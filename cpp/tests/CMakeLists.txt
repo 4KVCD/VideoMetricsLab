@@ -63,6 +63,8 @@ gtest_discover_tests(vml_tests)
 if(TARGET vml_app)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     add_executable(vml_app_tests
+        app/chart_test.cpp
+        app/graph_panel_test.cpp
         app/i18n_test.cpp
         app/main.cpp
         app/main_window_test.cpp

@@ -2,6 +2,7 @@
 // (the Python app's VmafOptions, a row's settings in the window).
 #pragma once
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -29,6 +30,14 @@ struct ResampleTarget {
 
 // The resolution tests offered, largest first.
 const std::vector<ResampleTarget>& resample_target_choices();
+
+// A made-up path that stands for a second run of the same test video with
+// the other scale direction (the Python app's
+// synthetic_scale_direction_variant_path). Both directions can then be rows
+// of their own, side by side, without one taking the other's saved scores or
+// graph line.
+std::filesystem::path synthetic_scale_direction_variant_path(const std::filesystem::path& distorted,
+                                                             ScaleDirection direction);
 
 struct VmafOptions {
     std::string model = "version=vmaf_v0.6.1";  // the FFmpeg model= value a run uses

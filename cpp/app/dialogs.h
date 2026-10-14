@@ -1,0 +1,29 @@
+// The dialogs that wait for the user (QMessageBox, QFileDialog), behind
+// functions: the window's tests answer them in the user's place, as the test
+// harness fails any dialog that opens.
+#pragma once
+
+#include <QString>
+
+#include <functional>
+
+class QWidget;
+
+namespace vml::app {
+
+struct Dialogs {
+    // A message with an OK button: information, and a failure (critical).
+    std::function<void(const QString& title, const QString& text)> inform;
+    std::function<void(const QString& title, const QString& text)> alert;
+    // A question answered Yes or No: whether Yes.
+    std::function<bool(const QString& title, const QString& text)> ask;
+    // The file dialogs; an empty answer is Cancel.
+    std::function<QString(const QString& title, const QString& filter)> open_file;
+    std::function<QString(const QString& title, const QString& suggested, const QString& filter)> save_file;
+    std::function<QString(const QString& title)> choose_folder;
+};
+
+// The real dialogs, over `parent`.
+Dialogs standard_dialogs(QWidget* parent);
+
+}  // namespace vml::app

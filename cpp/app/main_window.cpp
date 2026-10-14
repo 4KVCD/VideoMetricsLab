@@ -45,9 +45,11 @@
 #include "cvvdp_display_dialog.h"
 #include "file_writes.h"
 #include "formatting.h"
+#include "graph_panel.h"
 #include "i18n.h"
 #include "options_panel.h"
 #include "run_worker.h"
+#include "series_colors.h"
 #include "theme.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
@@ -329,6 +331,7 @@ void MainWindow::apply_theme_colours() {
         }
     }
     apply_best_worst();  // the backgrounds, in the new theme's greens and reds
+    graph_panel_->refresh_theme();  // its table's colours are set cell by cell too
 }
 
 void MainWindow::close_when_idle() {
@@ -364,8 +367,11 @@ void MainWindow::closeEvent(QCloseEvent* event) {
             worker_->cancel();
         }
     }
-    // Nor during a write of saved scores, which closing would lose.
-    const bool written = file_writes_->wait_until_idle(std::chrono::milliseconds(500));
+    // Nor during a write of saved scores or a saved run, which closing would
+    // lose, or of a graph's export, which it would cut short: the graph has
+    // writes of its own.
+    const bool written = file_writes_->wait_until_idle(std::chrono::milliseconds(500)) &&
+                         graph_panel_->wait_until_file_writes_idle(std::chrono::milliseconds(500));
     if (!live_workers().empty() || !written) {
         // Held on the status line, where the run would put its counts.
         run_hold_ = RunHold::message;
@@ -513,18 +519,7 @@ void MainWindow::build_ui() {
     connect(options_panel_, &OptionsPanel::scale_direction_chosen, this,
             [this](int index) { on_scale_direction_combo_changed(index); });
     run_cvvdp_dialog_ = [](CvvdpDisplayDialog& dialog) { return dialog.exec(); };
-    inform_ = [this](const QString& title, const QString& text) { QMessageBox::information(this, title, text); };
-    alert_ = [this](const QString& title, const QString& text) { QMessageBox::critical(this, title, text); };
-    ask_ = [this](const QString& title, const QString& text) {
-        return QMessageBox::question(this, title, text) == QMessageBox::Yes;
-    };
-    open_file_ = [this](const QString& title, const QString& filter) {
-        return QFileDialog::getOpenFileName(this, title, QString(), filter);
-    };
-    save_file_ = [this](const QString& title, const QString& suggested, const QString& filter) {
-        return QFileDialog::getSaveFileName(this, title, suggested, filter);
-    };
-    choose_folder_ = [this](const QString& title) { return QFileDialog::getExistingDirectory(this, title); };
+    dialogs_ = standard_dialogs(this);
     splitter->addWidget(options_panel_);
     splitter->addWidget(build_run_panel());
     splitter->setSizes({380, 300, 120});
@@ -535,10 +530,18 @@ void MainWindow::build_ui() {
         label->setAlignment(Qt::AlignCenter);
         return label;
     };
-    tabs_->addTab(new ScrollingPage(placeholder(QStringLiteral("Metric Graphs"))), app::tr("Metric Graphs"));
+    video_colors_ = new VideoColors(this);
+    graph_panel_ = new GraphPanel(video_colors_);
+    graph_panel_->set_preferred_metric(settings_.graph_metric);
+    connect(graph_panel_, &GraphPanel::metric_changed, this, [this](const QString& key) {
+        settings_.graph_metric = key.toStdString();  // the metric chosen, shown again next time
+        save_settings();
+    });
+    tabs_->addTab(new ScrollingPage(graph_panel_), app::tr("Metric Graphs"));
     tabs_->addTab(placeholder(QStringLiteral("Video Compare")), app::tr("Video Compare"));
     tabs_->addTab(new ScrollingPage(placeholder(QStringLiteral("The Bitrate Viewer"))), app::tr("Bitrate Viewer"));
     tabs_->addTab(new ScrollingPage(placeholder(QStringLiteral("Settings"))), app::tr("Settings"));
+    connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
 }
 
 QWidget* MainWindow::build_files_panel() {
@@ -750,7 +753,7 @@ QWidget* MainWindow::build_run_panel() {
     connect(save_button_, &QPushButton::clicked, this, [this] { on_save_selected(); });
     show_graph_button_ = new QPushButton(app::tr("Open metric graphs"));
     show_graph_button_->setToolTip(app::tr("Opens Metric Graphs with the current results and graph settings."));
-    show_graph_button_->setEnabled(false);  // Metric Graphs are not ported to C++ yet
+    connect(show_graph_button_, &QPushButton::clicked, this, [this] { on_show_graph_clicked(); });
     run_row->addWidget(load_button_);
     run_row->addWidget(save_button_);
     run_row->addWidget(show_graph_button_);
@@ -863,10 +866,10 @@ bool MainWindow::on_locate_ffmpeg() {
     const std::filesystem::path directory = path_of(chosen).parent_path();
     std::error_code error;
     if (!std::filesystem::exists(directory / platform::path_from_text(ffprobe_exe.toStdString()), error)) {
-        inform_(app::tr("ffprobe needed too"),
-                app::tr("{ffprobe_exe} wasn't found next to {ffmpeg_exe}.\n\nThe app needs both. Please select "
-                        "{ffprobe_exe} as well (it normally ships in the same folder).",
-                        {{"ffprobe_exe", ffprobe_exe}, {"ffmpeg_exe", ffmpeg_exe}}));
+        dialogs_.inform(app::tr("ffprobe needed too"),
+                        app::tr("{ffprobe_exe} wasn't found next to {ffmpeg_exe}.\n\nThe app needs both. Please select "
+                                "{ffprobe_exe} as well (it normally ships in the same folder).",
+                                {{"ffprobe_exe", ffprobe_exe}, {"ffmpeg_exe", ffmpeg_exe}}));
         const QString probe_chosen = QFileDialog::getOpenFileName(
             this, app::tr("Select {ffprobe_exe}", {{"ffprobe_exe", ffprobe_exe}}), text_of(directory),
             app::tr("{ffprobe_exe} ({ffprobe_exe});;All files (*)", {{"ffprobe_exe", ffprobe_exe}}));
@@ -1090,11 +1093,11 @@ void MainWindow::check_rows_against_new_source(const std::filesystem::path& path
         for (const QString& name : dropped) {
             names.append("  " + name);
         }
-        inform_(app::tr("Resolution tests removed"),
-                ntr("{count} resolution test belonged to the previous source and has been removed:\n\n",
-                    "{count} resolution tests belonged to the previous source and have been removed:\n\n",
-                    static_cast<long long>(dropped.size())) +
-                    names.join("\n") + app::tr("\n\nAdd them again to test the new source."));
+        dialogs_.inform(app::tr("Resolution tests removed"),
+                        ntr("{count} resolution test belonged to the previous source and has been removed:\n\n",
+                            "{count} resolution tests belonged to the previous source and have been removed:\n\n",
+                            static_cast<long long>(dropped.size())) +
+                            names.join("\n") + app::tr("\n\nAdd them again to test the new source."));
     }
 }
 
@@ -1109,14 +1112,19 @@ std::vector<QString> MainWindow::remove_rows_owned_by_the_previous_source() {
     // moved rows could become the same test, and quietly changing what a row
     // means is worse than saying it is gone.
     std::vector<QString> removed;
+    std::vector<std::string> lines;
     for (int row = static_cast<int>(rows_.size()) - 1; row >= 0; --row) {
         if (!rows_[static_cast<std::size_t>(row)]->options.resample_test) {
             continue;
+        }
+        if (const std::shared_ptr<CompletedRun>& run = rows_[static_cast<std::size_t>(row)]->completed_run) {
+            lines.push_back(run->graph_identity);
         }
         removed.push_back(name_of(rows_[static_cast<std::size_t>(row)]->path));
         distorted_table_->removeRow(row);
         rows_.erase(rows_.begin() + row);
     }
+    graph_panel_->remove_by_identities(lines);
     if (!removed.empty()) {
         on_table_selection_changed();
     }
@@ -1127,12 +1135,22 @@ void MainWindow::invalidate_completed_results(const std::vector<int>& rows) {
     // The rows' scores go, with their state and its detail: the tooltip
     // would otherwise say "Not calculated" over the old result's "240 scored
     // frames; metrics: ...", or over a failure's reason.
+    // Their lines go from the graph too, all at once.
+    std::vector<std::string> lines;
+    std::vector<std::filesystem::path> paths;
     for (const int row : rows) {
         RowData& row_data = *rows_[static_cast<std::size_t>(row)];
         row_data.analysis_status.reset();
         row_data.status_detail.clear();
+        if (row_data.completed_run) {
+            lines.push_back(row_data.completed_run->graph_identity);
+            paths.push_back(row_data.path);
+        }
         row_data.completed_run.reset();
         set_row_metrics(row);
+    }
+    if (!lines.empty()) {
+        graph_panel_->remove_by_identities(lines, paths);
     }
 }
 
@@ -1621,10 +1639,11 @@ void MainWindow::on_add_resample_test() {
         }
     }
     if (targets.empty()) {
-        inform_(app::tr("No smaller resolution available"),
-                app::tr("The smallest resolution test is {smallest} pixels wide, which is not below this "
-                        "reference's {width}-pixel width.",
-                        {{"smallest", resample_target_choices().back().width}, {"width", source_info_->width}}));
+        dialogs_.inform(
+            app::tr("No smaller resolution available"),
+            app::tr("The smallest resolution test is {smallest} pixels wide, which is not below this "
+                    "reference's {width}-pixel width.",
+                    {{"smallest", resample_target_choices().back().width}, {"width", source_info_->width}}));
         return;
     }
     QStringList labels;
@@ -1645,8 +1664,9 @@ void MainWindow::add_resample_test(const ResampleTarget& target) {
     // A row for a resolution test of the reference at `target`.
     const std::filesystem::path path = synthetic_resample_distorted_path(source_info_->path, target);
     if (row_index_of_path(path)) {
-        inform_(app::tr("Already added"), app::tr("A {label} resolution test for this reference is already in the list.",
-                                                  {{"label", QString::fromStdString(target.label)}}));
+        dialogs_.inform(app::tr("Already added"),
+                        app::tr("A {label} resolution test for this reference is already in the list.",
+                                {{"label", QString::fromStdString(target.label)}}));
         return;
     }
     const int row = add_table_row(path);
@@ -1886,6 +1906,15 @@ void MainWindow::on_remove_distorted() {
     for (const QModelIndex& index : distorted_table_->selectionModel()->selectedIndexes()) {
         rows.insert(index.row());
     }
+    // Their lines leave the graph too: once its row is gone, nothing else
+    // could remove a line.
+    std::vector<std::string> lines;
+    for (const int row : rows) {
+        if (const std::shared_ptr<CompletedRun>& run = rows_[static_cast<std::size_t>(row)]->completed_run) {
+            lines.push_back(run->graph_identity);
+        }
+    }
+    graph_panel_->remove_by_identities(lines);
     for (const int row : rows) {
         distorted_table_->removeRow(row);
         rows_.erase(rows_.begin() + row);
@@ -1910,6 +1939,13 @@ void MainWindow::on_remove_all_distorted() {
     if (answer != QMessageBox::Yes) {
         return;
     }
+    std::vector<std::string> lines;
+    for (const std::shared_ptr<RowData>& row_data : rows_) {
+        if (row_data->completed_run) {
+            lines.push_back(row_data->completed_run->graph_identity);
+        }
+    }
+    graph_panel_->remove_by_identities(lines);
     distorted_table_->setRowCount(0);
     rows_.clear();
     on_table_selection_changed();

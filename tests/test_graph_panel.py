@@ -132,6 +132,25 @@ def test_readding_the_same_file_replaces_its_series_instead_of_duplicating(qapp)
     assert a_entries[0].result.frames[0].vmaf == 99.0
 
 
+def test_a_line_updated_in_place_keeps_its_place(qapp):
+    # The table lists the lines in the order they were added. A line set
+    # again (a video's run going on) moved to the end of its page: last in
+    # the readout, the difference's sign turned, last in the exported table,
+    # and drawn over the others, while the table still listed it first.
+    win = GraphPanel()
+    win.add_run(_values_result("a.mp4", [90.0] * 4), "a", identity="row a")
+    win.add_run(_values_result("b.mp4", [80.0] * 4), "b", identity="row b")
+    page = win._pages["vmaf"]
+    win.add_run(_values_result("a.mp4", [91.0] * 4), "a", identity="row a")
+
+    assert page.show_frame(1, win._entries) is True
+    lines = page.hover_label.text().splitlines()
+    assert [line[:3] for line in lines[1:3]] == ["[a]", "[b]"]
+    assert lines[3] == "Δ (a − b) = +11.00"
+    assert [label for label, _color, _cells in win._export_table()[1]] == ["a", "b"]
+    assert list(page.chart._series) == list(win._entries)
+
+
 # ------------------------------------------------------------------ multi-series color + visibility
 
 
@@ -300,6 +319,39 @@ def test_the_exported_png_is_written_and_readable(qapp, tmp_path, monkeypatch):
 
     assert out.exists() and out.stat().st_size > 0
     assert not QPixmap(str(out)).isNull(), "the file is not a readable image"
+
+
+def _metrics_result(name: str, metrics: dict[str, list[float]]) -> ComparisonResult:
+    """A run with these metrics' scores, one per frame."""
+    from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
+
+    count = len(next(iter(metrics.values())))
+    result = _values_result(name, [90.0] * count)
+    provenance = MetricProvenance("ffmpeg/libvmaf", "ffmpeg 9.0.1", "cpu", "ffmpeg-libvmaf-v1")
+    result.metric_results = MetricResultSet([
+        FrameMetricResult(key, list(range(count)), [i / 30.0 for i in range(count)], values, provenance)
+        for key, values in metrics.items()
+    ])
+    return result
+
+
+def test_a_line_with_no_scores_for_the_metric_shows_dashes_and_exports(qapp):
+    # b's VMAF scored no frame (every score NaN). Its statistics read as
+    # zeros, its band cells kept the PSNR page's shares under VMAF's "> 95",
+    # and exporting the graph raised IndexError. It comes first: the
+    # exported table took its bands from the first line.
+    panel = GraphPanel()
+    panel.add_run(_metrics_result("b.mp4", {"vmaf": [float("nan")] * 10, "psnr": [44.0] * 10}), "b")
+    panel.add_run(_metrics_result("a.mp4", {"vmaf": [90.0] * 10, "psnr": [40.0] * 10}), "a")
+    panel.tabs.setCurrentIndex(next(i for i, m in enumerate(METRICS) if m.key == "psnr"))
+    panel.tabs.setCurrentIndex(0)  # VMAF
+    row = _row_for(panel, "b").row()
+    details = range(1 + len(METRICS), panel.stats_table.columnCount() - 1)  # after the means, before the ✕
+    assert [panel.stats_table.item(row, column).text() for column in details] == ["\u2014"] * len(details)
+
+    headers, rows = panel._export_table()
+    assert [len(cells) for _label, _color, cells in rows] == [len(headers) - 1] * 2
+    assert not panel.render_export_image().isNull()
 
 
 # ------------------------------------------------------------------ lower-is-better (Butteraugli)

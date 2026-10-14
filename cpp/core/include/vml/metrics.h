@@ -59,6 +59,9 @@ struct MetricDefinition {
     // A score as shown: at the metric's precision, infinity as a sign, and
     // no value (or NaN) as a dash.
     std::string format_value(std::optional<double> value) const;
+    // A difference between two scores as shown: with its sign, at the
+    // metric's precision.
+    std::string format_delta(std::optional<double> value) const;
 
     // Each of `scores` (one per video; none where a video has none) marked
     // best, worst or neither, by the metric's direction. Scores are compared

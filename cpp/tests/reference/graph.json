@@ -1,0 +1,2782 @@
+{
+ "runs": [
+  {
+   "label": "a",
+   "result": {
+    "source": "source.mkv",
+    "distorted": "a.mkv",
+    "fps": "0x1.e000000000000p+4",
+    "model": "version=vmaf_v0.6.1",
+    "source_crop": null,
+    "distorted_crop": null,
+    "source_info": {
+     "path": "a.mkv",
+     "width": 1920,
+     "height": 1080,
+     "fps": "0x1.e000000000000p+4",
+     "duration": "0x1.5555555555555p-2",
+     "nb_frames": 10,
+     "codec_name": "h264",
+     "sar": "1:1",
+     "pix_fmt": "",
+     "bit_rate": 0,
+     "bit_rate_whole_file": false,
+     "nominal_fps": "0x0.0p+0",
+     "average_fps": "0x0.0p+0",
+     "color_range": "",
+     "color_space": "",
+     "color_transfer": "",
+     "color_primaries": "",
+     "chroma_location": ""
+    },
+    "distorted_info": {
+     "path": "a.mkv",
+     "width": 1920,
+     "height": 1080,
+     "fps": "0x1.e000000000000p+4",
+     "duration": "0x1.5555555555555p-2",
+     "nb_frames": 10,
+     "codec_name": "h264",
+     "sar": "1:1",
+     "pix_fmt": "",
+     "bit_rate": 0,
+     "bit_rate_whole_file": false,
+     "nominal_fps": "0x0.0p+0",
+     "average_fps": "0x0.0p+0",
+     "color_range": "",
+     "color_space": "",
+     "color_transfer": "",
+     "color_primaries": "",
+     "chroma_location": ""
+    },
+    "scale_direction": "source_to_distorted",
+    "scale_algorithm": "bicubic",
+    "compared_frame_count": 10,
+    "model_choice": null,
+    "model_v1": "",
+    "model_choice_v1": null,
+    "resample_target": null,
+    "metrics": [
+     {
+      "key": "vmaf",
+      "provenance": {
+       "implementation": "ffmpeg/libvmaf",
+       "implementation_version": "ffmpeg 9.0.1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.1111111111111p-5",
+       "0x1.1111111111111p-4",
+       "0x1.999999999999ap-4",
+       "0x1.1111111111111p-3",
+       "0x1.5555555555555p-3",
+       "0x1.999999999999ap-3",
+       "0x1.ddddddddddddep-3",
+       "0x1.1111111111111p-2",
+       "0x1.3333333333333p-2"
+      ],
+      "values": [
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6",
+       "0x1.e000000000000p+4",
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6"
+      ]
+     },
+     {
+      "key": "psnr",
+      "provenance": {
+       "implementation": "ffmpeg/libvmaf",
+       "implementation_version": "ffmpeg 9.0.1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.1111111111111p-5",
+       "0x1.1111111111111p-4",
+       "0x1.999999999999ap-4",
+       "0x1.1111111111111p-3",
+       "0x1.5555555555555p-3",
+       "0x1.999999999999ap-3",
+       "0x1.ddddddddddddep-3",
+       "0x1.1111111111111p-2",
+       "0x1.3333333333333p-2"
+      ],
+      "values": [
+       "0x1.6800000000000p+5",
+       "0x1.6c00000000000p+5",
+       "0x1.6000000000000p+5",
+       "0x1.5800000000000p+5",
+       "0x1.5000000000000p+5",
+       "0x1.f400000000000p+4",
+       "0x1.6000000000000p+5",
+       "0x1.6800000000000p+5",
+       "0x1.7000000000000p+5",
+       "0x1.7800000000000p+5"
+      ]
+     },
+     {
+      "key": "ssim",
+      "provenance": {
+       "implementation": "ffmpeg/libvmaf",
+       "implementation_version": "ffmpeg 9.0.1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.1111111111111p-5",
+       "0x1.1111111111111p-4",
+       "0x1.999999999999ap-4",
+       "0x1.1111111111111p-3",
+       "0x1.5555555555555p-3",
+       "0x1.999999999999ap-3",
+       "0x1.ddddddddddddep-3",
+       "0x1.1111111111111p-2",
+       "0x1.3333333333333p-2"
+      ],
+      "values": [
+       "0x1.fae1480000000p-1",
+       "0x1.fb645a0000000p-1",
+       "0x1.fa5e360000000p-1",
+       "0x1.f5c2900000000p-1",
+       "0x1.f0a3d80000000p-1",
+       "0x1.cccccc0000000p-1",
+       "0x1.f5c2900000000p-1",
+       "0x1.fae1480000000p-1",
+       "0x1.fd70a40000000p-1",
+       "0x1.fae1480000000p-1"
+      ]
+     },
+     {
+      "key": "xpsnr",
+      "provenance": {
+       "implementation": "ffmpeg/libvmaf",
+       "implementation_version": "ffmpeg 9.0.1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.1111111111111p-5",
+       "0x1.1111111111111p-4",
+       "0x1.999999999999ap-4",
+       "0x1.1111111111111p-3",
+       "0x1.5555555555555p-3",
+       "0x1.999999999999ap-3",
+       "0x1.ddddddddddddep-3",
+       "0x1.1111111111111p-2",
+       "0x1.3333333333333p-2"
+      ],
+      "values": [
+       "0x1.4000000000000p+5",
+       "inf",
+       "0x1.3000000000000p+5",
+       "inf",
+       "0x1.4800000000000p+5",
+       "0x1.3800000000000p+5",
+       "0x1.4000000000000p+5",
+       "0x1.b800000000000p+6",
+       "nan",
+       "0x1.5000000000000p+5"
+      ]
+     },
+     {
+      "key": "butteraugli",
+      "provenance": {
+       "implementation": "ffmpeg/libvmaf",
+       "implementation_version": "ffmpeg 9.0.1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.1111111111111p-5",
+       "0x1.1111111111111p-4",
+       "0x1.999999999999ap-4",
+       "0x1.1111111111111p-3",
+       "0x1.5555555555555p-3",
+       "0x1.999999999999ap-3",
+       "0x1.ddddddddddddep-3",
+       "0x1.1111111111111p-2",
+       "0x1.3333333333333p-2"
+      ],
+      "values": [
+       "0x0.0p+0",
+       "0x1.0000000000000p+0",
+       "0x1.0000000000000p+1",
+       "0x1.8000000000000p+1",
+       "0x1.0000000000000p+2",
+       "0x1.4000000000000p+2",
+       "0x1.8000000000000p+2",
+       "0x1.c000000000000p+2",
+       "0x1.0000000000000p+3",
+       "0x1.2000000000000p+3"
+      ]
+     },
+     {
+      "key": "cvvdp",
+      "provenance": {
+       "implementation": "ffmpeg/libvmaf",
+       "implementation_version": "ffmpeg 9.0.1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "sequence",
+      "score": "0x1.1800000000000p+3",
+      "frame": [
+       0,
+       3,
+       6
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.999999999999ap-4",
+       "0x1.999999999999ap-3"
+      ],
+      "values": [
+       "0x1.1000000000000p+3",
+       "0x1.2000000000000p+3",
+       "0x1.0000000000000p+3"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "label": "b",
+   "result": {
+    "source": "source.mkv",
+    "distorted": "b.mkv",
+    "fps": "0x1.e000000000000p+4",
+    "model": "version=vmaf_v0.6.1",
+    "source_crop": null,
+    "distorted_crop": null,
+    "source_info": {
+     "path": "b.mkv",
+     "width": 1920,
+     "height": 1080,
+     "fps": "0x1.e000000000000p+4",
+     "duration": "0x1.5555555555555p-2",
+     "nb_frames": 10,
+     "codec_name": "h264",
+     "sar": "1:1",
+     "pix_fmt": "",
+     "bit_rate": 0,
+     "bit_rate_whole_file": false,
+     "nominal_fps": "0x0.0p+0",
+     "average_fps": "0x0.0p+0",
+     "color_range": "",
+     "color_space": "",
+     "color_transfer": "",
+     "color_primaries": "",
+     "chroma_location": ""
+    },
+    "distorted_info": {
+     "path": "b.mkv",
+     "width": 1920,
+     "height": 1080,
+     "fps": "0x1.e000000000000p+4",
+     "duration": "0x1.5555555555555p-2",
+     "nb_frames": 10,
+     "codec_name": "h264",
+     "sar": "1:1",
+     "pix_fmt": "",
+     "bit_rate": 0,
+     "bit_rate_whole_file": false,
+     "nominal_fps": "0x0.0p+0",
+     "average_fps": "0x0.0p+0",
+     "color_range": "",
+     "color_space": "",
+     "color_transfer": "",
+     "color_primaries": "",
+     "chroma_location": ""
+    },
+    "scale_direction": "source_to_distorted",
+    "scale_algorithm": "bicubic",
+    "compared_frame_count": 10,
+    "model_choice": null,
+    "model_v1": "",
+    "model_choice_v1": null,
+    "resample_target": null,
+    "metrics": [
+     {
+      "key": "vmaf",
+      "provenance": {
+       "implementation": "ffmpeg/libvmaf",
+       "implementation_version": "ffmpeg 9.0.1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.1111111111111p-5",
+       "0x1.1111111111111p-4",
+       "0x1.999999999999ap-4",
+       "0x1.1111111111111p-3",
+       "0x1.5555555555555p-3",
+       "0x1.999999999999ap-3",
+       "0x1.ddddddddddddep-3",
+       "0x1.1111111111111p-2",
+       "0x1.3333333333333p-2"
+      ],
+      "values": [
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6",
+       "0x1.7c00000000000p+6",
+       "0x1.4000000000000p+5",
+       "0x1.7c00000000000p+6"
+      ]
+     },
+     {
+      "key": "psnr",
+      "provenance": {
+       "implementation": "ffmpeg/libvmaf",
+       "implementation_version": "ffmpeg 9.0.1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       2,
+       4,
+       6,
+       8
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.1111111111111p-4",
+       "0x1.1111111111111p-3",
+       "0x1.999999999999ap-3",
+       "0x1.1111111111111p-2"
+      ],
+      "values": [
+       "0x1.6000000000000p+5",
+       "0x1.4000000000000p+5",
+       "0x1.3800000000000p+5",
+       "0x1.4800000000000p+5",
+       "0x1.5000000000000p+5"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "label": "short",
+   "result": {
+    "source": "source.mkv",
+    "distorted": "short.mkv",
+    "fps": "0x1.e000000000000p+4",
+    "model": "version=vmaf_v0.6.1",
+    "source_crop": null,
+    "distorted_crop": null,
+    "source_info": {
+     "path": "short.mkv",
+     "width": 1920,
+     "height": 1080,
+     "fps": "0x1.e000000000000p+4",
+     "duration": "0x1.5555555555555p-2",
+     "nb_frames": 10,
+     "codec_name": "h264",
+     "sar": "1:1",
+     "pix_fmt": "",
+     "bit_rate": 0,
+     "bit_rate_whole_file": false,
+     "nominal_fps": "0x0.0p+0",
+     "average_fps": "0x0.0p+0",
+     "color_range": "",
+     "color_space": "",
+     "color_transfer": "",
+     "color_primaries": "",
+     "chroma_location": ""
+    },
+    "distorted_info": {
+     "path": "short.mkv",
+     "width": 1920,
+     "height": 1080,
+     "fps": "0x1.e000000000000p+4",
+     "duration": "0x1.5555555555555p-2",
+     "nb_frames": 10,
+     "codec_name": "h264",
+     "sar": "1:1",
+     "pix_fmt": "",
+     "bit_rate": 0,
+     "bit_rate_whole_file": false,
+     "nominal_fps": "0x0.0p+0",
+     "average_fps": "0x0.0p+0",
+     "color_range": "",
+     "color_space": "",
+     "color_transfer": "",
+     "color_primaries": "",
+     "chroma_location": ""
+    },
+    "scale_direction": "source_to_distorted",
+    "scale_algorithm": "bicubic",
+    "compared_frame_count": 3,
+    "model_choice": null,
+    "model_v1": "",
+    "model_choice_v1": null,
+    "resample_target": null,
+    "metrics": [
+     {
+      "key": "vmaf",
+      "provenance": {
+       "implementation": "ffmpeg/libvmaf",
+       "implementation_version": "ffmpeg 9.0.1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.1111111111111p-5",
+       "0x1.1111111111111p-4"
+      ],
+      "values": [
+       "0x1.4000000000000p+6",
+       "0x1.4400000000000p+6",
+       "0x1.4800000000000p+6"
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "pages": [
+  {
+   "key": "vmaf",
+   "table": {
+    "headers": [
+     "Series",
+     "VMAF v0.6.1",
+     "VMAF NEG",
+     "VMAF v1",
+     "PSNR",
+     "SSIM",
+     "XPSNR",
+     "SSIMULACRA2",
+     "Butteraugli",
+     "CVVDP",
+     "Median",
+     "StDev",
+     "Min",
+     "Max",
+     "10% Low",
+     "5% Low",
+     "1% Low",
+     "0.1% Low",
+     "> 95",
+     "> 90",
+     "> 85",
+     "< 85",
+     "< 80",
+     "< 70",
+     ""
+    ],
+    "cells": [
+     [
+      "a",
+      "88.50",
+      "\u2014",
+      "\u2014",
+      "43.27",
+      "0.9775",
+      "43.43",
+      "\u2014",
+      "4.5000",
+      "8.750",
+      "95.00",
+      "19.50",
+      "30.00",
+      "95.00",
+      "88.50",
+      "59.25",
+      "35.85",
+      "30.59",
+      "0.0%",
+      "90.0%",
+      "90.0%",
+      "10.0%",
+      "10.0%",
+      "10.0%",
+      "\u2715"
+     ],
+     [
+      "b",
+      "89.50",
+      "\u2014",
+      "\u2014",
+      "41.20",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "95.00",
+      "16.50",
+      "40.00",
+      "95.00",
+      "89.50",
+      "64.75",
+      "44.95",
+      "40.49",
+      "0.0%",
+      "90.0%",
+      "90.0%",
+      "10.0%",
+      "10.0%",
+      "10.0%",
+      "\u2715"
+     ],
+     [
+      "short",
+      "81.00",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "81.00",
+      "0.82",
+      "80.00",
+      "82.00",
+      "80.20",
+      "80.10",
+      "80.02",
+      "80.00",
+      "0.0%",
+      "0.0%",
+      "0.0%",
+      "100.0%",
+      "0.0%",
+      "0.0%",
+      "\u2715"
+     ]
+    ]
+   },
+   "frame_range": [
+    0,
+    9
+   ],
+   "readouts": [
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]      frame      5   t=0:00:00.17   VMAF v0.6.1=95.00   |\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]      frame      5   t=0:00:00.17   VMAF v0.6.1=95.00   |\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27\n[a]      frame      8   t=0:00:00.27   VMAF v0.6.1=95.00   |  PSNR=46.00   SSIM=0.9950                  Butteraugli=8.0000\n[b]      frame      8   t=0:00:00.27   VMAF v0.6.1=40.00   |  PSNR=42.00\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |"
+    },
+    {
+     "hidden": [],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]      frame      5   t=0:00:00.17   VMAF v0.6.1=95.00   |\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25\n[a]      frame      8   t=0:00:00.27   VMAF v0.6.1=95.00   |  PSNR=46.00   SSIM=0.9950                  Butteraugli=8.0000\n[b]      frame      8   t=0:00:00.27   VMAF v0.6.1=40.00   |  PSNR=42.00\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00\n[a]      frame      9   t=0:00:00.30   VMAF v0.6.1=95.00   |  PSNR=47.00   SSIM=0.9900    XPSNR=42.00   Butteraugli=9.0000\n[b]      frame      9   t=0:00:00.30   VMAF v0.6.1=95.00   |\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |"
+    },
+    {
+     "hidden": [],
+     "frame": 1,
+     "text": "Frame 1\n[a]      frame      1   t=0:00:00.03   VMAF v0.6.1=95.00   |  PSNR=45.50   SSIM=0.9910    XPSNR=\u221e       Butteraugli=1.0000\n[b]      frame      1   t=0:00:00.03   VMAF v0.6.1=95.00   |\n[short]  frame      1   t=0:00:00.03   VMAF v0.6.1=81.00   |"
+    },
+    {
+     "hidden": [],
+     "frame": 5,
+     "text": "Frame 5\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]      frame      5   t=0:00:00.17   VMAF v0.6.1=95.00   |\n[short]  frame      5   not in this run\n\u0394 (a \u2212 b) = -65.00"
+    },
+    {
+     "hidden": [],
+     "frame": 7,
+     "text": "Frame 7\n[a]      frame      7   t=0:00:00.23   VMAF v0.6.1=95.00   |  PSNR=45.00   SSIM=0.9900    XPSNR=110.00  Butteraugli=7.0000\n[b]      frame      7   t=0:00:00.23   VMAF v0.6.1=95.00   |\n[short]  frame      7   not in this run\n\u0394 (a \u2212 b) = +0.00"
+    },
+    {
+     "hidden": [],
+     "frame": 20,
+     "text": "Frame 20\n[a]      frame     20   not in this run\n[b]      frame     20   not in this run\n[short]  frame     20   not in this run"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |\n\u0394 (a \u2212 short) = -52.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |\n\u0394 (a \u2212 short) = -52.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |\n\u0394 (a \u2212 short) = -52.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |\n\u0394 (a \u2212 short) = -52.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |\n\u0394 (a \u2212 short) = -52.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00\n[a]      frame      9   t=0:00:00.30   VMAF v0.6.1=95.00   |  PSNR=47.00   SSIM=0.9900    XPSNR=42.00   Butteraugli=9.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |\n\u0394 (a \u2212 short) = +13.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 1,
+     "text": "Frame 1\n[a]      frame      1   t=0:00:00.03   VMAF v0.6.1=95.00   |  PSNR=45.50   SSIM=0.9910    XPSNR=\u221e       Butteraugli=1.0000\n[short]  frame      1   t=0:00:00.03   VMAF v0.6.1=81.00   |\n\u0394 (a \u2212 short) = +14.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 5,
+     "text": "Frame 5\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      5   not in this run"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 7,
+     "text": "Frame 7\n[a]      frame      7   t=0:00:00.23   VMAF v0.6.1=95.00   |  PSNR=45.00   SSIM=0.9900    XPSNR=110.00  Butteraugli=7.0000\n[short]  frame      7   not in this run"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 20,
+     "text": "Frame 20\n[a]      frame     20   not in this run\n[short]  frame     20   not in this run"
+    }
+   ]
+  },
+  {
+   "key": "vmaf_neg",
+   "table": {
+    "headers": [
+     "Series",
+     "VMAF v0.6.1",
+     "VMAF NEG",
+     "VMAF v1",
+     "PSNR",
+     "SSIM",
+     "XPSNR",
+     "SSIMULACRA2",
+     "Butteraugli",
+     "CVVDP",
+     "Median",
+     "StDev",
+     "Min",
+     "Max",
+     "10% Low",
+     "5% Low",
+     "1% Low",
+     "0.1% Low",
+     "> 95",
+     "> 90",
+     "> 85",
+     "< 85",
+     "< 80",
+     "< 70",
+     ""
+    ],
+    "cells": [
+     [
+      "a",
+      "88.50",
+      "\u2014",
+      "\u2014",
+      "43.27",
+      "0.9775",
+      "43.43",
+      "\u2014",
+      "4.5000",
+      "8.750",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ],
+     [
+      "b",
+      "89.50",
+      "\u2014",
+      "\u2014",
+      "41.20",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ],
+     [
+      "short",
+      "81.00",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ]
+    ]
+   },
+   "frame_range": [
+    0,
+    0
+   ],
+   "readouts": [
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27"
+    },
+    {
+     "hidden": [],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00"
+    },
+    {
+     "hidden": [],
+     "frame": 1,
+     "text": "Frame 1: no visible series."
+    },
+    {
+     "hidden": [],
+     "frame": 5,
+     "text": "Frame 5: no visible series."
+    },
+    {
+     "hidden": [],
+     "frame": 7,
+     "text": "Frame 7: no visible series."
+    },
+    {
+     "hidden": [],
+     "frame": 20,
+     "text": "Frame 20: no visible series."
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 1,
+     "text": "Frame 1: no visible series."
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 5,
+     "text": "Frame 5: no visible series."
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 7,
+     "text": "Frame 7: no visible series."
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 20,
+     "text": "Frame 20: no visible series."
+    }
+   ]
+  },
+  {
+   "key": "vmaf_v1",
+   "table": {
+    "headers": [
+     "Series",
+     "VMAF v0.6.1",
+     "VMAF NEG",
+     "VMAF v1",
+     "PSNR",
+     "SSIM",
+     "XPSNR",
+     "SSIMULACRA2",
+     "Butteraugli",
+     "CVVDP",
+     "Median",
+     "StDev",
+     "Min",
+     "Max",
+     "10% Low",
+     "5% Low",
+     "1% Low",
+     "0.1% Low",
+     "> 95",
+     "> 90",
+     "> 85",
+     "< 85",
+     "< 80",
+     "< 70",
+     ""
+    ],
+    "cells": [
+     [
+      "a",
+      "88.50",
+      "\u2014",
+      "\u2014",
+      "43.27",
+      "0.9775",
+      "43.43",
+      "\u2014",
+      "4.5000",
+      "8.750",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ],
+     [
+      "b",
+      "89.50",
+      "\u2014",
+      "\u2014",
+      "41.20",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ],
+     [
+      "short",
+      "81.00",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ]
+    ]
+   },
+   "frame_range": [
+    0,
+    0
+   ],
+   "readouts": [
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27"
+    },
+    {
+     "hidden": [],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00"
+    },
+    {
+     "hidden": [],
+     "frame": 1,
+     "text": "Frame 1: no visible series."
+    },
+    {
+     "hidden": [],
+     "frame": 5,
+     "text": "Frame 5: no visible series."
+    },
+    {
+     "hidden": [],
+     "frame": 7,
+     "text": "Frame 7: no visible series."
+    },
+    {
+     "hidden": [],
+     "frame": 20,
+     "text": "Frame 20: no visible series."
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 1,
+     "text": "Frame 1: no visible series."
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 5,
+     "text": "Frame 5: no visible series."
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 7,
+     "text": "Frame 7: no visible series."
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 20,
+     "text": "Frame 20: no visible series."
+    }
+   ]
+  },
+  {
+   "key": "psnr",
+   "table": {
+    "headers": [
+     "Series",
+     "VMAF v0.6.1",
+     "VMAF NEG",
+     "VMAF v1",
+     "PSNR",
+     "SSIM",
+     "XPSNR",
+     "SSIMULACRA2",
+     "Butteraugli",
+     "CVVDP",
+     "Median",
+     "StDev",
+     "Min",
+     "Max",
+     "10% Low",
+     "5% Low",
+     "1% Low",
+     "0.1% Low",
+     "> 41",
+     "> 38",
+     "> 35",
+     "< 35",
+     "< 34",
+     "< 32",
+     ""
+    ],
+    "cells": [
+     [
+      "a",
+      "88.50",
+      "\u2014",
+      "\u2014",
+      "43.27",
+      "0.9775",
+      "43.43",
+      "\u2014",
+      "4.5000",
+      "8.750",
+      "44.50",
+      "4.24",
+      "31.25",
+      "47.00",
+      "40.92",
+      "36.09",
+      "32.22",
+      "31.35",
+      "90.0%",
+      "90.0%",
+      "90.0%",
+      "10.0%",
+      "10.0%",
+      "10.0%",
+      "\u2715"
+     ],
+     [
+      "b",
+      "89.50",
+      "\u2014",
+      "\u2014",
+      "41.20",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "41.00",
+      "1.72",
+      "39.00",
+      "44.00",
+      "39.40",
+      "39.20",
+      "39.04",
+      "39.00",
+      "40.0%",
+      "100.0%",
+      "100.0%",
+      "0.0%",
+      "0.0%",
+      "0.0%",
+      "\u2715"
+     ],
+     [
+      "short",
+      "81.00",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ]
+    ]
+   },
+   "frame_range": [
+    0,
+    9
+   ],
+   "readouts": [
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]  frame      4   t=0:00:00.13   PSNR=39.00   |  VMAF v0.6.1=95.00\n\u0394 (a \u2212 b) = -7.75"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]  frame      4   t=0:00:00.13   PSNR=39.00   |  VMAF v0.6.1=95.00\n\u0394 (a \u2212 b) = -7.75"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27\n[a]  frame      8   t=0:00:00.27   PSNR=46.00   |  VMAF v0.6.1=95.00   SSIM=0.9950                  Butteraugli=8.0000\n[b]  frame      8   t=0:00:00.27   PSNR=42.00   |  VMAF v0.6.1=40.00\n\u0394 (a \u2212 b) = +4.00"
+    },
+    {
+     "hidden": [],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]  frame      4   t=0:00:00.13   PSNR=39.00   |  VMAF v0.6.1=95.00\n\u0394 (a \u2212 b) = -7.75"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25\n[a]  frame      7   t=0:00:00.23   PSNR=45.00   |  VMAF v0.6.1=95.00   SSIM=0.9900    XPSNR=110.00  Butteraugli=7.0000\n[b]  frame      6   t=0:00:00.20   PSNR=41.00   |  VMAF v0.6.1=95.00\n\u0394 (a \u2212 b) = +4.00"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00\n[a]  frame      9   t=0:00:00.30   PSNR=47.00   |  VMAF v0.6.1=95.00   SSIM=0.9900    XPSNR=42.00   Butteraugli=9.0000\n[b]  frame      8   t=0:00:00.27   PSNR=42.00   |  VMAF v0.6.1=40.00\n\u0394 (a \u2212 b) = +5.00"
+    },
+    {
+     "hidden": [],
+     "frame": 1,
+     "text": "Frame 1\n[a]  frame      1   t=0:00:00.03   PSNR=45.50   |  VMAF v0.6.1=95.00   SSIM=0.9910    XPSNR=\u221e       Butteraugli=1.0000\n[b]  frame      1   not in this run"
+    },
+    {
+     "hidden": [],
+     "frame": 5,
+     "text": "Frame 5\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]  frame      5   not in this run"
+    },
+    {
+     "hidden": [],
+     "frame": 7,
+     "text": "Frame 7\n[a]  frame      7   t=0:00:00.23   PSNR=45.00   |  VMAF v0.6.1=95.00   SSIM=0.9900    XPSNR=110.00  Butteraugli=7.0000\n[b]  frame      7   not in this run"
+    },
+    {
+     "hidden": [],
+     "frame": 20,
+     "text": "Frame 20\n[a]  frame     20   not in this run\n[b]  frame     20   not in this run"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27\n[a]  frame      8   t=0:00:00.27   PSNR=46.00   |  VMAF v0.6.1=95.00   SSIM=0.9950                  Butteraugli=8.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25\n[a]  frame      7   t=0:00:00.23   PSNR=45.00   |  VMAF v0.6.1=95.00   SSIM=0.9900    XPSNR=110.00  Butteraugli=7.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00\n[a]  frame      9   t=0:00:00.30   PSNR=47.00   |  VMAF v0.6.1=95.00   SSIM=0.9900    XPSNR=42.00   Butteraugli=9.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 1,
+     "text": "Frame 1\n[a]  frame      1   t=0:00:00.03   PSNR=45.50   |  VMAF v0.6.1=95.00   SSIM=0.9910    XPSNR=\u221e       Butteraugli=1.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 5,
+     "text": "Frame 5\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 7,
+     "text": "Frame 7\n[a]  frame      7   t=0:00:00.23   PSNR=45.00   |  VMAF v0.6.1=95.00   SSIM=0.9900    XPSNR=110.00  Butteraugli=7.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 20,
+     "text": "Frame 20\n[a]  frame     20   not in this run"
+    }
+   ]
+  },
+  {
+   "key": "ssim",
+   "table": {
+    "headers": [
+     "Series",
+     "VMAF v0.6.1",
+     "VMAF NEG",
+     "VMAF v1",
+     "PSNR",
+     "SSIM",
+     "XPSNR",
+     "SSIMULACRA2",
+     "Butteraugli",
+     "CVVDP",
+     "Median",
+     "StDev",
+     "Min",
+     "Max",
+     "10% Low",
+     "5% Low",
+     "1% Low",
+     "0.1% Low",
+     "> 0.99",
+     "> 0.98",
+     "> 0.97",
+     "< 0.97",
+     "< 0.96",
+     "< 0.95",
+     ""
+    ],
+    "cells": [
+     [
+      "a",
+      "88.50",
+      "\u2014",
+      "\u2014",
+      "43.27",
+      "0.9775",
+      "43.43",
+      "\u2014",
+      "4.5000",
+      "8.750",
+      "0.9895",
+      "0.0268",
+      "0.9000",
+      "0.9950",
+      "0.9630",
+      "0.9315",
+      "0.9063",
+      "0.9006",
+      "50.0%",
+      "80.0%",
+      "90.0%",
+      "10.0%",
+      "10.0%",
+      "10.0%",
+      "\u2715"
+     ],
+     [
+      "b",
+      "89.50",
+      "\u2014",
+      "\u2014",
+      "41.20",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ],
+     [
+      "short",
+      "81.00",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ]
+    ]
+   },
+   "frame_range": [
+    0,
+    9
+   ],
+   "readouts": [
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   SSIM=0.9000    |  VMAF v0.6.1=30.00   PSNR=31.25   XPSNR=39.00   Butteraugli=5.0000"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   SSIM=0.9000    |  VMAF v0.6.1=30.00   PSNR=31.25   XPSNR=39.00   Butteraugli=5.0000"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27\n[a]  frame      8   t=0:00:00.27   SSIM=0.9950    |  VMAF v0.6.1=95.00   PSNR=46.00                 Butteraugli=8.0000"
+    },
+    {
+     "hidden": [],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00\n[a]  frame      5   t=0:00:00.17   SSIM=0.9000    |  VMAF v0.6.1=30.00   PSNR=31.25   XPSNR=39.00   Butteraugli=5.0000"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25\n[a]  frame      7   t=0:00:00.23   SSIM=0.9900    |  VMAF v0.6.1=95.00   PSNR=45.00   XPSNR=110.00  Butteraugli=7.0000"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00\n[a]  frame      9   t=0:00:00.30   SSIM=0.9900    |  VMAF v0.6.1=95.00   PSNR=47.00   XPSNR=42.00   Butteraugli=9.0000"
+    },
+    {
+     "hidden": [],
+     "frame": 1,
+     "text": "Frame 1\n[a]  frame      1   t=0:00:00.03   SSIM=0.9910    |  VMAF v0.6.1=95.00   PSNR=45.50   XPSNR=\u221e       Butteraugli=1.0000"
+    },
+    {
+     "hidden": [],
+     "frame": 5,
+     "text": "Frame 5\n[a]  frame      5   t=0:00:00.17   SSIM=0.9000    |  VMAF v0.6.1=30.00   PSNR=31.25   XPSNR=39.00   Butteraugli=5.0000"
+    },
+    {
+     "hidden": [],
+     "frame": 7,
+     "text": "Frame 7\n[a]  frame      7   t=0:00:00.23   SSIM=0.9900    |  VMAF v0.6.1=95.00   PSNR=45.00   XPSNR=110.00  Butteraugli=7.0000"
+    },
+    {
+     "hidden": [],
+     "frame": 20,
+     "text": "Frame 20\n[a]  frame     20   not in this run"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   SSIM=0.9000    |  VMAF v0.6.1=30.00   PSNR=31.25   XPSNR=39.00   Butteraugli=5.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   SSIM=0.9000    |  VMAF v0.6.1=30.00   PSNR=31.25   XPSNR=39.00   Butteraugli=5.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27\n[a]  frame      8   t=0:00:00.27   SSIM=0.9950    |  VMAF v0.6.1=95.00   PSNR=46.00                 Butteraugli=8.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00\n[a]  frame      5   t=0:00:00.17   SSIM=0.9000    |  VMAF v0.6.1=30.00   PSNR=31.25   XPSNR=39.00   Butteraugli=5.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25\n[a]  frame      7   t=0:00:00.23   SSIM=0.9900    |  VMAF v0.6.1=95.00   PSNR=45.00   XPSNR=110.00  Butteraugli=7.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00\n[a]  frame      9   t=0:00:00.30   SSIM=0.9900    |  VMAF v0.6.1=95.00   PSNR=47.00   XPSNR=42.00   Butteraugli=9.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 1,
+     "text": "Frame 1\n[a]  frame      1   t=0:00:00.03   SSIM=0.9910    |  VMAF v0.6.1=95.00   PSNR=45.50   XPSNR=\u221e       Butteraugli=1.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 5,
+     "text": "Frame 5\n[a]  frame      5   t=0:00:00.17   SSIM=0.9000    |  VMAF v0.6.1=30.00   PSNR=31.25   XPSNR=39.00   Butteraugli=5.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 7,
+     "text": "Frame 7\n[a]  frame      7   t=0:00:00.23   SSIM=0.9900    |  VMAF v0.6.1=95.00   PSNR=45.00   XPSNR=110.00  Butteraugli=7.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 20,
+     "text": "Frame 20\n[a]  frame     20   not in this run"
+    }
+   ]
+  },
+  {
+   "key": "xpsnr",
+   "table": {
+    "headers": [
+     "Series",
+     "VMAF v0.6.1",
+     "VMAF NEG",
+     "VMAF v1",
+     "PSNR",
+     "SSIM",
+     "XPSNR",
+     "SSIMULACRA2",
+     "Butteraugli",
+     "CVVDP",
+     "Median",
+     "StDev",
+     "Min",
+     "Max",
+     "10% Low",
+     "5% Low",
+     "1% Low",
+     "0.1% Low",
+     "> 38",
+     "> 35",
+     "> 33",
+     "< 33",
+     "< 30",
+     "< 27",
+     ""
+    ],
+    "cells": [
+     [
+      "a",
+      "88.50",
+      "\u2014",
+      "\u2014",
+      "43.27",
+      "0.9775",
+      "43.43",
+      "\u2014",
+      "4.5000",
+      "8.750",
+      "41.00",
+      "24.52",
+      "38.00",
+      "\u221e",
+      "38.80",
+      "38.40",
+      "38.08",
+      "38.01",
+      "88.9%",
+      "100.0%",
+      "100.0%",
+      "0.0%",
+      "0.0%",
+      "0.0%",
+      "\u2715"
+     ],
+     [
+      "b",
+      "89.50",
+      "\u2014",
+      "\u2014",
+      "41.20",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ],
+     [
+      "short",
+      "81.00",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ]
+    ]
+   },
+   "frame_range": [
+    0,
+    9
+   ],
+   "readouts": [
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   XPSNR=39.00   |  VMAF v0.6.1=30.00   PSNR=31.25   SSIM=0.9000    Butteraugli=5.0000"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   XPSNR=39.00   |  VMAF v0.6.1=30.00   PSNR=31.25   SSIM=0.9000    Butteraugli=5.0000"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27\n[a]  frame      9   t=0:00:00.30   XPSNR=42.00   |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    Butteraugli=9.0000"
+    },
+    {
+     "hidden": [],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00\n[a]  frame      2   t=0:00:00.07   XPSNR=38.00   |  VMAF v0.6.1=95.00   PSNR=44.00   SSIM=0.9890    Butteraugli=2.0000"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25\n[a]  frame      6   t=0:00:00.20   XPSNR=40.00   |  VMAF v0.6.1=95.00   PSNR=44.00   SSIM=0.9800    Butteraugli=6.0000"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00\n[a]  frame      9   t=0:00:00.30   XPSNR=42.00   |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    Butteraugli=9.0000"
+    },
+    {
+     "hidden": [],
+     "frame": 1,
+     "text": "Frame 1\n[a]  frame      1   t=0:00:00.03   XPSNR=\u221e       |  VMAF v0.6.1=95.00   PSNR=45.50   SSIM=0.9910    Butteraugli=1.0000"
+    },
+    {
+     "hidden": [],
+     "frame": 5,
+     "text": "Frame 5\n[a]  frame      5   t=0:00:00.17   XPSNR=39.00   |  VMAF v0.6.1=30.00   PSNR=31.25   SSIM=0.9000    Butteraugli=5.0000"
+    },
+    {
+     "hidden": [],
+     "frame": 7,
+     "text": "Frame 7\n[a]  frame      7   t=0:00:00.23   XPSNR=110.00  |  VMAF v0.6.1=95.00   PSNR=45.00   SSIM=0.9900    Butteraugli=7.0000"
+    },
+    {
+     "hidden": [],
+     "frame": 20,
+     "text": "Frame 20\n[a]  frame     20   not in this run"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   XPSNR=39.00   |  VMAF v0.6.1=30.00   PSNR=31.25   SSIM=0.9000    Butteraugli=5.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   XPSNR=39.00   |  VMAF v0.6.1=30.00   PSNR=31.25   SSIM=0.9000    Butteraugli=5.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27\n[a]  frame      9   t=0:00:00.30   XPSNR=42.00   |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    Butteraugli=9.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00\n[a]  frame      2   t=0:00:00.07   XPSNR=38.00   |  VMAF v0.6.1=95.00   PSNR=44.00   SSIM=0.9890    Butteraugli=2.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25\n[a]  frame      6   t=0:00:00.20   XPSNR=40.00   |  VMAF v0.6.1=95.00   PSNR=44.00   SSIM=0.9800    Butteraugli=6.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00\n[a]  frame      9   t=0:00:00.30   XPSNR=42.00   |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    Butteraugli=9.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 1,
+     "text": "Frame 1\n[a]  frame      1   t=0:00:00.03   XPSNR=\u221e       |  VMAF v0.6.1=95.00   PSNR=45.50   SSIM=0.9910    Butteraugli=1.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 5,
+     "text": "Frame 5\n[a]  frame      5   t=0:00:00.17   XPSNR=39.00   |  VMAF v0.6.1=30.00   PSNR=31.25   SSIM=0.9000    Butteraugli=5.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 7,
+     "text": "Frame 7\n[a]  frame      7   t=0:00:00.23   XPSNR=110.00  |  VMAF v0.6.1=95.00   PSNR=45.00   SSIM=0.9900    Butteraugli=7.0000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 20,
+     "text": "Frame 20\n[a]  frame     20   not in this run"
+    }
+   ]
+  },
+  {
+   "key": "ssimulacra2",
+   "table": {
+    "headers": [
+     "Series",
+     "VMAF v0.6.1",
+     "VMAF NEG",
+     "VMAF v1",
+     "PSNR",
+     "SSIM",
+     "XPSNR",
+     "SSIMULACRA2",
+     "Butteraugli",
+     "CVVDP",
+     "Median",
+     "StDev",
+     "Min",
+     "Max",
+     "10% Low",
+     "5% Low",
+     "1% Low",
+     "0.1% Low",
+     "> 90",
+     "> 80",
+     "> 70",
+     "< 70",
+     "< 50",
+     "< 30",
+     ""
+    ],
+    "cells": [
+     [
+      "a",
+      "88.50",
+      "\u2014",
+      "\u2014",
+      "43.27",
+      "0.9775",
+      "43.43",
+      "\u2014",
+      "4.5000",
+      "8.750",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ],
+     [
+      "b",
+      "89.50",
+      "\u2014",
+      "\u2014",
+      "41.20",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ],
+     [
+      "short",
+      "81.00",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ]
+    ]
+   },
+   "frame_range": [
+    0,
+    0
+   ],
+   "readouts": [
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27"
+    },
+    {
+     "hidden": [],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00"
+    },
+    {
+     "hidden": [],
+     "frame": 1,
+     "text": "Frame 1: no visible series."
+    },
+    {
+     "hidden": [],
+     "frame": 5,
+     "text": "Frame 5: no visible series."
+    },
+    {
+     "hidden": [],
+     "frame": 7,
+     "text": "Frame 7: no visible series."
+    },
+    {
+     "hidden": [],
+     "frame": 20,
+     "text": "Frame 20: no visible series."
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 1,
+     "text": "Frame 1: no visible series."
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 5,
+     "text": "Frame 5: no visible series."
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 7,
+     "text": "Frame 7: no visible series."
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 20,
+     "text": "Frame 20: no visible series."
+    }
+   ]
+  },
+  {
+   "key": "butteraugli",
+   "table": {
+    "headers": [
+     "Series",
+     "VMAF v0.6.1",
+     "VMAF NEG",
+     "VMAF v1",
+     "PSNR",
+     "SSIM",
+     "XPSNR",
+     "SSIMULACRA2",
+     "Butteraugli",
+     "CVVDP",
+     "Median",
+     "StDev",
+     "Min",
+     "Max",
+     "10% High",
+     "5% High",
+     "1% High",
+     "0.1% High",
+     ""
+    ],
+    "cells": [
+     [
+      "a",
+      "88.50",
+      "\u2014",
+      "\u2014",
+      "43.27",
+      "0.9775",
+      "43.43",
+      "\u2014",
+      "4.5000",
+      "8.750",
+      "4.5000",
+      "2.8723",
+      "0.0000",
+      "9.0000",
+      "8.1000",
+      "8.5500",
+      "8.9100",
+      "8.9910",
+      "\u2715"
+     ],
+     [
+      "b",
+      "89.50",
+      "\u2014",
+      "\u2014",
+      "41.20",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ],
+     [
+      "short",
+      "81.00",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ]
+    ]
+   },
+   "frame_range": [
+    0,
+    9
+   ],
+   "readouts": [
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      9   t=0:00:00.30   Butteraugli=9.0000    |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    XPSNR=42.00"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      9   t=0:00:00.30   Butteraugli=9.0000    |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    XPSNR=42.00"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27\n[a]  frame      9   t=0:00:00.30   Butteraugli=9.0000    |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    XPSNR=42.00"
+    },
+    {
+     "hidden": [],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00\n[a]  frame      0   t=0:00:00.00   Butteraugli=0.0000    |  VMAF v0.6.1=95.00   PSNR=45.00   SSIM=0.9900    XPSNR=40.00"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25\n[a]  frame      9   t=0:00:00.30   Butteraugli=9.0000    |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    XPSNR=42.00"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00\n[a]  frame      9   t=0:00:00.30   Butteraugli=9.0000    |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    XPSNR=42.00"
+    },
+    {
+     "hidden": [],
+     "frame": 1,
+     "text": "Frame 1\n[a]  frame      1   t=0:00:00.03   Butteraugli=1.0000    |  VMAF v0.6.1=95.00   PSNR=45.50   SSIM=0.9910    XPSNR=\u221e"
+    },
+    {
+     "hidden": [],
+     "frame": 5,
+     "text": "Frame 5\n[a]  frame      5   t=0:00:00.17   Butteraugli=5.0000    |  VMAF v0.6.1=30.00   PSNR=31.25   SSIM=0.9000    XPSNR=39.00"
+    },
+    {
+     "hidden": [],
+     "frame": 7,
+     "text": "Frame 7\n[a]  frame      7   t=0:00:00.23   Butteraugli=7.0000    |  VMAF v0.6.1=95.00   PSNR=45.00   SSIM=0.9900    XPSNR=110.00"
+    },
+    {
+     "hidden": [],
+     "frame": 20,
+     "text": "Frame 20\n[a]  frame     20   not in this run"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      9   t=0:00:00.30   Butteraugli=9.0000    |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    XPSNR=42.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  frame      9   t=0:00:00.30   Butteraugli=9.0000    |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    XPSNR=42.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27\n[a]  frame      9   t=0:00:00.30   Butteraugli=9.0000    |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    XPSNR=42.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00\n[a]  frame      0   t=0:00:00.00   Butteraugli=0.0000    |  VMAF v0.6.1=95.00   PSNR=45.00   SSIM=0.9900    XPSNR=40.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25\n[a]  frame      9   t=0:00:00.30   Butteraugli=9.0000    |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    XPSNR=42.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00\n[a]  frame      9   t=0:00:00.30   Butteraugli=9.0000    |  VMAF v0.6.1=95.00   PSNR=47.00   SSIM=0.9900    XPSNR=42.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 1,
+     "text": "Frame 1\n[a]  frame      1   t=0:00:00.03   Butteraugli=1.0000    |  VMAF v0.6.1=95.00   PSNR=45.50   SSIM=0.9910    XPSNR=\u221e"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 5,
+     "text": "Frame 5\n[a]  frame      5   t=0:00:00.17   Butteraugli=5.0000    |  VMAF v0.6.1=30.00   PSNR=31.25   SSIM=0.9000    XPSNR=39.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 7,
+     "text": "Frame 7\n[a]  frame      7   t=0:00:00.23   Butteraugli=7.0000    |  VMAF v0.6.1=95.00   PSNR=45.00   SSIM=0.9900    XPSNR=110.00"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 20,
+     "text": "Frame 20\n[a]  frame     20   not in this run"
+    }
+   ]
+  },
+  {
+   "key": "cvvdp",
+   "table": {
+    "headers": [
+     "Series",
+     "VMAF v0.6.1",
+     "VMAF NEG",
+     "VMAF v1",
+     "PSNR",
+     "SSIM",
+     "XPSNR",
+     "SSIMULACRA2",
+     "Butteraugli",
+     "CVVDP",
+     "Median",
+     "StDev",
+     "Min",
+     "Max",
+     "10% Low",
+     "5% Low",
+     "1% Low",
+     "0.1% Low",
+     ""
+    ],
+    "cells": [
+     [
+      "a",
+      "88.50",
+      "\u2014",
+      "\u2014",
+      "43.27",
+      "0.9775",
+      "43.43",
+      "\u2014",
+      "4.5000",
+      "8.750",
+      "8.500",
+      "0.408",
+      "8.000",
+      "9.000",
+      "8.100",
+      "8.050",
+      "8.010",
+      "8.001",
+      "\u2715"
+     ],
+     [
+      "b",
+      "89.50",
+      "\u2014",
+      "\u2014",
+      "41.20",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ],
+     [
+      "short",
+      "81.00",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "\u2014",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "\u2715"
+     ]
+    ]
+   },
+   "frame_range": [
+    0,
+    6
+   ],
+   "readouts": [
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  second from frame      3   t=0:00:00.10   CVVDP=9.000"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  second from frame      3   t=0:00:00.10   CVVDP=9.000"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27\n[a]  second from frame      6   t=0:00:00.20   CVVDP=8.000"
+    },
+    {
+     "hidden": [],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00\n[a]  second from frame      0   t=0:00:00.00   CVVDP=8.500"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25\n[a]  second from frame      6   t=0:00:00.20   CVVDP=8.000"
+    },
+    {
+     "hidden": [],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00\n[a]  second from frame      6   t=0:00:00.20   CVVDP=8.000"
+    },
+    {
+     "hidden": [],
+     "frame": 1,
+     "text": "Frame 1\n[a]  second from frame      0   t=0:00:00.00   CVVDP=8.500"
+    },
+    {
+     "hidden": [],
+     "frame": 5,
+     "text": "Frame 5\n[a]  second from frame      3   t=0:00:00.10   CVVDP=9.000"
+    },
+    {
+     "hidden": [],
+     "frame": 7,
+     "text": "Frame 7\n[a]  second from frame      6   t=0:00:00.20   CVVDP=8.000"
+    },
+    {
+     "hidden": [],
+     "frame": 20,
+     "text": "Frame 20\n[a]  second from frame      6   t=0:00:00.20   CVVDP=8.000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.1800000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  second from frame      3   t=0:00:00.10   CVVDP=9.000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.5555555555555p-3",
+     "y": "0x1.8c00000000000p+6",
+     "text": "Time: 0:00:00.17\n[a]  second from frame      3   t=0:00:00.10   CVVDP=9.000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.1111111111111p-2",
+     "y": "0x1.e000000000000p+5",
+     "text": "Time: 0:00:00.27\n[a]  second from frame      6   t=0:00:00.20   CVVDP=8.000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x0.0p+0",
+     "y": "0x0.0p+0",
+     "text": "Time: 0:00:00.00\n[a]  second from frame      0   t=0:00:00.00   CVVDP=8.500"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p-2",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:00.25\n[a]  second from frame      6   t=0:00:00.20   CVVDP=8.000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "x": "0x1.0000000000000p+1",
+     "y": "0x1.9000000000000p+5",
+     "text": "Time: 0:00:02.00\n[a]  second from frame      6   t=0:00:00.20   CVVDP=8.000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 1,
+     "text": "Frame 1\n[a]  second from frame      0   t=0:00:00.00   CVVDP=8.500"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 5,
+     "text": "Frame 5\n[a]  second from frame      3   t=0:00:00.10   CVVDP=9.000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 7,
+     "text": "Frame 7\n[a]  second from frame      6   t=0:00:00.20   CVVDP=8.000"
+    },
+    {
+     "hidden": [
+      "b"
+     ],
+     "frame": 20,
+     "text": "Frame 20\n[a]  second from frame      6   t=0:00:00.20   CVVDP=8.000"
+    }
+   ]
+  }
+ ]
+}

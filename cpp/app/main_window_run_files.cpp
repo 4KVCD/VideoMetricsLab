@@ -13,6 +13,7 @@
 
 #include "file_writes.h"
 #include "formatting.h"
+#include "graph_panel.h"
 #include "i18n.h"
 #include "vml/export_csv.h"
 #include "vml/model_select.h"
@@ -53,7 +54,7 @@ std::optional<CvvdpSettings> cvvdp_display_of(const SequenceMetricResult& cvvdp)
 
 void MainWindow::on_load_saved_run() {
     // Asks for a saved run and loads it into the table.
-    const QString chosen = open_file_(app::tr("Load analysis results"), run_file_filter());
+    const QString chosen = dialogs_.open_file(app::tr("Load analysis results"), run_file_filter());
     if (!chosen.isEmpty()) {
         load_saved_run(path_of(chosen));
     }
@@ -66,7 +67,7 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
     try {
         loaded = load_run(path);
     } catch (const RunFileError& error) {
-        alert_(app::tr("Failed to load run"), tr_message(QString::fromStdString(error.what())));
+        dialogs_.alert(app::tr("Failed to load run"), tr_message(QString::fromStdString(error.what())));
         return;
     }
     const ComparisonResult& result = loaded.first;
@@ -75,9 +76,9 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
     // video: with two rows for a path, every lookup by path (saved scores,
     // reads, a run's result) finds only the first.
     if (row_index_of_path(result.distorted) &&
-        !ask_(app::tr("Already added"), app::tr("{name} is already in the list. Show the saved run's scores in its "
-                                                "place?",
-                                                {{"name", name_of(result.distorted)}}))) {
+        !dialogs_.ask(app::tr("Already added"),
+                      app::tr("{name} is already in the list. Show the saved run's scores in its place?",
+                              {{"name", name_of(result.distorted)}}))) {
         return;
     }
     if (!source_info_) {
@@ -88,6 +89,10 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
         return;
     }
     if (const std::optional<int> existing = row_index_of_path(result.distorted)) {
+        const RowData& replaced = *rows_[static_cast<std::size_t>(*existing)];
+        if (replaced.completed_run && !graph_panel_->remove_by_identity(replaced.completed_run->graph_identity)) {
+            graph_panel_->remove_by_path(replaced.path);
+        }
         distorted_table_->removeRow(*existing);
         rows_.erase(rows_.begin() + *existing);
     }
@@ -184,11 +189,12 @@ bool MainWindow::offer_to_switch_source(const ComparisonResult& result) {
     // Asks before showing a run measured against another reference, and
     // whether to go ahead: yes makes the run's reference the window's, the
     // only way the table and the result mean the same thing.
-    if (!ask_(app::tr("Different reference video"),
-              app::tr("This saved run was measured against:\n    {source}\n\nbut the selected reference is:\n    "
-                      "{path}\n\nScores from two different references cannot be compared. Switch the reference to "
-                      "the one this run used?",
-                      {{"source", text_of(result.source)}, {"path", text_of(source_info_->path)}}))) {
+    if (!dialogs_.ask(
+            app::tr("Different reference video"),
+            app::tr("This saved run was measured against:\n    {source}\n\nbut the selected reference is:\n    "
+                    "{path}\n\nScores from two different references cannot be compared. Switch the reference to "
+                    "the one this run used?",
+                    {{"source", text_of(result.source)}, {"path", text_of(source_info_->path)}}))) {
         return false;
     }
     adopt_source_from_run(result);
@@ -215,19 +221,19 @@ void MainWindow::on_save_selected() {
     // several into a folder, each named after its run.
     const std::vector<std::shared_ptr<CompletedRun>> runs = selected_runs();
     if (runs.empty()) {
-        inform_(app::tr("Nothing selected"), app::tr("Select one or more completed rows to save."));
+        dialogs_.inform(app::tr("Nothing selected"), app::tr("Select one or more completed rows to save."));
         return;
     }
     const QString suffix = QString::fromUtf8(result_suffix.data(), static_cast<int>(result_suffix.size()));
     if (runs.size() == 1) {
-        const QString chosen = save_file_(app::tr("Save analysis results"), runs.front()->label + suffix,
-                                          run_file_filter());
+        const QString chosen = dialogs_.save_file(app::tr("Save analysis results"), runs.front()->label + suffix,
+                                                  run_file_filter());
         if (!chosen.isEmpty()) {
             submit_save(runs.front()->result, path_of(chosen), runs.front()->label);
         }
         return;
     }
-    const QString folder = choose_folder_(app::tr("Choose folder to save runs into"));
+    const QString folder = dialogs_.choose_folder(app::tr("Choose folder to save runs into"));
     if (folder.isEmpty()) {
         return;
     }

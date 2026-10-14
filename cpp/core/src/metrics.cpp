@@ -71,6 +71,16 @@ std::string MetricDefinition::format_value(std::optional<double> value) const {
     return format_fixed(*value, decimals);
 }
 
+std::string MetricDefinition::format_delta(std::optional<double> value) const {
+    if (!value || std::isnan(*value)) {
+        return "—";
+    }
+    if (std::isinf(*value)) {
+        return *value > 0 ? "+∞" : "−∞";
+    }
+    return (std::signbit(*value) ? "" : "+") + format_fixed(*value, decimals);
+}
+
 std::vector<ScoreMark> MetricDefinition::best_and_worst(const std::vector<std::optional<double>>& scores) const {
     std::vector<ScoreMark> marks(scores.size(), ScoreMark::none);
     std::vector<std::size_t> order;  // the videos with a score, lowest first (equal ones in their order)

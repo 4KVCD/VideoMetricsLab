@@ -15,6 +15,7 @@
 #include <variant>
 
 #include "file_writes.h"
+#include "graph_panel.h"
 #include "i18n.h"
 #include "main_window.h"
 #include "options_panel.h"
@@ -103,7 +104,7 @@ void MainWindow::on_run_clicked() {
         return;
     }
     if (source_probe_worker_ != nullptr && source_probe_worker_->isRunning()) {
-        inform_(app::tr("Still reading reference"), app::tr("Wait for the reference video to finish loading."));
+        dialogs_.inform(app::tr("Still reading reference"), app::tr("Wait for the reference video to finish loading."));
         return;
     }
     if (!source_info_) {
@@ -138,11 +139,19 @@ void MainWindow::on_run_clicked() {
         }
     }
     if (to_run.empty()) {
-        // (The Python app opens Metric Graphs with their scores, not ported
-        // to C++ yet.)
         show_status(ntr("The {count} checked video already has all requested metrics -- nothing to run.",
                         "All {count} checked videos already have all requested metrics -- nothing to run.",
                         already_scored));
+        // Their scores are what was asked for: on the graph.
+        std::vector<std::shared_ptr<CompletedRun>> done;
+        for (const int row : checked) {
+            if (const std::shared_ptr<CompletedRun>& run = rows_[static_cast<std::size_t>(row)]->completed_run) {
+                done.push_back(run);
+            }
+        }
+        if (!done.empty()) {
+            open_or_update_graph(done);
+        }
         return;
     }
 
@@ -154,8 +163,8 @@ void MainWindow::on_run_clicked() {
         if (!row_data->video_info) {
             if (std::any_of(probe_workers_.begin(), probe_workers_.end(),
                             [](ProbeWorker* worker) { return worker->isRunning(); })) {
-                inform_(app::tr("Still reading videos"),
-                        app::tr("Wait for every checked test video to finish loading before running."));
+                dialogs_.inform(app::tr("Still reading videos"),
+                                app::tr("Wait for every checked test video to finish loading before running."));
                 return;
             }
             skipped.emplace_back(row_data, N_("It could not be read. Remove it or add the file again to retry."));
@@ -198,6 +207,10 @@ void MainWindow::on_run_clicked() {
     }
 
     job_rows_ = std::move(job_rows);
+    checked_rows_for_run_.clear();
+    for (const int row : checked) {
+        checked_rows_for_run_.push_back(rows_[static_cast<std::size_t>(row)]);
+    }
     job_options_.clear();
     job_cvvdp_.clear();
     for (const std::shared_ptr<RowData>& row_data : job_rows_) {
@@ -780,14 +793,26 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
         }
         return std::nullopt;
     }
+    const std::shared_ptr<CompletedRun> previous = row_data.completed_run;
+    // The video's own result so far, before this piece: its line is updated.
+    const bool continuing = previous && previous->partial;
+    if (previous && !continuing && !graph_panel_->remove_by_identity(previous->graph_identity)) {
+        graph_panel_->remove_by_path(row_data.path);
+    }
     auto run = std::make_shared<CompletedRun>();
     run->result = result;
     run->label = label;
-    if (row_data.completed_run) {
+    run->partial = !final;
+    if (continuing) {
+        // The same line as the pieces before: its colour, and whether it was
+        // hidden, stay as they were.
+        run->graph_identity = previous->graph_identity;
+    }
+    if (previous) {
         // Scores the row was showing for metrics this run did not calculate
         // (unticked ones) stay shown, as the run's result holds only what it
         // calculated.
-        const MetricResultSet& before = row_data.completed_run->result.metric_results;
+        const MetricResultSet& before = previous->result.metric_results;
         const std::vector<std::string> requested = requested_metrics(row_data);
         for (const std::string& key : before.keys()) {
             if (result.has_metric(key) || contains(requested, key)) {
@@ -820,6 +845,10 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
             ntr("{count} scored frame; metrics: ", "{count} scored frames; metrics: ", frames) + labels.join(", ");
     }
     set_row_metrics(*row);
+    // Straight onto the graph: a finished video is a line, and waiting for a
+    // button to see it serves nobody.
+    graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label,
+                           run->graph_identity, !continuing});
     return row;
 }
 
@@ -854,9 +883,9 @@ void MainWindow::on_job_failed(int index, const QString& message, const QString&
 }
 
 void MainWindow::on_all_finished() {
-    // Ends the run: settles the rows it did not finish, and says how it
-    // ended. (The Python app also writes that to its log, and adds the run's
-    // results to Metric Graphs: neither is ported to C++ yet.)
+    // Ends the run: settles the rows it did not finish, says how it ended,
+    // and shows its results on Metric Graphs. (The Python app also writes
+    // how it ended to its log, not ported to C++ yet.)
     for (const std::shared_ptr<RowData>& row_data : job_rows_) {
         const std::optional<int> row = row_index_of(row_data.get());
         if (!row || (row_data->analysis_status != RowState::calculating &&
@@ -880,6 +909,21 @@ void MainWindow::on_all_finished() {
         line->setVisible(false);
     }
     show_status(run_end_message());
+    // Every row ticked, those skipped as already scored too, so that the
+    // graph shows all that was asked for; rows removed during the run left
+    // out.
+    std::vector<std::shared_ptr<CompletedRun>> finished;
+    for (const std::shared_ptr<RowData>& row_data : checked_rows_for_run_) {
+        if (row_data->completed_run && row_index_of(row_data.get())) {
+            finished.push_back(row_data->completed_run);
+        }
+    }
+    if (!finished.empty()) {
+        // A cancelled run stays on the Videos tab, where Cancel was pressed
+        // and the unfinished rows are; what it finished is on the graph all
+        // the same.
+        open_or_update_graph(finished, !run_was_cancelled_);
+    }
 }
 
 void MainWindow::on_run_thread_finished(RunWorker* worker) {

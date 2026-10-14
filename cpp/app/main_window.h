@@ -34,6 +34,7 @@
 #include <utility>
 #include <vector>
 
+#include "dialogs.h"
 #include "probe_worker.h"
 #include "row_state.h"
 #include "vml/analysis_request.h"
@@ -60,9 +61,11 @@ class ElidedLabel;
 class CvvdpDisplayDialog;
 class FileWrites;
 class FillColumnTable;
+class GraphPanel;
 class OptionsPanel;
 class QuietTabWidget;
 class RunWorker;
+class VideoColors;
 
 // The test-video table's columns, by their stable physical index (the
 // Python app's COL_* numbers). VMAF v1 was added last, so every older column
@@ -98,9 +101,19 @@ const std::vector<MetricColumn>& metric_columns();
 // The window's tabs.
 enum Tab : int { tab_videos, tab_graph, tab_frame_compare, tab_bitrate, tab_settings };
 
+// A run's own line on Metric Graphs: a name no other run has (the Python
+// app's graph_identity, an object of its own).
+std::string new_graph_identity();
+
 // A run's result on a row (the Python app's CompletedRun).
 struct CompletedRun {
     ComparisonResult result;
+    // A video's result so far, during its run; its line is updated in place
+    // when the rest arrives.
+    bool partial = false;
+    // Its line on Metric Graphs, kept by a run that replaces it to update
+    // the same line (its colour, whether it is hidden or removed stay).
+    std::string graph_identity = new_graph_identity();
     // Its name in saved runs and the graphs: the test video's, or the one a
     // saved run or saved scores were given.
     QString label;
@@ -296,6 +309,12 @@ private:
                            const std::optional<std::string>& replacing, bool apply_to_rows = true);
     void on_cvvdp_delete_preset();
 
+    // ------------------------------------------------------- Metric Graphs
+    void on_tab_changed(int index);
+    void sync_graph();
+    void open_or_update_graph(const std::vector<std::shared_ptr<CompletedRun>>& runs, bool show = true);
+    void on_show_graph_clicked();
+
     // -------------------------------------- saved runs (main_window_run_files.cpp)
     void on_load_saved_run();
     void load_saved_run(const std::filesystem::path& path);
@@ -398,15 +417,8 @@ private:
     // answer it in its place, as a user would.
     std::function<int(CvvdpDisplayDialog&)> run_cvvdp_dialog_;
     // The other dialogs that wait for the user, which the tests answer in
-    // the user's place: a message with an OK button (QMessageBox's
-    // information and critical), a question answered Yes or No, and the
-    // file dialogs (an empty answer is Cancel).
-    std::function<void(const QString& title, const QString& text)> inform_;
-    std::function<void(const QString& title, const QString& text)> alert_;
-    std::function<bool(const QString& title, const QString& text)> ask_;
-    std::function<QString(const QString& title, const QString& filter)> open_file_;
-    std::function<QString(const QString& title, const QString& suggested, const QString& filter)> save_file_;
-    std::function<QString(const QString& title)> choose_folder_;
+    // the user's place.
+    Dialogs dialogs_;
 
     // The lookup of saved scores under way: the rows it was asked about, and
     // a number each lookup raises, with which the window refuses the answers
@@ -473,6 +485,12 @@ private:
     QPushButton* cancel_button_ = nullptr;
     QCheckBox* parallel_jobs_check_ = nullptr;
     QPushButton* load_button_ = nullptr;
+    // The videos' colours, shared by the graphs, and Metric Graphs.
+    VideoColors* video_colors_ = nullptr;
+    GraphPanel* graph_panel_ = nullptr;
+    // The rows ticked when the run started, those already scored too: their
+    // results go to the graph when it ends.
+    std::vector<std::shared_ptr<RowData>> checked_rows_for_run_;
     QPushButton* save_button_ = nullptr;
     QPushButton* show_graph_button_ = nullptr;
     QLabel* status_label_ = nullptr;

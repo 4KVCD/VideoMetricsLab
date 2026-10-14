@@ -38,6 +38,7 @@
 
 #include "cvvdp_display_dialog.h"
 #include "file_writes.h"
+#include "graph_panel.h"
 #include "i18n.h"
 #include "options_panel.h"
 #include "test_videos.h"
@@ -164,14 +165,14 @@ protected:
     // they come, rather than shown.
     static std::shared_ptr<std::vector<std::pair<QString, QString>>> keep_information(MainWindow& window) {
         auto kept = std::make_shared<std::vector<std::pair<QString, QString>>>();
-        window.inform_ = [kept](const QString& title, const QString& text) { kept->emplace_back(title, text); };
+        window.dialogs_.inform = [kept](const QString& title, const QString& text) { kept->emplace_back(title, text); };
         return kept;
     }
     // Answers the window's Yes or No questions with `yes`, keeping their
     // titles in the order they are asked.
     static std::shared_ptr<std::vector<QString>> answer_questions(MainWindow& window, bool yes) {
         auto asked = std::make_shared<std::vector<QString>>();
-        window.ask_ = [asked, yes](const QString& title, const QString& /*text*/) {
+        window.dialogs_.ask = [asked, yes](const QString& title, const QString& /*text*/) {
             asked->push_back(title);
             return yes;
         };
@@ -180,8 +181,8 @@ protected:
     // Answers the dialogs that open or save a file with `path`.
     static void choose_file(MainWindow& window, const std::filesystem::path& path) {
         const QString text = QString::fromStdString(platform::path_text(path));
-        window.open_file_ = [text](const QString& /*title*/, const QString& /*filter*/) { return text; };
-        window.save_file_ = [text](const QString& /*title*/, const QString& /*suggested*/,
+        window.dialogs_.open_file = [text](const QString& /*title*/, const QString& /*filter*/) { return text; };
+        window.dialogs_.save_file = [text](const QString& /*title*/, const QString& /*suggested*/,
                                    const QString& /*filter*/) { return text; };
     }
     static QPushButton& save_button(MainWindow& window) { return *window.save_button_; }
@@ -205,6 +206,14 @@ protected:
             QTableWidgetSelectionRange(first, 0, last, table(window).columnCount() - 1), true);
     }
     static QString dialog_folder(MainWindow& window, const QString& kind) { return window.video_dialog_dir(kind); }
+    // The test videos with a line on Metric Graphs, in the order added.
+    static std::vector<std::string> graphed(MainWindow& window) {
+        std::vector<std::string> names;
+        for (const auto& [id, entry] : window.graph_panel_->entries_) {
+            names.push_back(platform::path_text(entry.result->distorted.filename()));
+        }
+        return names;
+    }
 
     // Whether a video is still being read.
     static bool reading(MainWindow& window) { return !window.probe_workers_.empty(); }
@@ -1275,6 +1284,30 @@ TEST_F(WindowTest, ClosingTheWindowDuringARunEndsTheRunAndThenTheWindow) {
     EXPECT_EQ(status(window), "Finishing up; the window will close on its own.");
     ASSERT_TRUE(wait_until([&] { return !window.isVisible(); }));
     EXPECT_FALSE(running(window));
+}
+
+// ------------------------------------------------------------- the graph
+
+TEST_F(WindowTest, AFinishedRunIsOnTheGraphAndARemovedVideoTakesItsLineAway) {
+    // Metric Graphs shows exactly the videos with a result: a run's reach it
+    // without a button pressed, its tab brought to the front, and a video
+    // removed takes its line with it. (The Python app once shipped both
+    // wrong: a graph empty until Show graph was pressed, and lines left.)
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    MainWindow window;
+    open_clips(window);
+    run_button(window).click();
+    ASSERT_TRUE(wait_until([&] { return !running(window); }));
+    ASSERT_EQ(state(window, 0), RowState::complete);
+    ASSERT_EQ(state(window, 1), RowState::complete);
+    EXPECT_EQ(tabs(window).currentIndex(), tab_graph);
+    EXPECT_EQ(graphed(window), (std::vector<std::string>{"a.mkv", "b.mkv"}));
+
+    select_rows(window, 0, 0);
+    remove_selected(window);
+    EXPECT_EQ(graphed(window), std::vector<std::string>{"b.mkv"});
 }
 
 // ------------------------------------------------------------ the window

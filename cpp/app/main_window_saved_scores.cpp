@@ -12,6 +12,7 @@
 
 #include "file_writes.h"
 #include "formatting.h"
+#include "graph_panel.h"
 #include "i18n.h"
 #include "main_window.h"
 #include "widgets.h"
@@ -124,9 +125,16 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     if (lookup_token(source_info_->path, row_data.identity_path(), analysis_request_of(row_data)) != found.token) {
         return;
     }
+    const std::shared_ptr<CompletedRun> previous = row_data.completed_run;
     auto run = std::make_shared<CompletedRun>();
     run->result = found.result;
     run->label = found.label;
+    if (previous) {
+        // The row's line updated in place: its colour, and whether it is
+        // hidden or removed, stay. Replaced under a new identity, they were
+        // reset whenever a display switched back to had a saved CVVDP score.
+        run->graph_identity = previous->graph_identity;
+    }
     if (row_data.completed_run) {
         // The saved scores replace what the row shows when they hold
         // something it does not, ticked or not, as saved scores are shown
@@ -160,6 +168,11 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
         set_row_info(*row, row_data.video_info ? *row_data.video_info : found.result.distorted_info);
     }
     set_row_metrics(*row);
+    // The graph kept in step as scores arrive, so that the tab shows them all
+    // when opened.
+    const std::shared_ptr<CompletedRun>& shown = row_data.completed_run;
+    graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(shown, &shown->result), shown->label,
+                           shown->graph_identity, previous == nullptr});
 }
 
 void MainWindow::on_other_displays_found(int generation, const OtherDisplaysFound& found) {
@@ -268,13 +281,22 @@ void MainWindow::drop_metric_results(int row, const std::vector<std::string>& ke
     }
     row_data.analysis_status.reset();
     if (kept.empty()) {
+        if (!graph_panel_->remove_by_identity(run->graph_identity)) {
+            graph_panel_->remove_by_path(row_data.path);
+        }
         row_data.completed_run.reset();
         row_data.status_detail.clear();
     } else {
+        // A copy, not the result edited: the graph holds the old one.
         auto rest = std::make_shared<CompletedRun>();
         rest->result = run->result;
         rest->label = run->label;
         rest->result.metric_results = std::move(kept);
+        // The same line, updated: under a new identity it took a new colour
+        // and came back even if hidden or removed from the graph.
+        rest->graph_identity = run->graph_identity;
+        graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(rest, &rest->result), rest->label,
+                               rest->graph_identity, false});
         row_data.completed_run = std::move(rest);
     }
     set_row_metrics(row);

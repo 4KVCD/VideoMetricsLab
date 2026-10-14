@@ -2502,6 +2502,158 @@ def _i18n_message(template: str, values: dict | None = None) -> str:
     return re.sub(r"\{(\w+)\}", lambda match: (values or {}).get(match[1], f"V{match[1]}"), template)
 
 
+def graph_cases() -> dict:
+    """Metric Graphs (ui/graph_panel.py), from the Python app's own panel:
+    three runs (every kind of score: a dip, XPSNR's infinity, a subsampled
+    PSNR, Butteraugli's high tail, CVVDP's seconds, a short run) added in
+    turn; then, on each metric's page, the table's headings and cells, the Go
+    to frame box's range, the readout at set points (the charts 800 pixels
+    wide) and at set frames, with all three lines shown and with one hidden."""
+    import numpy as np
+    from PySide6.QtWidgets import QApplication
+
+    from vmaf_app.core.metric_results import (
+        FrameMetricResult,
+        MetricProvenance,
+        MetricResultSet,
+        SequenceMetricResult,
+    )
+    from vmaf_app.core.metrics import METRICS
+    from vmaf_app.core.models import ComparisonResult, VideoInfo
+    from vmaf_app.ui.graph_panel import GraphPanel
+
+    app = QApplication.instance() or QApplication(["make_reference", "-platform", "offscreen"])
+    fps = 30.0
+    made = MetricProvenance("ffmpeg/libvmaf", "ffmpeg 9.0.1", "cpu", "ffmpeg-libvmaf-v1")
+
+    def frame_metric(key, values, frames=None):
+        frames = np.arange(len(values), dtype=np.int32) if frames is None else np.asarray(frames, dtype=np.int32)
+        return FrameMetricResult(key, frames, frames / fps, np.asarray(values, dtype=np.float32), made)
+
+    def result(name, metrics):
+        info = VideoInfo(path=Path(name), width=1920, height=1080, fps=fps, duration=10 / fps, nb_frames=10,
+                         codec_name="h264")
+        return ComparisonResult(source=Path("source.mkv"), distorted=Path(name), frames=[], fps=fps,
+                                model="version=vmaf_v0.6.1", source_crop=None, distorted_crop=None,
+                                source_info=info, distorted_info=info, metric_results=MetricResultSet(metrics))
+
+    inf = float("inf")
+    runs = [
+        ("a", result("a.mkv", [
+            frame_metric("vmaf", [95, 95, 95, 95, 95, 30, 95, 95, 95, 95]),
+            frame_metric("psnr", [45, 45.5, 44, 43, 42, 31.25, 44, 45, 46, 47]),
+            frame_metric("ssim", [0.99, 0.991, 0.989, 0.98, 0.97, 0.9, 0.98, 0.99, 0.995, 0.99]),
+            frame_metric("xpsnr", [40, inf, 38, inf, 41, 39, 40, 110, float("nan"), 42]),
+            frame_metric("butteraugli", [float(v) for v in range(10)]),
+            SequenceMetricResult("cvvdp", 8.75, made, np.array([0, 3, 6], dtype=np.int32),
+                                 np.array([0.0, 0.1, 0.2]), np.array([8.5, 9.0, 8.0], dtype=np.float32)),
+        ])),
+        ("b", result("b.mkv", [
+            frame_metric("vmaf", [95, 95, 95, 95, 95, 95, 95, 95, 40, 95]),
+            frame_metric("psnr", [44, 40, 39, 41, 42], frames=[0, 2, 4, 6, 8]),
+        ])),
+        ("short", result("short.mkv", [frame_metric("vmaf", [80, 81, 82])])),
+    ]
+    panel = GraphPanel()
+    for label, run in runs:
+        panel.add_run(run, label)
+    ids = {entry.label: sid for sid, entry in panel._entries.items()}
+
+    def table():
+        headers = [panel.stats_table.horizontalHeaderItem(c).text() for c in range(panel.stats_table.columnCount())]
+        cells = [[(panel.stats_table.item(r, c).text() if panel.stats_table.item(r, c) is not None else None)
+                  for c in range(panel.stats_table.columnCount())] for r in range(panel.stats_table.rowCount())]
+        return {"headers": headers, "cells": cells}
+
+    pages = []
+    hovers = [(5 / fps, 70.0), (5 / fps, 99.0), (8 / fps, 60.0), (0.0, 0.0), (0.25, 50.0), (2.0, 50.0)]
+    for index, metric in enumerate(METRICS):
+        panel.tabs.setCurrentIndex(index)
+        page = panel._pages[metric.key]
+        page.chart.resize(800, 400)
+        case = {"key": metric.key, "table": table(), "frame_range": [panel.frame_spin.minimum(),
+                                                                     panel.frame_spin.maximum()]}
+        readouts = []
+        for hidden in ([], ["b"]):
+            for label in hidden:
+                panel.set_series_visible(ids[label], False)
+            for x, y in hovers:
+                page.on_hover(x, y, panel._entries)
+                readouts.append({"hidden": hidden, "x": exact(x), "y": exact(y), "text": page.hover_label.text()})
+            for frame in (1, 5, 7, 20):
+                page.show_frame(frame, panel._entries)
+                readouts.append({"hidden": hidden, "frame": frame, "text": page.hover_label.text()})
+            for label in hidden:
+                panel.set_series_visible(ids[label], True)
+        case["readouts"] = readouts
+        pages.append(case)
+    panel.deleteLater()
+    del app
+    return {"runs": [{"label": label, "result": _result_json(run)} for label, run in runs], "pages": pages}
+
+
+def chart_cases() -> dict:
+    """The graph's chart (ui/chart.py), from the Python app's own widget at
+    800x400: the tick spacings for spans of every size, and for lines of
+    each kind (a bounded scale, one above its ceiling, decibels, an inverted
+    scale, all NaN, two hours, a single point) the value axis's range, the
+    ticks' labels and rows, and the mapping between pixels, times and
+    values."""
+    import numpy as np
+    from PySide6.QtWidgets import QApplication
+
+    from vmaf_app.ui import chart
+
+    app = QApplication.instance() or QApplication(["make_reference", "-platform", "offscreen"])
+    spans = [0.0, -1.0, 0.004, 0.5, 1.0, 3.7, 8.0, 10.0, 59.9, 60.0, 61.0, 600.0, 1234.5, 7200.0, 14400.0,
+             115200.0, 130000.0, 500000.0, 1e-7, 0.0123, 0.3, 2.5, 7.9, 8.1, 16.0, 39.99, 40.0, 100.0, 777.0]
+    steps = [{"span": exact(span), "time": exact(chart._nice_time_step(span)),
+              "value": exact(chart._nice_value_step(span))} for span in spans]
+
+    fps = 24000 / 1001
+    frames = np.arange(300)
+    lines = {
+        "VMAF": (100.0, False, frames / fps, 80 + 20 * np.sin(frames / 9.0)),
+        "VMAF v1 above 100": (100.0, False, frames[:3] / fps, [99.0, 105.0, 110.0]),
+        "PSNR": (None, False, frames / fps, 37.5 + 7.5 * np.cos(frames / 13.0)),
+        "a flat line": (None, False, frames / fps, np.full(300, 42.0)),
+        "Butteraugli, inverted": (None, True, frames[:3] / fps, [0.0, 1.5, 3.0]),
+        "all NaN": (100.0, False, frames / fps, np.full(300, np.nan)),
+        "two hours": (100.0, False, np.arange(172_800) / 24.0, np.full(172_800, 95.0)),
+        "a single point": (None, False, np.array([4.0]), [12.5]),
+    }
+    charts = []
+    for name, (fixed_y_max, inverted, times, values) in lines.items():
+        widget = chart.ChartWidget(y_axis_label="axis", fixed_y_max=fixed_y_max, invert_y=inverted)
+        widget.resize(800, 400)
+        times = np.asarray(times, dtype=np.float64)
+        values = np.asarray(values, dtype=np.float32)
+        widget.set_series(1, chart.ChartSeries(times=times, values=values, color="#4C72B0"))
+        rect = widget.plot_rect()
+        y0, y1 = widget.y_range()
+        x0, x1 = widget.x_range()
+        charts.append({
+            "name": name, "fixed_y_max": fixed_y_max, "inverted": inverted,
+            # The longest line by its pattern, the others in full.
+            "times": {"count": len(times), "per_second": 24.0} if name == "two hours"
+            else [exact(float(t)) for t in times],
+            "values": {"count": len(values), "value": 95.0} if name == "two hours"
+            else [exact(float(v)) for v in values],
+            "plot_rect": [rect.left(), rect.top(), rect.width(), rect.height()],
+            "y_range": [exact(y0), exact(y1)], "x_range": [exact(x0), exact(x1)],
+            "time_labels": widget.time_tick_labels(),
+            "value_ticks": [[row, label] for row, label in widget.value_ticks()],
+            "pixels_for_times": [[exact(t), widget.pixel_for_time(t)]
+                                 for t in (x0, x1, (x0 + x1) / 2, x0 + (x1 - x0) / 3)],
+            "times_at": [[px, exact(widget.time_at(px))] for px in (rect.left(), rect.right(), 400, 123)],
+            "values_at": [[py, exact(widget.value_at(py))] for py in (rect.top(), rect.bottom(), 200, 77)],
+            "seconds_per_pixel": exact(widget.seconds_per_pixel()),
+        })
+        widget.deleteLater()
+    del app
+    return {"steps": steps, "charts": charts}
+
+
 def i18n_cases() -> dict:
     """The window's text as vmaf_app/i18n.py gives it: the translation for
     Windows' language names, each language's plural forms, str.format over
@@ -2559,6 +2711,8 @@ if __name__ == "__main__":
     (HERE / "i18n.json").write_text(json.dumps(i18n_cases(), indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     write("metric_cache.json", metric_cache_cases())
     write("run_files.json", run_file_cases())
+    write("chart.json", chart_cases())
+    write("graph.json", graph_cases())
     write("devices.json", devices_cases())
     write("perceptual_cpu.json", perceptual_cpu_cases())
     write("timed_pairing.json", timed_pairing_cases())

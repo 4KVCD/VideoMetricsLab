@@ -26,23 +26,6 @@
 // The window's text is app::tr's, as in main_window.cpp.
 namespace vml::app {
 
-namespace {
-
-// A made-up path that stands for a second run of the same test video with
-// the other scale direction (the Python app's
-// synthetic_scale_direction_variant_path). Both directions can then be rows
-// of their own, side by side, without one taking the other's saved scores.
-std::filesystem::path synthetic_scale_direction_variant_path(const std::filesystem::path& distorted,
-                                                             ScaleDirection direction) {
-    std::filesystem::path name = distorted.stem();
-    name += direction == ScaleDirection::distorted_to_source ? " [upscale-distorted-to-source]"
-                                                            : " [downscale-source-to-distorted]";
-    name += distorted.extension();
-    return distorted.parent_path() / name;
-}
-
-}  // namespace
-
 void MainWindow::on_table_selection_changed() {
     // Shows the selected rows' options in the Options panel.
     std::set<int> rows;
@@ -309,9 +292,10 @@ void MainWindow::add_opposite_scale_direction_rows(const std::vector<int>& rows)
         ++added;
     }
     if (added == 0) {
-        inform_(app::tr("Nothing to add"),
-                app::tr("Selected row(s) either already have a matching-opposite row, don't have a resolution "
-                        "mismatch against the reference, or aren't a normal comparison (e.g. a resolution test)."));
+        dialogs_.inform(
+            app::tr("Nothing to add"),
+            app::tr("Selected row(s) either already have a matching-opposite row, don't have a resolution "
+                    "mismatch against the reference, or aren't a normal comparison (e.g. a resolution test)."));
         return;
     }
     show_status(ntr("Added {count} row testing the opposite scaling direction -- check it and click Calculate "

@@ -10,11 +10,15 @@ if(NOT Qt6_FOUND)
 endif()
 
 add_library(vml_app STATIC
+    chart.cpp
     cvvdp_display_dialog.cpp
+    dialogs.cpp
     file_writes.cpp
     formatting.cpp
+    graph_panel.cpp
     i18n.cpp
     main_window.cpp
+    main_window_graph.cpp
     main_window_options.cpp
     main_window_run.cpp
     main_window_run_files.cpp
@@ -23,6 +27,7 @@ add_library(vml_app STATIC
     probe_worker.cpp
     row_state.cpp
     run_worker.cpp
+    series_colors.cpp
     theme.cpp
     widgets.cpp
 )

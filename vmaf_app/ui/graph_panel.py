@@ -212,6 +212,18 @@ def _worst_is_high(metric: MetricDefinition) -> bool:
     return metric.direction is MetricDirection.LOWER_IS_BETTER
 
 
+def _statistics_cells(stats: VmafStats, metric: MetricDefinition) -> list[str]:
+    """A line's statistics as the table and the exported image show them:
+    stats.values at the metric's precision, then the share of its frames in
+    each of the metric's score bands. A line with no scored frame (every
+    score NaN) is a dash in every one: its statistics would read as zeros,
+    and it has no frames to share between the bands."""
+    if stats.count == 0:
+        return ["\u2014"] * (len(stats.values) + len(metric.thresholds))
+    return ([value for _, value in stats.summary(metric.value_format)]
+            + [f"{band.percentage:.1f}%" for band in stats.thresholds])
+
+
 @dataclass
 class _MetricCurve:
     """One run's line on one metric's page: its statistics and its points."""
@@ -372,8 +384,19 @@ class _MetricPage(QWidget):
             label=entry.label, visible=entry.visible,
             others=tuple(others),
         )
+        self._keep_lines_in_added_order()
         self._update_no_data_label()
         self._fit_hover_label()
+
+    def _keep_lines_in_added_order(self) -> None:
+        """Keeps the lines in the order they were added, the table's.
+        set_curve takes a line out and puts it back, which would move a line
+        updated during a run to the end: last in this page's readout and
+        exported table, the difference's sign turned, and drawn over the
+        other lines."""
+        if list(self._curves) != sorted(self._curves):
+            self._curves = dict(sorted(self._curves.items()))
+        self.chart.sort_series()
 
     def _set_timeline_curve(self, series_id: int, entry: SeriesEntry, color: str) -> None:
         """Draws a whole-video metric's timeline: CVVDP's JOD for each second.
@@ -401,6 +424,7 @@ class _MetricPage(QWidget):
             values=values, frames=np.asarray(result.frame), times=middles,
             label=entry.label, visible=entry.visible, starts=starts,
         )
+        self._keep_lines_in_added_order()
         self._update_no_data_label()
         self._fit_hover_label()
 
@@ -1406,7 +1430,9 @@ class GraphPanel(QWidget):
 
         first = series[0][1].stats
         headers = [tr("Series")] + [label for label, _ in first.values]
-        headers += [t.label for t in first.thresholds]
+        # The metric's bands, not the first line's: a line with no scored
+        # frame has none.
+        headers += [f"{comparison} {threshold:g}" for comparison, threshold in metric.thresholds]
 
         per_video = metric.kind is MetricKind.SEQUENCE
         if per_video:
@@ -1415,11 +1441,10 @@ class GraphPanel(QWidget):
             headers[1] = tr("Whole video")
         rows = []
         for entry, curve in series:
-            cells = [v for _, v in curve.stats.summary(metric.value_format)]
+            cells = _statistics_cells(curve.stats, metric)
             if per_video:
                 overall = entry.means.get(metric.key)
                 cells[0] = "\u2014" if overall is None else metric.format_value(overall)
-            cells += [f"{t.percentage:.1f}%" for t in curve.stats.thresholds]
             rows.append((entry.label, entry.color, cells))
         return headers, rows
 
@@ -1642,13 +1667,11 @@ class GraphPanel(QWidget):
                 if curve is None:
                     cells = [""] * (self.stats_table.columnCount() - detail_start - 1)
                 else:
-                    s = curve.stats
                     # At the metric's own precision: SSIM's whole range is
                     # 0-1, so VMAF's 2 decimals would hide most real
                     # differences between encodes. [1:] leaves out the mean,
                     # which has its own column above.
-                    cells = [v for _, v in s.summary(metric.value_format)[1:]]
-                    cells += [f"{t.percentage:.1f}%" for t in s.thresholds]
+                    cells = _statistics_cells(curve.stats, metric)[1:]
                 for col, val in enumerate(cells, start=detail_start):
                     self.stats_table.setItem(row, col, self._number_item(val))
 

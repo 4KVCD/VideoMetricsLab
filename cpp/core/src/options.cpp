@@ -29,6 +29,15 @@ bool VmafOptions::*bool_option(std::string_view name) {
 
 }  // namespace
 
+std::filesystem::path synthetic_scale_direction_variant_path(const std::filesystem::path& distorted,
+                                                             ScaleDirection direction) {
+    std::filesystem::path name = distorted.stem();
+    name += direction == ScaleDirection::distorted_to_source ? " [upscale-distorted-to-source]"
+                                                            : " [downscale-source-to-distorted]";
+    name += distorted.extension();
+    return distorted.parent_path() / name;
+}
+
 const std::vector<ResampleTarget>& resample_target_choices() {
     static const std::vector<ResampleTarget> choices{
         {2560, "1440p"},
