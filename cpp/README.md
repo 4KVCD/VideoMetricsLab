@@ -28,7 +28,7 @@ on every such GPU.
     .venv\Scripts\python.exe cpp\tests\reference\make_reference.py
 
 On real videos, `tests/golden/golden.py` holds the command lines to each
-other: it runs the cases in `cases.json` (78 runs covering the ways the app
+other: it runs the cases in `cases.json` (80 runs covering the ways the app
 scores videos) with either app, each with a fresh profile (and the case's
 own settings, where it has any; some cases save scores in it first, with
 either app), and compares the exit codes, the tables, the per-frame CSV

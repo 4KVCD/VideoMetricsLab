@@ -88,6 +88,34 @@ std::optional<nlohmann::json> parameter(const MetricProvenance& provenance, cons
     return nlohmann::json::parse(found->second, nullptr, false);
 }
 
+// The model and model choice of VMAF or VMAF v1 (`key`) in a result of saved
+// scores (the Python app's _loaded_model). When it was loaded: the model its
+// score was made with, as its file records it, and the choice of the request
+// it answers, as calculating that request would give them. Otherwise `model`
+// and `choice` stay as they are, context.json's: those of the result saved
+// last, which can be another display's CVVDP alone (model "") or VMAF with
+// another model chosen.
+void loaded_model(const MetricResultSet& results, const std::vector<MetricRequestSpec>& specs, const std::string& key,
+                  std::string& model, std::optional<std::string>& choice) {
+    const FrameMetricResult* metric = results.frame(key);
+    const auto spec =
+        std::find_if(specs.begin(), specs.end(), [&key](const MetricRequestSpec& asked) { return asked.key == key; });
+    if (metric == nullptr || spec == specs.end()) {
+        return;
+    }
+    if (const std::optional<nlohmann::json> ran = parameter(metric->provenance, "model");
+        ran && ran->is_string() && !ran->get<std::string>().empty()) {
+        model = ran->get<std::string>();
+    }
+    if (const auto chosen = spec->parameters.find("model_choice"); chosen != spec->parameters.end()) {
+        if (chosen->is_string()) {
+            choice = chosen->get<std::string>();
+        } else {
+            choice.reset();
+        }
+    }
+}
+
 nlohmann::json provenance_json(const MetricProvenance& provenance) {
     nlohmann::json parameters = nlohmann::json::object();
     for (const auto& [name, text] : provenance.parameters) {
@@ -1010,6 +1038,8 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
         result.model_v1 = optional_string("model_v1").value_or("");
         result.model_choice_v1 = optional_string("model_choice_v1");
         result.metric_results = std::move(results);
+        loaded_model(result.metric_results, specs, "vmaf", result.model, result.model_choice);
+        loaded_model(result.metric_results, specs, "vmaf_v1", result.model_v1, result.model_choice_v1);
         std::optional<std::string> label = optional_string("label");
         if (!label || label->empty()) {
             label = platform::path_text(result.distorted.stem());

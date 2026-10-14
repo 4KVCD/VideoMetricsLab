@@ -183,6 +183,13 @@
       "args": ["-m", "cvvdp", "--frames", "30", "--cvvdp-display", "30-inch 4K monitor, office",
                "--cvvdp-display", "6-inch phone"],
       "seeds": [{ "app": "python", "args": ["-m", "cvvdp", "--frames", "30", "--cvvdp-display",
-                                            "30-inch 4K monitor, office"] }] }
+                                            "30-inch 4K monitor, office"] }] },
+    { "name": "saved-vmaf-model-after-cvvdp-alone", "reference": "honeybee_src.mkv", "tests": ["honeybee_h265.mkv"],
+      "args": ["-m", "vmaf,cvvdp", "--model", "4k", "--frames", "30"],
+      "seeds": [{ "app": "python" },
+                { "app": "python", "args": ["-m", "cvvdp", "--cvvdp-display", "6-inch phone", "--frames", "30"] }] },
+    { "name": "saved-vmaf-model-after-another-model", "reference": "honeybee_src.mkv", "tests": ["honeybee_h265.mkv"],
+      "args": ["-m", "vmaf", "--model", "4k", "--frames", "30"],
+      "seeds": [{ "app": "cpp" }, { "app": "cpp", "args": ["-m", "vmaf", "--model", "standard", "--frames", "30"] }] }
   ]
 }

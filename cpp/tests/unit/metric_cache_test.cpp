@@ -1,15 +1,17 @@
 // The saved scores, held to the Python app's (reference/metric_cache.json,
 // and the comparison folder reference/metric_cache it saved): the names
 // requests and recipes are filed under, the files a stored result writes,
-// which scores answer a request, and what requests load from the Python
-// app's files.
+// which scores answer a request, what requests load from the Python app's
+// files, and the VMAF model a loaded result has.
 #include "vml/metric_cache.h"
 
 #include <gtest/gtest.h>
 
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "reference.h"
@@ -274,6 +276,56 @@ TEST(MetricCache, LoadsThePythonAppsSavedScores) {
             EXPECT_EQ(provenance->parameters, wanted.parameters);
         }
     }
+}
+
+// A VMAF from the saved scores has the model its own file says it was made
+// with, and the choice of the request it answers, whatever was saved after
+// it: CVVDP alone (no model), or VMAF with another model chosen. Each save
+// rewrites context.json with the models of the result being saved.
+TEST(MetricCache, ASavedVmafKeepsTheModelItWasMadeWith) {
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    const ComparisonResult made = result_from(test::load_reference("metric_cache.json").at("stored").at("result"));
+    const std::string standard = "version=vmaf_v0.6.1";
+    const std::string four_k = "version=vmaf_4k_v0.6.1";
+    using Models = std::pair<std::string, std::optional<std::string>>;
+    // Saves VMAF made with `model` for this model choice; with no model,
+    // CVVDP alone.
+    const auto save = [&](const std::string& choice, const std::string& model) {
+        VmafOptions options;
+        options.model_choice = choice;
+        ComparisonResult result = made;
+        result.metric_results = MetricResultSet();
+        result.model = model;
+        if (model.empty()) {
+            result.model_choice.reset();
+            result.metric_results.add(*made.metric_results.sequence("cvvdp"));
+        } else {
+            result.model_choice = choice;
+            FrameMetricResult vmaf = *made.metric_results.frame("vmaf");
+            vmaf.provenance.parameters["model"] = nlohmann::json(model).dump();
+            result.metric_results.add(vmaf);
+        }
+        const AnalysisRequest request =
+            analysis_request(options, {model.empty() ? "cvvdp" : "vmaf"}, {}, CvvdpSettings{});
+        store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe, result, "t", request.metrics);
+    };
+    const auto load = [&](const std::string& choice) {
+        VmafOptions options;
+        options.model_choice = choice;
+        const AnalysisRequest request = analysis_request(options, {"vmaf"}, {}, CvvdpSettings{});
+        const auto loaded = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                        request.metrics, request.perceptual_backends);
+        return loaded ? Models(loaded->first.model, loaded->first.model_choice) : Models();
+    };
+
+    save(four_k, four_k);
+    save(four_k, "");  // another display's CVVDP alone, saved last
+    EXPECT_EQ(load(four_k), Models(four_k, four_k));
+    save(standard, standard);  // VMAF with another model, saved last
+    EXPECT_EQ(load(four_k), Models(four_k, four_k));
+    EXPECT_EQ(load(standard), Models(standard, standard));
 }
 
 // Arrays come back from an .npz file as they went in, text past ASCII too,
