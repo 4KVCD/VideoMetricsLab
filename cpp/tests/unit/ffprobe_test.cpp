@@ -2,9 +2,13 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <filesystem>
 #include <string>
+#include <thread>
 
 #include "reference.h"
+#include "test_videos.h"
 #include "vml/platform/system.h"
 
 namespace vml {
@@ -51,6 +55,28 @@ TEST(Ffprobe, ReadsTheVideosDetailsAsThePythonAppDoes) {
         EXPECT_EQ(info.format_name, expected["format_name"].get<std::string>());
         EXPECT_EQ(info.start_offset, *test::reference_number(expected["start_offset"]));
     }
+}
+
+// Reading a video is ended by Cancel: closing the window, or stopping the
+// Bitrate tab's scan, ends an ffprobe that takes long (a large file on a
+// slow disk) rather than waiting up to the 60 s it is given. The stand-in
+// ffprobe never answers.
+TEST(Ffprobe, ReadingAVideoIsEndedByCancel) {
+    const test::Folder folder;
+    const std::filesystem::path log = folder / "log";
+    std::filesystem::create_directory(log);
+    const test::ScopedVariable tool("VML_TEST_TOOL", "hang");
+    const test::ScopedVariable logged_to("VML_TEST_TOOL_LOG", platform::path_text(log));
+    CancelToken cancel;
+    std::thread user([&log, &cancel] {
+        // Once the stand-in is running.
+        for (int wait = 0; wait < 6000 && std::filesystem::is_empty(log); ++wait) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        cancel.cancel();
+    });
+    EXPECT_THROW(probe_video(folder / "video.mkv", VML_TEST_CHILD, cancel), Cancelled);
+    user.join();
 }
 
 }  // namespace

@@ -46,7 +46,9 @@ void ProbeWorker::run() {
         }
         Probed result{path, std::nullopt, QString()};
         try {
-            result.info = probe_video(platform::path_from_text(path.toStdString()), ffprobe_);
+            result.info = probe_video(platform::path_from_text(path.toStdString()), ffprobe_, cancel_);
+        } catch (const Cancelled&) {
+            break;  // ended by cancel(): nothing to say about this video
         } catch (const std::exception& error) {
             // A background boundary: even an unexpected failure becomes the
             // row's error rather than ending the thread before it says so.

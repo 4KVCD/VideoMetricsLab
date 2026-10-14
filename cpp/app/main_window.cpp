@@ -318,7 +318,7 @@ MainWindow::~MainWindow() {
     // Hidden first, while the window is whole: hiding moves the focus, and
     // the reference box reads what it holds when the focus leaves it.
     hide();
-    // Each stops after the video it is reading: one ffprobe at most.
+    // Each stops, ending the ffprobe reading a video.
     for (ProbeWorker* worker : probe_workers_) {
         worker->cancel();
     }

@@ -322,11 +322,16 @@ VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_v
 }
 
 VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe) {
+    return probe_video(path, ffprobe, CancelToken());
+}
+
+VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe, const CancelToken& cancel) {
     const std::vector<std::string> command{ffprobe, "-v", "error", "-print_format", "json", "-show_format",
                                            "-show_streams", text(path)};
     platform::ProcessOutput output;
     try {
-        output = platform::run_program(command, std::chrono::seconds(60));
+        output = platform::run_program(command, std::chrono::seconds(60), {},
+                                       [&cancel] { return cancel.cancelled(); });
     } catch (const platform::ProcessError& error) {
         if (!platform::find_on_path(ffprobe) && !std::filesystem::exists(platform::path_from_text(ffprobe))) {
             throw ProbeError(
@@ -334,6 +339,9 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
                 "or set a custom ffmpeg folder in Settings.");
         }
         throw ProbeError("Could not start ffprobe for " + text(path) + ": " + error.what());
+    }
+    if (output.stopped) {
+        throw Cancelled();
     }
     if (output.timed_out) {
         throw ProbeError("ffprobe timed out while reading " + text(path));

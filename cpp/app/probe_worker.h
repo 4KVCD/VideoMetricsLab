@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "vml/analysis_request.h"
+#include "vml/cancel.h"
 #include "vml/cvvdp.h"
 #include "vml/results.h"
 #include "vml/video.h"
@@ -72,8 +73,12 @@ public:
     ProbeWorker(QStringList paths, std::filesystem::path base, std::filesystem::path source,
                 std::map<QString, SavedScoresQuery> queries, QObject* parent = nullptr);
 
-    // Stops after the video being read or looked up.
-    void cancel() { cancelled_ = true; }
+    // Stops, ending the ffprobe reading a video; a lookup under way is let
+    // finish.
+    void cancel() {
+        cancelled_ = true;
+        cancel_.cancel();
+    }
 
 signals:
     void probed(const vml::app::Probed& probed);
@@ -98,6 +103,7 @@ private:
     std::map<QString, SavedScoresQuery> queries_;
     bool looks_up_ = false;
     std::atomic<bool> cancelled_ = false;
+    CancelToken cancel_;
 };
 
 }  // namespace vml::app
