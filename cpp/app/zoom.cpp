@@ -34,6 +34,17 @@ Placement Zoom::placement(Extent view, Extent frame, double ratio) const {
             view_height / 2 - centred(centre.second, view_height, height) * height, width, height};
 }
 
+Zoom::Visible Zoom::visible(Extent view, Extent frame, double ratio) const {
+    const Placement place = placement(view, frame, ratio);
+    const double left = std::max(0.0, place.x);
+    const double top = std::max(0.0, place.y);
+    const double right = std::min(view.first, place.x + place.width);
+    const double bottom = std::min(view.second, place.y + place.height);
+    return {{(left - place.x) / place.width, (top - place.y) / place.height, (right - place.x) / place.width,
+             (bottom - place.y) / place.height},
+            {left, top, right - left, bottom - top}};
+}
+
 bool Zoom::can_drag(Extent view, Extent frame, double ratio) const {
     const Placement place = placement(view, frame, ratio);
     return place.width > view.first + 0.5 || place.height > view.second + 0.5;

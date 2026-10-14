@@ -242,6 +242,20 @@ VideoCompareView::VideoCompareView(std::function<std::string()> ffmpeg, Zoom& zo
         return new StreamDecodeWorker(ffmpeg_(), comparison, side, start_frame, colors, std::nullopt, maximum, owner);
     };
     clock = seconds_now;
+#ifdef VML_NATIVE_PLAYBACK
+    native_parts = [this](const PreviewColorSettings& colors, QString& why) -> std::optional<NativePool::Parts> {
+        if (const std::optional<QString> problem = NativePool::unavailable()) {
+            why = *problem;
+            return std::nullopt;
+        }
+        try {
+            return NativePool::default_parts(*this, colors);
+        } catch (const std::exception& error) {
+            why = QString::fromUtf8(error.what());
+            return std::nullopt;
+        }
+    };
+#endif
     // Once a resize has settled, FFmpeg's frames are decoded at the new size.
     resize_timer_ = new QTimer(this);
     resize_timer_->setSingleShot(true);
@@ -261,7 +275,10 @@ VideoCompareView::VideoCompareView(std::function<std::string()> ffmpeg, Zoom& zo
 VideoCompareView::~VideoCompareView() {
     stop_decoder();
     stop_audio();
-    for (PlaybackDecoder* worker : retired_) {
+    for (QThread* worker : retired_) {
+        worker->wait();
+    }
+    for (QThread* worker : stopping_) {
         worker->wait();
     }
 }
@@ -271,6 +288,11 @@ void VideoCompareView::resizeEvent(QResizeEvent* event) {
         surface->setGeometry(rect());
         surface->refresh_cursor();
     }
+#ifdef VML_NATIVE_PLAYBACK
+    if (native_pool_) {
+        native_pool_->resize();
+    }
+#endif
     if (pool_active_) {
         resize_timer_->start();
     }
@@ -288,7 +310,7 @@ bool VideoCompareView::event(QEvent* event) {
 void VideoCompareView::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
     on_screen_ = true;
-    if (pool_active_) {
+    if (pool_active_ || native_active()) {
         wake();
     }
 }
@@ -347,6 +369,16 @@ std::optional<Placement> VideoCompareView::zoom_placement(Size frame) const {
 }
 
 void VideoCompareView::zoom_changed() {
+#ifdef VML_NATIVE_PLAYBACK
+    if (native_pool_) {
+        try {
+            native_pool_->place();
+        } catch (const std::exception& error) {
+            native_failed(error);
+        }
+        return;
+    }
+#endif
     // When zoomed, FFmpeg's frames are decoded at the comparison's own size,
     // not the view's.
     follow_decode_size();
@@ -435,9 +467,11 @@ int VideoCompareView::position() const {
 
 std::vector<QThread*> VideoCompareView::live_workers() const {
     std::vector<QThread*> live;
-    for (PlaybackDecoder* worker : retired_) {
-        if (worker->isRunning()) {
-            live.push_back(worker);
+    for (const std::set<QThread*>* stopping : {&retired_, &stopping_}) {
+        for (QThread* worker : *stopping) {
+            if (worker->isRunning()) {
+                live.push_back(worker);
+            }
         }
     }
     for (const auto& [key, worker] : pool_) {
@@ -470,6 +504,20 @@ bool VideoCompareView::load(const FrameComparison& comparison, int position_ms, 
         selected_ = selected;
         comparison_ = comparison;
         frame_ = static_cast<long long>(std::nearbyint(timestamp / 1000.0 * comparison.fps));
+#ifdef VML_NATIVE_PLAYBACK
+        if (native_pool_) {
+            if (changed) {
+                try {
+                    native_pool_->sync(selected);
+                } catch (const std::exception& error) {
+                    native_failed(error);
+                    return true;
+                }
+            }
+            set_playing(playing);
+            return true;
+        }
+#endif
         if (pool_active_) {
             if (changed) {
                 distorted_surface_->clear_frame();
@@ -511,6 +559,14 @@ void VideoCompareView::clear() {
 }
 
 void VideoCompareView::set_position(int position_ms) {
+#ifdef VML_NATIVE_PLAYBACK
+    if (native_pool_) {
+        native_pool_->seek(position_ms);
+        frame_ = native_pool_->frame();
+        wake();
+        return;
+    }
+#endif
     if (!comparison_ || comparison_->fps <= 0) {
         return;
     }
@@ -519,6 +575,15 @@ void VideoCompareView::set_position(int position_ms) {
 }
 
 void VideoCompareView::set_playing(bool playing) {
+#ifdef VML_NATIVE_PLAYBACK
+    if (native_pool_) {
+        native_pool_->set_playing(playing);
+        wanted_playing_ = is_playing_ = playing;
+        wake();
+        emit playing_changed(playing);
+        return;
+    }
+#endif
     if (!pool_active_) {
         // Nothing decoding: playing starts the decoders.
         wanted_playing_ = playing;
@@ -551,6 +616,11 @@ void VideoCompareView::set_playing(bool playing) {
 
 void VideoCompareView::show_source(bool showing) {
     showing_source_ = showing;
+#ifdef VML_NATIVE_PLAYBACK
+    if (native_pool_) {
+        native_pool_->show_source(showing);
+    }
+#endif
     if (pool_active_) {
         StreamSurface* surface = showing ? source_surface_ : distorted_surface_;
         surface->raise();
@@ -560,6 +630,12 @@ void VideoCompareView::show_source(bool showing) {
 
 void VideoCompareView::set_audio_enabled(bool enabled) {
     audio_enabled_ = enabled;
+#ifdef VML_NATIVE_PLAYBACK
+    if (native_pool_) {
+        native_pool_->set_audio_enabled(enabled);
+        return;
+    }
+#endif
     if (!enabled) {
         stop_audio();
     } else if (is_playing_) {
@@ -583,22 +659,66 @@ void VideoCompareView::set_decoded_videos(int count) {
         return;
     }
     decoded_videos_ = count;
+#ifdef VML_NATIVE_PLAYBACK
+    if (native_pool_) {
+        try {
+            native_pool_->sync(selected_);
+        } catch (const std::exception& error) {
+            native_failed(error);
+        }
+        return;
+    }
+#endif
     if (pool_active_) {
         sync_pool();
     }
 }
 
 void VideoCompareView::restart_decoder(bool realtime) {
-    // Starts playback again from the frame shown.
+    // Starts playback again from the frame shown: natively where it can,
+    // else with FFmpeg.
     if (!comparison_) {
         return;
     }
+    QString reason;
+#ifdef VML_NATIVE_PLAYBACK
+    std::optional<NativePool::Parts> parts;
+    if (const std::optional<std::string> problem = native_playback_problem(*comparison_, colors_)) {
+        reason = QString::fromStdString(*problem);
+    } else {
+        parts = native_parts(colors_, reason);
+    }
+    if (parts) {
+        stop_decoder();
+        stop_audio();
+        try {
+            native_pool_ = std::make_unique<NativePool>(*this, series_, selected_, position(), colors_, realtime,
+                                                        source_native_, std::move(*parts));
+            is_playing_ = wanted_playing_ = realtime;
+            native_pool_->show_source(showing_source_);
+            wake();
+            emit playing_changed(realtime);
+            return;
+        } catch (const std::exception& error) {
+            native_pool_.reset();
+            reason = QString::fromUtf8(error.what());
+        }
+    }
+#endif
     stop_decoder();
     stop_audio();
-    start_ffmpeg(realtime);
+    start_ffmpeg(realtime, false, reason);
 }
 
-void VideoCompareView::start_ffmpeg(bool realtime, bool keep_frame) {
+void VideoCompareView::native_failed([[maybe_unused]] const std::exception& error) {
+#ifdef VML_NATIVE_PLAYBACK
+    native_pool_.reset();
+    start_ffmpeg(wanted_playing_, false, QString::fromUtf8(error.what()));
+#endif
+}
+
+void VideoCompareView::start_ffmpeg(bool realtime, bool keep_frame, const QString& reason) {
+    pool_reason_ = reason;
     pool_maximum_ = wanted_maximum();
     pool_active_ = true;
     wanted_playing_ = realtime;
@@ -617,7 +737,10 @@ void VideoCompareView::start_ffmpeg(bool realtime, bool keep_frame) {
         surface->show();
     }
     show_source(showing_source_);
-    status(QString::fromUtf8("Preparing source/current/adjacent videos \xC2\xB7 GPU tone mapping and RGB"));
+    const QString separator = QString::fromUtf8(" \xC2\xB7 ");
+    status(QStringLiteral("Preparing source/current/adjacent videos") + separator +
+           QStringLiteral("GPU tone mapping and RGB") +
+           (reason.isEmpty() ? QString() : separator + QStringLiteral("native fallback: %1").arg(reason)));
     sync_pool();
     wake();
     emit playing_changed(realtime);
@@ -691,7 +814,7 @@ void VideoCompareView::launch_missing() {
     // Decoders still stopping count too, so that quick switching never runs
     // one more than allowed while an old process exits.
     int occupied = static_cast<int>(pool_.size());
-    for (PlaybackDecoder* worker : retired_) {
+    for (QThread* worker : retired_) {
         occupied += worker->isRunning() ? 1 : 0;
     }
     // The pair on screen first: the test videos beside it start once it has
@@ -762,8 +885,14 @@ long long VideoCompareView::target_frame() const {
 }
 
 void VideoCompareView::tick() {
-    // Takes each worker's frames due, and shows the newest pair both videos
-    // have.
+    // Advances playback: natively, or by taking each worker's frames due and
+    // showing the newest pair both videos have.
+#ifdef VML_NATIVE_PLAYBACK
+    if (native_pool_) {
+        native_tick();
+        return;
+    }
+#endif
     if (!pool_active_) {
         return;
     }
@@ -874,13 +1003,129 @@ void VideoCompareView::tick() {
     pace(false);  // the next tick starts the test videos decoded beside it
 }
 
+bool VideoCompareView::native_active() const {
+#ifdef VML_NATIVE_PLAYBACK
+    return native_pool_ != nullptr;
+#else
+    return false;
+#endif
+}
+
+void VideoCompareView::native_tick() {
+#ifdef VML_NATIVE_PLAYBACK
+    NativePool& pool = *native_pool_;
+    try {
+        const int position = pool.poll();
+        const auto frame = static_cast<long long>(std::nearbyint(position / 1000.0 * comparison_->fps));
+        if (frame != frame_) {
+            frame_ = frame;
+            emit position_changed(position);
+        }
+        if (pool.ended() && wanted_playing_) {
+            set_playing(false);
+        }
+        const QString separator = QString::fromUtf8(" \xC2\xB7 ");
+        status((wanted_playing_ ? QStringLiteral("Playing") : QStringLiteral("Paused")) + separator +
+               QStringLiteral("FFmpeg D3D11") + separator +
+               QStringLiteral("%1/%2 streams").arg(pool.decoders()).arg(decoder_limit()) + separator +
+               pool.description());
+        check_end();
+        if (wanted_playing_ && !pool.buffering() && !pool.ended()) {
+            // The next tick when the next frame is due, if ticking at all:
+            // it is never started here, while off screen (hideEvent).
+            if (pool_timer_->isActive()) {
+                const std::optional<int> due = pool.next_tick_ms();
+                pool_timer_->start(due ? *due : busy_tick_ms());
+            }
+        } else {
+            pace(!wanted_playing_ && pool.paired_on_selected());
+        }
+    } catch (const std::exception& error) {
+        native_failed(error);
+    }
+#endif
+}
+
+#ifdef VML_NATIVE_PLAYBACK
+NativeOutput::Placement VideoCompareView::native_placement(const NativeFrame& frame,
+                                                                 const FrameComparison& comparison,
+                                                                 FrameSide side) const {
+    // The frame as the Python app's GStreamer gave it to its presenter: its
+    // crop stretched to the comparison's size (`size`), or boxed in black
+    // keeping its own shape while black bars are still to be detected.
+    const Size size = comparison_dimensions(comparison);
+    // A frame already cropped and scaled (the source scaled down) is drawn whole.
+    const std::optional<CropBox> crop =
+        frame.prepared ? std::nullopt : side == FrameSide::source ? comparison.source_crop : comparison.distorted_crop;
+    const int crop_x = crop ? crop->x : 0;
+    const int crop_y = crop ? crop->y : 0;
+    const int crop_w = crop ? crop->w : frame.width;
+    const int crop_h = crop ? crop->h : frame.height;
+    const double ratio = devicePixelRatioF();
+    NativeOutput::Placement placement;
+    if (!zoom_.factor) {
+        // Fitted on whole pixels, as the presenter fits a frame (in floats).
+        const auto window_w = static_cast<float>(std::max(1L, std::lround(width() * ratio)));
+        const auto window_h = static_cast<float>(std::max(1L, std::lround(height() * ratio)));
+        const auto frame_w = static_cast<float>(size.first);
+        const auto frame_h = static_cast<float>(size.second);
+        const float scale = std::min(window_w / frame_w, window_h / frame_h);
+        float target_w = std::round(frame_w * scale);
+        float target_h = std::round(frame_h * scale);
+        float target_x = std::floor((window_w - target_w) / 2);
+        float target_y = std::floor((window_h - target_h) / 2);
+        if (comparison.auto_crop_pending) {
+            const float boxed = std::min(target_w / static_cast<float>(crop_w), target_h / static_cast<float>(crop_h));
+            const float inner_w = std::round(static_cast<float>(crop_w) * boxed);
+            const float inner_h = std::round(static_cast<float>(crop_h) * boxed);
+            target_x += std::floor((target_w - inner_w) / 2);
+            target_y += std::floor((target_h - inner_h) / 2);
+            target_w = inner_w;
+            target_h = inner_h;
+        }
+        placement.source = {crop_x, crop_y, crop_w, crop_h};
+        placement.target = {static_cast<int>(target_x), static_cast<int>(target_y), static_cast<int>(target_w),
+                            static_cast<int>(target_h)};
+        return placement;
+    }
+    // Zoomed: the part of the comparison-sized frame in view (the Python
+    // app's native_view), then that part in the decoded picture's pixels.
+    const std::optional<ZoomContext> context = zoom_context(size);
+    if (!context) {
+        placement.source = {crop_x, crop_y, crop_w, crop_h};
+        placement.target = {0, 0, 1, 1};
+        return placement;
+    }
+    const Zoom::Visible visible = zoom_.visible(context->view, context->frame, context->ratio);
+    const auto [left, top, right, bottom] = visible.fractions;
+    const auto even = [](double value) { return static_cast<int>(std::nearbyint(value)); };
+    placement.target = {even(visible.drawn.x * ratio), even(visible.drawn.y * ratio),
+                        std::max(1, even(visible.drawn.width * ratio)), std::max(1, even(visible.drawn.height * ratio))};
+    // Sized from the part in view, then placed: rounding each edge on its own
+    // can give 4 rows where 5 are in view.
+    const int part_w = std::max(1, std::min(size.first, even((right - left) * size.first)));
+    const int part_h = std::max(1, std::min(size.second, even((bottom - top) * size.second)));
+    const int part_x = std::min(even(left * size.first), size.first - part_w);
+    const int part_y = std::min(even(top * size.second), size.second - part_h);
+    const double across = static_cast<double>(crop_w) / size.first;
+    const double down = static_cast<double>(crop_h) / size.second;
+    placement.source = {crop_x + even(part_x * across), crop_y + even(part_y * down), std::max(1, even(part_w * across)),
+                        std::max(1, even(part_h * down))};
+    return placement;
+}
+#endif
+
 void VideoCompareView::pool_status() {
     const auto detail = details_.find("d:" + std::to_string(selected_));
+    QString said = detail != details_.end() ? detail->second : QStringLiteral("GPU processing starting");
+    if (!pool_reason_.isEmpty()) {
+        said += QString::fromUtf8(" \xC2\xB7 SDR preview (native playback unavailable)");
+    }
     status(QString::fromUtf8("%1 \xC2\xB7 %2/%3 streams \xC2\xB7 %4")
                .arg(wanted_playing_ ? QStringLiteral("Playing") : QStringLiteral("Paused"))
                .arg(pool_.size())
                .arg(decoder_limit())
-               .arg(detail != details_.end() ? detail->second : QStringLiteral("GPU processing starting")));
+               .arg(said));
 }
 
 void VideoCompareView::check_end() {
@@ -937,6 +1182,9 @@ void VideoCompareView::stop_audio() {
 
 void VideoCompareView::stop_decoder(bool keep_frame) {
     // Stops all decoding, clearing the frame shown unless keep_frame.
+#ifdef VML_NATIVE_PLAYBACK
+    native_pool_.reset();
+#endif
     pool_active_ = false;
     pool_timer_->stop();
     for (const auto& [key, worker] : pool_) {

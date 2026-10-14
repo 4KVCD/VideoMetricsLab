@@ -1162,9 +1162,9 @@ void FrameComparePanel::update_color_status() {
     }
     const VideoInfo& info = frame_video_info(entry->comparison, shown_side());
     const std::optional<std::string> kind = hdr_kind(info);
-    // Playback here is FFmpeg's, always an SDR preview: the Python app's
-    // native GPU playback (10-bit HDR presentation) is not ported yet.
     const bool video = is_video_mode();
+    // FFmpeg's playback (the fallback) is an SDR preview, never native.
+    const bool ffmpeg_playback = video_view != nullptr && video_view->plays_with_ffmpeg();
     const QString prefix = video ? app::tr("Video playback \xC2\xB7 ") : QString();
     if (color_mode_ == PreviewColorMode::unmanaged) {
         color_status_label->setText(app::tr("{prefix}{kind} input \xC2\xB7 tone mapping off",
@@ -1190,6 +1190,14 @@ void FrameComparePanel::update_color_status() {
         return;
     }
     if (!kind) {
+        const std::string primaries = ascii_lower(info.color_primaries);
+        const bool wide_gamut = primaries == "bt2020" || primaries == "bt.2020";
+        if (video && wide_gamut && display_hdr_.hdr_enabled == true && !ffmpeg_playback) {
+            color_status_label->setText(app::tr(
+                "{prefix}BT.2020 wide-gamut input \xC2\xB7 Windows HDR on \xC2\xB7 native 10-bit D3D11 presentation",
+                {{"prefix", prefix}}));
+            return;
+        }
         color_status_label->setText(
             app::tr("{prefix}SDR / untagged input \xC2\xB7 no tone mapping", {{"prefix", prefix}}));
         return;
@@ -1197,8 +1205,15 @@ void FrameComparePanel::update_color_status() {
     const QString target = video ? app::tr("SDR preview") : app::tr("SDR at 100 nit");
     if (display_hdr_.hdr_enabled == true) {
         if (video) {
-            color_status_label->setText(app::tr("{prefix}{kind} \xC2\xB7 SDR preview (native HDR unavailable)",
-                                                {{"prefix", prefix}, {"kind", text_of(*kind)}}));
+            if (ffmpeg_playback) {
+                color_status_label->setText(app::tr("{prefix}{kind} \xC2\xB7 SDR preview (native HDR unavailable)",
+                                                    {{"prefix", prefix}, {"kind", text_of(*kind)}}));
+                return;
+            }
+            color_status_label->setText(app::tr(
+                "{prefix}{kind} \xC2\xB7 Windows HDR on \xC2\xB7 native 10-bit D3D11 presentation \xC2\xB7 tone "
+                "mapping off",
+                {{"prefix", prefix}, {"kind", text_of(*kind)}}));
             return;
         }
         color_status_label->setText(app::tr(

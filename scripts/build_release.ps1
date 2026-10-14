@@ -151,9 +151,10 @@ try {
             throw "Bundled native library license notice is missing: $notice"
         }
     }
-    # FFmpeg's decoders for the software frame decoder, and their licence.
+    # FFmpeg's libraries for the software frame decoder (libavcodec imports
+    # libswresample), and their licence.
     $ffmpeg = Join-Path $output '_internal/vmaf_app/tools/ffmpeg'
-    foreach ($file in @('avcodec-63.dll', 'avutil-61.dll', 'licenses/COPYING.LGPLv2.1.txt')) {
+    foreach ($file in @('avcodec-63.dll', 'avutil-61.dll', 'swresample-7.dll', 'licenses/COPYING.LGPLv2.1.txt')) {
         if (-not (Test-Path (Join-Path $ffmpeg $file))) { throw "Bundled FFmpeg file is missing: $file" }
     }
 

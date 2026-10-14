@@ -80,9 +80,14 @@ case anyone overrides that.
   of another codec or format, one that must be scaled, or a damaged one goes
   through FFmpeg's pipes as before. `VML_SOFTWARE_DECODE=ffmpeg` sends them
   all that way.
-- **FFmpeg's decoders** (`vmaf_app/tools/ffmpeg`: `avcodec-63.dll`,
-  `avutil-61.dll`, 8.4 MB), for the software frame decoder: FFmpeg 9.0.2's
-  libavcodec and libavutil with only those six decoders, configured LGPL with
+- **FFmpeg's libraries** (`vmaf_app/tools/ffmpeg`: `avcodec-63.dll`,
+  `avutil-61.dll`, `swresample-7.dll`, which libavcodec imports, and
+  `avformat-63.dll` and `swscale-10.dll`, which the C++ app's Video Compare
+  playback also reads videos and converts pictures with; 13.0 MB), for the
+  software frame decoder: FFmpeg 9.0.2's libraries with only the decoders,
+  parsers and demuxers the script lists (those six video decoders, AV1 and
+  ProRes, the soundtracks' audio decoders, and the containers the bundled
+  GStreamer reads) and Direct3D 11's video decoding, configured LGPL with
   nothing external, built from FFmpeg's release source by
   `scripts/build_ffmpeg_decoders.ps1` (MinGW-w64 GCC and NASM; the source is
   pinned by its SHA-256), which also vendors the headers the decoder is
@@ -198,9 +203,9 @@ case anyone overrides that.
 **FFmpeg (`ffmpeg.exe`, `ffprobe.exe`) and libvmaf.** The app finds them at
 runtime and prompts for their location if they are missing. They are left out
 deliberately (the bundled libvmaf above scores only VMAF and VMAF NEG on NVIDIA
-GPUs, FFmpeg's decoders above are six of libavcodec's decoders and nothing
-else, and the frame decoders above decode from the compressed streams the
-user's FFmpeg copies out of the containers):
+GPUs, FFmpeg's libraries above only decode and read files, with no encoder,
+filter or program, and the frame decoders above decode from the compressed
+streams the user's FFmpeg copies out of the containers):
 
 - A libvmaf-enabled FFmpeg is another ~80 MB on an already large download.
 - FFmpeg licensing depends on its build configuration and linked libraries.

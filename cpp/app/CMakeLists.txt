@@ -46,6 +46,36 @@ target_link_libraries(vml_app PUBLIC vml_core Qt6::Concurrent Qt6::Network Qt6::
 target_compile_definitions(vml_app PUBLIC VML_APP_VERSION="${PROJECT_VERSION}-dev"
                                           VML_APP_RELEASE="${PROJECT_VERSION}")
 
+if(WIN32 AND MSVC)
+    # Video Compare's native playback: FFmpeg's libraries (vmaf_app/tools/
+    # ffmpeg, built by scripts/build_ffmpeg_decoders.ps1, which vendors their
+    # headers and exports into native/ffmpeg) and Direct3D 11. They are
+    # linked through import libraries made from their exports, and loaded
+    # only when first called (native_device.cpp loads them by their paths
+    # first), so that the window starts without them.
+    set(vml_ffmpeg ${PROJECT_SOURCE_DIR}/../native/ffmpeg)
+    set(vml_ffmpeg_imports)
+    foreach(library avcodec-63 avformat-63 avutil-61 swscale-10)
+        set(import ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg/${library}.lib)
+        add_custom_command(OUTPUT ${import}
+            COMMAND ${CMAKE_AR} /nologo /machine:x64 /def:${vml_ffmpeg}/lib/${library}.def /name:${library}.dll
+                    /out:${import}
+            DEPENDS ${vml_ffmpeg}/lib/${library}.def
+            VERBATIM)
+        list(APPEND vml_ffmpeg_imports ${import})
+        target_link_options(vml_app INTERFACE /DELAYLOAD:${library}.dll)
+    endforeach()
+    add_custom_target(vml_ffmpeg_imports DEPENDS ${vml_ffmpeg_imports})
+    add_dependencies(vml_app vml_ffmpeg_imports)
+    target_sources(vml_app PRIVATE native_decoder.cpp native_device.cpp native_pool.cpp native_presentation.cpp)
+    target_include_directories(vml_app SYSTEM PRIVATE ${vml_ffmpeg}/include)
+    target_link_libraries(vml_app PUBLIC ${vml_ffmpeg_imports} delayimp d3d11 dxgi)
+    # VML_NATIVE_PLAYBACK public: the view's members depend on it, and the
+    # tests must see the same view. NOMINMAX: no min and max macros from
+    # Windows' headers.
+    target_compile_definitions(vml_app PUBLIC VML_NATIVE_PLAYBACK PRIVATE NOMINMAX)
+endif()
+
 add_executable(VideoMetricsLab WIN32 main.cpp)
 target_link_libraries(VideoMetricsLab PRIVATE vml_app vml_compile_options)
 if(MSVC)

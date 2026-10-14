@@ -1,13 +1,15 @@
 // Video Compare's playback view (the Python app's
-// vmaf_app/ui/video_compare_view.py, its FFmpeg playback): the source against
-// the test video shown, frame by frame in step.
+// vmaf_app/ui/video_compare_view.py): the source against the test video
+// shown, frame by frame in step.
 //
-// FFmpeg decodes the source, the test video shown and its neighbours, each
-// in a worker of its own a few frames ahead (StreamDecodeWorker), so that
-// switching to a neighbour is instant. The view keeps the one playback clock
-// and shows a frame only when the source and the test video both have that
-// frame's number; the neighbours follow the same clock but never hold up the
-// pair shown. The source's soundtrack plays with ffplay.
+// Natively where it can (NativePool, Windows): FFmpeg's libraries decode on
+// the GPU and the app's presenter draws the pair, HDR included. Otherwise
+// FFmpeg itself decodes the source, the test video shown and its neighbours,
+// each in a worker of its own a few frames ahead (StreamDecodeWorker), so
+// that switching to a neighbour is instant; the view keeps the one playback
+// clock and shows a frame only when the source and the test video both have
+// that frame's number, the neighbours following the same clock without ever
+// holding up the pair shown. The source's soundtrack plays with ffplay.
 #pragma once
 
 #include <QImage>
@@ -26,6 +28,9 @@
 #include <vector>
 
 #include "playback_worker.h"
+#ifdef VML_NATIVE_PLAYBACK
+#include "native_pool.h"
+#endif
 #include "vml/frame_extract.h"
 #include "vml/platform/process.h"
 #include "zoom.h"
@@ -116,6 +121,9 @@ public:
     void zoom_changed();
 
     bool is_playing() const { return is_playing_; }
+    // Whether FFmpeg itself plays the pair (an SDR preview), not native
+    // playback.
+    bool plays_with_ffmpeg() const { return pool_active_; }
     // Whether playing was asked for (it may still be buffering).
     bool playback_requested() const { return wanted_playing_; }
     // The position shown, in ms from the first frame.
@@ -142,6 +150,15 @@ public:
     DecoderFactory make_decoder;
     // The playback clock, in seconds (a stand-in in the tests).
     std::function<double()> clock;
+#ifdef VML_NATIVE_PLAYBACK
+    // What native playback plays with (decoders, presenter, soundtrack), or
+    // why it cannot run here: the tests give stand-ins.
+    std::function<std::optional<NativePool::Parts>(const PreviewColorSettings& colors, QString& why)> native_parts;
+    // Where a native frame of `comparison`'s `side` is drawn: the part of it
+    // shown and where in the view, in device pixels.
+    NativeOutput::Placement native_placement(const NativeFrame& frame, const FrameComparison& comparison,
+                                             FrameSide side) const;
+#endif
 
 signals:
     void position_changed(int position_ms);
@@ -156,6 +173,8 @@ protected:
 
 private:
     friend class PlaybackTest;  // the view's tests (tests/app)
+    friend class NativePool;    // native playback, which plays on the view's clock and limits
+    friend class NativePoolTest;  // its tests (tests/app)
 
     // What a decoder decodes: a pair (the source's recipe, or a test video's
     // comparison) and its side.
@@ -171,7 +190,13 @@ private:
     void follow_decode_size();
     bool decode_size_changes(std::optional<Size> maximum) const;
     void restart_decoder(bool realtime);
-    void start_ffmpeg(bool realtime, bool keep_frame = false);
+    void start_ffmpeg(bool realtime, bool keep_frame = false, const QString& reason = {});
+    // Native playback failed: FFmpeg plays on, saying why.
+    void native_failed(const std::exception& error);
+    // Whether native playback plays.
+    bool native_active() const;
+    // Advances native playback.
+    void native_tick();
     void status(const QString& text);
     int decoder_limit() const { return 1 + decoded_videos_; }
     FrameComparison source_recipe() const;
@@ -211,7 +236,14 @@ private:
     // and each test video's ("d:" and its index in the series).
     std::map<std::string, PlaybackDecoder*> pool_;
     // Decoders being stopped, which still count against the limit.
-    std::set<PlaybackDecoder*> retired_;
+    std::set<QThread*> retired_;
+    // Native playback's presenter being ended, which counts only as running.
+    std::set<QThread*> stopping_;
+#ifdef VML_NATIVE_PLAYBACK
+    std::unique_ptr<NativePool> native_pool_;
+#endif
+    // Why FFmpeg plays, not native playback: said in the status.
+    QString pool_reason_;
     std::map<std::string, std::map<long long, FramePixels>> history_;
     std::map<std::string, QString> details_;
     std::map<std::string, QString> failures_;

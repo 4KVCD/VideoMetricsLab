@@ -33,6 +33,7 @@ add_executable(vml_tests
     unit/stats_test.cpp
     unit/temp_files_test.cpp
     unit/update_check_test.cpp
+    unit/native_playback_test.cpp
     unit/video_playback_test.cpp
     unit/vmaf_cuda_test.cpp
     unit/vmaf_v1_gpu_test.cpp
@@ -91,6 +92,12 @@ if(TARGET vml_app)
         VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>"
         VML_CLI="$<TARGET_FILE:vml-cli>")  # the program isolated work runs in
     add_dependencies(vml_app_tests vml-cli vml_test_child)
+    if(WIN32 AND MSVC)
+        # Native playback, where it is built (app/CMakeLists.txt); no min and
+        # max macros from Windows' headers.
+        target_sources(vml_app_tests PRIVATE app/native_decoder_test.cpp app/native_pool_test.cpp)
+        target_compile_definitions(vml_app_tests PRIVATE NOMINMAX)
+    endif()
     if(WIN32)
         # Qt beside the tests, with the platform they run on; before the
         # tests are listed, which starts them.

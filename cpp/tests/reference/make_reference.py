@@ -3050,6 +3050,90 @@ def playback_cases() -> dict:
             "commands": commands, "audio": audio, "neighbours": neighbours}
 
 
+# ------------------------------------------------------------ native playback
+
+def native_cases() -> dict:
+    """Video Compare's native playback decisions (core/gstreamer_playback.py,
+    locked_presentation.py, d3d11_tonemap.py), from the Python app's own
+    functions: which comparisons play natively and why not, what the
+    presenter's shader does to each video's colours and with which
+    parameters, and the YUV-to-RGB rows for each matrix, range and depth.
+    Floats are given as the presenter takes them (C floats)."""
+    import ctypes
+
+    from vmaf_app.core import d3d11_tonemap
+    from vmaf_app.core import frame_extract as fe
+    from vmaf_app.core import gstreamer_playback as gp
+    from vmaf_app.core.locked_presentation import yuv_to_rgb
+    from vmaf_app.core.models import VideoInfo
+
+    def floats(values) -> list:
+        return [exact(value) for value in (ctypes.c_float * len(values))(*values)]
+
+    def video(name: str, primaries: str, transfer: str, space: str, pix_fmt: str = "yuv420p10le") -> VideoInfo:
+        return VideoInfo(path=Path("C:/clips") / name, width=3840, height=2160, fps=24.0, duration=10.0,
+                         nb_frames=240, codec_name="hevc", pix_fmt=pix_fmt, color_primaries=primaries,
+                         color_space=space, color_transfer=transfer)
+
+    videos = {
+        "sdr": video("sdr.mkv", "bt709", "bt709", "bt709", "yuv420p"),
+        "untagged": video("untagged.mkv", "", "", ""),
+        "transfer unspecified": video("unspecified.mkv", "bt709", "unspecified", "bt709", "yuv420p"),
+        "hdr10": video("hdr10.mkv", "bt2020", "smpte2084", "bt2020nc"),
+        "hdr10, primaries untagged": video("hdr10 untagged.mkv", "", "smpte2084", ""),
+        "hdr10, primaries unknown": video("hdr10 unknown.mkv", "unknown", "smpte2084", "bt2020nc"),
+        "hlg, primaries unspecified": video("hlg unspecified.mkv", "unspecified", "arib-std-b67", "bt2020nc"),
+        "hdr10 in display p3": video("p3.mkv", "smpte432", "smpte2084", "bt2020nc"),
+        "hdr10 in dci-p3": video("dci.mkv", "smpte431", "smpte2084", "bt2020nc"),
+        "hdr10 in bt709": video("hdr709.mkv", "bt709", "smpte2084", "bt709"),
+        "hlg": video("hlg.mkv", "bt2020", "arib-std-b67", "bt2020nc"),
+        "hlg in bt709": video("hlg709.mkv", "bt709", "arib-std-b67", "bt709"),
+    }
+    settings = {
+        "display-aware, unknown": fe.PreviewColorSettings(),
+        "display-aware, HDR on": fe.PreviewColorSettings(fe.PreviewColorMode.DISPLAY_AWARE, True, 203.0),
+        "display-aware, HDR off": fe.PreviewColorSettings(fe.PreviewColorMode.DISPLAY_AWARE, False, 80.0),
+        "HDR to SDR": fe.PreviewColorSettings(fe.PreviewColorMode.HDR_TO_SDR, True, 203.0),
+        "unmanaged": fe.PreviewColorSettings(fe.PreviewColorMode.UNMANAGED, True, 203.0),
+    }
+
+    def info_json(info: VideoInfo) -> dict:
+        return {"name": info.path.name, "pix_fmt": info.pix_fmt, "color_primaries": info.color_primaries,
+                "color_space": info.color_space, "color_transfer": info.color_transfer}
+
+    def settings_json(value) -> dict:
+        return {"mode": value.mode.value, "hdr": value.display_hdr_enabled, "white": value.display_sdr_white_nits}
+
+    shadings = [{"video": info_json(info), "colours": settings_json(value), "shading": gp._shading(info, value)}
+                for info in videos.values() for value in settings.values()]
+    # As where GStreamer and the presenter are there: native playback is then
+    # refused only for the comparison's colours.
+    real_available, real_presents = gp.gstreamer_available, d3d11_tonemap.presents
+    gp.gstreamer_available = lambda: (True, "")
+    d3d11_tonemap.presents = lambda: True
+    try:
+        problems = []
+        for source_name, distorted_name in [("hdr10", name) for name in videos] + [(name, "sdr") for name in videos]:
+            comparison = fe.FrameComparison(videos[source_name], videos[distorted_name], fps=24.0, frame_count=240)
+            for value in settings.values():
+                usable, reason = gp.uses_native_gstreamer(comparison, value)
+                problems.append({"source": info_json(comparison.source_info),
+                                 "distorted": info_json(comparison.distorted_info),
+                                 "colours": settings_json(value), "problem": None if usable else reason})
+        parameters = [{"kind": kind, "primaries": primaries, "hdr": hdr,
+                       "parameters": floats(d3d11_tonemap.shading(kind, primaries, hdr=hdr))}
+                      for kind in ("HDR10 / PQ", "HLG")
+                      for primaries in ("bt709", "bt2020", "smpte432", "", "unknown", "unspecified", "BT.2020")
+                      for hdr in (False, True)]
+    finally:
+        gp.gstreamer_available, d3d11_tonemap.presents = real_available, real_presents
+    rows = [{"matrix": matrix, "full_range": full_range, "ten_bit": ten_bit,
+             "rows": floats(yuv_to_rgb(matrix, full_range, ten_bit))}
+            for matrix in ("bt709", "bt601", "bt2020", "smpte240m", "fcc", "bt470m")
+            for full_range in (False, True) for ten_bit in (False, True)]
+    return {"shadings": shadings, "problems": problems, "parameters": parameters, "rows": rows}
+
+
 # ------------------------------------------------------------------- bitrate
 
 def bitrate_cases() -> dict:
@@ -3185,6 +3269,7 @@ if __name__ == "__main__":
     write("frame_extract.json", frame_extract_cases())
     write("bitrate.json", bitrate_cases())
     write("playback.json", playback_cases())
+    write("native.json", native_cases())
     write("devices.json", devices_cases())
     write("perceptual_cpu.json", perceptual_cpu_cases())
     write("timed_pairing.json", timed_pairing_cases())

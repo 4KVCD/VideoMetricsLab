@@ -10,6 +10,7 @@
 
 #include <QString>
 
+#include <array>
 #include <optional>
 #include <utility>
 
@@ -41,6 +42,13 @@ public:
 
     // Where a `frame`-sized picture (its pixels) goes in `view`.
     Placement placement(Extent view, Extent frame, double ratio) const;
+    // The part of the frame in view, as fractions of it (left, top, right,
+    // bottom), and where that part is drawn within the view.
+    struct Visible {
+        std::array<double, 4> fractions{};
+        Placement drawn;
+    };
+    Visible visible(Extent view, Extent frame, double ratio) const;
     // Whether the frame is larger than the view, so dragging moves it.
     bool can_drag(Extent view, Extent frame, double ratio) const;
     // Moves the frame by (dx, dy) view pixels, as far as it can go; whether

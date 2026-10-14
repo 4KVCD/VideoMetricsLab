@@ -26,6 +26,7 @@ add_library(vml_core
     src/metric_cache.cpp
     src/metrics.cpp
     src/model_select.cpp
+    src/native_playback.cpp
     src/npz.cpp
     src/number_format.cpp
     src/options.cpp
