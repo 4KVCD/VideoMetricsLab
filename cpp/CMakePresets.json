@@ -50,7 +50,7 @@
     { "name": "macos-release", "configurePreset": "macos", "configuration": "Release" }
   ],
   "testPresets": [
-    { "name": "base", "hidden": true, "output": { "outputOnFailure": true } },
+    { "name": "base", "hidden": true, "output": { "outputOnFailure": true }, "execution": { "jobs": 8 } },
     { "name": "windows-debug", "inherits": "base", "configurePreset": "windows", "configuration": "Debug" },
     { "name": "windows-release", "inherits": "base", "configurePreset": "windows", "configuration": "Release" },
     { "name": "linux-debug", "inherits": "base", "configurePreset": "linux", "configuration": "Debug" },
