@@ -1154,6 +1154,24 @@ def test_hiding_a_metric_hides_its_column_and_leaves_it_out_of_runs(qapp):
     win.close()
 
 
+def test_the_metrics_menu_is_gone_once_closed(qapp):
+    """Each opening of the metrics menu left a menu of its own in the window."""
+    from PySide6.QtCore import QEvent, QPoint, QTimer
+    from PySide6.QtWidgets import QMenu
+
+    def close_menu() -> None:
+        if (menu := QApplication.activePopupWidget()) is not None:
+            menu.close()
+
+    win = MainWindow()
+    for _ in range(2):
+        QTimer.singleShot(0, close_menu)
+        win._show_metrics_menu(QPoint(0, 0))
+    QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    assert win.findChildren(QMenu) == []
+    win.close()
+
+
 def test_a_row_set_to_cpu_does_not_show_a_cached_gpu_score(qapp, tmp_path, monkeypatch):
     """The app's own lookups carry each row's GPU/CPU choice."""
     from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet

@@ -3025,6 +3025,7 @@ class MainWindow(QMainWindow):
         if self._run_active:
             return
         menu = _StayOpenMenu(self)
+        menu.setAttribute(Qt.WA_DeleteOnClose)  # one menu for each opening otherwise stays in the window
         menu.setToolTipsVisible(True)
         shown = [item for item in _METRIC_COLUMNS if item.key not in self._hidden_metrics]
         for item in _METRIC_COLUMNS:
