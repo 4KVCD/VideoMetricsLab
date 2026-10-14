@@ -9,6 +9,8 @@
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
+#include <filesystem>
 #include <map>
 #include <string>
 #include <vector>
@@ -61,6 +63,17 @@ std::optional<std::string> accel_from(const Json& data) {
     return data.is_null() ? std::nullopt : std::optional(data.get<std::string>());
 }
 
+// The Python app's command, its input as this system completes it: the
+// Python app's paths are Windows paths, which are no absolute paths
+// elsewhere (and which each standard library completes its own way).
+std::vector<std::string> wanted_command(const Json& expected, [[maybe_unused]] const std::filesystem::path& input) {
+    std::vector<std::string> wanted = expected.get<std::vector<std::string>>();
+#ifndef _WIN32
+    *(std::find(wanted.begin(), wanted.end(), "-i") + 1) = platform::path_text(std::filesystem::weakly_canonical(input));
+#endif
+    return wanted;
+}
+
 TEST(VideoPlayback, DecodesEachVideoAsThePythonAppDoes) {
     const Json reference = test::load_reference("playback.json");
     std::map<std::string, PreviewColorSettings> colours;
@@ -94,15 +107,16 @@ TEST(VideoPlayback, DecodesEachVideoAsThePythonAppDoes) {
         const FrameSide side = item.at("side") == "source" ? FrameSide::source : FrameSide::distorted;
         EXPECT_EQ(build_playback_command("<ffmpeg>", comparison, side, item.at("start_frame"),
                                          colours.at(item.at("colour")), plan, maximum, modes.at(item.at("processing"))),
-                  item.at("command").get<std::vector<std::string>>());
+                  wanted_command(item.at("command"), frame_input_path(comparison, side)));
         EXPECT_EQ(playback_dimensions(comparison, maximum), (Size{item.at("size")[0], item.at("size")[1]}));
     }
 
     const Json& audio = reference.at("audio");
     ASSERT_FALSE(audio.empty());
     for (const Json& item : audio) {
-        EXPECT_EQ(build_audio_command("C:\\tools\\ffplay.exe", comparison_from(item.at("comparison")), item.at("frame")),
-                  item.at("command").get<std::vector<std::string>>());
+        const FrameComparison comparison = comparison_from(item.at("comparison"));
+        EXPECT_EQ(build_audio_command("C:\\tools\\ffplay.exe", comparison, item.at("frame")),
+                  wanted_command(item.at("command"), frame_input_path(comparison, FrameSide::source)));
     }
 
     const Json& neighbours = reference.at("neighbours");

@@ -16,7 +16,8 @@ std::string python_repr(double value);
 std::string format_fixed(double value, int decimals);
 
 // `value` as Python's "{:g}" writes it: six significant digits, no
-// trailing zeros, exponent form below 0.0001 and from 1e6 ("1e+06").
-std::string format_general(double value);
+// trailing zeros, exponent form below 0.0001 and from 1e6 ("1e+06"); with
+// `digits`, as "{:.12g}" (12) does, exponent form from 1e12.
+std::string format_general(double value, int digits = 6);
 
 }  // namespace vml

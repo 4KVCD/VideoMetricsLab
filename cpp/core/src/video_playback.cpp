@@ -1,7 +1,6 @@
 #include "vml/video_playback.h"
 
 #include <algorithm>
-#include <format>
 #include <set>
 #include <stdexcept>
 #include <string_view>
@@ -23,7 +22,7 @@ std::string resolved_text(const std::filesystem::path& path) {
 }
 
 // A number as Python's f"{value:.12g}" writes it.
-std::string twelve_digits(double value) { return std::format("{:.12g}", value); }
+std::string twelve_digits(double value) { return format_general(value, 12); }
 
 }  // namespace
 
