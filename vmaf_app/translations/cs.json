@@ -434,7 +434,7 @@
   "No videos loaded": "Nejsou načtena žádná videa",
   "▶ Play": "▶ Přehrát",
   "Audio": "Zvuk",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback uses the first encode's soundtrack. Video buffering also pauses audio.": "GStreamer přehrává jednu zvukovou stopu zdroje nepřetržitě při přepínání klávesou S i mezi kódováními. Chybějící nebo nepodporovaný zvuk zdroje zůstává ztišený. Záložní FFmpeg používá zvuk prvního kódování. Načítání videa do vyrovnávací paměti pozastaví i zvuk.",
+  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "GStreamer přehrává jednu zvukovou stopu zdroje nepřetržitě při přepínání klávesou S i mezi kódováními. Chybějící nebo nepodporovaný zvuk zdroje zůstává ztišený. Záložní FFmpeg přehrává také zvuk zdroje. Načítání videa do vyrovnávací paměti pozastaví i zvuk.",
   "− Frame": "− Snímek",
   "Enter seconds, M:SS, or H:MM:SS.sss": "Zadejte sekundy, M:SS nebo H:MM:SS.sss",
   "+ Frame": "+ Snímek",

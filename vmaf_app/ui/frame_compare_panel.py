@@ -331,8 +331,8 @@ class FrameComparePanel(QWidget):
         self.audio_checkbox = QCheckBox(tr("Audio"))
         self.audio_checkbox.setToolTip(
             tr("GStreamer plays one source soundtrack continuously across S and encode switches. "
-            "Missing/unsupported source audio stays silent. The FFmpeg fallback uses the "
-            "first encode's soundtrack. Video buffering also pauses audio.")
+            "Missing/unsupported source audio stays silent. The FFmpeg fallback plays the "
+            "source's soundtrack too. Video buffering also pauses audio.")
         )
         self.audio_checkbox.setChecked(True)
         self.audio_checkbox.toggled.connect(self._on_audio_toggled)

@@ -434,7 +434,7 @@
   "No videos loaded": "Nincsenek betöltött videók",
   "▶ Play": "▶ Lejátszás",
   "Audio": "Hang",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback uses the first encode's soundtrack. Video buffering also pauses audio.": "A GStreamer a forrás egyetlen hangsávját folyamatosan játssza le az S-sel való váltás és a kódolások közti váltás közben. A hiányzó vagy nem támogatott forráshang néma marad. Az FFmpeg tartalékmód az első kódolás hangját használja. A videó pufferelése a hangot is szünetelteti.",
+  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "A GStreamer a forrás egyetlen hangsávját folyamatosan játssza le az S-sel való váltás és a kódolások közti váltás közben. A hiányzó vagy nem támogatott forráshang néma marad. Az FFmpeg tartalékmód is a forrás hangját játssza le. A videó pufferelése a hangot is szünetelteti.",
   "− Frame": "− Képkocka",
   "Enter seconds, M:SS, or H:MM:SS.sss": "Adja meg másodpercben, M:SS vagy H:MM:SS.sss formában",
   "+ Frame": "+ Képkocka",

@@ -434,7 +434,7 @@
   "No videos loaded": "未載入影片",
   "▶ Play": "▶ 播放",
   "Audio": "音訊",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback uses the first encode's soundtrack. Video buffering also pauses audio.": "GStreamer 在 S 鍵切換和編碼切換之間持續播放來源影片的一條音軌。缺少或不支援的來源音訊會保持靜音。FFmpeg 備援方案使用第一個編碼的音軌。影片緩衝時音訊也會暫停。",
+  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "GStreamer 在 S 鍵切換和編碼切換之間持續播放來源影片的一條音軌。缺少或不支援的來源音訊會保持靜音。FFmpeg 備援方案同樣播放來源影片的音軌。影片緩衝時音訊也會暫停。",
   "− Frame": "− 影格",
   "Enter seconds, M:SS, or H:MM:SS.sss": "輸入秒數、M:SS 或 H:MM:SS.sss",
   "+ Frame": "+ 影格",
