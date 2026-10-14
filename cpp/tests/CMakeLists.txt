@@ -10,6 +10,7 @@ add_executable(vml_tests
     unit/ffmpeg_run_test.cpp
     unit/ffmpeg_tools_test.cpp
     unit/ffprobe_test.cpp
+    unit/frame_extract_test.cpp
     unit/frame_sync_by_time_test.cpp
     unit/gpu_frames_test.cpp
     unit/gpu_vmaf_test.cpp
@@ -71,6 +72,7 @@ if(TARGET vml_app)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     add_executable(vml_app_tests
         app/chart_test.cpp
+        app/frame_compare_test.cpp
         app/graph_panel_test.cpp
         app/i18n_test.cpp
         app/main.cpp

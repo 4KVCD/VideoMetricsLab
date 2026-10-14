@@ -138,6 +138,107 @@ std::string system_description() {
 
 std::string processor_description() { return environment_variable("PROCESSOR_IDENTIFIER").value_or(""); }
 
+namespace {
+
+// The display configuration's requests and answers, laid out as Windows
+// lays them out (wingdi.h), for the two that older SDKs lack.
+struct DeviceInfoHeader {
+    UINT32 type;
+    UINT32 size;
+    LUID adapter;
+    UINT32 id;
+};
+
+struct AdvancedColorInfo {
+    DeviceInfoHeader header;
+    UINT32 value;  // bit 0: HDR supported; bit 1: HDR on
+    UINT32 color_encoding;
+    UINT32 bits_per_color_channel;
+};
+
+struct SdrWhiteLevel {
+    DeviceInfoHeader header;
+    ULONG level;  // in thousandths of 80 nits
+};
+
+constexpr UINT32 get_source_name = 1;      // DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME
+constexpr UINT32 get_advanced_color = 9;   // DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO
+constexpr UINT32 get_sdr_white_level = 11;  // DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL
+
+LONG device_info(void* request) {
+    return DisplayConfigGetDeviceInfo(static_cast<DISPLAYCONFIG_DEVICE_INFO_HEADER*>(request));
+}
+
+}  // namespace
+
+DisplayHdrInfo query_display_hdr(void* window) {
+    DisplayHdrInfo info;
+    const HMONITOR monitor = MonitorFromWindow(static_cast<HWND>(window), MONITOR_DEFAULTTONEAREST);
+    MONITORINFOEXW monitor_info{};
+    monitor_info.cbSize = sizeof monitor_info;
+    if (monitor == nullptr || !GetMonitorInfoW(monitor, &monitor_info)) {
+        return info;
+    }
+
+    // The active display paths; asked again if they change in between. As
+    // in the Python app, nothing is known, not even the monitor's name, if
+    // they cannot be listed.
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths;
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes;
+    bool listed = false;
+    for (int attempt = 0; attempt < 3 && !listed; ++attempt) {
+        UINT32 path_count = 0;
+        UINT32 mode_count = 0;
+        if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &path_count, &mode_count) != ERROR_SUCCESS) {
+            return info;
+        }
+        paths.resize(path_count);
+        modes.resize(mode_count);
+        const LONG result =
+            QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &path_count, paths.data(), &mode_count, modes.data(), nullptr);
+        if (result == ERROR_INSUFFICIENT_BUFFER) {
+            continue;
+        }
+        if (result != ERROR_SUCCESS) {
+            return info;
+        }
+        paths.resize(path_count);
+        listed = true;
+    }
+    if (!listed) {
+        return info;
+    }
+    info.device_name = narrow(monitor_info.szDevice);
+
+    for (const DISPLAYCONFIG_PATH_INFO& path : paths) {
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+        source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+        source.header.size = sizeof source;
+        source.header.adapterId = path.sourceInfo.adapterId;
+        source.header.id = path.sourceInfo.id;
+        static_assert(DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME == get_source_name);
+        if (device_info(&source.header) != ERROR_SUCCESS ||
+            CompareStringOrdinal(source.viewGdiDeviceName, -1, monitor_info.szDevice, -1, TRUE) != CSTR_EQUAL) {
+            continue;
+        }
+        AdvancedColorInfo advanced{};
+        advanced.header = {get_advanced_color, sizeof advanced, path.targetInfo.adapterId, path.targetInfo.id};
+        if (device_info(&advanced) != ERROR_SUCCESS) {
+            return info;
+        }
+        SdrWhiteLevel white{};
+        white.header = {get_sdr_white_level, sizeof white, path.targetInfo.adapterId, path.targetInfo.id};
+        if (device_info(&white) == ERROR_SUCCESS) {
+            info.sdr_white_nits = white.level / 1000.0 * 80.0;
+        }
+        info.hdr_supported = (advanced.value & 0x1) != 0;
+        info.hdr_enabled = (advanced.value & 0x2) != 0;
+        info.bits_per_color_channel = static_cast<int>(advanced.bits_per_color_channel);
+        return info;
+    }
+    return info;
+}
+
 void raise_thread_priority() { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST); }
 
 bool keep_system_awake(bool awake) {

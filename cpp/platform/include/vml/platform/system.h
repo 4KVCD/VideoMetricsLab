@@ -90,6 +90,24 @@ std::string system_description();
 // Stepping 2, GenuineIntel"; elsewhere the machine, such as "x86_64".
 std::string processor_description();
 
+// The HDR state of a monitor, with nothing for what Windows does not say.
+struct DisplayHdrInfo {
+    std::string device_name;
+    std::optional<bool> hdr_supported;
+    std::optional<bool> hdr_enabled;
+    std::optional<int> bits_per_color_channel;
+    // Windows' SDR content brightness: the white SDR is shown at while HDR
+    // is on.
+    std::optional<double> sdr_white_nits;
+    bool operator==(const DisplayHdrInfo&) const = default;
+};
+
+// The HDR state of the monitor nearest `window` (a native window handle),
+// as Windows' display configuration says it (the Python app's
+// display_hdr.py); all unknown elsewhere, or when a driver does not say.
+// Only read: nothing about the display is changed.
+DisplayHdrInfo query_display_hdr(void* window);
+
 // Lets the calling thread run ahead of ordinary work (Windows'
 // THREAD_PRIORITY_HIGHEST), for a light thread whose timing matters. It does
 // nothing on other systems, as in the Python app, or if Windows refuses.

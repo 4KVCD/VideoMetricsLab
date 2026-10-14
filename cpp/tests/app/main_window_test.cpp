@@ -43,6 +43,7 @@
 #include "file_writes.h"
 #include "graph_panel.h"
 #include "i18n.h"
+#include "frame_compare_panel.h"
 #include "options_panel.h"
 #include "settings_panel.h"
 #include "test_videos.h"
@@ -234,6 +235,15 @@ protected:
             names.push_back(platform::path_text(entry.result->distorted.filename()));
         }
         return names;
+    }
+    // The pairs Video Compare lists, top to bottom: each one's name, and
+    // whether it has scores to show.
+    static std::vector<std::pair<std::string, bool>> compared(MainWindow& window) {
+        std::vector<std::pair<std::string, bool>> listed;
+        for (const FrameComparisonEntry& entry : window.frame_compare_panel_->entries_) {
+            listed.emplace_back(entry.label.toStdString(), entry.scores != nullptr);
+        }
+        return listed;
     }
 
     // Whether a video is still being read.
@@ -1329,6 +1339,40 @@ TEST_F(WindowTest, AFinishedRunIsOnTheGraphAndARemovedVideoTakesItsLineAway) {
     select_rows(window, 0, 0);
     remove_selected(window);
     EXPECT_EQ(graphed(window), std::vector<std::string>{"b.mkv"});
+}
+
+// --------------------------------------------------------- Video Compare
+
+TEST_F(WindowTest, VideoCompareListsTheVideosReadScoredOrNotAndFollowsTheTable) {
+    // Frames can be compared before anything is measured: the videos read
+    // are listed when the tab is opened, a run's scores join them, a video
+    // removed leaves, and scores taken away leave the video listed without
+    // them.
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    using Listed = std::vector<std::pair<std::string, bool>>;
+    MainWindow window;
+    open_clips(window);
+    tabs(window).setCurrentIndex(tab_frame_compare);
+    EXPECT_EQ(compared(window), (Listed{{"a", false}, {"b", false}}));
+
+    tabs(window).setCurrentIndex(tab_videos);
+    run_button(window).click();
+    ASSERT_TRUE(wait_until([&] { return !running(window); }));
+    EXPECT_EQ(compared(window), (Listed{{"a", true}, {"b", true}}));
+    tabs(window).setCurrentIndex(tab_frame_compare);
+    EXPECT_EQ(compared(window), (Listed{{"a", true}, {"b", true}}));
+
+    tabs(window).setCurrentIndex(tab_videos);
+    select_rows(window, 0, 0);
+    remove_selected(window);
+    EXPECT_EQ(compared(window), (Listed{{"b", true}}));
+
+    select_rows(window, 0, 0);
+    options_panel(window).subsample_spin->setValue(5);
+    ASSERT_EQ(rows(window)[0]->completed_run, nullptr);
+    EXPECT_EQ(compared(window), (Listed{{"b", false}}));
 }
 
 // ------------------------------------------------------------ the window

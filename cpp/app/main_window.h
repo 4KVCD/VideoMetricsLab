@@ -63,6 +63,8 @@ class CheckableHeaderView;
 class ElidedLabel;
 class CvvdpDisplayDialog;
 class FileWrites;
+class FrameComparePanel;
+struct FrameComparisonEntry;
 class FillColumnTable;
 class GraphPanel;
 class OptionsPanel;
@@ -108,6 +110,9 @@ enum Tab : int { tab_videos, tab_graph, tab_frame_compare, tab_bitrate, tab_sett
 // A run's own line on Metric Graphs: a name no other run has (the Python
 // app's graph_identity, an object of its own).
 std::string new_graph_identity();
+
+// A row's own entry in Video Compare (the Python app's frame_identity).
+std::string new_frame_identity();
 
 // A run's result on a row (the Python app's CompletedRun).
 struct CompletedRun {
@@ -159,6 +164,8 @@ struct RowData {
     std::map<std::string, QString> metric_failures;
     // The scores of the row's last run; nothing before one.
     std::shared_ptr<CompletedRun> completed_run;
+    // Its entry in Video Compare while it has no run.
+    std::string frame_identity = new_frame_identity();
     // True only for a "Test both" companion row, whose scale direction was
     // set on purpose to the direction the row stands for.
     bool scale_direction_pinned = false;
@@ -217,6 +224,14 @@ private:
     // Takes the Settings tab's defaults for newly added videos. Rows already
     // in the table keep what they were given.
     void on_default_settings_changed();
+
+    // ------------------------------------------------------- Video Compare
+    // Makes Video Compare list every row it can show, scored or not.
+    void sync_frame_compare();
+    // A row's entry in Video Compare; nothing while it cannot be shown.
+    std::optional<FrameComparisonEntry> frame_comparison_entry(const RowData& row_data) const;
+    // Keeps the black bars found in the saved scores' folder now named.
+    void use_crop_store();
 
     // ------------------------------------------------------- the update check
     // GitHub's answer (`body`), or why it could not be asked (`error`).
@@ -507,6 +522,7 @@ private:
     // The videos' colours, shared by the graphs, and Metric Graphs.
     VideoColors* video_colors_ = nullptr;
     GraphPanel* graph_panel_ = nullptr;
+    FrameComparePanel* frame_compare_panel_ = nullptr;
     // The newer release offered, while its message is open.
     QPointer<QMessageBox> update_box_;
     // The Settings tab, and the latest check of FFmpeg, which it shows.

@@ -247,12 +247,7 @@ void MainWindow::on_run_clicked() {
     pause_button_->setChecked(false);
     pause_button_->setText(app::tr("Pause"));
 
-    // Black bars found are kept for the next run, beside the saved scores.
-    const std::filesystem::path cache_folder = settings_.cache_dir_path().value_or(default_cache_dir());
-    set_crop_store([cache_folder] {
-        std::filesystem::create_directories(cache_folder);
-        return cache_folder / black_bars_file;
-    });
+    use_crop_store();  // black bars found are kept for the next run, beside the saved scores
     auto* worker = new RunWorker(std::move(jobs), parallel_jobs(), settings_.gpu_metrics_together, settings_, this);
     worker_ = worker;
     connect(worker, &RunWorker::job_started, this, [this](int index) { on_job_started(index); });
@@ -854,6 +849,7 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
     // button to see it serves nobody.
     graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label,
                            run->graph_identity, !continuing});
+    sync_frame_compare();
     return row;
 }
 

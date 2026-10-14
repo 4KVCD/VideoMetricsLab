@@ -51,4 +51,10 @@ double display_aspect_ratio(const VideoInfo& info, const std::optional<CropBox>&
 // nothing.
 std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, double duration_limit);
 
+// Video Compare's check: a raw stream whose frame rate (FFmpeg's guess)
+// disagrees with the other video's is refused, as pair_problem refuses it.
+// Video Compare shows other mismatched pairs anyway, but it places a raw
+// stream's frames by that guessed rate, so it would show the wrong frame.
+std::optional<std::string> untimed_pair_problem(const VideoInfo& source, const VideoInfo& distorted);
+
 }  // namespace vml

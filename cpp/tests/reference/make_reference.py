@@ -2815,6 +2815,129 @@ def update_check_cases() -> dict:
             "timeout": update_check.TIMEOUT_SECONDS}
 
 
+def frame_extract_cases() -> dict:
+    """Video Compare's still frames (core/frame_extract.py), from the Python
+    app's own functions: each side's filter chain and FFmpeg command for
+    pairs with crops, either scale direction, resolution tests and black bars
+    still to be detected, in every colour mode; the seek times; the compared
+    size; the HDR family of each video; the SDR white level used."""
+    from dataclasses import replace as dc_replace
+
+    from vmaf_app.core import frame_extract as fe
+    from vmaf_app.core.models import CropBox, ResampleTarget, ScaleDirection, VideoInfo
+
+    def video(name: str, width: int, height: int, pix_fmt: str, *, fps: float = 24000 / 1001, sar: str = "1:1",
+              primaries: str = "", space: str = "", transfer: str = "", color_range: str = "",
+              start_offset: float = 0.0) -> VideoInfo:
+        return VideoInfo(path=Path("C:/clips") / name, width=width, height=height, fps=fps, duration=60.0,
+                         nb_frames=1438, codec_name="hevc", sar=sar, pix_fmt=pix_fmt, color_primaries=primaries,
+                         color_space=space, color_transfer=transfer, color_range=color_range,
+                         start_offset=start_offset)
+
+    videos = {
+        "source_hdr": video("source hdr.mkv", 3840, 2160, "yuv420p10le", primaries="bt2020", space="bt2020nc",
+                            transfer="smpte2084", color_range="tv", start_offset=0.032),
+        "encode_sdr": video("encode.mp4", 1920, 1080, "yuv420p", primaries="bt709", space="bt709",
+                            transfer="bt709", color_range="tv"),
+        "encode_hdr_lost_tags": video("lost.mkv", 3840, 2160, "yuv420p10le", primaries="unknown", space="",
+                                      transfer=" SMPTE2084 ", color_range="unspecified"),
+        "encode_hlg": video("hlg.mkv", 1920, 1080, "yuv420p10le", primaries="bt2020", space="bt2020nc",
+                            transfer="arib-std-b67", color_range="pc"),
+        "encode_untagged_10bit": video("untagged.mkv", 2560, 1440, "yuv420p10le"),
+        "encode_anamorphic": video("anamorphic.mkv", 1440, 1080, "yuv420p", sar="4:3", transfer="bt709"),
+        "source_letterboxed": video("letterboxed.mkv", 1920, 1080, "yuv420p", transfer="bt709"),
+        "encode_scope": video("scope.mkv", 1920, 816, "yuv420p", transfer="bt709"),
+        "encode_flat": video("flat.mkv", 1920, 1038, "yuv420p", transfer="bt709"),
+    }
+    comparisons = {
+        "hdr source, sdr encode": fe.FrameComparison(videos["source_hdr"], videos["encode_sdr"],
+                                                     fps=videos["source_hdr"].fps, frame_count=1438),
+        "test scaled to the source": fe.FrameComparison(videos["source_hdr"], videos["encode_sdr"],
+                                                        scale_direction=ScaleDirection.DISTORTED_TO_SOURCE,
+                                                        scale_algorithm="lanczos", fps=24000 / 1001,
+                                                        frame_count=1438),
+        "cropped both": fe.FrameComparison(videos["source_hdr"], videos["encode_hdr_lost_tags"],
+                                           source_crop=CropBox(3840, 1600, 0, 280),
+                                           distorted_crop=CropBox(3838, 1600, 2, 280), fps=24000 / 1001,
+                                           frame_count=1438),
+        "a crop that keeps everything": fe.FrameComparison(videos["encode_hlg"], videos["encode_hlg"],
+                                                           source_crop=CropBox(1920, 1080, 0, 0), fps=25.0,
+                                                           frame_count=100),
+        "resolution test": fe.FrameComparison(videos["source_hdr"], videos["source_hdr"],
+                                              source_crop=CropBox(3840, 1600, 0, 280),
+                                              resample_target=ResampleTarget(1280, 720), fps=24000 / 1001,
+                                              frame_count=1438),
+        "untagged and anamorphic": fe.FrameComparison(videos["encode_untagged_10bit"],
+                                                      videos["encode_anamorphic"], fps=60.0, frame_count=600),
+        "black bars still to detect": fe.FrameComparison(videos["source_letterboxed"], videos["encode_scope"],
+                                                         fps=24.0, frame_count=240, auto_crop_pending=True),
+        "black bars still to detect, same shape": fe.FrameComparison(videos["encode_sdr"], videos["source_letterboxed"],
+                                                                     fps=24.0, frame_count=240, auto_crop_pending=True),
+        # 16:9 against 1.85:1, shapes 4% apart: fitted, not stretched.
+        "black bars still to detect, nearly the same shape": fe.FrameComparison(
+            videos["source_letterboxed"], videos["encode_flat"], fps=24.0, frame_count=240, auto_crop_pending=True),
+    }
+    colours = {
+        "display-aware, Windows HDR on at 203 nits": fe.PreviewColorSettings(fe.PreviewColorMode.DISPLAY_AWARE, True, 203.0),
+        "display-aware, Windows HDR on at 30 nits": fe.PreviewColorSettings(fe.PreviewColorMode.DISPLAY_AWARE, True, 30.0),
+        "display-aware, Windows HDR off": fe.PreviewColorSettings(fe.PreviewColorMode.DISPLAY_AWARE, False, 240.0),
+        "display-aware, unknown": fe.PreviewColorSettings(),
+        "HDR to SDR": fe.PreviewColorSettings(fe.PreviewColorMode.HDR_TO_SDR, True, 203.0),
+        "unmanaged": fe.PreviewColorSettings(fe.PreviewColorMode.UNMANAGED, True, 203.0),
+    }
+
+    def info_json(info: VideoInfo) -> dict:
+        return {"path": str(info.path), "width": info.width, "height": info.height, "fps": exact(info.fps),
+                "sar": info.sar, "pix_fmt": info.pix_fmt, "color_primaries": info.color_primaries,
+                "color_space": info.color_space, "color_transfer": info.color_transfer,
+                "color_range": info.color_range, "start_offset": exact(info.start_offset)}
+
+    def crop_json(crop):
+        return None if crop is None else [crop.w, crop.h, crop.x, crop.y]
+
+    real_ffmpeg = fe.ffmpeg_path
+    fe.ffmpeg_path = lambda: "<ffmpeg>"
+    try:
+        comparison_cases = []
+        for name, comparison in comparisons.items():
+            sides = []
+            for side in ("source", "distorted"):
+                filters = {colour: fe.frame_filter(comparison, side, settings) for colour, settings in colours.items()}
+                commands = {str(frame): fe.build_frame_command(comparison, side, frame, colours["display-aware, unknown"])
+                            for frame in (0, 1, 1000)}
+                sides.append({"side": side, "filters": filters, "commands": commands})
+            comparison_cases.append({
+                "name": name, "source": info_json(comparison.source_info),
+                "distorted": info_json(comparison.distorted_info),
+                "source_crop": crop_json(comparison.source_crop), "distorted_crop": crop_json(comparison.distorted_crop),
+                "scale_direction": comparison.scale_direction.value, "scale_algorithm": comparison.scale_algorithm,
+                "resample_width": None if comparison.resample_target is None else comparison.resample_target.width,
+                "fps": exact(comparison.fps), "frame_count": comparison.frame_count,
+                "auto_crop_pending": comparison.auto_crop_pending,
+                "dimensions": list(fe.comparison_dimensions(comparison)), "sides": sides,
+            })
+        no_rate = dc_replace(comparisons["hdr source, sdr encode"], fps=0.0)
+        try:
+            fe.build_frame_command(no_rate, "source", 0)
+            no_rate_error = None
+        except fe.FrameExtractError as error:
+            no_rate_error = str(error)
+    finally:
+        fe.ffmpeg_path = real_ffmpeg
+    return {
+        "comparisons": comparison_cases,
+        "colours": [{"name": name, "mode": settings.mode.value, "hdr": settings.display_hdr_enabled,
+                     "white": settings.display_sdr_white_nits, "target_nits": exact(settings.target_nits)}
+                    for name, settings in colours.items()],
+        "hdr_kinds": [{"video": info_json(info), "kind": fe.hdr_kind(info)} for info in videos.values()],
+        "seeks": [{"video": info_json(info), "frame": frame, "fps": exact(fps),
+                   "seconds": exact(fe.seek_seconds(info, frame, fps))}
+                  for info in (videos["source_hdr"], videos["encode_sdr"])
+                  for frame, fps in ((0, 24000 / 1001), (1, 24000 / 1001), (3, 120.0), (86399, 24.0))],
+        "no_frame_rate": no_rate_error,
+    }
+
+
 if __name__ == "__main__":
     # Its texts as they are, not escaped: the file is a third the size.
     (HERE / "i18n.json").write_text(json.dumps(i18n_cases(), indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -2824,6 +2947,7 @@ if __name__ == "__main__":
     write("graph.json", graph_cases())
     write("app_log.json", app_log_cases())
     write("update_check.json", update_check_cases())
+    write("frame_extract.json", frame_extract_cases())
     write("devices.json", devices_cases())
     write("perceptual_cpu.json", perceptual_cpu_cases())
     write("timed_pairing.json", timed_pairing_cases())

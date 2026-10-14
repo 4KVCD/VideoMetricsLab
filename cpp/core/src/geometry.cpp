@@ -118,6 +118,13 @@ double display_aspect_ratio(const VideoInfo& info, const std::optional<CropBox>&
            static_cast<double>(static_cast<long long>(height) * denominator);
 }
 
+std::optional<std::string> untimed_pair_problem(const VideoInfo& source, const VideoInfo& distorted) {
+    if (!source.is_raw_stream() && !distorted.is_raw_stream()) {
+        return std::nullopt;
+    }
+    return pair_problem(source, distorted, 0.0);
+}
+
 std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, double duration_limit) {
     std::optional<std::string> problem = timeline_problem(source, distorted, duration_limit);
     const VideoInfo* raw = source.is_raw_stream() ? &source : distorted.is_raw_stream() ? &distorted : nullptr;

@@ -173,6 +173,7 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     const std::shared_ptr<CompletedRun>& shown = row_data.completed_run;
     graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(shown, &shown->result), shown->label,
                            shown->graph_identity, previous == nullptr});
+    sync_frame_compare();
 }
 
 void MainWindow::on_other_displays_found(int generation, const OtherDisplaysFound& found) {
@@ -245,6 +246,7 @@ void MainWindow::recompute_rows(const std::vector<int>& rows) {
     show_status(ntr("Cleared {count} result -- make sure it is checked, then click Calculate metrics to recompute.",
                     "Cleared {count} results -- make sure they're checked, then click Calculate metrics to recompute.",
                     static_cast<long long>(rows.size())));
+    sync_frame_compare();
     std::vector<std::filesystem::path> others;
     for (const std::filesystem::path& path : interrupted) {
         if (std::none_of(rows.begin(), rows.end(),
@@ -300,6 +302,7 @@ void MainWindow::drop_metric_results(int row, const std::vector<std::string>& ke
         row_data.completed_run = std::move(rest);
     }
     set_row_metrics(row);
+    sync_frame_compare();
 }
 
 QString MainWindow::cvvdp_elsewhere_note(const RowData& row_data) const {

@@ -170,6 +170,7 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
     set_row_metrics(row);
     row_data.status_detail = app::tr("Loaded from saved run");
     refresh_row_state(row);
+    sync_frame_compare();
 }
 
 void MainWindow::adopt_source_from_run(const ComparisonResult& result) {

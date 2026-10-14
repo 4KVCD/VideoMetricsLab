@@ -127,6 +127,8 @@ std::string processor_description() {
     return uname(&name) == 0 ? std::string(name.machine) : std::string();
 }
 
+DisplayHdrInfo query_display_hdr(void* /*window*/) { return {}; }  // not known here: SDR at 100 nits
+
 void raise_thread_priority() {}
 
 bool keep_system_awake(bool /*awake*/) { return false; }

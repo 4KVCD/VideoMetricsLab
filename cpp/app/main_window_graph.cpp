@@ -24,6 +24,8 @@ void MainWindow::on_tab_changed(int index) {
     // The tab just opened, brought up to date.
     if (index == tab_graph) {
         sync_graph();
+    } else if (index == tab_frame_compare) {
+        sync_frame_compare();
     } else if (index == tab_settings) {
         settings_panel_->refresh_status();
     }

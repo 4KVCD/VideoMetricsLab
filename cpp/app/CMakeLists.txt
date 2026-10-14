@@ -15,9 +15,11 @@ add_library(vml_app STATIC
     dialogs.cpp
     file_writes.cpp
     formatting.cpp
+    frame_compare_panel.cpp
     graph_panel.cpp
     i18n.cpp
     main_window.cpp
+    main_window_compare.cpp
     main_window_graph.cpp
     main_window_options.cpp
     main_window_run.cpp
@@ -31,6 +33,7 @@ add_library(vml_app STATIC
     settings_panel.cpp
     theme.cpp
     widgets.cpp
+    zoom.cpp
 )
 set_target_properties(vml_app PROPERTIES AUTOMOC ON)
 target_include_directories(vml_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

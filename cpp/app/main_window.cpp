@@ -57,6 +57,7 @@
 #include "options_panel.h"
 #include "run_worker.h"
 #include "series_colors.h"
+#include "frame_compare_panel.h"
 #include "settings_panel.h"
 #include "theme.h"
 #include "vml/app_log.h"
@@ -307,6 +308,7 @@ MainWindow::MainWindow() {
     theme_refresh_due_ = false;
     // Light or dark changed (Settings, or Windows when following it).
     connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, [this] { theme_changed(); });
+    use_crop_store();  // black bars found are kept beside the saved scores
     check_ffmpeg(true);  // the start's check: both tools present, ffmpeg new enough
     restore_open_videos();
     on_table_selection_changed();
@@ -394,6 +396,9 @@ std::vector<QThread*> MainWindow::live_workers() const {
     if (worker_ != nullptr && worker_->isRunning()) {
         workers.push_back(worker_);
     }
+    for (QThread* worker : frame_compare_panel_->live_workers()) {
+        workers.push_back(worker);
+    }
     return workers;
 }
 
@@ -404,6 +409,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     // itself once it has.
     if (!closing_) {
         closing_ = true;
+        frame_compare_panel_->cancel();
         for (ProbeWorker* worker : probe_workers_) {
             worker->cancel();
         }
@@ -589,13 +595,20 @@ void MainWindow::build_ui() {
         save_settings();
     });
     tabs_->addTab(new ScrollingPage(graph_panel_), app::tr("Metric Graphs"));
-    tabs_->addTab(placeholder(QStringLiteral("Video Compare")), app::tr("Video Compare"));
+    frame_compare_panel_ = new FrameComparePanel([this] { return tools_status_.ffmpeg.path; },
+                                                 preview_color_mode_from(settings_.frame_preview_color_mode),
+                                                 settings_.compare_decoded_videos);
+    connect(frame_compare_panel_, &FrameComparePanel::color_mode_changed, this, [this](const QString& mode) {
+        settings_.frame_preview_color_mode = mode.toStdString();  // the colour mode chosen, next time too
+        save_settings();
+    });
+    tabs_->addTab(frame_compare_panel_, app::tr("Video Compare"));
     tabs_->addTab(new ScrollingPage(placeholder(QStringLiteral("The Bitrate Viewer"))), app::tr("Bitrate Viewer"));
     settings_panel_ = new SettingsPanel(settings_, *file_writes_, detected_gpu_vendors_,
                                         [this] { return tools_status_; }, dialogs_);
     connect(settings_panel_, &SettingsPanel::defaults_changed, this, [this] { on_default_settings_changed(); });
-    // How many videos Video Compare decodes (decoded_videos_changed) waits
-    // for Video Compare to be ported.
+    connect(settings_panel_, &SettingsPanel::decoded_videos_changed, frame_compare_panel_,
+            &FrameComparePanel::set_decoded_videos);
     connect(settings_panel_, &SettingsPanel::ffmpeg_folder_changed, this, [this] { check_ffmpeg(false); });
     tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
@@ -858,6 +871,7 @@ std::set<std::string> MainWindow::extra_metrics_from_settings() const {
 }
 
 void MainWindow::on_default_settings_changed() {
+    use_crop_store();  // the saved results' folder may have changed
     default_options_ = options_from_settings();
     default_extra_metric_keys_ = extra_metrics_from_settings();
     default_cvvdp_ = cvvdp_from_settings();
@@ -1279,6 +1293,7 @@ std::vector<QString> MainWindow::remove_rows_owned_by_the_previous_source() {
     graph_panel_->remove_by_identities(lines);
     if (!removed.empty()) {
         on_table_selection_changed();
+        sync_frame_compare();
     }
     return removed;
 }
@@ -1303,6 +1318,7 @@ void MainWindow::invalidate_completed_results(const std::vector<int>& rows) {
     }
     if (!lines.empty()) {
         graph_panel_->remove_by_identities(lines, paths);
+        sync_frame_compare();
     }
 }
 
@@ -1946,6 +1962,7 @@ void MainWindow::apply_row_order(const std::vector<int>& order) {
     table->blockSignals(false);
     table->viewport()->update();
     on_table_selection_changed();
+    sync_frame_compare();  // Video Compare lists the videos in the table's order
 }
 
 void MainWindow::on_rows_dragged(const QList<int>& rows, int target) {
@@ -2072,6 +2089,7 @@ void MainWindow::on_remove_distorted() {
         rows_.erase(rows_.begin() + row);
     }
     on_table_selection_changed();
+    sync_frame_compare();
 }
 
 void MainWindow::on_remove_all_distorted() {
@@ -2101,6 +2119,7 @@ void MainWindow::on_remove_all_distorted() {
     distorted_table_->setRowCount(0);
     rows_.clear();
     on_table_selection_changed();
+    sync_frame_compare();
 }
 
 void MainWindow::on_highlight_toggled(bool on) {
