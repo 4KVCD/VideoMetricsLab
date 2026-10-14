@@ -92,6 +92,13 @@ private:
 // a zip; none when there is no log yet.
 std::vector<std::filesystem::path> log_files(const std::optional<std::filesystem::path>& directory = {});
 
+// Zips those files (log_files) into `destination`, to attach to a report,
+// and returns their names; when there is no log yet, nothing is written and
+// the list is empty. Throws std::runtime_error when a file cannot be read
+// or the zip cannot be written.
+std::vector<std::string> export_logs(const std::filesystem::path& destination,
+                                     const std::optional<std::filesystem::path>& directory = {});
+
 // The part of the log to paste into a post or chat, and whether it was
 // shortened; nothing when there is no log yet.
 //

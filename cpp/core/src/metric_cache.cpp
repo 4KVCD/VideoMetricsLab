@@ -1120,4 +1120,44 @@ std::string lookup_token(const std::filesystem::path& source, const std::filesys
         nlohmann::json{{"recipe", recipe_hash(source, distorted, request.recipe)}, {"metrics", metrics}}.dump());
 }
 
+CacheSummary cache_summary(const std::filesystem::path& base) {
+    // Walked by directory entries, which come with their sizes on Windows:
+    // asking each file for its size takes about ten times as long.
+    CacheSummary summary;
+    std::error_code error;
+    std::filesystem::recursive_directory_iterator walk(
+        base / format_folder, std::filesystem::directory_options::skip_permission_denied, error);
+    for (; !error && walk != std::filesystem::recursive_directory_iterator(); walk.increment(error)) {
+        std::error_code ignored;
+        if (!walk->is_regular_file(ignored)) {
+            continue;
+        }
+        if (const std::uintmax_t size = walk->file_size(ignored); !ignored) {
+            summary.bytes += size;
+        }
+        // A comparison's folder holds its context.json (<base>/v2/<hash>).
+        if (walk.depth() == 1 && walk->path().filename() == "context.json") {
+            ++summary.comparisons;
+        }
+    }
+    return summary;
+}
+
+int clear_all(const std::filesystem::path& base) {
+    const std::filesystem::path root = base / format_folder;
+    std::error_code error;
+    if (!std::filesystem::exists(root, error)) {
+        return 0;
+    }
+    int count = 0;
+    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(root, error)) {
+        std::error_code ignored;
+        if (std::filesystem::is_regular_file(entry.path() / "context.json", ignored)) {
+            ++count;
+        }
+    }
+    std::filesystem::remove_all(root, error);
+    return error ? 0 : count;
+}
+
 }  // namespace vml

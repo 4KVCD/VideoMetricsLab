@@ -37,7 +37,7 @@ add_executable(vml_tests
     unit/reference.cpp
     unit/test_videos.cpp
 )
-target_link_libraries(vml_tests PRIVATE vml_cli vml_core vml_compile_options nlohmann_json gtest gtest_main)
+target_link_libraries(vml_tests PRIVATE vml_cli vml_core vml_compile_options vml_miniz nlohmann_json gtest gtest_main)
 target_compile_definitions(vml_tests PRIVATE
     VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
     VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>"

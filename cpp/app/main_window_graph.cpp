@@ -10,6 +10,7 @@
 
 #include "graph_panel.h"
 #include "i18n.h"
+#include "settings_panel.h"
 #include "widgets.h"
 
 namespace vml::app {
@@ -23,6 +24,8 @@ void MainWindow::on_tab_changed(int index) {
     // The tab just opened, brought up to date.
     if (index == tab_graph) {
         sync_graph();
+    } else if (index == tab_settings) {
+        settings_panel_->refresh_status();
     }
 }
 

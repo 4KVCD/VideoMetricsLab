@@ -18,7 +18,9 @@ Dialogs standard_dialogs(QWidget* parent) {
         [parent](const QString& title, const QString& suggested, const QString& filter) {
             return QFileDialog::getSaveFileName(parent, title, suggested, filter);
         },
-        [parent](const QString& title) { return QFileDialog::getExistingDirectory(parent, title); },
+        [parent](const QString& title, const QString& start) {
+            return QFileDialog::getExistingDirectory(parent, title, start);
+        },
     };
 }
 

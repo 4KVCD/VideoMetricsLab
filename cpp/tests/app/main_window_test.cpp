@@ -5,6 +5,7 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QComboBox>
 #include <QDeadlineTimer>
 #include <QDoubleSpinBox>
@@ -29,6 +30,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <future>
 #include <limits>
 #include <map>
 #include <memory>
@@ -41,8 +43,10 @@
 #include "graph_panel.h"
 #include "i18n.h"
 #include "options_panel.h"
+#include "settings_panel.h"
 #include "test_videos.h"
 #include "theme.h"
+#include "vml/app_log.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
@@ -190,6 +194,16 @@ protected:
     // Load analysis results..., answered by choose_file.
     static void load_analysis_results(MainWindow& window) { window.on_load_saved_run(); }
     static OptionsPanel& options_panel(MainWindow& window) { return *window.options_panel_; }
+    static SettingsPanel& settings_panel(MainWindow& window) { return *window.settings_panel_; }
+    // The window's settings now, as settings.json would hold them.
+    static nlohmann::json settings_now(MainWindow& window) {
+        return nlohmann::json::parse(window.settings_.text());
+    }
+    // Holds the queue of file writes until the promise is kept: what is
+    // queued after waits, as behind a feature-length result being saved.
+    static void hold_writes(MainWindow& window, std::shared_future<void> release) {
+        window.file_writes_->submit("hold", [release] { release.wait(); });
+    }
     // Answers the CVVDP display editor in the user's place when it opens.
     static void answer_cvvdp_dialog(MainWindow& window, std::function<int(CvvdpDisplayDialog&)> answer) {
         window.run_cvvdp_dialog_ = std::move(answer);
@@ -1398,6 +1412,146 @@ TEST_F(WindowTest, NoTabIsSqueezedInTheSmallestWindowWithLargeText) {
         EXPECT_TRUE(given.width() >= needed.width() && given.height() >= needed.height())
             << tabs(window).tabText(index).toStdString();
     }
+}
+
+// ------------------------------------------------------------ the Settings tab
+
+// Clear saved results deletes the saved scores and black bars of the folder
+// the question named, even when the setting changes before the queue of
+// writes gets to it, and nothing else in that folder (the Python app's
+// test_clearing_the_cache_deletes_the_folder_the_dialog_named and
+// test_clear_cache_never_deletes_unrelated_json_files).
+TEST_F(WindowTest, ClearingSavedResultsDeletesOnlyWhatTheQuestionNamed) {
+    const std::filesystem::path named = folder("named");
+    const std::filesystem::path other = folder("other");
+    for (const std::filesystem::path& base : {named, other}) {
+        std::filesystem::create_directories(base / "v2" / "comparison");
+        std::ofstream(base / "v2" / "comparison" / "context.json", std::ios::binary) << "{}";
+        std::ofstream(base / "black_bars.json", std::ios::binary) << "{}";
+    }
+    std::ofstream(named / "family_budget.json", std::ios::binary) << "important";
+    write_settings({{"cache_dir", platform::path_text(named)}});
+    MainWindow window;
+    const auto asked = answer_questions(window, true);
+    SettingsPanel& panel = settings_panel(window);
+    std::promise<void> release;
+    hold_writes(window, release.get_future().share());
+
+    panel.clear_saved_results();
+    ASSERT_EQ(*asked, std::vector<QString>{"Clear saved results"});
+    EXPECT_EQ(panel.status->text().toStdString(), "Clearing saved results...");
+    panel.cache_edit->setText(QString::fromStdString(platform::path_text(other)));  // edited meanwhile
+    emit panel.cache_edit->editingFinished();
+    release.set_value();
+    ASSERT_TRUE(wait_for_writes(window));
+    EXPECT_TRUE(wait_until([&] { return panel.status->text() == "Removed 1 saved result."; }))
+        << panel.status->text().toStdString();
+
+    EXPECT_FALSE(std::filesystem::exists(named / "v2"));
+    EXPECT_FALSE(std::filesystem::exists(named / "black_bars.json"));
+    EXPECT_EQ(platform::read_file(named / "family_budget.json"), "important");
+    EXPECT_TRUE(std::filesystem::exists(other / "v2" / "comparison" / "context.json"));
+    EXPECT_TRUE(std::filesystem::exists(other / "black_bars.json"));
+}
+
+// Each edit in the tab is saved at once, to the setting it shows and no
+// other; a video added afterwards starts with the tab's defaults, while one
+// already there keeps its own.
+TEST_F(WindowTest, EachSettingIsSavedAsItIsEditedAndNewVideosTakeTheDefaults) {
+    using Json = nlohmann::json;
+    write_settings({{"remember_videos", true}, {"remembered_reference", "ref.mkv"}, {"remembered_tests", {"a.mkv"}}});
+    MainWindow window;
+    SettingsPanel& panel = settings_panel(window);
+    add_row(window, "before.mkv");
+    // The settings an edit changed in settings.json, with their new values.
+    const auto changed_by = [&](const std::function<void()>& edit) {
+        const Json before = settings_now(window);
+        edit();
+        const Json after = saved_settings();
+        Json changed = Json::object();
+        for (const auto& [key, value] : after.items()) {
+            if (!before.contains(key) || before[key] != value) {
+                changed[key] = value;
+            }
+        }
+        return changed;
+    };
+    const auto select = [](QComboBox* box, const QVariant& data) {
+        const int index = box->findData(data);
+        ASSERT_GE(index, 0) << data.toString().toStdString();
+        box->setCurrentIndex(index);
+    };
+    const auto type = [](QLineEdit* edit, const QString& text) {
+        edit->setText(text);
+        emit edit->editingFinished();
+    };
+
+    EXPECT_EQ(changed_by([&] { type(panel.ffmpeg_edit, "C:/no ffmpeg here"); }),
+              (Json{{"ffmpeg_dir", "C:/no ffmpeg here"}}));
+    const std::string saved = platform::path_text(folder("saved"));
+    const std::string exports = platform::path_text(folder("exports"));
+    EXPECT_EQ(changed_by([&] { type(panel.cache_edit, QString::fromStdString(saved)); }),
+              (Json{{"cache_dir", saved}}));
+    EXPECT_EQ(changed_by([&] { type(panel.export_edit, QString::fromStdString(exports)); }),
+              (Json{{"export_dir", exports}}));
+    EXPECT_EQ(changed_by([&] { panel.use_cache->setChecked(false); }), (Json{{"use_cache", false}}));
+    EXPECT_EQ(changed_by([&] { panel.default_gpu->setChecked(false); }), (Json{{"default_gpu_decode", false}}));
+    for (const auto& [key, box] : panel.default_metrics) {
+        const bool shown = box->isChecked();
+        EXPECT_EQ(changed_by([&box = box, shown] { box->setChecked(!shown); }),
+                  (Json{{"default_compute_" + key, !shown}}));
+        EXPECT_EQ(changed_by([&box = box, shown] { box->setChecked(shown); }),
+                  (Json{{"default_compute_" + key, shown}}));
+    }
+    EXPECT_EQ(changed_by([&] { select(panel.cvvdp_default, "30-inch 4K HDR monitor, dim room"); }),
+              (Json{{"cvvdp_default_preset", "30-inch 4K HDR monitor, dim room"}}));
+    EXPECT_EQ(changed_by([&] { panel.gpu_together->setChecked(true); }), (Json{{"gpu_metrics_together", true}}));
+    EXPECT_EQ(changed_by([&] { select(panel.decoded_videos, 5); }), (Json{{"compare_decoded_videos", 5}}));
+    EXPECT_EQ(changed_by([&] { select(panel.theme, "dark"); }), (Json{{"theme", "dark"}}));
+    EXPECT_EQ(changed_by([&] { panel.remember_size->setChecked(false); }), (Json{{"remember_window_size", false}}));
+    // The paths go when they are no longer asked for.
+    EXPECT_EQ(changed_by([&] { panel.remember_videos->setChecked(false); }),
+              (Json{{"remember_videos", false}, {"remembered_reference", ""}, {"remembered_tests", Json::array()}}));
+    EXPECT_EQ(changed_by([&] { panel.check_updates->setChecked(false); }), (Json{{"check_for_updates", false}}));
+    EXPECT_EQ(panel.status->text().toStdString(), "Settings saved.");
+    EXPECT_EQ(changed_by([&] { select(panel.language, "de"); }), (Json{{"language", "de"}}));
+    EXPECT_EQ(panel.status->text().toStdString(),
+              "Settings saved. The new language shows when the app is next started.");
+
+    panel.default_metrics.at("psnr")->setChecked(false);
+    add_row(window, "after.mkv");
+    const std::vector<std::string> before = requested(window, 0);
+    const std::vector<std::string> after = requested(window, 1);
+    EXPECT_TRUE(contains(before, "psnr"));
+    EXPECT_FALSE(contains(after, "psnr"));
+    EXPECT_TRUE(contains(after, "ssim"));
+    EXPECT_TRUE(rows(window)[0]->options.gpu_decode);
+    EXPECT_FALSE(rows(window)[1]->options.gpu_decode);
+}
+
+// Copy log puts the latest session that ran something on the clipboard, and
+// Export log saves every log file in one zip; both say what they did.
+TEST_F(WindowTest, CopyLogAndExportLogShareTheLog) {
+    MainWindow window;
+    SettingsPanel& panel = settings_panel(window);
+    panel.copy_log_button->click();
+    EXPECT_EQ(panel.status->text().toStdString(), "There is no log to copy yet.");
+
+    const std::filesystem::path logs = app_log::log_dir();
+    std::filesystem::create_directories(logs);
+    std::ofstream(logs / "VideoMetricsLab.log", std::ios::binary)
+        << "2026-10-14 09:00:00.000 INFO    [MainThread] vml.main: ==== VideoMetricsLab starting ====\r\n"
+           "2026-10-14 09:00:01.000 INFO    [Thread-1] vml.job_runner: Run started: 1 video(s)\r\n"
+           "2026-10-14 09:00:02.000 INFO    [Thread-1] vml.job_runner: Run ended\r\n";
+    panel.copy_log_button->click();
+    EXPECT_EQ(QApplication::clipboard()->text().toStdString(), app_log::log_text_to_share()->first);
+    EXPECT_EQ(panel.status->text().toStdString(), "Copied the log to the clipboard (3 lines).");
+
+    const std::filesystem::path zip = folder("log.zip");
+    choose_file(window, zip);
+    panel.export_log_button->click();
+    EXPECT_TRUE(std::filesystem::exists(zip));
+    EXPECT_EQ(panel.status->text().toStdString(), "Log exported to " + platform::path_text(zip));
 }
 
 }  // namespace

@@ -20,7 +20,8 @@ struct Dialogs {
     // The file dialogs; an empty answer is Cancel.
     std::function<QString(const QString& title, const QString& filter)> open_file;
     std::function<QString(const QString& title, const QString& suggested, const QString& filter)> save_file;
-    std::function<QString(const QString& title)> choose_folder;
+    // A folder, the dialog opening at `start` (none: wherever it opens).
+    std::function<QString(const QString& title, const QString& start)> choose_folder;
 };
 
 // The real dialogs, over `parent`.

@@ -39,6 +39,7 @@
 #include "row_state.h"
 #include "vml/analysis_request.h"
 #include "vml/cvvdp.h"
+#include "vml/ffmpeg_tools.h"
 #include "vml/job_runner.h"
 #include "vml/options.h"
 #include "vml/results.h"
@@ -65,6 +66,7 @@ class GraphPanel;
 class OptionsPanel;
 class QuietTabWidget;
 class RunWorker;
+class SettingsPanel;
 class VideoColors;
 
 // The test-video table's columns, by their stable physical index (the
@@ -204,6 +206,9 @@ private:
     VmafOptions options_from_settings() const;
     std::set<std::string> extra_metrics_from_settings() const;
     CvvdpSettings cvvdp_from_settings() const;
+    // Takes the Settings tab's defaults for newly added videos. Rows already
+    // in the table keep what they were given.
+    void on_default_settings_changed();
 
     // ------------------------------------------------------ FFmpeg's presence
     bool check_ffmpeg(bool prompt);
@@ -488,6 +493,9 @@ private:
     // The videos' colours, shared by the graphs, and Metric Graphs.
     VideoColors* video_colors_ = nullptr;
     GraphPanel* graph_panel_ = nullptr;
+    // The Settings tab, and the latest check of FFmpeg, which it shows.
+    SettingsPanel* settings_panel_ = nullptr;
+    ToolsStatus tools_status_;
     // The rows ticked when the run started, those already scored too: their
     // results go to the graph when it ends.
     std::vector<std::shared_ptr<RowData>> checked_rows_for_run_;

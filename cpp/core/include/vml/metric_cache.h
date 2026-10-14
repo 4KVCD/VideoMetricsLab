@@ -9,6 +9,7 @@
 // metric score, named by the metric and a hash of its request.
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -133,5 +134,18 @@ int clear_metrics(const std::filesystem::path& base, const std::filesystem::path
 // the row's settings changed while it was being read.
 std::string lookup_token(const std::filesystem::path& source, const std::filesystem::path& distorted,
                          const AnalysisRequest& request);
+
+// How many comparisons are saved under `base`, and the bytes their files
+// take, for Settings.
+struct CacheSummary {
+    int comparisons = 0;
+    std::uintmax_t bytes = 0;
+};
+CacheSummary cache_summary(const std::filesystem::path& base);
+
+// Deletes every comparison saved under `base` (its v2 folder; nothing else
+// there) and returns how many there were: 0 when they could not all be
+// deleted, as the Python app counts it.
+int clear_all(const std::filesystem::path& base);
 
 }  // namespace vml

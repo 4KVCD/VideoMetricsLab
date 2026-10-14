@@ -18,6 +18,7 @@
 #include "i18n.h"
 #include "main_window.h"
 #include "options_panel.h"
+#include "settings_panel.h"
 #include "widgets.h"
 #include "window_helpers.h"
 #include "vml/cvvdp.h"
@@ -464,6 +465,7 @@ void MainWindow::save_cvvdp_preset(const CvvdpDisplayDialog& dialog, const Cvvdp
     }
     default_cvvdp_ = cvvdp_from_settings();
     const std::optional<std::string> error = settings_.save();
+    settings_panel_->fill_cvvdp_default_combo();
     const auto with_saved_display = [&saved](const CvvdpSettings& old) {
         CvvdpSettings changed = old;
         changed.display = saved;
@@ -533,6 +535,7 @@ void MainWindow::on_cvvdp_delete_preset() {
     }
     default_cvvdp_ = cvvdp_from_settings();
     const std::optional<std::string> error = settings_.save();
+    settings_panel_->fill_cvvdp_default_combo();
     if (!panel_target_rows_.empty()) {
         write_panel_options(rows_[static_cast<std::size_t>(panel_target_rows_.front())]->options);
     }

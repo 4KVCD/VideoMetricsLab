@@ -28,6 +28,7 @@ add_library(vml_app STATIC
     row_state.cpp
     run_worker.cpp
     series_colors.cpp
+    settings_panel.cpp
     theme.cpp
     widgets.cpp
 )

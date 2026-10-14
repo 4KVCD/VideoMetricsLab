@@ -51,6 +51,7 @@
 #include "options_panel.h"
 #include "run_worker.h"
 #include "series_colors.h"
+#include "settings_panel.h"
 #include "theme.h"
 #include "vml/app_log.h"
 #include "vml/ffmpeg_run.h"
@@ -583,7 +584,13 @@ void MainWindow::build_ui() {
     tabs_->addTab(new ScrollingPage(graph_panel_), app::tr("Metric Graphs"));
     tabs_->addTab(placeholder(QStringLiteral("Video Compare")), app::tr("Video Compare"));
     tabs_->addTab(new ScrollingPage(placeholder(QStringLiteral("The Bitrate Viewer"))), app::tr("Bitrate Viewer"));
-    tabs_->addTab(new ScrollingPage(placeholder(QStringLiteral("Settings"))), app::tr("Settings"));
+    settings_panel_ = new SettingsPanel(settings_, *file_writes_, detected_gpu_vendors_,
+                                        [this] { return tools_status_; }, dialogs_);
+    connect(settings_panel_, &SettingsPanel::defaults_changed, this, [this] { on_default_settings_changed(); });
+    // How many videos Video Compare decodes (decoded_videos_changed) waits
+    // for Video Compare to be ported.
+    connect(settings_panel_, &SettingsPanel::ffmpeg_folder_changed, this, [this] { check_ffmpeg(false); });
+    tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
 }
 
@@ -843,6 +850,12 @@ std::set<std::string> MainWindow::extra_metrics_from_settings() const {
     return keys;
 }
 
+void MainWindow::on_default_settings_changed() {
+    default_options_ = options_from_settings();
+    default_extra_metric_keys_ = extra_metrics_from_settings();
+    default_cvvdp_ = cvvdp_from_settings();
+}
+
 CvvdpSettings MainWindow::cvvdp_from_settings() const {
     // The preset chosen in Settings, or the built-in default if that preset
     // is gone or unset. A preset is a display; scaling to fill it is each
@@ -863,6 +876,7 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     // a file picker to point at ffmpeg.exe is offered rather than only a
     // banner.
     const ToolsStatus status = check_tools(settings_);
+    tools_status_ = status;
     if (prompt) {
         log_tools(status, detected_gpu_vendors_);
     }
@@ -932,11 +946,13 @@ bool MainWindow::on_locate_ffmpeg() {
     }
     // Kept as the Settings tab's folder: the one place it is kept.
     settings_.ffmpeg_dir = platform::path_text(directory);
+    settings_panel_->show_ffmpeg_folder(QString::fromStdString(settings_.ffmpeg_dir));
     if (const std::optional<std::string> problem = settings_.save()) {
         show_status(tr_message(QString::fromStdString(*problem)));
         return false;
     }
     const ToolsStatus status = check_tools(settings_);
+    tools_status_ = status;
     if (!status.ok()) {
         QStringList problems;
         for (const std::string& problem : status.problems()) {
@@ -2218,6 +2234,7 @@ void MainWindow::apply_metric_selection(const std::vector<int>& rows, int column
         // Saved as the default too, the same setting as Settings > Default
         // metrics.
         settings_.*default_compute_field(key) = checked;
+        settings_panel_->show_default_metric(key, checked);
         save_settings();
     }
     reload_saved_scores(rows);

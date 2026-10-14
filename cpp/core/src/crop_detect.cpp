@@ -96,6 +96,14 @@ public:
         store_read_.reset();
     }
 
+    // Forgets every answer kept (not those being detected now), and reads
+    // the store again when next asked.
+    void forget() {
+        const std::lock_guard lock(mutex_);
+        boxes_.clear();
+        store_read_.reset();
+    }
+
     // The kept box, or nothing once this caller has been given the job of
     // detecting it (then it must call settle).
     std::optional<CropBox> claim(const AnswerKey& key, const CancelToken& cancel) {
@@ -425,6 +433,8 @@ CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double
 }  // namespace
 
 void set_crop_store(std::function<std::filesystem::path()> store) { answers().set_store(std::move(store)); }
+
+void forget_crop_answers() { answers().forget(); }
 
 CropBox detect_crop(const std::string& ffmpeg, const VideoInfo& info, const CancelToken& cancel,
                     const std::optional<std::string>& hwaccel) {

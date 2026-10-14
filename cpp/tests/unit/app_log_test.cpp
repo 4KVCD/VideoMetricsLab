@@ -6,8 +6,11 @@
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
+#include <miniz.h>
+
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <thread>
 #include <vector>
@@ -80,6 +83,44 @@ TEST(AppLog, StartsAgainAtFiveMegabytesKeepingFourOlderFiles) {
         }
     }
     EXPECT_EQ(next, lines);
+}
+
+// Export log: the log files with anything in them, in one zip to attach to
+// a report, as the Python app's export_logs writes it; with no log yet,
+// nothing.
+TEST(AppLog, TheLogsAreExportedAsOneZip) {
+    const test::Folder folder;
+    const std::filesystem::path logs = folder / "logs";
+    std::filesystem::create_directories(logs);
+    std::ofstream(logs / "VideoMetricsLab.log", std::ios::binary) << "today's session\n";
+    std::ofstream(logs / "VideoMetricsLab.log.1", std::ios::binary) << "an older session\n";
+    std::ofstream(logs / "native-crashes.log", std::ios::binary);  // nothing in it: left out
+    std::ofstream(logs / "notes.txt", std::ios::binary) << "not a log\n";
+    const std::filesystem::path target = folder / "export.zip";
+    EXPECT_EQ(app_log::export_logs(target, logs),
+              (std::vector<std::string>{"VideoMetricsLab.log", "VideoMetricsLab.log.1"}));
+
+    const std::string zip = platform::read_file(target).value_or("");
+    mz_zip_archive archive{};
+    ASSERT_TRUE(mz_zip_reader_init_mem(&archive, zip.data(), zip.size(), 0));
+    std::map<std::string, std::string> entries;
+    for (mz_uint index = 0; index < mz_zip_reader_get_num_files(&archive); ++index) {
+        mz_zip_archive_file_stat stat{};
+        ASSERT_TRUE(mz_zip_reader_file_stat(&archive, index, &stat));
+        std::size_t size = 0;
+        void* bytes = mz_zip_reader_extract_to_heap(&archive, index, &size, 0);
+        ASSERT_NE(bytes, nullptr);
+        entries[stat.m_filename] = std::string(static_cast<const char*>(bytes), size);
+        EXPECT_EQ(stat.m_method, MZ_DEFLATED) << stat.m_filename;
+        mz_free(bytes);
+    }
+    mz_zip_reader_end(&archive);
+    EXPECT_EQ(entries, (std::map<std::string, std::string>{{"VideoMetricsLab.log", "today's session\n"},
+                                                           {"VideoMetricsLab.log.1", "an older session\n"}}));
+
+    const test::Folder empty;
+    EXPECT_TRUE(app_log::export_logs(empty / "none.zip", empty / "logs").empty());
+    EXPECT_FALSE(std::filesystem::exists(empty / "none.zip"));
 }
 
 // The run's lanes name their threads for the log, and end as soon as the

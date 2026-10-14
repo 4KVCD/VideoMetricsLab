@@ -15,6 +15,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "vml/cancel.h"
@@ -32,6 +33,14 @@ public:
 // Keeps the answers between sessions in `store` (a folder can move, so it is
 // asked for each time); nothing keeps them only in this process.
 void set_crop_store(std::function<std::filesystem::path()> store);
+
+// The store's file, kept with the saved scores.
+inline constexpr std::string_view black_bars_file = "black_bars.json";
+
+// Forgets the answers this process holds, and reads the store again when
+// next asked: clearing the saved results, which deletes the store too, then
+// starts afresh.
+void forget_crop_answers();
 
 // The box that cuts the video's black bars. `hwaccel` is the decoder the
 // run will use for this video (only how fast the answer comes depends on

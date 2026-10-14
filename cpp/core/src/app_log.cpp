@@ -11,6 +11,9 @@
 #include <fstream>
 #include <limits>
 #include <mutex>
+#include <stdexcept>
+
+#include <miniz.h>
 
 #include "vml/platform/console.h"
 #include "vml/platform/system.h"
@@ -285,6 +288,52 @@ std::vector<std::filesystem::path> log_files(const std::optional<std::filesystem
     }
     std::sort(files.begin(), files.end());
     return files;
+}
+
+std::vector<std::string> export_logs(const std::filesystem::path& destination,
+                                     const std::optional<std::filesystem::path>& directory) {
+    const std::vector<std::filesystem::path> files = log_files(directory);
+    if (files.empty()) {
+        return {};
+    }
+    mz_zip_archive zip{};
+    if (!mz_zip_writer_init_heap(&zip, 0, 0)) {
+        throw std::runtime_error("the zip file could not be made");
+    }
+    std::vector<std::string> names;
+    std::string failure;
+    for (const std::filesystem::path& file : files) {
+        const std::string name = platform::path_text(file.filename());
+        const std::optional<std::string> bytes = platform::read_file(file);
+        if (!bytes) {
+            failure = platform::path_text(file) + " could not be read";
+            break;
+        }
+        // Deflated, as the Python app's zipfile.ZIP_DEFLATED.
+        if (!mz_zip_writer_add_mem(&zip, name.c_str(), bytes->data(), bytes->size(), MZ_DEFAULT_LEVEL)) {
+            failure = name + " could not be added to the zip file";
+            break;
+        }
+        names.push_back(name);
+    }
+    void* archive = nullptr;
+    std::size_t size = 0;
+    if (failure.empty() && !mz_zip_writer_finalize_heap_archive(&zip, &archive, &size)) {
+        failure = "the zip file could not be made";
+    }
+    if (failure.empty()) {
+        std::ofstream out(destination, std::ios::binary | std::ios::trunc);
+        out.write(static_cast<const char*>(archive), static_cast<std::streamsize>(size));
+        if (!out) {
+            failure = platform::path_text(destination) + " could not be written";
+        }
+    }
+    mz_zip_writer_end(&zip);
+    mz_free(archive);
+    if (!failure.empty()) {
+        throw std::runtime_error(failure);
+    }
+    return names;
 }
 
 std::optional<std::pair<std::string, bool>> log_text_to_share(const std::optional<std::filesystem::path>& directory,

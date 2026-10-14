@@ -760,7 +760,7 @@ int compare(const CompareArguments& arguments) {
     const std::filesystem::path cache_folder = settings.cache_dir_path().value_or(default_cache_dir());
     set_crop_store([cache_folder] {
         std::filesystem::create_directories(cache_folder);
-        return cache_folder / "black_bars.json";
+        return cache_folder / black_bars_file;
     });
     const ToolsStatus tools = check_tools(settings);
     if (!tools.ok()) {
