@@ -1009,11 +1009,14 @@ class FrameComparePanel(QWidget):
             )
             return
         wide_gamut = info.color_primaries.casefold() in {"bt2020", "bt.2020"}
+        # FFmpeg's playback (the fallback) is an SDR preview, never native.
+        ffmpeg_playback = self.video_view is not None and self.video_view._pool_active
         if kind is None:
             if (
                 self.is_video_mode
                 and wide_gamut
                 and self._display_hdr.hdr_enabled is True
+                and not ffmpeg_playback
             ):
                 self.color_status_label.setText(
                     tr("{prefix}BT.2020 wide-gamut input · Windows HDR on · native 10-bit D3D11 presentation", prefix=prefix)
@@ -1025,7 +1028,7 @@ class FrameComparePanel(QWidget):
             return
         if self._display_hdr.hdr_enabled is True:
             if self.is_video_mode:
-                if self.video_view is not None and self.video_view._pool_active:
+                if ffmpeg_playback:
                     self.color_status_label.setText(tr("{prefix}{kind} · SDR preview (native HDR unavailable)", prefix=prefix, kind=kind))
                     return
                 self.color_status_label.setText(

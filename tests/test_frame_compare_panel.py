@@ -309,6 +309,27 @@ def test_the_black_bars_found_against_one_reference_are_not_used_with_another(qa
     panel.close()
 
 
+def test_ffmpeg_playback_does_not_claim_a_native_hdr_presentation(qapp, tmp_path):
+    """Untagged BT.2020 video on an HDR display is presented in 10 bits only
+    by native playback. Played by FFmpeg, it is an SDR preview, and the
+    colour line still said "native 10-bit D3D11 presentation"."""
+    from vmaf_app.core.display_hdr import DisplayHdrInfo
+
+    entry = _physical_entry(tmp_path)
+    wide = replace(entry.comparison.distorted_info, color_primaries="bt2020", color_transfer="")
+    entry = replace(entry, comparison=replace(entry.comparison, distorted_info=wide))
+    panel = FrameComparePanel()
+    panel.set_runs([entry])
+    assert panel.is_video_mode
+    panel._display_hdr = DisplayHdrInfo(hdr_enabled=True)
+    view = panel._ensure_video_view()
+    view._pool_active = True  # FFmpeg plays the pair
+    panel._update_color_status()
+    assert panel.color_status_label.text() == "Video playback · SDR / untagged input · no tone mapping"
+    view._pool_active = False
+    panel.close()
+
+
 def test_zoom_fits_by_default_and_takes_a_chosen_or_typed_percentage(qapp):
     """A user: "a comparison tool needs zoom". Fit to window as before, or
     a zoom chosen or typed in, which playback shares with the still frames."""
