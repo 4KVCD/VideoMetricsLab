@@ -576,6 +576,36 @@ TEST_F(WindowTest, ARunPausedOnTheWayScoresAsTheCommandLineAndItsTimeLeavesThePa
     EXPECT_EQ(status(window), "All 2 checked videos already have all requested metrics -- nothing to run.");
 }
 
+TEST_F(WindowTest, ANewReferenceTakesAwayTheScoresMeasuredAgainstTheOldOne) {
+    // Kept, they stood in the table as the new pair's scores, and a run
+    // calculated nothing: every row "already had" its scores.
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    MainWindow window;
+    open_clips(window);
+    run_button(window).click();
+    ASSERT_TRUE(wait_until([&] { return !running(window); }));
+    ASSERT_EQ(state(window, 0), RowState::complete);
+    const std::string score = table(window).item(0, col_psnr)->text().toStdString();
+
+    // The reference chosen again keeps them...
+    choose_source(window, clip("sources/ref.mkv"));
+    ASSERT_TRUE(wait_until([&] { return !reading(window); }));
+    EXPECT_EQ(state(window, 0), RowState::complete);
+    EXPECT_EQ(table(window).item(0, col_psnr)->text().toStdString(), score);
+
+    // ...and another reference takes them away: the next run calculates them.
+    choose_source(window, clip("encodes/b.mkv"));
+    ASSERT_TRUE(wait_until([&] { return source_info(window)->path == clip("encodes/b.mkv") && !reading(window); }));
+    EXPECT_EQ(state(window, 0), RowState::not_calculated);
+    EXPECT_TRUE(table(window).item(0, col_psnr)->text().isEmpty());
+    run_button(window).click();
+    EXPECT_TRUE(running(window));
+    cancel_button(window).click();
+    ASSERT_TRUE(wait_until([&] { return !running(window); }));
+}
+
 TEST_F(WindowTest, CancelEndsAPausedRunAndMarksTheVideoItWasCalculating) {
     if (!have_clips()) {
         GTEST_SKIP() << "FFmpeg is not here";

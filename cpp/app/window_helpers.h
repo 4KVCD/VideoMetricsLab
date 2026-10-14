@@ -31,6 +31,19 @@ inline bool same_path(const std::filesystem::path& a, const std::filesystem::pat
 #endif
 }
 
+// Whether two paths name the same file once resolved (the Python app's
+// Path.resolve() ==): a saved result records a path as it was given,
+// relative or absolute, with either slash, in any case on Windows.
+inline bool same_file(const std::filesystem::path& a, const std::filesystem::path& b) {
+    const auto resolved = [](const std::filesystem::path& path) {
+        std::error_code error;
+        const std::filesystem::path absolute = std::filesystem::absolute(path, error);
+        const std::filesystem::path canonical = std::filesystem::weakly_canonical(error ? path : absolute, error);
+        return error ? absolute : canonical;
+    };
+    return same_path(resolved(a), resolved(b));
+}
+
 // Whether a GPU Vship can use is here (CVVDP runs on it); the probe is kept
 // after the first time.
 inline bool vship_available() { return detect_vship_device().first.has_value(); }

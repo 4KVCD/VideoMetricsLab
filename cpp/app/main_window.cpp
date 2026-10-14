@@ -999,9 +999,35 @@ void MainWindow::apply_source_info(const std::filesystem::path& path, const Vide
     source_edit_->setText(text_of(path));
     source_info_label_->setText(media_info_string(info) + ", " + bitrate_string(info) + "  (" +
                                 QString::fromStdString(format_hms(info.duration, 1)) + ")");
+    // Scores belong to a pair of videos: a new reference takes away every
+    // score measured against another, which would otherwise stand in the
+    // table as the new pair's, and keep a run from calculating it. Those
+    // measured against the very reference chosen stay: choosing it again
+    // confirms them.
+    std::vector<int> other_reference;
+    for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
+        const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        if (row_data.completed_run && !same_file(row_data.completed_run->result.source, path)) {
+            other_reference.push_back(row);
+        }
+    }
+    invalidate_completed_results(other_reference);
     // Every row is checked against the new reference: its Scaling cell
     // depends on it.
     for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
+        set_row_metrics(row);
+    }
+}
+
+void MainWindow::invalidate_completed_results(const std::vector<int>& rows) {
+    // The rows' scores go, with their state and its detail: the tooltip
+    // would otherwise say "Not calculated" over the old result's "240 scored
+    // frames; metrics: ...", or over a failure's reason.
+    for (const int row : rows) {
+        RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        row_data.analysis_status.reset();
+        row_data.status_detail.clear();
+        row_data.completed_run.reset();
         set_row_metrics(row);
     }
 }

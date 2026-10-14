@@ -195,6 +195,7 @@ private:
     void start_source_probe(const std::filesystem::path& path);
     void on_source_probed(int generation, const Probed& probed);
     void apply_source_info(const std::filesystem::path& path, const VideoInfo& info);
+    void invalidate_completed_results(const std::vector<int>& rows);
     void show_reading(const QString& text);
     void show_ready();
     void on_source_probe_finished(int generation, ProbeWorker* worker);
