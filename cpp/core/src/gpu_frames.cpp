@@ -16,6 +16,7 @@
 #include <system_error>
 #include <thread>
 
+#include "vml/app_log.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
 #include "vml/frame_sync_by_time.h"
@@ -125,6 +126,8 @@ constexpr std::chrono::seconds feeder_timeout(30);
 
 std::atomic<int> stuck_closes{0};
 
+const app_log::Logger logger("vml.gpu_frames");
+
 // ------------------------------------------------------------------ binding
 
 // The decoder libraries' Params and Info (native/gpu_frames.h), field for
@@ -154,7 +157,7 @@ struct NativeParams {
 
 // A decoder library and the functions of it the app calls.
 struct DecoderLibrary {
-    DecoderLibrary(const std::filesystem::path& path, bool hands_over, bool takes_libraries)
+    DecoderLibrary(const std::filesystem::path& path, bool hands_over, bool takes_libraries, bool scales)
         : library(path),
           open(library.function<decltype(open)>("nvf_open")),
           push(library.function<decltype(push)>("nvf_push")),
@@ -177,6 +180,10 @@ struct DecoderLibrary {
         }
         if (takes_libraries) {
             set_libraries = library.function<decltype(set_libraries)>("nvf_set_libraries");
+            libraries_error = library.function<decltype(libraries_error)>("nvf_libraries_error");
+        }
+        if (scales) {
+            scale_note = library.function<decltype(scale_note)>("nvf_scale_note");
         }
     }
 
@@ -203,8 +210,13 @@ struct DecoderLibrary {
     int (*unpin)(void* decoder, void* host) = nullptr;
     int (*download_planes)(void* decoder, int slot, void* const* planes, const long long* pitches) = nullptr;
     int (*copy_planes)(void* decoder, int slot, const unsigned long long* addresses, const long long* pitches) = nullptr;
-    // The software decoder's: the libraries it decodes with (their handles).
+    // The software decoder's: the libraries it decodes with (their handles),
+    // and why it cannot use one of them.
     int (*set_libraries)(void* avutil, void* avcodec, void* dav1d) = nullptr;
+    int (*libraries_error)(char* out, int size) = nullptr;
+    // Intel's and AMD's, which scale the pictures on the GPU when they can:
+    // why they were scaled on the CPU instead.
+    int (*scale_note)(void* decoder, char* out, int size) = nullptr;
 };
 
 // Text a library wrote into a buffer of ours, up to its terminating zero.
@@ -262,7 +274,8 @@ const DecoderLibrary& load_decoder(std::string_view backend) {
     }
     std::unique_ptr<DecoderLibrary> library;
     try {
-        library = std::make_unique<DecoderLibrary>(path, backend == "nvidia", backend == software_decoder);
+        library = std::make_unique<DecoderLibrary>(path, backend == "nvidia", backend == software_decoder,
+                                                   backend == "intel" || backend == "amd");
     } catch (const platform::LibraryError& error) {
         throw GpuDecodeUnavailableError(std::string("the GPU frame decoder could not be loaded: ") + error.what());
     }
@@ -277,12 +290,19 @@ const DecoderLibrary& load_decoder(std::string_view backend) {
                 try {
                     software_libraries.emplace_back(paths[i]);
                     handles[i] = software_libraries.back().native_handle();
-                } catch (const platform::LibraryError&) {
+                } catch (const platform::LibraryError& error) {
                     // The decoder then refuses what it would need it for (nvf_supports).
+                    logger.info("The software decoder cannot use " + platform::path_text(paths[i].filename()) + ": " +
+                                error.what());
                 }
             }
         }
-        library->set_libraries(handles[0], handles[1], handles[2]);  // what it cannot use, it refuses
+        // What it cannot use, it refuses.
+        if (library->set_libraries(handles[0], handles[1], handles[2]) != 0) {
+            std::array<char, 512> said{};
+            library->libraries_error(said.data(), static_cast<int>(said.size()));
+            logger.info("The software decoder: " + buffer_text(said.data(), said.size()));
+        }
     }
     return *loaded.emplace(std::string(backend), std::move(library)).first->second;
 }
@@ -314,8 +334,9 @@ NativeParams native_params(const DecodePlan& plan, int device, int pool, const s
 // Closes a decoder on a thread of its own, waited for only so long: a close
 // that never returned would hang the whole run at its end, scores and all
 // (AMD's decoder did, after failing on 10-bit H.264, which it is no longer
-// given). A decoder that does not close is left open, and counted.
-void close_decoder(const DecoderLibrary& library, void* handle) {
+// given). A decoder that does not close is left open, and counted. Whether
+// it closed.
+bool close_decoder(const DecoderLibrary& library, void* handle) {
     struct Closing {
         std::mutex mutex;
         std::condition_variable closed_signal;
@@ -337,6 +358,7 @@ void close_decoder(const DecoderLibrary& library, void* handle) {
         closer.detach();  // the library stays loaded, so the thread may go on
         ++stuck_closes;
     }
+    return closed;
 }
 
 // ------------------------------------------------------------- the packets
@@ -987,7 +1009,8 @@ struct GpuFrameStream::State {
     }
 
     std::string backend;
-    std::string decoder;  // for messages
+    std::string decoder;    // for messages
+    std::string file_name;  // the video's, for the log
     PictureChecks checks;
     const DecoderLibrary* library = nullptr;
     // AV1's sequence header or FFV1's configuration, which the decoder may
@@ -1044,6 +1067,7 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
                                std::string_view backend, const std::string& ffmpeg, const std::string& ffprobe)
     : state_(std::make_shared<State>(backend)) {
     State& state = *state_;
+    state.file_name = platform::path_text(info.path.filename());
     if (!decodes_codec(plan.codec, backend)) {
         throw GpuDecodeUnavailableError(plan.codec + " is not decoded by the " + std::string(backend) + " decoder");
     }
@@ -1216,6 +1240,13 @@ void GpuFrameStream::close() {
         return;
     }
     state.closing = true;
+    if (state.library->scale_note != nullptr) {
+        std::array<char, 1024> note{};
+        state.library->scale_note(state.handle, note.data(), static_cast<int>(note.size()));
+        if (const std::string text = buffer_text(note.data(), note.size()); !text.empty()) {
+            logger.warning(state.file_name + ": scaled on the CPU, not the GPU: " + text);
+        }
+    }
     state.library->abort(state.handle);
     state.reader->close();
     bool feeder_stopped = true;
@@ -1229,9 +1260,14 @@ void GpuFrameStream::close() {
             state.feeder.detach();  // it holds the state, which lives on with it
         }
     }
-    if (feeder_stopped) {
-        close_decoder(*state.library, state.handle);
-    }  // else (never seen): leaking the decoder is safer than freeing it under the running thread
+    if (!feeder_stopped) {
+        // Never seen: leaking the decoder is safer than freeing it under the
+        // running thread.
+        logger.error("The " + state.backend + " decoder's feeding thread did not stop; its decoder is left open");
+    } else if (!close_decoder(*state.library, state.handle)) {
+        logger.error(state.file_name + ": the " + state.backend + " decoder did not close in " +
+                     std::to_string(close_timeout.count()) + " s; it is left open");
+    }
     state.handle = nullptr;
 }
 

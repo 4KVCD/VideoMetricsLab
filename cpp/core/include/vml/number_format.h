@@ -15,4 +15,8 @@ std::string python_repr(double value);
 // "{:.2f}" rounds it (to the nearest, from the number's exact binary value).
 std::string format_fixed(double value, int decimals);
 
+// `value` as Python's "{:g}" writes it: six significant digits, no
+// trailing zeros, exponent form below 0.0001 and from 1e6 ("1e+06").
+std::string format_general(double value);
+
 }  // namespace vml

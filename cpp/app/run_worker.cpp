@@ -4,6 +4,7 @@
 #include <exception>
 #include <utility>
 
+#include "vml/app_log.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
@@ -68,6 +69,25 @@ RunWorker::RunWorker(std::vector<VmafJob> jobs, int parallel_jobs, bool gpu_metr
 }
 
 RunWorker::~RunWorker() = default;
+
+// The run's own lines in the log, as the Python app's JobScheduler writes
+// them.
+const app_log::Logger run_logger("vml.job_runner");
+
+void RunWorker::cancel() {
+    run_logger.info("Run: cancel requested");
+    cancel_.cancel();
+}
+
+void RunWorker::pause() {
+    run_logger.info("Run: paused");
+    cancel_.pause();
+}
+
+void RunWorker::resume() {
+    run_logger.info("Run: resumed");
+    cancel_.resume();
+}
 
 void RunWorker::set_parallel_jobs(int count) { scheduler_->set_parallel_jobs(count); }
 

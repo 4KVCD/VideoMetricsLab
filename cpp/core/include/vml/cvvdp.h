@@ -46,6 +46,11 @@ struct CvvdpDisplay {
     // The viewing distance as a multiple of the screen's height, which the
     // diagonal and the aspect ratio give.
     double distance_in_heights() const;
+
+    // The display in one line, for tooltips and the log (the Python app's
+    // CvvdpDisplay.describe): '30" 3840x2160 SDR, 200 nits, 250 lux, 0.75 m
+    // (2.0 x screen height)'.
+    std::string describe() const;
 };
 
 // Everything that changes a CVVDP score besides the two videos.

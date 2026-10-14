@@ -12,6 +12,7 @@
 #include <tuple>
 #include <variant>
 
+#include "vml/app_log.h"
 #include "vml/geometry.h"
 #include "vml/model_select.h"
 #include "vml/npz.h"
@@ -926,15 +927,24 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
                                    const std::vector<MetricRequestSpec>& specs) {
     const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
     write_atomically(directory / "context.json", python_json_compact(context_json(result, label, recipe)), ".tmp");
+    // A score saved under a request it does not answer would answer it from
+    // then on: loading checks the saved request, not the score.
+    const auto answers_request = [](const MetricRequestSpec& spec, const MetricProvenance& provenance) {
+        if (compatible(spec, provenance)) {
+            return true;
+        }
+        app_log::write(app_log::Level::warning, "vml.metric_cache",
+                       spec.key + " not saved: its score is " + provenance.implementation_compatibility_id +
+                           "'s, the request asks for " + spec.implementation_compatibility_id + "'s");
+        return false;
+    };
     for (const MetricRequestSpec& spec : specs) {
-        // A score saved under a request it does not answer would answer it
-        // from then on: loading checks the saved request, not the score.
         if (const FrameMetricResult* metric = result.metric_results.frame(spec.key)) {
-            if (compatible(spec, metric->provenance)) {
+            if (answers_request(spec, metric->provenance)) {
                 store_metric(directory, *metric, spec);
             }
         } else if (const SequenceMetricResult* sequence = result.metric_results.sequence(spec.key)) {
-            if (compatible(spec, sequence->provenance)) {
+            if (answers_request(spec, sequence->provenance)) {
                 store_metric(directory, *sequence, spec);
             }
         }

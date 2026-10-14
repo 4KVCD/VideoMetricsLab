@@ -20,6 +20,7 @@
 #include <system_error>
 #include <thread>
 
+#include "vml/app_log.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
 #include "vml/frame_sync_by_time.h"
@@ -39,6 +40,8 @@
 namespace vml {
 
 namespace {
+
+const app_log::Logger logger("vml.perceptual_vship");
 
 // Vship handlers working at once per metric. One handler leaves the GPU idle
 // between its own kernels, and two keep it busy: at 4K 10-bit on an RTX
@@ -301,7 +304,7 @@ public:
                 deadline = now + std::chrono::seconds(10);
             }
             if (ended || now >= *deadline) {
-                throw missing();
+                throw missing("FFmpeg wrote none");
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
@@ -310,9 +313,22 @@ public:
     Rational time_base() const { return time_base_.value(); }
 
 private:
-    // The pass's failure for a frame without a usable timestamp.
-    VshipUnavailableError missing() const {
+    // The pass's failure for a frame without a usable timestamp. The window
+    // gets one fixed message (it has a translation), and the log gets
+    // `what`.
+    VshipUnavailableError missing(const std::string& what) const {
+        logger.error("Vship: no timestamp for a " + label_ + " frame: " + what);
         return VshipUnavailableError("FFmpeg did not give the timestamp of a " + label_ + " frame.");
+    }
+
+    // What FFmpeg wrote, for the log: as Python writes bytes (b'123 1/1000').
+    static std::string written(std::string_view line) {
+        return "FFmpeg wrote b" + python_string_repr(line.substr(0, 80));
+    }
+
+    static std::string fraction_text(const Rational& value) {
+        return std::to_string(value.numerator) +
+               (value.denominator == 1 ? std::string() : "/" + std::to_string(value.denominator));
     }
 
     // A line's timestamp and time base ("123 1/1000"), the time base checked
@@ -329,7 +345,7 @@ private:
             at = end;
         }
         if (words.size() != 2) {
-            throw missing();
+            throw missing(written(line));
         }
         const std::optional<long long> pts = python_int(words[0]);
         const std::size_t slash = words[1].find('/');
@@ -337,7 +353,7 @@ private:
         const std::optional<long long> denominator =
             slash == std::string_view::npos ? std::optional(1LL) : python_int(words[1].substr(slash + 1));
         if (!pts || !numerator || !denominator || *denominator == 0) {
-            throw missing();
+            throw missing(written(line));
         }
         long long top = *numerator;
         long long bottom = *denominator;
@@ -346,14 +362,15 @@ private:
             bottom = -bottom;
         }
         if (*pts == std::numeric_limits<long long>::min() || top <= 0) {  // AV_NOPTS_VALUE, or no time base
-            throw missing();
+            throw missing(written(line) + ": no timestamp");
         }
         const long long divisor = std::gcd(top, bottom);
         const Rational time_base{top / divisor, bottom / divisor};
         if (!time_base_) {
             time_base_ = time_base;
         } else if (time_base != *time_base_) {
-            throw missing();  // its time base changed
+            throw missing("its time base changed from " + fraction_text(*time_base_) + " to " +
+                          fraction_text(time_base));
         }
         return *pts;
     }
@@ -1282,10 +1299,12 @@ public:
         } catch (const FramesApartError&) {
             close();  // made again with every source frame (score_vship_pass)
             throw;
-        } catch (const VshipUnavailableError&) {
+        } catch (const VshipUnavailableError& error) {
+            logger.error("Vship pass (" + labels_of(plan_.keys, ", ") + ") failed: " + error.what());
             close();
             throw;
         } catch (const std::exception& error) {
+            logger.error("Vship pass (" + labels_of(plan_.keys, ", ") + ") failed: " + error.what());
             close();
             throw VshipUnavailableError(std::string("Vship GPU calculation failed: ") + error.what());
         }
@@ -1376,26 +1395,37 @@ private:
     std::unique_ptr<GpuFrameStream> native_decoder(const VideoPlan& video, const std::string& backend) const {
         static const std::map<std::string, int, std::less<>> shifts{
             {"yuv420p", 0}, {"yuv420p16le", 0}, {"yuv420p10le", 6}};
+        std::string reason;  // why FFmpeg decodes it, for the log
         const auto shift = shifts.find(video.image.pixel_format);
         if (shift == shifts.end()) {
-            return nullptr;  // Vship reads it in another layout
-        }
-        try {
-            const DecodePlan decode = plan_decode(video.info, video.crop, shift->second, false, video.size,
-                                                  request_.options.scale_algorithm);
-            if (decode.frame_bytes() != video.layout.frame_bytes) {
-                return nullptr;
+            reason = "Vship reads it as " + video.image.pixel_format;
+        } else {
+            try {
+                const DecodePlan decode = plan_decode(video.info, video.crop, shift->second, false, video.size,
+                                                      request_.options.scale_algorithm);
+                if (decode.frame_bytes() != video.layout.frame_bytes) {
+                    throw GpuDecodeUnavailableError("its frames would be " + std::to_string(decode.frame_bytes()) +
+                                                    " bytes, not " + std::to_string(video.layout.frame_bytes));
+                }
+                // Asked first, because a stream the decoder refuses once the
+                // pass has started (10-bit H.264, say) means making the
+                // whole pass again.
+                const auto [supported, refusal] = decoder_supports(plan_.device.gpu_id, decode, backend);
+                if (!supported) {
+                    throw GpuDecodeUnavailableError(refusal);
+                }
+                auto decoder = std::make_unique<GpuFrameStream>(video.info, decode, plan_.device.gpu_id, 4, backend,
+                                                                request_.environment.ffmpeg,
+                                                                request_.environment.ffprobe);
+                logger.info("Vship: the " + video.label + " is decoded by the " + backend +
+                            " decoder in the scoring process");
+                return decoder;
+            } catch (const GpuDecodeUnavailableError& error) {
+                reason = error.what();
             }
-            // Asked first, because a stream the decoder refuses once the pass
-            // has started (10-bit H.264, say) means making the whole pass again.
-            if (!decoder_supports(plan_.device.gpu_id, decode, backend).first) {
-                return nullptr;
-            }
-            return std::make_unique<GpuFrameStream>(video.info, decode, plan_.device.gpu_id, 4, backend,
-                                                    request_.environment.ffmpeg, request_.environment.ffprobe);
-        } catch (const GpuDecodeUnavailableError&) {
-            return nullptr;  // FFmpeg decodes it
         }
+        logger.info("Vship: the " + video.label + " is decoded by FFmpeg (" + reason + ")");
+        return nullptr;
     }
 
     // One video's frame stream: decoded in this process where it can be, by
@@ -1787,11 +1817,18 @@ private:
         output.distorted_crop = videos_[1].crop;
         output.compared_frame_count = frames * step_;
         output.failures = failures;
+        const double elapsed =
+            std::max(std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count(), 1e-6);
+        logger.info("Vship pass (" + labels_of(plan_.keys, ", ") + ") on " + plan_.device.name + ": " +
+                    std::to_string(frames) + " frame pairs in " + format_fixed(elapsed, 1) + " s, " +
+                    format_fixed(static_cast<double>(frames) / elapsed, 1) + " pairs/s");
+        for (const auto& [key, error] : errors) {
+            logger.error("Vship " + std::string(metric_definition(key).label) + " failed in its pass: " +
+                         message_of(error));
+        }
         if (on_progress_) {
             // A pass too short to time from its first frame is timed over its
             // whole length instead.
-            const double elapsed =
-                std::max(std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count(), 1e-6);
             const double fps = rate.frames_per_second(frames);
             on_progress_(frames * step_, frames * step_,
                          fps != 0.0 ? fps : static_cast<double>(frames * step_) / elapsed);
@@ -2041,6 +2078,8 @@ PerceptualTaskOutput score_vship_pass(const PerceptualRequest& request, const Pa
             if (!native) {
                 throw VshipUnavailableError(error.what());
             }
+            logger.warning(std::string("Decoding in the Vship pass failed; decoding through FFmpeg instead: ") +
+                           error.what());
             if (on_status) {
                 on_status({decoding_failed_status(error)});
             }
@@ -2049,6 +2088,7 @@ PerceptualTaskOutput score_vship_pass(const PerceptualRequest& request, const Pa
             if (every_source_frame) {
                 throw VshipUnavailableError(error.what());
             }
+            logger.info(std::string("Vship pass: ") + error.what() + "; it is made again with every source frame");
             every_source_frame = true;
         }
     }
@@ -2089,6 +2129,7 @@ PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const Pass
                 }
             });
     } catch (const IsolatedCrashError& error) {
+        logger.error("Vship pass (" + labels_of(plan.keys, ", ") + ") failed: " + error.what());
         throw VshipUnavailableError("Vship GPU calculation failed: " + std::string(error.what()));
     } catch (const Cancelled&) {
         throw;
@@ -2164,6 +2205,9 @@ private:
     // Scores the metrics not `refused`, which are reported as failed with
     // their reasons.
     PerceptualTaskOutput run_without(const PerceptualFailures& refused) {
+        for (const auto& [key, reason] : refused) {
+            logger.warning(std::string(metric_definition(key).label) + " not started: " + reason);
+        }
         std::vector<std::string> keys;
         for (const std::string& key : keys_) {
             if (failure_of(refused, key) == nullptr) {
@@ -2258,6 +2302,8 @@ private:
     // numbered after the `passes_before` passes.
     void retry_alone(const std::vector<std::string>& shared, int passes_before) {
         const std::string labels = labels_of(shared, " and ");
+        logger.warning(labels + " failed in the GPU pass shared with the other metrics; calculating " +
+                       (shared.size() == 1 ? "it in a pass of its own" : "them in a pass of their own"));
         if (hooks_.on_status) {
             hooks_.on_status({labels + " failed in the shared GPU pass; calculating " +
                               (shared.size() == 1 ? "it" : "each") + " in a pass of its own\xE2\x80\xA6"});
@@ -2311,6 +2357,8 @@ private:
                 if (cancel_.cancelled()) {
                     throw Cancelled();
                 }
+                logger.error("GPU metric " + std::to_string(number + 1) + "/" + std::to_string(count) + " (" +
+                             labels_of(group, " + ") + ") failed: " + error.what());
                 errors_.push_back(std::current_exception());
                 for (const std::string& key : group) {
                     set_failure(failures_, key, error.what());
@@ -2532,6 +2580,11 @@ private:
         std::vector<std::string> wrong;
         std::copy_if(gpu_.begin(), gpu_.end(), std::back_inserter(wrong),
                      [&device](const std::string& key) { return !scores_correctly(device, key); });
+        if (wrong.empty()) {
+            return;
+        }
+        logger.info(labels_of(wrong, " and ") + " on the CPU: Vship's " + backend_label(device.backend) +
+                    " build scores it wrongly on " + device.name);
         gpu_ = without(gpu_, wrong);
         cpu_.insert(cpu_.end(), wrong.begin(), wrong.end());
     }

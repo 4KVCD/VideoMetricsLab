@@ -362,5 +362,33 @@ TEST(GpuFrames, DecodingThatFailsHandsTheRunToFfmpeg) {
     EXPECT_EQ(result.metric_results.frame("vmaf")->provenance.compute_backend, "gpu");
 }
 
+// An AVI with B-frames gives its packets no presentation time (FFmpeg lists
+// the lowest 64-bit number for it), so the app's decoding cannot put its
+// pictures in order: it is refused with the reason the Python app gives,
+// which the run's status and the log show, and FFmpeg decodes the video.
+TEST(GpuFrames, PacketsWithoutTimestampsAreRefusedForTheReasonThePythonAppGives) {
+    const std::optional<Tools> found = tools();
+    if (!found) {
+        GTEST_SKIP() << "no FFmpeg";
+    }
+    const SoftwareDecode software("");
+    if (!software_decoder_bundled()) {
+        GTEST_SKIP() << "no software decoder";
+    }
+    const Folder folder;
+    const VideoInfo info = probe_video(
+        make_clip(*found, folder / "b-frames.avi", "libx264", "yuv420p", 1.0, {"-bf", "2"}), found->ffprobe);
+    GpuFrameStream stream(info, plan_decode(info, std::nullopt, 6), 0, 4, "software", found->ffmpeg, found->ffprobe);
+    try {
+        stream.start();
+        while (const std::optional<GpuFrameStream::Picture> picture = stream.next(CancelToken())) {
+            stream.release(picture->slot);
+        }
+        ADD_FAILURE() << "decoded";
+    } catch (const GpuDecodeFailedError& error) {
+        EXPECT_STREQ(error.what(), "a packet has no timestamp");
+    }
+}
+
 }  // namespace
 }  // namespace vml

@@ -112,4 +112,17 @@ std::string format_fixed(double value, int decimals) {
     return std::string(buffer, end);
 }
 
+std::string format_general(double value) {
+    if (!std::isfinite(value)) {
+        return non_finite_text(value);
+    }
+    // As printf's "%g", whose rules Python's "g" follows.
+    char buffer[32];
+    const auto [end, error] = std::to_chars(buffer, buffer + sizeof buffer, value, std::chars_format::general, 6);
+    if (error != std::errc()) {
+        throw std::runtime_error("a number could not be written as text");
+    }
+    return std::string(buffer, end);
+}
+
 }  // namespace vml

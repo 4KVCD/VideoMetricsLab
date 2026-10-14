@@ -6,7 +6,10 @@
 #include <dxgi.h>
 
 #include <algorithm>
+#include <csignal>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <cwctype>
 #include <thread>
 #ifdef _MSC_VER
@@ -95,6 +98,46 @@ std::optional<unsigned long long> available_memory() {
     return status.ullAvailPhys;
 }
 
+std::optional<unsigned long long> total_memory() {
+    MEMORYSTATUSEX status{};
+    status.dwLength = sizeof status;
+    if (!GlobalMemoryStatusEx(&status)) {
+        return std::nullopt;
+    }
+    return status.ullTotalPhys;
+}
+
+std::tm local_time(std::time_t time) {
+    std::tm local{};
+    localtime_s(&local, &time);
+    return local;
+}
+
+std::string system_description() {
+    // ntdll's RtlGetVersion gives the real version whatever this program's
+    // manifest says (GetVersionEx gives the version the manifest names).
+    using GetVersion = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
+    const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    // Through void (*)(), which any function type may be cast from and to.
+    const auto get_version = ntdll == nullptr ? nullptr
+                                              : reinterpret_cast<GetVersion>(reinterpret_cast<void (*)()>(
+                                                    GetProcAddress(ntdll, "RtlGetVersion")));
+    RTL_OSVERSIONINFOEXW version{};
+    version.dwOSVersionInfoSize = sizeof version;
+    if (get_version == nullptr || get_version(reinterpret_cast<PRTL_OSVERSIONINFOW>(&version)) != 0) {
+        return "Windows";
+    }
+    // Windows 11 still says 10.0, with builds from 22000.
+    const std::string release = version.dwMajorVersion == 10 && version.dwBuildNumber >= 22000
+                                    ? "11"
+                                    : std::to_string(version.dwMajorVersion);
+    return "Windows-" + release + "-" + std::to_string(version.dwMajorVersion) + "." +
+           std::to_string(version.dwMinorVersion) + "." + std::to_string(version.dwBuildNumber) + "-SP" +
+           std::to_string(version.wServicePackMajor);
+}
+
+std::string processor_description() { return environment_variable("PROCESSOR_IDENTIFIER").value_or(""); }
+
 void raise_thread_priority() { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST); }
 
 bool keep_system_awake(bool awake) {
@@ -131,7 +174,16 @@ std::optional<long long> modified_ns(const std::filesystem::path& file) {
     return (since_1601 - 116444736000000000LL) * 100;
 }
 
+namespace {
+
+// Whether a crash ends this process at once (crash_quietly), once it is
+// reported (report_crashes_to).
+bool quiet_crashes = false;
+
+}  // namespace
+
 void crash_quietly() {
+    quiet_crashes = true;
     SetErrorMode(GetErrorMode() | SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
 #ifdef _MSC_VER
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);  // abort() without its message box
@@ -143,6 +195,95 @@ void crash_quietly() {
     }
 #endif
 #endif
+}
+
+namespace {
+
+// The file crashes are reported in (report_crashes_to).
+HANDLE crash_file = INVALID_HANDLE_VALUE;
+
+void write_crash_text(const char* text) {
+    DWORD written = 0;
+    WriteFile(crash_file, text, static_cast<DWORD>(std::strlen(text)), &written, nullptr);
+}
+
+// An address as the module it is in and its offset there
+// ("vmaf_vulkan.dll+0x1a2b3"), or as itself.
+void describe_address(const void* address, char* out, std::size_t size) {
+    HMODULE module = nullptr;
+    char name[MAX_PATH] = "?";
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           static_cast<LPCSTR>(address), &module) &&
+        module != nullptr) {
+        GetModuleFileNameA(module, name, sizeof name);
+        const char* base = std::strrchr(name, '\\');
+        std::snprintf(out, size, "%s+0x%llx", base != nullptr ? base + 1 : name,
+                      static_cast<unsigned long long>(static_cast<const char*>(address) -
+                                                      reinterpret_cast<const char*>(module)));
+    } else {
+        std::snprintf(out, size, "0x%p", address);
+    }
+}
+
+// Writes `headline`, the time and the thread, then the calling stack: from
+// `from` on when it is on the stack (an exception's address, past this
+// handler and Windows' own frames that called it), or all of it.
+void report_crash(const char* headline, const void* from = nullptr) {
+    SYSTEMTIME now{};
+    GetLocalTime(&now);
+    char line[512];
+    std::snprintf(line, sizeof line, "%04u-%02u-%02u %02u:%02u:%02u %s in thread %lu\nStack:\n",
+                  static_cast<unsigned>(now.wYear), static_cast<unsigned>(now.wMonth), static_cast<unsigned>(now.wDay),
+                  static_cast<unsigned>(now.wHour), static_cast<unsigned>(now.wMinute),
+                  static_cast<unsigned>(now.wSecond), headline, GetCurrentThreadId());
+    write_crash_text(line);
+    void* frames[62];
+    const USHORT count = CaptureStackBackTrace(0, 62, frames, nullptr);
+    USHORT first = 0;
+    while (from != nullptr && first < count && frames[first] != from) {
+        ++first;
+    }
+    if (first == count) {
+        first = 0;
+    }
+    for (USHORT i = first; i < count; ++i) {
+        char where[300];
+        describe_address(frames[i], where, sizeof where);
+        std::snprintf(line, sizeof line, "  %s\n", where);
+        write_crash_text(line);
+    }
+    write_crash_text("\n");
+    FlushFileBuffers(crash_file);
+}
+
+LONG WINAPI report_exception(EXCEPTION_POINTERS* exception) {
+    char where[300];
+    describe_address(exception->ExceptionRecord->ExceptionAddress, where, sizeof where);
+    char headline[400];
+    std::snprintf(headline, sizeof headline, "Fatal exception 0x%08lX at %s",
+                  static_cast<unsigned long>(exception->ExceptionRecord->ExceptionCode), where);
+    report_crash(headline, exception->ExceptionRecord->ExceptionAddress);
+    if (quiet_crashes) {
+        // Ended now, with the exception's code as its exit code, as Windows
+        // would end it, without Windows' error reporting first.
+        TerminateProcess(GetCurrentProcess(), exception->ExceptionRecord->ExceptionCode);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;  // the process then ends as it would have
+}
+
+void report_abort(int /*signal*/) { report_crash("Aborted"); }
+
+}  // namespace
+
+bool report_crashes_to(const std::filesystem::path& file) {
+    crash_file = CreateFileW(file.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                             nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (crash_file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    SetUnhandledExceptionFilter(report_exception);
+    std::signal(SIGABRT, report_abort);
+    return true;
 }
 
 void end_process_now(int exit_code) {

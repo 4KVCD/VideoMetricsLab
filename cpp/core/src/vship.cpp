@@ -13,6 +13,7 @@
 #include <system_error>
 #include <tuple>
 
+#include "vml/app_log.h"
 #include "vml/colour.h"
 #include "vml/geometry.h"
 #include "vml/hardware_decoding.h"
@@ -617,6 +618,13 @@ std::pair<std::optional<VshipDevice>, std::string> detect_vship_device() {
     if (!state.probed) {
         state.probed = isolation_program() ? probe_isolated(state.backend) : probe_vship_device(state.backend);
         state.probed_at = std::chrono::steady_clock::now();
+        const auto& [device, reason] = *state.probed;
+        if (device) {
+            app_log::write(app_log::Level::info, "vml.perceptual_vship",
+                           "Vship " + device->version + " (" + backend_label(device->backend) + ") GPU: " + device->name);
+        } else {
+            app_log::write(app_log::Level::warning, "vml.perceptual_vship", "Vship GPU unavailable: " + reason);
+        }
     }
     return *state.probed;
 }

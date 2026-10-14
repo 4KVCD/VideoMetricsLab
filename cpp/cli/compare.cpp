@@ -14,6 +14,7 @@
 #include <string_view>
 
 #include "report.h"
+#include "vml/app_log.h"
 #include "vml/cancel.h"
 #include "vml/crop_detect.h"
 #include "vml/cvvdp.h"
@@ -631,7 +632,7 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         saved.reset();
     }
     jobs.push_back(VmafJob{source, *video.info, std::move(options), video.path, video.metrics, std::move(tasks), backends,
-                           cvvdp, std::move(saved), std::move(kept)});
+                           cvvdp, std::move(saved), std::move(kept), platform::path_text(video.path.stem())});
     return missing;
 }
 
@@ -789,6 +790,7 @@ int compare(const CompareArguments& arguments) {
     platform::on_interrupt([cancel, progress, running]() mutable {
         if (*running) {
             progress->message("Cancelling...");
+            app_log::write(app_log::Level::info, "vml.job_runner", "Run: cancel requested");
         }
         cancel.cancel();
     });

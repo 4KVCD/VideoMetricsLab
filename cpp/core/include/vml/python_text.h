@@ -2,9 +2,11 @@
 // logs and settings.json say is taken the same way by both apps.
 #pragma once
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace vml {
 
@@ -38,5 +40,19 @@ std::string_view python_strip(std::string_view text);
 // double one, ASCII control characters escaped. Characters past ASCII are
 // kept, as repr() keeps the printable ones.
 std::string python_string_repr(std::string_view text);
+
+// `text`'s lines, as Python's str.splitlines() cuts well-formed UTF-8 text:
+// at \n, \r, \r\n, the separators \v, \f and 0x1C to 0x1E, and U+0085,
+// U+2028 and U+2029; no empty line after a last line break.
+std::vector<std::string_view> python_splitlines(std::string_view text);
+
+// How many characters Python's len() counts in well-formed UTF-8 text.
+std::size_t python_length(std::string_view text);
+
+// A command as one line, ready to copy, as Python's
+// subprocess.list2cmdline writes it (the Microsoft C run-time's rules): an
+// empty argument, or one with a space or a tab, in double quotes; a double
+// quote escaped, with the backslashes before it doubled.
+std::string python_list2cmdline(const std::vector<std::string>& arguments);
 
 }  // namespace vml

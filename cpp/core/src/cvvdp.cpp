@@ -167,6 +167,18 @@ double CvvdpDisplay::distance_in_heights() const {
     return viewing_distance_m / height_m;
 }
 
+std::string CvvdpDisplay::describe() const {
+    // The resolution as Python writes the whole numbers it holds, and a
+    // hand-edited fraction ("3840.5") as it is.
+    const auto resolution = [](double value) {
+        return value == std::floor(value) ? std::to_string(static_cast<long long>(value)) : python_repr(value);
+    };
+    return format_general(diagonal_inches) + "\" " + resolution(width) + "x" + resolution(height) + " " +
+           (hdr ? "HDR" : "SDR") + ", " + format_general(peak_luminance) + " nits, " + format_general(ambient_lux) +
+           " lux, " + format_fixed(viewing_distance_m, 2) + " m (" + format_fixed(distance_in_heights(), 1) +
+           " x screen height)";
+}
+
 nlohmann::ordered_json CvvdpSettings::parameters() const {
     return Json{{"display", display.identity()}, {"resize_to_display", resize_to_display}};
 }

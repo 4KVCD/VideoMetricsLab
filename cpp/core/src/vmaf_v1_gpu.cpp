@@ -13,6 +13,7 @@
 #include <random>
 #include <set>
 
+#include "vml/app_log.h"
 #include "vml/gpu_frames.h"
 #include "vml/isolated.h"
 #include "vml/model_select.h"
@@ -24,6 +25,8 @@
 namespace vml {
 
 namespace {
+
+const app_log::Logger logger("vml.vmaf_v1_gpu");
 
 // A feature's options, as its model gives them, in the model's order.
 using Options = nlohmann::ordered_json;
@@ -1088,8 +1091,9 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
             scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.backend, device,
                            &test);
             on_gpu = true;
-        } catch (const LibvmafError&) {
-            // The frames go through system memory instead.
+        } catch (const LibvmafError& error) {
+            logger.info(std::string("VMAF v1 with the GPU: the frames go through system memory (") + error.what() +
+                        ")");
         }
     }
     if (!scorer) {
@@ -1180,8 +1184,11 @@ V1Probe v1_available() {
         } catch (const IsolatedCrashError& error) {
             probed = V1Probe{false, error.what()};
         } catch (const std::exception& error) {
+            logger.warning(std::string("The GPU VMAF v1 probe failed: ") + error.what());
             probed = V1Probe{false, std::string("the GPU probe failed: ") + error.what()};
         }
+        logger.info(std::string("VMAF v1 with the GPU") + (probed->available ? "" : " unavailable") + ": " +
+                    probed->text);
     }
     return *probed;
 }

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -12,10 +13,16 @@
 #include <set>
 #include <thread>
 
+#include "vml/app_log.h"
+#include "vml/frame_sync.h"
 #include "vml/geometry.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
 #include "vml/metrics.h"
+#include "vml/number_format.h"
+#include "vml/platform/system.h"
+#include "vml/result_json.h"
+#include "vml/time_format.h"
 
 namespace vml {
 
@@ -96,6 +103,26 @@ bool is_cancel(const std::exception_ptr& error) {
     }
 }
 
+const app_log::Logger logger("vml.job_runner");
+
+// A video's format, for the log: "3840x2160 23.976 fps vvc yuv420p10le HDR
+// PQ, 1:45:36".
+std::string media_text(const VideoInfo& info) {
+    const std::string hdr = info.color_transfer == "smpte2084"      ? " HDR PQ"
+                            : info.color_transfer == "arib-std-b67" ? " HDR HLG"
+                                                                    : "";
+    return std::to_string(info.width) + "x" + std::to_string(info.height) + " " + format_fixed(info.fps, 3) +
+           " fps " + info.codec_name + " " + info.pix_fmt + hdr + ", " + format_hms(info.duration);
+}
+
+// The end of the tool's error output, for the log.
+std::string stderr_note(const std::string& tail) { return tail.empty() ? "" : "\nLast output:\n" + tail; }
+
+// How long since `started`, for the log: "0:01:05".
+std::string took_since(std::chrono::steady_clock::time_point started) {
+    return format_hms(std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count());
+}
+
 enum Pool { cpu_pool, gpu_pool };
 
 class Scheduler;
@@ -109,6 +136,11 @@ public:
     std::size_t index() const { return index_; }
     std::size_t task_count() const { return tasks_.size(); }
     Pool pool_of(std::size_t task) const { return job_.tasks[task].on_gpu() ? gpu_pool : cpu_pool; }
+
+    // The video's name in the log: "Video 2 'label'".
+    std::string name() const { return "Video " + std::to_string(index_ + 1) + " '" + job_.label + "'"; }
+    // The video's files, what will be calculated and how, for the log.
+    std::string describe() const;
 
     // Starts the video when a lane takes its first task: decides its share
     // of the cores and sends job_started. False when the run was cancelled
@@ -164,6 +196,8 @@ private:
         bool finished() const { return result.has_value() || perceptual.has_value(); }
     };
 
+    // A task's name in the log: "GPU metrics (SSIMULACRA2, CVVDP)".
+    std::string task_name(std::size_t task) const;
     ComparisonResult execute_task(std::size_t task);
     PerceptualTaskOutput execute_perceptual(std::size_t task);
     void report_progress(std::size_t task, long long current, long long total, double fps);
@@ -316,6 +350,52 @@ JobRun::JobRun(Scheduler& scheduler, std::size_t index, const VmafJob& job)
     }
 }
 
+std::string JobRun::task_name(std::size_t task) const {
+    std::string labels;
+    for (const std::string& key : job_.tasks[task].metric_keys) {
+        labels += (labels.empty() ? "" : ", ") + std::string(metric_definition(key).label);
+    }
+    return std::string(pool_of(task) == gpu_pool ? "GPU" : "CPU") + " metrics (" + labels + ")";
+}
+
+std::string JobRun::describe() const {
+    std::string calculating;
+    for (std::size_t task = 0; task < tasks_.size(); ++task) {
+        calculating += (calculating.empty() ? "" : "; ") + task_name(task);
+    }
+    if (calculating.empty()) {
+        calculating = "nothing (all saved)";
+    }
+    std::string kept;
+    if (job_.cached_result) {  // saved scores are kept only with their saved result, as merged() keeps them
+        for (const std::string& key : job_.cached_metrics.keys()) {
+            kept += (kept.empty() ? "" : ", ") + std::string(metric_definition(key).label);
+        }
+    }
+    const VmafOptions& options = job_.options;
+    std::string settings = std::string("black bars ") + (options.crop_mode == CropMode::automatic ? "auto" : "none") +
+                           ", duration limit " + format_general(options.duration_limit) + " s, resolution mismatch " +
+                           scale_direction_value(options.scale_direction) + " (" + options.scale_algorithm +
+                           "), VMAF v0.6.1 model " + options.model_choice + ", VMAF v1 model " +
+                           options.model_choice_v1 + ", frame subsample " + std::to_string(options.n_subsample) +
+                           ", GPU decode " + (options.gpu_decode ? "on" : "off");
+    for (const auto& [key, backend] : job_.perceptual_backends) {
+        std::string place = backend;
+        std::transform(place.begin(), place.end(), place.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+        settings += ", " + std::string(metric_definition(key).label) + " on " + place;
+    }
+    settings += ", CVVDP display " + job_.cvvdp.display.describe();
+    std::string text = name() + ":\n  test   " + platform::path_text(job_.distorted_info.path) + " (" +
+                       media_text(job_.distorted_info) + ")\n  source " + platform::path_text(job_.source_info.path) +
+                       " (" + media_text(job_.source_info) + ")\n  calculating " + calculating +
+                       (kept.empty() ? "" : "; saved scores kept: " + kept) + "\n  " + settings;
+    if (options.resample_test) {
+        text += "\n  resolution test: " + options.resample_test->label;
+    }
+    return text;
+}
+
 bool JobRun::begin() {
     const std::lock_guard lock(mutex_);
     if (begun_) {
@@ -327,6 +407,7 @@ bool JobRun::begin() {
         return false;
     }
     options_ = scheduler_.share_cores(job_.options);
+    logger.info(name() + ": started");
     if (scheduler_.events.job_started) {
         scheduler_.events.job_started(index_);
     }
@@ -430,6 +511,7 @@ void JobRun::report_progress(std::size_t task, long long current, long long tota
 }
 
 void JobRun::report_status(std::size_t task, const RunStatus& status) {
+    logger.info(name() + ": " + status.text);
     const std::lock_guard lock(mutex_);
     TaskState& state = tasks_[task];
     state.step = status;
@@ -452,6 +534,9 @@ bool JobRun::run_task(std::size_t task) {
         const std::lock_guard lock(mutex_);
         tasks_[task].waiting_for.clear();
     }
+    const std::string half = task_name(task);
+    logger.info(name() + ": " + half + " started");
+    const auto began = std::chrono::steady_clock::now();
     std::optional<ComparisonResult> output;
     std::optional<PerceptualTaskOutput> perceptual;
     std::exception_ptr error;
@@ -465,6 +550,19 @@ bool JobRun::run_task(std::size_t task) {
         // The video's other tasks are left to finish, so that one failing
         // does not lose the others' metrics too.
         error = std::current_exception();
+    }
+    if (error && is_cancel(error)) {
+        logger.info(name() + ": " + half + " cancelled after " + took_since(began));
+    } else if (error) {
+        const auto [why, tail] = failure_of(error);
+        logger.error(name() + ": " + half + " failed after " + took_since(began) + ": " + why + stderr_note(tail));
+    } else {
+        logger.info(name() + ": " + half + " done in " + took_since(began));
+        if (perceptual) {
+            for (const auto& [key, why] : perceptual->failures) {
+                logger.error(name() + ": " + std::string(metric_definition(key).label) + " failed: " + why);
+            }
+        }
     }
     const std::lock_guard lock(mutex_);
     TaskState& state = tasks_[task];
@@ -524,16 +622,25 @@ void JobRun::finish() {
     pass_outputs_.clear();
     if (!result) {
         if (cancelled || (!failed.empty() && is_cancel(tasks_[failed.front()].error))) {
+            logger.info(name() + ": cancelled");
             scheduler_.report_cancelled_once();
-        } else if (events.job_failed) {
+        } else {
             const auto [message, tail] = failed.empty() ? std::pair<std::string, std::string>(
                                                               "No executable metric task was planned.", "")
                                                         : failure_of(tasks_[failed.front()].error);
-            events.job_failed(index_, message, tail);
+            logger.error(name() + " failed: " + message + stderr_note(tail));
+            if (events.job_failed) {
+                events.job_failed(index_, message, tail);
+            }
         }
         return;
     }
+    std::string metrics;
+    for (const std::string& key : result->metric_results.keys()) {
+        metrics += (metrics.empty() ? "" : ", ") + std::string(metric_definition(key).label);
+    }
     if (failed.empty() && metric_failures.empty()) {
+        logger.info(name() + " finished: " + metrics);
         if (events.job_finished) {
             events.job_finished(index_, *result);
         }
@@ -558,6 +665,8 @@ void JobRun::finish() {
         message += (message.empty() ? "" : "\n") + std::string(metric_definition(key).label) + " failed: " + why;
         set_failure(failures, key, why);
     }
+    logger.warning(name() + " finished with failed metrics (kept: " + (metrics.empty() ? "none" : metrics) + "):\n" +
+                   message + stderr_note(stderr_tail));
     if (events.job_partially_failed) {
         events.job_partially_failed(index_, *result, message, stderr_tail, failures);
     }
@@ -776,6 +885,13 @@ void Scheduler::run() {
     for (std::size_t index = 0; index < jobs_.size(); ++index) {
         runs_.push_back(std::make_unique<JobRun>(*this, index, jobs_[index]));
     }
+    logger.info(std::string(app_log::run_start) + " " + std::to_string(jobs_.size()) +
+                " video(s), CPU metrics for up to " + std::to_string(parallel_jobs_.load()) +
+                " at once, GPU metrics one video at a time" + (gpu_metrics_together ? ", each video's in one pass" : "") +
+                (by_timestamp() ? ", frames paired by timestamp (VML_FRAME_PAIRING)" : ""));
+    for (const std::unique_ptr<JobRun>& run : runs_) {
+        logger.info(run->describe());
+    }
     for (const std::unique_ptr<JobRun>& run : runs_) {
         if (run->task_count() == 0) {
             if (run->begin()) {
@@ -796,7 +912,12 @@ void Scheduler::run() {
     }
     std::vector<std::thread> threads;
     for (std::size_t lane = 0; lane + 1 < lanes.size(); ++lane) {
-        threads.emplace_back([this, pool = lanes[lane]] { drain_queue(pool); });
+        // Named in the log as the Python app names them.
+        std::string thread_name = lanes[lane] == gpu_pool ? "vmaf-gpu" : "vmaf-cpu-" + std::to_string(lane);
+        threads.emplace_back([this, pool = lanes[lane], thread_name = std::move(thread_name)]() mutable {
+            app_log::set_thread_name(std::move(thread_name));
+            drain_queue(pool);
+        });
     }
     if (!lanes.empty()) {
         drain_queue(lanes.back());
@@ -814,6 +935,7 @@ void Scheduler::run() {
         }
         report_cancelled_once();
     }
+    logger.info(std::string("Run ended") + (cancel.cancelled() ? " (cancelled)" : ""));
     if (lane_error_) {
         std::rethrow_exception(lane_error_);
     }

@@ -15,6 +15,7 @@
 #include "arguments.h"
 #include "compare.h"
 #include "devices.h"
+#include "vml/app_log.h"
 #include "vml/isolated.h"
 #include "vml/platform/console.h"
 #include "vml/platform/system.h"
@@ -34,6 +35,10 @@ int main(int argc, char** argv) {
             platform::write_text(platform::Stream::output, *arguments.print_and_exit);
             return cli::exit_ok;
         }
+        // The app's log on standard error: its failures always, everything
+        // with --verbose.
+        const bool verbose = arguments.command == cli::Command::compare && arguments.compare.verbose;
+        app_log::log_to_console(verbose ? app_log::Level::info : app_log::Level::error);
         switch (arguments.command) {
             case cli::Command::compare:
                 return cli::compare(arguments.compare);

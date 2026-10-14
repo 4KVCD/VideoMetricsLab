@@ -2,6 +2,7 @@
 # code runs under the command line and the window on every system.
 add_library(vml_core
     src/analysis_request.cpp
+    src/app_log.cpp
     src/cancel.cpp
     src/colour.cpp
     src/crop_detect.cpp

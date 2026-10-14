@@ -127,8 +127,11 @@ std::optional<long long> python_int(std::string_view text) {
     if (number.empty()) {
         return std::nullopt;
     }
+    // The lowest number is one further from 0 than the highest: FFmpeg writes
+    // it for a missing timestamp (AV_NOPTS_VALUE).
     unsigned long long value = 0;
-    constexpr unsigned long long limit = static_cast<unsigned long long>(std::numeric_limits<long long>::max());
+    const unsigned long long limit =
+        static_cast<unsigned long long>(std::numeric_limits<long long>::max()) + (negative ? 1 : 0);
     for (const char c : number) {
         if (!is_digit(c)) {
             return std::nullopt;
@@ -139,8 +142,8 @@ std::optional<long long> python_int(std::string_view text) {
         }
         value = value * 10 + digit;
     }
-    const auto signed_value = static_cast<long long>(value);
-    return negative ? -signed_value : signed_value;
+    // Negated as an unsigned number, which wraps to the lowest one exactly.
+    return static_cast<long long>(negative ? 0 - value : value);
 }
 
 std::string replace_invalid_utf8(std::string_view text) {
@@ -244,6 +247,83 @@ std::string python_string_repr(std::string_view text) {
         }
     }
     return quoted + quote;
+}
+
+std::vector<std::string_view> python_splitlines(std::string_view text) {
+    std::vector<std::string_view> lines;
+    std::size_t start = 0;
+    std::size_t i = 0;
+    while (i < text.size()) {
+        // How many bytes the line break at i takes, if there is one.
+        std::size_t length = 0;
+        const auto byte = static_cast<unsigned char>(text[i]);
+        if (byte == '\r') {
+            length = i + 1 < text.size() && text[i + 1] == '\n' ? 2 : 1;
+        } else if (byte == '\n' || byte == '\v' || byte == '\f' || (byte >= 0x1C && byte <= 0x1E)) {
+            length = 1;
+        } else if (byte == 0xC2 && i + 1 < text.size() && static_cast<unsigned char>(text[i + 1]) == 0x85) {
+            length = 2;  // U+0085
+        } else if (byte == 0xE2 && i + 2 < text.size() && static_cast<unsigned char>(text[i + 1]) == 0x80 &&
+                   (static_cast<unsigned char>(text[i + 2]) == 0xA8 ||
+                    static_cast<unsigned char>(text[i + 2]) == 0xA9)) {
+            length = 3;  // U+2028, U+2029
+        }
+        if (length == 0) {
+            ++i;
+            continue;
+        }
+        lines.push_back(text.substr(start, i - start));
+        i += length;
+        start = i;
+    }
+    if (start < text.size()) {
+        lines.push_back(text.substr(start));
+    }
+    return lines;
+}
+
+std::string python_list2cmdline(const std::vector<std::string>& arguments) {
+    std::string line;
+    for (std::size_t i = 0; i < arguments.size(); ++i) {
+        const std::string& argument = arguments[i];
+        if (i > 0) {
+            line += ' ';
+        }
+        const bool quoted = argument.empty() || argument.find_first_of(" \t") != std::string::npos;
+        if (quoted) {
+            line += '"';
+        }
+        std::size_t backslashes = 0;  // waiting to be doubled, if a quote follows them
+        for (const char c : argument) {
+            if (c == '\\') {
+                ++backslashes;
+                continue;
+            }
+            if (c == '"') {
+                line.append(backslashes * 2, '\\');
+                line += "\\\"";
+            } else {
+                line.append(backslashes, '\\');
+                line += c;
+            }
+            backslashes = 0;
+        }
+        line.append(backslashes, '\\');
+        if (quoted) {
+            line.append(backslashes, '\\');  // doubled before the closing quote
+            line += '"';
+        }
+    }
+    return line;
+}
+
+std::size_t python_length(std::string_view text) {
+    // Each character's first byte: any byte but a continuation byte.
+    std::size_t count = 0;
+    for (const char c : text) {
+        count += (static_cast<unsigned char>(c) & 0xC0) != 0x80 ? 1 : 0;
+    }
+    return count;
 }
 
 }  // namespace vml

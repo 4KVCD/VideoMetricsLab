@@ -11,6 +11,7 @@
 #include <thread>
 #include <utility>
 
+#include "vml/app_log.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/gpu_frames.h"
 #include "vml/platform/console.h"
@@ -39,6 +40,9 @@ std::optional<std::filesystem::path>& program() {
 // How long a child's folder is tried while a program the child started
 // (FFmpeg) is still ending with a file in it open.
 constexpr std::chrono::seconds folder_wait{5};
+
+// The file in a child's folder where it reports a crash.
+constexpr std::string_view crash_report_name = "crash.txt";
 
 // A folder of its own for a child's request and files, deleted with it.
 class ChildFolder {
@@ -166,6 +170,12 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
                     result = message["result"];
                 } else if (message.is_object() && message.contains("error")) {
                     failure = message["error"].is_string() ? message["error"].get<std::string>() : message["error"].dump();
+                } else if (message.is_object() && message.contains("log") && message["log"].is_object()) {
+                    // A line of the child's log, written to this app's under
+                    // its own name.
+                    const nlohmann::json& line = message["log"];
+                    app_log::write(line.value("level", static_cast<int>(app_log::Level::info)),
+                                   line.value("name", std::string("vml")), line.value("text", std::string()));
                 } else if (!message.is_discarded() && !stopped && on_message) {
                     on_message(message);
                 }
@@ -189,7 +199,13 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
         throw std::runtime_error(*failure);
     }
     if (!result) {
-        throw IsolatedCrashError(std::string(what), exit_code);
+        IsolatedCrashError crash(std::string(what), exit_code);
+        if (const std::optional<std::string> report = platform::read_file(folder.path() / crash_report_name);
+            report && !report->empty()) {
+            app_log::write(app_log::Level::error, "vml.isolated",
+                           std::string(crash.what()) + "; its stack at the crash:\n" + *report);
+        }
+        throw crash;
     }
     if (on_files) {
         on_files(*result, folder.path());
@@ -205,6 +221,13 @@ void send_isolated_message(const nlohmann::json& message) {
 
 int run_isolated_task(std::string_view task, const std::filesystem::path& request_file) {
     platform::crash_quietly();  // its parent reports a crash; no dialog waits for the user
+    // Where a crash happened, for the parent to put in its log: a crash ends
+    // this process before it could send anything.
+    platform::report_crashes_to(request_file.parent_path() / crash_report_name);
+    // Its log's lines go to the app that started it, which writes them.
+    app_log::forward_lines([](int level, std::string_view name, std::string_view text) {
+        send_isolated_message({{"log", {{"name", std::string(name)}, {"level", level}, {"text", std::string(text)}}}});
+    });
     int exit_code = 0;
     try {
         std::ifstream file(request_file, std::ios::binary);
@@ -237,6 +260,16 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
         } else if (task == "test-crash") {
             // For the tests: ends as an access violation ends a process.
             std::_Exit(static_cast<int>(0xC0000005u));
+        } else if (task == "test-fault") {
+            // For the tests: a real crash, which the process reports before
+            // it ends: an access violation on Windows, an abort elsewhere
+            // (AddressSanitizer keeps SIGSEGV to itself, not SIGABRT).
+#ifdef _WIN32
+            volatile int* nowhere = nullptr;
+            *nowhere = 1;
+#else
+            std::abort();
+#endif
         } else if (task == "test-wait") {
             // For the tests: waits to be cancelled.
             send_isolated_message({{"waiting", true}});

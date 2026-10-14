@@ -2,6 +2,7 @@
 // environment, the CPU and the GPUs.
 #pragma once
 
+#include <ctime>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -22,6 +23,13 @@ std::filesystem::path executable_path();
 // waiting on the user's screen (Windows), for a process whose crash its
 // parent reports.
 void crash_quietly();
+
+// From now on, a crash of this process (an access violation, an abort) is
+// written to the end of `file` before the process ends: what happened, where
+// (module and offset), the thread, and the calling stack, as modules and
+// offsets (the Python app's faulthandler). False when the file cannot be
+// opened.
+bool report_crashes_to(const std::filesystem::path& file);
 
 // Ends this process at once with `exit_code`, without unloading its
 // libraries: for a process one of whose threads may hold a driver's locks
@@ -64,6 +72,23 @@ unsigned logical_cores();
 // physical memory on Windows, MemAvailable on Linux, the free and inactive
 // pages on macOS. Nothing when the system does not say.
 std::optional<unsigned long long> available_memory();
+
+// How many bytes of physical memory the PC has, or nothing when the system
+// does not say.
+std::optional<unsigned long long> total_memory();
+
+// The local time of `time` (seconds since 1970), for the log's timestamps.
+std::tm local_time(std::time_t time);
+
+// The system, as the Python app's log names it: on Windows Python's
+// platform.platform() form, such as "Windows-11-10.0.26300-SP0"; elsewhere
+// the kernel's name, release and machine, such as "Linux-6.8.0-x86_64".
+std::string system_description();
+
+// The processor, as Python's platform.processor() names it: on Windows the
+// PROCESSOR_IDENTIFIER Windows sets, such as "Intel64 Family 6 Model 198
+// Stepping 2, GenuineIntel"; elsewhere the machine, such as "x86_64".
+std::string processor_description();
 
 // Lets the calling thread run ahead of ordinary work (Windows'
 // THREAD_PRIORITY_HIGHEST), for a light thread whose timing matters. It does

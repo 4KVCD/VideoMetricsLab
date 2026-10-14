@@ -13,6 +13,7 @@
 #include <regex>
 #include <thread>
 
+#include "vml/app_log.h"
 #include "vml/frame_sync.h"
 #include "vml/frame_sync_by_time.h"
 #include "vml/gpu_frames.h"
@@ -28,6 +29,8 @@
 namespace vml {
 
 namespace {
+
+const app_log::Logger logger("vml.vmaf_gpu");
 
 // The app's built-in VMAF models, as libvmaf names them. A custom model file
 // is calculated on the CPU.
@@ -186,6 +189,7 @@ GpuVmafBackend probe_backends(const std::string& preference) {
             }
             add_reason("Vulkan: " + probe.text);
         } catch (const std::exception& error) {
+            logger.warning("The " + backend + " VMAF probe failed: " + error.what());
             add_reason(backend + ": the GPU probe failed: " + error.what());
         }
     }
@@ -222,6 +226,9 @@ void set_gpu_backend(const std::string& preference) {
     Probe& probe = probe_state();
     const std::lock_guard lock(probe.mutex);
     if (backend_order(preference) != backend_order(probe.preference)) {
+        if (probe.found) {
+            logger.info("VMAF on the GPU: GPU backend set to " + preference);
+        }
         probe.found.reset();
     }
     probe.preference = preference;
@@ -233,6 +240,8 @@ GpuVmafBackend gpu_vmaf_backend() {
     if (!probe.found) {
         probe.found = probe_backends(probe.preference);
         probe.found_at = std::chrono::steady_clock::now();
+        logger.info((probe.found->backend.empty() ? "VMAF on the GPU unavailable: " : "VMAF on the GPU: ") +
+                    probe.found->text);
     }
     return *probe.found;
 }
@@ -876,8 +885,10 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
         try {
             scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.device, &test);
             shared = true;
-        } catch (const VmafVulkanError&) {
+        } catch (const VmafVulkanError& error) {
             // The frames go through system memory instead.
+            app_log::write(app_log::Level::info, "vml.vmaf_vulkan",
+                           std::string("VMAF with Vulkan: the frames go through system memory (") + error.what() + ")");
         }
     }
     if (!scorer) {

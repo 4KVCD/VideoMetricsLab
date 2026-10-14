@@ -16,6 +16,7 @@
 #include <tuple>
 #include <vector>
 
+#include "vml/app_log.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/hardware_decoding.h"
 #include "vml/number_format.h"
@@ -27,6 +28,14 @@ namespace vml {
 namespace {
 
 using namespace std::chrono_literals;
+
+const app_log::Logger logger("vml.crop_detect");
+
+// A box for the log: "3840x1608 at 0,276".
+std::string box_text(const CropBox& box) {
+    return std::to_string(box.w) + "x" + std::to_string(box.h) + " at " + std::to_string(box.x) + "," +
+           std::to_string(box.y);
+}
 
 constexpr double sample_window_seconds = 3.0;
 constexpr int sample_count = 5;
@@ -206,11 +215,17 @@ private:
             std::ofstream file(partial, std::ios::binary);
             file << data.dump();
             if (!file) {
+                logger.warning("Could not keep black-bar answers in " + platform::path_text(*path) + ": " +
+                               platform::path_text(partial) + " could not be written");
                 return;
             }
         }
-        std::error_code ignored;
-        std::filesystem::rename(partial, *path, ignored);
+        std::error_code error;
+        std::filesystem::rename(partial, *path, error);
+        if (error) {
+            logger.warning("Could not keep black-bar answers in " + platform::path_text(*path) + ": " +
+                           error.message());
+        }
     }
 
     std::mutex mutex_;
@@ -423,6 +438,15 @@ CropBox detect_crop(const std::string& ffmpeg, const VideoInfo& info, const Canc
     std::optional<CropBox> box;
     try {
         box = detect_uncached(ffmpeg, info, sampled_duration, cancel, hwaccel);
+        logger.info("Black bars in " + platform::path_text(info.path.filename()) + ": picture " + box_text(*box) +
+                    " of " + std::to_string(info.width) + "x" + std::to_string(info.height));
+    } catch (const CropDetectError& error) {
+        logger.warning("Black-bar detection failed for " + platform::path_text(info.path.filename()) + ": " +
+                       error.what());
+        if (key) {
+            answers().settle(*key, std::nullopt);
+        }
+        throw;
     } catch (...) {
         if (key) {
             answers().settle(*key, std::nullopt);
@@ -451,7 +475,10 @@ std::pair<CropBox, CropBox> detect_pair(const std::string& ffmpeg, const VideoIn
             errors[index] = std::current_exception();
         }
     };
-    std::thread reference(detect, 0, std::cref(source), std::cref(source_hwaccel));
+    std::thread reference([&] {
+        app_log::set_thread_name("crop-reference");  // in the log, as the Python app names it
+        detect(0, source, source_hwaccel);
+    });
     detect(1, distorted, distorted_hwaccel);
     reference.join();
     for (const std::exception_ptr& error : errors) {
@@ -522,6 +549,11 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const V
     const CropBox shared_distorted = shared(distorted);
     if (shared_source.w <= 0 || shared_source.h <= 0 || shared_distorted.w <= 0 || shared_distorted.h <= 0) {
         return kept;
+    }
+    if (shared_source != *source_crop || shared_distorted != *distorted_crop) {
+        logger.info("Black bars: the picture both videos show is " + box_text(shared_source) + " of the source and " +
+                    box_text(shared_distorted) + " of the test video (detected: " + box_text(*source_crop) +
+                    " and " + box_text(*distorted_crop) + ")");
     }
     return {shared_source, shared_distorted};
 }

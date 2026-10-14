@@ -34,9 +34,9 @@ public:
     ~RunWorker() override;
 
     // From the window's thread, at any time.
-    void cancel() { cancel_.cancel(); }
-    void pause() { cancel_.pause(); }
-    void resume() { cancel_.resume(); }
+    void cancel();
+    void pause();
+    void resume();
     void set_parallel_jobs(int count);
 
 signals:

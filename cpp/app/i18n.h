@@ -110,6 +110,20 @@ QString set_language(const QString& code);
 // The code of the language the window is shown in, such as "en" or "de".
 QString language();
 
+// tr() and the rest give English on this thread while one lives: for text
+// the window shows that also goes to the log, which is always in English
+// (the Python app's in_english).
+class InEnglish {
+public:
+    InEnglish();
+    ~InEnglish();
+    InEnglish(const InEnglish&) = delete;
+    InEnglish& operator=(const InEnglish&) = delete;
+
+private:
+    bool before_;
+};
+
 // The engine's message shapes the window translates (the Python app's
 // MESSAGE_TEMPLATES).
 const std::vector<QString>& message_templates();

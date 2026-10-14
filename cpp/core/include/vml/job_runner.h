@@ -101,6 +101,9 @@ struct VmafJob {
     // one. With FFmpeg's metrics all saved, the saved result is the base.
     std::optional<ComparisonResult> cached_result;
     MetricResultSet cached_metrics;
+    // The video's name in the log: its file's name without the extension
+    // (the Python app's VmafJob.label).
+    std::string label;
 };
 
 // The state of one of a video's tasks, for its run line (run_line.h).

@@ -34,6 +34,7 @@
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <functional>
@@ -51,6 +52,7 @@
 #include "run_worker.h"
 #include "series_colors.h"
 #include "theme.h"
+#include "vml/app_log.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/geometry.h"
@@ -69,6 +71,27 @@
 namespace vml::app {
 
 namespace {
+
+const app_log::Logger logger("vml.main_window");
+
+// FFmpeg's version and the GPUs found, for this session's log, from the
+// checks made at the start (the Python app's log_tools).
+void log_tools(const ToolsStatus& status, const std::vector<GpuVendor>& gpus) {
+    const app_log::Logger main_logger("vml.main");
+    if (status.ok()) {
+        main_logger.info("FFmpeg " + format_version(status.ffmpeg.version) + ": " + status.ffmpeg.path);
+    } else {
+        for (const std::string& problem : status.problems()) {
+            main_logger.warning("FFmpeg: " + problem);
+        }
+    }
+    std::string vendors;
+    for (const GpuVendor vendor : gpus) {
+        const char* name = vendor == GpuVendor::nvidia ? "NVIDIA" : vendor == GpuVendor::intel ? "INTEL" : "AMD";
+        vendors += (vendors.empty() ? "" : ", ") + std::string(name);
+    }
+    main_logger.info("GPUs: " + (vendors.empty() ? std::string("none detected") : vendors));
+}
 
 // The videos in progress at once: two with the CPU's metrics, and one more
 // on the GPU (the Python app's job_runner MAX_VIDEOS_IN_FLIGHT).
@@ -211,6 +234,19 @@ MainWindow::MainWindow() {
     // come from them, so they must be applied before the tool check or any
     // row is added.
     settings_ = Settings::load();
+    const auto upper = [](std::string text) {
+        std::transform(text.begin(), text.end(), text.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+        return text;
+    };
+    logger.info(std::string("Settings: parallel CPU metrics ") + (settings_.parallel_jobs > 1 ? "on" : "off") +
+                ", GPU decode " + (settings_.default_gpu_decode ? "on" : "off") + ", VMAF v0.6.1 and NEG on " +
+                (settings_.default_vmaf_on_gpu ? "GPU" : "CPU") + ", SSIMULACRA2 on " +
+                upper(settings_.default_ssimulacra2_backend) + ", Butteraugli on " +
+                upper(settings_.default_butteraugli_backend) + ", GPU metrics " +
+                (settings_.gpu_metrics_together ? "together in one pass" : "one pass each") + " on the " +
+                settings_.gpu_backend + " backend, saved results " + (settings_.use_cache ? "reused" : "not reused") +
+                " (" + (settings_.cache_dir.empty() ? std::string("default folder") : settings_.cache_dir) + ")");
     if (settings_.remember_window_size) {
         resize(settings_.window_width, settings_.window_height);
     } else {
@@ -449,8 +485,15 @@ void MainWindow::reopen_videos(const QString& reference, const QStringList& test
     if (!rows_.empty() || source_info_ || source_reading_ || run_active_) {
         return;
     }
+    const std::size_t remembered = settings_.remembered_tests.size();
+    if (static_cast<std::size_t>(tests.size()) < remembered) {
+        logger.info("Reopening " + std::to_string(tests.size()) + " of the " + std::to_string(remembered) +
+                    " test videos open last time; the rest are no longer there");
+    }
     if (!reference.isEmpty()) {
         choose_source(path_of(reference));
+    } else if (!settings_.remembered_reference.empty()) {
+        logger.info("The reference open last time is no longer there");
     }
     std::vector<std::filesystem::path> paths;
     for (const QString& path : tests) {
@@ -820,6 +863,9 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     // a file picker to point at ffmpeg.exe is offered rather than only a
     // banner.
     const ToolsStatus status = check_tools(settings_);
+    if (prompt) {
+        log_tools(status, detected_gpu_vendors_);
+    }
     if (status.ok()) {
         ffmpeg_banner_->setVisible(false);
         return true;
@@ -1013,7 +1059,9 @@ void MainWindow::remember_video_dir(const QString& kind, const std::filesystem::
     const std::string folder = platform::path_text(path.parent_path());
     if (folder != setting) {
         setting = folder;
-        settings_.save();
+        if (const std::optional<std::string> error = settings_.save()) {
+            logger.warning(*error);
+        }
     }
 }
 

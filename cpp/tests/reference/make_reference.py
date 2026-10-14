@@ -2706,6 +2706,58 @@ def i18n_cases() -> dict:
     }
 
 
+def app_log_cases() -> dict:
+    """Copy log's text (core/app_log.py log_text_to_share), from the Python
+    app's own function, for logs as its files hold them: sessions with and
+    without a run, a run in an older session or an older file, a log cut to
+    the limit (with characters past ASCII, which the limit counts as one
+    each, and a carriage return inside a line), and no log at all."""
+    import tempfile
+
+    from vmaf_app.core import app_log
+
+    def line(time: str, level: str, thread: str, name: str, text: str) -> str:
+        return f"2026-10-14 {time}.123 {level:<7} [{thread}] {name}: {text}"
+
+    def session(time: str, *texts: str) -> list[str]:
+        lines = [line(time, "INFO", "MainThread", "vmaf_app.main", f"==== VideoMetricsLab{app_log.SESSION_START}"),
+                 line(time, "INFO", "MainThread", "vmaf_app.main", "VideoMetricsLab 2.1.0 (from source)")]
+        return lines + [line(time, "INFO", "vmaf-cpu-0", "vmaf_app.core.job_runner", text) for text in texts]
+
+    run = f"{app_log.RUN_START} 2 video(s), CPU metrics for up to 1 at once, GPU metrics one video at a time"
+    first = session("09:00:00", run, "Video 1 'a': started", "Video 1 'a' finished: VMAF", "Run ended")
+    second = session("10:00:00", "Run status: nothing to run")
+    long_session = session("11:00:00", run, *[f"Video {n} 'Bühne – 4K {n}.mkv': VMAF done in 0:00:{n:02d}"
+                                              for n in range(1, 40)], "FFmpeg: frame=1\rframe=2", "Run ended")
+    cases = []
+
+    def case(name: str, files: dict[str, list[str]], limit: int = app_log.SHARE_LIMIT) -> None:
+        contents = {file: "\r\n".join(lines) + "\r\n" for file, lines in files.items()}
+        with tempfile.TemporaryDirectory() as folder:
+            for file, text in contents.items():
+                (Path(folder) / file).write_bytes(text.encode("utf-8"))
+            shared = app_log.log_text_to_share(Path(folder), limit)
+        cases.append({"name": name, "files": contents, "limit": limit,
+                      "text": None if shared is None else shared[0],
+                      "shortened": None if shared is None else shared[1]})
+
+    case("no log", {})
+    case("a session with a run", {"VideoMetricsLab.log": first})
+    case("the run in an older session", {"VideoMetricsLab.log": first + second})
+    case("no run", {"VideoMetricsLab.log": second + second})
+    case("the run in an older file",
+         {"VideoMetricsLab.log.2": first, "VideoMetricsLab.log.1": second, "VideoMetricsLab.log": second})
+    case("cut to the limit", {"VideoMetricsLab.log": first + long_session}, limit=1500)
+    case("a head longer than a quarter of the limit", {"VideoMetricsLab.log": long_session}, limit=400)
+    # The limit counts characters: between this session's length in
+    # characters and in UTF-8 bytes, it is shared whole.
+    japanese = session("12:00:00", run, *[f"Video {n} '映像のエンコード {n}.mkv': finished" for n in range(1, 9)])
+    joined = "\n".join(japanese)
+    case("characters past ASCII count one each", {"VideoMetricsLab.log": japanese},
+         limit=(len(joined) + len(joined.encode("utf-8"))) // 2)
+    return {"cases": cases}
+
+
 if __name__ == "__main__":
     # Its texts as they are, not escaped: the file is a third the size.
     (HERE / "i18n.json").write_text(json.dumps(i18n_cases(), indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -2713,6 +2765,7 @@ if __name__ == "__main__":
     write("run_files.json", run_file_cases())
     write("chart.json", chart_cases())
     write("graph.json", graph_cases())
+    write("app_log.json", app_log_cases())
     write("devices.json", devices_cases())
     write("perceptual_cpu.json", perceptual_cpu_cases())
     write("timed_pairing.json", timed_pairing_cases())

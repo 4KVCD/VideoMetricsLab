@@ -64,8 +64,12 @@ std::mutex translated_mutex;
 QHash<QString, QString> translated_lines;
 constexpr qsizetype translated_kept = 4096;
 
-// Whether text is translated: a language other than English is shown.
-bool active() { return catalog.language != "en"; }
+// While an InEnglish lives on this thread.
+thread_local bool english_here = false;
+
+// Whether text is translated: a language other than English is shown, and
+// not for the log.
+bool active() { return catalog.language != "en" && !english_here; }
 
 // A spec's parts: [[fill]align][sign][#][0][width][grouping][.precision][type].
 struct Spec {
@@ -724,6 +728,10 @@ QString set_language(const QString& code) {
 }
 
 QString language() { return catalog.language; }
+
+InEnglish::InEnglish() : before_(english_here) { english_here = true; }
+
+InEnglish::~InEnglish() { english_here = before_; }
 
 const std::vector<QString>& message_templates() {
     static const std::vector<QString> all = [] {

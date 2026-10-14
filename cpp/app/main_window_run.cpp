@@ -22,6 +22,7 @@
 #include "run_worker.h"
 #include "widgets.h"
 #include "window_helpers.h"
+#include "vml/app_log.h"
 #include "vml/crop_detect.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/geometry.h"
@@ -36,6 +37,8 @@
 namespace vml::app {
 
 namespace {
+
+const app_log::Logger logger("vml.main_window");
 
 // A task's rate is its frames over the last ten seconds of the run's own
 // clock, once two have passed (the Python app's _RATE_WINDOW_SECONDS and
@@ -196,7 +199,7 @@ void MainWindow::on_run_clicked() {
         jobs.push_back(VmafJob{*source_info_, info, std::move(options), row_data->path, metric_keys, std::move(tasks),
                                backends, row_data->cvvdp,
                                row_data->completed_run ? std::optional(row_data->completed_run->result) : std::nullopt,
-                               std::move(kept)});
+                               std::move(kept), platform::path_text(row_data->path.stem())});
         job_rows.push_back(row_data);
     }
     if (!skipped.empty() && !confirm_skipping(skipped, !jobs.empty())) {
@@ -387,7 +390,9 @@ void MainWindow::set_run_ui_active(bool active) {
     run_active_ = active;
     // A run can take hours: the PC must not go to sleep under it. Released as
     // soon as the run ends.
-    keep_awake()(active);
+    if (keep_awake()(active)) {
+        logger.info(std::string("Windows keep-awake request ") + (active ? "held for the run" : "released"));
+    }
     // The table itself stays live, so that the queue can be scrolled and
     // read while it runs. Nothing reachable through it can change a running
     // job: the metric tick boxes refuse edits (on_table_item_changed), and
@@ -883,9 +888,8 @@ void MainWindow::on_job_failed(int index, const QString& message, const QString&
 }
 
 void MainWindow::on_all_finished() {
-    // Ends the run: settles the rows it did not finish, says how it ended,
-    // and shows its results on Metric Graphs. (The Python app also writes
-    // how it ended to its log, not ported to C++ yet.)
+    // Ends the run: settles the rows it did not finish, says how it ended
+    // (in the log too), and shows its results on Metric Graphs.
     for (const std::shared_ptr<RowData>& row_data : job_rows_) {
         const std::optional<int> row = row_index_of(row_data.get());
         if (!row || (row_data->analysis_status != RowState::calculating &&
@@ -909,6 +913,10 @@ void MainWindow::on_all_finished() {
         line->setVisible(false);
     }
     show_status(run_end_message());
+    {
+        const InEnglish english;  // the log is always in English
+        logger.info("Run status: " + run_end_message().toStdString());
+    }
     // Every row ticked, those skipped as already scored too, so that the
     // graph shows all that was asked for; rows removed during the run left
     // out.

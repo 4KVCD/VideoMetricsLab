@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <variant>
 
+#include "vml/app_log.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 
@@ -70,25 +71,36 @@ const std::unordered_map<std::string, Field>& fields() {
 
 // Sets a setting from its value in the file when the value is of its type
 // (as Python's _fits checks it: a bool is not an int); otherwise leaves the
-// default.
-void set_if_it_fits(Settings& settings, const Field& field, const Json& value) {
+// default, and returns the type, as Python names it, for the log.
+std::optional<std::string> set_if_it_fits(Settings& settings, const Field& field, const Json& value) {
     if (const auto* flag = std::get_if<bool Settings::*>(&field)) {
-        if (value.is_boolean()) {
-            settings.*(*flag) = value.get<bool>();
+        if (!value.is_boolean()) {
+            return "<class 'bool'>";
         }
+        settings.*(*flag) = value.get<bool>();
     } else if (const auto* number = std::get_if<int Settings::*>(&field)) {
-        if (value.is_number_integer()) {
-            settings.*(*number) = value.get<int>();
+        if (!value.is_number_integer()) {
+            return "<class 'int'>";
         }
+        settings.*(*number) = value.get<int>();
     } else if (const auto* text = std::get_if<std::string Settings::*>(&field)) {
-        if (value.is_string()) {
-            settings.*(*text) = value.get<std::string>();
+        if (!value.is_string()) {
+            return "<class 'str'>";
         }
+        settings.*(*text) = value.get<std::string>();
     } else if (const auto* list = std::get_if<std::vector<std::string> Settings::*>(&field)) {
-        if (value.is_array() && std::all_of(value.begin(), value.end(), [](const Json& v) { return v.is_string(); })) {
-            settings.*(*list) = value.get<std::vector<std::string>>();
+        if (!value.is_array() || !std::all_of(value.begin(), value.end(), [](const Json& v) { return v.is_string(); })) {
+            return "list[str]";
         }
+        settings.*(*list) = value.get<std::vector<std::string>>();
     }
+    return std::nullopt;
+}
+
+// A setting the file holds in a type of its own, in the log.
+void log_unfit(const std::string& name, const Json& value, const std::string& kind) {
+    app_log::write(app_log::Level::warning, "vml.settings",
+                   "Settings: " + name + " is " + python_repr_of(value) + ", not a " + kind + "; using its default");
 }
 
 }  // namespace
@@ -128,12 +140,16 @@ Settings Settings::load_from(const std::filesystem::path& path) {
             if (item.value().is_array() &&
                 std::all_of(item.value().begin(), item.value().end(), [](const Json& v) { return v.is_object(); })) {
                 settings.cvvdp_presets_json = item.value().dump();
+            } else {
+                log_unfit(item.key(), item.value(), "list[dict]");
             }
             continue;
         }
         const auto found = fields().find(item.key());
         if (found != fields().end()) {
-            set_if_it_fits(settings, found->second, item.value());
+            if (const std::optional<std::string> kind = set_if_it_fits(settings, found->second, item.value())) {
+                log_unfit(item.key(), item.value(), *kind);
+            }
         }
     }
     return settings;

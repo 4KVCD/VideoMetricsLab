@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "test_videos.h"
+#include "vml/app_log.h"
 #include "vml/platform/system.h"
 
 namespace vml {
@@ -81,6 +83,27 @@ TEST(Isolated, ItsFolderGoesWhenAProgramItStartedHadAFileThereOpen) {
     set_isolation_program(std::nullopt);
     ASSERT_FALSE(folder.empty());
     EXPECT_FALSE(std::filesystem::exists(folder));
+}
+
+// A real crash of the child: the app's log says where it happened, from the
+// child's own report, as the Python app logs its threads at the crash.
+TEST(Isolated, ACrashIsReportedInTheLogWithWhereItHappened) {
+    const test::Folder folder;
+    const std::filesystem::path logs = folder / "logs";
+    ASSERT_TRUE(app_log::start_logging(logs).has_value());
+    set_isolation_program(std::filesystem::path(VML_CLI));
+    EXPECT_THROW(run_isolated("test-fault", "the test", nlohmann::json::object(), {}, CancelToken()),
+                 IsolatedCrashError);
+    set_isolation_program(std::nullopt);
+    app_log::stop_logging();
+    const std::string log = platform::read_file(logs / "VideoMetricsLab.log").value_or("");
+    EXPECT_NE(log.find("the test crashed"), std::string::npos) << log;
+    EXPECT_NE(log.find("; its stack at the crash:"), std::string::npos) << log;
+#ifdef _WIN32
+    EXPECT_NE(log.find("Fatal exception 0xC0000005 at vml-cli.exe+0x"), std::string::npos) << log;
+#else
+    EXPECT_NE(log.find("Aborted\nStack:\n"), std::string::npos) << log;
+#endif
 }
 
 TEST(Isolated, DescribesExitCodesAsThePythonAppDoes) {

@@ -1,12 +1,16 @@
 // The system on Linux and macOS.
 #include "vml/platform/system.h"
 
+#include <execinfo.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #include <mach/mach.h>
+#include <sys/sysctl.h>
 #endif
 
 #include <cerrno>
@@ -86,6 +90,43 @@ std::optional<unsigned long long> available_memory() {
 #endif
 }
 
+std::optional<unsigned long long> total_memory() {
+#ifdef __APPLE__
+    std::uint64_t bytes = 0;
+    std::size_t size = sizeof bytes;
+    if (sysctlbyname("hw.memsize", &bytes, &size, nullptr, 0) != 0) {
+        return std::nullopt;
+    }
+    return bytes;
+#else
+    const long pages = sysconf(_SC_PHYS_PAGES);
+    const long page = sysconf(_SC_PAGESIZE);
+    if (pages <= 0 || page <= 0) {
+        return std::nullopt;
+    }
+    return static_cast<unsigned long long>(pages) * static_cast<unsigned long long>(page);
+#endif
+}
+
+std::tm local_time(std::time_t time) {
+    std::tm local{};
+    localtime_r(&time, &local);
+    return local;
+}
+
+std::string system_description() {
+    utsname name{};
+    if (uname(&name) != 0) {
+        return "unknown";
+    }
+    return std::string(name.sysname) + "-" + name.release + "-" + name.machine;
+}
+
+std::string processor_description() {
+    utsname name{};
+    return uname(&name) == 0 ? std::string(name.machine) : std::string();
+}
+
 void raise_thread_priority() {}
 
 bool keep_system_awake(bool /*awake*/) { return false; }
@@ -106,6 +147,51 @@ std::optional<long long> modified_ns(const std::filesystem::path& file) {
 }
 
 void crash_quietly() {}  // a crash shows no dialog here
+
+namespace {
+
+// The file crashes are reported in (report_crashes_to).
+int crash_file = -1;
+
+void write_crash_text(const char* text) {
+    [[maybe_unused]] const ssize_t written = write(crash_file, text, std::strlen(text));
+}
+
+// Writes what happened and the calling stack, with only what a signal
+// handler may call, then lets the signal end the process as it would have.
+void report_signal(int signal_number) {
+    write_crash_text(signal_number == SIGSEGV   ? "Fatal signal: segmentation fault\nStack:\n"
+                     : signal_number == SIGBUS  ? "Fatal signal: bus error\nStack:\n"
+                     : signal_number == SIGILL  ? "Fatal signal: illegal instruction\nStack:\n"
+                     : signal_number == SIGFPE  ? "Fatal signal: arithmetic error\nStack:\n"
+                                                : "Aborted\nStack:\n");
+    void* frames[64];
+    const int count = backtrace(frames, 64);
+    backtrace_symbols_fd(frames, count, crash_file);
+    write_crash_text("\n");
+    raise(signal_number);  // SA_RESETHAND made its handling the default again
+}
+
+}  // namespace
+
+bool report_crashes_to(const std::filesystem::path& file) {
+    crash_file = open(file.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+    if (crash_file < 0) {
+        return false;
+    }
+    // Loaded now: the first call may load the unwinder, which a signal
+    // handler must not.
+    void* warm[1];
+    backtrace(warm, 1);
+    struct sigaction action {};
+    action.sa_handler = report_signal;
+    action.sa_flags = SA_RESETHAND;
+    sigemptyset(&action.sa_mask);
+    for (const int signal_number : {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT}) {
+        sigaction(signal_number, &action, nullptr);
+    }
+    return true;
+}
 
 void end_process_now(int exit_code) { _exit(exit_code); }
 

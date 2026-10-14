@@ -20,6 +20,7 @@
 #include <thread>
 #include <utility>
 
+#include "vml/app_log.h"
 #include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
@@ -35,6 +36,8 @@
 namespace vml {
 
 namespace {
+
+const app_log::Logger logger("vml.perceptual_cpu");
 
 // How many frame pairs FFmpeg may write ahead of the scoring before it is
 // suspended. FFmpeg writes the pictures far faster than the tools score them
@@ -337,6 +340,9 @@ std::string pairs_by_time(const GraphPlan& plan) {
         return prepare(crop, info, target, plan.scale_algorithm);
     };
     if (!blend_takes(source_format) || !restore) {
+        logger.info("The CPU tools' frames are paired by position: " +
+                    (restore ? "blend cannot carry the source's " + source_format + " frames unchanged"
+                             : std::string("setparams has no name for one of the source's colour tags")));
         // select comes first, so that the frames it drops are not cropped or
         // scaled.
         const auto chain = [&plan, &prepared](const std::string& input, const std::string& output,
@@ -1022,6 +1028,12 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
         compared_dimensions(source, distorted, options.scale_direction, source_crop, distorted_crop);
     const int workers = scoring_workers(static_cast<long long>(width) * height, keys, request.concurrent_cpu_tasks,
                                         platform::logical_cores(), platform::available_memory());
+    std::string names;
+    for (const std::string& key : keys) {
+        names += (names.empty() ? "" : " and ") + key;
+    }
+    logger.info(names + " on the CPU: " + std::to_string(workers) + " frame pair" + (workers == 1 ? "" : "s") +
+                " at a time");
 
     Scores scores;
     const std::function<bool()> stopped = [&scores, &cancel] { return scores.stop || cancel.cancelled(); };

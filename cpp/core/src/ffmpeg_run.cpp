@@ -18,6 +18,7 @@
 #include <thread>
 #include <tuple>
 
+#include "vml/app_log.h"
 #include "vml/crop_detect.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
@@ -424,6 +425,16 @@ std::string last_lines(const std::string& text, std::size_t count) {
     return joined(std::vector<std::string>(lines.begin() + static_cast<std::ptrdiff_t>(first), lines.end()), "\n");
 }
 
+const app_log::Logger logger("vml.vmaf_runner");
+
+// An FFmpeg that failed, in the log: its exit code, the decode plan, whether
+// another plan is tried, and the end of its error output.
+void log_failed_attempt(const FfmpegOutcome& outcome, const HardwareDecoding& plan, bool retrying) {
+    logger.warning("FFmpeg exited with code " + std::to_string(outcome.exit_code) + " (GPU decode: " +
+                   plan.describe() + ")" + (retrying ? "; retrying" : "") + ". Last output:\n" +
+                   last_lines(outcome.errors, 25));
+}
+
 // XPSNR's luma score per frame from the xpsnr filter's stats file, by frame
 // number counted from 0 (the file counts from 1).
 std::map<int, double> parse_xpsnr_log(const std::filesystem::path& path) {
@@ -693,6 +704,7 @@ ParsedScores execute_run(const CommandBuilder& build_command, const VmafOptions&
                                    : decoding_status("GPU decode failed, retrying", plan));
         }
         const std::vector<std::string> command = build_command(plan, run_model, xpsnr_log_name);
+        logger.info("FFmpeg: " + python_list2cmdline(command));
         try {
             outcome = run_ffmpeg(command, total_frames, on_progress, cancel, folder.path());
         } catch (const platform::ProcessError& error) {
@@ -701,6 +713,7 @@ ParsedScores execute_run(const CommandBuilder& build_command, const VmafOptions&
         if (outcome.exit_code == 0) {
             break;
         }
+        log_failed_attempt(outcome, plan, attempt + 1 < ladder.size());
         // A failed attempt can leave a partial log, which would be read as
         // the retry's.
         std::error_code ignored;
@@ -868,6 +881,9 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
                 environment.ffmpeg, distorted.path, source.path,
                 build_stream_graphs(source, distorted, options, source_crop, distorted_crop, decode), decode,
                 attempt.output_args(limit));
+            for (const std::vector<std::string>& command : commands) {
+                logger.info("FFmpeg: " + python_list2cmdline(command));
+            }
             outcome = run_ffmpeg_pair(commands, total_frames, on_progress, cancel, folder.path());
         } catch (const platform::ProcessError& error) {
             abandon();
@@ -882,6 +898,7 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
         if (outcome.exit_code == 0) {
             break;
         }
+        log_failed_attempt(outcome, decode, attempt_number + 1 < ladder.size());
     }
     if (outcome.exit_code != 0) {
         throw VmafRunError("ffmpeg exited with code " + std::to_string(outcome.exit_code),
@@ -963,9 +980,12 @@ ParsedScores score_plan(const RunEnvironment& environment, const VideoInfo& sour
         try {
             return score_decoded_here(environment, source, distorted, options, source_crop, distorted_crop, plan,
                                       fps, total_frames, decoding, *decoders, on_progress, on_status, cancel);
-        } catch (const GpuDecodeUnavailableError&) {
+        } catch (const GpuDecodeUnavailableError& error) {
             // FFmpeg decodes the videos.
+            logger.info(doing(plan) + ": the videos are decoded by FFmpeg (" + error.what() + ")");
         } catch (const GpuDecodeFailedError& error) {
+            logger.warning("Decoding for " + (plan.backend == "cpu" ? metric_names(plan) : "VMAF on the GPU") +
+                           " failed; decoding through FFmpeg instead: " + error.what());
             if (on_status) {
                 on_status({decoding_failed_status(error)});
             }
@@ -1246,6 +1266,12 @@ std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const 
                                        long long total_frames, const HardwareDecoding& decoding,
                                        const ProgressCallback& on_progress, const StatusCallback& on_status,
                                        const CancelToken& cancel) {
+    std::string models;
+    for (const auto& [key, model] : plan.models) {
+        models += (models.empty() ? "" : ", ") + model;
+    }
+    logger.info("VMAF on the GPU (" + models +
+                "): " + (plan.backend == "vulkan" ? vulkan_library_build() : cuda_library_build()));
     std::unique_lock pass(gpu_pass(), std::defer_lock);
     if (!pass.try_lock()) {
         if (on_status) {
@@ -1265,6 +1291,7 @@ std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const 
     } catch (const Cancelled&) {
         throw;
     } catch (const std::exception& error) {
+        logger.error(std::string("VMAF on the GPU failed; calculating it on the CPU: ") + error.what());
         if (on_status) {
             on_status({std::string(vmaf_gpu_failed) + " (" + error.what() + "); calculating it on the CPU…",
                        StatusKind::gpu_vmaf_failed});
@@ -1289,6 +1316,8 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
                                             double fps, long long total_frames, const HardwareDecoding& decoding,
                                             const ProgressCallback& on_progress, const StatusCallback& on_status,
                                             const CancelToken& cancel) {
+    logger.info(metric_names(plan) + " in the app: " + cpu_library_build() + ", " + std::to_string(plan.threads) +
+                " threads");
     const std::vector<std::string> keys = plan_keys(plan);
     const bool beside = options.compute_xpsnr && std::find(keys.begin(), keys.end(), "xpsnr") == keys.end();
     SlowerProgress progress(on_progress, beside ? 2 : 1);
@@ -1355,6 +1384,7 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
     } catch (const std::exception& error) {
         stop.cancel();
         wait_for_xpsnr();
+        logger.error(metric_names(plan) + " in the app failed; FFmpeg calculates them: " + error.what());
         if (on_status) {
             on_status(
                 {metric_names(plan) + " in the app failed (" + error.what() + "); calculating them with FFmpeg…"});
