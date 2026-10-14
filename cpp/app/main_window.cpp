@@ -49,15 +49,16 @@
 #include <utility>
 #include <variant>
 
+#include "bitrate_panel.h"
 #include "cvvdp_display_dialog.h"
 #include "file_writes.h"
 #include "formatting.h"
+#include "frame_compare_panel.h"
 #include "graph_panel.h"
 #include "i18n.h"
 #include "options_panel.h"
 #include "run_worker.h"
 #include "series_colors.h"
-#include "frame_compare_panel.h"
 #include "settings_panel.h"
 #include "theme.h"
 #include "vml/app_log.h"
@@ -399,6 +400,9 @@ std::vector<QThread*> MainWindow::live_workers() const {
     for (QThread* worker : frame_compare_panel_->live_workers()) {
         workers.push_back(worker);
     }
+    for (QThread* worker : bitrate_panel_->live_workers()) {
+        workers.push_back(worker);
+    }
     return workers;
 }
 
@@ -410,6 +414,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     if (!closing_) {
         closing_ = true;
         frame_compare_panel_->cancel();
+        bitrate_panel_->cancel();
         for (ProbeWorker* worker : probe_workers_) {
             worker->cancel();
         }
@@ -582,11 +587,6 @@ void MainWindow::build_ui() {
     splitter->setSizes({380, 300, 120});
     tabs_->addTab(new ScrollingPage(videos_page), app::tr("Videos"));
 
-    const auto placeholder = [](const QString& what) {
-        auto* label = new QLabel(what + QStringLiteral(" is not ported to C++ yet."));
-        label->setAlignment(Qt::AlignCenter);
-        return label;
-    };
     video_colors_ = new VideoColors(this);
     graph_panel_ = new GraphPanel(video_colors_);
     graph_panel_->set_preferred_metric(settings_.graph_metric);
@@ -603,7 +603,9 @@ void MainWindow::build_ui() {
         save_settings();
     });
     tabs_->addTab(frame_compare_panel_, app::tr("Video Compare"));
-    tabs_->addTab(new ScrollingPage(placeholder(QStringLiteral("The Bitrate Viewer"))), app::tr("Bitrate Viewer"));
+    // Its own list of videos: a finished run adds its own (on_job_finished).
+    bitrate_panel_ = new BitratePanel([this] { return find_tool("ffprobe", settings_); }, video_colors_);
+    tabs_->addTab(new ScrollingPage(bitrate_panel_), app::tr("Bitrate Viewer"));
     settings_panel_ = new SettingsPanel(settings_, *file_writes_, detected_gpu_vendors_,
                                         [this] { return tools_status_; }, dialogs_);
     connect(settings_panel_, &SettingsPanel::defaults_changed, this, [this] { on_default_settings_changed(); });

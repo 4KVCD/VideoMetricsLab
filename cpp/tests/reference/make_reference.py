@@ -2938,6 +2938,129 @@ def frame_extract_cases() -> dict:
     }
 
 
+# ------------------------------------------------------------------- bitrate
+
+def bitrate_cases() -> dict:
+    """The Bitrate tab's numbers (core/bitrate.py), from the Python app's own
+    functions: ffprobe's lines of packets read by analyze_video_bitrate (fed
+    through a stand-in process: B-frames in decode order, missing, odd and
+    repeated values, lines that are not packets, none at all), and each
+    stream's graphs per frame, second and group of pictures, its one-second
+    bins and its summary, with the start moved to zero and not."""
+    import io
+
+    import numpy as np
+
+    from vmaf_app.core import bitrate as br
+    from vmaf_app.core.models import VideoInfo
+
+    class StandIn:
+        """A finished ffprobe that wrote `lines`."""
+
+        pid = 0
+
+        def __init__(self, lines: list[str]) -> None:
+            self.stdout = iter(lines)
+            self.stderr = io.StringIO("")
+
+        def wait(self) -> int:
+            return 0
+
+    def read(lines: list[str], fps: float) -> dict:
+        real_popen = br.proc_util.popen
+        br.proc_util.popen = lambda *_args, **_kwargs: StandIn(lines)
+        try:
+            with tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / "clip.mkv"
+                path.write_bytes(b"")
+                info = VideoInfo(path=path, width=1920, height=1080, fps=fps, duration=10.0, nb_frames=240,
+                                 codec_name="h264")
+                data = br.analyze_video_bitrate(info)
+        except br.BitrateError as error:
+            return {"error": str(error)}
+        finally:
+            br.proc_util.popen = real_popen
+        return {"times": [exact(t) for t in data.times], "durations": [exact(d) for d in data.durations],
+                "sizes": [int(s) for s in data.sizes], "keyframes": [bool(k) for k in data.keyframes]}
+
+    frame = 1001 / 24000
+    reads = [
+        {"name": "B-frames in decode order", "fps": 24000 / 1001, "lines": [
+            f"pts_time={0:.6f}|dts_time={-2 * frame:.6f}|duration_time={frame:.6f}|size=5000|pos=48|flags=K__\n",
+            f"pts_time={3 * frame:.6f}|dts_time={-frame:.6f}|duration_time={frame:.6f}|size=900|pos=5048|flags=___\n",
+            f"pts_time={frame:.6f}|dts_time={0:.6f}|duration_time={frame:.6f}|size=300|pos=5948|flags=___\n",
+            f"pts_time={2 * frame:.6f}|dts_time={frame:.6f}|duration_time={frame:.6f}|size=310|pos=6248|flags=___\n",
+            f"pts_time={4 * frame:.6f}|dts_time={2 * frame:.6f}|duration_time={frame:.6f}|size=4800|pos=6558|flags=K_\n",
+        ]},
+        {"name": "missing, odd and repeated values", "fps": 25.0, "lines": [
+            "pts_time=N/A|dts_time=0.040000|duration_time=0.040000|size=1000|pos=100|flags=K__\n",
+            "pts_time=N/A|dts_time=N/A|duration_time=N/A|size=1100|pos=N/A|flags=___\n",
+            "pts_time=inf|dts_time=nan|duration_time=0|size=1200|flags=___\n",
+            "pts_time=0.200000|dts_time=0.120000|duration_time=-0.5|size= 1300 |pos=400\n",
+            "  pts_time=0.200000|dts_time=0.160000|duration_time=0.040000|size=1400|pos=300|flags=__ \r\n",
+            "pts_time=0.200000|duration_time=0.040000|size=10|size=1500|pos=300|flags=K\n",
+            "pts_time=0.300000|dts_time=0.240000|duration_time=0.040000|size=N/A|pos=600|flags=K__\n",
+            "pts_time=0.300000|dts_time=0.240000|duration_time=0.040000|size=|pos=600|flags=K__\n",
+            "pts_time=0.300000|dts_time=0.240000|duration_time=0.040000|size=12.5|pos=600|flags=K__\n",
+            "this is not a packet\n",
+            "\n",
+            "pts_time= 0.32 |dts_time=0.28|duration_time=4e-2|size=1_600|pos=700|flags=___|extra=a=b\n",
+        ]},
+        {"name": "no frame rate, no durations", "fps": 0.0, "lines": [
+            "pts_time=1.000000|dts_time=1.000000|duration_time=N/A|size=800|pos=0|flags=K__\n",
+            "pts_time=1.500000|dts_time=1.500000|duration_time=N/A|size=700|pos=900|flags=___\n",
+        ]},
+        {"name": "no packets", "fps": 25.0, "lines": ["pts_time=0.0|dts_time=0.0\n", "nothing\n"]},
+    ]
+
+    rng = random.Random(1234)
+    streams = {
+        "the panel test's": ([0.0, 0.5, 1.0, 1.5], [0.5] * 4, [1000, 500, 2000, 500], [True, False, True, False]),
+        "starting late, frames across seconds": (
+            [1.4 + i * frame for i in range(50)], [frame] * 50,
+            [rng.randint(200, 60000) for _ in range(50)], [i % 12 == 0 for i in range(50)]),
+        "starting at 0.7, not on a second": (
+            [0.7 + i * 0.3 for i in range(9)], [0.3] * 9, [rng.randint(1000, 9000) for _ in range(9)],
+            [i in (0, 4) for i in range(9)]),
+        "packets without a duration": (
+            [0.0, 0.25, 0.25, 0.9, 1.0, 1.75], [0.25, 0.0, 0.0, 0.1, 0.0, 0.25], [4000, 50, 60, 700, 80, 900],
+            [True, False, False, False, True, False]),
+        "one packet": ([2.25], [0.04], [5000], [True]),
+        "one keyframe, a long group": (
+            [i / 30 for i in range(95)], [1 / 30] * 95, [rng.randint(100, 3000) for _ in range(95)],
+            [i == 0 for i in range(95)]),
+    }
+
+    def plot_json(plot: br.BitratePlot) -> dict:
+        return {"times": [exact(t) for t in plot.times], "values": [exact(v) for v in plot.values],
+                "axis_label": plot.axis_label, "value_label": plot.value_label}
+
+    stream_cases = []
+    for name, (times, durations, sizes, keyframes) in streams.items():
+        data = br.BitrateData(path=Path("C:/clips/stream.mkv"), times=np.array(times), durations=np.array(durations),
+                              sizes=np.array(sizes), keyframes=np.array(keyframes))
+        summary = br.bitrate_summary(data)
+        case = {
+            "name": name, "times": [exact(t) for t in times], "durations": [exact(d) for d in durations],
+            "sizes": sizes, "keyframes": keyframes,
+            "start_time": exact(data.start_time), "end_time": exact(data.end_time), "duration": exact(data.duration),
+            "total_bytes": data.total_bytes, "average_kbps": exact(data.average_kbps),
+            "summary": {"average_kbps": exact(summary.average_kbps), "minimum_kbps": exact(summary.minimum_kbps),
+                        "maximum_kbps": exact(summary.maximum_kbps)},
+            "bins": {}, "plots": {},
+        }
+        for adjust in (True, False):
+            starts, ends, rates = br._compute_second_bins(data, adjust)
+            case["bins"][str(adjust).lower()] = {"starts": [exact(s) for s in starts], "ends": [exact(e) for e in ends],
+                                                 "rates": [exact(r) for r in rates]}
+            for kind, function in (("frame", br.frame_plot), ("second", br.second_plot), ("gop", br.gop_plot)):
+                case["plots"][f"{kind}|{str(adjust).lower()}"] = plot_json(function(data, adjust))
+        stream_cases.append(case)
+    return {"reads": [{**item, "fps": exact(item["fps"]), "expected": read(item["lines"], item["fps"])}
+                      for item in reads],
+            "streams": stream_cases}
+
+
 if __name__ == "__main__":
     # Its texts as they are, not escaped: the file is a third the size.
     (HERE / "i18n.json").write_text(json.dumps(i18n_cases(), indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -2948,6 +3071,7 @@ if __name__ == "__main__":
     write("app_log.json", app_log_cases())
     write("update_check.json", update_check_cases())
     write("frame_extract.json", frame_extract_cases())
+    write("bitrate.json", bitrate_cases())
     write("devices.json", devices_cases())
     write("perceptual_cpu.json", perceptual_cpu_cases())
     write("timed_pairing.json", timed_pairing_cases())

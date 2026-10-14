@@ -12,6 +12,10 @@ Dialogs standard_dialogs(QWidget* parent) {
         [parent](const QString& title, const QString& text) {
             return QMessageBox::question(parent, title, text) == QMessageBox::Yes;
         },
+        [parent](const QString& title, const QString& text) {
+            return QMessageBox::question(parent, title, text, QMessageBox::Yes | QMessageBox::No, QMessageBox::No) ==
+                   QMessageBox::Yes;
+        },
         [parent](const QString& title, const QString& filter) {
             return QFileDialog::getOpenFileName(parent, title, QString(), filter);
         },

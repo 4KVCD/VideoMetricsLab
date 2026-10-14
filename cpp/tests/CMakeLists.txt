@@ -3,6 +3,7 @@
 # says the C++ code gives the Python app's answers.
 add_executable(vml_tests
     unit/app_log_test.cpp
+    unit/bitrate_test.cpp
     unit/cancel_test.cpp
     unit/cli_test.cpp
     unit/cvvdp_test.cpp
@@ -71,6 +72,7 @@ gtest_discover_tests(vml_tests TEST_FILTER "${gpu_suites}" PROPERTIES RESOURCE_L
 if(TARGET vml_app)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     add_executable(vml_app_tests
+        app/bitrate_panel_test.cpp
         app/chart_test.cpp
         app/frame_compare_test.cpp
         app/graph_panel_test.cpp
@@ -84,8 +86,9 @@ if(TARGET vml_app)
     target_link_libraries(vml_app_tests PRIVATE vml_app Qt6::Test vml_compile_options nlohmann_json gtest)
     target_compile_definitions(vml_app_tests PRIVATE
         VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
+        VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>"
         VML_CLI="$<TARGET_FILE:vml-cli>")  # the program isolated work runs in
-    add_dependencies(vml_app_tests vml-cli)
+    add_dependencies(vml_app_tests vml-cli vml_test_child)
     if(WIN32)
         # Qt beside the tests, with the platform they run on; before the
         # tests are listed, which starts them.

@@ -15,6 +15,7 @@ add_library(vml_app STATIC
     dialogs.cpp
     file_writes.cpp
     formatting.cpp
+    bitrate_panel.cpp
     frame_compare_panel.cpp
     graph_panel.cpp
     i18n.cpp

@@ -14,6 +14,7 @@
 #include <utility>
 #include <variant>
 
+#include "bitrate_panel.h"
 #include "file_writes.h"
 #include "graph_panel.h"
 #include "i18n.h"
@@ -778,6 +779,17 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
                              store_result(base, result.source, identity, request.recipe, result, label,
                                           request.metrics);
                          });
+    // The packets' bitrate goes well with the scores, and costs much less
+    // than they did: both files go to the Bitrate tab, which reads a file
+    // once however many runs finish with it. A resolution test has no
+    // second file.
+    if (final) {
+        std::vector<VideoInfo> bitrate_infos{result.source_info};
+        if (!result.resample_target) {
+            bitrate_infos.push_back(result.distorted_info);
+        }
+        bitrate_panel_->add_and_analyze(bitrate_infos);
+    }
     if (!source_info_ || !same_path(source_info_->path, result.source)) {
         if (final) {
             set_row_status(*row, RowState::for_previous_source);

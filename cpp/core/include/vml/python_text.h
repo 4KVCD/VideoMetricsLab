@@ -35,6 +35,10 @@ std::string ascii_lower(std::string_view text);
 // Unicode's other spaces off; nothing here needs that.
 std::string_view python_strip(std::string_view text);
 
+// The last `count` characters of UTF-8 text, as Python's text[-count:]
+// keeps the end of a program's error output for a message.
+std::string last_characters(std::string_view text, std::size_t count);
+
 // Python's repr() of a string, as messages quote names and values: in
 // single quotes, or double quotes for text with a single quote and no
 // double one, ASCII control characters escaped. Characters past ASCII are

@@ -63,6 +63,7 @@ class CheckableHeaderView;
 class ElidedLabel;
 class CvvdpDisplayDialog;
 class FileWrites;
+class BitratePanel;
 class FrameComparePanel;
 struct FrameComparisonEntry;
 class FillColumnTable;
@@ -523,6 +524,7 @@ private:
     VideoColors* video_colors_ = nullptr;
     GraphPanel* graph_panel_ = nullptr;
     FrameComparePanel* frame_compare_panel_ = nullptr;
+    BitratePanel* bitrate_panel_ = nullptr;
     // The newer release offered, while its message is open.
     QPointer<QMessageBox> update_box_;
     // The Settings tab, and the latest check of FFmpeg, which it shows.

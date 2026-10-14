@@ -17,6 +17,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
+#include <QTableWidget>
 #include <QTableWidgetSelectionRange>
 #include <QTest>
 #include <QThread>
@@ -39,17 +40,19 @@
 #include <string>
 #include <vector>
 
+#include "bitrate_panel.h"
 #include "cvvdp_display_dialog.h"
 #include "file_writes.h"
+#include "frame_compare_panel.h"
 #include "graph_panel.h"
 #include "i18n.h"
-#include "frame_compare_panel.h"
 #include "options_panel.h"
 #include "settings_panel.h"
 #include "test_videos.h"
 #include "theme.h"
 #include "vml/app_log.h"
 #include "vml/ffmpeg_run.h"
+#include "vml/ffprobe.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/platform/process.h"
@@ -245,6 +248,9 @@ protected:
         }
         return listed;
     }
+
+    // The Bitrate Viewer's list of videos.
+    static const QTableWidget& bitrate_table(MainWindow& window) { return *window.bitrate_panel_->table; }
 
     // Whether a video is still being read.
     static bool reading(MainWindow& window) { return !window.probe_workers_.empty(); }
@@ -1373,6 +1379,40 @@ TEST_F(WindowTest, VideoCompareListsTheVideosReadScoredOrNotAndFollowsTheTable) 
     options_panel(window).subsample_spin->setValue(5);
     ASSERT_EQ(rows(window)[0]->completed_run, nullptr);
     EXPECT_EQ(compared(window), (Listed{{"b", false}}));
+}
+
+// --------------------------------------------------------- Bitrate Viewer
+
+TEST_F(WindowTest, AFinishedRunsVideosAreReadInTheBitrateViewer) {
+    // Each video a run has compared is read packet by packet there, the
+    // reference once for both test videos, without a button pressed.
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    MainWindow window;
+    open_clips(window);
+    run_button(window).click();
+    ASSERT_TRUE(wait_until([&] { return !running(window); }));
+    const QTableWidget& listed = bitrate_table(window);
+    ASSERT_TRUE(wait_until([&] {
+        for (int row = 0; row < listed.rowCount(); ++row) {
+            if (listed.item(row, 8)->text() != QStringLiteral("Complete")) {
+                return false;
+            }
+        }
+        return listed.rowCount() > 0;
+    })) << "the videos were not all read";
+    const std::vector<std::string> names{"ref.mkv", "a.mkv", "b.mkv"};
+    ASSERT_EQ(listed.rowCount(), static_cast<int>(names.size()));
+    const std::optional<test::Tools> found = test::tools();
+    for (int row = 0; row < listed.rowCount(); ++row) {
+        const std::string& name = names[static_cast<std::size_t>(row)];
+        EXPECT_EQ(listed.item(row, 1)->text().toStdString(), name);
+        const std::filesystem::path path = clip((row == 0 ? "sources/" : "encodes/") + name);
+        EXPECT_EQ(listed.item(row, 4)->text().toStdString(),
+                  std::to_string(probe_video(path, found->ffprobe).estimated_frame_count()))
+            << name;
+    }
 }
 
 // ------------------------------------------------------------ the window

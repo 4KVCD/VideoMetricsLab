@@ -222,6 +222,16 @@ std::string_view python_strip(std::string_view text) {
     return text;
 }
 
+std::string last_characters(std::string_view text, std::size_t count) {
+    std::size_t start = text.size();
+    for (std::size_t kept = 0; start > 0 && kept < count; ++kept) {
+        do {
+            --start;
+        } while (start > 0 && (static_cast<unsigned char>(text[start]) & 0xC0) == 0x80);
+    }
+    return std::string(text.substr(start));
+}
+
 std::string python_string_repr(std::string_view text) {
     const bool double_quotes = text.find('\'') != std::string_view::npos && text.find('"') == std::string_view::npos;
     const char quote = double_quotes ? '"' : '\'';

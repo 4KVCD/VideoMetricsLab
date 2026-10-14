@@ -122,6 +122,13 @@ void ChartWidget::set_series_visible(int key, bool visible) {
     }
 }
 
+void ChartWidget::set_y_axis_label(const QString& label) {
+    if (label != y_axis_label_) {
+        y_axis_label_ = label;
+        invalidate();
+    }
+}
+
 void ChartWidget::clear() {
     series_.clear();
     invalidate(true);

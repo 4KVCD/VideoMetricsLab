@@ -51,17 +51,6 @@ std::vector<std::string> tone_map_filters(const VideoInfo& info, const PreviewCo
             "zscale=p=bt709:t=bt709:m=bt709:r=tv:dither=error_diffusion", "format=rgb24"};
 }
 
-// The last `count` characters of UTF-8 text.
-std::string last_characters(const std::string& text, std::size_t count) {
-    std::size_t start = text.size();
-    for (std::size_t kept = 0; start > 0 && kept < count; ++kept) {
-        do {
-            --start;
-        } while (start > 0 && (static_cast<unsigned char>(text[start]) & 0xC0) == 0x80);
-    }
-    return text.substr(start);
-}
-
 }  // namespace
 
 std::string_view preview_color_mode_value(PreviewColorMode mode) {

@@ -3,6 +3,7 @@
 add_library(vml_core
     src/analysis_request.cpp
     src/app_log.cpp
+    src/bitrate.cpp
     src/cancel.cpp
     src/colour.cpp
     src/crop_detect.cpp

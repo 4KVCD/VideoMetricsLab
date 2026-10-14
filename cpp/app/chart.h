@@ -58,6 +58,10 @@ public:
     void set_series(int key, ChartSeries series);
     // Draws a line in another colour, without fitting the axes again.
     void set_series_color(int key, const QColor& color);
+    // The value axis' name, for a chart whose lines change what they show
+    // (the Bitrate tab's frame sizes or bitrates).
+    void set_y_axis_label(const QString& label);
+    const QString& y_axis_label() const { return y_axis_label_; }
     // Removes lines, fitting the axes again once however many go.
     void remove_series(const std::vector<int>& keys);
     void set_series_visible(int key, bool visible);
@@ -112,8 +116,9 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
 
 private:
-    friend class ChartTest;       // the chart's tests (tests/app)
-    friend class GraphPanelTest;  // and the graph's
+    friend class ChartTest;         // the chart's tests (tests/app)
+    friend class GraphPanelTest;    // and the graph's
+    friend class BitratePanelTest;  // and the Bitrate tab's
 
     std::vector<const ChartSeries*> visible_series() const;
     void recompute_y_range();
