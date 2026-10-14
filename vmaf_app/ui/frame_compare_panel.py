@@ -36,6 +36,7 @@ from vmaf_app.core.frame_extract import (
     PreviewColorSettings,
     _would_distort,
     comparison_dimensions,
+    frame_filter,
     frame_video_info,
     hdr_kind,
 )
@@ -1045,12 +1046,21 @@ class FrameComparePanel(QWidget):
 
     # --------------------------------------------------------------- decoding
     def _cache_key(self, side: str) -> tuple | None:
-        """The key of a side's frame in the frame cache, or None."""
+        """The key of a side's frame in the frame cache, or None: the pair,
+        the frame, the side, and what the frame is made from -- the file,
+        where its frames start, the frame rate, the colour settings and every
+        filter (the crops, the scaling, the tone mapping). A pair keeps its
+        identity while these change (its black bars found, its scaling
+        edited, another reference chosen), and a frame kept from before must
+        not stand for the new one."""
         entry = self.current_entry
-        return (
-            None if entry is None else
-            (entry.identity, self._frame, side, self._color_settings().cache_token)
-        )
+        if entry is None:
+            return None
+        comparison = entry.comparison
+        settings = self._color_settings()
+        info = frame_video_info(comparison, side)
+        return (entry.identity, self._frame, side, str(info.path), info.start_offset, comparison.fps,
+                settings.cache_token, frame_filter(comparison, side, settings))
 
     def _current_image(self) -> QImage | None:
         """The frame shown, if extracted already."""
