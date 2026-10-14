@@ -121,6 +121,9 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
         {platform::path_text(*program()), std::string(isolated_argument), std::string(task),
          platform::path_text(request_file)},
         platform::ProcessOptions{folder.path()});
+    // Pause holds the child and every program it started (they are in its
+    // job), so the work in it waits whatever it is doing.
+    const CancelToken::Attached attached = cancel.attach(child);
 
     // A thread reads the child's messages as they come; this one hands them
     // on and watches for Cancel, which the child cannot see.

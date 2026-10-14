@@ -2,6 +2,7 @@
 # the Python app itself (reference/make_reference.py), so a test that passes
 # says the C++ code gives the Python app's answers.
 add_executable(vml_tests
+    unit/cancel_test.cpp
     unit/cli_test.cpp
     unit/cvvdp_test.cpp
     unit/decisions_test.cpp

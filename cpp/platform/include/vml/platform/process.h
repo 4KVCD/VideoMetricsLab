@@ -108,19 +108,23 @@ public:
     // Ends the program, and every program it started.
     void terminate();
 
-    // Stops the program and every program it started from running, until
-    // resume(), as the Python app suspends a process tree (proc.py). Called
-    // again, it stops what was started since: a launcher's program found
-    // after the first call would otherwise run on. On Windows each process
-    // of its job is suspended once, less the console host Windows gives a
-    // console program; Windows counts suspends, so these nest with any made
-    // elsewhere. Elsewhere its process group is sent SIGSTOP. Not for use
-    // from two threads at once.
+    // Stops the program and every program it started from running, as the
+    // Python app suspends a process tree (proc.py), until a resume() of this
+    // call's own. Each call is a hold of its own, and the program runs again
+    // only once every hold is let go: the CPU metrics' flow control and the
+    // user's Pause each hold it, from their own threads, and neither lets go
+    // of the other's. A call while held stops what was started since: a
+    // launcher's program found after the first call would otherwise run on.
+    // On Windows each process of its job is suspended once, less the console
+    // host Windows gives a console program; Windows counts suspends, so these
+    // nest with any made elsewhere. Elsewhere its process group is sent
+    // SIGSTOP.
     void suspend();
 
-    // Lets every process suspend() stopped run again: on Windows the last
-    // suspended first, so that a program never runs under a stopped
-    // launcher; elsewhere its process group is sent SIGCONT.
+    // Lets go of one hold of suspend(). The last lets every process
+    // suspend() stopped run again: on Windows the last suspended first, so
+    // that a program never runs under a stopped launcher; elsewhere its
+    // process group is sent SIGCONT.
     void resume();
 
     // The end of what the program wrote to standard error (error_tail),

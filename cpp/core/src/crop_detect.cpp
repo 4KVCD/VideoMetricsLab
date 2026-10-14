@@ -279,12 +279,15 @@ std::pair<int, std::string> launch_window(const std::vector<std::string>& comman
     } release_slot;
     try {
         platform::ChildProcess window = platform::ChildProcess::start(command);
-        auto running = std::chrono::steady_clock::duration::zero();
+        const CancelToken::Attached attached = cancel.attach(window);
+        auto running = std::chrono::steady_clock::duration::zero();  // paused time not counted
         while (!window.wait_for(200ms)) {
             if (cancel.cancelled()) {
                 window.terminate();
             }
-            running += 200ms;
+            if (!cancel.paused()) {
+                running += 200ms;
+            }
             if (running >= 60s) {
                 window.terminate();
                 window.wait();

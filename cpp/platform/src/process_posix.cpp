@@ -103,7 +103,11 @@ struct ChildProcess::State {
     std::mutex wait_mutex;
     bool ended = false;
     int exit_code = -1;
-    bool stopped = false;  // suspend() has stopped its process group
+    // suspend() has stopped its process group, with `holds` calls not yet
+    // let go; `hold_mutex` guards both.
+    std::mutex hold_mutex;
+    int holds = 0;
+    bool stopped = false;
     Descriptor output;
     std::string unread;
     bool output_ended = false;
@@ -305,6 +309,8 @@ void ChildProcess::terminate() {
 void ChildProcess::suspend() {
     // Sent again each time: a process stopped already stays so, and one that
     // joined the group since stops too.
+    const std::lock_guard lock(state_->hold_mutex);
+    ++state_->holds;
     if (!state_->reap(false)) {
         kill(-state_->id, SIGSTOP);
         state_->stopped = true;
@@ -312,6 +318,10 @@ void ChildProcess::suspend() {
 }
 
 void ChildProcess::resume() {
+    const std::lock_guard lock(state_->hold_mutex);
+    if (state_->holds == 0 || --state_->holds > 0) {
+        return;  // not held, or still held by another
+    }
     if (state_->stopped && !state_->reap(false)) {
         kill(-state_->id, SIGCONT);
     }

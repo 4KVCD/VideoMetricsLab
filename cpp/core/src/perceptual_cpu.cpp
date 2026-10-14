@@ -444,12 +444,60 @@ private:
     std::filesystem::path path_;
 };
 
+// Runs a still-image tool to its end, as platform::run_program does, with
+// the tool attached to the run: Pause holds it, as it holds FFmpeg, and
+// Cancel ends it at once. Without that, the tools would score the pairs
+// already written while the window says "Paused". `stop` ends it too, and
+// so does tool_timeout of running, the time paused not counted.
+platform::ProcessOutput run_tool(const std::vector<std::string>& command, const std::function<bool()>& stop,
+                                 const CancelToken& cancel) {
+    platform::ChildProcess tool = platform::ChildProcess::start(command);
+    const CancelToken::Attached attached = cancel.attach(tool);
+    // Read on a thread of its own, so that the tool is never held up by a
+    // full pipe while this one waits for it to end.
+    std::string output;
+    std::thread reader([&tool, &output] {
+        while (const std::optional<std::string> line = tool.read_line()) {
+            output += *line;
+            output += '\n';
+        }
+    });
+    platform::ProcessOutput result;
+    constexpr std::chrono::milliseconds step(100);
+    std::chrono::milliseconds running(0);
+    while (!tool.wait_for(step)) {
+        if (stop()) {
+            tool.terminate();
+            result.stopped = true;
+            break;
+        }
+        if (!cancel.paused()) {
+            running += step;
+        }
+        if (running >= tool_timeout) {
+            tool.terminate();
+            result.timed_out = true;
+            break;
+        }
+    }
+    result.exit_code = tool.wait();
+    reader.join();
+    // Ended by the run's Cancel (which ends attached programs itself), it was
+    // stopped, not failed: its exit code says only that it was ended.
+    if (!result.timed_out && cancel.cancelled()) {
+        result.stopped = true;
+    }
+    result.standard_output = std::move(output);
+    result.standard_error = tool.standard_error();
+    return result;
+}
+
 // Scores one frame pair with a still-image tool and returns the score (the
 // Python app's _run_metric). `stop` ends the tool at once: the user's
 // Cancel, or another pair's failure, which throws Cancelled here.
 double run_metric(const std::filesystem::path& executable, const std::string& metric,
                   const std::filesystem::path& reference, const std::filesystem::path& test, bool hdr,
-                  const std::function<bool()>& stop) {
+                  const std::function<bool()>& stop, const CancelToken& cancel) {
     std::vector<std::string> command{platform::path_text(executable), platform::path_text(reference),
                                      platform::path_text(test)};
     std::optional<std::filesystem::path> distortion_map;
@@ -472,7 +520,7 @@ double run_metric(const std::filesystem::path& executable, const std::string& me
     }
     platform::ProcessOutput output;
     try {
-        output = platform::run_program(command, tool_timeout, {}, stop);
+        output = run_tool(command, stop, cancel);
     } catch (const platform::ProcessError& error) {
         throw PerceptualRunError("Could not run " + metric + ": " + error.what());
     }
@@ -526,7 +574,9 @@ public:
     using Pair = std::pair<std::filesystem::path, std::filesystem::path>;
 
     // Starts FFmpeg with `command`, which writes into `folder`. `stop` makes
-    // a caller waiting for a pair give up (another pair failed).
+    // a caller waiting for a pair give up (another pair failed). Pause holds
+    // FFmpeg as the backlog does: each of the two holds it while it wants it
+    // held (ChildProcess::suspend).
     PngPairs(const std::vector<std::string>& command, std::filesystem::path folder, int backlog,
              const std::atomic<bool>& stop, const CancelToken& cancel)
         : folder_(std::move(folder)),
@@ -534,6 +584,7 @@ public:
           stop_(stop),
           cancel_(cancel),
           ffmpeg_(platform::ChildProcess::start(command)),
+          attached_(cancel.attach(ffmpeg_)),
           regulator_([this] { regulate(); }) {}
 
     // Stops FFmpeg if the pairs ended early.
@@ -568,6 +619,9 @@ public:
                 if (complete(index_)) {
                     break;  // written just before FFmpeg ended
                 }
+                // Ended by the run's Cancel since the check above, it was
+                // stopped, not failed.
+                cancel_.throw_if_cancelled();
                 if (ffmpeg_.wait() != 0) {
                     throw failure("FFmpeg could not prepare lossless perceptual-metric frames.");
                 }
@@ -646,6 +700,7 @@ private:
     const std::atomic<bool>& stop_;
     const CancelToken& cancel_;
     platform::ChildProcess ffmpeg_;
+    CancelToken::Attached attached_;  // after ffmpeg_, so that it goes first
     long long index_ = 1;  // the number of the next pair
     bool ended_ = false;
     std::atomic<long long> consumed_{1};  // the number of the pair the caller is on, read by the regulator
@@ -974,7 +1029,8 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
         }
         std::vector<double> values;
         for (std::size_t position = 0; position < keys.size(); ++position) {
-            values.push_back(run_metric(executables[position], keys[position], reference, test, hdr, stopped));
+            values.push_back(
+                run_metric(executables[position], keys[position], reference, test, hdr, stopped, cancel));
         }
         return values;
     };

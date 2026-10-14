@@ -12,8 +12,9 @@
 //
 // run_jobs takes the list of videos and runs each video's tasks in the CPU's
 // and the GPU's queues, in list order, and reports what happens through
-// RunEvents. Not yet: pausing, changing the parallel jobs during a run, and
-// saved scores (the C++ app keeps none yet).
+// RunEvents. A JobScheduler does the same, and takes a change of the
+// parallel jobs while it runs. A run is cancelled, paused and resumed
+// through its CancelToken.
 #pragma once
 
 #include <array>
@@ -21,6 +22,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -182,5 +184,33 @@ void run_jobs(const std::vector<VmafJob>& jobs, int parallel_jobs, const RunEven
 // run_jobs for jobs without perceptual tasks.
 void run_jobs(const std::vector<VmafJob>& jobs, int parallel_jobs, const RunEvents& events, const TaskRunner& runner,
               unsigned cores, const CancelToken& cancel);
+
+// A run of run_jobs (the Python app's JobScheduler) whose parallel jobs can
+// change while it runs: a list of feature-length videos is just when someone
+// notices that half of their CPU is idle, and starting the list again to use
+// it would waste the work done.
+class JobScheduler {
+public:
+    JobScheduler(std::vector<VmafJob> jobs, int parallel_jobs, RunEvents events, TaskRunner runner,
+                 PerceptualRunner perceptual, bool gpu_metrics_together, unsigned cores, CancelToken cancel);
+    ~JobScheduler();
+    JobScheduler(const JobScheduler&) = delete;
+    JobScheduler& operator=(const JobScheduler&) = delete;
+
+    // Runs every job's tasks, as run_jobs does, once.
+    void run();
+
+    // How many videos' CPU metrics may run at once (max_parallel_jobs at
+    // most), from any thread. Raising it lets a waiting lane start the next
+    // video at once; lowering it stops nothing already started, and keeps
+    // more from starting until enough have finished. A video started before
+    // keeps the libvmaf threads it started with.
+    void set_parallel_jobs(int count);
+    int parallel_jobs() const;
+
+private:
+    struct Parts;
+    std::unique_ptr<Parts> parts_;
+};
 
 }  // namespace vml

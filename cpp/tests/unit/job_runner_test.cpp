@@ -282,6 +282,47 @@ TEST(JobRunner, VideosShareTheCpusTwoLanesAndTheGpusOne) {
     EXPECT_EQ(reported.finished.size(), jobs.size());
 }
 
+// The parallel jobs can be raised while a run goes on, as the window's check
+// box does: a video waiting for the CPU then starts beside the one running.
+// The one running keeps every core; the one started after gets its share.
+TEST(JobRunner, RaisingTheParallelJobsDuringARunStartsAWaitingVideo) {
+    const std::vector<VmafJob> jobs{job_of({{"ffmpeg", {"psnr"}}}), job_of({{"ffmpeg", {"psnr"}}})};
+    Meeting both(2);
+    std::mutex mutex;
+    int started = 0;
+    std::vector<int> threads;
+    bool met = true;
+    Reported reported;
+    JobScheduler* running = nullptr;
+    JobScheduler scheduler(
+        jobs, 1, reported.events(),
+        [&](const VmafJob&, const VmafOptions& options, const ProgressCallback&, const StatusCallback&,
+            const CancelToken&) {
+            bool first = false;
+            {
+                const std::lock_guard lock(mutex);
+                first = started++ == 0;
+                threads.push_back(options.n_threads);
+            }
+            if (first) {
+                running->set_parallel_jobs(2);
+            }
+            // Met only if the second video starts while the first still runs.
+            const bool together = both.arrive_and_wait();
+            const std::lock_guard lock(mutex);
+            met = met && together;
+            return result_with({{"psnr", {0}}});
+        },
+        PerceptualRunner(), false, 24, CancelToken());
+    running = &scheduler;
+    scheduler.run();
+
+    EXPECT_TRUE(met);
+    EXPECT_EQ(scheduler.parallel_jobs(), 2);
+    EXPECT_EQ(threads, (std::vector<int>{0, 12}));  // "Auto": every core alone, then half each
+    EXPECT_EQ(reported.finished.size(), jobs.size());
+}
+
 // A perceptual task's output with these metrics, each scored on these frames.
 PerceptualTaskOutput output_with(const std::vector<std::pair<std::string, std::vector<int>>>& metrics,
                                  long long compared = 0) {

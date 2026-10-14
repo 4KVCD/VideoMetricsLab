@@ -190,6 +190,10 @@ struct ChildProcess::State {
     Handle timer;
     // The processes suspend() has suspended, each once, in that order. The
     // handles keep their ids from going to other processes meanwhile.
+    // `holds` counts the suspend() calls not yet let go; `hold_mutex` guards
+    // both.
+    std::mutex hold_mutex;
+    int holds = 0;
     std::vector<std::pair<DWORD, Handle>> suspended;
 
     // Standard error, read on a thread of its own so the program never
@@ -392,6 +396,8 @@ void ChildProcess::terminate() { TerminateJobObject(state_->job.get(), 1); }
 
 void ChildProcess::suspend() {
     static const ProcessCall suspend_process = ntdll_call("NtSuspendProcess");
+    const std::lock_guard lock(state_->hold_mutex);
+    ++state_->holds;
     if (suspend_process == nullptr) {
         return;
     }
@@ -415,6 +421,10 @@ void ChildProcess::suspend() {
 
 void ChildProcess::resume() {
     static const ProcessCall resume_process = ntdll_call("NtResumeProcess");
+    const std::lock_guard lock(state_->hold_mutex);
+    if (state_->holds == 0 || --state_->holds > 0) {
+        return;  // not held, or still held by another
+    }
     if (resume_process != nullptr) {
         for (auto done = state_->suspended.rbegin(); done != state_->suspended.rend(); ++done) {
             resume_process(done->second.get());

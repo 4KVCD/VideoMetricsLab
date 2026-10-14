@@ -234,7 +234,19 @@ public:
     // How many tasks the CPU's queue may run at once. The CPU's perceptual
     // tools, which score several frame pairs at a time, divide the cores and
     // memory by it, as share_cores divides libvmaf's threads.
-    int concurrent_cpu_tasks() const { return std::max(1, std::min(parallel_jobs_, lane_count_)); }
+    int concurrent_cpu_tasks() const { return std::max(1, std::min(parallel_jobs_.load(), lane_count_)); }
+
+    // How many videos' CPU metrics may run at once, while the run goes on
+    // (JobScheduler::set_parallel_jobs).
+    void set_parallel_jobs(int count) {
+        {
+            const std::lock_guard lock(mutex_);
+            parallel_jobs_ = std::clamp(count, 1, max_parallel_jobs);
+        }
+        room_.notify_all();  // a lane waiting for room may now have it
+    }
+
+    int parallel_jobs() const { return parallel_jobs_; }
 
     // Which of a video's tasks lanes have taken.
     std::vector<bool> admitted(const JobRun& run) {
@@ -264,7 +276,7 @@ private:
     void drain_queue(Pool pool);
 
     const std::vector<VmafJob>& jobs_;
-    const int parallel_jobs_;
+    std::atomic<int> parallel_jobs_;  // changed under mutex_, read anywhere
     const unsigned cores_;
     // How many CPU lanes the run has: at least one, and never more than
     // there are CPU tasks.
@@ -822,7 +834,7 @@ std::optional<Scheduler::Picked> Scheduler::next_task(Pool pool) {
 // Takes the task this queue may start now off it, or nothing when there is
 // no room for one. Called with mutex_ held.
 std::optional<Scheduler::Picked> Scheduler::take_next(Pool pool) {
-    if (busy_[pool] >= (pool == cpu_pool ? parallel_jobs_ : 1)) {
+    if (busy_[pool] >= (pool == cpu_pool ? parallel_jobs_.load() : 1)) {
         return std::nullopt;
     }
     // The first task whose video is in progress, or that may start a new
@@ -957,5 +969,39 @@ void run_jobs(const std::vector<VmafJob>& jobs, int parallel_jobs, const RunEven
               unsigned cores, const CancelToken& cancel) {
     run_jobs(jobs, parallel_jobs, events, runner, PerceptualRunner(), false, cores, cancel);
 }
+
+// ------------------------------------------------------------- JobScheduler
+
+// What the Scheduler refers to, kept here for as long as it runs.
+struct JobScheduler::Parts {
+    Parts(std::vector<VmafJob> jobs_given, int parallel_jobs, RunEvents events_given, TaskRunner runner_given,
+          PerceptualRunner perceptual_given, bool gpu_metrics_together, unsigned cores, CancelToken cancel_given)
+        : jobs(std::move(jobs_given)),
+          events(std::move(events_given)),
+          runner(std::move(runner_given)),
+          perceptual(std::move(perceptual_given)),
+          cancel(std::move(cancel_given)),
+          scheduler(jobs, parallel_jobs, events, runner, perceptual, gpu_metrics_together, cores, cancel) {}
+
+    const std::vector<VmafJob> jobs;
+    const RunEvents events;
+    const TaskRunner runner;
+    const PerceptualRunner perceptual;
+    const CancelToken cancel;
+    Scheduler scheduler;  // last: it refers to the rest
+};
+
+JobScheduler::JobScheduler(std::vector<VmafJob> jobs, int parallel_jobs, RunEvents events, TaskRunner runner,
+                           PerceptualRunner perceptual, bool gpu_metrics_together, unsigned cores, CancelToken cancel)
+    : parts_(std::make_unique<Parts>(std::move(jobs), parallel_jobs, std::move(events), std::move(runner),
+                                     std::move(perceptual), gpu_metrics_together, cores, std::move(cancel))) {}
+
+JobScheduler::~JobScheduler() = default;
+
+void JobScheduler::run() { parts_->scheduler.run(); }
+
+void JobScheduler::set_parallel_jobs(int count) { parts_->scheduler.set_parallel_jobs(count); }
+
+int JobScheduler::parallel_jobs() const { return parts_->scheduler.parallel_jobs(); }
 
 }  // namespace vml

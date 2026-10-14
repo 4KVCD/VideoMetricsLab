@@ -324,6 +324,7 @@ FfmpegOutcome run_ffmpeg(const std::vector<std::string>& command, long long tota
                          const std::filesystem::path& folder) {
     cancel.throw_if_cancelled();  // not one more FFmpeg after a Cancel
     platform::ChildProcess ffmpeg = platform::ChildProcess::start(command, platform::ProcessOptions{folder});
+    const CancelToken::Attached attached = cancel.attach(ffmpeg);
     ProgressLines progress;
     while (const std::optional<std::string> line = ffmpeg.read_line()) {
         if (cancel.cancelled()) {
@@ -348,6 +349,11 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
     std::vector<platform::ChildProcess> processes;
     for (const std::vector<std::string>& command : commands) {
         processes.push_back(platform::ChildProcess::start(command, platform::ProcessOptions{folder}));
+    }
+    // Attached once all are in place: the vector moves them as it grows.
+    std::vector<CancelToken::Attached> attached;
+    for (platform::ChildProcess& process : processes) {
+        attached.push_back(cancel.attach(process));
     }
     std::vector<FfmpegOutcome> outcomes(processes.size());
     std::vector<char> done(processes.size(), 0);
