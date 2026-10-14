@@ -53,6 +53,10 @@ struct DecodingCapabilities {
     static DecodingCapabilities detect(const std::string& ffmpeg);
 };
 
+// The makers of the GPUs DirectX lists (none on other systems so far): NVIDIA
+// first, then Intel, then AMD (the Python app's detected_gpu_vendors).
+std::vector<GpuVendor> detected_gpu_vendors();
+
 // Whether FFmpeg's hardware decoding, as the app runs it, gives a video of
 // this pixel format and size the same pictures its software decoding does:
 // 4:2:0 at 8 or 10 bits, and an even width and height.

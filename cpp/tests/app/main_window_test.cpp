@@ -5,6 +5,7 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDeadlineTimer>
 #include <QDropEvent>
 #include <QLabel>
@@ -12,6 +13,7 @@
 #include <QMimeData>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSpinBox>
 #include <QTableWidgetSelectionRange>
 #include <QTest>
 #include <QThread>
@@ -35,6 +37,7 @@
 
 #include "file_writes.h"
 #include "i18n.h"
+#include "options_panel.h"
 #include "test_videos.h"
 #include "theme.h"
 #include "vml/metrics.h"
@@ -146,6 +149,13 @@ protected:
     // Shows a row's scores, as a finished video or its saved scores do.
     static void show_scores(MainWindow& window, int row) { window.set_row_metrics(row); }
     static void remove_selected(MainWindow& window) { window.on_remove_distorted(); }
+    static OptionsPanel& options_panel(MainWindow& window) { return *window.options_panel_; }
+    // Selects rows `first` to `last`, as a drag over them does.
+    static void select_rows(MainWindow& window, int first, int last) {
+        table(window).clearSelection();
+        table(window).setRangeSelected(
+            QTableWidgetSelectionRange(first, 0, last, table(window).columnCount() - 1), true);
+    }
     static QString dialog_folder(MainWindow& window, const QString& kind) { return window.video_dialog_dir(kind); }
 
     // Whether a video is still being read.
@@ -695,6 +705,93 @@ TEST_F(WindowTest, HighlightBestWorstColoursEachMetricsBestAndWorstScore) {
     EXPECT_EQ(marks(col_vmaf), (Marks{""}));
     highlight_check(window).setChecked(false);
     EXPECT_FALSE(saved_settings()["highlight_best_worst"].get<bool>());
+}
+
+TEST_F(WindowTest, AnOptionEditedForSeveralVideosChangesThatOptionAloneInEach) {
+    // Copying the whole panel over them would give every selected video the
+    // first one's other settings.
+    MainWindow window;
+    const int a = add_row(window, "a.mp4");
+    const int b = add_row(window, "b.mp4");
+    const int c = add_row(window, "c.mp4");
+    RowData& first = *rows(window)[static_cast<std::size_t>(a)];
+    RowData& second = *rows(window)[static_cast<std::size_t>(b)];
+    first.options.n_threads = 2;
+    first.options.gpu_decode = false;
+    second.options.n_threads = 11;
+    select_rows(window, a, b);
+    EXPECT_EQ(options_panel(window).target_label->text().toStdString(),
+              "Editing settings for 2 selected videos -- editing anything below applies to all of them.");
+
+    options_panel(window).crop_combo->setCurrentIndex(1);  // None (use full frame)
+
+    EXPECT_EQ(first.options.crop_mode, CropMode::none);
+    EXPECT_EQ(second.options.crop_mode, CropMode::none);
+    EXPECT_EQ(rows(window)[static_cast<std::size_t>(c)]->options.crop_mode, CropMode::automatic);
+    EXPECT_EQ(first.options.n_threads, 2);
+    EXPECT_EQ(second.options.n_threads, 11);
+    EXPECT_FALSE(first.options.gpu_decode);
+    EXPECT_TRUE(second.options.gpu_decode);
+}
+
+TEST_F(WindowTest, TheOptionsPanelShowsTheSelectedVideosOwnSettings) {
+    MainWindow window;
+    EXPECT_FALSE(options_panel(window).isEnabled());  // nothing selected
+    const int a = add_row(window, "a.mp4");
+    const int b = add_row(window, "b.mp4");
+    select_rows(window, a, a);
+    EXPECT_TRUE(options_panel(window).isEnabled());
+    EXPECT_EQ(options_panel(window).target_label->text().toStdString(), "Editing settings for: a.mp4");
+    options_panel(window).crop_combo->setCurrentIndex(1);
+    options_panel(window).subsample_spin->setValue(4);
+    select_rows(window, b, b);
+    EXPECT_EQ(options_panel(window).crop_combo->currentIndex(), 0);
+    EXPECT_EQ(options_panel(window).subsample_spin->value(), 1);
+    select_rows(window, a, a);
+    EXPECT_EQ(options_panel(window).crop_combo->currentIndex(), 1);
+    EXPECT_EQ(options_panel(window).subsample_spin->value(), 4);
+}
+
+TEST_F(WindowTest, AnOptionThatChangesWhatIsComparedTakesTheScoresAwayOneThatChangesHowKeepsThem) {
+    // Which GPU, how many threads, and how frames are scaled change how a
+    // comparison is made, not what it is.
+    MainWindow window;
+    const int row = add_row(window, "a.mp4");
+    RowData& row_data = *rows(window)[static_cast<std::size_t>(row)];
+    const auto run = std::make_shared<CompletedRun>();
+    run->result.metric_results.add(FrameMetricResult{
+        "vmaf", {0}, {0.0}, {90.0f}, MetricProvenance{"ffmpeg/libvmaf", "ffmpeg 9.0.1", "cpu", "vmaf", {}}});
+    row_data.completed_run = run;
+    show_scores(window, row);
+    select_rows(window, row, row);
+
+    OptionsPanel& panel = options_panel(window);
+    panel.gpu_checkbox->setChecked(!panel.gpu_checkbox->isChecked());
+    panel.threads_spin->setValue(7);
+    panel.scale_algo_combo->setCurrentText("lanczos");
+    EXPECT_EQ(row_data.options.n_threads, 7);
+    EXPECT_EQ(row_data.options.scale_algorithm, "lanczos");
+    EXPECT_EQ(row_data.completed_run, run);
+
+    panel.subsample_spin->setValue(5);
+    EXPECT_EQ(row_data.options.n_subsample, 5);
+    EXPECT_EQ(row_data.completed_run, nullptr);
+    EXPECT_TRUE(table(window).item(row, col_vmaf)->text().isEmpty());
+}
+
+TEST_F(WindowTest, WhereSsimulacra2IsCalculatedIsSetForTheSelectedVideosAndKeptForTheNextSession) {
+    MainWindow window;
+    const int a = add_row(window, "a.mp4");
+    const int b = add_row(window, "b.mp4");
+    select_rows(window, a, a);
+
+    options_panel(window).ssimulacra2_backend_combo->setCurrentIndex(1);  // CPU
+
+    EXPECT_EQ(rows(window)[static_cast<std::size_t>(a)]->metric_backends.at("ssimulacra2"), "cpu");
+    EXPECT_EQ(rows(window)[static_cast<std::size_t>(b)]->metric_backends.at("ssimulacra2"), "gpu");
+    EXPECT_EQ(saved_settings()["default_ssimulacra2_backend"], "cpu");
+    EXPECT_EQ(rows(window)[static_cast<std::size_t>(add_row(window, "c.mp4"))]->metric_backends.at("ssimulacra2"),
+              "cpu");
 }
 
 TEST_F(WindowTest, ScoresSavedSinceAVideoWasAddedComeBackWhenItsMetricsAreTickedOrShown) {

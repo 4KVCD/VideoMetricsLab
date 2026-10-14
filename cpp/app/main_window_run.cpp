@@ -17,6 +17,7 @@
 #include "file_writes.h"
 #include "i18n.h"
 #include "main_window.h"
+#include "options_panel.h"
 #include "run_worker.h"
 #include "widgets.h"
 #include "window_helpers.h"
@@ -384,6 +385,7 @@ void MainWindow::set_run_ui_active(bool active) {
     distorted_table_->drops_allowed = !active;
     distorted_table_->setDragEnabled(!active);
     source_edit_->setReadOnly(active);
+    options_panel_->setEnabled(!active && !panel_target_rows_.empty());
     tabs_->setTabEnabled(tab_settings, !active);
     run_button_->setEnabled(!active);
     pause_button_->setEnabled(active);

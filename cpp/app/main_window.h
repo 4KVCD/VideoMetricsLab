@@ -8,11 +8,12 @@
 //
 // Ported so far: the window's frame, its tabs, the Videos tab's files panel
 // (the reference, the test-video table and its buttons, the best and worst
-// scores highlighted), runs: the ticked videos' metrics calculated, with
-// their progress, and the scores shown in the table (main_window_run.cpp),
-// and the saved scores: looked up for each row, saved as a run goes,
-// forgotten by Recalculate (main_window_saved_scores.cpp). The other tabs
-// and the Options panel are still the Python app's alone.
+// scores highlighted), the Options panel but for CVVDP's display and "Test
+// both" (main_window_options.cpp), runs: the ticked videos' metrics
+// calculated, with their progress, and the scores shown in the table
+// (main_window_run.cpp), and the saved scores: looked up for each row, saved
+// as a run goes, forgotten by Recalculate (main_window_saved_scores.cpp). The
+// other tabs are still the Python app's alone.
 #pragma once
 
 #include <QMainWindow>
@@ -58,6 +59,7 @@ class CheckableHeaderView;
 class ElidedLabel;
 class FileWrites;
 class FillColumnTable;
+class OptionsPanel;
 class QuietTabWidget;
 class RunWorker;
 
@@ -265,6 +267,14 @@ private:
     void drop_metric_results(int row, const std::vector<std::string>& keys);
     QString cvvdp_elsewhere_note(const RowData& row_data) const;
 
+    // ------------------------------------- the Options panel (main_window_options.cpp)
+    void write_panel_options(const VmafOptions& options);
+    VmafOptions read_panel_options() const;
+    void on_panel_field_edited(const QString& field);
+    void on_metric_backend_changed(const QString& metric_key);
+    void on_model_changed(int index);
+    void on_scale_direction_combo_changed(int index);
+
     // ------------------------------------------------------------ the scores
     std::vector<std::string> reusable_metric_keys(const RowData& row_data) const;
     MetricResultSet reusable_results(const RowData& row_data) const;
@@ -348,6 +358,12 @@ private:
     std::map<std::string, std::string> default_metric_backends_;
     CvvdpSettings default_cvvdp_;
     std::set<std::string> hidden_metrics_;
+
+    // The Options panel, the rows it edits (the selected ones, top to
+    // bottom), and the GPUs found here, which it offers.
+    OptionsPanel* options_panel_ = nullptr;
+    std::vector<int> panel_target_rows_;
+    std::vector<GpuVendor> detected_gpu_vendors_;
 
     // The lookup of saved scores under way: the rows it was asked about, and
     // a number each lookup raises, with which the window refuses the answers

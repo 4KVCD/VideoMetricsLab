@@ -14,8 +14,10 @@ add_library(vml_app STATIC
     formatting.cpp
     i18n.cpp
     main_window.cpp
+    main_window_options.cpp
     main_window_run.cpp
     main_window_saved_scores.cpp
+    options_panel.cpp
     probe_worker.cpp
     row_state.cpp
     run_worker.cpp

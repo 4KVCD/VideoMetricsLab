@@ -44,10 +44,12 @@
 #include "file_writes.h"
 #include "formatting.h"
 #include "i18n.h"
+#include "options_panel.h"
 #include "run_worker.h"
 #include "theme.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/geometry.h"
+#include "vml/hardware_decoding.h"
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
@@ -484,9 +486,17 @@ void MainWindow::build_ui() {
     // The videos on top and the options below them, so the video table gets
     // the window's full width.
     splitter->addWidget(build_files_panel());
-    auto* options_placeholder = new QLabel(QStringLiteral("The Options panel is not ported to C++ yet."));
-    options_placeholder->setAlignment(Qt::AlignCenter);
-    splitter->addWidget(options_placeholder);
+    // The GPUs here: the Options panel offers its GPU choices for them.
+    detected_gpu_vendors_ = detected_gpu_vendors();
+    options_panel_ = new OptionsPanel(detected_gpu_vendors_);
+    connect(options_panel_, &OptionsPanel::field_edited, this,
+            [this](const QString& field) { on_panel_field_edited(field); });
+    connect(options_panel_, &OptionsPanel::model_chosen, this, [this](int index) { on_model_changed(index); });
+    connect(options_panel_, &OptionsPanel::metric_backend_changed, this,
+            [this](const QString& key) { on_metric_backend_changed(key); });
+    connect(options_panel_, &OptionsPanel::scale_direction_chosen, this,
+            [this](int index) { on_scale_direction_combo_changed(index); });
+    splitter->addWidget(options_panel_);
     splitter->addWidget(build_run_panel());
     splitter->setSizes({380, 300, 120});
     tabs_->addTab(new ScrollingPage(videos_page), app::tr("Videos"));
@@ -1750,26 +1760,6 @@ void MainWindow::on_remove_all_distorted() {
     distorted_table_->setRowCount(0);
     rows_.clear();
     on_table_selection_changed();
-}
-
-void MainWindow::on_table_selection_changed() {
-    // The metric headings show the first selected row's metrics. (The Options
-    // panel, which shows the rest of its settings, is not ported to C++ yet.)
-    std::set<int> rows;
-    for (const QModelIndex& index : distorted_table_->selectionModel()->selectedIndexes()) {
-        rows.insert(index.row());
-    }
-    if (rows.empty()) {
-        return;
-    }
-    const RowData& first = *rows_[static_cast<std::size_t>(*rows.begin())];
-    const std::vector<std::string> requested = requested_metrics(first);
-    syncing_panel_ = true;
-    for (const MetricColumn& metric : metric_columns()) {
-        metric_header_->set_checked(metric.column,
-                                    std::find(requested.begin(), requested.end(), metric.key) != requested.end());
-    }
-    syncing_panel_ = false;
 }
 
 void MainWindow::on_highlight_toggled(bool on) {

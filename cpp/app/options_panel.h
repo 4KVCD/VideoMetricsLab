@@ -1,0 +1,116 @@
+// The Options panel of the Videos tab (the Python app's
+// vmaf_app/ui/options_panel.py): the settings of the videos selected in the
+// table.
+//
+// The panel shows a video's options (show_options) and reads them back
+// (read_options). It decides nothing about the rows itself: each control the
+// user edits is reported to the window with a signal, and the window applies
+// the change to the selected rows. Which metrics a video calculates is not
+// here: it is ticked in the table's own columns.
+//
+// Not ported yet: CVVDP's display (its preset, its editor, "Scale the video
+// to fill the display"), and "Test both", whose entry is there but cannot be
+// chosen.
+#pragma once
+
+#include <QGroupBox>
+#include <QString>
+
+#include <map>
+#include <string>
+#include <vector>
+
+#include "vml/options.h"
+#include "vml/video.h"
+
+class QCheckBox;
+class QComboBox;
+class QFormLayout;
+class QLabel;
+class QSpinBox;
+class QTimeEdit;
+
+namespace vml::app {
+
+// A VMAF model in a dropdown: its name (shown translated) and the choice a
+// video saves (VmafOptions' model_choice or model_choice_v1).
+struct ModelChoice {
+    const char* name;
+    std::string choice;
+};
+
+// The VMAF v0.6.1 column's models, in the dropdown's order.
+const std::vector<ModelChoice>& model_choices();
+// The VMAF v1 column's models, in the dropdown's order.
+const std::vector<ModelChoice>& v1_model_choices();
+
+class OptionsPanel : public QGroupBox {
+    Q_OBJECT
+
+public:
+    // `gpu_vendors`: the GPUs found on this PC. Without one, VMAF can only
+    // be calculated on the CPU.
+    explicit OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* parent = nullptr);
+
+    // Shows `options` (the first selected video's) in the controls.
+    // `metric_backends` are its Vship metrics' GPU/CPU choices, and
+    // `selected` every selected video's options, which decide what can be
+    // edited. The window ignores its own handlers while this runs.
+    void show_options(const VmafOptions& options, const std::map<std::string, std::string>& metric_backends,
+                      const std::vector<VmafOptions>& selected);
+    // Shows the GPU/CPU choices: VMAF's, and each Vship metric's.
+    void show_backends(bool vmaf_on_gpu, const std::map<std::string, std::string>& metric_backends);
+    // The VMAF GPU/CPU choice as a run would take it: CPU when there is no
+    // GPU, whatever the video is set to.
+    void show_vmaf_backend(bool on_gpu);
+
+    // The options the controls show. The metrics are not in the panel, so
+    // the window gives them, from the table's column headings.
+    VmafOptions read_options(const std::vector<std::string>& extra_features, bool compute_vmaf, bool compute_vmaf_neg,
+                             bool compute_vmaf_v1, bool compute_xpsnr) const;
+    // A Vship metric's GPU/CPU choice: "gpu" or "cpu". Throws
+    // std::invalid_argument for another metric.
+    std::string metric_backend(const std::string& metric_key) const;
+
+    // The model file chosen for "Custom model file...", until it is applied
+    // to the rows.
+    std::string custom_model_path;
+
+    // The controls. Public, as the Python app's are: the window reads them,
+    // and the tests use them as a user would.
+    QLabel* target_label = nullptr;
+    QComboBox* crop_combo = nullptr;
+    QTimeEdit* duration_edit = nullptr;
+    QComboBox* scale_algo_combo = nullptr;
+    QComboBox* scale_direction_combo = nullptr;
+    QComboBox* model_combo = nullptr;
+    QComboBox* model_v1_combo = nullptr;
+    QSpinBox* subsample_spin = nullptr;
+    QCheckBox* gpu_checkbox = nullptr;
+    QComboBox* gpu_vendor_combo = nullptr;
+    QComboBox* vmaf_backend_combo = nullptr;
+    QComboBox* ssimulacra2_backend_combo = nullptr;
+    QComboBox* butteraugli_backend_combo = nullptr;
+    QSpinBox* threads_spin = nullptr;
+
+signals:
+    // A control was edited: the name of the VmafOptions field it sets ("gpu"
+    // for the decode box and the vendor, "model_v1", "crop_mode"...).
+    void field_edited(const QString& field);
+    // The VMAF v0.6.1 model dropdown changed to this index (model_choices).
+    void model_chosen(int index);
+    // A Vship metric's GPU/CPU choice changed ("ssimulacra2", "butteraugli").
+    void metric_backend_changed(const QString& metric_key);
+    // The resolution mismatch dropdown changed to this index (2: "Test both").
+    void scale_direction_chosen(int index);
+
+private:
+    void build_preparation(QFormLayout* form);
+    void build_metric_settings(QFormLayout* form);
+    void build_performance(QFormLayout* form, const std::vector<GpuVendor>& gpu_vendors);
+
+    // Whether there is a GPU here for VMAF: without one, its choice is CPU.
+    const bool vmaf_gpu_possible_;
+};
+
+}  // namespace vml::app
