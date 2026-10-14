@@ -79,6 +79,25 @@ def test_stop_cancels_worker_and_queue_and_preserves_results(qapp, tmp_path):
     assert panel.analyze_btn.text() == "Calculate bitrate"
 
 
+def test_a_failed_files_reason_stays_with_it(qapp, tmp_path):
+    """Why a file failed is on its own row: once a row above it is removed,
+    the row that takes its place does not show it (the reason stayed on the
+    row)."""
+    panel = BitratePanel()
+    broken, fine = tmp_path / "broken.mkv", tmp_path / "fine.mkv"
+    panel.add_files([broken, fine])
+    panel._on_failed(broken, "Invalid data found when processing input")
+    assert panel.table.item(0, 8).text() == "Failed"
+    assert panel.table.item(0, 8).toolTip() == "Invalid data found when processing input"
+
+    panel.table.selectRow(0)
+    panel.remove_btn.click()
+
+    assert panel.table.rowCount() == 1
+    assert panel.table.item(0, 1).text() == "fine.mkv"
+    assert panel.table.item(0, 8).toolTip() == ""
+
+
 def test_completed_analysis_populates_stats_and_all_three_plot_views(qapp, tmp_path):
     panel = BitratePanel()
     path = tmp_path / "encode.mkv"
