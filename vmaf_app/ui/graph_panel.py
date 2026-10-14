@@ -384,8 +384,19 @@ class _MetricPage(QWidget):
             label=entry.label, visible=entry.visible,
             others=tuple(others),
         )
+        self._keep_lines_in_added_order()
         self._update_no_data_label()
         self._fit_hover_label()
+
+    def _keep_lines_in_added_order(self) -> None:
+        """Keeps the lines in the order they were added, the table's.
+        set_curve takes a line out and puts it back, which would move a line
+        updated during a run to the end: last in this page's readout and
+        exported table, the difference's sign turned, and drawn over the
+        other lines."""
+        if list(self._curves) != sorted(self._curves):
+            self._curves = dict(sorted(self._curves.items()))
+        self.chart.sort_series()
 
     def _set_timeline_curve(self, series_id: int, entry: SeriesEntry, color: str) -> None:
         """Draws a whole-video metric's timeline: CVVDP's JOD for each second.
@@ -413,6 +424,7 @@ class _MetricPage(QWidget):
             values=values, frames=np.asarray(result.frame), times=middles,
             label=entry.label, visible=entry.visible, starts=starts,
         )
+        self._keep_lines_in_added_order()
         self._update_no_data_label()
         self._fit_hover_label()
 

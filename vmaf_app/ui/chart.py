@@ -122,6 +122,13 @@ class ChartWidget(QWidget):
         self._series[key] = series
         self._invalidate(refit=True)
 
+    def sort_series(self) -> None:
+        """Puts the lines in the order of their keys, which is the order they
+        were added in: the last is drawn over the others."""
+        if list(self._series) != sorted(self._series):
+            self._series = dict(sorted(self._series.items()))
+            self._invalidate()
+
     def set_series_color(self, key: int, color: str) -> None:
         """Repaint a color change without scanning scores or resetting zoom."""
         series = self._series.get(key)

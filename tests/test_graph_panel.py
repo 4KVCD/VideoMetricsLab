@@ -132,6 +132,25 @@ def test_readding_the_same_file_replaces_its_series_instead_of_duplicating(qapp)
     assert a_entries[0].result.frames[0].vmaf == 99.0
 
 
+def test_a_line_updated_in_place_keeps_its_place(qapp):
+    # The table lists the lines in the order they were added. A line set
+    # again (a video's run going on) moved to the end of its page: last in
+    # the readout, the difference's sign turned, last in the exported table,
+    # and drawn over the others, while the table still listed it first.
+    win = GraphPanel()
+    win.add_run(_values_result("a.mp4", [90.0] * 4), "a", identity="row a")
+    win.add_run(_values_result("b.mp4", [80.0] * 4), "b", identity="row b")
+    page = win._pages["vmaf"]
+    win.add_run(_values_result("a.mp4", [91.0] * 4), "a", identity="row a")
+
+    assert page.show_frame(1, win._entries) is True
+    lines = page.hover_label.text().splitlines()
+    assert [line[:3] for line in lines[1:3]] == ["[a]", "[b]"]
+    assert lines[3] == "Δ (a − b) = +11.00"
+    assert [label for label, _color, _cells in win._export_table()[1]] == ["a", "b"]
+    assert list(page.chart._series) == list(win._entries)
+
+
 # ------------------------------------------------------------------ multi-series color + visibility
 
 
