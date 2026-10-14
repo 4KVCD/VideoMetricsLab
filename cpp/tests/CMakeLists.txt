@@ -58,7 +58,12 @@ target_link_libraries(vml_test_library PRIVATE vml_compile_options)
 add_dependencies(vml_tests vml_test_child vml_test_library vml-cli)
 
 include(GoogleTest)
-gtest_discover_tests(vml_tests)
+# The tests that run work on the PC's GPU share a lock, so that ctest -j runs
+# them one at a time: side by side they could use up a smaller PC's memory
+# (they crashed a 14 GB laptop with an AMD 780M). The others run in parallel.
+set(gpu_suites "GpuFrames.*:VmafCuda.*:VmafV1Gpu.*:VmafVulkan.*:Vship.*")
+gtest_discover_tests(vml_tests TEST_FILTER "-${gpu_suites}")
+gtest_discover_tests(vml_tests TEST_FILTER "${gpu_suites}" PROPERTIES RESOURCE_LOCK gpu)
 
 # The window's tests, where the window is built (app/CMakeLists.txt). They
 # run with no screen, each in a profile of its own (app/main.cpp).
