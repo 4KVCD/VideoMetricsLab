@@ -403,8 +403,9 @@ def _png_pairs(
 
     One FFmpeg decodes both videos and writes lossless 16-bit RGB PNG files.
     Each picture is written under a temporary name and renamed when complete
-    (-atomic_writing), so a picture that exists is whole. The caller scores
-    and deletes each pair as it arrives.
+    (-atomic_writing), so a picture that exists is whole; a pair is handed
+    out once FFmpeg has let go of both its pictures too (ready). The caller
+    scores and deletes each pair as it arrives.
 
     FFmpeg is suspended while it has `backlog` complete pairs ready ahead of
     the caller, and resumed when it has half as many. `backlog` is
@@ -535,6 +536,22 @@ def _png_pairs(
         reference, test = pair(number)
         return reference.exists() and test.exists()
 
+    def ready(number: int) -> bool:
+        """Whether both pictures of pair `number` have been written and can
+        be opened, as describe_png and the tools open them. On Windows,
+        FFmpeg can still hold a picture for a moment after giving it its
+        name (up to 77 ms was seen), and a picture opened then could not be
+        read: the task failed."""
+        if not complete(number):
+            return False
+        try:
+            for picture in pair(number):
+                with open(picture, "rb"):
+                    pass
+        except OSError:
+            return False
+        return True
+
     def regulate() -> None:
         """Suspends FFmpeg when it is `backlog` pairs ahead of the caller,
         and resumes it at half that."""
@@ -559,7 +576,7 @@ def _png_pairs(
         while True:
             consumed[0] = index
             reference, test = pair(index)
-            while not (reference.exists() and test.exists()):
+            while not ready(index):
                 if cancel_event is not None and cancel_event.is_set():
                     raise PerceptualCancelled("Cancelled by user")
                 code = process.poll()
