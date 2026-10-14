@@ -97,6 +97,10 @@ std::optional<unsigned long long> available_memory() {
 
 void raise_thread_priority() { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST); }
 
+bool keep_system_awake(bool awake) {
+    return SetThreadExecutionState(ES_CONTINUOUS | (awake ? ES_SYSTEM_REQUIRED : 0)) != 0;
+}
+
 std::vector<unsigned> gpu_vendor_ids() {
     std::vector<unsigned> vendors;
     IDXGIFactory1* factory = nullptr;

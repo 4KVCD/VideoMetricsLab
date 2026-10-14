@@ -57,7 +57,6 @@ struct Catalog {
     QHash<QString, QStringList> plurals;
 };
 Catalog catalog;
-thread_local bool english = false;
 
 // Lines of the engine's messages translated so far (tr_message), from any
 // thread.
@@ -65,9 +64,8 @@ std::mutex translated_mutex;
 QHash<QString, QString> translated_lines;
 constexpr qsizetype translated_kept = 4096;
 
-// Whether text is translated on this thread now: a language other than
-// English, and not while an InEnglish lives.
-bool active() { return catalog.language != "en" && !english; }
+// Whether text is translated: a language other than English is shown.
+bool active() { return catalog.language != "en"; }
 
 // A spec's parts: [[fill]align][sign][#][0][width][grouping][.precision][type].
 struct Spec {
@@ -728,9 +726,5 @@ const std::vector<QString>& message_templates() {
     }();
     return all;
 }
-
-InEnglish::InEnglish() : before_(english) { english = true; }
-
-InEnglish::~InEnglish() { english = before_; }
 
 }  // namespace vml::app

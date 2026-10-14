@@ -59,6 +59,9 @@ struct RunStatus {
     // The text without the decode plan, which the run line shows apart;
     // empty when the text has none.
     std::string brief{};
+    // The decode plan the text names, for the window's "Decoder: ..."
+    // (the Python app's Status.decode).
+    std::optional<HardwareDecoding> decoding{};
 };
 using StatusCallback = std::function<void(const RunStatus&)>;
 
@@ -67,6 +70,11 @@ using StatusCallback = std::function<void(const RunStatus&)>;
 // cpu)...".
 RunStatus decoding_status(const std::string& brief, const HardwareDecoding& decoding,
                           StatusKind kind = StatusKind::step, std::string_view ending = "...");
+
+// A status as a process of its own sends it to the run (isolated.h), and
+// back.
+nlohmann::json status_json(const RunStatus& status);
+RunStatus status_from_json(const nlohmann::json& json);
 
 // The status a run sends when VMAF on the GPU fails, after which FFmpeg's
 // libvmaf calculates it, starts with this.

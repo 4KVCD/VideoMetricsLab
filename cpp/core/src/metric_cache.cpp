@@ -934,16 +934,16 @@ bool made_as_chosen(const std::string& key, const std::optional<std::string>& ch
     return true;
 }
 
-MetricResultSet reusable(const ComparisonResult& result, const std::vector<MetricRequestSpec>& specs,
-                         const std::map<std::string, std::string>& backends,
-                         const std::function<bool(const std::string&)>& gpu_can_score,
-                         const std::vector<ColourTags>& infos) {
-    MetricResultSet kept;
+std::vector<std::string> reusable_keys(const ComparisonResult& result, const std::vector<MetricRequestSpec>& specs,
+                                       const std::map<std::string, std::string>& backends,
+                                       const std::function<bool(const std::string&)>& gpu_can_score,
+                                       const std::vector<ColourTags>& infos) {
+    std::vector<std::string> kept;
     for (const MetricRequestSpec& spec : specs) {
         if (const SequenceMetricResult* sequence = result.metric_results.sequence(spec.key)) {
             // One score for the video (CVVDP).
             if (std::isfinite(sequence->score) && answers(spec, sequence->provenance, infos)) {
-                kept.add(*sequence);
+                kept.push_back(spec.key);
             }
             continue;
         }
@@ -958,7 +958,22 @@ MetricResultSet reusable(const ComparisonResult& result, const std::vector<Metri
         }
         if (made_as_chosen(spec.key, choice, metric->provenance.compute_backend, gpu_can_score) &&
             answers(spec, metric->provenance, infos)) {
-            kept.add(*metric);
+            kept.push_back(spec.key);
+        }
+    }
+    return kept;
+}
+
+MetricResultSet reusable(const ComparisonResult& result, const std::vector<MetricRequestSpec>& specs,
+                         const std::map<std::string, std::string>& backends,
+                         const std::function<bool(const std::string&)>& gpu_can_score,
+                         const std::vector<ColourTags>& infos) {
+    MetricResultSet kept;
+    for (const std::string& key : reusable_keys(result, specs, backends, gpu_can_score, infos)) {
+        if (const SequenceMetricResult* sequence = result.metric_results.sequence(key)) {
+            kept.add(*sequence);
+        } else {
+            kept.add(*result.metric_results.frame(key));
         }
     }
     return kept;

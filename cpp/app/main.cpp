@@ -17,6 +17,7 @@
 #include "i18n.h"
 #include "main_window.h"
 #include "theme.h"
+#include "vml/gpu_vmaf.h"
 #include "vml/isolated.h"
 #include "vml/platform/console.h"
 #include "vml/platform/system.h"
@@ -70,11 +71,14 @@ int main(int argc, char** argv) {
     apply_language(app, QString::fromStdString(settings.language));
     // Before the window is built, which reads it to colour itself.
     app::theme::apply_theme(QString::fromStdString(settings.theme));
+    set_gpu_backend(settings.gpu_backend);
     set_vship_backend(settings.gpu_backend);
-    // The first probe loads Vship and starts the GPU's driver, which would
+    // The first probes load Vship and start the GPU's driver, which would
     // freeze the window for as long if it came when the first video is
-    // added; started now, it is done by then.
+    // added, and hold up the first run's VMAF; started now, they are done by
+    // then.
     (void)QtConcurrent::run([] { detect_vship_device(); });
+    (void)QtConcurrent::run([] { gpu_vmaf_backend(); });
 
     app::MainWindow window;
     window.show();

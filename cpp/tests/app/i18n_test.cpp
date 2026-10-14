@@ -138,20 +138,5 @@ TEST(I18n, TheWindowsTextIsThePythonAppsInEachLanguage) {
     }
 }
 
-// The log, written while the window is in another language, stays in
-// English.
-TEST(I18n, InEnglishGivesEnglishOnItsThreadWhileItLives) {
-    const InEnglishAfter english;
-    ASSERT_EQ(set_language("de").toStdString(), "de");
-    const QString german = tr("Calculate metrics");
-    ASSERT_NE(german.toStdString(), "Calculate metrics");
-    {
-        const InEnglish in_english;
-        EXPECT_EQ(tr("Calculate metrics").toStdString(), "Calculate metrics");
-    }
-    EXPECT_EQ(tr("Calculate metrics"), german);
-    EXPECT_EQ(tr("Not in the catalog").toStdString(), "Not in the catalog");
-}
-
 }  // namespace
 }  // namespace vml::app

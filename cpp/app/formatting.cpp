@@ -1,5 +1,6 @@
 #include "formatting.h"
 
+#include <cmath>
 #include <format>
 
 #include "i18n.h"
@@ -44,6 +45,24 @@ QColor vmaf_band_colour(double mean) {
 QString preset_label(const CvvdpPreset& preset) {
     const QString name = QString::fromStdString(preset.name);
     return preset.builtin ? tr(name) : name;
+}
+
+QString display_description(const CvvdpDisplay& display) {
+    // The resolution as Python writes the whole numbers it holds, and a
+    // hand-edited fraction ("3840.5") as it is.
+    const auto resolution = [](double value) {
+        return value == std::floor(value) ? FormatValue(static_cast<long long>(value)) : FormatValue(value);
+    };
+    return python_format("{diagonal:g}\" {width}x{height} {range}, {peak:g} nits, {lux:g} lux, {distance:.2f} m "
+                         "({heights:.1f} x screen height)",
+                         {{"diagonal", display.diagonal_inches},
+                          {"width", resolution(display.width)},
+                          {"height", resolution(display.height)},
+                          {"range", display.hdr ? "HDR" : "SDR"},
+                          {"peak", display.peak_luminance},
+                          {"lux", display.ambient_lux},
+                          {"distance", display.viewing_distance_m},
+                          {"heights", display.distance_in_heights()}});
 }
 
 }  // namespace vml::app

@@ -104,7 +104,12 @@ struct Probe {
     std::mutex mutex;
     std::string preference = "auto";
     std::optional<GpuVmafBackend> found;
+    std::chrono::steady_clock::time_point found_at;
 };
+
+// How long a failed probe is kept before a run asks again
+// (forget_failed_gpu_vmaf_probe).
+constexpr std::chrono::seconds failed_probe_retry{60};
 
 Probe& probe_state() {
     static Probe probe;
@@ -227,8 +232,18 @@ GpuVmafBackend gpu_vmaf_backend() {
     const std::lock_guard lock(probe.mutex);
     if (!probe.found) {
         probe.found = probe_backends(probe.preference);
+        probe.found_at = std::chrono::steady_clock::now();
     }
     return *probe.found;
+}
+
+void forget_failed_gpu_vmaf_probe() {
+    Probe& probe = probe_state();
+    const std::lock_guard lock(probe.mutex);
+    if (probe.found && probe.found->backend.empty() &&
+        std::chrono::steady_clock::now() - probe.found_at >= failed_probe_retry) {
+        probe.found.reset();
+    }
 }
 
 GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model, bool enabled,

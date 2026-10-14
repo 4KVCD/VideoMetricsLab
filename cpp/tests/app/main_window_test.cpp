@@ -21,9 +21,11 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -33,7 +35,9 @@
 #include "i18n.h"
 #include "test_videos.h"
 #include "theme.h"
+#include "vml/metrics.h"
 #include "vml/model_select.h"
+#include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "widgets.h"
 
@@ -61,7 +65,9 @@ protected:
 
     // A profile of the test's own, so that the user's real settings and
     // saved scores are never read or written. Its settings.json ticks VMAF,
-    // PSNR, SSIM and XPSNR, as the Python app's tests' does.
+    // PSNR, SSIM and XPSNR, as the Python app's tests' does, with VMAF on
+    // the CPU: on the GPU, a run of these half-second clips would be mostly
+    // the GPU starting, in a process of its own.
     WindowTest()
         : profile_(folder_ / "profile"), user_profile_("USERPROFILE", platform::path_text(profile_)) {
         std::filesystem::create_directories(profile_ / ".videometricslab");
@@ -79,6 +85,7 @@ protected:
             {"default_compute_butteraugli", false},
             {"default_compute_cvvdp", false},
             {"default_compute_vmaf_v1", false},
+            {"default_vmaf_on_gpu", false},
         };
         settings.update(changes);
         std::ofstream(profile_ / ".videometricslab" / "settings.json", std::ios::binary) << settings.dump();
@@ -112,6 +119,19 @@ protected:
     static QPushButton& locate_ffmpeg_button(MainWindow& window) { return *window.locate_ffmpeg_button_; }
     static QTabWidget& tabs(MainWindow& window) { return *window.tabs_; }
     static QPushButton& run_button(MainWindow& window) { return *window.run_button_; }
+    static QPushButton& pause_button(MainWindow& window) { return *window.pause_button_; }
+    static QPushButton& cancel_button(MainWindow& window) { return *window.cancel_button_; }
+    static std::string status(MainWindow& window) { return window.status_label_->text().toStdString(); }
+    // The line below the status line, from the top, of a video in progress.
+    static std::string job_line(MainWindow& window, std::size_t line) {
+        return window.job_progress_labels_[line]->full_text().toStdString();
+    }
+    static bool running(MainWindow& window) { return window.run_active_; }
+    static RowState state(MainWindow& window, int row) {
+        return window.row_state(*window.rows_[static_cast<std::size_t>(row)]);
+    }
+    // The run's clock, in seconds.
+    static void set_clock(MainWindow& window, std::function<double()> clock) { window.clock_ = std::move(clock); }
     static QString dialog_folder(MainWindow& window, const QString& kind) { return window.video_dialog_dir(kind); }
 
     // Whether a video is still being read.
@@ -139,6 +159,13 @@ protected:
 
     static void choose_source(MainWindow& window, const std::filesystem::path& path) {
         window.choose_source(path);
+    }
+
+    // The reference and the two test videos, read.
+    static void open_clips(MainWindow& window) {
+        window.choose_source(clip("sources/ref.mkv"));
+        window.add_test_videos({clip("encodes/a.mkv"), clip("encodes/b.mkv")});
+        ASSERT_TRUE(wait_until([&] { return window.source_info_.has_value() && !reading(window); }));
     }
 
     // What reading a video found, as its thread says it.
@@ -461,6 +488,136 @@ TEST_F(WindowTest, TheVideosOpenAtClosingAreReopenedThoseStillThere) {
     ASSERT_TRUE(wait_until([&] { return table(reopened).rowCount() > 0 && !reading(reopened); }));
     EXPECT_EQ(names(reopened), (std::vector<std::string>{"b.mkv"}));
     EXPECT_EQ(source_edit(reopened).text().toStdString(), platform::path_text(clip("sources/ref.mkv")));
+}
+
+// ---------------------------------------------------------------- the run
+
+// What a run asks of the PC's sleep, in order, in place of the request
+// itself; the tests' own stand-in is put back as it goes.
+class KeepAwakeCalls {
+public:
+    KeepAwakeCalls() {
+        set_keep_awake([this](bool awake) {
+            calls.push_back(awake);
+            return true;
+        });
+    }
+    ~KeepAwakeCalls() {
+        set_keep_awake([](bool /*awake*/) { return false; });
+    }
+    KeepAwakeCalls(const KeepAwakeCalls&) = delete;
+    KeepAwakeCalls& operator=(const KeepAwakeCalls&) = delete;
+
+    std::vector<bool> calls;
+};
+
+// A score as the command line's JSON gives it: "inf" is text there.
+std::optional<double> score_in(const nlohmann::json& score) {
+    if (score.is_string()) {
+        return score == "inf" ? std::numeric_limits<double>::infinity() : -std::numeric_limits<double>::infinity();
+    }
+    return score.is_null() ? std::nullopt : std::optional(score.get<double>());
+}
+
+TEST_F(WindowTest, ARunPausedOnTheWayScoresAsTheCommandLineAndItsTimeLeavesThePauseOut) {
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    KeepAwakeCalls awake;
+    MainWindow window;
+    double now = 100;
+    set_clock(window, [&now] { return now; });
+    open_clips(window);
+
+    run_button(window).click();
+    // Frozen at once: nothing that changes what a running video means can
+    // be used, and the PC is kept awake.
+    EXPECT_TRUE(running(window));
+    EXPECT_FALSE(run_button(window).isEnabled());
+    EXPECT_TRUE(source_edit(window).isReadOnly());
+    EXPECT_EQ(awake.calls, std::vector<bool>{true});
+    now = 103;
+    pause_button(window).click();
+    EXPECT_EQ(pause_button(window).text().toStdString(), "Resume");
+    EXPECT_EQ(status(window), "Paused   ·   2 videos: 2 queued   ·   Elapsed: 0:00:03");
+    now = 160;
+    pause_button(window).click();
+    now = 170;
+    ASSERT_TRUE(wait_until([&] { return !running(window); }));
+    EXPECT_EQ(status(window), "Done in 0:00:13.");
+    EXPECT_EQ(awake.calls, (std::vector<bool>{true, false}));
+    EXPECT_TRUE(run_button(window).isEnabled());
+    EXPECT_FALSE(source_edit(window).isReadOnly());
+
+    // The command line's scores for the same videos, with the same settings,
+    // are in the metrics' cells.
+    const platform::ProcessOutput command_line = platform::run_program(
+        {VML_CLI, "compare", platform::path_text(clip("sources/ref.mkv")), platform::path_text(clip("encodes/a.mkv")),
+         platform::path_text(clip("encodes/b.mkv")), "--json", "-", "--quiet"},
+        std::chrono::minutes(2));
+    ASSERT_EQ(command_line.exit_code, 0) << command_line.standard_error;
+    const nlohmann::json results = nlohmann::json::parse(command_line.standard_output);
+    for (int row = 0; row < 2; ++row) {
+        const nlohmann::json& scores = results["videos"][row]["metrics"];
+        ASSERT_EQ(scores.size(), 4U);  // VMAF, PSNR, SSIM and XPSNR
+        for (const MetricColumn& column : metric_columns()) {
+            if (scores.contains(column.key)) {
+                EXPECT_EQ(table(window).item(row, column.column)->text().toStdString(),
+                          metric_definition(column.key).format_value(score_in(scores[column.key]["score"])))
+                    << row << " " << column.key;
+            }
+        }
+        EXPECT_EQ(state(window, row), RowState::complete);
+    }
+
+    // Ticked again, every video has its scores: nothing is calculated.
+    run_button(window).click();
+    EXPECT_FALSE(running(window));
+    EXPECT_EQ(status(window), "All 2 checked videos already have all requested metrics -- nothing to run.");
+}
+
+TEST_F(WindowTest, CancelEndsAPausedRunAndMarksTheVideoItWasCalculating) {
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    MainWindow window;
+    open_clips(window);
+    run_button(window).click();
+    pause_button(window).click();
+    // Paused, the first video starts and goes no further, its line saying
+    // where it stopped; the second waits for its turn.
+    ASSERT_TRUE(wait_until([&] { return state(window, 0) == RowState::calculating; }));
+    EXPECT_TRUE(wait_until([&] {
+        return job_line(window, 0) == "a — CPU metrics 1–4 of 4: VMAF v0.6.1, PSNR, SSIM, XPSNR (Detecting black bars "
+                                      "in source and test video)";
+    })) << job_line(window, 0);
+    cancel_button(window).click();
+    EXPECT_EQ(status(window), "Cancelling...");
+    ASSERT_TRUE(wait_until([&] { return !running(window); }));
+    EXPECT_TRUE(status(window).starts_with("Cancelled after ")) << status(window);
+    EXPECT_EQ(state(window, 0), RowState::cancelled);
+    EXPECT_EQ(state(window, 1), RowState::not_calculated);  // as it was
+    EXPECT_FALSE(pause_button(window).isChecked());
+    EXPECT_EQ(pause_button(window).text().toStdString(), "Pause");
+}
+
+TEST_F(WindowTest, ClosingTheWindowDuringARunEndsTheRunAndThenTheWindow) {
+    // Closed while its thread still wrote into the widgets, the window would
+    // crash the app and leave its programs running.
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    MainWindow window;
+    window.show();
+    open_clips(window);
+    run_button(window).click();
+    pause_button(window).click();
+    ASSERT_TRUE(wait_until([&] { return state(window, 0) == RowState::calculating; }));
+    window.close();
+    EXPECT_TRUE(window.isVisible());
+    EXPECT_EQ(status(window), "Finishing up; the window will close on its own.");
+    ASSERT_TRUE(wait_until([&] { return !window.isVisible(); }));
+    EXPECT_FALSE(running(window));
 }
 
 // ------------------------------------------------------------ the window

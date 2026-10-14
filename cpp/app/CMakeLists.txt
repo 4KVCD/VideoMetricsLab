@@ -13,8 +13,10 @@ add_library(vml_app STATIC
     formatting.cpp
     i18n.cpp
     main_window.cpp
+    main_window_run.cpp
     probe_worker.cpp
     row_state.cpp
+    run_worker.cpp
     theme.cpp
     widgets.cpp
 )

@@ -159,6 +159,7 @@ private:
         std::optional<std::array<long long, 3>> phase;
         std::string waiting_for;  // "GPU" or "CPU" while it waits
         RunStatus step;           // its latest status
+        std::optional<HardwareDecoding> decode;  // the last decode plan a status named
 
         bool finished() const { return result.has_value() || perceptual.has_value(); }
     };
@@ -432,6 +433,9 @@ void JobRun::report_status(std::size_t task, const RunStatus& status) {
     const std::lock_guard lock(mutex_);
     TaskState& state = tasks_[task];
     state.step = status;
+    if (status.decoding) {
+        state.decode = status.decoding;
+    }
     if (tasks_.size() > 1 && status.kind == StatusKind::gpu_wait) {
         state.waiting_for = "GPU";
     }
@@ -601,6 +605,7 @@ std::vector<TaskSnapshot> JobRun::snapshots() const {
                                                       : "starting";
         snapshot.waiting_for = state.waiting_for;
         snapshot.step = state.step;
+        snapshot.decode = state.decode;
     }
     return found;
 }

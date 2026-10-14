@@ -88,6 +88,8 @@ std::optional<unsigned long long> available_memory() {
 
 void raise_thread_priority() {}
 
+bool keep_system_awake(bool /*awake*/) { return false; }
+
 std::vector<unsigned> gpu_vendor_ids() { return {}; }
 
 std::optional<long long> modified_ns(const std::filesystem::path& file) {

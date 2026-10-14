@@ -73,6 +73,14 @@ MetricResultSet reusable(const ComparisonResult& result, const std::vector<Metri
                          const std::function<bool(const std::string&)>& gpu_can_score,
                          const std::vector<ColourTags>& infos);
 
+// The keys of the scores reusable() keeps, in the order of `specs`, without
+// copying the scores: for the window, which asks for each row whenever the
+// row is drawn.
+std::vector<std::string> reusable_keys(const ComparisonResult& result, const std::vector<MetricRequestSpec>& specs,
+                                       const std::map<std::string, std::string>& backends,
+                                       const std::function<bool(const std::string&)>& gpu_can_score,
+                                       const std::vector<ColourTags>& infos);
+
 // Saves a run's result in `base`: the comparison's context.json and the
 // score of each request in `specs` the result has. Returns the comparison's
 // folder. Throws std::filesystem::filesystem_error (or std::runtime_error)

@@ -114,17 +114,4 @@ QString language();
 // MESSAGE_TEMPLATES).
 const std::vector<QString>& message_templates();
 
-// While one lives, tr() and the rest give English on its thread: for text
-// the window shows that also goes to the log.
-class InEnglish {
-public:
-    InEnglish();
-    ~InEnglish();
-    InEnglish(const InEnglish&) = delete;
-    InEnglish& operator=(const InEnglish&) = delete;
-
-private:
-    bool before_;
-};
-
 }  // namespace vml::app

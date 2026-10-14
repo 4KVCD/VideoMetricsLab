@@ -35,4 +35,8 @@ QColor vmaf_band_colour(double mean);
 // as they wrote it. The name itself stays the identifier.
 QString preset_label(const CvvdpPreset& preset);
 
+// A display in one line, for tooltips (the Python app's CvvdpDisplay.describe):
+// '30" 3840x2160 SDR, 200 nits, 250 lux, 0.75 m (2.0 x screen height)'.
+QString display_description(const CvvdpDisplay& display);
+
 }  // namespace vml::app

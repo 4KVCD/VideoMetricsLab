@@ -1,10 +1,12 @@
 // The line that says how far a video's metrics are (run_line.h), held to
 // the Python app's own (run_line.json): from snapshots of the video's tasks,
-// with the steps and metric numbers it shows.
+// with its tooltip, its "Decoder: ..." text, and the steps and metric
+// numbers it shows.
 #include "vml/run_line.h"
 
 #include <gtest/gtest.h>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -43,6 +45,12 @@ TaskSnapshot snapshot_from(const Json& item) {
     snapshot.state = item["state"].get<std::string>();
     snapshot.waiting_for = item["waiting_for"].get<std::string>();
     snapshot.step = status_from(item["step"]);
+    if (const Json& decode = item["decode"]; !decode.is_null()) {
+        const auto hwaccel = [](const Json& value) {
+            return value.is_null() ? std::nullopt : std::optional(value.get<std::string>());
+        };
+        snapshot.decode = HardwareDecoding{hwaccel(decode["source"]), hwaccel(decode["distorted"])};
+    }
     return snapshot;
 }
 
@@ -54,8 +62,15 @@ TEST(RunLine, IsThePythonAppsLine) {
         for (const Json& task : item["tasks"]) {
             tasks.push_back(snapshot_from(task));
         }
-        EXPECT_EQ(metric_line(tasks, item["paused"].get<bool>()), item["line"].get<std::vector<std::string>>())
-            << item["name"].get<std::string>();
+        const std::string name = item["name"].get<std::string>();
+        const MetricLine line = metric_line(tasks, item["paused"].get<bool>());
+        EXPECT_EQ(line.parts, item["line"].get<std::vector<std::string>>()) << name;
+        EXPECT_EQ(line.tooltip, item["tooltip"].get<std::string>()) << name;
+        EXPECT_EQ(line.plans.empty() ? "" : decoder_text(line.plans, false), item["decoder"].get<std::string>())
+            << name;
+        EXPECT_EQ(line.plans.empty() ? "" : decoder_text(line.plans, true),
+                  item["decoder_source_only"].get<std::string>())
+            << name;
     }
     for (const Json& item : reference["steps"]) {
         EXPECT_EQ(step_text(status_from(item["status"])), item["text"].get<std::string>()) << item["status"].dump();

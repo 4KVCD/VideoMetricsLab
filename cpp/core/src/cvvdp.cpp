@@ -181,6 +181,12 @@ nlohmann::ordered_json CvvdpDisplay::identity() const {
                 {"hdr", hdr}};
 }
 
+double CvvdpDisplay::distance_in_heights() const {
+    const double aspect = width / height;
+    const double height_m = diagonal_inches * 0.0254 / std::sqrt(1 + aspect * aspect);
+    return viewing_distance_m / height_m;
+}
+
 nlohmann::ordered_json CvvdpSettings::parameters() const {
     return Json{{"display", display.identity()}, {"resize_to_display", resize_to_display}};
 }
@@ -266,6 +272,28 @@ std::optional<CvvdpPreset> cvvdp_preset_named(const std::string& name, const std
     for (CvvdpPreset& preset : cvvdp_presets(user_presets_json)) {
         if (preset.name == name) {
             return std::move(preset);
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<CvvdpPreset> matching_cvvdp_preset(const CvvdpSettings& settings, const std::string& user_presets_json,
+                                                 const std::string& preferred) {
+    std::vector<CvvdpPreset> candidates = cvvdp_presets(user_presets_json);
+    const Json identity = settings.display.identity();
+    const auto matches = [&identity](const CvvdpPreset& preset) {
+        return preset.settings.display.identity() == identity;
+    };
+    if (!preferred.empty()) {
+        for (CvvdpPreset& preset : candidates) {
+            if (preset.name == preferred && matches(preset)) {
+                return std::move(preset);
+            }
+        }
+    }
+    for (auto preset = candidates.rbegin(); preset != candidates.rend(); ++preset) {
+        if (matches(*preset)) {
+            return std::move(*preset);
         }
     }
     return std::nullopt;

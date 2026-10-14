@@ -33,6 +33,8 @@
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <functional>
 #include <numeric>
 #include <tuple>
@@ -41,14 +43,17 @@
 
 #include "formatting.h"
 #include "i18n.h"
+#include "run_worker.h"
 #include "theme.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/geometry.h"
+#include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
 #include "vml/time_format.h"
 #include "vml/vship.h"
 #include "widgets.h"
+#include "window_helpers.h"
 
 // The window's text is app::tr's (i18n.h), always written so: Q_OBJECT gives
 // the window a tr() of Qt's own, which inside its functions would hide the
@@ -57,36 +62,18 @@ namespace vml::app {
 
 namespace {
 
-// Two videos for the CPU's metrics at most, and one more on the GPU (the
-// Python app's job_runner MAX_PARALLEL_JOBS and MAX_VIDEOS_IN_FLIGHT).
-constexpr int max_parallel_jobs = 2;
-constexpr int max_videos_in_flight = 3;
+// The videos in progress at once: two with the CPU's metrics, and one more
+// on the GPU (the Python app's job_runner MAX_VIDEOS_IN_FLIGHT).
+constexpr int max_videos_in_flight = max_parallel_jobs + 1;
 
 // A metric cell's score, as compared by Highlight best/worst results:
 // nothing where it shows none to compare.
 constexpr int score_role = Qt::UserRole;
 
-QString qt_text(std::string_view text) { return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size())); }
-
-QString text_of(const std::filesystem::path& path) { return QString::fromStdString(platform::path_text(path)); }
-
-QString name_of(const std::filesystem::path& path) { return text_of(path.filename()); }
-
 // A path as the window takes it from a dialog, a drop or the reference box:
 // with the system's separators, as Python's Path gives it.
 std::filesystem::path path_of(const QString& text) {
     return platform::path_from_text(text.toStdString()).make_preferred();
-}
-
-// Whether two paths name the same file as Python's Path compares them: on
-// Windows, whatever the case of their letters.
-bool same_path(const std::filesystem::path& a, const std::filesystem::path& b) {
-#ifdef _WIN32
-    return QString::compare(text_of(std::filesystem::path(a).make_preferred()),
-                            text_of(std::filesystem::path(b).make_preferred()), Qt::CaseInsensitive) == 0;
-#else
-    return a == b;
-#endif
 }
 
 // "1920x1080".
@@ -117,10 +104,6 @@ bool Settings::* default_compute_field(std::string_view key) {
     const auto found = fields.find(key);
     return found == fields.end() ? nullptr : found->second;
 }
-
-// Whether a GPU Vship can use is here (CVVDP runs on it); the probe is kept
-// after the first time.
-bool vship_available() { return detect_vship_device().first.has_value(); }
 
 // A menu of check boxes that stays open while boxes are ticked, so several
 // metrics can be switched in one visit.
@@ -250,6 +233,15 @@ MainWindow::MainWindow() {
         hidden_metrics_.clear();  // a settings file that hides everything shows everything
     }
 
+    // A run's clock, and its tick: once a second, its lines' new figures and
+    // the time it has taken.
+    clock_ = [] {
+        return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    };
+    run_tick_timer_ = new QTimer(this);
+    run_tick_timer_->setInterval(1000);
+    connect(run_tick_timer_, &QTimer::timeout, this, [this] { on_run_tick(); });
+
     build_ui();
     // At least 1050x650, and never smaller than the window's contents need.
     setMinimumSize(QSize(1050, 650).expandedTo(minimumSizeHint()));
@@ -269,8 +261,18 @@ MainWindow::~MainWindow() {
     for (ProbeWorker* worker : probe_workers_) {
         worker->cancel();
     }
+    // A run ends every program it started.
+    if (worker_ != nullptr) {
+        worker_->cancel();
+    }
     for (ProbeWorker* worker : probe_workers_) {
         worker->wait();
+    }
+    if (worker_ != nullptr) {
+        worker_->wait();
+    }
+    if (run_active_) {
+        set_run_ui_active(false);  // the PC may sleep again
     }
 }
 
@@ -328,21 +330,31 @@ std::vector<QThread*> MainWindow::live_workers() const {
             workers.push_back(worker);
         }
     }
+    if (worker_ != nullptr && worker_->isRunning()) {
+        workers.push_back(worker_);
+    }
     return workers;
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
     // Don't close while background work still writes into the widgets: it
     // would crash the app and leave the process running. The work is told
-    // to stop, and the window closes itself once it has.
+    // to stop (a run ends the programs it started), and the window closes
+    // itself once it has.
     if (!closing_) {
         closing_ = true;
         for (ProbeWorker* worker : probe_workers_) {
             worker->cancel();
         }
+        if (worker_ != nullptr) {
+            worker_->cancel();
+        }
     }
     if (!live_workers().empty()) {
-        status_label_->setText(app::tr("Finishing up; the window will close on its own."));
+        // Held on the status line, where the run would put its counts.
+        run_hold_ = RunHold::message;
+        run_hold_message_ = app::tr("Finishing up; the window will close on its own.");
+        show_status(run_hold_message_);
         QTimer::singleShot(200, this, [this] { close_when_idle(); });
         event->ignore();
         return;
@@ -648,12 +660,14 @@ QWidget* MainWindow::build_run_panel() {
 
     auto* run_row = new QHBoxLayout;
     run_button_ = new QPushButton(app::tr("Calculate metrics"));
-    run_button_->setEnabled(false);  // runs are not ported to C++ yet
+    connect(run_button_, &QPushButton::clicked, this, [this] { on_run_clicked(); });
     pause_button_ = new QPushButton(app::tr("Pause"));
     pause_button_->setEnabled(false);
     pause_button_->setCheckable(true);
+    connect(pause_button_, &QPushButton::clicked, this, [this] { on_pause_clicked(); });
     cancel_button_ = new QPushButton(app::tr("Cancel"));
     cancel_button_->setEnabled(false);
+    connect(cancel_button_, &QPushButton::clicked, this, [this] { on_cancel_clicked(); });
     run_row->addWidget(run_button_);
     run_row->addWidget(pause_button_);
     run_row->addWidget(cancel_button_);
@@ -671,10 +685,7 @@ QWidget* MainWindow::build_run_panel() {
         "is in progress: ticking it starts another video straight away, unticking it lets the running ones finish "
         "first.\n\nOnly affects how fast results arrive, never what they are.",
         {{"cores", cores}}));
-    connect(parallel_jobs_check_, &QCheckBox::toggled, this, [this](bool on) {
-        settings_.parallel_jobs = on ? max_parallel_jobs : 1;
-        save_settings();
-    });
+    connect(parallel_jobs_check_, &QCheckBox::toggled, this, [this](bool on) { on_parallel_jobs_changed(on); });
     run_row->addWidget(parallel_jobs_check_);
     run_row->addStretch(1);
 
@@ -1077,10 +1088,16 @@ int MainWindow::add_table_row(const std::filesystem::path& path) {
 }
 
 void MainWindow::set_row_metrics(int row) {
-    // Each metric cell shows its score, or a tick box for calculating it: a
-    // metric without a score shows a tick box in the column its result will
-    // go in, so choosing what to calculate is one click on the row.
+    // Each metric cell shows its score, or a tick box for calculating it. A
+    // metric that has been measured shows only the number: there is no
+    // choice left to make about it, and a tick box beside a score invites
+    // unticking it as though that would undo the measurement. A metric
+    // without a score shows a tick box in the column its result will go in,
+    // so choosing what to calculate is one click on the row. Scores stay when
+    // the ticks change: ticking another metric changes what is asked for,
+    // not what was measured.
     const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+    CompletedRun* run = row_data.completed_run.get();
     // setCheckState/setData below emit itemChanged, which is also how a real
     // click arrives: without this the window would read its own repaint back
     // as the user asking for a change.
@@ -1091,6 +1108,37 @@ void MainWindow::set_row_metrics(int row) {
             continue;
         }
         const bool enabled = row_metric_enabled(row_data, metric.column);
+        const std::optional<double> score = run != nullptr ? score_of(*run, metric.column) : std::nullopt;
+        if (score) {
+            // Measured: the score replaces the tick box. Taking the check
+            // state's value away is what removes the box: Qt draws one for
+            // any item that has the role set at all.
+            item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            item->setData(Qt::CheckStateRole, QVariant());
+            const MetricDefinition& definition = metric_definition(metric.key);
+            const FrameMetricResult* frame_metric = run->result.metric_results.frame(metric.key);
+            QString text = qt_text(definition.format_value(*score));
+            const bool other_scale = frame_metric != nullptr && row_data.metric_backends.contains(metric.key) &&
+                                     !backend_matches(row_data, metric.key, frame_metric->provenance);
+            if (other_scale) {
+                // Visible without hovering: a score from the other
+                // implementation is on a different scale from the rest.
+                text += " (" + QString::fromStdString(frame_metric->provenance.compute_backend).toUpper() + ")";
+            }
+            item->setText(text);
+            // Compared with the others' unless on another scale.
+            item->setData(score_role, other_scale ? QVariant() : QVariant(*score));
+            item->setToolTip(definition.kind == MetricKind::sequence
+                                 ? cvvdp_note(row_data)
+                                 : app::tr("Mean of calculated frame scores.") +
+                                       identical_frames_note(*run, metric.column) +
+                                       backend_note(row_data, metric.key, frame_metric));
+            QFont font;
+            font.setBold(true);
+            item->setFont(font);
+            theme::foreground(item, std::nullopt);
+            continue;
+        }
         if (const std::optional<QString> unavailable = metric_unavailable_reason(row_data, metric.key)) {
             // No tick box: there is nothing to choose. The row's own selection
             // is left alone for when it applies again.
@@ -1136,12 +1184,19 @@ void MainWindow::set_row_metrics(int row) {
 }
 
 RowState MainWindow::row_state(const RowData& row_data) const {
-    // What the metric cells cannot say: which stage a live job is at, and why
-    // a finished job is not shown. No results are ported to C++ yet.
+    // How the row's analysis stands, in one phrase. Above all what the
+    // metric cells cannot say: which stage a live job is at, and why a
+    // finished job is not shown.
     if (row_data.analysis_status) {
         return *row_data.analysis_status;
     }
-    return requested_metrics(row_data).empty() ? RowState::no_metrics : RowState::not_calculated;
+    if (requested_metrics(row_data).empty()) {
+        return RowState::no_metrics;
+    }
+    if (has_requested_results(row_data)) {
+        return RowState::complete;
+    }
+    return row_data.completed_run ? RowState::partial : RowState::not_calculated;
 }
 
 void MainWindow::refresh_row_state(int row) {
@@ -1170,10 +1225,37 @@ void MainWindow::refresh_row_state(int row) {
     }
 }
 
+QString MainWindow::crop_detail(const QString& label, const VideoInfo& info, const std::optional<CropBox>& crop) {
+    // One video's crop, spelled out for the Black bars cell's tooltip.
+    if (!crop) {
+        return app::tr("{label}: not checked for black bars; no crop was applied.", {{"label", label}});
+    }
+    if (crop->is_noop(info.width, info.height)) {
+        return app::tr("{label}: no black bars. Compared in full at {size}.",
+                       {{"label", label}, {"size", size_text(info.width, info.height)}});
+    }
+    QStringList sides;
+    for (const auto& [side, pixels] : {std::pair{"top {pixels} px", std::max(0, crop->y)},
+                                       std::pair{"bottom {pixels} px", std::max(0, info.height - crop->y - crop->h)},
+                                       std::pair{"left {pixels} px", std::max(0, crop->x)},
+                                       std::pair{"right {pixels} px", std::max(0, info.width - crop->x - crop->w)}}) {
+        if (pixels != 0) {
+            sides.append(app::tr(side, {{"pixels", pixels}}));
+        }
+    }
+    return app::tr("{label}: black bars cropped off -- {sides}.\nCompared at {cropped} instead of {full}.",
+                   {{"label", label},
+                    {"sides", sides.join(", ")},
+                    {"cropped", size_text(crop->w, crop->h)},
+                    {"full", size_text(info.width, info.height)}});
+}
+
 void MainWindow::set_row_black_bars(int row, bool probe_failed) {
-    // Whether the test video has black bars, and nothing more; Auto crop is
-    // worked out during a run, so before a result the cell says it is
-    // pending.
+    // Whether the test video has black bars, and nothing more; the pixel
+    // counts, and what was cropped off the reference, are in the tooltip.
+    // Auto crop is worked out during a run, and can differ between rows, as
+    // each has its own duration limit: the cell says it is pending until a
+    // result gives the crops the run used.
     QTableWidgetItem* item = distorted_table_->item(row, col_black_bars);
     if (item == nullptr) {
         return;
@@ -1188,32 +1270,51 @@ void MainWindow::set_row_black_bars(int row, bool probe_failed) {
         return;
     }
     const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
-    if (row_data.options.crop_mode == CropMode::none) {
-        show(app::tr("Off"),
-             app::tr("Black-bar detection is disabled for this row; the full frames will be compared."), true);
-    } else {
-        show(app::tr("Pending"), app::tr("Black bars will be detected when this row is run."), true);
+    if (!row_data.completed_run) {
+        if (row_data.options.crop_mode == CropMode::none) {
+            show(app::tr("Off"),
+                 app::tr("Black-bar detection is disabled for this row; the full frames will be compared."), true);
+        } else {
+            show(app::tr("Pending"), app::tr("Black bars will be detected when this row is run."), true);
+        }
+        return;
     }
+    const ComparisonResult& result = row_data.completed_run->result;
+    if (!result.distorted_crop) {
+        show(app::tr("Off"), app::tr("Black-bar detection was disabled for this run; no crop was applied."), true);
+        return;
+    }
+    show(result.distorted_crop->is_noop(result.distorted_info.width, result.distorted_info.height) ? app::tr("No")
+                                                                                                  : app::tr("Yes"),
+         crop_detail(app::tr("Test video"), result.distorted_info, result.distorted_crop) + "\n\n" +
+             crop_detail(app::tr("Reference"), result.source_info, result.source_crop),
+         false);
 }
 
 std::pair<QString, QString> MainWindow::resize_mismatch(int row) const {
     // (short tag, full explanation) saying which of the two videos is
-    // resized to match the other, when their sizes differ. Before a run, it
-    // uses the row's own setting. (Results are not ported to C++ yet: a run's
-    // crops and direction come with them.)
+    // resized to match the other, when their sizes differ. The two are
+    // compared after their black bars come off, as the run compares them: a
+    // 1920x1080 letterboxed reference and a 1920x804 encode of the same film
+    // are the same picture, not a resize. After a run, it uses the crops and
+    // direction the run used, which stay right if the row's settings are
+    // edited afterwards; before one, the row's own setting.
     const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
-    if (!source_info_ || !row_data.video_info) {
+    const CompletedRun* run = row_data.completed_run.get();
+    if (run == nullptr && (!source_info_ || !row_data.video_info)) {
         return {};
     }
-    const VideoInfo& source = *source_info_;
-    const VideoInfo& distorted = *row_data.video_info;
-    const std::pair<int, int> reference{source.width, source.height};
-    const std::pair<int, int> test{distorted.width, distorted.height};
+    const VideoInfo& source = run != nullptr ? run->result.source_info : *source_info_;
+    const VideoInfo& distorted = run != nullptr ? run->result.distorted_info : *row_data.video_info;
+    const Size reference = run != nullptr ? content_size(source, run->result.source_crop)
+                                          : Size{source.width, source.height};
+    const Size test = run != nullptr ? content_size(distorted, run->result.distorted_crop)
+                                     : Size{distorted.width, distorted.height};
     if (reference == test) {
         return {QString(), app::tr("Reference and test video are compared at the same {size} -- no scaling needed.",
                               {{"size", size_text(reference.first, reference.second)}})};
     }
-    if (row_data.options.crop_mode != CropMode::none &&
+    if (run == nullptr && row_data.options.crop_mode != CropMode::none &&
         (reference.first == test.first || reference.second == test.second)) {
         // One dimension already matches and only the other differs: the shape
         // of black bars. Whether any scaling is needed is known once they are
@@ -1225,18 +1326,27 @@ std::pair<QString, QString> MainWindow::resize_mismatch(int row) const {
                         {{"reference", size_text(source.width, source.height)},
                          {"test", size_text(distorted.width, distorted.height)}})};
     }
-    if (row_data.options.scale_direction == ScaleDirection::distorted_to_source) {
+    // A "Test both" companion row always goes its own way, set as it is
+    // made; a saved result from before results kept the direction says the
+    // default, whatever made it.
+    const ScaleDirection direction = run != nullptr && !row_data.scale_direction_pinned
+                                         ? run->result.scale_direction
+                                         : row_data.options.scale_direction;
+    const bool cropped_either =
+        reference != Size{source.width, source.height} || test != Size{distorted.width, distorted.height};
+    const QString cropped = cropped_either ? app::tr(" (after black bars)") : QString();
+    if (direction == ScaleDirection::distorted_to_source) {
         return {app::tr("Test upscaled to source"),
                 app::tr("Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.",
                         {{"from_size", size_text(test.first, test.second)},
                          {"to_size", size_text(reference.first, reference.second)},
-                         {"cropped", QString()}})};
+                         {"cropped", cropped}})};
     }
     return {app::tr("\u2193 source"),
             app::tr("Reference downscaled {from_size} -> {to_size}{cropped} to match the test video.",
                     {{"from_size", size_text(reference.first, reference.second)},
                      {"to_size", size_text(test.first, test.second)},
-                     {"cropped", QString()}})};
+                     {"cropped", cropped}})};
 }
 
 void MainWindow::fit_columns(std::initializer_list<int> columns) {
@@ -1511,9 +1621,13 @@ void MainWindow::on_header_clicked(int column) {
             if (item != nullptr && !item->text().isEmpty()) {
                 key = item->text().toCaseFolded();
             }
+        } else if (metric_column_of(column) != nullptr && row_data.completed_run) {
+            // NaN would scramble the sort.
+            if (const std::optional<double> score = score_of(*row_data.completed_run, column);
+                score && !std::isnan(*score)) {
+                key = *score;
+            }
         }
-        // A metric column sorts by its scores: no results are ported to C++
-        // yet, so no row has one.
         keys.push_back(std::move(key));
     }
     std::vector<int> present;
@@ -1829,6 +1943,132 @@ void MainWindow::on_metric_column_toggled(int column, bool checked) {
     std::vector<int> rows(rows_.size());
     std::iota(rows.begin(), rows.end(), 0);
     apply_metric_selection(rows, column, checked, true);
+}
+
+// -------------------------------------------------------------- the scores
+
+std::vector<std::string> MainWindow::reusable_metric_keys(const RowData& row_data) const {
+    // The requested metrics the row already has and a run can keep
+    // (metric_cache.h's reusable_keys, the command line's rule too).
+    if (!row_data.completed_run) {
+        return {};
+    }
+    std::vector<ColourTags> infos;
+    for (const std::optional<VideoInfo>* info : {&source_info_, &row_data.video_info}) {
+        if (*info) {
+            infos.push_back({(*info)->pix_fmt, (*info)->color_transfer});
+        }
+    }
+    return reusable_keys(row_data.completed_run->result,
+                         analysis_request(row_data.options, requested_metrics(row_data), row_data.metric_backends,
+                                          row_data.cvvdp)
+                             .metrics,
+                         row_data.metric_backends, [](const std::string& key) { return gpu_can_score(key); }, infos);
+}
+
+MetricResultSet MainWindow::reusable_results(const RowData& row_data) const {
+    // Those metrics' scores, for a run to keep.
+    MetricResultSet kept;
+    for (const std::string& key : reusable_metric_keys(row_data)) {
+        const MetricResultSet& scores = row_data.completed_run->result.metric_results;
+        if (const SequenceMetricResult* sequence = scores.sequence(key)) {
+            kept.add(*sequence);
+        } else {
+            kept.add(*scores.frame(key));
+        }
+    }
+    return kept;
+}
+
+bool MainWindow::has_requested_results(const RowData& row_data) const {
+    // Whether the row already has a result for every metric it asks for.
+    const std::vector<std::string> requested = requested_metrics(row_data);
+    if (requested.empty()) {
+        return false;
+    }
+    const std::vector<std::string> kept = reusable_metric_keys(row_data);
+    return std::all_of(requested.begin(), requested.end(), [&kept](const std::string& key) {
+        return std::find(kept.begin(), kept.end(), key) != kept.end();
+    });
+}
+
+bool MainWindow::backend_matches(const RowData& row_data, const std::string& key,
+                                 const MetricProvenance& provenance) {
+    // Whether a score was made the way the row asks for it (metric_cache.h's
+    // made_as_chosen); a metric without a GPU or CPU choice always is.
+    const auto choice = row_data.metric_backends.find(key);
+    return made_as_chosen(key, choice == row_data.metric_backends.end() ? std::nullopt : std::optional(choice->second),
+                          provenance.compute_backend, [](const std::string& metric) { return gpu_can_score(metric); });
+}
+
+QString MainWindow::backend_note(const RowData& row_data, const std::string& key, const FrameMetricResult* metric) {
+    // The tooltip's word on a SSIMULACRA2 or Butteraugli score calculated on
+    // the other device than the row's choice, the rare case marked "(CPU)" or
+    // "(GPU)" in the cell. A score calculated where chosen needs none.
+    const auto choice = row_data.metric_backends.find(key);
+    if (choice == row_data.metric_backends.end() || metric == nullptr ||
+        backend_matches(row_data, key, metric->provenance)) {
+        return {};
+    }
+    return app::tr("\n\nCalculated on the {produced}, but this row is set to {wanted}; the two give different numbers, "
+                   "so the next run recalculates it on the {wanted}.",
+                   {{"produced", QString::fromStdString(metric->provenance.compute_backend).toUpper()},
+                    {"wanted", choice->second == "gpu" ? "GPU" : "CPU"}});
+}
+
+std::optional<double> MainWindow::score_of(CompletedRun& run, int column) {
+    // A metric column's score: CVVDP's one for the whole video, the others'
+    // mean of their frames. Worked out once a run: each time, a two-hour
+    // video's took 0.6 ms a metric, at each of the refreshes of its row.
+    if (const auto known = run.scores.find(column); known != run.scores.end()) {
+        return known->second;
+    }
+    const std::string key = metric_column_of(column)->key;
+    std::optional<double> score;
+    if (const SequenceMetricResult* sequence = run.result.metric_results.sequence(key)) {
+        score = sequence->score;
+    } else if (const FrameMetricResult* frame = run.result.metric_results.frame(key)) {
+        score = frame->aggregate();
+    }
+    run.scores.emplace(column, score);
+    return score;
+}
+
+QString MainWindow::identical_frames_note(CompletedRun& run, int column) {
+    // Says when frames were identical to the reference and scored infinity:
+    // without it, the mean silently describes fewer frames than the run
+    // measured. Counted once a run.
+    auto counted = run.identical.find(column);
+    if (counted == run.identical.end()) {
+        std::pair<long long, long long> found{0, 0};
+        if (const FrameMetricResult* frame = run.result.metric_results.frame(metric_column_of(column)->key)) {
+            found = {std::count_if(frame->values.begin(), frame->values.end(),
+                                   [](float value) { return std::isinf(value) && value > 0; }),
+                     static_cast<long long>(frame->values.size())};
+        }
+        counted = run.identical.emplace(column, found).first;
+    }
+    const auto [identical, count] = counted->second;
+    if (identical == 0) {
+        return {};
+    }
+    return app::tr("\n\n{identical} of {count} frames were identical to the reference and scored infinity; they "
+                   "contribute zero distortion and are included in the frame count for the XPSNR sequence average.",
+                   {{"identical", identical}, {"count", count}});
+}
+
+QString MainWindow::cvvdp_note(const RowData& row_data) const {
+    // A CVVDP score's tooltip: what the number means, and which display it
+    // is for.
+    const std::optional<CvvdpPreset> preset =
+        matching_cvvdp_preset(row_data.cvvdp, settings_.cvvdp_presets_json, row_data.cvvdp_preset);
+    return app::tr("CVVDP of the whole video, in JOD (just-objectionable differences): 10 means no visible "
+                   "difference, and one JOD lower means 75% of viewers would pick the reference as better.\n\nFor "
+                   "the display {preset}: {display}",
+                   {{"preset", preset ? preset_label(*preset) : app::tr("(custom)")},
+                    {"display", display_description(row_data.cvvdp.display)}}) +
+           (row_data.cvvdp.resize_to_display ? app::tr(", video scaled to fill it") : QString()) +
+           app::tr(".\n\nThe JOD of each second is plotted in Metric Graphs.");
 }
 
 }  // namespace vml::app

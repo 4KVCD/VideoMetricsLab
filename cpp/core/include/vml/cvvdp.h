@@ -42,6 +42,10 @@ struct CvvdpDisplay {
     // What a score depends on: the physical properties, rounded so that a
     // value typed or read back as 0.7472 is the same display.
     nlohmann::ordered_json identity() const;
+
+    // The viewing distance as a multiple of the screen's height, which the
+    // diagonal and the aspect ratio give.
+    double distance_in_heights() const;
 };
 
 // Everything that changes a CVVDP score besides the two videos.
@@ -63,6 +67,9 @@ struct CvvdpSettings {
     // a display CVVDP cannot model, and nlohmann's errors for parameters of
     // another shape.
     static CvvdpSettings from_parameters(const nlohmann::json& parameters);
+
+    // Whether two settings give the same scores.
+    bool same_as(const CvvdpSettings& other) const { return parameters() == other.parameters(); }
 };
 
 // The display as Vship 5.1 reads it: the JSON text of a display_models.json
@@ -90,6 +97,14 @@ std::vector<CvvdpPreset> cvvdp_presets(const std::string& user_presets_json);
 
 // The preset with this name, built-in or the user's, or nothing.
 std::optional<CvvdpPreset> cvvdp_preset_named(const std::string& name, const std::string& user_presets_json);
+
+// The preset whose display `settings` model, or nothing (the Python app's
+// matching_preset): `preferred`, the preset the video was given, while its
+// display still matches, so that of two presets with the same display the
+// one chosen is named; else the last with that display, so that a user's
+// preset saved from a built-in one is named as the user named it.
+std::optional<CvvdpPreset> matching_cvvdp_preset(const CvvdpSettings& settings, const std::string& user_presets_json,
+                                                 const std::string& preferred = "");
 
 // The size Vship calculates CVVDP at for frames of `size`: their own size,
 // or with resize_to_display, the larger of their own size and their size

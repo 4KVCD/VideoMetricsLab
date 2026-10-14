@@ -50,6 +50,8 @@ struct VmafOptions {
     // Turns one of FFmpeg's metrics on or off. Throws std::invalid_argument
     // for a metric that is not FFmpeg's.
     void set_metric_enabled(std::string_view key, bool enabled);
+
+    bool operator==(const VmafOptions&) const = default;
 };
 
 }  // namespace vml

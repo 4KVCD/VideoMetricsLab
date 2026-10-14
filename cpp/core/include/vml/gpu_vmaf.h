@@ -58,6 +58,12 @@ struct GpuVmafBackend {
 // Python app checks it.
 GpuVmafBackend gpu_vmaf_backend();
 
+// Before a run of the window, which stays open for long: forgets an answer
+// that the CPU scores VMAF found a minute or more ago, so that the run asks
+// again. The failure may have passed (a driver being updated or restarted);
+// kept, VMAF would be calculated on the CPU until the app restarted.
+void forget_failed_gpu_vmaf_probe();
+
 // The models a run scores on the GPU (gpu_models), or none when its VMAF is
 // calculated on the CPU: VMAF set to the CPU (`enabled`), a custom model, a
 // comparison deeper than 10 bits, an odd width or height (`size`, where

@@ -70,6 +70,13 @@ std::optional<unsigned long long> available_memory();
 // nothing on other systems, as in the Python app, or if Windows refuses.
 void raise_thread_priority();
 
+// Holds (`awake`) or releases Windows' "system required" request, which
+// keeps the PC from going to sleep while a run takes hours; the screen may
+// still turn off (the Python app's power.keep_system_awake). The request is
+// the calling thread's, and ends with it at the latest. False where nothing
+// was done: not Windows, or Windows refused.
+bool keep_system_awake(bool awake);
+
 // The PCI vendor IDs of the hardware GPUs DirectX lists (Windows only; empty
 // elsewhere): 0x10DE NVIDIA, 0x1002 and 0x1022 AMD, 0x8086 Intel.
 std::vector<unsigned> gpu_vendor_ids();

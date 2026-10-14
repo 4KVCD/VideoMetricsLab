@@ -125,6 +125,9 @@ struct TaskSnapshot {
     std::string state;        // "done", "failed", "waiting", "running" or "starting"
     std::string waiting_for;  // what a waiting task waits for: "GPU" or "CPU"
     RunStatus step;           // its latest status
+    // The last decode plan its statuses named: where it decodes each video,
+    // for the window's "Decoder: ...".
+    std::optional<HardwareDecoding> decode;
 };
 
 // The metrics that failed in a video whose other metrics finished: each

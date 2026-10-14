@@ -6,9 +6,12 @@
 // information and its scores. Each row has its own VmafOptions (crop
 // handling, model, GPU decoding and so on), not one setting shared by all.
 //
-// Ported so far: the window's frame, its tabs, and the Videos tab's files
-// panel (the reference, the test-video table and its buttons). The other
-// tabs, the Options panel and runs are still the Python app's alone.
+// Ported so far: the window's frame, its tabs, the Videos tab's files panel
+// (the reference, the test-video table and its buttons), and runs: the
+// ticked videos' metrics calculated, with their progress, and the scores
+// shown in the table (main_window_run.cpp). The other tabs and the Options
+// panel are still the Python app's alone, and the window does not read or
+// save the saved scores yet.
 #pragma once
 
 #include <QMainWindow>
@@ -16,18 +19,26 @@
 #include <QString>
 #include <QStringList>
 
+#include <array>
+#include <deque>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
 #include <string>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #include "probe_worker.h"
 #include "row_state.h"
+#include "vml/analysis_request.h"
 #include "vml/cvvdp.h"
+#include "vml/job_runner.h"
 #include "vml/options.h"
+#include "vml/results.h"
 #include "vml/settings.h"
 #include "vml/video.h"
 
@@ -46,6 +57,7 @@ class CheckableHeaderView;
 class ElidedLabel;
 class FillColumnTable;
 class QuietTabWidget;
+class RunWorker;
 
 // The test-video table's columns, by their stable physical index (the
 // Python app's COL_* numbers). VMAF v1 was added last, so every older column
@@ -81,6 +93,16 @@ const std::vector<MetricColumn>& metric_columns();
 // The window's tabs.
 enum Tab : int { tab_videos, tab_graph, tab_frame_compare, tab_bitrate, tab_settings };
 
+// A run's result on a row (the Python app's CompletedRun).
+struct CompletedRun {
+    ComparisonResult result;
+    // Each metric column's score, and the frames of its scores that were
+    // identical to the reference with how many it has: worked out once, as
+    // a long video's take a while and its row is drawn again and again.
+    std::map<int, std::optional<double>> scores;
+    std::map<int, std::pair<long long, long long>> identical;
+};
+
 // One row of the test-video table: the video, its options and its results.
 struct RowData {
     std::filesystem::path path;
@@ -107,6 +129,8 @@ struct RowData {
     QString status_detail;
     // Why each metric failed on the last run, by key, for its red cell.
     std::map<std::string, QString> metric_failures;
+    // The scores of the row's last run; nothing before one.
+    std::shared_ptr<CompletedRun> completed_run;
     // True only for a "Test both" companion row, whose scale direction was
     // set on purpose to the direction the row stands for.
     bool scale_direction_pinned = false;
@@ -116,13 +140,18 @@ struct RowData {
     const std::filesystem::path& identity_path() const { return media_path ? *media_path : path; }
 };
 
+// How the window keeps the PC from sleeping while a run goes on
+// (platform::keep_system_awake). The tests put a stand-in in its place, so
+// that no test holds the real request.
+void set_keep_awake(std::function<bool(bool awake)> keep_awake);
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
     MainWindow();
-    // Waits for the videos still being read: a thread must not outlive its
-    // window.
+    // Waits for the videos still being read, and ends a run: a thread must
+    // not outlive its window.
     ~MainWindow() override;
 
 protected:
@@ -214,6 +243,60 @@ private:
     void on_table_item_changed(QTableWidgetItem* item);
     void on_metric_column_toggled(int column, bool checked);
 
+    // ------------------------------------------------------------ the scores
+    std::vector<std::string> reusable_metric_keys(const RowData& row_data) const;
+    MetricResultSet reusable_results(const RowData& row_data) const;
+    bool has_requested_results(const RowData& row_data) const;
+    static bool backend_matches(const RowData& row_data, const std::string& key, const MetricProvenance& provenance);
+    static QString backend_note(const RowData& row_data, const std::string& key, const FrameMetricResult* metric);
+    static std::optional<double> score_of(CompletedRun& run, int column);
+    static QString identical_frames_note(CompletedRun& run, int column);
+    QString cvvdp_note(const RowData& row_data) const;
+    static QString crop_detail(const QString& label, const VideoInfo& info, const std::optional<CropBox>& crop);
+
+    // ---------------------------------------------------- the run (main_window_run.cpp)
+    // The status line during a run says how much is done; this holds
+    // something else there: "Paused" before the counts, or a message alone
+    // ("Cancelling...").
+    enum class RunHold { none, paused, message };
+    // What a video's line shows apart from its figures, which redraws it at
+    // once when it changes: each task's state, pass, wait, and metrics moved
+    // to the CPU or done.
+    using LineShape = std::vector<std::tuple<std::string, std::optional<std::array<long long, 3>>, std::string,
+                                             std::vector<std::string>, std::vector<std::string>>>;
+
+    std::vector<int> checked_rows() const;
+    void on_run_clicked();
+    bool confirm_skipping(const std::vector<std::pair<std::shared_ptr<RowData>, QString>>& skipped, bool others);
+    bool confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<RowData>>& job_rows);
+    void set_run_ui_active(bool active);
+    int parallel_jobs() const;
+    void on_parallel_jobs_changed(bool on);
+    void on_cancel_clicked();
+    void on_pause_clicked();
+    void on_job_started(int index);
+    void redraw_job_lines();
+    void set_job_line(int index, const QString& text, const QString& tooltip = QString());
+    void arrange_job_lines();
+    void mark_job_over(int index);
+    QString job_label(int index) const;
+    void update_run_status();
+    std::optional<double> run_elapsed() const;
+    QString run_end_message() const;
+    QString run_summary(int running, int total) const;
+    void pause_free_rates(int index, std::vector<TaskSnapshot>& tasks);
+    void on_task_progress(int index, std::vector<TaskSnapshot> tasks);
+    void on_run_tick();
+    void render_job_progress(int index);
+    std::optional<int> row_index_of(const RowData* row_data) const;
+    void on_result_updated(int index, const ComparisonResult& result);
+    std::optional<int> on_job_finished(int index, const ComparisonResult& result, bool final = true);
+    void on_job_partially_failed(int index, const ComparisonResult& result, const QString& message,
+                                 const QString& stderr_tail, const MetricFailures& failures);
+    void on_job_failed(int index, const QString& message, const QString& stderr_tail);
+    void on_all_finished();
+    void on_run_thread_finished(RunWorker* worker);
+
     Settings settings_;
     std::optional<VideoInfo> source_info_;
     // The rows, in the table's order. Held by pointer: work that outlives a
@@ -243,6 +326,41 @@ private:
     std::map<std::string, std::string> default_metric_backends_;
     CvvdpSettings default_cvvdp_;
     std::set<std::string> hidden_metrics_;
+
+    // The run under way, or the last one, by its jobs' indexes. Its jobs'
+    // rows are held as rows, not positions, so that a row moved or removed
+    // during the run never takes another's result; with the options and
+    // display each job started with.
+    RunWorker* worker_ = nullptr;
+    std::vector<std::shared_ptr<RowData>> job_rows_;
+    std::vector<VmafOptions> job_options_;
+    std::vector<CvvdpSettings> job_cvvdp_;
+    std::vector<int> running_jobs_;  // in the order they started
+    std::set<int> finished_jobs_;
+    int run_failed_count_ = 0;
+    int run_partial_count_ = 0;  // videos with some metrics failed, the rest scored
+    int run_skipped_ = 0;        // ticked videos left out, as they had every score
+    bool run_was_cancelled_ = false;
+    // The run's clock, in seconds: started, paused in all, paused since.
+    std::optional<double> run_started_at_;
+    double paused_total_ = 0;
+    std::optional<double> paused_since_;
+    RunHold run_hold_ = RunHold::none;
+    QString run_hold_message_;
+    // Each video's line: the latest state of its tasks, the line's text and
+    // tooltip, which of the lines shows it, what it shows apart from its
+    // figures, and whether its figures are due on the next tick.
+    std::map<int, std::vector<TaskSnapshot>> job_task_progress_;
+    std::map<int, std::pair<QString, QString>> job_line_text_;
+    std::map<int, int> job_line_slot_;
+    std::map<int, LineShape> job_line_shape_;
+    std::set<int> job_lines_due_;
+    // Each running task's recent progress on the run's clock, by job, task
+    // and pass: (seconds, frames done).
+    std::map<std::tuple<int, std::string, long long>, std::deque<std::pair<double, long long>>> rate_samples_;
+    QTimer* run_tick_timer_ = nullptr;
+    // Seconds on a steady clock; a clock of their own in the tests.
+    std::function<double()> clock_;
 
     QLabel* ffmpeg_banner_ = nullptr;
     QPushButton* locate_ffmpeg_button_ = nullptr;

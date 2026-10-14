@@ -706,12 +706,19 @@ def run_line_cases() -> dict:
     def task(backend: str, keys: tuple[str, ...], state: str, *, lane: str | None = None, current: int = 0,
              total: int = 0, fps: float = 0.0, done: tuple[str, ...] = (), cpu: tuple[str, ...] = (),
              waiting: str | None = None, step: str = "none", passes: tuple[tuple[str, ...], ...] | None = None,
-             phase: tuple[int, int, int] | None = None) -> dict:
+             phase: tuple[int, int, int] | None = None, decode: HwAccelPlan | None = None) -> dict:
         """A task's snapshot, as JobRun.task_snapshots makes it."""
         return {"backend": backend, "metric_keys": keys,
                 "lane": lane or ("gpu" if backend in ("vmaf_gpu", "perceptual") else "cpu"),
                 "passes": passes or (keys,), "cpu_keys": cpu, "done_keys": done, "current": current, "total": total,
-                "fps": fps, "state": state, "waiting_for": waiting, "step": steps[step], "decode": "", "phase": phase}
+                "fps": fps, "state": state, "waiting_for": waiting, "step": steps[step], "decode": decode or "",
+                "phase": phase}
+
+    def plan(decode) -> dict | None:
+        """A decode plan as the C++ snapshot holds it."""
+        return {"source": decode.source, "distorted": decode.distorted} if decode else None
+
+    on_gpu, gpu_source, on_cpu = HwAccelPlan("cuda", "cuda"), HwAccelPlan("cuda", None), HwAccelPlan(None, None)
 
     every = ("vmaf", "vmaf_neg", "psnr", "ssim", "xpsnr")
     cpu, gpu = ("psnr", "ssim", "xpsnr"), ("vmaf", "vmaf_neg")
@@ -719,7 +726,7 @@ def run_line_cases() -> dict:
     one_each = (("ssimulacra2",), ("butteraugli",), ("cvvdp",))
     lines = {
         "one task starting": [task("ffmpeg", every, "starting")],
-        "one task, FFmpeg starting": [task("ffmpeg", every, "starting", step="ffmpeg starting")],
+        "one task, FFmpeg starting": [task("ffmpeg", every, "starting", step="ffmpeg starting", decode=gpu_source)],
         "one task, a step": [task("ffmpeg", cpu, "starting", step="in the app")],
         "one task, a step in the test video": [task("ffmpeg", cpu, "starting", step="spaces and dots")],
         "one task running": [task("ffmpeg", every, "running", current=120, total=515, fps=9.75)],
@@ -731,22 +738,24 @@ def run_line_cases() -> dict:
         "paused": [task("ffmpeg", every, "running", current=120, total=515, fps=9.75)],
         "waiting for a CPU slot": [task("ffmpeg", cpu, "waiting", waiting="CPU"),
                                    task("vmaf_gpu", gpu, "starting", step="ffmpeg starting")],
-        "both running": [task("ffmpeg", cpu, "running", current=50, total=100, fps=30.0),
-                         task("vmaf_gpu", gpu, "running", current=75, total=100, fps=480.5)],
+        "both running": [task("ffmpeg", cpu, "running", current=50, total=100, fps=30.0, decode=on_gpu),
+                         task("vmaf_gpu", gpu, "running", current=75, total=100, fps=480.5, decode=on_gpu)],
         "waiting for the GPU": [task("ffmpeg", cpu, "running", current=50, total=100, fps=30.0),
                                 task("vmaf_gpu", gpu, "waiting", waiting="GPU", step="gpu wait")],
         "GPU waits, one task": [task("vmaf_gpu", gpu, "starting", step="gpu wait")],
-        "the CPU took over": [task("ffmpeg", cpu, "running", current=50, total=100, fps=30.0),
-                              task("vmaf_gpu", gpu, "starting", cpu=gpu, step="gpu failed")],
+        "the CPU took over": [task("ffmpeg", cpu, "running", current=50, total=100, fps=30.0, decode=gpu_source),
+                              task("vmaf_gpu", gpu, "starting", cpu=gpu, step="gpu failed", decode=on_cpu)],
         "the CPU took over, running": [task("ffmpeg", cpu, "done", done=cpu),
                                        task("vmaf_gpu", gpu, "running", current=10, total=100, fps=8.0, cpu=gpu)],
         "the CPU took over, done": [task("ffmpeg", cpu, "done", done=cpu),
                                     task("vmaf_gpu", gpu, "done", done=gpu, cpu=gpu)],
-        "CPU done, GPU running": [task("ffmpeg", cpu, "done", done=cpu),
-                                  task("vmaf_gpu", gpu, "running", current=30, total=100, fps=60.0)],
+        "CPU done, GPU running": [task("ffmpeg", cpu, "done", done=cpu, decode=on_gpu),
+                                  task("vmaf_gpu", gpu, "running", current=30, total=100, fps=60.0,
+                                       decode=gpu_source)],
         "CPU failed, GPU running": [task("ffmpeg", cpu, "failed"),
                                     task("vmaf_gpu", gpu, "running", current=30, total=100, fps=60.0)],
-        "both done": [task("ffmpeg", cpu, "done", done=cpu), task("vmaf_gpu", gpu, "done", done=gpu)],
+        "both done": [task("ffmpeg", cpu, "done", done=cpu, decode=on_gpu),
+                      task("vmaf_gpu", gpu, "done", done=gpu, decode=gpu_source)],
         "a metric missing": [task("ffmpeg", cpu, "done", done=("psnr", "ssim")),
                              task("vmaf_gpu", gpu, "starting", step="retrying")],
         "GPU failed": [task("ffmpeg", cpu, "running", current=1, total=2, fps=1.0), task("vmaf_gpu", gpu, "failed")],
@@ -782,19 +791,29 @@ def run_line_cases() -> dict:
                                               cpu=("ssimulacra2", "butteraugli"), passes=(("cvvdp",),),
                                               done=("cvvdp",))],
         "Vship and the CPU's perceptual task": [
-            task("vmaf_gpu", gpu, "done", done=gpu),
+            task("vmaf_gpu", gpu, "done", done=gpu, decode=on_gpu),
             task("perceptual", ("cvvdp",), "running", current=40, total=100, fps=20.0, passes=(("cvvdp",),),
-                 phase=(1, 1, 0)),
-            task("perceptual_cpu", ("ssimulacra2", "butteraugli"), "running", current=3, total=100, fps=0.5)],
+                 phase=(1, 1, 0), decode=on_gpu),
+            task("perceptual_cpu", ("ssimulacra2", "butteraugli"), "running", current=3, total=100, fps=0.5,
+                 decode=on_cpu)],
     }
+
+    def line_case(name: str, snapshots: list[dict]) -> dict:
+        """The line, its tooltip, and the decoder text the window shows with
+        it (for a test video, and for a resolution test)."""
+        parts, tooltip, plans = run_line.metric_line(snapshots, name == "paused")
+        return {"name": name, "paused": name == "paused",
+                "tasks": [{**{key: value for key, value in snapshot.items()
+                              if key not in ("decode", "step", "waiting_for", "fps")},
+                           "fps": exact(snapshot["fps"]), "waiting_for": snapshot["waiting_for"] or "",
+                           "step": status(snapshot["step"]), "decode": plan(snapshot["decode"])}
+                          for snapshot in snapshots],
+                "line": parts, "tooltip": tooltip,
+                "decoder": run_line.decoder_text(plans, source_only=False) if plans else "",
+                "decoder_source_only": run_line.decoder_text(plans, source_only=True) if plans else ""}
+
     return {
-        "lines": [{"name": name, "paused": name == "paused",
-                   "tasks": [{**{key: value for key, value in snapshot.items()
-                                 if key not in ("decode", "step", "waiting_for", "fps")},
-                              "fps": exact(snapshot["fps"]), "waiting_for": snapshot["waiting_for"] or "",
-                              "step": status(snapshot["step"])} for snapshot in snapshots],
-                   "line": run_line.metric_line(snapshots, name == "paused")[0]}
-                  for name, snapshots in lines.items()],
+        "lines": [line_case(name, snapshots) for name, snapshots in lines.items()],
         "steps": [{"status": status(message), "text": run_line.step_text(message)} for message in steps.values()],
         "numbers": [{"numbers": numbers, "text": run_line.numbers_text(numbers)}
                     for numbers in ([3], [1, 2], [1, 3], [2, 1, 3], [5, 6, 7, 9], [4, 5, 6])],

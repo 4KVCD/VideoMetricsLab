@@ -2075,10 +2075,7 @@ PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const Pass
                     on_progress(counts.at(0).get<long long>(), counts.at(1).get<long long>(),
                                 counts.at(2).get<double>());
                 } else if (message.contains("status") && on_status) {
-                    const nlohmann::json& status = message["status"];
-                    on_status({status.at("text").get<std::string>(),
-                               static_cast<StatusKind>(status.at("kind").get<int>()),
-                               status.at("brief").get<std::string>()});
+                    on_status(status_from_json(message["status"]));
                 }
             },
             cancel, [&](const nlohmann::json& result, const std::filesystem::path& folder) {
@@ -2746,10 +2743,7 @@ nlohmann::json vship_pass_task(const nlohmann::json& request, const std::filesys
             [](long long done, long long whole, double fps) {
                 send_isolated_message({{"progress", {done, whole, fps}}});
             },
-            [](const RunStatus& status) {
-                send_isolated_message(
-                    {{"status", {{"text", status.text}, {"kind", static_cast<int>(status.kind)}, {"brief", status.brief}}}});
-            },
+            [](const RunStatus& status) { send_isolated_message({{"status", status_json(status)}}); },
             CancelToken());  // the parent cancels by ending this process
         return output_json(output, folder);
     } catch (const ComparisonCutShortError& error) {

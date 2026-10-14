@@ -1205,9 +1205,7 @@ ParsedScores score_plan_apart(std::string_view task, const RunEnvironment& envir
                 const nlohmann::json& counts = message["progress"];
                 on_progress(counts.at(0).get<long long>(), counts.at(1).get<long long>(), counts.at(2).get<double>());
             } else if (message.contains("status") && on_status) {
-                const nlohmann::json& status = message["status"];
-                on_status({status.at("text").get<std::string>(), static_cast<StatusKind>(status.at("kind").get<int>()),
-                           status.at("brief").get<std::string>()});
+                on_status(status_from_json(message["status"]));
             }
         },
         cancel,
@@ -1374,7 +1372,26 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
 
 RunStatus decoding_status(const std::string& brief, const HardwareDecoding& decoding, StatusKind kind,
                           std::string_view ending) {
-    return {brief + " (GPU decode: " + decoding.describe() + ")" + std::string(ending), kind, brief};
+    return {brief + " (GPU decode: " + decoding.describe() + ")" + std::string(ending), kind, brief, decoding};
+}
+
+nlohmann::json status_json(const RunStatus& status) {
+    nlohmann::json json{{"text", status.text}, {"kind", static_cast<int>(status.kind)}, {"brief", status.brief}};
+    if (status.decoding) {
+        json["decoding"] = {{"source", hwaccel_json(status.decoding->source)},
+                            {"distorted", hwaccel_json(status.decoding->distorted)}};
+    }
+    return json;
+}
+
+RunStatus status_from_json(const nlohmann::json& json) {
+    RunStatus status{json.at("text").get<std::string>(), static_cast<StatusKind>(json.at("kind").get<int>()),
+                     json.at("brief").get<std::string>()};
+    if (const auto decoding = json.find("decoding"); decoding != json.end()) {
+        status.decoding =
+            HardwareDecoding{hwaccel_from(decoding->at("source")), hwaccel_from(decoding->at("distorted"))};
+    }
+    return status;
 }
 
 FrameScores parse_libvmaf_log(const std::filesystem::path& log, double fps,
@@ -1506,12 +1523,7 @@ nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem
         [](long long done, long long whole, double fps) {
             send_isolated_message({{"progress", {done, whole, fps}}});
         },
-        [](const RunStatus& status) {
-            send_isolated_message({{"status",
-                                    {{"text", status.text},
-                                     {"kind", static_cast<int>(status.kind)},
-                                     {"brief", status.brief}}}});
-        },
+        [](const RunStatus& status) { send_isolated_message({{"status", status_json(status)}}); },
         CancelToken());  // the parent cancels by ending this process
     std::ofstream file(folder / scores_file, std::ios::binary);
     file.write(reinterpret_cast<const char*>(scores.frame.data()),
@@ -1574,6 +1586,11 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
     std::optional<CropBox> source_crop;
     std::optional<CropBox> distorted_crop;
     if (options.crop_mode == CropMode::automatic) {
+        // Said, or the run line would keep the step before: a long video's
+        // detection takes a while.
+        if (on_status) {
+            on_status({"Detecting black bars in source and distorted..."});
+        }
         const auto [source_box, distorted_box] =
             detect_pair(environment.ffmpeg, source, distorted, cancel, decoding.source, decoding.distorted);
         std::tie(source_crop, distorted_crop) = common_picture(source, distorted, source_box, distorted_box);

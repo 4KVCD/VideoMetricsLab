@@ -551,7 +551,7 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
     events.job_started = [&](std::size_t index) { progress.message(video(index).label() + ": started"); };
     events.task_progress = [&](std::size_t index, const std::vector<TaskSnapshot>& tasks) {
         std::string line;
-        for (const std::string& part : metric_line(tasks, false)) {
+        for (const std::string& part : metric_line(tasks, false).parts) {
             line += (line.empty() ? "" : "; ") + part;
         }
         if (!line.empty()) {

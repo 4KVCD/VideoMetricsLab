@@ -35,12 +35,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20135 of 5: VMAF v0.6.1, VMAF NEG, PSNR, SSIM, XPSNR starting"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 5: VMAF v0.6.1 starting\nCPU metrics 2 of 5: VMAF NEG starting\nCPU metrics 3 of 5: PSNR starting\nCPU metrics 4 of 5: SSIM starting\nCPU metrics 5 of 5: XPSNR starting",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "one task, FFmpeg starting",
@@ -77,12 +81,19 @@
       "text": "Running ffmpeg (GPU decode: source cuda, distorted cpu)...",
       "kind": "starting",
       "brief": "Running ffmpeg"
+     },
+     "decode": {
+      "source": "cuda",
+      "distorted": null
      }
     }
    ],
    "line": [
     "CPU metrics 1\u20135 of 5: VMAF v0.6.1, VMAF NEG, PSNR, SSIM, XPSNR starting"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 5: VMAF v0.6.1 starting\nCPU metrics 2 of 5: VMAF NEG starting\nCPU metrics 3 of 5: PSNR starting\nCPU metrics 4 of 5: SSIM starting\nCPU metrics 5 of 5: XPSNR starting",
+   "decoder": "Decoder: Source: GPU, test video: CPU",
+   "decoder_source_only": "Decoder: Source: GPU"
   },
   {
    "name": "one task, a step",
@@ -115,12 +126,16 @@
       "text": "Running PSNR, SSIM and XPSNR in the app (GPU decode: source cuda, distorted cuda)...",
       "kind": "step",
       "brief": "Running PSNR, SSIM and XPSNR in the app"
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20133 of 3: PSNR, SSIM, XPSNR (Running PSNR, SSIM and XPSNR in the app)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR starting\nCPU metrics 2 of 3: SSIM starting\nCPU metrics 3 of 3: XPSNR starting",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "one task, a step in the test video",
@@ -153,12 +168,16 @@
       "text": "  Detecting black bars in distorted . \u2026..  ",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20133 of 3: PSNR, SSIM, XPSNR (Detecting black bars in test video .)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR starting\nCPU metrics 2 of 3: SSIM starting\nCPU metrics 3 of 3: XPSNR starting",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "one task running",
@@ -195,12 +214,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20135 of 5: VMAF v0.6.1, VMAF NEG, PSNR, SSIM, XPSNR 23.3% (9.8 fps, 0:00:40 remaining)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 5: VMAF v0.6.1 23.3% (0:00:40 remaining)\nCPU metrics 2 of 5: VMAF NEG 23.3% (0:00:40 remaining)\nCPU metrics 3 of 5: PSNR 23.3% (0:00:40 remaining)\nCPU metrics 4 of 5: SSIM 23.3% (0:00:40 remaining)\nCPU metrics 5 of 5: XPSNR 23.3% (0:00:40 remaining)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "one task running fast",
@@ -233,12 +256,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20133 of 3: PSNR, SSIM, XPSNR 0.0% (120.0 fps, 0:13:52 remaining)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR 0.0% (0:13:52 remaining)\nCPU metrics 2 of 3: SSIM 0.0% (0:13:52 remaining)\nCPU metrics 3 of 3: XPSNR 0.0% (0:13:52 remaining)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "no speed yet",
@@ -275,12 +302,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20135 of 5: VMAF v0.6.1, VMAF NEG, PSNR, SSIM, XPSNR 0.5%"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 5: VMAF v0.6.1 0.5%\nCPU metrics 2 of 5: VMAF NEG 0.5%\nCPU metrics 3 of 5: PSNR 0.5%\nCPU metrics 4 of 5: SSIM 0.5%\nCPU metrics 5 of 5: XPSNR 0.5%",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "no frame count",
@@ -317,12 +348,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20135 of 5: VMAF v0.6.1, VMAF NEG, PSNR, SSIM, XPSNR 0.0%"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 5: VMAF v0.6.1 0.0%\nCPU metrics 2 of 5: VMAF NEG 0.0%\nCPU metrics 3 of 5: PSNR 0.0%\nCPU metrics 4 of 5: SSIM 0.0%\nCPU metrics 5 of 5: XPSNR 0.0%",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "almost done",
@@ -351,12 +386,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1 of 1: PSNR 99.9% (0.1 fps, 0:00:20 remaining)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 1: PSNR 99.9% (0:00:20 remaining)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "past the end",
@@ -385,12 +424,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1 of 1: PSNR 100.0% (50.0 fps, 0:00:00 remaining)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 1: PSNR 100.0% (0:00:00 remaining)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "paused",
@@ -427,12 +470,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20135 of 5: VMAF v0.6.1, VMAF NEG, PSNR, SSIM, XPSNR 23.3% (paused)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 5: VMAF v0.6.1 23.3% (paused)\nCPU metrics 2 of 5: VMAF NEG 23.3% (paused)\nCPU metrics 3 of 5: PSNR 23.3% (paused)\nCPU metrics 4 of 5: SSIM 23.3% (paused)\nCPU metrics 5 of 5: XPSNR 23.3% (paused)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "waiting for a CPU slot",
@@ -465,7 +512,8 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     },
     {
      "backend": "vmaf_gpu",
@@ -492,13 +540,17 @@
       "text": "Running ffmpeg (GPU decode: source cuda, distorted cpu)...",
       "kind": "starting",
       "brief": "Running ffmpeg"
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20133 of 3: PSNR, SSIM, XPSNR queued (waiting for a free CPU slot)",
     "GPU metrics 1\u20132 of 2: VMAF v0.6.1, VMAF NEG starting"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR (queued)\nCPU metrics 2 of 3: SSIM (queued)\nCPU metrics 3 of 3: XPSNR (queued)\nGPU metrics 1 of 2: VMAF v0.6.1 starting\nGPU metrics 2 of 2: VMAF NEG starting",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "both running",
@@ -531,6 +583,10 @@
       "text": "",
       "kind": "step",
       "brief": ""
+     },
+     "decode": {
+      "source": "cuda",
+      "distorted": "cuda"
      }
     },
     {
@@ -558,13 +614,20 @@
       "text": "",
       "kind": "step",
       "brief": ""
+     },
+     "decode": {
+      "source": "cuda",
+      "distorted": "cuda"
      }
     }
    ],
    "line": [
     "CPU metrics 1\u20133 of 3: PSNR, SSIM, XPSNR 50.0% (30.0 fps, 0:00:01 remaining)",
     "GPU metrics 1\u20132 of 2: VMAF v0.6.1, VMAF NEG 75.0% (480.5 fps, 0:00:00 remaining)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR 50.0% (0:00:01 remaining)\nCPU metrics 2 of 3: SSIM 50.0% (0:00:01 remaining)\nCPU metrics 3 of 3: XPSNR 50.0% (0:00:01 remaining)\nGPU metrics 1 of 2: VMAF v0.6.1 75.0% (0:00:00 remaining)\nGPU metrics 2 of 2: VMAF NEG 75.0% (0:00:00 remaining)",
+   "decoder": "Decoder: Source: GPU, test video: GPU",
+   "decoder_source_only": "Decoder: Source: GPU"
   },
   {
    "name": "waiting for the GPU",
@@ -597,7 +660,8 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     },
     {
      "backend": "vmaf_gpu",
@@ -624,13 +688,17 @@
       "text": "Waiting for the GPU: another video's GPU pass is running\u2026",
       "kind": "gpu_wait",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20133 of 3: PSNR, SSIM, XPSNR 50.0% (30.0 fps, 0:00:01 remaining)",
     "GPU metrics 1\u20132 of 2: VMAF v0.6.1, VMAF NEG queued (another video is using the GPU)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR 50.0% (0:00:01 remaining)\nCPU metrics 2 of 3: SSIM 50.0% (0:00:01 remaining)\nCPU metrics 3 of 3: XPSNR 50.0% (0:00:01 remaining)\nGPU metrics 1 of 2: VMAF v0.6.1 (queued)\nGPU metrics 2 of 2: VMAF NEG (queued)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "GPU waits, one task",
@@ -661,12 +729,16 @@
       "text": "Waiting for the GPU: another video's GPU pass is running\u2026",
       "kind": "gpu_wait",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "GPU metrics 1\u20132 of 2: VMAF v0.6.1, VMAF NEG (Waiting for the GPU: another video's GPU pass is running)"
-   ]
+   ],
+   "tooltip": "GPU metrics 1 of 2: VMAF v0.6.1 starting\nGPU metrics 2 of 2: VMAF NEG starting",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "the CPU took over",
@@ -699,6 +771,10 @@
       "text": "",
       "kind": "step",
       "brief": ""
+     },
+     "decode": {
+      "source": "cuda",
+      "distorted": null
      }
     },
     {
@@ -729,13 +805,20 @@
       "text": "VMAF on the GPU failed (device lost); calculating it on the CPU\u2026",
       "kind": "gpu_vmaf_failed",
       "brief": ""
+     },
+     "decode": {
+      "source": null,
+      "distorted": null
      }
     }
    ],
    "line": [
     "CPU metrics 1\u20133 of 5: PSNR, SSIM, XPSNR 50.0% (30.0 fps, 0:00:01 remaining)",
     "CPU metrics 4\u20135 of 5: VMAF v0.6.1, VMAF NEG (VMAF on the GPU failed (device lost); calculating it on the CPU)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 5: PSNR 50.0% (0:00:01 remaining)\nCPU metrics 2 of 5: SSIM 50.0% (0:00:01 remaining)\nCPU metrics 3 of 5: XPSNR 50.0% (0:00:01 remaining)\nCPU metrics 4 of 5: VMAF v0.6.1 starting\nCPU metrics 5 of 5: VMAF NEG starting",
+   "decoder": "Decoder: Source: GPU (CPU metrics 1\u20133) / CPU (CPU metrics 4\u20135), test video: CPU",
+   "decoder_source_only": "Decoder: Source: GPU (CPU metrics 1\u20133) / CPU (CPU metrics 4\u20135)"
   },
   {
    "name": "the CPU took over, running",
@@ -772,7 +855,8 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     },
     {
      "backend": "vmaf_gpu",
@@ -802,12 +886,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 4\u20135 of 5: VMAF v0.6.1, VMAF NEG 10.0% (8.0 fps, 0:00:11 remaining)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 5: PSNR (done)\nCPU metrics 2 of 5: SSIM (done)\nCPU metrics 3 of 5: XPSNR (done)\nCPU metrics 4 of 5: VMAF v0.6.1 10.0% (0:00:11 remaining)\nCPU metrics 5 of 5: VMAF NEG 10.0% (0:00:11 remaining)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "the CPU took over, done",
@@ -844,7 +932,8 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     },
     {
      "backend": "vmaf_gpu",
@@ -877,12 +966,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics done"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 5: PSNR (done)\nCPU metrics 2 of 5: SSIM (done)\nCPU metrics 3 of 5: XPSNR (done)\nCPU metrics 4 of 5: VMAF v0.6.1 (done)\nCPU metrics 5 of 5: VMAF NEG (done)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "CPU done, GPU running",
@@ -919,6 +1012,10 @@
       "text": "",
       "kind": "step",
       "brief": ""
+     },
+     "decode": {
+      "source": "cuda",
+      "distorted": "cuda"
      }
     },
     {
@@ -946,13 +1043,20 @@
       "text": "",
       "kind": "step",
       "brief": ""
+     },
+     "decode": {
+      "source": "cuda",
+      "distorted": null
      }
     }
    ],
    "line": [
     "CPU metrics done",
     "GPU metrics 1\u20132 of 2: VMAF v0.6.1, VMAF NEG 30.0% (60.0 fps, 0:00:01 remaining)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR (done)\nCPU metrics 2 of 3: SSIM (done)\nCPU metrics 3 of 3: XPSNR (done)\nGPU metrics 1 of 2: VMAF v0.6.1 30.0% (0:00:01 remaining)\nGPU metrics 2 of 2: VMAF NEG 30.0% (0:00:01 remaining)",
+   "decoder": "Decoder: Source: GPU, test video: CPU",
+   "decoder_source_only": "Decoder: Source: GPU"
   },
   {
    "name": "CPU failed, GPU running",
@@ -985,7 +1089,8 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     },
     {
      "backend": "vmaf_gpu",
@@ -1012,13 +1117,17 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20133 of 3: PSNR, SSIM, XPSNR failed",
     "GPU metrics 1\u20132 of 2: VMAF v0.6.1, VMAF NEG 30.0% (60.0 fps, 0:00:01 remaining)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR (failed)\nCPU metrics 2 of 3: SSIM (failed)\nCPU metrics 3 of 3: XPSNR (failed)\nGPU metrics 1 of 2: VMAF v0.6.1 30.0% (0:00:01 remaining)\nGPU metrics 2 of 2: VMAF NEG 30.0% (0:00:01 remaining)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "both done",
@@ -1055,6 +1164,10 @@
       "text": "",
       "kind": "step",
       "brief": ""
+     },
+     "decode": {
+      "source": "cuda",
+      "distorted": "cuda"
      }
     },
     {
@@ -1085,13 +1198,20 @@
       "text": "",
       "kind": "step",
       "brief": ""
+     },
+     "decode": {
+      "source": "cuda",
+      "distorted": null
      }
     }
    ],
    "line": [
     "CPU metrics done",
     "GPU metrics done"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR (done)\nCPU metrics 2 of 3: SSIM (done)\nCPU metrics 3 of 3: XPSNR (done)\nGPU metrics 1 of 2: VMAF v0.6.1 (done)\nGPU metrics 2 of 2: VMAF NEG (done)",
+   "decoder": "Decoder: Source: GPU, test video: GPU (CPU metrics) / CPU (GPU metrics)",
+   "decoder_source_only": "Decoder: Source: GPU"
   },
   {
    "name": "a metric missing",
@@ -1127,7 +1247,8 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     },
     {
      "backend": "vmaf_gpu",
@@ -1154,13 +1275,17 @@
       "text": "GPU decode failed, retrying (GPU decode: off)...",
       "kind": "step",
       "brief": "GPU decode failed, retrying"
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 3 of 3: XPSNR failed",
     "GPU metrics 1\u20132 of 2: VMAF v0.6.1, VMAF NEG (GPU decode failed, retrying)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR (done)\nCPU metrics 2 of 3: SSIM (done)\nCPU metrics 3 of 3: XPSNR (failed)\nGPU metrics 1 of 2: VMAF v0.6.1 starting\nGPU metrics 2 of 2: VMAF NEG starting",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "GPU failed",
@@ -1193,7 +1318,8 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     },
     {
      "backend": "vmaf_gpu",
@@ -1220,13 +1346,17 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20133 of 3: PSNR, SSIM, XPSNR 50.0% (1.0 fps, 0:00:01 remaining)",
     "GPU metrics 1\u20132 of 2: VMAF v0.6.1, VMAF NEG failed"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR 50.0% (0:00:01 remaining)\nCPU metrics 2 of 3: SSIM 50.0% (0:00:01 remaining)\nCPU metrics 3 of 3: XPSNR 50.0% (0:00:01 remaining)\nGPU metrics 1 of 2: VMAF v0.6.1 (failed)\nGPU metrics 2 of 2: VMAF NEG (failed)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "this video holds the GPU",
@@ -1257,7 +1387,8 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     },
     {
      "backend": "perceptual",
@@ -1282,13 +1413,17 @@
       "text": "Waiting for the GPU: another video's GPU pass is running\u2026",
       "kind": "gpu_wait",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1 of 1: VMAF v0.6.1 10.0% (8.0 fps, 0:00:11 remaining)",
     "GPU metrics 1 of 1: SSIMULACRA2 queued (waiting for this video's VMAF v0.6.1 to finish)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 1: VMAF v0.6.1 10.0% (0:00:11 remaining)\nGPU metrics 1 of 1: SSIMULACRA2 (queued)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "a step after decoding failed",
@@ -1325,12 +1460,16 @@
       "text": "GPU decoding failed (no decoder for the distorted video); decoding through FFmpeg instead\u2026",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20135 of 5: VMAF v0.6.1, VMAF NEG, PSNR, SSIM, XPSNR (GPU decoding failed (no decoder for the test video video); decoding through FFmpeg instead)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 5: VMAF v0.6.1 starting\nCPU metrics 2 of 5: VMAF NEG starting\nCPU metrics 3 of 5: PSNR starting\nCPU metrics 4 of 5: SSIM starting\nCPU metrics 5 of 5: XPSNR starting",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "Vship's first pass",
@@ -1371,12 +1510,16 @@
       "text": "GPU metric 2/3: Butteraugli",
       "kind": "gpu_pass",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "GPU metrics 1 of 3: SSIMULACRA2 50.0% (30.0 fps, 0:00:01 remaining)"
-   ]
+   ],
+   "tooltip": "GPU metrics 1 of 3: SSIMULACRA2 50.0% (0:00:01 remaining)\nGPU metrics 2 of 3: Butteraugli (queued)\nGPU metrics 3 of 3: CVVDP (queued)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "Vship's second pass",
@@ -1417,12 +1560,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "GPU metrics 2 of 3: Butteraugli 50.0% (25.0 fps, 0:00:02 remaining)"
-   ]
+   ],
+   "tooltip": "GPU metrics 1 of 3: SSIMULACRA2 (failed)\nGPU metrics 2 of 3: Butteraugli 50.0% (0:00:02 remaining)\nGPU metrics 3 of 3: CVVDP (queued)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "Vship's last pass, no speed yet",
@@ -1463,12 +1610,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "GPU metrics 3 of 3: CVVDP 0.0%"
-   ]
+   ],
+   "tooltip": "GPU metrics 1 of 3: SSIMULACRA2 (failed)\nGPU metrics 2 of 3: Butteraugli (failed)\nGPU metrics 3 of 3: CVVDP 0.0%",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "Vship starting",
@@ -1505,12 +1656,16 @@
       "text": "Vship GPU (NVIDIA GeForce RTX 5090): calculating SSIMULACRA2 (GPU decode: source cuda, distorted cpu)\u2026",
       "kind": "step",
       "brief": "Vship GPU (NVIDIA GeForce RTX 5090): calculating SSIMULACRA2"
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "GPU metrics 1 of 3: SSIMULACRA2 (Vship GPU (NVIDIA GeForce RTX 5090): calculating SSIMULACRA2)"
-   ]
+   ],
+   "tooltip": "GPU metrics 1 of 3: SSIMULACRA2 starting\nGPU metrics 2 of 3: Butteraugli (queued)\nGPU metrics 3 of 3: CVVDP (queued)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "Vship before its first pass",
@@ -1547,12 +1702,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "GPU metrics 1 of 3: SSIMULACRA2 0.0%"
-   ]
+   ],
+   "tooltip": "GPU metrics 1 of 3: SSIMULACRA2 0.0%\nGPU metrics 2 of 3: Butteraugli (queued)\nGPU metrics 3 of 3: CVVDP (queued)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "Vship waiting",
@@ -1585,7 +1744,8 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     },
     {
      "backend": "perceptual",
@@ -1618,13 +1778,17 @@
       "text": "Waiting for the GPU: another video's GPU pass is running\u2026",
       "kind": "gpu_wait",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20133 of 3: PSNR, SSIM, XPSNR 50.0% (30.0 fps, 0:00:01 remaining)",
     "GPU metrics 1 of 3: SSIMULACRA2 queued (another video is using the GPU)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR 50.0% (0:00:01 remaining)\nCPU metrics 2 of 3: SSIM 50.0% (0:00:01 remaining)\nCPU metrics 3 of 3: XPSNR 50.0% (0:00:01 remaining)\nGPU metrics 1 of 3: SSIMULACRA2 (queued)\nGPU metrics 2 of 3: Butteraugli (queued)\nGPU metrics 3 of 3: CVVDP (queued)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "Vship done, one failed",
@@ -1664,12 +1828,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "GPU metrics 2 of 3: Butteraugli failed"
-   ]
+   ],
+   "tooltip": "GPU metrics 1 of 3: SSIMULACRA2 (done)\nGPU metrics 2 of 3: Butteraugli (failed)\nGPU metrics 3 of 3: CVVDP (done)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "Vship failed",
@@ -1706,7 +1874,8 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     },
     {
      "backend": "perceptual",
@@ -1739,7 +1908,8 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
@@ -1747,7 +1917,10 @@
     "GPU metrics 1 of 3: SSIMULACRA2 failed",
     "GPU metrics 2 of 3: Butteraugli failed",
     "GPU metrics 3 of 3: CVVDP failed"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR (done)\nCPU metrics 2 of 3: SSIM (done)\nCPU metrics 3 of 3: XPSNR (done)\nGPU metrics 1 of 3: SSIMULACRA2 (failed)\nGPU metrics 2 of 3: Butteraugli (failed)\nGPU metrics 3 of 3: CVVDP (failed)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "a shared pass, then a retry",
@@ -1785,12 +1958,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "GPU metrics 2 of 2: Butteraugli 50.0% (40.0 fps, 0:00:01 remaining)"
-   ]
+   ],
+   "tooltip": "GPU metrics 1 of 2: SSIMULACRA2 (failed)\nGPU metrics 2 of 2: Butteraugli 50.0% (0:00:01 remaining)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "one pass with all three",
@@ -1827,12 +2004,16 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "GPU metrics 1\u20133 of 3: SSIMULACRA2, Butteraugli, CVVDP 10.0% (12.5 fps, 0:00:07 remaining)"
-   ]
+   ],
+   "tooltip": "GPU metrics 1 of 3: SSIMULACRA2 10.0% (0:00:07 remaining)\nGPU metrics 2 of 3: Butteraugli 10.0% (0:00:07 remaining)\nGPU metrics 3 of 3: CVVDP 10.0% (0:00:07 remaining)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "the CPU took over from Vship",
@@ -1868,13 +2049,17 @@
       "text": "",
       "kind": "step",
       "brief": ""
-     }
+     },
+     "decode": null
     }
    ],
    "line": [
     "CPU metrics 1\u20132 of 2: SSIMULACRA2, Butteraugli 5.0% (2.0 fps, 0:00:47 remaining)",
     "GPU metrics done"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 2: SSIMULACRA2 5.0% (0:00:47 remaining)\nCPU metrics 2 of 2: Butteraugli 5.0% (0:00:47 remaining)\nGPU metrics 1 of 1: CVVDP (done)",
+   "decoder": "",
+   "decoder_source_only": ""
   },
   {
    "name": "Vship and the CPU's perceptual task",
@@ -1908,6 +2093,10 @@
       "text": "",
       "kind": "step",
       "brief": ""
+     },
+     "decode": {
+      "source": "cuda",
+      "distorted": "cuda"
      }
     },
     {
@@ -1937,6 +2126,10 @@
       "text": "",
       "kind": "step",
       "brief": ""
+     },
+     "decode": {
+      "source": "cuda",
+      "distorted": "cuda"
      }
     },
     {
@@ -1964,13 +2157,20 @@
       "text": "",
       "kind": "step",
       "brief": ""
+     },
+     "decode": {
+      "source": null,
+      "distorted": null
      }
     }
    ],
    "line": [
     "CPU metrics 1\u20132 of 2: SSIMULACRA2, Butteraugli 3.0% (0.5 fps, 0:03:14 remaining)",
     "GPU metrics 3 of 3: CVVDP 40.0% (20.0 fps, 0:00:03 remaining)"
-   ]
+   ],
+   "tooltip": "CPU metrics 1 of 2: SSIMULACRA2 3.0% (0:03:14 remaining)\nCPU metrics 2 of 2: Butteraugli 3.0% (0:03:14 remaining)\nGPU metrics 1 of 3: VMAF v0.6.1 (done)\nGPU metrics 2 of 3: VMAF NEG (done)\nGPU metrics 3 of 3: CVVDP 40.0% (0:00:03 remaining)",
+   "decoder": "Decoder: Source: GPU (GPU metrics) / CPU (CPU metrics), test video: GPU (GPU metrics) / CPU (CPU metrics)",
+   "decoder_source_only": "Decoder: Source: GPU (GPU metrics) / CPU (CPU metrics)"
   }
  ],
  "steps": [
