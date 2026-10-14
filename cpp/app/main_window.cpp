@@ -41,6 +41,7 @@
 #include <utility>
 #include <variant>
 
+#include "file_writes.h"
 #include "formatting.h"
 #include "i18n.h"
 #include "run_worker.h"
@@ -69,12 +70,6 @@ constexpr int max_videos_in_flight = max_parallel_jobs + 1;
 // A metric cell's score, as compared by Highlight best/worst results:
 // nothing where it shows none to compare.
 constexpr int score_role = Qt::UserRole;
-
-// A path as the window takes it from a dialog, a drop or the reference box:
-// with the system's separators, as Python's Path gives it.
-std::filesystem::path path_of(const QString& text) {
-    return platform::path_from_text(text.toStdString()).make_preferred();
-}
 
 // "1920x1080".
 QString size_text(int width, int height) { return QStringLiteral("%1x%2").arg(width).arg(height); }
@@ -241,6 +236,13 @@ MainWindow::MainWindow() {
     run_tick_timer_ = new QTimer(this);
     run_tick_timer_->setInterval(1000);
     connect(run_tick_timer_, &QTimer::timeout, this, [this] { on_run_tick(); });
+    // Saved scores are written off the window's thread. A failure is said on
+    // the status line, not in a dialog: a dialog taking the focus minutes
+    // later would be worse than the failure it announces.
+    file_writes_ = new FileWrites(this);
+    connect(file_writes_, &FileWrites::write_failed, this, [this](const QString& description, const QString& error) {
+        show_status(app::tr("Could not {description}: {error}", {{"description", description}, {"error", error}}));
+    });
 
     build_ui();
     // At least 1050x650, and never smaller than the window's contents need.
@@ -350,7 +352,9 @@ void MainWindow::closeEvent(QCloseEvent* event) {
             worker_->cancel();
         }
     }
-    if (!live_workers().empty()) {
+    // Nor during a write of saved scores, which closing would lose.
+    const bool written = file_writes_->wait_until_idle(std::chrono::milliseconds(500));
+    if (!live_workers().empty() || !written) {
         // Held on the status line, where the run would put its counts.
         run_hold_ = RunHold::message;
         run_hold_message_ = app::tr("Finishing up; the window will close on its own.");
@@ -580,6 +584,9 @@ QWidget* MainWindow::build_files_panel() {
     distorted_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     distorted_table_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     distorted_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    distorted_table_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(distorted_table_, &QWidget::customContextMenuRequested, this,
+            [this](const QPoint& position) { show_table_menu(position); });
     connect(distorted_table_, &QTableWidget::itemSelectionChanged, this, [this] { on_table_selection_changed(); });
     connect(distorted_table_, &QTableWidget::itemChanged, this,
             [this](QTableWidgetItem* item) { on_table_item_changed(item); });
@@ -1013,10 +1020,14 @@ void MainWindow::apply_source_info(const std::filesystem::path& path, const Vide
     }
     invalidate_completed_results(other_reference);
     // Every row is checked against the new reference: its Scaling cell
-    // depends on it.
+    // depends on it, and its saved scores with the new reference are looked
+    // up off the window's thread (a long video's are several MB to read).
+    std::vector<std::filesystem::path> paths;
     for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
         set_row_metrics(row);
+        paths.push_back(rows_[static_cast<std::size_t>(row)]->path);
     }
+    start_cache_lookup(paths);
 }
 
 void MainWindow::invalidate_completed_results(const std::vector<int>& rows) {
@@ -1197,6 +1208,9 @@ void MainWindow::set_row_metrics(int row) {
         } else {
             tooltip = enabled ? app::tr("Ticked: calculated on the next run. Untick to skip it.")
                               : app::tr("Not selected. Tick to calculate this metric.");
+        }
+        if (std::string_view(metric.key) == "cvvdp") {
+            tooltip += cvvdp_elsewhere_note(row_data);
         }
         item->setToolTip(tooltip);
         theme::foreground(item, failed ? std::optional(theme::color("failed")) : std::nullopt);
@@ -1471,8 +1485,9 @@ void MainWindow::on_files_dropped_on_table(const QStringList& paths) {
 
 void MainWindow::add_test_videos(const std::vector<std::filesystem::path>& paths) {
     // A row for each video not already in the table, in order. The rows
-    // appear at once; reading each file happens on a worker, as for a
-    // handful of long videos it takes a couple of seconds.
+    // appear at once; reading each file and looking up its saved scores
+    // happen on workers, as for a handful of long videos they take a couple
+    // of seconds.
     std::vector<std::filesystem::path> added;
     for (const std::filesystem::path& path : paths) {
         const auto same = [&path](const std::filesystem::path& other) { return same_path(path, other); };
@@ -1490,6 +1505,7 @@ void MainWindow::add_test_videos(const std::vector<std::filesystem::path>& paths
         set_row_status(row, RowState::reading);
     }
     start_media_probe(added);
+    start_cache_lookup(added);
 }
 
 void MainWindow::start_media_probe(const std::vector<std::filesystem::path>& paths) {
@@ -1881,8 +1897,14 @@ void MainWindow::on_metric_visibility_toggled(const std::string& key, bool shown
             action->setEnabled(!(visible == 1 && action->isChecked()));
         }
     }
+    std::vector<int> every_row;
     for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
         set_row_metrics(row);
+        every_row.push_back(row);
+    }
+    if (shown) {
+        // Scores saved for the metric while it was hidden come back.
+        reload_saved_scores(every_row);
     }
 }
 
@@ -1924,6 +1946,7 @@ void MainWindow::apply_metric_selection(const std::vector<int>& rows, int column
         settings_.*default_compute_field(key) = checked;
         save_settings();
     }
+    reload_saved_scores(rows);
     on_table_selection_changed();
 }
 

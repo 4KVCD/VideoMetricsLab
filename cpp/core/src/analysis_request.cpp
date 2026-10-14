@@ -1,6 +1,7 @@
 #include "vml/analysis_request.h"
 
 #include <algorithm>
+#include <set>
 #include <stdexcept>
 #include <system_error>
 
@@ -125,6 +126,29 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
         request.metrics.push_back(std::move(spec));
     }
     return request;
+}
+
+std::vector<MetricRequestSpec> displayable_metric_specs(const VmafOptions& options, const CvvdpSettings& cvvdp) {
+    std::vector<std::string> ffmpeg;      // every FFmpeg metric, in the registry's order
+    std::vector<std::string> perceptual;  // SSIMULACRA2, Butteraugli, CVVDP
+    for (const MetricDefinition& metric : metrics()) {
+        if (metric.ffmpeg_binding && metric.kind == MetricKind::frame) {
+            ffmpeg.emplace_back(metric.key);
+        }
+        if (metric.backend_id == "perceptual") {
+            perceptual.emplace_back(metric.key);
+        }
+    }
+    std::vector<MetricRequestSpec> specs;
+    std::set<std::string> found;  // each identity once, the first time it comes
+    for (const std::vector<std::string>& keys : {ffmpeg, std::vector<std::string>{"xpsnr"}, perceptual}) {
+        for (MetricRequestSpec& spec : analysis_request(options, keys, {}, cvvdp).metrics) {
+            if (found.insert(spec.identity().dump()).second) {
+                specs.push_back(std::move(spec));
+            }
+        }
+    }
+    return specs;
 }
 
 std::string file_identity(const std::filesystem::path& path) {

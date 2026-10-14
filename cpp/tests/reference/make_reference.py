@@ -2064,9 +2064,68 @@ def metric_cache_cases() -> dict:
         case["loaded"] = [metric_json(loaded.get(key)) for key in loaded]
         loads.append(case)
 
+    # The folder laid where a comparison of two files finds it.
+    from vmaf_app.core import result_cache
+    from vmaf_app.core.ffmpeg_request import displayable_metric_specs
+
+    def laid(folder: Path, recipe) -> tuple[Path, Path, Path]:
+        base, source, distorted = folder / "cache", folder / "s.mp4", folder / "t.mp4"
+        source.write_bytes(b"s")
+        distorted.write_bytes(b"t")
+        directory = metric_cache.recipe_directory(base, source, distorted, recipe)
+        directory.mkdir(parents=True, exist_ok=True)
+        for path in SAVED_SCORES.iterdir():
+            shutil.copy(path, directory / path.name)
+        return base, source, distorted
+
+    # What the window finds for a row: the scores it asks for and every other
+    # score it can show (displayable_metric_specs), and CVVDP's scores saved
+    # for other displays.
+    window_loads = []
+    with tempfile.TemporaryDirectory() as folder:
+        base, source, distorted = laid(Path(folder), request_json("saved", {}, ("vmaf",), {}, None)[1].recipe)
+        for name, fields, metrics, backends, cvvdp in (
+                ("everything, on Auto", {}, ("vmaf", "psnr", "cvvdp"), {}, None),
+                ("one metric ticked", {}, ("ssim",), {}, None),
+                ("subsampled, SSIMULACRA2 on the CPU", {"n_subsample": 2}, ("psnr",), {"ssimulacra2": "cpu"}, None),
+                ("another display", {}, ("vmaf",), {}, hdr_display)):
+            case, request = request_json(name, fields, metrics, backends, cvvdp)
+            supplemental = displayable_metric_specs(options_of(fields), cvvdp)
+            found = result_cache.load_cached(source, distorted, request, base, supplemental)
+            parameters, others = result_cache.other_cvvdp_scores(source, distorted, request, base, supplemental)
+            case.update(
+                displayable=[metric_cache._canonical(spec.identity_dict()) for spec in supplemental],
+                loaded=[] if found is None else [metric_json(found[0].metric_results.get(key))
+                                                 for key in found[0].metric_results],
+                other_cvvdp=None if not parameters else {
+                    "parameters": dict(parameters),
+                    "scores": [{"parameters": dict(settings.spec_parameters()), "score": exact(score)}
+                               for settings, score in others]})
+            window_loads.append(case)
+
+    # What Recalculate leaves of the folder: each request's scores go, with
+    # those that would answer it too.
+    clears = []
+    for name, fields, metrics, backends, cvvdp in (
+            ("everything, on Auto", {}, ("vmaf", "vmaf_v1", "psnr", "xpsnr", "ssimulacra2", "butteraugli", "cvvdp"),
+             {}, None),
+            ("a model Auto ran, chosen", {"model_choice": "version=vmaf_v0.6.1"}, ("vmaf",), {}, None),
+            ("SSIMULACRA2, on either device", {}, ("ssimulacra2",), {"ssimulacra2": "cpu"}, None),
+            ("VMAF v1 saved under VMAF's key", {"model_choice_v1": old_v1}, ("vmaf_v1",), {}, None),
+            ("CVVDP on another display", {}, ("cvvdp",), {}, hdr_display)):
+        case, request = request_json(name, fields, metrics, backends, cvvdp)
+        with tempfile.TemporaryDirectory() as folder:
+            base, source, distorted = laid(Path(folder), request.recipe)
+            removed = metric_cache.clear_metrics(base, source, distorted, request.recipe, request.metrics)
+            directory = metric_cache.recipe_directory(base, source, distorted, request.recipe)
+            left = sorted(path.name for path in directory.iterdir()) if directory.exists() else []
+        case.update(removed=removed, left=left)
+        clears.append(case)
+
     return {"requests": requests, "stored": store_case, "answers": answer_cases, "made_as_chosen": chosen_cases,
             "reusable": {"result": result_json(reused), "cases": reuse_cases},
-            "saved": {"folder": SAVED_SCORES.name, "label": "t", "loads": loads}}
+            "saved": {"folder": SAVED_SCORES.name, "label": "t", "loads": loads, "window_loads": window_loads,
+                      "clears": clears}}
 
 
 # ---------------------------------------------------------------------- i18n

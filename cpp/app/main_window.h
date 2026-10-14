@@ -7,11 +7,12 @@
 // handling, model, GPU decoding and so on), not one setting shared by all.
 //
 // Ported so far: the window's frame, its tabs, the Videos tab's files panel
-// (the reference, the test-video table and its buttons), and runs: the
-// ticked videos' metrics calculated, with their progress, and the scores
-// shown in the table (main_window_run.cpp). The other tabs and the Options
-// panel are still the Python app's alone, and the window does not read or
-// save the saved scores yet.
+// (the reference, the test-video table and its buttons), runs: the ticked
+// videos' metrics calculated, with their progress, and the scores shown in
+// the table (main_window_run.cpp), and the saved scores: looked up for each
+// row, saved as a run goes, forgotten by Recalculate
+// (main_window_saved_scores.cpp). The other tabs and the Options panel are
+// still the Python app's alone.
 #pragma once
 
 #include <QMainWindow>
@@ -55,6 +56,7 @@ namespace vml::app {
 
 class CheckableHeaderView;
 class ElidedLabel;
+class FileWrites;
 class FillColumnTable;
 class QuietTabWidget;
 class RunWorker;
@@ -120,6 +122,9 @@ struct RowData {
     // The display CVVDP models for this row: part of what a CVVDP score
     // means, so part of its saved scores' identity.
     CvvdpSettings cvvdp;
+    // CVVDP's scores saved for this comparison with other displays, for the
+    // CVVDP cell's tooltip while the row's own display has none.
+    std::vector<std::pair<CvvdpSettings, double>> cvvdp_elsewhere;
     // The CVVDP preset the row was given, if any: only tells apart presets
     // with the same display.
     std::string cvvdp_preset;
@@ -244,6 +249,20 @@ private:
     void on_table_item_changed(QTableWidgetItem* item);
     void on_metric_column_toggled(int column, bool checked);
 
+    // ------------------------------------------------------ the saved scores
+    std::filesystem::path cache_folder() const;
+    AnalysisRequest analysis_request_of(const RowData& row_data) const;
+    void start_cache_lookup(const std::vector<std::filesystem::path>& paths);
+    void reload_saved_scores(const std::vector<int>& rows);
+    std::vector<std::filesystem::path> cancel_cache_lookup();
+    void on_cache_lookup_finished(ProbeWorker* worker);
+    void on_saved_found(int generation, const SavedScoresFound& found);
+    void on_other_displays_found(int generation, const OtherDisplaysFound& found);
+    void show_table_menu(const QPoint& position);
+    void recompute_rows(const std::vector<int>& rows);
+    void drop_metric_results(int row, const std::vector<std::string>& keys);
+    QString cvvdp_elsewhere_note(const RowData& row_data) const;
+
     // ------------------------------------------------------------ the scores
     std::vector<std::string> reusable_metric_keys(const RowData& row_data) const;
     MetricResultSet reusable_results(const RowData& row_data) const;
@@ -327,6 +346,14 @@ private:
     std::map<std::string, std::string> default_metric_backends_;
     CvvdpSettings default_cvvdp_;
     std::set<std::string> hidden_metrics_;
+
+    // The lookup of saved scores under way: the rows it was asked about, and
+    // a number each lookup raises, with which the window refuses the answers
+    // of one it replaced (they were for the reference and settings then).
+    ProbeWorker* cache_worker_ = nullptr;
+    std::vector<std::filesystem::path> cache_lookup_paths_;
+    int cache_generation_ = 0;
+    FileWrites* file_writes_ = nullptr;
 
     // The run under way, or the last one, by its jobs' indexes. Its jobs'
     // rows are held as rows, not positions, so that a row moved or removed

@@ -1494,6 +1494,1234 @@
      }
     ]
    }
+  ],
+  "window_loads": [
+   {
+    "name": "everything, on Auto",
+    "options": {
+     "n_subsample": 1,
+     "model_choice": "__auto__",
+     "model_choice_v1": "__auto__",
+     "crop_mode": "auto",
+     "scale_direction": "source_to_distorted",
+     "scale_algorithm": "bicubic",
+     "duration_limit": "0x0.0p+0"
+    },
+    "metrics": [
+     "vmaf",
+     "psnr",
+     "cvvdp"
+    ],
+    "backends": {},
+    "cvvdp": null,
+    "displayable": [
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_neg\",\"parameters\":{\"model\":\"version=vmaf_v0.6.1neg\"}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_v1\",\"parameters\":{\"model\":\"\",\"model_choice\":\"__auto__\"}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"psnr\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"ssim\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-xpsnr-v2\",\"key\":\"xpsnr\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ssimulacra2-auto-or-libjxl-cpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"butteraugli-auto-or-libjxl-cpu-v1\",\"key\":\"butteraugli\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v1\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":250.0,\"contrast\":1000.0,\"diagonal_inches\":30.0,\"exposure\":1.0,\"hdr\":false,\"peak_luminance\":200.0,\"reflectivity\":0.005,\"resolution\":[3840,2160],\"viewing_distance_m\":0.7472},\"resize_to_display\":false}}"
+    ],
+    "loaded": [
+     {
+      "key": "vmaf",
+      "provenance": {
+       "implementation": "libvmaf/vulkan",
+       "implementation_version": "libvmaf-fast v1",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {
+        "model": "version=vmaf_v0.6.1"
+       }
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.6a00000000000p+6",
+       "0x1.6c00000000000p+6",
+       "0x1.6500000000000p+6",
+       "0x1.7200000000000p+6",
+       "0x1.6800000000000p+6",
+       "0x1.6f00000000000p+6"
+      ]
+     },
+     {
+      "key": "psnr",
+      "provenance": {
+       "implementation": "libvmaf",
+       "implementation_version": "",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.4400000000000p+5",
+       "0x1.4800000000000p+5",
+       "0x1.3a00000000000p+5",
+       "0x1.5400000000000p+5",
+       "0x1.4000000000000p+5",
+       "0x1.4e00000000000p+5"
+      ]
+     },
+     {
+      "key": "cvvdp",
+      "provenance": {
+       "implementation": "Vship/cvvdp",
+       "implementation_version": "",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
+       "parameters": {
+        "color_tags": "ffvship-5.1.1",
+        "display": {
+         "ambient_lux": 250.0,
+         "contrast": 1000.0,
+         "diagonal_inches": 30.0,
+         "exposure": 1.0,
+         "hdr": false,
+         "peak_luminance": 200.0,
+         "reflectivity": 0.005,
+         "resolution": [
+          3840,
+          2160
+         ],
+         "viewing_distance_m": 0.7472
+        },
+        "resize_to_display": false
+       }
+      },
+      "kind": "sequence",
+      "score": "0x1.2800000000000p+3",
+      "frame": [
+       0,
+       24
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.004189374bc6ap+0"
+      ],
+      "values": [
+       "0x1.2000000000000p+3",
+       "0x1.3000000000000p+3"
+      ]
+     },
+     {
+      "key": "vmaf_v1",
+      "provenance": {
+       "implementation": "libvmaf",
+       "implementation_version": "libvmaf-fast v1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.6000000000000p+6",
+       "0x1.6600000000000p+6",
+       "0x1.5d00000000000p+6",
+       "0x1.6800000000000p+6",
+       "0x1.6300000000000p+6",
+       "0x1.6400000000000p+6"
+      ]
+     },
+     {
+      "key": "xpsnr",
+      "provenance": {
+       "implementation": "ffmpeg/xpsnr",
+       "implementation_version": "",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-xpsnr-v2",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.6000000000000p+5",
+       "0x1.6c00000000000p+5",
+       "0x1.5a00000000000p+5",
+       "0x1.6600000000000p+5",
+       "0x1.6800000000000p+5",
+       "0x1.7000000000000p+5"
+      ]
+     },
+     {
+      "key": "ssimulacra2",
+      "provenance": {
+       "implementation": "Vship/ssimulacra2",
+       "implementation_version": "",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "ssimulacra2-vship-gpu-v1",
+       "parameters": {
+        "color_tags": "ffvship-5.1.1",
+        "coverage_step": 1
+       }
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.4000000000000p+6",
+       "0x1.4600000000000p+6",
+       "0x1.3d00000000000p+6",
+       "0x1.4800000000000p+6",
+       "0x1.4300000000000p+6",
+       "0x1.4400000000000p+6"
+      ]
+     }
+    ],
+    "other_cvvdp": {
+     "parameters": {
+      "display": {
+       "resolution": [
+        3840,
+        2160
+       ],
+       "diagonal_inches": 30.0,
+       "viewing_distance_m": 0.7472,
+       "peak_luminance": 200.0,
+       "contrast": 1000.0,
+       "ambient_lux": 250.0,
+       "reflectivity": 0.005,
+       "exposure": 1.0,
+       "hdr": false
+      },
+      "resize_to_display": false
+     },
+     "scores": [
+      {
+       "parameters": {
+        "display": {
+         "resolution": [
+          1920,
+          1080
+         ],
+         "diagonal_inches": 55.0,
+         "viewing_distance_m": 2.1,
+         "peak_luminance": 1000.0,
+         "contrast": 100000.0,
+         "ambient_lux": 10.0,
+         "reflectivity": 0.01,
+         "exposure": 1.0,
+         "hdr": true
+        },
+        "resize_to_display": true
+       },
+       "score": "0x1.e000000000000p+2"
+      }
+     ]
+    }
+   },
+   {
+    "name": "one metric ticked",
+    "options": {
+     "n_subsample": 1,
+     "model_choice": "__auto__",
+     "model_choice_v1": "__auto__",
+     "crop_mode": "auto",
+     "scale_direction": "source_to_distorted",
+     "scale_algorithm": "bicubic",
+     "duration_limit": "0x0.0p+0"
+    },
+    "metrics": [
+     "ssim"
+    ],
+    "backends": {},
+    "cvvdp": null,
+    "displayable": [
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_neg\",\"parameters\":{\"model\":\"version=vmaf_v0.6.1neg\"}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_v1\",\"parameters\":{\"model\":\"\",\"model_choice\":\"__auto__\"}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"psnr\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"ssim\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-xpsnr-v2\",\"key\":\"xpsnr\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ssimulacra2-auto-or-libjxl-cpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"butteraugli-auto-or-libjxl-cpu-v1\",\"key\":\"butteraugli\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v1\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":250.0,\"contrast\":1000.0,\"diagonal_inches\":30.0,\"exposure\":1.0,\"hdr\":false,\"peak_luminance\":200.0,\"reflectivity\":0.005,\"resolution\":[3840,2160],\"viewing_distance_m\":0.7472},\"resize_to_display\":false}}"
+    ],
+    "loaded": [
+     {
+      "key": "vmaf",
+      "provenance": {
+       "implementation": "libvmaf/vulkan",
+       "implementation_version": "libvmaf-fast v1",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {
+        "model": "version=vmaf_v0.6.1"
+       }
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.6a00000000000p+6",
+       "0x1.6c00000000000p+6",
+       "0x1.6500000000000p+6",
+       "0x1.7200000000000p+6",
+       "0x1.6800000000000p+6",
+       "0x1.6f00000000000p+6"
+      ]
+     },
+     {
+      "key": "vmaf_v1",
+      "provenance": {
+       "implementation": "libvmaf",
+       "implementation_version": "libvmaf-fast v1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.6000000000000p+6",
+       "0x1.6600000000000p+6",
+       "0x1.5d00000000000p+6",
+       "0x1.6800000000000p+6",
+       "0x1.6300000000000p+6",
+       "0x1.6400000000000p+6"
+      ]
+     },
+     {
+      "key": "psnr",
+      "provenance": {
+       "implementation": "libvmaf",
+       "implementation_version": "",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.4400000000000p+5",
+       "0x1.4800000000000p+5",
+       "0x1.3a00000000000p+5",
+       "0x1.5400000000000p+5",
+       "0x1.4000000000000p+5",
+       "0x1.4e00000000000p+5"
+      ]
+     },
+     {
+      "key": "xpsnr",
+      "provenance": {
+       "implementation": "ffmpeg/xpsnr",
+       "implementation_version": "",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-xpsnr-v2",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.6000000000000p+5",
+       "0x1.6c00000000000p+5",
+       "0x1.5a00000000000p+5",
+       "0x1.6600000000000p+5",
+       "0x1.6800000000000p+5",
+       "0x1.7000000000000p+5"
+      ]
+     },
+     {
+      "key": "ssimulacra2",
+      "provenance": {
+       "implementation": "Vship/ssimulacra2",
+       "implementation_version": "",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "ssimulacra2-vship-gpu-v1",
+       "parameters": {
+        "color_tags": "ffvship-5.1.1",
+        "coverage_step": 1
+       }
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.4000000000000p+6",
+       "0x1.4600000000000p+6",
+       "0x1.3d00000000000p+6",
+       "0x1.4800000000000p+6",
+       "0x1.4300000000000p+6",
+       "0x1.4400000000000p+6"
+      ]
+     },
+     {
+      "key": "cvvdp",
+      "provenance": {
+       "implementation": "Vship/cvvdp",
+       "implementation_version": "",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
+       "parameters": {
+        "color_tags": "ffvship-5.1.1",
+        "display": {
+         "ambient_lux": 250.0,
+         "contrast": 1000.0,
+         "diagonal_inches": 30.0,
+         "exposure": 1.0,
+         "hdr": false,
+         "peak_luminance": 200.0,
+         "reflectivity": 0.005,
+         "resolution": [
+          3840,
+          2160
+         ],
+         "viewing_distance_m": 0.7472
+        },
+        "resize_to_display": false
+       }
+      },
+      "kind": "sequence",
+      "score": "0x1.2800000000000p+3",
+      "frame": [
+       0,
+       24
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.004189374bc6ap+0"
+      ],
+      "values": [
+       "0x1.2000000000000p+3",
+       "0x1.3000000000000p+3"
+      ]
+     }
+    ],
+    "other_cvvdp": {
+     "parameters": {
+      "display": {
+       "resolution": [
+        3840,
+        2160
+       ],
+       "diagonal_inches": 30.0,
+       "viewing_distance_m": 0.7472,
+       "peak_luminance": 200.0,
+       "contrast": 1000.0,
+       "ambient_lux": 250.0,
+       "reflectivity": 0.005,
+       "exposure": 1.0,
+       "hdr": false
+      },
+      "resize_to_display": false
+     },
+     "scores": [
+      {
+       "parameters": {
+        "display": {
+         "resolution": [
+          1920,
+          1080
+         ],
+         "diagonal_inches": 55.0,
+         "viewing_distance_m": 2.1,
+         "peak_luminance": 1000.0,
+         "contrast": 100000.0,
+         "ambient_lux": 10.0,
+         "reflectivity": 0.01,
+         "exposure": 1.0,
+         "hdr": true
+        },
+        "resize_to_display": true
+       },
+       "score": "0x1.e000000000000p+2"
+      }
+     ]
+    }
+   },
+   {
+    "name": "subsampled, SSIMULACRA2 on the CPU",
+    "options": {
+     "n_subsample": 2,
+     "model_choice": "__auto__",
+     "model_choice_v1": "__auto__",
+     "crop_mode": "auto",
+     "scale_direction": "source_to_distorted",
+     "scale_algorithm": "bicubic",
+     "duration_limit": "0x0.0p+0"
+    },
+    "metrics": [
+     "psnr"
+    ],
+    "backends": {
+     "ssimulacra2": "cpu"
+    },
+    "cvvdp": null,
+    "displayable": [
+     "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}",
+     "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_neg\",\"parameters\":{\"model\":\"version=vmaf_v0.6.1neg\"}}",
+     "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_v1\",\"parameters\":{\"model\":\"\",\"model_choice\":\"__auto__\"}}",
+     "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"psnr\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"ssim\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"ffmpeg-xpsnr-v2\",\"key\":\"xpsnr\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-xpsnr-v2\",\"key\":\"xpsnr\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"ssimulacra2-auto-or-libjxl-cpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"butteraugli-auto-or-libjxl-cpu-v1\",\"key\":\"butteraugli\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v1\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":250.0,\"contrast\":1000.0,\"diagonal_inches\":30.0,\"exposure\":1.0,\"hdr\":false,\"peak_luminance\":200.0,\"reflectivity\":0.005,\"resolution\":[3840,2160],\"viewing_distance_m\":0.7472},\"resize_to_display\":false}}"
+    ],
+    "loaded": [
+     {
+      "key": "psnr",
+      "provenance": {
+       "implementation": "libvmaf",
+       "implementation_version": "",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       2,
+       4
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-4",
+       "0x1.55acb6f46508ep-3"
+      ],
+      "values": [
+       "0x1.e800000000000p+4",
+       "0x1.d400000000000p+4",
+       "0x1.e000000000000p+4"
+      ]
+     },
+     {
+      "key": "xpsnr",
+      "provenance": {
+       "implementation": "ffmpeg/xpsnr",
+       "implementation_version": "",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-xpsnr-v2",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.6000000000000p+5",
+       "0x1.6c00000000000p+5",
+       "0x1.5a00000000000p+5",
+       "0x1.6600000000000p+5",
+       "0x1.6800000000000p+5",
+       "0x1.7000000000000p+5"
+      ]
+     },
+     {
+      "key": "cvvdp",
+      "provenance": {
+       "implementation": "Vship/cvvdp",
+       "implementation_version": "",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
+       "parameters": {
+        "color_tags": "ffvship-5.1.1",
+        "display": {
+         "ambient_lux": 250.0,
+         "contrast": 1000.0,
+         "diagonal_inches": 30.0,
+         "exposure": 1.0,
+         "hdr": false,
+         "peak_luminance": 200.0,
+         "reflectivity": 0.005,
+         "resolution": [
+          3840,
+          2160
+         ],
+         "viewing_distance_m": 0.7472
+        },
+        "resize_to_display": false
+       }
+      },
+      "kind": "sequence",
+      "score": "0x1.2800000000000p+3",
+      "frame": [
+       0,
+       24
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.004189374bc6ap+0"
+      ],
+      "values": [
+       "0x1.2000000000000p+3",
+       "0x1.3000000000000p+3"
+      ]
+     }
+    ],
+    "other_cvvdp": {
+     "parameters": {
+      "display": {
+       "resolution": [
+        3840,
+        2160
+       ],
+       "diagonal_inches": 30.0,
+       "viewing_distance_m": 0.7472,
+       "peak_luminance": 200.0,
+       "contrast": 1000.0,
+       "ambient_lux": 250.0,
+       "reflectivity": 0.005,
+       "exposure": 1.0,
+       "hdr": false
+      },
+      "resize_to_display": false
+     },
+     "scores": [
+      {
+       "parameters": {
+        "display": {
+         "resolution": [
+          1920,
+          1080
+         ],
+         "diagonal_inches": 55.0,
+         "viewing_distance_m": 2.1,
+         "peak_luminance": 1000.0,
+         "contrast": 100000.0,
+         "ambient_lux": 10.0,
+         "reflectivity": 0.01,
+         "exposure": 1.0,
+         "hdr": true
+        },
+        "resize_to_display": true
+       },
+       "score": "0x1.e000000000000p+2"
+      }
+     ]
+    }
+   },
+   {
+    "name": "another display",
+    "options": {
+     "n_subsample": 1,
+     "model_choice": "__auto__",
+     "model_choice_v1": "__auto__",
+     "crop_mode": "auto",
+     "scale_direction": "source_to_distorted",
+     "scale_algorithm": "bicubic",
+     "duration_limit": "0x0.0p+0"
+    },
+    "metrics": [
+     "vmaf"
+    ],
+    "backends": {},
+    "cvvdp": {
+     "display": {
+      "resolution": [
+       1920,
+       1080
+      ],
+      "diagonal_inches": 55.0,
+      "viewing_distance_m": 2.1,
+      "peak_luminance": 1000.0,
+      "contrast": 100000.0,
+      "ambient_lux": 10.0,
+      "reflectivity": 0.01,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": true
+    },
+    "displayable": [
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_neg\",\"parameters\":{\"model\":\"version=vmaf_v0.6.1neg\"}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_v1\",\"parameters\":{\"model\":\"\",\"model_choice\":\"__auto__\"}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"psnr\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"ssim\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-xpsnr-v2\",\"key\":\"xpsnr\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ssimulacra2-auto-or-libjxl-cpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"butteraugli-auto-or-libjxl-cpu-v1\",\"key\":\"butteraugli\",\"parameters\":{}}",
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v1\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":10.0,\"contrast\":100000.0,\"diagonal_inches\":55.0,\"exposure\":1.0,\"hdr\":true,\"peak_luminance\":1000.0,\"reflectivity\":0.01,\"resolution\":[1920,1080],\"viewing_distance_m\":2.1},\"resize_to_display\":true}}"
+    ],
+    "loaded": [
+     {
+      "key": "vmaf",
+      "provenance": {
+       "implementation": "libvmaf/vulkan",
+       "implementation_version": "libvmaf-fast v1",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {
+        "model": "version=vmaf_v0.6.1"
+       }
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.6a00000000000p+6",
+       "0x1.6c00000000000p+6",
+       "0x1.6500000000000p+6",
+       "0x1.7200000000000p+6",
+       "0x1.6800000000000p+6",
+       "0x1.6f00000000000p+6"
+      ]
+     },
+     {
+      "key": "vmaf_v1",
+      "provenance": {
+       "implementation": "libvmaf",
+       "implementation_version": "libvmaf-fast v1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.6000000000000p+6",
+       "0x1.6600000000000p+6",
+       "0x1.5d00000000000p+6",
+       "0x1.6800000000000p+6",
+       "0x1.6300000000000p+6",
+       "0x1.6400000000000p+6"
+      ]
+     },
+     {
+      "key": "psnr",
+      "provenance": {
+       "implementation": "libvmaf",
+       "implementation_version": "",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-libvmaf-v1",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.4400000000000p+5",
+       "0x1.4800000000000p+5",
+       "0x1.3a00000000000p+5",
+       "0x1.5400000000000p+5",
+       "0x1.4000000000000p+5",
+       "0x1.4e00000000000p+5"
+      ]
+     },
+     {
+      "key": "xpsnr",
+      "provenance": {
+       "implementation": "ffmpeg/xpsnr",
+       "implementation_version": "",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ffmpeg-xpsnr-v2",
+       "parameters": {}
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.6000000000000p+5",
+       "0x1.6c00000000000p+5",
+       "0x1.5a00000000000p+5",
+       "0x1.6600000000000p+5",
+       "0x1.6800000000000p+5",
+       "0x1.7000000000000p+5"
+      ]
+     },
+     {
+      "key": "ssimulacra2",
+      "provenance": {
+       "implementation": "Vship/ssimulacra2",
+       "implementation_version": "",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "ssimulacra2-vship-gpu-v1",
+       "parameters": {
+        "color_tags": "ffvship-5.1.1",
+        "coverage_step": 1
+       }
+      },
+      "kind": "frame",
+      "frame": [
+       0,
+       1,
+       2,
+       3,
+       4,
+       5
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.55acb6f46508ep-5",
+       "0x1.55acb6f46508ep-4",
+       "0x1.004189374bc6ap-3",
+       "0x1.55acb6f46508ep-3",
+       "0x1.ab17e4b17e4b1p-3"
+      ],
+      "values": [
+       "0x1.4000000000000p+6",
+       "0x1.4600000000000p+6",
+       "0x1.3d00000000000p+6",
+       "0x1.4800000000000p+6",
+       "0x1.4300000000000p+6",
+       "0x1.4400000000000p+6"
+      ]
+     },
+     {
+      "key": "cvvdp",
+      "provenance": {
+       "implementation": "Vship/cvvdp",
+       "implementation_version": "",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
+       "parameters": {
+        "color_tags": "ffvship-5.1.1",
+        "display": {
+         "ambient_lux": 250.0,
+         "contrast": 1000.0,
+         "diagonal_inches": 30.0,
+         "exposure": 1.0,
+         "hdr": false,
+         "peak_luminance": 200.0,
+         "reflectivity": 0.005,
+         "resolution": [
+          3840,
+          2160
+         ],
+         "viewing_distance_m": 0.7472
+        },
+        "resize_to_display": false
+       }
+      },
+      "kind": "sequence",
+      "score": "0x1.e000000000000p+2"
+     }
+    ],
+    "other_cvvdp": {
+     "parameters": {
+      "display": {
+       "resolution": [
+        1920,
+        1080
+       ],
+       "diagonal_inches": 55.0,
+       "viewing_distance_m": 2.1,
+       "peak_luminance": 1000.0,
+       "contrast": 100000.0,
+       "ambient_lux": 10.0,
+       "reflectivity": 0.01,
+       "exposure": 1.0,
+       "hdr": true
+      },
+      "resize_to_display": true
+     },
+     "scores": [
+      {
+       "parameters": {
+        "display": {
+         "resolution": [
+          3840,
+          2160
+         ],
+         "diagonal_inches": 30.0,
+         "viewing_distance_m": 0.7472,
+         "peak_luminance": 200.0,
+         "contrast": 1000.0,
+         "ambient_lux": 250.0,
+         "reflectivity": 0.005,
+         "exposure": 1.0,
+         "hdr": false
+        },
+        "resize_to_display": false
+       },
+       "score": "0x1.2800000000000p+3"
+      }
+     ]
+    }
+   }
+  ],
+  "clears": [
+   {
+    "name": "everything, on Auto",
+    "options": {
+     "n_subsample": 1,
+     "model_choice": "__auto__",
+     "model_choice_v1": "__auto__",
+     "crop_mode": "auto",
+     "scale_direction": "source_to_distorted",
+     "scale_algorithm": "bicubic",
+     "duration_limit": "0x0.0p+0"
+    },
+    "metrics": [
+     "vmaf",
+     "vmaf_v1",
+     "psnr",
+     "xpsnr",
+     "ssimulacra2",
+     "butteraugli",
+     "cvvdp"
+    ],
+    "backends": {},
+    "cvvdp": null,
+    "removed": 8,
+    "left": [
+     "context.json",
+     "cvvdp_8c972bd4217003ad4040b7bb093b9e8cee47773723e2aa0fe4a4fdc7a5ea1166.npz",
+     "psnr_123329faf9b4fa0bc59895bf055f21cdbec6c92fb82ef270a915f138a645f43a.npz"
+    ]
+   },
+   {
+    "name": "a model Auto ran, chosen",
+    "options": {
+     "n_subsample": 1,
+     "model_choice": "version=vmaf_v0.6.1",
+     "model_choice_v1": "__auto__",
+     "crop_mode": "auto",
+     "scale_direction": "source_to_distorted",
+     "scale_algorithm": "bicubic",
+     "duration_limit": "0x0.0p+0"
+    },
+    "metrics": [
+     "vmaf"
+    ],
+    "backends": {},
+    "cvvdp": null,
+    "removed": 1,
+    "left": [
+     "butteraugli_27850760876cf7e5600b13b31c703102c95abb025b437c8a96f1886f3a59f55b.npz",
+     "context.json",
+     "cvvdp_8c972bd4217003ad4040b7bb093b9e8cee47773723e2aa0fe4a4fdc7a5ea1166.npz",
+     "cvvdp_b16a7293ec667dc5bae894a10351fe0fcf4da4c40658d5abb8397191a5fa2f3b.npz",
+     "psnr_06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83.npz",
+     "psnr_123329faf9b4fa0bc59895bf055f21cdbec6c92fb82ef270a915f138a645f43a.npz",
+     "ssimulacra2_5c7f8a14bfef2485aaef15ac87be1c672a47b2b70111951fe2fcd69eaad83ccc.npz",
+     "ssimulacra2_90dc8e2eb9ea0a874a9c7486b9656dfb91e5e6d2e374552895215099cb1118cb.npz",
+     "vmaf_0012615264fa558fb311fdab506bc62efabd8f67b8005637d1002dbe5b33dbf1.npz",
+     "xpsnr_a991719296a82a834bc1e8d9f9bc514e500aaf801e4daad31308a2f67e552f7c.npz"
+    ]
+   },
+   {
+    "name": "SSIMULACRA2, on either device",
+    "options": {
+     "n_subsample": 1,
+     "model_choice": "__auto__",
+     "model_choice_v1": "__auto__",
+     "crop_mode": "auto",
+     "scale_direction": "source_to_distorted",
+     "scale_algorithm": "bicubic",
+     "duration_limit": "0x0.0p+0"
+    },
+    "metrics": [
+     "ssimulacra2"
+    ],
+    "backends": {
+     "ssimulacra2": "cpu"
+    },
+    "cvvdp": null,
+    "removed": 2,
+    "left": [
+     "butteraugli_27850760876cf7e5600b13b31c703102c95abb025b437c8a96f1886f3a59f55b.npz",
+     "context.json",
+     "cvvdp_8c972bd4217003ad4040b7bb093b9e8cee47773723e2aa0fe4a4fdc7a5ea1166.npz",
+     "cvvdp_b16a7293ec667dc5bae894a10351fe0fcf4da4c40658d5abb8397191a5fa2f3b.npz",
+     "psnr_06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83.npz",
+     "psnr_123329faf9b4fa0bc59895bf055f21cdbec6c92fb82ef270a915f138a645f43a.npz",
+     "vmaf_0012615264fa558fb311fdab506bc62efabd8f67b8005637d1002dbe5b33dbf1.npz",
+     "vmaf_58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca.npz",
+     "xpsnr_a991719296a82a834bc1e8d9f9bc514e500aaf801e4daad31308a2f67e552f7c.npz"
+    ]
+   },
+   {
+    "name": "VMAF v1 saved under VMAF's key",
+    "options": {
+     "n_subsample": 1,
+     "model_choice": "__auto__",
+     "model_choice_v1": "__builtin:vmaf_v1_3d0h",
+     "crop_mode": "auto",
+     "scale_direction": "source_to_distorted",
+     "scale_algorithm": "bicubic",
+     "duration_limit": "0x0.0p+0"
+    },
+    "metrics": [
+     "vmaf_v1"
+    ],
+    "backends": {},
+    "cvvdp": null,
+    "removed": 1,
+    "left": [
+     "butteraugli_27850760876cf7e5600b13b31c703102c95abb025b437c8a96f1886f3a59f55b.npz",
+     "context.json",
+     "cvvdp_8c972bd4217003ad4040b7bb093b9e8cee47773723e2aa0fe4a4fdc7a5ea1166.npz",
+     "cvvdp_b16a7293ec667dc5bae894a10351fe0fcf4da4c40658d5abb8397191a5fa2f3b.npz",
+     "psnr_06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83.npz",
+     "psnr_123329faf9b4fa0bc59895bf055f21cdbec6c92fb82ef270a915f138a645f43a.npz",
+     "ssimulacra2_5c7f8a14bfef2485aaef15ac87be1c672a47b2b70111951fe2fcd69eaad83ccc.npz",
+     "ssimulacra2_90dc8e2eb9ea0a874a9c7486b9656dfb91e5e6d2e374552895215099cb1118cb.npz",
+     "vmaf_58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca.npz",
+     "xpsnr_a991719296a82a834bc1e8d9f9bc514e500aaf801e4daad31308a2f67e552f7c.npz"
+    ]
+   },
+   {
+    "name": "CVVDP on another display",
+    "options": {
+     "n_subsample": 1,
+     "model_choice": "__auto__",
+     "model_choice_v1": "__auto__",
+     "crop_mode": "auto",
+     "scale_direction": "source_to_distorted",
+     "scale_algorithm": "bicubic",
+     "duration_limit": "0x0.0p+0"
+    },
+    "metrics": [
+     "cvvdp"
+    ],
+    "backends": {},
+    "cvvdp": {
+     "display": {
+      "resolution": [
+       1920,
+       1080
+      ],
+      "diagonal_inches": 55.0,
+      "viewing_distance_m": 2.1,
+      "peak_luminance": 1000.0,
+      "contrast": 100000.0,
+      "ambient_lux": 10.0,
+      "reflectivity": 0.01,
+      "exposure": 1.0,
+      "hdr": true
+     },
+     "resize_to_display": true
+    },
+    "removed": 1,
+    "left": [
+     "butteraugli_27850760876cf7e5600b13b31c703102c95abb025b437c8a96f1886f3a59f55b.npz",
+     "context.json",
+     "cvvdp_b16a7293ec667dc5bae894a10351fe0fcf4da4c40658d5abb8397191a5fa2f3b.npz",
+     "psnr_06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83.npz",
+     "psnr_123329faf9b4fa0bc59895bf055f21cdbec6c92fb82ef270a915f138a645f43a.npz",
+     "ssimulacra2_5c7f8a14bfef2485aaef15ac87be1c672a47b2b70111951fe2fcd69eaad83ccc.npz",
+     "ssimulacra2_90dc8e2eb9ea0a874a9c7486b9656dfb91e5e6d2e374552895215099cb1118cb.npz",
+     "vmaf_0012615264fa558fb311fdab506bc62efabd8f67b8005637d1002dbe5b33dbf1.npz",
+     "vmaf_58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca.npz",
+     "xpsnr_a991719296a82a834bc1e8d9f9bc514e500aaf801e4daad31308a2f67e552f7c.npz"
+    ]
+   }
   ]
  }
 }

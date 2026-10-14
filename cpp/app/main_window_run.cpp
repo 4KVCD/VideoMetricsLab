@@ -14,6 +14,7 @@
 #include <utility>
 #include <variant>
 
+#include "file_writes.h"
 #include "i18n.h"
 #include "main_window.h"
 #include "run_worker.h"
@@ -722,9 +723,10 @@ std::optional<int> MainWindow::row_index_of(const RowData* row_data) const {
 }
 
 void MainWindow::on_result_updated(int index, const ComparisonResult& result) {
-    // A video's result so far, shown now: one of its tasks finished while
-    // the rest runs on. (Saving it in the saved scores is not ported to C++
-    // yet.)
+    // A video's result so far, saved and shown now: one of its tasks
+    // finished while the rest runs on. Were it kept only once the whole video
+    // was done, a Butteraugli score would wait hours for the video's VMAF,
+    // and closing the app or a crash in between would lose it.
     if (finished_jobs_.contains(index)) {
         return;  // the video's own result has arrived: it is the one to show
     }
@@ -732,11 +734,10 @@ void MainWindow::on_result_updated(int index, const ComparisonResult& result) {
 }
 
 std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult& result, bool final) {
-    // Shows a finished video's result, or with `final` false its result so
-    // far (on_result_updated). Returns the row it was shown on, or nothing
-    // when it was not: the row was removed, or the reference or the row's
-    // settings changed since the video started. (Saving it in the saved
-    // scores is not ported to C++ yet.)
+    // Saves and shows a finished video's result, or with `final` false its
+    // result so far (on_result_updated). Returns the row it was shown on, or
+    // nothing when it was not: the row was removed, or the reference or the
+    // row's settings changed since the video started.
     const auto job = static_cast<std::size_t>(index);
     RowData& row_data = *job_rows_[job];
     if (final) {
@@ -747,6 +748,19 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
     if (!row) {
         return std::nullopt;  // the row was removed during the run: nothing to show the result in
     }
+    // Saved under the videos and settings the video started with, never the
+    // reference chosen by the time it ends; and under the row's real file,
+    // whose size and time notice a file replaced. Off the window's thread: a
+    // long video's scores take seconds to write.
+    const QString label = text_of(row_data.path.stem());
+    const AnalysisRequest request =
+        analysis_request(job_options_[job], requested_metrics(row_data), row_data.metric_backends, job_cvvdp_[job]);
+    file_writes_->submit(QStringLiteral("cache %1").arg(label),
+                         [base = cache_folder(), identity = row_data.identity_path(), result,
+                          label = label.toStdString(), request] {
+                             store_result(base, result.source, identity, request.recipe, result, label,
+                                          request.metrics);
+                         });
     if (!source_info_ || !same_path(source_info_->path, result.source)) {
         if (final) {
             set_row_status(*row, RowState::for_previous_source);

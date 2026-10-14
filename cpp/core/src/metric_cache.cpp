@@ -788,6 +788,51 @@ std::vector<std::pair<std::filesystem::path, MetricRequestSpec>> old_v1_scores(c
     return found;
 }
 
+// The whole-video scores saved for `spec`'s metric with other parameters but
+// otherwise the same request, each with those parameters
+// (load_other_parameters): CVVDP's for other displays.
+std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::filesystem::path& directory,
+                                                                const MetricRequestSpec& spec) {
+    const nlohmann::json wanted = spec.identity();
+    const nlohmann::json rest = without(wanted, {"parameters"});
+    const std::vector<std::filesystem::path> paths = score_files(directory, spec.key);
+    const std::vector<ColourTags> infos = paths.empty() ? std::vector<ColourTags>() : context_colour_tags(directory);
+    std::vector<std::pair<nlohmann::json, double>> found;
+    for (const std::filesystem::path& path : paths) {
+        try {
+            const auto score = read_score(path);
+            if (!score) {
+                continue;
+            }
+            const auto& [metadata, arrays] = *score;
+            const nlohmann::json request = metadata.value("request", nlohmann::json::object());
+            if (!current_format(metadata) || metadata.value("key", nlohmann::json()) != spec.key ||
+                metadata.value("kind", nlohmann::json()) != "sequence" || without(request, {"parameters"}) != rest ||
+                request.value("parameters", nlohmann::json()) == wanted.at("parameters")) {
+                continue;
+            }
+            if (const nlohmann::json made = metadata.value("provenance", nlohmann::json()); made.is_object()) {
+                const std::optional<MetricProvenance> provenance = provenance_from(made);
+                if (!provenance || stale_vship_score(*provenance, infos)) {
+                    continue;
+                }
+            }
+            const nlohmann::json parameters = request.at("parameters");
+            const std::optional<std::vector<double>> value =
+                arrays.contains("score") ? npy_numbers(arrays.at("score")) : std::nullopt;
+            if (!parameters.is_object() || !value || value->size() != 1) {
+                continue;
+            }
+            if (std::isfinite(value->front())) {
+                found.emplace_back(parameters, value->front());
+            }
+        } catch (const nlohmann::json::exception&) {
+            continue;
+        }
+    }
+    return found;
+}
+
 // One saved metric score (load_metric), or nothing. `backend` is where the
 // user set a perceptual metric to be calculated: "cpu" accepts only a CPU
 // score; "gpu" prefers a Vship score and also accepts a CPU one, which is
@@ -1004,23 +1049,35 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
 std::optional<std::pair<ComparisonResult, std::string>> load_result(
     const std::filesystem::path& base, const std::filesystem::path& source, const std::filesystem::path& distorted,
     const ComparisonRecipe& recipe, const std::vector<MetricRequestSpec>& specs,
-    const std::map<std::string, std::string>& backends) {
+    const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental) {
     const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
     const std::optional<nlohmann::json> context = read_json(directory / "context.json");
     if (!context || !context->is_object() || !current_format(*context)) {
         return std::nullopt;
     }
     MetricResultSet results;
-    for (const MetricRequestSpec& spec : specs) {
+    const auto load = [&](const MetricRequestSpec& spec) {
         const auto backend = backends.find(spec.key);
         if (std::optional<LoadedMetric> metric =
                 load_metric(directory, spec, backend == backends.end() ? "gpu" : backend->second)) {
             std::visit([&results](auto&& loaded) { results.add(std::move(loaded)); }, std::move(*metric));
         }
+    };
+    for (const MetricRequestSpec& spec : specs) {
+        load(spec);
+    }
+    for (const MetricRequestSpec& spec : supplemental) {
+        const bool asked = std::any_of(specs.begin(), specs.end(),
+                                       [&spec](const MetricRequestSpec& other) { return other.key == spec.key; });
+        if (!asked && !results.has(spec.key)) {
+            load(spec);
+        }
     }
     if (results.empty()) {
         return std::nullopt;
     }
+    std::vector<MetricRequestSpec> loaded_for = specs;  // the requests a loaded score answers
+    loaded_for.insert(loaded_for.end(), supplemental.begin(), supplemental.end());
     try {
         // A context saved before some of these fields were recorded lacks
         // them: the recipe's values stand in, the comparison found under the
@@ -1053,8 +1110,8 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
         result.model_v1 = optional_string("model_v1").value_or("");
         result.model_choice_v1 = optional_string("model_choice_v1");
         result.metric_results = std::move(results);
-        loaded_model(result.metric_results, specs, "vmaf", result.model, result.model_choice);
-        loaded_model(result.metric_results, specs, "vmaf_v1", result.model_v1, result.model_choice_v1);
+        loaded_model(result.metric_results, loaded_for, "vmaf", result.model, result.model_choice);
+        loaded_model(result.metric_results, loaded_for, "vmaf_v1", result.model_v1, result.model_choice_v1);
         std::optional<std::string> label = optional_string("label");
         if (!label || label->empty()) {
             label = platform::path_text(result.distorted.stem());
@@ -1065,6 +1122,88 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
     } catch (const std::invalid_argument&) {
         return std::nullopt;
     }
+}
+
+std::optional<OtherCvvdpScores> other_cvvdp_scores(const std::filesystem::path& base,
+                                                   const std::filesystem::path& source,
+                                                   const std::filesystem::path& distorted,
+                                                   const ComparisonRecipe& recipe,
+                                                   const std::vector<MetricRequestSpec>& specs,
+                                                   const std::vector<MetricRequestSpec>& supplemental) {
+    const MetricRequestSpec* spec = nullptr;
+    for (const std::vector<MetricRequestSpec>* list : {&specs, &supplemental}) {
+        for (const MetricRequestSpec& asked : *list) {
+            if (spec == nullptr && asked.key == "cvvdp") {
+                spec = &asked;
+            }
+        }
+    }
+    if (spec == nullptr) {
+        return std::nullopt;
+    }
+    OtherCvvdpScores found{spec->parameters, {}};
+    for (const auto& [parameters, score] : other_parameters(recipe_directory(base, source, distorted, recipe), *spec)) {
+        try {
+            found.scores.emplace_back(CvvdpSettings::from_parameters(parameters), score);
+        } catch (const std::invalid_argument&) {
+            continue;  // a display CVVDP cannot model, as a hand-edited file can say
+        } catch (const nlohmann::json::exception&) {
+            continue;
+        }
+    }
+    return found;
+}
+
+int clear_metrics(const std::filesystem::path& base, const std::filesystem::path& source,
+                  const std::filesystem::path& distorted, const ComparisonRecipe& recipe,
+                  const std::vector<MetricRequestSpec>& specs) {
+    const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
+    int removed = 0;
+    const auto remove = [&removed](const std::filesystem::path& path) {
+        std::error_code error;
+        if (std::filesystem::remove(path, error)) {
+            ++removed;
+        }
+    };
+    for (const MetricRequestSpec& spec : specs) {
+        if (is_auto_perceptual(spec)) {
+            for (const auto& [path, concrete] : auto_perceptual_candidates(directory, spec)) {
+                remove(path);
+            }
+            continue;
+        }
+        if (spec.key == "vmaf" && spec.backend_id == "ffmpeg") {
+            for (const auto& [path, concrete] : vmaf_equivalents(directory, spec)) {
+                remove(path);
+            }
+        } else if (spec.key == "vmaf_v1" && spec.backend_id == "ffmpeg") {
+            for (const auto& [path, concrete] : old_v1_scores(directory, spec)) {
+                remove(path);
+            }
+        }
+        remove(metric_path(directory, spec));
+    }
+    // The folder goes with its last score.
+    std::error_code error;
+    bool scores_left = false;
+    for (std::filesystem::directory_iterator entry(directory, error);
+         !error && entry != std::filesystem::directory_iterator(); entry.increment(error)) {
+        scores_left = scores_left || entry->path().extension() == ".npz";
+    }
+    if (!error && !scores_left) {
+        std::filesystem::remove_all(directory, error);
+    }
+    return removed;
+}
+
+std::string lookup_token(const std::filesystem::path& source, const std::filesystem::path& distorted,
+                         const AnalysisRequest& request) {
+    nlohmann::json metrics = nlohmann::json::array();
+    for (const MetricRequestSpec& spec : request.metrics) {
+        metrics.push_back(spec.identity());
+    }
+    return sha256_hex(
+        nlohmann::json{{"recipe", recipe_hash(source, distorted, request.recipe)}, {"metrics", metrics}}.dump());
 }
 
 }  // namespace vml

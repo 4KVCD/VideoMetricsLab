@@ -32,6 +32,7 @@
 #include <string>
 #include <vector>
 
+#include "file_writes.h"
 #include "i18n.h"
 #include "test_videos.h"
 #include "theme.h"
@@ -132,6 +133,12 @@ protected:
     }
     // The run's clock, in seconds.
     static void set_clock(MainWindow& window, std::function<double()> clock) { window.clock_ = std::move(clock); }
+    // Whether the saved scores' writes queued so far have run, within 30 s.
+    static bool wait_for_writes(MainWindow& window) {
+        return window.file_writes_->wait_until_idle(std::chrono::seconds(30));
+    }
+    // The table menu's Recalculate, for `rows`.
+    static void recalculate(MainWindow& window, const std::vector<int>& rows) { window.recompute_rows(rows); }
     static QString dialog_folder(MainWindow& window, const QString& kind) { return window.video_dialog_dir(kind); }
 
     // Whether a video is still being read.
@@ -550,10 +557,12 @@ TEST_F(WindowTest, ARunPausedOnTheWayScoresAsTheCommandLineAndItsTimeLeavesThePa
     EXPECT_FALSE(source_edit(window).isReadOnly());
 
     // The command line's scores for the same videos, with the same settings,
-    // are in the metrics' cells.
+    // calculated afresh rather than read from what the window saved, are in
+    // the metrics' cells.
+    ASSERT_TRUE(wait_for_writes(window));
     const platform::ProcessOutput command_line = platform::run_program(
         {VML_CLI, "compare", platform::path_text(clip("sources/ref.mkv")), platform::path_text(clip("encodes/a.mkv")),
-         platform::path_text(clip("encodes/b.mkv")), "--json", "-", "--quiet"},
+         platform::path_text(clip("encodes/b.mkv")), "--recalculate", "--json", "-", "--quiet"},
         std::chrono::minutes(2));
     ASSERT_EQ(command_line.exit_code, 0) << command_line.standard_error;
     const nlohmann::json results = nlohmann::json::parse(command_line.standard_output);
@@ -574,6 +583,87 @@ TEST_F(WindowTest, ARunPausedOnTheWayScoresAsTheCommandLineAndItsTimeLeavesThePa
     run_button(window).click();
     EXPECT_FALSE(running(window));
     EXPECT_EQ(status(window), "All 2 checked videos already have all requested metrics -- nothing to run.");
+}
+
+TEST_F(WindowTest, ARunsScoresAreSavedForTheNextTimeItsVideosAreAddedUnlessRecalculated) {
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    std::vector<std::string> saved;  // the first video's scores, as its cells show them
+    {
+        MainWindow window;
+        open_clips(window);
+        run_button(window).click();
+        ASSERT_TRUE(wait_until([&] { return !running(window); }));
+        for (const MetricColumn& column : metric_columns()) {
+            saved.push_back(table(window).item(0, column.column)->text().toStdString());
+        }
+        // Recalculate forgets the second video's: its cells are tick boxes again.
+        recalculate(window, {1});
+        EXPECT_EQ(state(window, 1), RowState::not_calculated);
+        EXPECT_TRUE(table(window).item(1, col_psnr)->text().isEmpty());
+        ASSERT_TRUE(wait_for_writes(window));
+    }
+
+    // The command line finds the first video's scores as the window saved
+    // them...
+    const platform::ProcessOutput command_line = platform::run_program(
+        {VML_CLI, "compare", platform::path_text(clip("sources/ref.mkv")), platform::path_text(clip("encodes/a.mkv")),
+         "--json", "-", "--quiet"},
+        std::chrono::minutes(2));
+    ASSERT_EQ(command_line.exit_code, 0) << command_line.standard_error;
+    const nlohmann::json found = nlohmann::json::parse(command_line.standard_output)["videos"][0];
+    EXPECT_TRUE(found["from_saved_scores"].get<bool>());
+
+    // ...and a window opened later shows them, and none for the second.
+    MainWindow reopened;
+    open_clips(reopened);
+    EXPECT_EQ(state(reopened, 0), RowState::cached);
+    std::vector<std::string> shown;
+    for (const MetricColumn& column : metric_columns()) {
+        const QTableWidgetItem* cell = table(reopened).item(0, column.column);
+        shown.push_back(cell->text().toStdString());
+        if (found["metrics"].contains(column.key)) {
+            EXPECT_EQ(cell->text().toStdString(),
+                      metric_definition(column.key).format_value(score_in(found["metrics"][column.key]["score"])))
+                << column.key;
+        }
+    }
+    EXPECT_EQ(shown, saved);
+    EXPECT_EQ(state(reopened, 1), RowState::not_calculated);
+    EXPECT_TRUE(table(reopened).item(1, col_psnr)->text().isEmpty());
+}
+
+TEST_F(WindowTest, ScoresSavedSinceAVideoWasAddedComeBackWhenItsMetricsAreTickedOrShown) {
+    // As in the Python app, a row's saved scores are looked up again when
+    // its metrics are ticked or one is shown again. Otherwise scores saved
+    // meanwhile (here by the command line) stay away, and so does every
+    // score of a row ticked while its lookup was reading: the answer is for
+    // the row as it was, and refused.
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    const auto saved_by_command_line = [](const std::string& test_video) {
+        const platform::ProcessOutput output = platform::run_program(
+            {VML_CLI, "compare", platform::path_text(clip("sources/ref.mkv")), platform::path_text(clip(test_video)),
+             "--json", "-", "--quiet"},
+            std::chrono::minutes(2));
+        ASSERT_EQ(output.exit_code, 0) << output.standard_error;
+    };
+    MainWindow window;
+    open_clips(window);
+    ASSERT_TRUE(table(window).item(0, col_psnr)->text().isEmpty());  // none saved yet
+
+    saved_by_command_line("encodes/a.mkv");
+    table(window).item(0, col_xpsnr)->setCheckState(Qt::Unchecked);
+    ASSERT_TRUE(wait_until([&] { return !reading(window); }));
+    EXPECT_FALSE(table(window).item(0, col_psnr)->text().isEmpty());
+
+    show_metric(window, "ssim", false);
+    saved_by_command_line("encodes/b.mkv");
+    show_metric(window, "ssim", true);
+    ASSERT_TRUE(wait_until([&] { return !reading(window); }));
+    EXPECT_FALSE(table(window).item(1, col_psnr)->text().isEmpty());
 }
 
 TEST_F(WindowTest, ANewReferenceTakesAwayTheScoresMeasuredAgainstTheOldOne) {

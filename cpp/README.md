@@ -121,12 +121,14 @@ its cells or for every row in the headings, and hidden or shown from the
 metrics menu. Calculate metrics runs the ticked videos as the command line
 does, with each video's progress on a line of its own, Pause, Cancel and the
 videos in parallel changed while it runs, and shows their scores in the
-table. It reads and writes the Python app's settings.json, and shows its text
-in the user's language from the Python app's catalogs
-(`vmaf_app/translations`), in the light or dark theme. The other tabs and the
-Options panel are still the Python app's alone, and the window does not read
-or save the saved scores yet. Like the command line, the program is also the
-process of its own that GPU code runs in.
+table. Scores are saved as a run goes, and a video added again shows them;
+the saved scores are the Python app's and the command line's too, and
+Recalculate (right-click) forgets a video's. It reads and writes the Python
+app's settings.json, and shows its text in the user's language from the
+Python app's catalogs (`vmaf_app/translations`), in the light or dark theme.
+The other tabs and the Options panel are still the Python app's alone. Like
+the command line, the program is also the process of its own that GPU code
+runs in.
 
 ## Building and testing
 

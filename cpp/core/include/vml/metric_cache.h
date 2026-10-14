@@ -93,10 +93,45 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
 // The saved scores of `specs` for a comparison, with the comparison's
 // details and its label; nothing when none are saved. `backends` says where
 // SSIMULACRA2 and Butteraugli are set to be calculated: set to CPU, a Vship
-// GPU score never answers.
+// GPU score never answers. The saved scores of `supplemental` come too, for
+// the metrics `specs` do not ask for: a metric asked for has its own saved
+// score or none, or a score made another way (XPSNR of every frame for one
+// of every n-th) would stand for it and never be calculated as asked.
 std::optional<std::pair<ComparisonResult, std::string>> load_result(
     const std::filesystem::path& base, const std::filesystem::path& source, const std::filesystem::path& distorted,
     const ComparisonRecipe& recipe, const std::vector<MetricRequestSpec>& specs,
-    const std::map<std::string, std::string>& backends);
+    const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental = {});
+
+// CVVDP's scores saved for a comparison with other displays than the one
+// its request in `specs` or `supplemental` models, each with the CVVDP
+// parameters it was made with (the Python app's other_cvvdp_scores), and
+// that request's parameters; nothing when neither asks for CVVDP. Never an
+// answer for the request: a CVVDP score holds for its own display only.
+struct OtherCvvdpScores {
+    nlohmann::json parameters;                             // the request's
+    std::vector<std::pair<CvvdpSettings, double>> scores;  // made for other displays
+};
+std::optional<OtherCvvdpScores> other_cvvdp_scores(const std::filesystem::path& base,
+                                                   const std::filesystem::path& source,
+                                                   const std::filesystem::path& distorted,
+                                                   const ComparisonRecipe& recipe,
+                                                   const std::vector<MetricRequestSpec>& specs,
+                                                   const std::vector<MetricRequestSpec>& supplemental = {});
+
+// Deletes a comparison's saved scores of `specs`, and those that would
+// answer the same requests (another VMAF score made with the same model, a
+// VMAF v1 score saved under VMAF's key, either implementation's SSIMULACRA2
+// or Butteraugli), so that none comes back after a Recalculate; the folder
+// goes with its last score. Returns how many files were deleted.
+int clear_metrics(const std::filesystem::path& base, const std::filesystem::path& source,
+                  const std::filesystem::path& distorted, const ComparisonRecipe& recipe,
+                  const std::vector<MetricRequestSpec>& specs);
+
+// A token for a row's request to the saved scores: of the two files'
+// identities, the recipe and each metric's request. The window refuses a
+// saved result read under a token that is no longer the row's: a file or
+// the row's settings changed while it was being read.
+std::string lookup_token(const std::filesystem::path& source, const std::filesystem::path& distorted,
+                         const AnalysisRequest& request);
 
 }  // namespace vml

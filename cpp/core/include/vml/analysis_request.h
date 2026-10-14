@@ -70,6 +70,15 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
                                  const std::map<std::string, std::string>& perceptual_backends,
                                  const CvvdpSettings& cvvdp);
 
+// The request of every saved score a row of the window can show for its
+// comparison, its metric ticked or not (the Python app's
+// displayable_metric_specs): FFmpeg's metrics as a run of all of them saves
+// them, XPSNR as a run of XPSNR alone saves it (every frame, even when
+// libvmaf's are subsampled), SSIMULACRA2 and Butteraugli at the row's frame
+// coverage, and CVVDP for its display. Only for finding scores: a run still
+// calculates the ticked metrics, and Recalculate clears those.
+std::vector<MetricRequestSpec> displayable_metric_specs(const VmafOptions& options, const CvvdpSettings& cvvdp);
+
 // A file's identity in the saved scores: its full path (resolved, as
 // Python's Path.resolve() gives it), its size and its modification time in
 // nanoseconds, "path:size:mtime"; -1 for both when it cannot be read.

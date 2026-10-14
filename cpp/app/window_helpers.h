@@ -20,6 +20,12 @@ inline QString text_of(const std::filesystem::path& path) { return QString::from
 
 inline QString name_of(const std::filesystem::path& path) { return text_of(path.filename()); }
 
+// A path as the window takes it from a dialog, a drop or the reference box:
+// with the system's separators, as Python's Path gives it.
+inline std::filesystem::path path_of(const QString& text) {
+    return platform::path_from_text(text.toStdString()).make_preferred();
+}
+
 // Whether two paths name the same file as Python's Path compares them: on
 // Windows, whatever the case of their letters.
 inline bool same_path(const std::filesystem::path& a, const std::filesystem::path& b) {

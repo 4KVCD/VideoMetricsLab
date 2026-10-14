@@ -1,8 +1,9 @@
-// Reads newly added videos off the window's thread (the Python app's
-// vmaf_app/ui/probe_worker.py, its media half): ffprobe is a process to
-// start, about 70 ms for a small file and more for a large one on a slow
-// disk, so eight videos read on the window's thread would freeze it for a
-// second or more.
+// Reads newly added videos, and looks up their saved scores, off the window's
+// thread (the Python app's vmaf_app/ui/probe_worker.py). Both are slow
+// enough to be felt: ffprobe is a process to start, about 70 ms for a small
+// file and more for a large one on a slow disk, and a feature-length video's
+// saved scores are several MB to read. Eight videos done on the window's
+// thread would freeze it for a second or more.
 #pragma once
 
 #include <QMetaType>
@@ -11,8 +12,16 @@
 #include <QThread>
 
 #include <atomic>
+#include <filesystem>
+#include <map>
 #include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include "vml/analysis_request.h"
+#include "vml/cvvdp.h"
+#include "vml/results.h"
 #include "vml/video.h"
 
 namespace vml::app {
@@ -24,31 +33,75 @@ struct Probed {
     QString error;
 };
 
-// Reads each video in turn, and says what it found for each, in the order
-// they were given.
+// What to look up for a row in the saved scores: the file its comparison is
+// filed under (RowData::identity_path), its request, and every other score
+// it can show (displayable_metric_specs).
+struct SavedScoresQuery {
+    std::filesystem::path identity;
+    AnalysisRequest request;
+    std::vector<MetricRequestSpec> supplemental;
+};
+
+// The saved scores found for a row, with the result's label and the token
+// of the request they were found for (metric_cache.h's lookup_token).
+struct SavedScoresFound {
+    QString path;
+    ComparisonResult result;
+    QString label;
+    std::string token;
+};
+
+// CVVDP's scores saved for a row's comparison with other displays, and the
+// CVVDP parameters of the request they were looked up for.
+struct OtherDisplaysFound {
+    QString path;
+    std::vector<std::pair<CvvdpSettings, double>> scores;
+    nlohmann::json parameters;
+};
+
+// Reads each video in turn, or looks up each one's saved scores, and says
+// what it found for each, in the order they were given.
 class ProbeWorker : public QThread {
     Q_OBJECT
 
 public:
-    // `ffprobe`: the program to read them with (find_tool's answer).
+    // Reads the videos with `ffprobe` (find_tool's answer).
     ProbeWorker(QStringList paths, std::string ffprobe, QObject* parent = nullptr);
+    // Looks up the saved scores of the rows `paths` (as `queries` asks for
+    // each) under `base`, compared with the reference `source`.
+    ProbeWorker(QStringList paths, std::filesystem::path base, std::filesystem::path source,
+                std::map<QString, SavedScoresQuery> queries, QObject* parent = nullptr);
 
-    // Stops after the video being read.
+    // Stops after the video being read or looked up.
     void cancel() { cancelled_ = true; }
 
 signals:
     void probed(const vml::app::Probed& probed);
+    // Only for a row that has saved scores: a miss is the usual case.
+    void saved_found(const vml::app::SavedScoresFound& found);
+    // For every row whose lookup includes CVVDP, so that none found clears
+    // what was found before.
+    void other_displays_found(const vml::app::OtherDisplaysFound& found);
     void finished_all();
 
 protected:
     void run() override;
 
 private:
+    void look_up(const QString& path);
+
     QStringList paths_;
     std::string ffprobe_;
+    // The lookup's, when it looks up saved scores.
+    std::filesystem::path base_;
+    std::filesystem::path source_;
+    std::map<QString, SavedScoresQuery> queries_;
+    bool looks_up_ = false;
     std::atomic<bool> cancelled_ = false;
 };
 
 }  // namespace vml::app
 
 Q_DECLARE_METATYPE(vml::app::Probed)
+Q_DECLARE_METATYPE(vml::app::SavedScoresFound)
+Q_DECLARE_METATYPE(vml::app::OtherDisplaysFound)

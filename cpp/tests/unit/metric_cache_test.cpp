@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -140,6 +141,63 @@ ComparisonResult result_from(const nlohmann::json& data) {
 
 void touch(const std::filesystem::path& path, const std::string& text) { std::ofstream(path, std::ios::binary) << text; }
 
+// The Python app's comparison folder (reference/metric_cache), laid where
+// this app files the comparison of `folder`'s s.mp4 and t.mp4 under `base`.
+void lay_saved_scores(const test::Folder& folder, const std::filesystem::path& base,
+                      const ComparisonRecipe& recipe) {
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    const std::filesystem::path directory = recipe_directory(base, folder / "s.mp4", folder / "t.mp4", recipe);
+    std::filesystem::create_directories(directory);
+    const std::filesystem::path from = std::filesystem::path(VML_REFERENCE_DIR) / "metric_cache";
+    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(from)) {
+        std::filesystem::copy_file(entry.path(), directory / entry.path().filename());
+    }
+}
+
+// A loaded result holds the scores `expected` lists (make_reference.py's
+// metric_json), with their frames and provenance, and the label saved.
+void expect_loaded(const std::optional<std::pair<ComparisonResult, std::string>>& loaded,
+                   const nlohmann::json& expected, const std::string& label) {
+    if (expected.empty()) {
+        EXPECT_FALSE(loaded.has_value());
+        return;
+    }
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->second, label);
+    const MetricResultSet& results = loaded->first.metric_results;
+    ASSERT_EQ(results.keys().size(), expected.size());
+    for (const nlohmann::json& metric : expected) {
+        const std::string key = metric.at("key");
+        SCOPED_TRACE(key);
+        const MetricProvenance wanted = provenance_from(metric.at("provenance"));
+        const MetricProvenance* provenance = nullptr;
+        if (metric.at("kind") == "sequence") {
+            const SequenceMetricResult* sequence = results.sequence(key);
+            ASSERT_NE(sequence, nullptr);
+            EXPECT_EQ(sequence->score, *test::reference_number(metric.at("score")));
+            EXPECT_EQ(sequence->values, metric.contains("values") ? floats_from(metric.at("values")) : std::vector<float>{});
+            provenance = &sequence->provenance;
+        } else {
+            const FrameMetricResult* frame = results.frame(key);
+            ASSERT_NE(frame, nullptr);
+            EXPECT_EQ(frame->frame, metric.at("frame").get<std::vector<int>>());
+            EXPECT_EQ(frame->time, test::reference_numbers(metric.at("time")));
+            EXPECT_EQ(frame->values, floats_from(metric.at("values")));
+            provenance = &frame->provenance;
+        }
+        EXPECT_EQ(provenance->implementation, wanted.implementation);
+        EXPECT_EQ(provenance->implementation_version, wanted.implementation_version);
+        EXPECT_EQ(provenance->compute_backend, wanted.compute_backend);
+        EXPECT_EQ(provenance->implementation_compatibility_id, wanted.implementation_compatibility_id);
+        EXPECT_EQ(provenance->parameters, wanted.parameters);
+    }
+}
+
+CvvdpSettings cvvdp_from(const nlohmann::json& item) {
+    return item.at("cvvdp").is_null() ? CvvdpSettings{} : CvvdpSettings::from_parameters(item.at("cvvdp"));
+}
+
 // Every request's identity and hash, and the recipe's, are the Python app's
 // to the byte: a saved score is found by them.
 TEST(MetricCache, FilesRequestsAndRecipesAsThePythonApp) {
@@ -222,59 +280,77 @@ TEST(MetricCache, AnswersAsThePythonApp) {
 TEST(MetricCache, LoadsThePythonAppsSavedScores) {
     const nlohmann::json saved = test::load_reference("metric_cache.json").at("saved");
     const test::Folder folder;
-    touch(folder / "s.mp4", "s");
-    touch(folder / "t.mp4", "t");
     const std::filesystem::path base = folder / "cache";
-    bool laid = false;
+    lay_saved_scores(folder, base, request_from(saved.at("loads").at(0)).recipe);
     for (const nlohmann::json& item : saved.at("loads")) {
         SCOPED_TRACE(item.at("name").get<std::string>());
         const AnalysisRequest request = request_from(item);
-        if (!laid) {
-            // The Python app's files, under the name this comparison has here.
-            const std::filesystem::path directory = recipe_directory(base, folder / "s.mp4", folder / "t.mp4", request.recipe);
-            std::filesystem::create_directories(directory);
-            const std::filesystem::path from =
-                std::filesystem::path(VML_REFERENCE_DIR) / saved.at("folder").get<std::string>();
-            for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(from)) {
-                std::filesystem::copy_file(entry.path(), directory / entry.path().filename());
+        expect_loaded(load_result(base, folder / "s.mp4", folder / "t.mp4", request.recipe, request.metrics,
+                                  request.perceptual_backends),
+                      item.at("loaded"), saved.at("label"));
+    }
+}
+
+// What the window finds for a row in the Python app's saved scores: the
+// scores its ticked metrics ask for, every other score it can show
+// (displayable_metric_specs), and CVVDP's scores for other displays.
+TEST(MetricCache, FindsWhatTheWindowShowsAsThePythonApp) {
+    const nlohmann::json saved = test::load_reference("metric_cache.json").at("saved");
+    const test::Folder folder;
+    const std::filesystem::path base = folder / "cache";
+    lay_saved_scores(folder, base, request_from(saved.at("window_loads").at(0)).recipe);
+    for (const nlohmann::json& item : saved.at("window_loads")) {
+        SCOPED_TRACE(item.at("name").get<std::string>());
+        const AnalysisRequest request = request_from(item);
+        const std::vector<MetricRequestSpec> shown =
+            displayable_metric_specs(options_from(item.at("options")), cvvdp_from(item));
+        std::vector<std::string> identities;
+        for (const MetricRequestSpec& spec : shown) {
+            identities.push_back(python_json_compact(spec.identity()));
+        }
+        EXPECT_EQ(nlohmann::json(identities), item.at("displayable"));
+        expect_loaded(load_result(base, folder / "s.mp4", folder / "t.mp4", request.recipe, request.metrics,
+                                  request.perceptual_backends, shown),
+                      item.at("loaded"), saved.at("label"));
+        const std::optional<OtherCvvdpScores> others =
+            other_cvvdp_scores(base, folder / "s.mp4", folder / "t.mp4", request.recipe, request.metrics, shown);
+        const nlohmann::json& expected = item.at("other_cvvdp");
+        ASSERT_EQ(others.has_value(), !expected.is_null());
+        if (others) {
+            EXPECT_EQ(others->parameters, expected.at("parameters"));
+            ASSERT_EQ(others->scores.size(), expected.at("scores").size());
+            for (std::size_t i = 0; i < others->scores.size(); ++i) {
+                EXPECT_EQ(nlohmann::json(others->scores[i].first.parameters()),
+                          expected.at("scores")[i].at("parameters"));
+                EXPECT_EQ(others->scores[i].second, *test::reference_number(expected.at("scores")[i].at("score")));
             }
-            laid = true;
         }
-        const auto loaded = load_result(base, folder / "s.mp4", folder / "t.mp4", request.recipe, request.metrics,
-                                        request.perceptual_backends);
-        if (item.at("loaded").empty()) {
-            EXPECT_FALSE(loaded.has_value());
-            continue;
+    }
+}
+
+// What Recalculate leaves of the Python app's saved scores: each request's
+// scores go, with those that would answer it, and the folder with its last
+// score.
+TEST(MetricCache, ClearsAsThePythonApp) {
+    const nlohmann::json clears = test::load_reference("metric_cache.json").at("saved").at("clears");
+    for (const nlohmann::json& item : clears) {
+        SCOPED_TRACE(item.at("name").get<std::string>());
+        const test::Folder folder;
+        const std::filesystem::path base = folder / "cache";
+        const AnalysisRequest request = request_from(item);
+        lay_saved_scores(folder, base, request.recipe);
+        EXPECT_EQ(clear_metrics(base, folder / "s.mp4", folder / "t.mp4", request.recipe, request.metrics),
+                  item.at("removed").get<int>());
+        std::vector<std::string> left;
+        const std::filesystem::path directory =
+            recipe_directory(base, folder / "s.mp4", folder / "t.mp4", request.recipe);
+        std::error_code error;
+        for (std::filesystem::directory_iterator entry(directory, error);
+             !error && entry != std::filesystem::directory_iterator(); entry.increment(error)) {
+            left.push_back(platform::path_text(entry->path().filename()));
         }
-        ASSERT_TRUE(loaded.has_value());
-        EXPECT_EQ(loaded->second, saved.at("label").get<std::string>());
-        const MetricResultSet& results = loaded->first.metric_results;
-        ASSERT_EQ(results.keys().size(), item.at("loaded").size());
-        for (const nlohmann::json& expected : item.at("loaded")) {
-            const std::string key = expected.at("key");
-            SCOPED_TRACE(key);
-            const MetricProvenance wanted = provenance_from(expected.at("provenance"));
-            const MetricProvenance* provenance = nullptr;
-            if (expected.at("kind") == "sequence") {
-                const SequenceMetricResult* sequence = results.sequence(key);
-                ASSERT_NE(sequence, nullptr);
-                EXPECT_EQ(sequence->score, *test::reference_number(expected.at("score")));
-                EXPECT_EQ(sequence->values, expected.contains("values") ? floats_from(expected.at("values")) : std::vector<float>{});
-                provenance = &sequence->provenance;
-            } else {
-                const FrameMetricResult* frame = results.frame(key);
-                ASSERT_NE(frame, nullptr);
-                EXPECT_EQ(frame->frame, expected.at("frame").get<std::vector<int>>());
-                EXPECT_EQ(frame->time, test::reference_numbers(expected.at("time")));
-                EXPECT_EQ(frame->values, floats_from(expected.at("values")));
-                provenance = &frame->provenance;
-            }
-            EXPECT_EQ(provenance->implementation, wanted.implementation);
-            EXPECT_EQ(provenance->implementation_version, wanted.implementation_version);
-            EXPECT_EQ(provenance->compute_backend, wanted.compute_backend);
-            EXPECT_EQ(provenance->implementation_compatibility_id, wanted.implementation_compatibility_id);
-            EXPECT_EQ(provenance->parameters, wanted.parameters);
-        }
+        std::sort(left.begin(), left.end());
+        EXPECT_EQ(nlohmann::json(left), item.at("left"));
     }
 }
 
