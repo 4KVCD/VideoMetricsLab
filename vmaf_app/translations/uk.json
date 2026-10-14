@@ -434,7 +434,7 @@
   "No videos loaded": "Відео не завантажено",
   "▶ Play": "▶ Відтворити",
   "Audio": "Звук",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback uses the first encode's soundtrack. Video buffering also pauses audio.": "GStreamer безперервно відтворює одну звукову доріжку вихідного відео під час перемикання на S і між кодуваннями. Відсутній чи непідтримуваний звук вихідного відео лишається тихим. Резервний режим FFmpeg використовує звук першого кодування. Буферизація відео також призупиняє звук.",
+  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "GStreamer безперервно відтворює одну звукову доріжку вихідного відео під час перемикання на S і між кодуваннями. Відсутній чи непідтримуваний звук вихідного відео лишається тихим. Резервний режим FFmpeg теж відтворює звук вихідного відео. Буферизація відео також призупиняє звук.",
   "− Frame": "− Кадр",
   "Enter seconds, M:SS, or H:MM:SS.sss": "Введіть секунди, M:SS або H:MM:SS.sss",
   "+ Frame": "+ Кадр",

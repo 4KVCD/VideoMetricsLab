@@ -434,7 +434,7 @@
   "No videos loaded": "Nenhum vídeo carregado",
   "▶ Play": "▶ Reproduzir",
   "Audio": "Áudio",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback uses the first encode's soundtrack. Video buffering also pauses audio.": "O GStreamer toca uma trilha de áudio do original sem interrupção nas trocas com S e entre codificações. Áudio original ausente ou incompatível fica mudo. A alternativa do FFmpeg usa a trilha da primeira codificação. O carregamento do vídeo também pausa o áudio.",
+  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "O GStreamer toca uma trilha de áudio do original sem interrupção nas trocas com S e entre codificações. Áudio original ausente ou incompatível fica mudo. A alternativa do FFmpeg também toca a trilha do original. O carregamento do vídeo também pausa o áudio.",
   "− Frame": "− Quadro",
   "Enter seconds, M:SS, or H:MM:SS.sss": "Digite segundos, M:SS ou H:MM:SS.sss",
   "+ Frame": "+ Quadro",
