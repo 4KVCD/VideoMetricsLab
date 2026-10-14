@@ -5,18 +5,22 @@
 #include "frame_compare_panel.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDeadlineTimer>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
+#include <QStackedWidget>
 #include <QTest>
 #include <QThread>
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -25,6 +29,8 @@
 #include <vector>
 
 #include "test_videos.h"
+#include "video_compare_view.h"
+#include "vml/ffprobe.h"
 #include "widgets.h"
 
 namespace vml::app {
@@ -40,6 +46,7 @@ protected:
     static bool idle(const FrameComparePanel& panel) { return panel.live_workers().empty(); }
     static std::size_t frames_kept(const FrameComparePanel& panel) { return panel.cache_.size(); }
     static const QImage* current_image(const FrameComparePanel& panel) { return panel.current_image(); }
+    static QWidget* shown_page(const FrameComparePanel& panel) { return panel.content_stack_->currentWidget(); }
     // The sides whose current frame is kept, as they are now made.
     static std::vector<std::string> kept(const FrameComparePanel& panel) {
         std::vector<std::string> sides;
@@ -315,10 +322,56 @@ TEST_F(FramePanelTest, TheBlackBarsFoundAgainstOneReferenceAreNotUsedWithAnother
     EXPECT_EQ(crops(), std::pair(found.source, found.distorted));
 }
 
-// Real frames of two real clips, through the panel as the window shows it:
-// the test video's frame, then with S the source's same frame, each of the
-// size the metrics compare; a frame kept is shown again without FFmpeg; a
-// file that has gone says why.
+// A pair of real clips plays in the tab: the playback view takes the still
+// frames' place, Play and Space play and pause it (the button says which),
+// the frame box follows the frames played, and a frame chosen while paused
+// is shown there.
+TEST_F(FramePanelTest, APairThatCanPlayIsPlayedWithThePanelsControls) {
+    const std::optional<test::Tools> found = test::tools();
+    if (!found) {
+        GTEST_SKIP() << "no FFmpeg";
+    }
+    const test::Folder folder;
+    FrameComparison comparison;
+    comparison.source_info = probe_video(
+        test::make_clip(*found, folder / "source.mp4", "libx264", "yuv420p", 2.0, {}, "160x90"), found->ffprobe);
+    comparison.distorted_info = probe_video(
+        test::make_clip(*found, folder / "encode.mkv", "libx265", "yuv420p", 2.0, {}, "160x90"), found->ffprobe);
+    comparison.fps = comparison.distorted_info.fps;
+    comparison.frame_count = 47;
+    const auto panel = make_panel(found->ffmpeg);
+    panel->audio_checkbox->setChecked(false);
+    panel->resize(800, 600);
+    panel->show();
+    panel->set_runs({{"row:encode", "encode", comparison, nullptr}});
+    ASSERT_NE(panel->video_view, nullptr);
+    EXPECT_EQ(shown_page(*panel), panel->video_view);
+    EXPECT_TRUE(panel->play_button->isEnabled());
+    EXPECT_TRUE(panel->source_resolution_combo->isEnabled());
+
+    QTest::keyClick(panel->video_view, Qt::Key_Space);
+    EXPECT_TRUE(panel->video_view->playback_requested());
+    EXPECT_EQ(panel->play_button->text().toStdString(), "\xE2\x9D\x9A\xE2\x9D\x9A Pause");
+    ASSERT_TRUE(wait_until([&panel] { return panel->frame_spin->value() >= 10; }))
+        << "the frame box did not follow playback";
+    panel->play_button->click();
+    EXPECT_FALSE(panel->video_view->playback_requested());
+    EXPECT_EQ(panel->play_button->text().toStdString(), "\xE2\x96\xB6 Play");
+
+    panel->set_frame(5);
+    ASSERT_TRUE(wait_until([&panel] {
+        return panel->video_view->position() == static_cast<int>(std::nearbyint(5 / panel->current_entry()->comparison.fps * 1000));
+    }));
+    EXPECT_EQ(panel->frame_spin->value(), 5);
+    panel->cancel();
+    ASSERT_TRUE(wait_until([&panel] { return FramePanelTest::idle(*panel); }));
+}
+
+// Real frames of a real clip's resolution test (still frames: it does not
+// play), through the panel as the window shows it: the test's frame (the
+// clip scaled down and back up), then with S the source's same frame, each of
+// the size the metrics compare; a frame kept is shown again without FFmpeg;
+// a file that has gone says why.
 TEST_F(FramePanelTest, TheFramesShownAreFfmpegsFramesOfBothVideos) {
     const std::optional<test::Tools> found = test::tools();
     if (!found) {
@@ -329,10 +382,8 @@ TEST_F(FramePanelTest, TheFramesShownAreFfmpegsFramesOfBothVideos) {
     comparison.source_info = video("source.mkv", 640, 360, 24);
     comparison.source_info.path = test::make_clip(*found, folder / "source.mkv", "libx264", "yuv420p", 1.0);
     comparison.source_info.fps = 24000.0 / 1001;
-    comparison.distorted_info = video("encode.mkv", 320, 180, 24);
-    comparison.distorted_info.path =
-        test::make_clip(*found, folder / "encode.mkv", "libx265", "yuv420p", 1.0, {}, "320x180");
-    comparison.distorted_info.fps = 24000.0 / 1001;
+    comparison.distorted_info = comparison.source_info;
+    comparison.resample_target = ResampleTarget{320, "320 wide"};
     comparison.fps = 24000.0 / 1001;
     comparison.frame_count = 23;
     const auto panel = make_panel(found->ffmpeg);
@@ -342,21 +393,21 @@ TEST_F(FramePanelTest, TheFramesShownAreFfmpegsFramesOfBothVideos) {
     panel->set_frame(5);
     ASSERT_TRUE(wait_until([&panel] { return !panel->viewer->image().isNull(); }))
         << panel->viewer->message().toStdString();
-    // The test video's frame, at the size compared (the source scaled to the
-    // test video's), converted for the display.
-    EXPECT_EQ(panel->viewer->image().size(), QSize(320, 180));
+    // The test's frame, at the size compared (the source's), converted for
+    // the display.
+    EXPECT_EQ(panel->viewer->image().size(), QSize(640, 360));
     const QImage test_frame = panel->viewer->image();
     // Both sides extracted and kept (the last arrives after its thread ends).
     ASSERT_TRUE(wait_until([&panel] { return FramePanelTest::frames_kept(*panel) == 2; }));
 
     QTest::keyPress(panel->viewer, Qt::Key_S);
     ASSERT_FALSE(panel->viewer->image().isNull()) << "the source's frame was not kept";
-    EXPECT_EQ(panel->viewer->image().size(), QSize(320, 180));
+    EXPECT_EQ(panel->viewer->image().size(), QSize(640, 360));
     EXPECT_NE(panel->viewer->image(), test_frame);
     QTest::keyRelease(panel->viewer, Qt::Key_S);
     EXPECT_EQ(panel->viewer->image(), test_frame);
 
-    std::filesystem::remove(comparison.distorted_info.path);
+    std::filesystem::remove(comparison.source_info.path);
     panel->set_runs({{"row:encode", "encode", comparison, nullptr}});  // read again, as the window does
     panel->set_frame(6);
     ASSERT_TRUE(wait_until([&panel] { return panel->viewer->message().startsWith("Could not load frame"); }))

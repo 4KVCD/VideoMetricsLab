@@ -5,6 +5,7 @@
 #include <cctype>
 #include <chrono>
 #include <map>
+#include <mutex>
 #include <regex>
 #include <utility>
 
@@ -153,6 +154,22 @@ DecodingCapabilities DecodingCapabilities::detect(const std::string& ffmpeg) {
     }
     capabilities.vendors = detected_gpu_vendors();
     return capabilities;
+}
+
+DecodingCapabilities DecodingCapabilities::remembered(const std::string& ffmpeg) {
+    static std::mutex mutex;
+    static std::map<std::string, DecodingCapabilities> known;
+    {
+        const std::lock_guard lock(mutex);
+        if (const auto found = known.find(ffmpeg); found != known.end()) {
+            return found->second;
+        }
+    }
+    // Asked outside the lock: two threads may both ask the first time, and
+    // give the same answer.
+    DecodingCapabilities capabilities = detect(ffmpeg);
+    const std::lock_guard lock(mutex);
+    return known.try_emplace(ffmpeg, std::move(capabilities)).first->second;
 }
 
 std::vector<GpuVendor> detected_gpu_vendors() {

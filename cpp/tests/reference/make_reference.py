@@ -2938,6 +2938,118 @@ def frame_extract_cases() -> dict:
     }
 
 
+# ------------------------------------------------------------------ playback
+
+def playback_cases() -> dict:
+    """Video Compare's playback with FFmpeg (core/video_playback.py), from the
+    Python app's own functions: each video's decoding command, as a decoder
+    worker runs it (one video, real time, unpaced), for pairs with HDR, crops,
+    black bars still to detect and untagged video, both sides and the source
+    as it is played (native and scaled down), in every processing mode and
+    colour mode, fitted to a view and at full size; the sizes decoded at; the
+    test videos decoded beside the one shown; and the soundtrack's command."""
+    from vmaf_app.core import frame_extract as fe
+    from vmaf_app.core import video_playback as vp
+    from vmaf_app.core.gpu import HwAccelPlan
+    from vmaf_app.core.models import CropBox, ScaleDirection, VideoInfo
+
+    def video(name: str, width: int, height: int, pix_fmt: str, codec: str, *, fps: float = 24000 / 1001,
+              primaries: str = "", space: str = "", transfer: str = "", color_range: str = "",
+              start_offset: float = 0.0) -> VideoInfo:
+        return VideoInfo(path=Path("C:/clips") / name, width=width, height=height, fps=fps, duration=60.0,
+                         nb_frames=1438, codec_name=codec, pix_fmt=pix_fmt, color_primaries=primaries,
+                         color_space=space, color_transfer=transfer, color_range=color_range,
+                         start_offset=start_offset)
+
+    hdr = video("source hdr.mkv", 3840, 2160, "yuv420p10le", "hevc", primaries="bt2020", space="bt2020nc",
+                transfer="smpte2084", color_range="tv", start_offset=0.032)
+    sdr = video("encode.mp4", 1920, 1080, "yuv420p", "h264", primaries="bt709", space="bt709", transfer="bt709",
+                color_range="tv")
+    lost = video("lost tags.mkv", 3840, 2160, "yuv420p10le", "av1", primaries="unknown", transfer=" SMPTE2084 ",
+                 color_range="unspecified")
+    untagged = video("untagged.mkv", 2560, 1440, "yuv420p10le", "hevc")
+    letterboxed = video("letterboxed.mkv", 1920, 1080, "yuv420p", "h264", transfer="bt709")
+    scope = video("scope.mkv", 1920, 816, "yuv420p", "h264", transfer="bt709")
+    comparisons = {
+        "hdr source, sdr encode": fe.FrameComparison(hdr, sdr, fps=hdr.fps, frame_count=1438),
+        "test scaled to the source": fe.FrameComparison(hdr, sdr, scale_direction=ScaleDirection.DISTORTED_TO_SOURCE,
+                                                        scale_algorithm="lanczos", fps=24000 / 1001, frame_count=1438),
+        "cropped both": fe.FrameComparison(hdr, lost, source_crop=CropBox(3840, 1600, 0, 280),
+                                           distorted_crop=CropBox(3838, 1600, 2, 280), fps=24000 / 1001,
+                                           frame_count=1438),
+        "untagged": fe.FrameComparison(untagged, sdr, fps=60.0, frame_count=600),
+        "black bars still to detect": fe.FrameComparison(letterboxed, scope, fps=24.0, frame_count=240,
+                                                         auto_crop_pending=True),
+    }
+    colours = {
+        "display-aware, unknown": fe.PreviewColorSettings(),
+        "HDR to SDR": fe.PreviewColorSettings(fe.PreviewColorMode.HDR_TO_SDR, True, 203.0),
+        "unmanaged": fe.PreviewColorSettings(fe.PreviewColorMode.UNMANAGED, True, 203.0),
+    }
+    plans = {"cuda, d3d11va": HwAccelPlan("cuda", "d3d11va"), "qsv, none": HwAccelPlan("qsv", None)}
+
+    def info_json(info: VideoInfo) -> dict:
+        return {"path": str(info.path), "width": info.width, "height": info.height, "fps": exact(info.fps),
+                "codec_name": info.codec_name, "pix_fmt": info.pix_fmt, "color_primaries": info.color_primaries,
+                "color_space": info.color_space, "color_transfer": info.color_transfer,
+                "color_range": info.color_range, "start_offset": exact(info.start_offset)}
+
+    def comparison_json(comparison) -> dict:
+        def crop(box):
+            return None if box is None else [box.w, box.h, box.x, box.y]
+        return {"source": info_json(comparison.source_info), "distorted": info_json(comparison.distorted_info),
+                "source_crop": crop(comparison.source_crop), "distorted_crop": crop(comparison.distorted_crop),
+                "scale_direction": comparison.scale_direction.value, "scale_algorithm": comparison.scale_algorithm,
+                "fps": exact(comparison.fps), "frame_count": comparison.frame_count,
+                "auto_crop_pending": comparison.auto_crop_pending}
+
+    real_ffmpeg, real_ffplay = vp.ffmpeg_path, vp.ffplay_path
+    vp.ffmpeg_path = lambda: "<ffmpeg>"
+    vp.ffplay_path = lambda: Path("C:/tools/ffplay.exe")
+    try:
+        commands = []
+        for name, comparison in comparisons.items():
+            # How the source is played is given with the comparison: the port
+            # makes it with its own source_playback_comparison, as its view does.
+            played = {"source as played": (vp.source_playback_comparison(comparison), "source", "native"),
+                      "source scaled down": (vp.source_playback_comparison(comparison, False), "source",
+                                             "scaled down"),
+                      "test video": (comparison, "distorted", None)}
+            for which, (recipe, side, source_played) in played.items():
+                # The second plan only where the plan is used; the view's size
+                # only in the usual colour mode.
+                runs = [(plan_name, mode, colour_name, maximum)
+                        for plan_name, modes in (("cuda, d3d11va", ("interop", "transfer", "software", "cpu")),
+                                                 ("qsv, none", ("transfer",)))
+                        for mode in modes
+                        for colour_name, maximum in (("display-aware, unknown", None),
+                                                     ("display-aware, unknown", (1280, 720)),
+                                                     ("HDR to SDR", None), ("unmanaged", None))]
+                for plan_name, mode, colour_name, maximum in runs:
+                    plan = plans[plan_name]
+                    command = vp.build_video_series_command(
+                        [recipe], 7, colours[colour_name], [plan], maximum, realtime=True, processing=mode,
+                        side=side, paced=False)
+                    commands.append({
+                        "name": f"{name}: {which}, {plan_name}, {mode}, {colour_name}, {maximum}",
+                        "comparison": comparison_json(comparison), "played": source_played,
+                        "side": side, "start_frame": 7,
+                        "plan": [plan.source, plan.distorted], "processing": mode,
+                        "colour": colour_name, "maximum": None if maximum is None else list(maximum),
+                        "command": command, "size": list(vp.playback_dimensions(recipe, maximum))})
+        audio = [{"comparison": comparison_json(comparison), "frame": frame,
+                  "command": vp.build_audio_command(comparison, frame)}
+                 for comparison in comparisons.values() for frame in (0, 1001)]
+    finally:
+        vp.ffmpeg_path, vp.ffplay_path = real_ffmpeg, real_ffplay
+    neighbours = [{"count": count, "selected": selected, "width": width,
+                   "indices": list(vp.neighbour_indices(count, selected, width))}
+                  for count in (0, 1, 2, 5) for selected in (-1, 0, 1, 4) for width in (0, 1, 3, 9)]
+    return {"colours": [{"name": name, "mode": settings.mode.value, "hdr": settings.display_hdr_enabled,
+                         "white": settings.display_sdr_white_nits} for name, settings in colours.items()],
+            "commands": commands, "audio": audio, "neighbours": neighbours}
+
+
 # ------------------------------------------------------------------- bitrate
 
 def bitrate_cases() -> dict:
@@ -3072,6 +3184,7 @@ if __name__ == "__main__":
     write("update_check.json", update_check_cases())
     write("frame_extract.json", frame_extract_cases())
     write("bitrate.json", bitrate_cases())
+    write("playback.json", playback_cases())
     write("devices.json", devices_cases())
     write("perceptual_cpu.json", perceptual_cpu_cases())
     write("timed_pairing.json", timed_pairing_cases())

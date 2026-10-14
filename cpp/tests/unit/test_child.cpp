@@ -21,6 +21,17 @@
 //                           VML_TEST_TOOL_LOG names, then sleeps for ten
 //                           minutes
 //
+// With VML_TEST_PLAYBACK set, it stands in for FFmpeg decoding a video for
+// Video Compare's playback (build_playback_command). It tells the way of
+// decoding from its arguments (interop: a CUDA device; transfer: a Vulkan
+// device and -hwaccel; software: a Vulkan device alone; cpu: neither), and
+// does what VML_TEST_PLAYBACK says for that way, "way=FRAMES:EXIT:PARTIAL:
+// MESSAGE" each, separated by ";": FRAMES frames of VML_TEST_FRAME_BYTES
+// bytes, each filled with its number (modulo 251), counted from the frame
+// its -ss gives at VML_TEST_FPS frames a second; then PARTIAL bytes of one
+// more; MESSAGE on standard error; and exits with EXIT. It writes "way
+// start" into a file of its own in VML_TEST_TOOL_LOG.
+//
 // With VML_TEST_FFMPEG_PICTURE set, it stands in for FFmpeg writing the CPU
 // tools' frame pairs (png_pairs_command): it writes VML_TEST_FFMPEG_PAIRS
 // pairs, each picture a copy of the picture VML_TEST_FFMPEG_PICTURE names,
@@ -33,6 +44,7 @@
 // bytes as they are (no text-mode line endings added).
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -99,6 +111,46 @@ void log_file(const std::string& name, const std::string& text) {
     if (!folder.empty()) {
         std::ofstream(path_of(folder) / (name + "-" + process_number() + ".txt"), std::ios::binary) << text;
     }
+}
+
+// FFmpeg decoding for playback, stood in for.
+int playback(const std::vector<std::string>& arguments) {
+    const auto has = [&arguments](const std::string& argument) {
+        return std::find(arguments.begin(), arguments.end(), argument) != arguments.end();
+    };
+    const std::string way = has("cuda=decode")      ? "interop"
+                            : has("vulkan=preview") ? (has("-hwaccel") ? "transfer" : "software")
+                                                    : "cpu";
+    const auto seek = std::find(arguments.begin(), arguments.end(), "-ss");
+    const double seconds = seek != arguments.end() && seek + 1 != arguments.end() ? std::atof((seek + 1)->c_str()) : 0;
+    const auto start = static_cast<long long>(std::llround(seconds * std::atof(variable("VML_TEST_FPS").c_str()) + 0.125));
+    log_file("way", way + " " + std::to_string(start));
+    // This way's part of the spec: "way=FRAMES:EXIT:PARTIAL:MESSAGE".
+    const std::string spec = variable("VML_TEST_PLAYBACK");
+    const std::size_t at = spec.find(way + "=");
+    if (at == std::string::npos) {
+        return 1;
+    }
+    const std::string part = spec.substr(at + way.size() + 1, spec.find(';', at) - at - way.size() - 1);
+    std::vector<std::string> fields;
+    for (std::size_t from = 0, to = 0; to != std::string::npos; from = to + 1) {
+        to = part.find(':', from);
+        fields.push_back(part.substr(from, to == std::string::npos ? std::string::npos : to - from));
+    }
+    fields.resize(4);
+    const long long frames = std::atoll(fields[0].c_str());
+    const auto bytes = static_cast<std::size_t>(std::atoll(variable("VML_TEST_FRAME_BYTES").c_str()));
+    for (long long frame = start; frame < start + frames; ++frame) {
+        const std::vector<char> picture(bytes, static_cast<char>(frame % 251));
+        std::fwrite(picture.data(), 1, picture.size(), stdout);
+    }
+    const std::vector<char> partial(static_cast<std::size_t>(std::atoll(fields[2].c_str())), 'x');
+    std::fwrite(partial.data(), 1, partial.size(), stdout);
+    std::fflush(stdout);
+    if (!fields[3].empty()) {
+        std::fputs((fields[3] + "\n").c_str(), stderr);
+    }
+    return std::atoi(fields[1].c_str());
 }
 
 // libjxl's tools, stood in for.
@@ -189,6 +241,9 @@ int run(const std::vector<std::string>& arguments) {
     if (!variable("VML_TEST_FFMPEG_PICTURE").empty() &&
         std::find(arguments.begin(), arguments.end(), "-atomic_writing") != arguments.end()) {
         return ffmpeg(arguments);
+    }
+    if (!variable("VML_TEST_PLAYBACK").empty()) {
+        return playback(arguments);
     }
     if (const std::string mode = variable("VML_TEST_TOOL"); !mode.empty()) {
         return tool(mode, arguments);

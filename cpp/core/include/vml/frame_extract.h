@@ -46,6 +46,7 @@ struct PreviewColorSettings {
     // What the converted picture depends on, for keeping it: the mode,
     // Windows' HDR state and the target, as the Python app's cache_token.
     std::string cache_token() const;
+    bool operator==(const PreviewColorSettings&) const = default;
 };
 
 // A frame could not be extracted; the message says why.
@@ -73,6 +74,7 @@ struct FrameComparison {
 
     // The geometry a finished run used.
     static FrameComparison from_result(const ComparisonResult& result);
+    bool operator==(const FrameComparison&) const = default;
 };
 
 // The size of the pictures the metrics would compare.

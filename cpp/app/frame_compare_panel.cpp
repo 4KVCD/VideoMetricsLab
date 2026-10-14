@@ -12,6 +12,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -21,11 +22,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <stdexcept>
 #include <thread>
 
 #include "i18n.h"
 #include "theme.h"
+#include "video_compare_view.h"
 #include "widgets.h"
 #include "vml/crop_detect.h"
 #include "vml/metrics.h"
@@ -386,6 +389,11 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
         "it to fit the selected encode's cropped resolution. Both fit the window. "
         "Changing this may briefly buffer. Metric calculations are unaffected."));
     source_resolution_combo->setEnabled(false);
+    connect(source_resolution_combo, &QComboBox::currentIndexChanged, this, [this](int /*index*/) {
+        if (is_video_mode()) {
+            load_current_video();
+        }
+    });
     color_row->addWidget(new QLabel(app::tr("Reference playback:")));
     color_row->addWidget(source_resolution_combo);
     // This row would set the window's minimum width: a drop-down is never
@@ -419,12 +427,18 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
 
     auto* seek = new QHBoxLayout;
     play_button = new QPushButton(app::tr("\xE2\x96\xB6 Play"));
+    connect(play_button, &QPushButton::clicked, this, [this] { on_play_clicked(); });
     audio_checkbox = new QCheckBox(app::tr("Audio"));
     audio_checkbox->setToolTip(app::tr(
         "GStreamer plays one source soundtrack continuously across S and encode switches. "
-        "Missing/unsupported source audio stays silent. The FFmpeg fallback uses the "
-        "first encode's soundtrack. Video buffering also pauses audio."));
+        "Missing/unsupported source audio stays silent. The FFmpeg fallback plays the "
+        "source's soundtrack too. Video buffering also pauses audio."));
     audio_checkbox->setChecked(true);
+    connect(audio_checkbox, &QCheckBox::toggled, this, [this](bool enabled) {
+        if (video_view != nullptr) {
+            video_view->set_audio_enabled(enabled);
+        }
+    });
     previous_frame_button = new QPushButton(app::tr("\xE2\x88\x92 Frame"));
     connect(previous_frame_button, &QPushButton::clicked, this, [this] { set_frame(frame_ - 1); });
     frame_spin = new QSpinBox;
@@ -474,6 +488,12 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     display_timer_->setSingleShot(true);
     display_timer_->setInterval(200);
     connect(display_timer_, &QTimer::timeout, this, [this] { on_display_maybe_changed(); });
+    // While playing, the seek widgets and the frame line follow the frames
+    // ten times a second, not at each.
+    position_timer_ = new QTimer(this);
+    position_timer_->setSingleShot(true);
+    position_timer_->setInterval(100);
+    connect(position_timer_, &QTimer::timeout, this, [this] { show_video_position(); });
 
     // This panel's own widgets' keys, rather than the whole application's:
     // a filter on the application would keep every window closed alive.
@@ -497,6 +517,8 @@ void FrameComparePanel::set_runs(std::vector<FrameComparisonEntry> entries) {
     const FrameComparisonEntry* old_entry = current_entry();
     const std::optional<std::string> old_identity =
         old_entry != nullptr ? std::optional(old_entry->identity) : std::nullopt;
+    const std::optional<FrameComparison> old_comparison =
+        old_entry != nullptr ? std::optional(old_entry->comparison) : std::nullopt;
     entries_.clear();
     for (const FrameComparisonEntry& entry : entries) {
         entries_.push_back(apply_auto_crop(entry));
@@ -538,8 +560,21 @@ void FrameComparePanel::set_runs(std::vector<FrameComparisonEntry> entries) {
     update_labels();
     if (entries_.empty()) {
         viewer->set_message(app::tr(nothing_to_compare));
+        if (video_view != nullptr) {
+            video_view->clear();
+        }
     } else if (isVisible()) {
-        show_or_request();
+        if (is_video_mode()) {
+            // Only when what is on screen changed: a result arrives for a
+            // video several times while a run goes on, which must not
+            // restart the video being watched.
+            const FrameComparisonEntry* shown = current_entry();
+            if (!old_identity || shown->identity != *old_identity || shown->comparison != *old_comparison) {
+                load_current_video();
+            }
+        } else {
+            show_or_request();
+        }
     }
 }
 
@@ -556,7 +591,13 @@ void FrameComparePanel::set_frame(long long frame) {
     frame_ = bounded;
     sync_seek_widgets();
     update_labels();
-    if (changed || current_image() == nullptr) {
+    if (is_video_mode()) {
+        // Playback seeks there, unless it is playback moving the widgets.
+        const double fps = current_entry()->comparison.fps;
+        if (!syncing_video_position_ && video_view != nullptr && fps > 0) {
+            video_view->set_position(static_cast<int>(std::nearbyint(static_cast<double>(frame_) / fps * 1000)));
+        }
+    } else if (changed || current_image() == nullptr) {
         ++generation_;
         seek_timer_->start();
     }
@@ -576,10 +617,19 @@ void FrameComparePanel::cycle_distorted(int direction) {
     }
     ++generation_;
     update_labels();
-    show_or_request();
+    if (is_video_mode()) {
+        load_current_video();
+    } else {
+        show_or_request();
+    }
 }
 
-void FrameComparePanel::set_decoded_videos(int count) { decoded_videos_ = std::max(1, count); }
+void FrameComparePanel::set_decoded_videos(int count) {
+    decoded_videos_ = std::max(1, count);
+    if (video_view != nullptr) {
+        video_view->set_decoded_videos(decoded_videos_);
+    }
+}
 
 std::vector<QThread*> FrameComparePanel::live_workers() const {
     std::vector<QThread*> live;
@@ -593,6 +643,11 @@ std::vector<QThread*> FrameComparePanel::live_workers() const {
             live.push_back(worker);
         }
     }
+    if (video_view != nullptr) {
+        for (QThread* worker : video_view->live_workers()) {
+            live.push_back(worker);
+        }
+    }
     return live;
 }
 
@@ -601,6 +656,9 @@ void FrameComparePanel::cancel() {
     ++generation_;
     cancel_workers();
     cancel_crop_workers();
+    if (video_view != nullptr) {
+        video_view->clear();
+    }
 }
 
 // ------------------------------------------------------------------ lifecycle
@@ -618,16 +676,24 @@ void FrameComparePanel::showEvent(QShowEvent* event) {
     }
     refresh_display_hdr();
     if (!entries_.empty()) {
-        show_or_request();
+        if (is_video_mode()) {
+            load_current_video();
+        } else {
+            show_or_request();
+        }
     }
 }
 
 void FrameComparePanel::hideEvent(QHideEvent* event) {
+    // Stops the workers, and pauses playback.
     seek_timer_->stop();
     display_timer_->stop();
     ++generation_;
     cancel_workers();
     cancel_crop_workers();
+    if (video_view != nullptr) {
+        video_view->set_playing(false);
+    }
     showing_source_ = false;
     update_labels();
     QWidget::hideEvent(event);
@@ -664,7 +730,10 @@ bool FrameComparePanel::eventFilter(QObject* watched, QEvent* event) {
         QWidget* focus = QApplication::focusWidget();
         if (qobject_cast<QLineEdit*>(focus) == nullptr && qobject_cast<QAbstractSpinBox*>(focus) == nullptr &&
             qobject_cast<QComboBox*>(focus) == nullptr) {
-            return true;  // play/pause: playback is not ported yet
+            if (!key->isAutoRepeat()) {
+                on_play_clicked();
+            }
+            return true;
         }
     }
     if (key != nullptr && type == QEvent::KeyPress && (key->key() == Qt::Key_Left || key->key() == Qt::Key_Right)) {
@@ -686,6 +755,171 @@ bool FrameComparePanel::eventFilter(QObject* watched, QEvent* event) {
     return QWidget::eventFilter(watched, event);
 }
 
+// ------------------------------------------------------------------- playback
+
+bool FrameComparePanel::is_video_mode() const {
+    // A pair that can play is always played (its paused frames too); still
+    // frames are for the rest: resolution tests, missing files, raw streams.
+    const FrameComparisonEntry* entry = current_entry();
+    return entry != nullptr && VideoCompareView::can_play(entry->comparison).first;
+}
+
+VideoCompareView& FrameComparePanel::ensure_video_view() {
+    // Made the first time a pair plays.
+    if (video_view != nullptr) {
+        return *video_view;
+    }
+    auto* view = new VideoCompareView([this] { return ffmpeg_(); }, zoom_);
+    view->set_decoded_videos(decoded_videos_);
+    connect(view, &VideoCompareView::position_changed, this, [this](int position) { on_video_position_changed(position); });
+    connect(view, &VideoCompareView::playing_changed, this, [this](bool playing) { on_video_playing_changed(playing); });
+    connect(view, &VideoCompareView::status_changed, this,
+            [this](const QString& status) { on_video_status_changed(status); });
+    view->set_audio_enabled(audio_checkbox->isChecked());
+    content_stack_->addWidget(view);
+    // The tab's keys reach the panel from the view too.
+    view->installEventFilter(this);
+    for (QWidget* child : view->findChildren<QWidget*>()) {
+        child->installEventFilter(this);
+    }
+    video_view = view;
+    return *view;
+}
+
+void FrameComparePanel::load_current_video(std::optional<bool> playing) {
+    // Plays the pair shown, playing or paused as before unless `playing`.
+    const FrameComparisonEntry* entry = current_entry();
+    if (entry == nullptr) {
+        if (video_view != nullptr) {
+            video_view->clear();
+        }
+        return;
+    }
+    VideoCompareView& view = ensure_video_view();
+    // Black bars already known for its files give a cropped copy.
+    ensure_auto_crop(entry);
+    entry = current_entry();
+    seek_timer_->stop();
+    cancel_workers();
+    content_stack_->setCurrentWidget(&view);
+    const bool play = playing.value_or(view.is_playing() || view.playback_requested());
+    const double fps = entry->comparison.fps;
+    const int position_ms = fps > 0 ? static_cast<int>(std::nearbyint(static_cast<double>(frame_) / fps * 1000)) : 0;
+    std::vector<FrameComparison> series;
+    for (const FrameComparisonEntry& item : entries_) {
+        if (VideoCompareView::can_play(item.comparison).first) {
+            series.push_back(item.comparison);
+        }
+    }
+    if (!view.load(entry->comparison, position_ms, play, color_settings(), series,
+                   source_resolution_combo->currentData().toBool())) {
+        play_button->setText(app::tr("\xE2\x96\xB6 Play"));
+    }
+    view.show_source(showing_source_);
+    update_enabled_state();
+}
+
+void FrameComparePanel::on_play_clicked() {
+    const FrameComparisonEntry* entry = current_entry();
+    if (entry == nullptr) {
+        return;
+    }
+    VideoCompareView& view = ensure_video_view();
+    if (const auto [available, reason] = VideoCompareView::can_play(entry->comparison); !available) {
+        on_video_status_changed(text_of(reason));
+        return;
+    }
+    view.set_playing(!view.playback_requested());
+}
+
+void FrameComparePanel::on_video_position_changed(int position_ms) {
+    // The seek widgets follow playback: at once when paused, ten times a
+    // second while playing.
+    const FrameComparisonEntry* entry = current_entry();
+    if (entry == nullptr || !is_video_mode() || entry->comparison.fps <= 0) {
+        return;
+    }
+    const auto frame = static_cast<long long>(std::nearbyint(position_ms / 1000.0 * entry->comparison.fps));
+    const long long bounded = std::clamp(frame, 0LL, static_cast<long long>(frame_spin->maximum()));
+    if (bounded == frame_) {
+        return;
+    }
+    frame_ = bounded;
+    if (video_view != nullptr && video_view->is_playing()) {
+        if (!position_timer_->isActive()) {
+            position_timer_->start();
+        }
+        return;
+    }
+    show_video_position();
+}
+
+void FrameComparePanel::show_video_position() {
+    // The frame in the seek widgets and the frame line, and only there:
+    // what is shown and its colours are the same at every frame.
+    position_timer_->stop();
+    syncing_video_position_ = true;
+    sync_seek_widgets();
+    update_frame_line();
+    syncing_video_position_ = false;
+}
+
+void FrameComparePanel::on_video_playing_changed(bool playing) {
+    if (!playing && position_timer_->isActive()) {
+        show_video_position();  // the frame it stopped on, now
+    }
+    play_button->setText(playing ? app::tr("\xE2\x9D\x9A\xE2\x9D\x9A Pause") : app::tr("\xE2\x96\xB6 Play"));
+    video_status_ = playing ? QStringLiteral("Playing") : QStringLiteral("Paused");
+    if (is_video_mode()) {
+        update_color_status();
+    }
+}
+
+void FrameComparePanel::on_video_status_changed(const QString& message) {
+    // Playback's status: in full in Advanced info, short in the frame line.
+    video_status_ = message;
+    QStringList lines;
+    for (const QString& part : QString(message).replace("distorted", "test").split(QString::fromUtf8(" \xC2\xB7 "))) {
+        lines.append(tr_message(part).toHtmlEscaped());
+    }
+    const QString tooltip = "<p>" + lines.join("<br>") + "</p>";
+    if (advanced_info_button->toolTip() != tooltip) {
+        advanced_info_button->setToolTip(tooltip);
+    }
+    if (is_video_mode()) {
+        update_color_status();
+    }
+}
+
+QString FrameComparePanel::concise_playback_status() const {
+    // Playback's status, short and translated, the details left to Advanced
+    // info. The view's messages are in English, read here for their words.
+    const QString message = QString(video_status_).replace("distorted", "test");
+    const QString separator = QString::fromUtf8(" \xC2\xB7 ");
+    // Errors stay visible. A reference without a soundtrack ("audio
+    // unavailable") is not one.
+    const QString problem = message.toLower().replace("audio unavailable", "");
+    if (problem.contains("failed") || problem.contains("could not") || problem.contains("error") ||
+        problem.contains("unavailable")) {
+        QStringList parts;
+        for (const QString& part : message.split(separator)) {
+            parts.append(tr_message(part));
+        }
+        return parts.join(separator);
+    }
+    QStringList parts{tr_message(message.section(separator, 0, 0))};
+    for (const auto& [side, shown] : {std::pair("source", N_("Source")), std::pair("test", N_("Test"))}) {
+        const QRegularExpression decoder(QStringLiteral("\\b%1 (GPU|software|cpu|cuda|d3d11va|qsv|vaapi)\\b").arg(side),
+                                         QRegularExpression::CaseInsensitiveOption);
+        if (const QRegularExpressionMatch match = decoder.match(message); match.hasMatch()) {
+            const QString used = match.captured(1).toLower();
+            const QString mode = used == "software" || used == "cpu" ? QStringLiteral("CPU") : QStringLiteral("GPU");
+            parts.append(app::tr("{side}: {mode} decode", {{"side", app::tr(shown)}, {"mode", mode}}));
+        }
+    }
+    return parts.join(separator);
+}
+
 // ------------------------------------------------------------------- controls
 
 void FrameComparePanel::on_video_selected(int index) {
@@ -696,7 +930,11 @@ void FrameComparePanel::on_video_selected(int index) {
     current_index_ = static_cast<std::size_t>(index);
     ++generation_;
     update_labels();
-    show_or_request();
+    if (is_video_mode()) {
+        load_current_video();
+    } else {
+        show_or_request();
+    }
 }
 
 void FrameComparePanel::on_zoom_chosen(int index) {
@@ -725,6 +963,9 @@ void FrameComparePanel::apply_zoom(std::optional<double> factor) {
     show_zoom();
     if (changed) {
         viewer->zoom_changed();
+        if (video_view != nullptr) {
+            video_view->zoom_changed();
+        }
     }
 }
 
@@ -809,10 +1050,10 @@ void FrameComparePanel::update_enabled_state() {
     const bool several = entries_.size() > 1;
     previous_video_button->setEnabled(several);
     next_video_button->setEnabled(several);
-    // Playback is not ported yet: every pair shows as still frames.
-    play_button->setEnabled(false);
-    audio_checkbox->setEnabled(false);
-    source_resolution_combo->setEnabled(false);
+    const bool playable = is_video_mode();
+    play_button->setEnabled(available && playable);
+    audio_checkbox->setEnabled(available && playable);
+    source_resolution_combo->setEnabled(playable);
     color_mode_combo->setEnabled(available);
 }
 
@@ -844,6 +1085,9 @@ void FrameComparePanel::update_frame_line() {
     const double seconds = comparison.fps > 0 ? static_cast<double>(frame_) / comparison.fps : 0;
     QStringList parts{app::tr("Frame {frame:,}", {{"frame", frame_}}), text_of(format_hms(seconds, 3)),
                       score_text(*entry)};
+    if (is_video_mode()) {
+        parts.append(concise_playback_status());
+    }
     if (comparison.auto_crop_pending) {
         // Said, rather than showing frames that look cropped and are not:
         // auto black bars are measured during a run, and until then these
@@ -918,7 +1162,10 @@ void FrameComparePanel::update_color_status() {
     }
     const VideoInfo& info = frame_video_info(entry->comparison, shown_side());
     const std::optional<std::string> kind = hdr_kind(info);
-    const QString prefix;  // "Video playback · " once playback is ported
+    // Playback here is FFmpeg's, always an SDR preview: the Python app's
+    // native GPU playback (10-bit HDR presentation) is not ported yet.
+    const bool video = is_video_mode();
+    const QString prefix = video ? app::tr("Video playback \xC2\xB7 ") : QString();
     if (color_mode_ == PreviewColorMode::unmanaged) {
         color_status_label->setText(app::tr("{prefix}{kind} input \xC2\xB7 tone mapping off",
                                             {{"prefix", prefix},
@@ -927,7 +1174,16 @@ void FrameComparePanel::update_color_status() {
     }
     const PreviewColorSettings settings = color_settings();
     if (color_mode_ == PreviewColorMode::hdr_to_sdr) {
-        const QString source = kind ? text_of(*kind) : app::tr("Untagged input (assuming HDR10 / PQ)");
+        QString source = kind ? text_of(*kind) : app::tr("Untagged input (assuming HDR10 / PQ)");
+        if (video) {
+            static const std::set<std::string, std::less<>> untagged{"", "unknown", "unspecified"};
+            if (!kind && !untagged.contains(info.color_transfer)) {
+                source = app::tr("SDR input");
+            }
+            color_status_label->setText(
+                app::tr("{prefix}{source} \xC2\xB7 SDR preview", {{"prefix", prefix}, {"source", source}}));
+            return;
+        }
         color_status_label->setText(
             app::tr("{prefix}{source} \xC2\xB7 fixed HDR \xE2\x86\x92 SDR at {target_nits:g} nit",
                     {{"prefix", prefix}, {"source", source}, {"target_nits", settings.target_nits()}}));
@@ -938,7 +1194,13 @@ void FrameComparePanel::update_color_status() {
             app::tr("{prefix}SDR / untagged input \xC2\xB7 no tone mapping", {{"prefix", prefix}}));
         return;
     }
+    const QString target = video ? app::tr("SDR preview") : app::tr("SDR at 100 nit");
     if (display_hdr_.hdr_enabled == true) {
+        if (video) {
+            color_status_label->setText(app::tr("{prefix}{kind} \xC2\xB7 SDR preview (native HDR unavailable)",
+                                                {{"prefix", prefix}, {"kind", text_of(*kind)}}));
+            return;
+        }
         color_status_label->setText(app::tr(
             "{prefix}{kind} \xC2\xB7 display-aware HDR \xE2\x86\x92 SDR \xC2\xB7 Windows HDR on \xC2\xB7 SDR white "
             "{target_nits:g} nit",
@@ -946,11 +1208,11 @@ void FrameComparePanel::update_color_status() {
     } else if (display_hdr_.hdr_enabled == false) {
         color_status_label->setText(
             app::tr("{prefix}{kind} \xC2\xB7 HDR \xE2\x86\x92 {target} \xC2\xB7 Windows HDR off",
-                    {{"prefix", prefix}, {"kind", text_of(*kind)}, {"target", app::tr("SDR at 100 nit")}}));
+                    {{"prefix", prefix}, {"kind", text_of(*kind)}, {"target", target}}));
     } else {
         color_status_label->setText(
             app::tr("{prefix}{kind} \xC2\xB7 HDR \xE2\x86\x92 {target} \xC2\xB7 display HDR state unavailable",
-                    {{"prefix", prefix}, {"kind", text_of(*kind)}, {"target", app::tr("SDR at 100 nit")}}));
+                    {{"prefix", prefix}, {"kind", text_of(*kind)}, {"target", target}}));
     }
 }
 
@@ -984,7 +1246,18 @@ const QImage* FrameComparePanel::current_image() const {
 }
 
 void FrameComparePanel::show_or_request() {
-    // The current frame, extracted first if need be.
+    // The current frame, extracted first if need be; a pair that plays is
+    // the playback view's.
+    if (is_video_mode()) {
+        if (video_view != nullptr) {
+            video_view->set_color_settings(color_settings());
+            video_view->show_source(showing_source_);
+        }
+        return;
+    }
+    if (video_view != nullptr) {
+        video_view->set_playing(false);
+    }
     content_stack_->setCurrentWidget(viewer);
     const FrameComparisonEntry* entry = current_entry();
     if (entry != nullptr) {
@@ -1022,7 +1295,7 @@ void FrameComparePanel::request_current_frames() {
     // Extracts the current frame of each side not kept yet, the side shown
     // first.
     const FrameComparisonEntry* entry = current_entry();
-    if (entry == nullptr || !isVisible()) {
+    if (entry == nullptr || !isVisible() || is_video_mode()) {
         return;
     }
     if (untimed_pair_problem(entry->comparison.source_info, entry->comparison.distorted_info)) {
@@ -1146,18 +1419,51 @@ void FrameComparePanel::on_auto_crop_ready(const PairKey& key, const DetectedCro
     auto_crops_[key] = crops;
     auto_crop_files_[key.source_file] = crops.source;
     auto_crop_files_[key.distorted_file] = crops.distorted;
+    std::optional<FrameComparison> previous;
     for (FrameComparisonEntry& entry : entries_) {
         if (pair_key(entry) == key) {
+            previous = entry.comparison;
             entry = apply_auto_crop(entry);
             break;
         }
     }
     const FrameComparisonEntry* current = current_entry();
     if (current != nullptr && pair_key(*current) == key) {
+        const bool playing = video_view != nullptr && (video_view->is_playing() || video_view->playback_requested());
         ++generation_;
         update_labels();
-        show_or_request();
+        if (is_video_mode()) {
+            if (previous && previous->auto_crop_pending && crops_change_nothing(*previous, current->comparison)) {
+                return;  // the pair playing already shows what the crops give
+            }
+            load_current_video(playing);
+        } else {
+            show_or_request();
+        }
     }
+}
+
+bool FrameComparePanel::crops_change_nothing(const FrameComparison& pending, const FrameComparison& cropped) {
+    // Whether the black bars found for `pending` leave its pictures as they
+    // are: none on either side, the size compared at unchanged, and neither
+    // side boxed while they were looked for. Then the frames playing are
+    // the ones the crops give, and loading the pair again would restart
+    // every decoder for nothing (0.7-1.3 s of buffering mid-playback, in the
+    // Python app).
+    const Size size = comparison_dimensions(pending);
+    if (size != comparison_dimensions(cropped)) {
+        return false;
+    }
+    for (const auto& [info, crop] : {std::pair(&cropped.source_info, &cropped.source_crop),
+                                     std::pair(&cropped.distorted_info, &cropped.distorted_crop)}) {
+        if (*crop && !(*crop)->is_noop(info->width, info->height)) {
+            return false;
+        }
+        if (would_distort(pending, *info, std::nullopt, size.first, size.second)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void FrameComparePanel::cancel_crop_workers() {

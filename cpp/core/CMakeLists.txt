@@ -45,6 +45,7 @@ add_library(vml_core
     src/time_format.cpp
     src/update_check.cpp
     src/video.cpp
+    src/video_playback.cpp
     src/vship.cpp
     src/vship_run.cpp
     src/vmaf_cuda.cpp

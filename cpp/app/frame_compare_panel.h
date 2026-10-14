@@ -166,6 +166,7 @@ private:
 };
 
 class FramePanelTest;
+class VideoCompareView;
 
 class FrameComparePanel : public QWidget {
     Q_OBJECT
@@ -213,6 +214,8 @@ public:
     QSlider* timeline = nullptr;
     ElidedLabel* detail_label = nullptr;
     QLabel* guide_label = nullptr;
+    // The playback view, made when a pair first plays.
+    VideoCompareView* video_view = nullptr;
 
 signals:
     // The colour mode chosen, to save ("display_aware", ...).
@@ -282,6 +285,17 @@ private:
     void cancel_workers();
     void cancel_crop_workers();
     FrameSide shown_side() const { return showing_source_ ? FrameSide::source : FrameSide::distorted; }
+    // Playback (the pairs that can play).
+    bool is_video_mode() const;
+    VideoCompareView& ensure_video_view();
+    void load_current_video(std::optional<bool> playing = std::nullopt);
+    void on_play_clicked();
+    void on_video_position_changed(int position_ms);
+    void show_video_position();
+    void on_video_playing_changed(bool playing);
+    void on_video_status_changed(const QString& message);
+    QString concise_playback_status() const;
+    static bool crops_change_nothing(const FrameComparison& pending, const FrameComparison& cropped);
 
     std::function<std::string()> ffmpeg_;
     int decoded_videos_;
@@ -307,6 +321,11 @@ private:
     QStackedWidget* content_stack_ = nullptr;
     QTimer* seek_timer_ = nullptr;
     QTimer* display_timer_ = nullptr;
+    QTimer* position_timer_ = nullptr;
+    // Playback moving the seek widgets, which must not seek it back.
+    bool syncing_video_position_ = false;
+    // Playback's status as the view said it, in English.
+    QString video_status_;
 };
 
 }  // namespace vml::app

@@ -10,12 +10,12 @@ if(NOT Qt6_FOUND)
 endif()
 
 add_library(vml_app STATIC
+    bitrate_panel.cpp
     chart.cpp
     cvvdp_display_dialog.cpp
     dialogs.cpp
     file_writes.cpp
     formatting.cpp
-    bitrate_panel.cpp
     frame_compare_panel.cpp
     graph_panel.cpp
     i18n.cpp
@@ -27,12 +27,14 @@ add_library(vml_app STATIC
     main_window_run_files.cpp
     main_window_saved_scores.cpp
     options_panel.cpp
+    playback_worker.cpp
     probe_worker.cpp
     row_state.cpp
     run_worker.cpp
     series_colors.cpp
     settings_panel.cpp
     theme.cpp
+    video_compare_view.cpp
     widgets.cpp
     zoom.cpp
 )

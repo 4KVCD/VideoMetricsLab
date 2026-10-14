@@ -51,6 +51,10 @@ struct DecodingCapabilities {
 
     // Asks `ffmpeg` (-hwaccels) and the system.
     static DecodingCapabilities detect(const std::string& ffmpeg);
+    // The same, asked once per FFmpeg in this process (another FFmpeg chosen
+    // in Settings is asked again): playback plans each video it starts, and
+    // asking at each seek would start a process each time. Any thread.
+    static DecodingCapabilities remembered(const std::string& ffmpeg);
 };
 
 // The makers of the GPUs DirectX lists (none on other systems so far): NVIDIA

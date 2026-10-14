@@ -80,6 +80,8 @@ struct VideoInfo {
     // Whether the nominal and the average frame rate differ by more than
     // rounding.
     bool is_variable_frame_rate() const;
+    // Every field the same, as the Python app's dataclass compares them.
+    bool operator==(const VideoInfo&) const = default;
 };
 
 }  // namespace vml

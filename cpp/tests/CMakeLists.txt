@@ -33,6 +33,7 @@ add_executable(vml_tests
     unit/stats_test.cpp
     unit/temp_files_test.cpp
     unit/update_check_test.cpp
+    unit/video_playback_test.cpp
     unit/vmaf_cuda_test.cpp
     unit/vmaf_v1_gpu_test.cpp
     unit/vmaf_vulkan_test.cpp
@@ -79,6 +80,7 @@ if(TARGET vml_app)
         app/i18n_test.cpp
         app/main.cpp
         app/main_window_test.cpp
+        app/playback_test.cpp
         unit/reference.cpp
         unit/test_videos.cpp
     )
