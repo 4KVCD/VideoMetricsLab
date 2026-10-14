@@ -1386,7 +1386,9 @@ class MainWindow(QMainWindow):
         """A path typed or pasted into the reference box, read when Enter is
         pressed or the box is left. Quotes, as Explorer's "Copy as path"
         puts them, are taken off."""
-        if self._run_active or self.source_edit.isReadOnly():
+        # Not as the window closes: the focus leaves the box as it hides, and
+        # reading started then outlived the window, which crashed the app.
+        if self._run_active or self._closing or self.source_edit.isReadOnly():
             return
         text = self.source_edit.text().strip().strip('"').strip()
         shown = self._shown_source_path()

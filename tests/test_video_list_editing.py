@@ -119,6 +119,25 @@ def test_files_dropped_are_added_once_and_each_list_opens_its_own_last_folder(wi
     assert asked[-1] == ("tests", str(sources))
 
 
+def test_a_path_left_in_the_reference_box_is_not_read_as_the_window_closes(win, tmp_path):
+    """The focus leaves the box as the window hides, and the box read the
+    path left in it: the reading started then outlived the window, and the
+    app crashed as it closed ("QThread: Destroyed while thread is still
+    running")."""
+    from PySide6.QtTest import QTest
+
+    reference = tmp_path / "ref.mkv"
+    reference.write_bytes(b"")
+    win.show()
+    win.activateWindow()
+    QApplication.processEvents()
+    win.source_edit.setFocus()
+    QTest.keyClicks(win.source_edit, str(reference))
+    assert win.source_edit.hasFocus()
+    win.close()
+    assert win.probed_sources == []
+
+
 # ------------------------------------------------------------------ sorting
 
 
