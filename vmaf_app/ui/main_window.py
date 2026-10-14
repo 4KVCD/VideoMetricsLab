@@ -4359,7 +4359,12 @@ class MainWindow(QMainWindow):
         if result.resample_target is not None:
             row_data.media_path = result.source_info.path
         self.distorted_table.item(row, COL_CHECK).setCheckState(Qt.Unchecked)
-        self._set_row_info(row, result.distorted_info)
+        if result.resample_target is not None:
+            # As one added or found in the saved scores: what the test scales
+            # the reference to, not the reference's own details and bitrate.
+            self._set_resample_row_info(row, result.resample_target)
+        else:
+            self._set_row_info(row, result.distorted_info)
         self._set_row_metrics(row)
         self._rows[row].status_detail = tr("Loaded from saved run")
         self._refresh_row_state(row)
