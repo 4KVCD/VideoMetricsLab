@@ -30,6 +30,7 @@ add_executable(vml_tests
     unit/sha256_test.cpp
     unit/stats_test.cpp
     unit/temp_files_test.cpp
+    unit/update_check_test.cpp
     unit/vmaf_cuda_test.cpp
     unit/vmaf_v1_gpu_test.cpp
     unit/vmaf_vulkan_test.cpp

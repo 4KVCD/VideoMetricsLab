@@ -41,6 +41,7 @@ add_library(vml_core
     src/stats.cpp
     src/temp_files.cpp
     src/time_format.cpp
+    src/update_check.cpp
     src/video.cpp
     src/vship.cpp
     src/vship_run.cpp

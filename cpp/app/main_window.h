@@ -44,6 +44,7 @@
 #include "vml/options.h"
 #include "vml/results.h"
 #include "vml/settings.h"
+#include "vml/update_check.h"
 #include "vml/video.h"
 
 class QCheckBox;
@@ -51,6 +52,7 @@ class QGroupBox;
 class QLabel;
 class QLineEdit;
 class QMenu;
+class QMessageBox;
 class QPushButton;
 class QTableWidgetItem;
 class QTimer;
@@ -180,6 +182,12 @@ public:
     // not outlive its window.
     ~MainWindow() override;
 
+    // Asks GitHub for the latest release, without holding the window, and
+    // offers it when it is newer and not skipped. Called once, when the app
+    // starts (main.cpp): the window never calls it itself, so building a
+    // window never uses the network.
+    void check_for_updates();
+
 protected:
     void changeEvent(QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
@@ -209,6 +217,12 @@ private:
     // Takes the Settings tab's defaults for newly added videos. Rows already
     // in the table keep what they were given.
     void on_default_settings_changed();
+
+    // ------------------------------------------------------- the update check
+    // GitHub's answer (`body`), or why it could not be asked (`error`).
+    void on_update_answer(const std::string& body, const QString& error);
+    // Offers a newer release, unless the user chose to skip it.
+    void offer_update(const Release& release);
 
     // ------------------------------------------------------ FFmpeg's presence
     bool check_ffmpeg(bool prompt);
@@ -493,6 +507,8 @@ private:
     // The videos' colours, shared by the graphs, and Metric Graphs.
     VideoColors* video_colors_ = nullptr;
     GraphPanel* graph_panel_ = nullptr;
+    // The newer release offered, while its message is open.
+    QPointer<QMessageBox> update_box_;
     // The Settings tab, and the latest check of FFmpeg, which it shows.
     SettingsPanel* settings_panel_ = nullptr;
     ToolsStatus tools_status_;

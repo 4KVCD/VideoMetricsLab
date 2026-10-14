@@ -12,6 +12,7 @@
 #include <QDropEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QMimeData>
 #include <QPushButton>
 #include <QScrollArea>
@@ -195,6 +196,12 @@ protected:
     static void load_analysis_results(MainWindow& window) { window.on_load_saved_run(); }
     static OptionsPanel& options_panel(MainWindow& window) { return *window.options_panel_; }
     static SettingsPanel& settings_panel(MainWindow& window) { return *window.settings_panel_; }
+    // GitHub's answer to the update check, or why it could not be asked.
+    static void answer_update(MainWindow& window, const std::string& body, const QString& error) {
+        window.on_update_answer(body, error);
+    }
+    // The newer release's message, while it is open.
+    static QMessageBox* update_box(MainWindow& window) { return window.update_box_.data(); }
     // The window's settings now, as settings.json would hold them.
     static nlohmann::json settings_now(MainWindow& window) {
         return nlohmann::json::parse(window.settings_.text());
@@ -1552,6 +1559,45 @@ TEST_F(WindowTest, CopyLogAndExportLogShareTheLog) {
     panel.export_log_button->click();
     EXPECT_TRUE(std::filesystem::exists(zip));
     EXPECT_EQ(panel.status->text().toStdString(), "Log exported to " + platform::path_text(zip));
+}
+
+// The update check: a newer release than this one is offered, with its
+// notes; Skip this version keeps it from being offered again, and Later only
+// closes the message. Nothing is offered for a release no newer than this
+// one, or when GitHub could not be asked.
+TEST_F(WindowTest, ANewerReleaseIsOfferedUntilTheUserSkipsIt) {
+    MainWindow window;
+    const auto click = [&window](const QString& text) {
+        QMessageBox* box = update_box(window);
+        ASSERT_NE(box, nullptr);
+        for (QAbstractButton* button : box->buttons()) {
+            if (button->text() == text) {
+                button->click();
+                ASSERT_TRUE(wait_until([&window] { return update_box(window) == nullptr; }));
+                return;
+            }
+        }
+        FAIL() << "no button " << text.toStdString();
+    };
+    answer_update(window, R"({"tag_name": "v1.0", "html_url": "https://example.invalid/v1.0"})", {});
+    EXPECT_EQ(update_box(window), nullptr);
+    answer_update(window, "", "Host api.github.com not found");
+    EXPECT_EQ(update_box(window), nullptr);
+
+    const std::string newer = R"({"tag_name": "v99.0", "html_url": "https://example.invalid/v99.0", "body": "- Faster."})";
+    answer_update(window, newer, {});
+    ASSERT_NE(update_box(window), nullptr);
+    EXPECT_EQ(update_box(window)->text().toStdString(), "VideoMetricsLab 99.0 is available. You have " VML_APP_VERSION ".");
+    EXPECT_EQ(update_box(window)->detailedText().toStdString(), "- Faster.");
+    click("Skip this version");
+    EXPECT_EQ(saved_settings()["skipped_update_version"], "99.0");
+    answer_update(window, newer, {});
+    EXPECT_EQ(update_box(window), nullptr);
+
+    answer_update(window, R"({"tag_name": "v100.0"})", {});
+    ASSERT_NE(update_box(window), nullptr);
+    click("Later");
+    EXPECT_EQ(saved_settings()["skipped_update_version"], "99.0");
 }
 
 }  // namespace

@@ -2758,6 +2758,63 @@ def app_log_cases() -> dict:
     return {"cases": cases}
 
 
+def update_check_cases() -> dict:
+    """The update check (core/update_check.py), from the Python app's own
+    functions: versions compared as numbers, and GitHub's answers read into
+    a release, or refused (bodies that are not JSON, name no version, or a
+    tag that is not one)."""
+    import json as json_module
+
+    from vmaf_app.core import update_check
+
+    versions = [("v1.3", "1.2.1"), ("v1.10", "1.9"), ("v1.2.1", "1.2.1"), ("v1.3.0", "1.3"), ("v1.2", "1.3"),
+                ("nightly", "1.3"), ("2.0", "3.0.0-dev"), ("v3.0", "2.0"), (" v1.0 ", "1"), ("v0", "0.0.0"),
+                ("v1..2", "1"), ("", "1"), ("v1.2.3.4", "1.2.3"), ("V1.4", "1.3"), ("v1.3a", "1.2"),
+                ("v-1", "0"), ("v+1", "0"), ("1.03", "1.2"), ("vv1", "0")]
+    version_cases = [{"candidate": candidate, "current": current,
+                      "newer": update_check.is_newer(candidate, current),
+                      "tuple": None if (found := update_check.version_tuple(candidate)) is None else list(found)}
+                     for candidate, current in versions]
+
+    class _Response:
+        def __init__(self, body: bytes) -> None:
+            self.body = body
+
+        def read(self) -> bytes:
+            return self.body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc) -> None:
+            return None
+
+    bodies = [
+        {"tag_name": "v1.4", "html_url": "https://github.com/x/releases/tag/v1.4", "body": "- Added a thing."},
+        {"tag_name": "v2.0", "body": None},
+        {"tag_name": " v1.3.0 ", "html_url": "", "body": "notes"},
+        {"tag_name": "v1.5", "body": "Neu: B\u00fchne\r\n- und mehr"},
+        {"tag_name": 5},
+        {"tag_name": "v1", "html_url": 5},
+        {"tag_name": "nightly"},
+        {},
+        [],
+        {"tag_name": "V1.2"},
+        {"name": "v1.2"},
+    ]
+    texts = [json_module.dumps(body) for body in bodies] + ["not json", "", "{\"tag_name\": \"v1.2\""]
+    answer_cases = []
+    for body in texts:
+        try:
+            release = update_check.latest_release(opener=lambda request, timeout, b=body: _Response(b.encode()))
+            answer_cases.append({"body": body, "release": {"version": release.version, "page_url": release.page_url,
+                                                           "notes": release.notes}})
+        except update_check.UpdateCheckError:
+            answer_cases.append({"body": body, "release": None})
+    return {"versions": version_cases, "answers": answer_cases, "url": update_check.RELEASES_URL,
+            "timeout": update_check.TIMEOUT_SECONDS}
+
+
 if __name__ == "__main__":
     # Its texts as they are, not escaped: the file is a third the size.
     (HERE / "i18n.json").write_text(json.dumps(i18n_cases(), indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -2766,6 +2823,7 @@ if __name__ == "__main__":
     write("chart.json", chart_cases())
     write("graph.json", graph_cases())
     write("app_log.json", app_log_cases())
+    write("update_check.json", update_check_cases())
     write("devices.json", devices_cases())
     write("perceptual_cpu.json", perceptual_cpu_cases())
     write("timed_pairing.json", timed_pairing_cases())

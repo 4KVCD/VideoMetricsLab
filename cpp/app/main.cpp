@@ -152,5 +152,6 @@ int main(int argc, char** argv) {
 
     app::MainWindow window;
     window.show();
+    window.check_for_updates();  // once, now, and at no other time
     return QApplication::exec();
 }

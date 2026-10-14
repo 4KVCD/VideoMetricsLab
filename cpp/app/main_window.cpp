@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QDesktopServices>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QEvent>
@@ -24,12 +25,17 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QNetworkAccessManager>
+#include <QNetworkProxyFactory>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QPushButton>
 #include <QSplitter>
 #include <QStyleHints>
 #include <QTableWidgetItem>
 #include <QThread>
 #include <QTimer>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -60,6 +66,7 @@
 #include "vml/hardware_decoding.h"
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
+#include "vml/python_text.h"
 #include "vml/platform/system.h"
 #include "vml/time_format.h"
 #include "vml/vship.h"
@@ -854,6 +861,87 @@ void MainWindow::on_default_settings_changed() {
     default_options_ = options_from_settings();
     default_extra_metric_keys_ = extra_metrics_from_settings();
     default_cvvdp_ = cvvdp_from_settings();
+}
+
+// ------------------------------------------------------------ the update check
+
+void MainWindow::check_for_updates() {
+    if (!settings_.check_for_updates) {
+        return;
+    }
+    // Through the system's proxy, if it names one, as the Python app's
+    // urllib asks.
+    QNetworkProxyFactory::setUseSystemConfiguration(true);
+    auto* network = new QNetworkAccessManager(this);
+    QNetworkRequest request(QUrl(QString::fromUtf8(releases_url.data(), static_cast<qsizetype>(releases_url.size()))));
+    request.setRawHeader("Accept", "application/vnd.github+json");
+    // GitHub refuses requests without a User-Agent.
+    request.setHeader(QNetworkRequest::UserAgentHeader, "VideoMetricsLab/" VML_APP_VERSION);
+    request.setTransferTimeout(update_check_timeout_seconds * 1000);
+    QNetworkReply* reply = network->get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, network] {
+        const QString error = reply->error() == QNetworkReply::NoError ? QString() : reply->errorString();
+        const QByteArray body = reply->readAll();
+        reply->deleteLater();
+        network->deleteLater();
+        on_update_answer(body.toStdString(), error);
+    });
+}
+
+void MainWindow::on_update_answer(const std::string& body, const QString& error) {
+    std::optional<Release> release;
+    try {
+        if (!error.isEmpty()) {
+            throw UpdateCheckError(error.toStdString());
+        }
+        release = release_from_answer(body);
+    } catch (const UpdateCheckError& failure) {
+        logger.info(std::string("Update check: GitHub could not be asked (") + failure.what() + ")");
+        return;
+    }
+    // Compared with the release this build is ("3.0.0" for 3.0.0-dev).
+    if (!is_newer(release->version, VML_APP_RELEASE)) {
+        logger.info("Update check: VideoMetricsLab " VML_APP_VERSION " is the latest release");
+        return;
+    }
+    logger.info("Update check: VideoMetricsLab " + release->version + " is available (this is " VML_APP_VERSION ")");
+    offer_update(*release);
+}
+
+void MainWindow::offer_update(const Release& release) {
+    // Nothing is shown for a release the user chose to skip.
+    if (release.version == settings_.skipped_update_version) {
+        return;
+    }
+    auto* box = new QMessageBox(this);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->setIcon(QMessageBox::Information);
+    box->setWindowTitle(app::tr("Update available"));
+    box->setText(app::tr("{app} {version} is available. You have {current}.",
+                         {{"app", "VideoMetricsLab"},
+                          {"version", QString::fromStdString(release.version)},
+                          {"current", VML_APP_VERSION}}));
+    box->setInformativeText(app::tr("Updating does not affect your saved results or settings: they are stored "
+                                    "separately from the app, in {cache_dir} and {user_data_dir}.",
+                                    {{"cache_dir", text_of(cache_folder())},
+                                     {"user_data_dir", text_of(Settings::file().parent_path())}}));
+    if (!python_strip(release.notes).empty()) {
+        box->setDetailedText(QString::fromStdString(release.notes));
+    }
+    QPushButton* download = box->addButton(app::tr("Download"), QMessageBox::AcceptRole);
+    QPushButton* skip = box->addButton(app::tr("Skip this version"), QMessageBox::DestructiveRole);
+    box->addButton(app::tr("Later"), QMessageBox::RejectRole);
+    box->setDefaultButton(download);
+    connect(box, &QMessageBox::finished, this, [this, box, download, skip, release] {
+        if (box->clickedButton() == download) {
+            QDesktopServices::openUrl(QUrl(QString::fromStdString(release.page_url)));
+        } else if (box->clickedButton() == skip) {
+            settings_.skipped_update_version = release.version;
+            save_settings();
+        }
+    });
+    update_box_ = box;
+    box->open();
 }
 
 CvvdpSettings MainWindow::cvvdp_from_settings() const {

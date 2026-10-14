@@ -3,7 +3,7 @@
 # VideoMetricsLab. Built where Qt 6.5 or newer is found (CMAKE_PREFIX_PATH
 # names Qt's folder: README.md); without Qt, the rest is built and the window
 # is left out.
-find_package(Qt6 6.5 QUIET COMPONENTS Concurrent Widgets)
+find_package(Qt6 6.5 QUIET COMPONENTS Concurrent Network Widgets)
 if(NOT Qt6_FOUND)
     message(STATUS "Qt 6 not found: the window is not built (CMAKE_PREFIX_PATH names Qt's folder)")
     return()
@@ -34,8 +34,11 @@ add_library(vml_app STATIC
 )
 set_target_properties(vml_app PROPERTIES AUTOMOC ON)
 target_include_directories(vml_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(vml_app PUBLIC vml_core Qt6::Concurrent Qt6::Widgets PRIVATE vml_compile_options)
-target_compile_definitions(vml_app PUBLIC VML_APP_VERSION="${PROJECT_VERSION}-dev")
+target_link_libraries(vml_app PUBLIC vml_core Qt6::Concurrent Qt6::Network Qt6::Widgets PRIVATE vml_compile_options)
+# The version shown, and the release it will be, which the update check
+# compares with GitHub's latest.
+target_compile_definitions(vml_app PUBLIC VML_APP_VERSION="${PROJECT_VERSION}-dev"
+                                          VML_APP_RELEASE="${PROJECT_VERSION}")
 
 add_executable(VideoMetricsLab WIN32 main.cpp)
 target_link_libraries(VideoMetricsLab PRIVATE vml_app vml_compile_options)
