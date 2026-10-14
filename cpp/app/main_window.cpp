@@ -248,6 +248,12 @@ MainWindow::MainWindow() {
     connect(file_writes_, &FileWrites::write_failed, this, [this](const QString& description, const QString& error) {
         show_status(app::tr("Could not {description}: {error}", {{"description", description}, {"error", error}}));
     });
+    // Saving runs can be asked for again once the saves asked for are written.
+    connect(file_writes_, &FileWrites::became_idle, this, [this] {
+        if (file_writes_->idle()) {
+            save_button_->setEnabled(true);
+        }
+    });
 
     build_ui();
     // At least 1050x650, and never smaller than the window's contents need.
@@ -508,6 +514,17 @@ void MainWindow::build_ui() {
             [this](int index) { on_scale_direction_combo_changed(index); });
     run_cvvdp_dialog_ = [](CvvdpDisplayDialog& dialog) { return dialog.exec(); };
     inform_ = [this](const QString& title, const QString& text) { QMessageBox::information(this, title, text); };
+    alert_ = [this](const QString& title, const QString& text) { QMessageBox::critical(this, title, text); };
+    ask_ = [this](const QString& title, const QString& text) {
+        return QMessageBox::question(this, title, text) == QMessageBox::Yes;
+    };
+    open_file_ = [this](const QString& title, const QString& filter) {
+        return QFileDialog::getOpenFileName(this, title, QString(), filter);
+    };
+    save_file_ = [this](const QString& title, const QString& suggested, const QString& filter) {
+        return QFileDialog::getSaveFileName(this, title, suggested, filter);
+    };
+    choose_folder_ = [this](const QString& title) { return QFileDialog::getExistingDirectory(this, title); };
     splitter->addWidget(options_panel_);
     splitter->addWidget(build_run_panel());
     splitter->setSizes({380, 300, 120});
@@ -724,14 +741,17 @@ QWidget* MainWindow::build_run_panel() {
     run_row->addWidget(parallel_jobs_check_);
     run_row->addStretch(1);
 
-    auto* load_button = new QPushButton(app::tr("Load analysis results..."));
-    load_button->setEnabled(false);  // run files are not ported to C++ yet
+    load_button_ = new QPushButton(app::tr("Load analysis results..."));
+    connect(load_button_, &QPushButton::clicked, this, [this] { on_load_saved_run(); });
+    // Frozen during a run with the files: a saved run can bring a reference
+    // of its own, which would change what the running videos mean.
+    file_action_widgets_.push_back(load_button_);
     save_button_ = new QPushButton(app::tr("Save selected results..."));
-    save_button_->setEnabled(false);
+    connect(save_button_, &QPushButton::clicked, this, [this] { on_save_selected(); });
     show_graph_button_ = new QPushButton(app::tr("Open metric graphs"));
     show_graph_button_->setToolTip(app::tr("Opens Metric Graphs with the current results and graph settings."));
-    show_graph_button_->setEnabled(false);
-    run_row->addWidget(load_button);
+    show_graph_button_->setEnabled(false);  // Metric Graphs are not ported to C++ yet
+    run_row->addWidget(load_button_);
     run_row->addWidget(save_button_);
     run_row->addWidget(show_graph_button_);
     layout->addLayout(run_row);
@@ -1033,23 +1053,29 @@ void MainWindow::apply_source_info(const std::filesystem::path& path, const Vide
     source_edit_->setText(text_of(path));
     source_info_label_->setText(media_info_string(info) + ", " + bitrate_string(info) + "  (" +
                                 QString::fromStdString(format_hms(info.duration, 1)) + ")");
-    // A resolution test is made from the reference, while a test video is
-    // only compared with it, so a resolution test cannot outlive a change of
-    // reference.
+    check_rows_against_new_source(path);
+}
+
+void MainWindow::check_rows_against_new_source(const std::filesystem::path& path) {
+    // The rows, after `path` became the reference: chosen, or taken from a
+    // saved run. A resolution test is made from the reference, while a test
+    // video is only compared with it, so a resolution test cannot outlive a
+    // change of reference.
     const std::vector<QString> dropped = remove_rows_owned_by_the_previous_source();
     // Scores belong to a pair of videos: a new reference takes away every
     // score measured against another, which would otherwise stand in the
-    // table as the new pair's, and keep a run from calculating it. Those
-    // measured against the very reference chosen stay: choosing it again
-    // confirms them.
-    std::vector<int> other_reference;
+    // table as the new pair's, and keep a run from calculating it, and the
+    // state of every row without scores (how its run against the old one
+    // ended, failed or cancelled). Those measured against the very reference
+    // chosen stay: choosing it again confirms them.
+    std::vector<int> stale;
     for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
         const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
-        if (row_data.completed_run && !same_file(row_data.completed_run->result.source, path)) {
-            other_reference.push_back(row);
+        if (!row_data.completed_run || !same_file(row_data.completed_run->result.source, path)) {
+            stale.push_back(row);
         }
     }
-    invalidate_completed_results(other_reference);
+    invalidate_completed_results(stale);
     // Every row is checked against the new reference: its Scaling cell
     // depends on it, and its saved scores with the new reference are looked
     // up off the window's thread (a long video's are several MB to read).

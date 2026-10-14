@@ -49,100 +49,11 @@ AnalysisRequest request_from(const nlohmann::json& item) {
     return analysis_request(options_from(item.at("options")), keys, backends, cvvdp);
 }
 
-MetricProvenance provenance_from(const nlohmann::json& data) {
-    MetricProvenance provenance{data.at("implementation"), data.at("implementation_version"),
-                                data.at("compute_backend"), data.at("implementation_compatibility_id"), {}};
-    for (auto item = data.at("parameters").begin(); item != data.at("parameters").end(); ++item) {
-        provenance.parameters[item.key()] = item.value().dump();
-    }
-    return provenance;
-}
-
-std::vector<float> floats_from(const nlohmann::json& list) {
-    std::vector<float> values;
-    for (const double value : test::reference_numbers(list)) {
-        values.push_back(static_cast<float>(value));
-    }
-    return values;
-}
-
-VideoInfo video_from(const nlohmann::json& data) {
-    VideoInfo info;
-    info.path = platform::path_from_text(data.at("path").get<std::string>());
-    info.width = data.at("width");
-    info.height = data.at("height");
-    info.fps = *test::reference_number(data.at("fps"));
-    info.duration = *test::reference_number(data.at("duration"));
-    info.nb_frames = data.at("nb_frames");
-    info.codec_name = data.at("codec_name");
-    info.sar = data.at("sar");
-    info.pix_fmt = data.at("pix_fmt");
-    info.bit_rate = data.at("bit_rate");
-    info.bit_rate_whole_file = data.at("bit_rate_whole_file");
-    info.nominal_fps = *test::reference_number(data.at("nominal_fps"));
-    info.average_fps = *test::reference_number(data.at("average_fps"));
-    info.color_range = data.at("color_range");
-    info.color_space = data.at("color_space");
-    info.color_transfer = data.at("color_transfer");
-    info.color_primaries = data.at("color_primaries");
-    info.chroma_location = data.at("chroma_location");
-    return info;
-}
-
-std::optional<CropBox> crop_from(const nlohmann::json& data) {
-    if (data.is_null()) {
-        return std::nullopt;
-    }
-    return CropBox{data[0], data[1], data[2], data[3]};
-}
-
 std::optional<std::string> text_or_none(const nlohmann::json& data) {
     if (data.is_null()) {
         return std::nullopt;
     }
     return data.get<std::string>();
-}
-
-// A result as the reference describes it (make_reference.py's result_json).
-ComparisonResult result_from(const nlohmann::json& data) {
-    ComparisonResult result;
-    result.source = platform::path_from_text(data.at("source").get<std::string>());
-    result.distorted = platform::path_from_text(data.at("distorted").get<std::string>());
-    result.fps = *test::reference_number(data.at("fps"));
-    result.model = data.at("model");
-    result.source_crop = crop_from(data.at("source_crop"));
-    result.distorted_crop = crop_from(data.at("distorted_crop"));
-    result.source_info = video_from(data.at("source_info"));
-    result.distorted_info = video_from(data.at("distorted_info"));
-    result.scale_direction = data.at("scale_direction") == "distorted_to_source" ? ScaleDirection::distorted_to_source
-                                                                                 : ScaleDirection::source_to_distorted;
-    result.scale_algorithm = data.at("scale_algorithm");
-    result.compared_frame_count = data.at("compared_frame_count");
-    result.model_choice = text_or_none(data.at("model_choice"));
-    result.model_v1 = data.at("model_v1");
-    result.model_choice_v1 = text_or_none(data.at("model_choice_v1"));
-    if (const nlohmann::json& target = data.at("resample_target"); !target.is_null()) {
-        result.resample_target = ResampleTarget{target.at("width"), target.at("label")};
-    }
-    for (const nlohmann::json& metric : data.at("metrics")) {
-        const std::string key = metric.at("key");
-        if (metric.at("kind") == "sequence") {
-            SequenceMetricResult sequence{key, *test::reference_number(metric.at("score")),
-                                          provenance_from(metric.at("provenance")), {}, {}, {}};
-            if (metric.contains("values")) {
-                sequence.frame = metric.at("frame").get<std::vector<int>>();
-                sequence.time = test::reference_numbers(metric.at("time"));
-                sequence.values = floats_from(metric.at("values"));
-            }
-            result.metric_results.add(sequence);
-        } else {
-            result.metric_results.add(FrameMetricResult{key, metric.at("frame").get<std::vector<int>>(),
-                                                        test::reference_numbers(metric.at("time")),
-                                                        floats_from(metric.at("values")),
-                                                        provenance_from(metric.at("provenance"))});
-        }
-    }
-    return result;
 }
 
 void touch(const std::filesystem::path& path, const std::string& text) { std::ofstream(path, std::ios::binary) << text; }
@@ -176,20 +87,20 @@ void expect_loaded(const std::optional<std::pair<ComparisonResult, std::string>>
     for (const nlohmann::json& metric : expected) {
         const std::string key = metric.at("key");
         SCOPED_TRACE(key);
-        const MetricProvenance wanted = provenance_from(metric.at("provenance"));
+        const MetricProvenance wanted = test::provenance_from(metric.at("provenance"));
         const MetricProvenance* provenance = nullptr;
         if (metric.at("kind") == "sequence") {
             const SequenceMetricResult* sequence = results.sequence(key);
             ASSERT_NE(sequence, nullptr);
             EXPECT_EQ(sequence->score, *test::reference_number(metric.at("score")));
-            EXPECT_EQ(sequence->values, metric.contains("values") ? floats_from(metric.at("values")) : std::vector<float>{});
+            EXPECT_EQ(sequence->values, metric.contains("values") ? test::floats_from(metric.at("values")) : std::vector<float>{});
             provenance = &sequence->provenance;
         } else {
             const FrameMetricResult* frame = results.frame(key);
             ASSERT_NE(frame, nullptr);
             EXPECT_EQ(frame->frame, metric.at("frame").get<std::vector<int>>());
             EXPECT_EQ(frame->time, test::reference_numbers(metric.at("time")));
-            EXPECT_EQ(frame->values, floats_from(metric.at("values")));
+            EXPECT_EQ(frame->values, test::floats_from(metric.at("values")));
             provenance = &frame->provenance;
         }
         EXPECT_EQ(provenance->implementation, wanted.implementation);
@@ -237,7 +148,7 @@ TEST(MetricCache, StoresAResultAsThePythonApp) {
         touch(folder / "s.mp4", "s");
         touch(folder / "t.mp4", "t");
         const AnalysisRequest request = request_from(stored);
-        const ComparisonResult result = result_from(stored.at("result"));
+        const ComparisonResult result = test::result_from(stored.at("result"));
         const std::filesystem::path directory = store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4",
                                                              request.recipe, result, stored.at("label"), request.metrics);
         EXPECT_EQ(platform::read_file(directory / "context.json"), stored.at("context").get<std::string>());
@@ -268,7 +179,7 @@ TEST(MetricCache, AnswersAsThePythonApp) {
         for (const nlohmann::json& info : item.at("infos")) {
             infos.push_back({info.at("pix_fmt"), info.at("color_transfer")});
         }
-        EXPECT_EQ(answers(*request.metric(item.at("key")), provenance_from(item.at("provenance")), infos),
+        EXPECT_EQ(answers(*request.metric(item.at("key")), test::provenance_from(item.at("provenance")), infos),
                   item.at("answers").get<bool>())
             << item.dump();
     }
@@ -279,7 +190,7 @@ TEST(MetricCache, AnswersAsThePythonApp) {
                   item.at("counts").get<bool>())
             << item.dump();
     }
-    const ComparisonResult result = result_from(reference.at("reusable").at("result"));
+    const ComparisonResult result = test::result_from(reference.at("reusable").at("result"));
     for (const nlohmann::json& item : reference.at("reusable").at("cases")) {
         const AnalysisRequest asked = request_from(item);
         const bool can = item.at("gpu_can_score");
@@ -377,7 +288,7 @@ TEST(MetricCache, ASavedVmafKeepsTheModelItWasMadeWith) {
     const test::Folder folder;
     touch(folder / "s.mp4", "s");
     touch(folder / "t.mp4", "t");
-    const ComparisonResult made = result_from(test::load_reference("metric_cache.json").at("stored").at("result"));
+    const ComparisonResult made = test::result_from(test::load_reference("metric_cache.json").at("stored").at("result"));
     const std::string standard = "version=vmaf_v0.6.1";
     const std::string four_k = "version=vmaf_4k_v0.6.1";
     using Models = std::pair<std::string, std::optional<std::string>>;

@@ -1902,6 +1902,213 @@ def devices_cases() -> list[dict]:
 SAVED_SCORES = HERE / "metric_cache"
 
 
+def _metric_json(metric) -> dict:
+    """A metric's result, as the C++ tests read it (reference.h's
+    result_from): numbers by float.hex()."""
+    from vmaf_app.core.metric_results import SequenceMetricResult, provenance_to_dict
+
+    data = {"key": metric.key, "provenance": provenance_to_dict(metric.provenance)}
+    if isinstance(metric, SequenceMetricResult):
+        data.update(kind="sequence", score=exact(metric.score))
+        if not metric.has_timeline:
+            return data
+    else:
+        data["kind"] = "frame"
+    data.update(frame=[int(f) for f in metric.frame], time=[exact(float(t)) for t in metric.time],
+                values=[exact(float(v)) for v in metric.values])
+    return data
+
+
+def _result_json(result) -> dict:
+    """A comparison's result, as the C++ tests read it (reference.h's
+    result_from)."""
+    def video(details) -> dict:
+        return {"path": str(details.path), "width": details.width, "height": details.height,
+                "fps": exact(details.fps), "duration": exact(details.duration), "nb_frames": details.nb_frames,
+                "codec_name": details.codec_name, "sar": details.sar, "pix_fmt": details.pix_fmt,
+                "bit_rate": details.bit_rate, "bit_rate_whole_file": details.bit_rate_whole_file,
+                "nominal_fps": exact(details.nominal_fps), "average_fps": exact(details.average_fps),
+                "color_range": details.color_range, "color_space": details.color_space,
+                "color_transfer": details.color_transfer, "color_primaries": details.color_primaries,
+                "chroma_location": details.chroma_location}
+
+    def crop(box) -> list | None:
+        return None if box is None else [box.w, box.h, box.x, box.y]
+
+    return {"source": str(result.source), "distorted": str(result.distorted), "fps": exact(result.fps),
+            "model": result.model, "source_crop": crop(result.source_crop),
+            "distorted_crop": crop(result.distorted_crop), "source_info": video(result.source_info),
+            "distorted_info": video(result.distorted_info), "scale_direction": result.scale_direction.value,
+            "scale_algorithm": result.scale_algorithm, "compared_frame_count": result.compared_frame_count,
+            "model_choice": result.model_choice, "model_v1": result.model_v1,
+            "model_choice_v1": result.model_choice_v1,
+            "resample_target": None if result.resample_target is None else {
+                "width": result.resample_target.width, "label": result.resample_target.label},
+            "metrics": [_metric_json(result.metric_results.get(key)) for key in result.metric_results]}
+
+
+#: Marks a field to take out of a file (run_file_cases).
+_REMOVE = object()
+
+
+def run_file_cases() -> dict:
+    """Saved runs (run_io.py): the text save_run writes for results of every
+    kind of score, and what load_run makes of files: the result, as save_run
+    writes it again, or the error it gives."""
+    import tempfile
+
+    import numpy as np
+
+    from vmaf_app.core import run_io
+    from vmaf_app.core.builtin_models import builtin_choice
+    from vmaf_app.core.metric_results import (
+        FrameMetricResult,
+        MetricProvenance,
+        MetricResultSet,
+        SequenceMetricResult,
+    )
+    from vmaf_app.core.models import ComparisonResult, CropBox, ResampleTarget, ScaleDirection, VideoInfo
+
+    fps = 24000 / 1001
+    source_path = "C:\\Videos\\K\u00e4se \u2013 source.mkv"
+    test_path = "D:\\Encodes\\take 1.mkv"
+
+    def info(path: str, width: int = 3840, height: int = 2160) -> VideoInfo:
+        return VideoInfo(path=Path(path), width=width, height=height, fps=fps, duration=10.01, nb_frames=240,
+                         codec_name="hevc", sar="1:1", pix_fmt="yuv420p10le", bit_rate=45_000_000,
+                         bit_rate_whole_file=True, nominal_fps=fps, average_fps=fps, color_range="tv",
+                         color_space="bt2020nc", color_transfer="smpte2084", color_primaries="bt2020",
+                         chroma_location="topleft")
+
+    frames = np.arange(6, dtype=np.int32)
+    times = frames / fps
+    libvmaf = MetricProvenance("ffmpeg/libvmaf", "ffmpeg 9.0.1", "cpu", "ffmpeg-libvmaf-v1",
+                               {"model": "version=vmaf_v0.6.1"})
+    xpsnr = MetricProvenance("ffmpeg/xpsnr", "ffmpeg 9.0.1", "cpu", "ffmpeg-xpsnr-v2")
+    # Parameters with their keys in order: the C++ app keeps a score's
+    # parameters sorted (run_file.h), so its files differ in that order alone.
+    cvvdp = MetricProvenance("Vship/cvvdp", "Vship 5.1.2", "gpu", "cvvdp-vship-gpu-v1",
+                             {"display": {"hdr": True, "height": 2160, "width": 3840}, "resize": False})
+    whole = MetricProvenance("unknown", "", "unknown", "unversioned")
+    v1_choice = builtin_choice("vmaf_v1_3d0h_2160")
+
+    def result(**fields) -> ComparisonResult:
+        values = {"source": Path(source_path), "distorted": Path(test_path), "frames": [], "fps": fps,
+                  "model": "version=vmaf_v0.6.1", "source_crop": None, "distorted_crop": None,
+                  "source_info": info(source_path), "distorted_info": info(test_path, 1920, 1080),
+                  "compared_frame_count": 6, "model_choice": "__auto__", **fields}
+        return ComparisonResult(**values)
+
+    every_kind = MetricResultSet([
+        FrameMetricResult("vmaf", frames, times, np.array([95.5, 96.25, np.nan, 94.123456, 100.0, 0.0],
+                                                           dtype=np.float32), libvmaf),
+        FrameMetricResult("xpsnr", frames, times, np.array([40.5, np.inf, 38.25, np.inf, 41.0, -np.inf],
+                                                            dtype=np.float32), xpsnr),
+        SequenceMetricResult("cvvdp", 8.75, cvvdp, frames[:2], times[:2], np.array([8.5, 9.0], dtype=np.float32)),
+        SequenceMetricResult("whole", float("inf"), whole),
+    ])
+    saved_results = [
+        ("every kind of score", "K\u00e4se \u2013 take 1", result(
+            metric_results=every_kind, source_crop=CropBox(3840, 1600, 0, 280),
+            distorted_crop=CropBox(1920, 800, 0, 140), scale_direction=ScaleDirection.DISTORTED_TO_SOURCE,
+            scale_algorithm="lanczos", model_v1="path=C:\\models\\vmaf_v1.json", model_choice_v1=v1_choice)),
+        ("no label: the test video's name", "", result(
+            metric_results=MetricResultSet([every_kind.get("vmaf")]), model_choice=None)),
+        ("a resolution test", "", result(
+            metric_results=MetricResultSet([every_kind.get("vmaf")]),
+            distorted=Path("C:\\Videos\\K\u00e4se \u2013 source [downscale-720p-upscale].mkv"),
+            distorted_info=info(source_path), resample_target=ResampleTarget(1280, "720p"))),
+    ]
+    saved = []
+    texts = {}
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / "run.metrics.json"
+        for name, label, saved_result in saved_results:
+            run_io.save_run(saved_result, path, label=label or None)
+            texts[name] = path.read_text(encoding="utf-8")
+            saved.append({"name": name, "label": label, "result": _result_json(saved_result), "text": texts[name]})
+
+        good = json.loads(texts["every kind of score"])
+
+        def changed(**fields) -> str:
+            data = json.loads(texts["every kind of score"])
+            for key, value in fields.items():
+                if value is _REMOVE:
+                    del data[key]
+                else:
+                    data[key] = value
+            return json.dumps(data)
+
+        def changed_metric(index: int, **fields) -> str:
+            data = json.loads(texts["every kind of score"])
+            for key, value in fields.items():
+                if value is _REMOVE:
+                    del data["metric_results"][index][key]
+                else:
+                    data["metric_results"][index][key] = value
+            return json.dumps(data)
+
+        provenance = good["metric_results"][0]["provenance"]
+        # As saved while VMAF v1 was a model of the one VMAF column.
+        old_v1 = json.loads(texts["no label: the test video's name"])
+        old_v1.update(model="path=C:\\vmaf_app\\models\\vmaf_v1.0.16_3d0h_2160.json", model_choice=v1_choice)
+        files = [
+            ("every kind of score", texts["every kind of score"]),
+            ("a resolution test", texts["a resolution test"]),
+            ("format version 1", changed(format_version=1)),
+            ("format version as text", changed(format_version="2")),
+            ("format version as a decimal", changed(format_version=2.0)),
+            ("no format version", changed(format_version=_REMOVE)),
+            ("not an object", json.dumps([good])),
+            ("scores not a list", changed(metric_results={"vmaf": []})),
+            ("no scores", changed(metric_results=_REMOVE)),
+            ("a score not an object", changed(metric_results=[1])),
+            ("a score without a key", changed_metric(0, key="")),
+            ("a score without provenance", changed_metric(0, provenance=_REMOVE)),
+            ("provenance not an object", changed_metric(0, provenance="libvmaf")),
+            ("provenance parameters not an object", changed_metric(0, provenance={**provenance, "parameters": []})),
+            ("provenance without its backend", changed_metric(
+                0, provenance={key: value for key, value in provenance.items() if key != "compute_backend"})),
+            ("a score of another kind", changed_metric(0, kind="histogram")),
+            ("a score of no kind", changed_metric(0, kind=_REMOVE)),
+            ("frame arrays not lists", changed_metric(0, values="95.5")),
+            ("frame arrays of other lengths", changed_metric(0, time=[0.0])),
+            ("a missing frame array", changed_metric(0, time=_REMOVE)),
+            ("timeline of other lengths", changed_metric(2, timeline={"frame": [0], "time": [0.0, 1.0],
+                                                                      "values": [8.5]})),
+            ("scores as text", changed_metric(0, values=["95.5", " 96.25 ", "nan", "-inf", "Infinity", None])),
+            ("no source", changed(source=_REMOVE)),
+            ("no source details", changed(source_info=_REMOVE)),
+            ("source details without a path", changed(
+                source_info={key: value for key, value in good["source_info"].items() if key != "path"})),
+            ("source details of an older file", changed(source_info={key: good["source_info"][key] for key in (
+                "path", "width", "height", "fps", "duration", "nb_frames", "codec_name")})),
+            ("another scale direction", changed(scale_direction="sideways")),
+            ("no resolution test field", changed(resample_target=_REMOVE)),
+            ("no model choice field", changed(model_choice=_REMOVE)),
+            ("no VMAF v1 fields", changed(model_v1=_REMOVE, model_choice_v1=_REMOVE)),
+            ("no label", changed(label=_REMOVE)),
+            ("no crops", changed(source_crop=_REMOVE, distorted_crop=_REMOVE)),
+            ("no frames counted", changed(compared_frame_count=0)),
+            ("VMAF v1 scores in the VMAF column", json.dumps(old_v1)),
+            ("not JSON", "{"),
+        ]
+        loads = []
+        for name, text in files:
+            case = {"name": name, "text": text}
+            path.write_text(text, encoding="utf-8")
+            try:
+                loaded, label = run_io.load_run(path)
+            except Exception as error:  # every error is the answer
+                # Python's JSON parser words its errors its own way.
+                case["error"] = "" if name == "not JSON" else str(error)
+            else:
+                run_io.save_run(loaded, path, label=label)
+                case.update(label=label, resaved=path.read_text(encoding="utf-8"))
+            loads.append(case)
+    return {"saved": saved, "loads": loads}
+
+
 def metric_cache_cases() -> dict:
     """The saved scores as the Python app names, writes and reads them
     (metric_cache.py): each request's identity and hash and the recipe's
@@ -1996,42 +2203,7 @@ def metric_cache_cases() -> dict:
         frames = np.arange(count or len(values), dtype=np.int32)
         return FrameMetricResult(key, frames, frames / fps, np.array(values, dtype=np.float32), provenance)
 
-    def metric_json(metric) -> dict:
-        data = {"key": metric.key, "provenance": provenance_to_dict(metric.provenance)}
-        if isinstance(metric, SequenceMetricResult):
-            data.update(kind="sequence", score=exact(metric.score))
-            if not metric.has_timeline:
-                return data
-        else:
-            data["kind"] = "frame"
-        data.update(frame=[int(f) for f in metric.frame], time=[exact(float(t)) for t in metric.time],
-                    values=[exact(float(v)) for v in metric.values])
-        return data
-
-    def result_json(result: ComparisonResult) -> dict:
-        def video(details: VideoInfo) -> dict:
-            return {"path": str(details.path), "width": details.width, "height": details.height,
-                    "fps": exact(details.fps), "duration": exact(details.duration), "nb_frames": details.nb_frames,
-                    "codec_name": details.codec_name, "sar": details.sar, "pix_fmt": details.pix_fmt,
-                    "bit_rate": details.bit_rate, "bit_rate_whole_file": details.bit_rate_whole_file,
-                    "nominal_fps": exact(details.nominal_fps), "average_fps": exact(details.average_fps),
-                    "color_range": details.color_range, "color_space": details.color_space,
-                    "color_transfer": details.color_transfer, "color_primaries": details.color_primaries,
-                    "chroma_location": details.chroma_location}
-
-        def crop(box) -> list | None:
-            return None if box is None else [box.w, box.h, box.x, box.y]
-
-        return {"source": str(result.source), "distorted": str(result.distorted), "fps": exact(result.fps),
-                "model": result.model, "source_crop": crop(result.source_crop),
-                "distorted_crop": crop(result.distorted_crop), "source_info": video(result.source_info),
-                "distorted_info": video(result.distorted_info), "scale_direction": result.scale_direction.value,
-                "scale_algorithm": result.scale_algorithm, "compared_frame_count": result.compared_frame_count,
-                "model_choice": result.model_choice, "model_v1": result.model_v1,
-                "model_choice_v1": result.model_choice_v1,
-                "resample_target": None if result.resample_target is None else {
-                    "width": result.resample_target.width, "label": result.resample_target.label},
-                "metrics": [metric_json(result.metric_results.get(key)) for key in result.metric_results]}
+    metric_json, result_json = _metric_json, _result_json
 
     def result_of(metrics: list, source_info: VideoInfo, distorted_info: VideoInfo, **fields) -> ComparisonResult:
         results = MetricResultSet()
@@ -2381,6 +2553,7 @@ if __name__ == "__main__":
     # Its texts as they are, not escaped: the file is a third the size.
     (HERE / "i18n.json").write_text(json.dumps(i18n_cases(), indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     write("metric_cache.json", metric_cache_cases())
+    write("run_files.json", run_file_cases())
     write("devices.json", devices_cases())
     write("perceptual_cpu.json", perceptual_cpu_cases())
     write("timed_pairing.json", timed_pairing_cases())

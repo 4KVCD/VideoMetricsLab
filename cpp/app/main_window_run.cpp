@@ -782,6 +782,7 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
     }
     auto run = std::make_shared<CompletedRun>();
     run->result = result;
+    run->label = label;
     if (row_data.completed_run) {
         // Scores the row was showing for metrics this run did not calculate
         // (unticked ones) stay shown, as the run's result holds only what it

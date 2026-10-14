@@ -34,9 +34,15 @@ public:
     // they all have. For closing the window, which must not cut one short.
     bool wait_until_idle(std::chrono::milliseconds timeout);
 
+    // Whether every write queued has run.
+    bool idle();
+
 signals:
     // A write failed: what it was writing, and why.
     void write_failed(const QString& description, const QString& error);
+    // The last write queued has run. By the time a receiver on another
+    // thread hears it, another may have been queued: check idle().
+    void became_idle();
 
 private:
     void write_all();

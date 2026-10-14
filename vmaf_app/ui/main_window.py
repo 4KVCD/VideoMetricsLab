@@ -1244,8 +1244,12 @@ class MainWindow(QMainWindow):
         run_row.addWidget(self.parallel_jobs_check)
         run_row.addStretch(1)
 
-        load_btn = QPushButton(tr("Load analysis results..."))
+        self.load_btn = load_btn = QPushButton(tr("Load analysis results..."))
         load_btn.clicked.connect(self._on_load_saved_run)
+        # Frozen during a run with the files: a saved run can bring a
+        # reference of its own, which would change what the running videos
+        # mean.
+        self._file_action_widgets.append(load_btn)
         self.save_btn = save_btn = QPushButton(tr("Save selected results..."))
         save_btn.clicked.connect(self._on_save_selected)
         # One button. Opening the tab puts every completed row into the graph
@@ -1505,6 +1509,11 @@ class MainWindow(QMainWindow):
         self.source_info_label.setText(
             f"{media_info_string(info)}, {bitrate_string(info)}  ({format_hms(info.duration, decimals=1)})"
         )
+        self._check_rows_against_new_source(path)
+
+    def _check_rows_against_new_source(self, path: Path) -> None:
+        """The rows, after `path` became the reference: chosen, or taken
+        from a saved run (_adopt_source_from_run)."""
         # A new reference may have cached results with the test videos
         # already in the table. Each is a JSON file of several MB, so reading
         # them here holds the window for seconds with a few long videos. The
@@ -4345,7 +4354,12 @@ class MainWindow(QMainWindow):
         if result.resample_target is not None:
             row_data.media_path = result.source_info.path
         self.distorted_table.item(row, COL_CHECK).setCheckState(Qt.Unchecked)
-        self._set_row_info(row, result.distorted_info)
+        if result.resample_target is not None:
+            # As one added or found in the saved scores: what the test scales
+            # the reference to, not the reference's own details and bitrate.
+            self._set_resample_row_info(row, result.resample_target)
+        else:
+            self._set_row_info(row, result.distorted_info)
         self._set_row_metrics(row)
         self._rows[row].status_detail = tr("Loaded from saved run")
         self._refresh_row_state(row)
@@ -4353,7 +4367,11 @@ class MainWindow(QMainWindow):
 
     def _adopt_source_from_run(self, result) -> None:
         """Points the window at the reference a loaded run was measured
-        against, so the two cannot disagree."""
+        against, so the two cannot disagree, as choosing it would: the rows
+        are checked against it again. Without that, the old reference's
+        resolution tests stayed, each describing one video while its run
+        scaled the other, and no row's saved scores with the new reference
+        were looked for."""
         self._source_info = result.source_info
         self.source_edit.setText(str(result.source))
         info = result.source_info
@@ -4361,6 +4379,7 @@ class MainWindow(QMainWindow):
             tr("{media}, {bitrate}  ({duration})  [from saved run]", media=media_info_string(info),
                bitrate=bitrate_string(info), duration=format_hms(info.duration, decimals=1))
         )
+        self._check_rows_against_new_source(result.source)
 
     def _offer_to_switch_source(self, result) -> bool:
         """Asks before showing a run measured against a different reference.
@@ -4379,8 +4398,6 @@ class MainWindow(QMainWindow):
         if answer != QMessageBox.Yes:
             return False
         self._adopt_source_from_run(result)
-        # Every other row was scored against the previous reference.
-        self._invalidate_completed_results(range(len(self._rows)))
         return True
 
     def _on_save_selected(self) -> None:

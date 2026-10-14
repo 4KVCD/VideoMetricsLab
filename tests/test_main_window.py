@@ -34,6 +34,7 @@ from vmaf_app.core.settings import Settings
 from vmaf_app.ui import main_window as main_window_module
 from vmaf_app.ui import probe_worker as probe_worker_module
 from vmaf_app.ui.main_window import (
+    COL_BITRATE,
     COL_BLACK_BARS,
     COL_INFO,
     COL_PATH,
@@ -625,6 +626,7 @@ def test_live_run_disables_inputs_that_can_change_the_jobs(qapp):
     win._set_run_ui_active(True)
 
     assert all(not w.isEnabled() for w in win._file_action_widgets)
+    assert not win.load_btn.isEnabled()  # a saved run can bring another reference
     assert not win.options_panel.isEnabled()
     assert not win.tabs.isTabEnabled(TAB_SETTINGS)
     assert not win.run_btn.isEnabled()
@@ -976,6 +978,64 @@ def test_changing_the_source_removes_its_resolution_tests(qapp, tmp_path, monkey
     win._apply_source_info(small, _fake_video_info_res(str(small), 1280, 720))
 
     assert win._rows == [], "a 2560 downscale test survived a move to a 1280 source"
+
+
+def test_taking_a_saved_runs_reference_removes_the_old_references_resolution_tests(qapp, tmp_path, monkeypatch):
+    """Loading a run measured against another reference, the user agrees to
+    switch to it. That is a change of reference like any other: the
+    resolution tests made from the old reference go, or each would describe
+    one video while its run scaled the other."""
+    from vmaf_app.core import run_io
+
+    big = tmp_path / "big.mkv"
+    small = tmp_path / "small.mkv"
+    for path in (big, small):
+        path.write_bytes(b"x" * 100)
+    saved = tmp_path / "small run.metrics.json"
+    run_io.save_run(ComparisonResult(
+        source=small, distorted=tmp_path / "test.mkv", frames=[FrameScore(0, 0.0, 95.0), FrameScore(1, 1 / 30, 96.0)],
+        fps=30.0, model="version=vmaf_v0.6.1", source_crop=None, distorted_crop=None,
+        source_info=_fake_video_info_res(str(small), 1280, 720),
+        distorted_info=_fake_video_info_res(str(tmp_path / "test.mkv"), 1280, 720),
+    ), saved, label="test")
+
+    win = MainWindow()
+    win._apply_source_info(big, _fake_video_info_res(str(big), 3840, 2160))
+    _add_resolution_test(win, monkeypatch, "1440p")
+    monkeypatch.setattr(main_window_module.QFileDialog, "getOpenFileName", lambda *a, **k: (str(saved), ""))
+    monkeypatch.setattr(main_window_module.QMessageBox, "question", lambda *a, **k: main_window_module.QMessageBox.Yes)
+    told = []
+    monkeypatch.setattr(main_window_module.QMessageBox, "information", lambda _parent, title, _text: told.append(title))
+    win._on_load_saved_run()
+
+    assert win._source_info.path == small
+    assert [row.path.name for row in win._rows] == ["test.mkv"], "the 1440p test of big.mkv survived the switch"
+    assert told == ["Resolution tests removed"]
+
+
+def test_a_loaded_resolution_test_describes_the_test(qapp, tmp_path, monkeypatch):
+    """A resolution test loaded from a saved run says what it scales the
+    reference to, as one added does, not the reference's own details."""
+    from vmaf_app.core import run_io
+
+    source = tmp_path / "source.mkv"
+    source.write_bytes(b"x" * 100)
+    source_info = _fake_video_info_res(str(source), 3840, 2160)
+    target = ResampleTarget(1920, "1080p")
+    saved = tmp_path / "test.metrics.json"
+    run_io.save_run(ComparisonResult(
+        source=source, distorted=synthetic_resample_distorted_path(source, target),
+        frames=[FrameScore(0, 0.0, 95.0), FrameScore(1, 1 / 30, 96.0)], fps=30.0, model="version=vmaf_v0.6.1",
+        source_crop=None, distorted_crop=None, source_info=source_info, distorted_info=source_info,
+        resample_target=target,
+    ), saved)
+
+    win = MainWindow()
+    monkeypatch.setattr(main_window_module.QFileDialog, "getOpenFileName", lambda *a, **k: (str(saved), ""))
+    win._on_load_saved_run()
+
+    assert win.distorted_table.item(0, COL_INFO).text() == "Downscale to 1920x1080, upscale back to 3840x2160"
+    assert win.distorted_table.item(0, COL_BITRATE).text() == "N/A"
 
 
 # --------------------- a loaded run belongs to the source it was measured on

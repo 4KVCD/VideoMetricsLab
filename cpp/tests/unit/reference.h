@@ -9,6 +9,8 @@
 #include <string_view>
 #include <vector>
 
+#include "vml/results.h"
+
 namespace vml::test {
 
 // The JSON file of that name in tests/reference.
@@ -22,5 +24,15 @@ std::vector<double> reference_numbers(const nlohmann::json& list);
 // NaN. On Windows, where the Python app runs, that means exactly; elsewhere,
 // to 12 significant digits.
 bool same_number(double expected, double actual);
+
+// A result as make_reference.py's _result_json describes it, its numbers
+// written by float.hex().
+ComparisonResult result_from(const nlohmann::json& data);
+
+// A provenance as provenance_to_dict writes it.
+MetricProvenance provenance_from(const nlohmann::json& data);
+
+// Scores written by float.hex(), as the 32-bit floats results keep them.
+std::vector<float> floats_from(const nlohmann::json& list);
 
 }  // namespace vml::test

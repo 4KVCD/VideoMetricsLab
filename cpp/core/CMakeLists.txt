@@ -30,7 +30,9 @@ add_library(vml_core
     src/perceptual_cpu.cpp
     src/python_json.cpp
     src/python_text.cpp
+    src/result_json.cpp
     src/results.cpp
+    src/run_file.cpp
     src/run_json.cpp
     src/run_line.cpp
     src/settings.cpp

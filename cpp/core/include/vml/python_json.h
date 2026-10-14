@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include <string>
+#include <string_view>
 
 namespace vml {
 
@@ -21,6 +22,24 @@ std::string python_json_dumps(const nlohmann::ordered_json& value, int indent = 
 // allow_nan=False). A sorted json keeps its keys in Python's order. Throws
 // std::invalid_argument for NaN or an infinity, which Python refuses too.
 std::string python_json_compact(const nlohmann::json& value);
+
+// `value` as the Python app's saved runs write it (run_io.save_run):
+// json.dumps(value, allow_nan=False), on one line with ", " between items
+// and ": " after keys, keys in their order. Throws std::invalid_argument for
+// NaN or an infinity.
+std::string python_json_line(const nlohmann::ordered_json& value);
+
+// Python's str() of a value read from JSON: a text itself; anything else as
+// JSON writes it.
+std::string python_str(const nlohmann::json& value);
+
+// Python's repr() of a value read from JSON: None, True, 3.0, 'text',
+// [1, 2], {'a': 1}.
+std::string python_repr_of(const nlohmann::json& value);
+
+// data[name] as Python reads it from a dict: throws std::invalid_argument
+// for a missing key, saying the key in quotes as Python's KeyError does.
+const nlohmann::json& python_item(const nlohmann::json& data, std::string_view name);
 
 // Python's bool() of a value read from JSON: false for null, false, zero,
 // and an empty text, list or object.

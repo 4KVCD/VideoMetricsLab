@@ -42,10 +42,12 @@
 #include "options_panel.h"
 #include "test_videos.h"
 #include "theme.h"
+#include "vml/ffmpeg_run.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
+#include "vml/run_file.h"
 #include "widgets.h"
 
 namespace vml::app {
@@ -165,6 +167,27 @@ protected:
         window.inform_ = [kept](const QString& title, const QString& text) { kept->emplace_back(title, text); };
         return kept;
     }
+    // Answers the window's Yes or No questions with `yes`, keeping their
+    // titles in the order they are asked.
+    static std::shared_ptr<std::vector<QString>> answer_questions(MainWindow& window, bool yes) {
+        auto asked = std::make_shared<std::vector<QString>>();
+        window.ask_ = [asked, yes](const QString& title, const QString& /*text*/) {
+            asked->push_back(title);
+            return yes;
+        };
+        return asked;
+    }
+    // Answers the dialogs that open or save a file with `path`.
+    static void choose_file(MainWindow& window, const std::filesystem::path& path) {
+        const QString text = QString::fromStdString(platform::path_text(path));
+        window.open_file_ = [text](const QString& /*title*/, const QString& /*filter*/) { return text; };
+        window.save_file_ = [text](const QString& /*title*/, const QString& /*suggested*/,
+                                   const QString& /*filter*/) { return text; };
+    }
+    static QPushButton& save_button(MainWindow& window) { return *window.save_button_; }
+    static QPushButton& load_button(MainWindow& window) { return *window.load_button_; }
+    // Load analysis results..., answered by choose_file.
+    static void load_analysis_results(MainWindow& window) { window.on_load_saved_run(); }
     static OptionsPanel& options_panel(MainWindow& window) { return *window.options_panel_; }
     // Answers the CVVDP display editor in the user's place when it opens.
     static void answer_cvvdp_dialog(MainWindow& window, std::function<int(CvvdpDisplayDialog&)> answer) {
@@ -584,6 +607,7 @@ TEST_F(WindowTest, ARunPausedOnTheWayScoresAsTheCommandLineAndItsTimeLeavesThePa
     EXPECT_TRUE(running(window));
     EXPECT_FALSE(run_button(window).isEnabled());
     EXPECT_TRUE(source_edit(window).isReadOnly());
+    EXPECT_FALSE(load_button(window).isEnabled());  // a saved run can bring another reference
     EXPECT_EQ(awake.calls, std::vector<bool>{true});
     now = 103;
     pause_button(window).click();
@@ -597,6 +621,7 @@ TEST_F(WindowTest, ARunPausedOnTheWayScoresAsTheCommandLineAndItsTimeLeavesThePa
     EXPECT_EQ(awake.calls, (std::vector<bool>{true, false}));
     EXPECT_TRUE(run_button(window).isEnabled());
     EXPECT_FALSE(source_edit(window).isReadOnly());
+    EXPECT_TRUE(load_button(window).isEnabled());
 
     // The command line's scores for the same videos, with the same settings,
     // calculated afresh rather than read from what the window saved, are in
@@ -1016,6 +1041,115 @@ TEST_F(WindowTest, ANewReferenceRemovesTheResolutionTestsMadeFromTheOldOne) {
     EXPECT_TRUE(text.contains("\n  wide [downscale-480p-upscale].mkv")) << text.toStdString();
 }
 
+// --------------------------------------------------------------- saved runs
+
+TEST_F(WindowTest, ASavedRunLoadsIntoAnotherWindowAsAnUntickedRowWithItsScores) {
+    // A row's result saved to a file, then loaded where the window knows
+    // nothing of it: the run's reference becomes the window's, and the row
+    // shows the same scores, its metrics' columns ticked from what the file
+    // holds, unticked itself so that a run leaves it alone.
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    const std::filesystem::path saved = folder("b.metrics.json");
+    std::string psnr;
+    std::string xpsnr;
+    {
+        MainWindow window;
+        open_clips(window);
+        table(window).item(0, col_check)->setCheckState(Qt::Unchecked);
+        run_button(window).click();
+        ASSERT_TRUE(wait_until([&] { return !running(window); }));
+        ASSERT_EQ(state(window, 1), RowState::complete);
+        psnr = table(window).item(1, col_psnr)->text().toStdString();
+        xpsnr = table(window).item(1, col_xpsnr)->text().toStdString();
+        select_rows(window, 1, 1);
+        choose_file(window, saved);
+        save_button(window).click();
+        ASSERT_TRUE(wait_for_writes(window));
+    }
+    write_settings({{"default_compute_xpsnr", false}});  // not ticked for new rows here
+    MainWindow window;
+    choose_file(window, saved);
+    load_analysis_results(window);
+    ASSERT_EQ(names(window), std::vector<std::string>{"b.mkv"});
+    EXPECT_EQ(source_info(window)->path, clip("sources/ref.mkv"));
+    EXPECT_EQ(table(window).item(0, col_check)->checkState(), Qt::Unchecked);
+    EXPECT_FALSE(psnr.empty());
+    EXPECT_EQ(table(window).item(0, col_psnr)->text().toStdString(), psnr);
+    EXPECT_EQ(table(window).item(0, col_xpsnr)->text().toStdString(), xpsnr);
+    const std::vector<std::string> ticked = selected(window, 0);
+    EXPECT_NE(std::find(ticked.begin(), ticked.end(), "xpsnr"), ticked.end());
+    EXPECT_EQ(rows(window)[0]->status_detail.toStdString(), "Loaded from saved run");
+}
+
+TEST_F(WindowTest, ASavedRunsOtherReferenceTakenInRemovesTheResolutionTestsOfTheOldOne) {
+    // Loading a run measured against another reference, the user agrees to
+    // switch to it. That is a change of reference like any other: the
+    // resolution tests made from the old one go, or each would describe one
+    // video while its run scaled the other. (The Python app's own switch
+    // left them, until release/v2.1 92b357b.)
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    const std::filesystem::path saved = folder("a.metrics.json");
+    {
+        MainWindow window;
+        open_clips(window);
+        table(window).item(1, col_check)->setCheckState(Qt::Unchecked);
+        run_button(window).click();
+        ASSERT_TRUE(wait_until([&] { return !running(window); }));
+        select_rows(window, 0, 0);
+        choose_file(window, saved);
+        save_button(window).click();
+        ASSERT_TRUE(wait_for_writes(window));
+    }
+    MainWindow window;
+    const auto information = keep_information(window);
+    const auto asked = answer_questions(window, true);
+    choose_source(window, clip("sources/wide.mkv"));
+    ASSERT_TRUE(wait_until([&] { return source_info(window).has_value() && !reading(window); }));
+    add_resample_test(window, {854, "480p"});
+    choose_file(window, saved);
+    load_analysis_results(window);
+    EXPECT_EQ(*asked, std::vector<QString>{"Different reference video"});
+    EXPECT_EQ(source_info(window)->path, clip("sources/ref.mkv"));
+    EXPECT_EQ(names(window), std::vector<std::string>{"a.mkv"});
+    ASSERT_EQ(information->size(), 1u);
+    EXPECT_EQ(information->front().first.toStdString(), "Resolution tests removed");
+}
+
+TEST_F(WindowTest, AResolutionTestLoadedFromASavedRunDescribesTheTest) {
+    // As one added does: what it scales the reference to, with no bitrate of
+    // its own, not the reference's details. (The Python app's own load drew
+    // those, until release/v2.1 9423de8.)
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    MainWindow window;
+    choose_source(window, clip("sources/wide.mkv"));
+    ASSERT_TRUE(wait_until([&] { return source_info(window).has_value() && !reading(window); }));
+    const ResampleTarget target{854, "480p"};
+    ComparisonResult result;
+    result.source = clip("sources/wide.mkv");
+    result.distorted = synthetic_resample_distorted_path(result.source, target);
+    result.fps = source_info(window)->fps;
+    result.source_info = *source_info(window);
+    result.distorted_info = *source_info(window);
+    result.resample_target = target;
+    result.model_choice = std::string(auto_model_choice);
+    result.metric_results.add(FrameMetricResult{"vmaf", {0, 1}, {0.0, 0.04}, {95.0F, 96.0F},
+                                                current_ffmpeg_provenance("vmaf", "9.0.1")});
+    const std::filesystem::path saved = folder("test.metrics.json");
+    save_run(result, saved, "test");
+
+    choose_file(window, saved);
+    load_analysis_results(window);
+    ASSERT_EQ(table(window).rowCount(), 1);
+    EXPECT_EQ(table(window).item(0, col_info)->text().toStdString(), "Downscale to 854x480, upscale back to 1280x720");
+    EXPECT_EQ(table(window).item(0, col_bitrate)->text().toStdString(), "N/A");
+}
+
 TEST_F(WindowTest, ScoresSavedSinceAVideoWasAddedComeBackWhenItsMetricsAreTickedOrShown) {
     // As in the Python app, a row's saved scores are looked up again when
     // its metrics are ticked or one is shown again. Otherwise scores saved
@@ -1076,6 +1210,27 @@ TEST_F(WindowTest, ANewReferenceTakesAwayTheScoresMeasuredAgainstTheOldOne) {
     EXPECT_TRUE(running(window));
     cancel_button(window).click();
     ASSERT_TRUE(wait_until([&] { return !running(window); }));
+}
+
+TEST_F(WindowTest, ANewReferenceTakesAwayHowARunAgainstTheOldOneEnded) {
+    // A video's run against the old reference was cancelled. Under another
+    // reference that says nothing about it: the row is not calculated, as in
+    // the Python app, rather than still Cancelled.
+    if (!have_clips()) {
+        GTEST_SKIP() << "FFmpeg is not here";
+    }
+    MainWindow window;
+    open_clips(window);
+    run_button(window).click();
+    pause_button(window).click();
+    ASSERT_TRUE(wait_until([&] { return state(window, 0) == RowState::calculating; }));
+    cancel_button(window).click();
+    ASSERT_TRUE(wait_until([&] { return !running(window); }));
+    ASSERT_EQ(state(window, 0), RowState::cancelled);
+
+    choose_source(window, clip("encodes/b.mkv"));
+    ASSERT_TRUE(wait_until([&] { return source_info(window)->path == clip("encodes/b.mkv") && !reading(window); }));
+    EXPECT_EQ(state(window, 0), RowState::not_calculated);
 }
 
 TEST_F(WindowTest, CancelEndsAPausedRunAndMarksTheVideoItWasCalculating) {

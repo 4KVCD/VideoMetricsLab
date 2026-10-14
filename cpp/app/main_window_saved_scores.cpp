@@ -126,6 +126,7 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     }
     auto run = std::make_shared<CompletedRun>();
     run->result = found.result;
+    run->label = found.label;
     if (row_data.completed_run) {
         // The saved scores replace what the row shows when they hold
         // something it does not, ticked or not, as saved scores are shown
@@ -272,6 +273,7 @@ void MainWindow::drop_metric_results(int row, const std::vector<std::string>& ke
     } else {
         auto rest = std::make_shared<CompletedRun>();
         rest->result = run->result;
+        rest->label = run->label;
         rest->result.metric_results = std::move(kept);
         row_data.completed_run = std::move(rest);
     }

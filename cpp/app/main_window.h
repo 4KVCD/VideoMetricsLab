@@ -101,6 +101,9 @@ enum Tab : int { tab_videos, tab_graph, tab_frame_compare, tab_bitrate, tab_sett
 // A run's result on a row (the Python app's CompletedRun).
 struct CompletedRun {
     ComparisonResult result;
+    // Its name in saved runs and the graphs: the test video's, or the one a
+    // saved run or saved scores were given.
+    QString label;
     // Each metric column's score, and the frames of its scores that were
     // identical to the reference with how many it has: worked out once, as
     // a long video's take a while and its row is drawn again and again.
@@ -203,6 +206,7 @@ private:
     void start_source_probe(const std::filesystem::path& path);
     void on_source_probed(int generation, const Probed& probed);
     void apply_source_info(const std::filesystem::path& path, const VideoInfo& info);
+    void check_rows_against_new_source(const std::filesystem::path& path);
     void invalidate_completed_results(const std::vector<int>& rows);
     void show_reading(const QString& text);
     void show_ready();
@@ -291,6 +295,15 @@ private:
     void save_cvvdp_preset(const CvvdpDisplayDialog& dialog, const CvvdpSettings& settings,
                            const std::optional<std::string>& replacing, bool apply_to_rows = true);
     void on_cvvdp_delete_preset();
+
+    // -------------------------------------- saved runs (main_window_run_files.cpp)
+    void on_load_saved_run();
+    void load_saved_run(const std::filesystem::path& path);
+    void adopt_source_from_run(const ComparisonResult& result);
+    bool offer_to_switch_source(const ComparisonResult& result);
+    std::vector<std::shared_ptr<CompletedRun>> selected_runs() const;
+    void on_save_selected();
+    void submit_save(const ComparisonResult& result, const std::filesystem::path& path, const QString& label);
 
     // ------------------------------------------------------------ the scores
     std::vector<std::string> reusable_metric_keys(const RowData& row_data) const;
@@ -384,9 +397,16 @@ private:
     // Opens the CVVDP display editor and waits for it (exec); the tests
     // answer it in its place, as a user would.
     std::function<int(CvvdpDisplayDialog&)> run_cvvdp_dialog_;
-    // Shows a message with an OK button and waits for the click
-    // (QMessageBox::information); the tests read it in its place.
+    // The other dialogs that wait for the user, which the tests answer in
+    // the user's place: a message with an OK button (QMessageBox's
+    // information and critical), a question answered Yes or No, and the
+    // file dialogs (an empty answer is Cancel).
     std::function<void(const QString& title, const QString& text)> inform_;
+    std::function<void(const QString& title, const QString& text)> alert_;
+    std::function<bool(const QString& title, const QString& text)> ask_;
+    std::function<QString(const QString& title, const QString& filter)> open_file_;
+    std::function<QString(const QString& title, const QString& suggested, const QString& filter)> save_file_;
+    std::function<QString(const QString& title)> choose_folder_;
 
     // The lookup of saved scores under way: the rows it was asked about, and
     // a number each lookup raises, with which the window refuses the answers
@@ -452,6 +472,7 @@ private:
     QPushButton* pause_button_ = nullptr;
     QPushButton* cancel_button_ = nullptr;
     QCheckBox* parallel_jobs_check_ = nullptr;
+    QPushButton* load_button_ = nullptr;
     QPushButton* save_button_ = nullptr;
     QPushButton* show_graph_button_ = nullptr;
     QLabel* status_label_ = nullptr;

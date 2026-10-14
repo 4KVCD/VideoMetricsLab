@@ -49,11 +49,23 @@ void FileWrites::write_all() {
         } catch (const std::exception& error) {
             emit write_failed(description, QString::fromStdString(error.what()));
         }
-        std::lock_guard lock(mutex_);
-        if (--pending_ == 0) {
-            idle_.notify_all();
+        bool now_idle = false;
+        {
+            std::lock_guard lock(mutex_);
+            now_idle = --pending_ == 0;
+            if (now_idle) {
+                idle_.notify_all();
+            }
+        }
+        if (now_idle) {
+            emit became_idle();
         }
     }
+}
+
+bool FileWrites::idle() {
+    std::lock_guard lock(mutex_);
+    return pending_ == 0;
 }
 
 }  // namespace vml::app

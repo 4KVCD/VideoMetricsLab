@@ -2,8 +2,11 @@
 
 #include <cmath>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 
 #include "vml/number_format.h"
+#include "vml/python_text.h"
 
 namespace vml {
 
@@ -176,49 +179,51 @@ void write_value(std::string& out, const nlohmann::ordered_json& value, int inde
     }
 }
 
-// `value` with separators (",", ":"): no space anywhere. A sorted json's
-// keys come in the order Python's sort_keys gives (UTF-8's byte order is
-// the code points' order).
-void write_compact(std::string& out, const nlohmann::json& value) {
+// `value` on one line, with `item_separator` between items and
+// `key_separator` after keys, refusing NaN and infinities (allow_nan=False).
+// A sorted json's keys come in the order Python's sort_keys gives (UTF-8's
+// byte order is the code points' order); an ordered one's in their order.
+template <typename Json>
+void write_flat(std::string& out, const Json& value, std::string_view item_separator, std::string_view key_separator) {
     switch (value.type()) {
-        case nlohmann::json::value_t::object: {
+        case Json::value_t::object: {
             out += '{';
             bool first = true;
             for (auto item = value.begin(); item != value.end(); ++item) {
-                out += first ? "" : ",";
+                out += first ? std::string_view() : item_separator;
                 first = false;
                 write_string(out, item.key());
-                out += ':';
-                write_compact(out, item.value());
+                out += key_separator;
+                write_flat(out, item.value(), item_separator, key_separator);
             }
             out += '}';
             return;
         }
-        case nlohmann::json::value_t::array: {
+        case Json::value_t::array: {
             out += '[';
             bool first = true;
             for (const auto& item : value) {
-                out += first ? "" : ",";
+                out += first ? std::string_view() : item_separator;
                 first = false;
-                write_compact(out, item);
+                write_flat(out, item, item_separator, key_separator);
             }
             out += ']';
             return;
         }
-        case nlohmann::json::value_t::string:
-            write_string(out, value.get_ref<const std::string&>());
+        case Json::value_t::string:
+            write_string(out, value.template get_ref<const std::string&>());
             return;
-        case nlohmann::json::value_t::boolean:
-            out += value.get<bool>() ? "true" : "false";
+        case Json::value_t::boolean:
+            out += value.template get<bool>() ? "true" : "false";
             return;
-        case nlohmann::json::value_t::number_integer:
-            out += std::to_string(value.get<long long>());
+        case Json::value_t::number_integer:
+            out += std::to_string(value.template get<long long>());
             return;
-        case nlohmann::json::value_t::number_unsigned:
-            out += std::to_string(value.get<unsigned long long>());
+        case Json::value_t::number_unsigned:
+            out += std::to_string(value.template get<unsigned long long>());
             return;
-        case nlohmann::json::value_t::number_float: {
-            const double number = value.get<double>();
+        case Json::value_t::number_float: {
+            const double number = value.template get<double>();
             if (!std::isfinite(number)) {
                 throw std::invalid_argument("Out of range float values are not JSON compliant");
             }
@@ -240,8 +245,61 @@ std::string python_json_dumps(const nlohmann::ordered_json& value, int indent) {
 
 std::string python_json_compact(const nlohmann::json& value) {
     std::string out;
-    write_compact(out, value);
+    write_flat(out, value, ",", ":");
     return out;
+}
+
+std::string python_json_line(const nlohmann::ordered_json& value) {
+    std::string out;
+    write_flat(out, value, ", ", ": ");
+    return out;
+}
+
+std::string python_str(const nlohmann::json& value) {
+    return value.is_string() ? value.get<std::string>() : value.dump();
+}
+
+std::string python_repr_of(const nlohmann::json& value) {
+    switch (value.type()) {
+        case nlohmann::json::value_t::null:
+            return "None";
+        case nlohmann::json::value_t::boolean:
+            return value.get<bool>() ? "True" : "False";
+        case nlohmann::json::value_t::number_integer:
+            return std::to_string(value.get<long long>());
+        case nlohmann::json::value_t::number_unsigned:
+            return std::to_string(value.get<unsigned long long>());
+        case nlohmann::json::value_t::number_float:
+            return python_repr(value.get<double>());
+        case nlohmann::json::value_t::string:
+            return python_string_repr(value.get_ref<const std::string&>());
+        case nlohmann::json::value_t::array: {
+            std::string out = "[";
+            for (std::size_t i = 0; i < value.size(); ++i) {
+                out += (i == 0 ? "" : ", ") + python_repr_of(value[i]);
+            }
+            return out + "]";
+        }
+        case nlohmann::json::value_t::object: {
+            std::string out = "{";
+            bool first = true;
+            for (auto item = value.begin(); item != value.end(); ++item) {
+                out += (first ? "" : ", ") + python_string_repr(item.key()) + ": " + python_repr_of(item.value());
+                first = false;
+            }
+            return out + "}";
+        }
+        default:
+            return value.dump();
+    }
+}
+
+const nlohmann::json& python_item(const nlohmann::json& data, std::string_view name) {
+    const auto found = data.is_object() ? data.find(name) : data.end();
+    if (found == data.end()) {
+        throw std::invalid_argument(python_string_repr(name));
+    }
+    return *found;
 }
 
 }  // namespace vml

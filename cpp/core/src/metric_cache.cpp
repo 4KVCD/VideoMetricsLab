@@ -17,6 +17,7 @@
 #include "vml/npz.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
+#include "vml/result_json.h"
 #include "vml/sha256.h"
 
 namespace vml {
@@ -72,13 +73,6 @@ std::string folded(std::string text) {
     return text;
 }
 
-// A path as Python's str() writes it on this system: backslashes on Windows.
-std::string python_path_text(const std::filesystem::path& path) {
-    std::filesystem::path preferred = path;
-    preferred.make_preferred();
-    return platform::path_text(preferred);
-}
-
 // A provenance parameter's value: the JSON its text holds.
 std::optional<nlohmann::json> parameter(const MetricProvenance& provenance, const std::string& name) {
     const auto found = provenance.parameters.find(name);
@@ -116,45 +110,17 @@ void loaded_model(const MetricResultSet& results, const std::vector<MetricReques
     }
 }
 
-nlohmann::json provenance_json(const MetricProvenance& provenance) {
-    nlohmann::json parameters = nlohmann::json::object();
-    for (const auto& [name, text] : provenance.parameters) {
-        parameters[name] = nlohmann::json::parse(text);
-    }
-    return {{"implementation", provenance.implementation},
-            {"implementation_version", provenance.implementation_version},
-            {"compute_backend", provenance.compute_backend},
-            {"implementation_compatibility_id", provenance.implementation_compatibility_id},
-            {"parameters", parameters}};
-}
-
-// Python's str() of a JSON value read back.
-std::string python_str(const nlohmann::json& value) {
-    return value.is_string() ? value.get<std::string>() : value.dump();
-}
-
 // A provenance read back (provenance_from_dict); nothing for one of another
 // shape.
 std::optional<MetricProvenance> provenance_from(const nlohmann::json& data) {
     if (!data.is_object()) {
         return std::nullopt;
     }
-    const nlohmann::json parameters = data.contains("parameters") ? data["parameters"] : nlohmann::json::object();
-    if (!parameters.is_object()) {
+    try {
+        return provenance_from_dict(data);
+    } catch (const std::invalid_argument&) {
         return std::nullopt;
     }
-    for (const char* key : {"implementation", "implementation_version", "compute_backend", "implementation_compatibility_id"}) {
-        if (!data.contains(key)) {
-            return std::nullopt;
-        }
-    }
-    MetricProvenance provenance{python_str(data["implementation"]), python_str(data["implementation_version"]),
-                                python_str(data["compute_backend"]),
-                                python_str(data["implementation_compatibility_id"]), {}};
-    for (auto item = parameters.begin(); item != parameters.end(); ++item) {
-        provenance.parameters[item.key()] = item.value().dump();
-    }
-    return provenance;
 }
 
 const MetricProvenance& provenance_of(const LoadedMetric& metric) {
@@ -249,7 +215,7 @@ void write_atomically(const std::filesystem::path& path, const std::string& byte
 // scores looking the same).
 std::string metadata(const std::string& key, const char* kind, const MetricRequestSpec& spec,
                      const MetricProvenance& provenance) {
-    nlohmann::json made = provenance_json(provenance);
+    nlohmann::json made = provenance_to_dict(provenance);
     if (key != "vmaf") {
         made["implementation_version"] = "";
     }
@@ -295,81 +261,6 @@ void store_metric(const std::filesystem::path& directory, const SequenceMetricRe
     write_atomically(metric_path(directory, stored), npz_bytes(arrays), ".npz");
 }
 
-nlohmann::json crop_json(const std::optional<CropBox>& crop) {
-    if (!crop) {
-        return nullptr;
-    }
-    return {{"w", crop->w}, {"h", crop->h}, {"x", crop->x}, {"y", crop->y}};
-}
-
-std::optional<CropBox> crop_from_json(const nlohmann::json& data) {
-    if (data.is_null()) {
-        return std::nullopt;
-    }
-    return CropBox{data.at("w").get<int>(), data.at("h").get<int>(), data.at("x").get<int>(), data.at("y").get<int>()};
-}
-
-const char* scale_direction_value(ScaleDirection direction) {
-    return direction == ScaleDirection::source_to_distorted ? "source_to_distorted" : "distorted_to_source";
-}
-
-ScaleDirection scale_direction_from(const std::string& value) {
-    if (value == "source_to_distorted") {
-        return ScaleDirection::source_to_distorted;
-    }
-    if (value == "distorted_to_source") {
-        return ScaleDirection::distorted_to_source;
-    }
-    throw std::invalid_argument("'" + value + "' is not a valid ScaleDirection");
-}
-
-// A video's details as context.json saves them (video_info_to_dict).
-nlohmann::json video_json(const VideoInfo& info) {
-    return {{"path", python_path_text(info.path)},
-            {"width", info.width},
-            {"height", info.height},
-            {"fps", info.fps},
-            {"duration", info.duration},
-            {"nb_frames", info.nb_frames},
-            {"codec_name", info.codec_name},
-            {"sar", info.sar},
-            {"pix_fmt", info.pix_fmt},
-            {"bit_rate", info.bit_rate},
-            {"bit_rate_whole_file", info.bit_rate_whole_file},
-            {"nominal_fps", info.nominal_fps},
-            {"average_fps", info.average_fps},
-            {"color_range", info.color_range},
-            {"color_space", info.color_space},
-            {"color_transfer", info.color_transfer},
-            {"color_primaries", info.color_primaries},
-            {"chroma_location", info.chroma_location}};
-}
-
-// A video's details read back (video_info_from_dict): a field missing from
-// an older file loads as its default.
-VideoInfo video_from_json(const nlohmann::json& data) {
-    VideoInfo info;
-    info.path = platform::path_from_text(data.at("path").get<std::string>());
-    info.width = data.at("width").get<int>();
-    info.height = data.at("height").get<int>();
-    info.fps = data.at("fps").get<double>();
-    info.duration = data.at("duration").get<double>();
-    info.nb_frames = data.at("nb_frames").get<long long>();
-    info.codec_name = data.at("codec_name").get<std::string>();
-    info.sar = data.value("sar", std::string("1:1"));
-    info.pix_fmt = data.value("pix_fmt", std::string());
-    info.bit_rate = data.value("bit_rate", 0LL);
-    info.bit_rate_whole_file = data.value("bit_rate_whole_file", false);
-    info.nominal_fps = data.value("nominal_fps", 0.0);
-    info.average_fps = data.value("average_fps", 0.0);
-    info.color_range = data.value("color_range", std::string());
-    info.color_space = data.value("color_space", std::string());
-    info.color_transfer = data.value("color_transfer", std::string());
-    info.color_primaries = data.value("color_primaries", std::string());
-    info.chroma_location = data.value("chroma_location", std::string());
-    return info;
-}
-
 nlohmann::json optional_text(const std::optional<std::string>& text) {
     return text ? nlohmann::json(*text) : nlohmann::json(nullptr);
 }
@@ -381,15 +272,13 @@ nlohmann::json context_json(const ComparisonResult& result, const std::string& l
             {"source", python_path_text(result.source)},
             {"distorted", python_path_text(result.distorted)},
             {"fps", result.fps},
-            {"source_crop", crop_json(result.source_crop)},
-            {"distorted_crop", crop_json(result.distorted_crop)},
-            {"source_info", video_json(result.source_info)},
-            {"distorted_info", video_json(result.distorted_info)},
+            {"source_crop", nlohmann::json(crop_to_dict(result.source_crop))},
+            {"distorted_crop", nlohmann::json(crop_to_dict(result.distorted_crop))},
+            {"source_info", nlohmann::json(video_info_to_dict(result.source_info))},
+            {"distorted_info", nlohmann::json(video_info_to_dict(result.distorted_info))},
             {"scale_direction", scale_direction_value(result.scale_direction)},
             {"scale_algorithm", result.scale_algorithm},
-            {"resample_target", result.resample_target ? nlohmann::json{{"width", result.resample_target->width},
-                                                                        {"label", result.resample_target->label}}
-                                                       : nlohmann::json(nullptr)},
+            {"resample_target", nlohmann::json(resample_target_to_dict(result.resample_target))},
             {"compared_frame_count", result.compared_frame_count},
             {"model", result.model},
             {"model_choice", optional_text(result.model_choice)},
@@ -623,18 +512,18 @@ std::optional<Size> compared_size(const std::filesystem::path& directory) {
         if (!context || !context->is_object()) {
             return std::nullopt;
         }
-        const VideoInfo source = video_from_json(context->at("source_info"));
+        const VideoInfo source = video_info_from_dict(context->at("source_info"));
         if (python_truthy(context->value("resample_target", nlohmann::json()))) {
             // A resolution test compares at the source's own (cropped) size:
             // the downscale is undone before the comparison.
             return resample_analysis_dimensions(source,
-                                                crop_from_json(context->value("source_crop", nlohmann::json())));
+                                                crop_from_dict(context->value("source_crop", nlohmann::json())));
         }
-        const VideoInfo distorted = video_from_json(context->at("distorted_info"));
+        const VideoInfo distorted = video_info_from_dict(context->at("distorted_info"));
         return compared_dimensions(source, distorted,
                                    scale_direction_from(context->at("scale_direction").get<std::string>()),
-                                   crop_from_json(context->value("source_crop", nlohmann::json())),
-                                   crop_from_json(context->value("distorted_crop", nlohmann::json())));
+                                   crop_from_dict(context->value("source_crop", nlohmann::json())),
+                                   crop_from_dict(context->value("distorted_crop", nlohmann::json())));
     } catch (const nlohmann::json::exception&) {
         return std::nullopt;
     } catch (const std::invalid_argument&) {
@@ -1095,10 +984,10 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
         result.fps = context->at("fps").get<double>();
         const nlohmann::json model = context->value("model", nlohmann::json(""));
         result.model = model.is_string() ? model.get<std::string>() : std::string();
-        result.source_crop = crop_from_json(context->value("source_crop", nlohmann::json()));
-        result.distorted_crop = crop_from_json(context->value("distorted_crop", nlohmann::json()));
-        result.source_info = video_from_json(context->at("source_info"));
-        result.distorted_info = video_from_json(context->at("distorted_info"));
+        result.source_crop = crop_from_dict(context->value("source_crop", nlohmann::json()));
+        result.distorted_crop = crop_from_dict(context->value("distorted_crop", nlohmann::json()));
+        result.source_info = video_info_from_dict(context->at("source_info"));
+        result.distorted_info = video_info_from_dict(context->at("distorted_info"));
         result.scale_direction = scale_direction_from(
             context->value("scale_direction", std::string(scale_direction_value(recipe.scale_direction))));
         const nlohmann::json algorithm = context->value("scale_algorithm", nlohmann::json());

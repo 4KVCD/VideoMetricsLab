@@ -17,6 +17,7 @@ add_library(vml_app STATIC
     main_window.cpp
     main_window_options.cpp
     main_window_run.cpp
+    main_window_run_files.cpp
     main_window_saved_scores.cpp
     options_panel.cpp
     probe_worker.cpp
