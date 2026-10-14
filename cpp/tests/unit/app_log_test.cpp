@@ -9,9 +9,12 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "reference.h"
 #include "test_videos.h"
+#include "vml/platform/system.h"
 
 namespace vml {
 namespace {
@@ -77,6 +80,34 @@ TEST(AppLog, StartsAgainAtFiveMegabytesKeepingFourOlderFiles) {
         }
     }
     EXPECT_EQ(next, lines);
+}
+
+// The run's lanes name their threads for the log, and end as soon as the
+// run does: threads named, writing a line and ending, many at once, leave
+// the heap whole (MinGW's thread-local storage corrupted it when a name was
+// a std::string), and each line carries its own thread's name.
+TEST(AppLog, ThreadsNamedForTheLogEndCleanly) {
+    const test::Folder folder;
+    const std::filesystem::path logs = folder / "logs";
+    ASSERT_TRUE(app_log::start_logging(logs).has_value());
+    for (int round = 0; round < 50; ++round) {
+        std::vector<std::thread> threads;
+        for (int lane = 0; lane < 8; ++lane) {
+            threads.emplace_back([lane] {
+                app_log::set_thread_name("vmaf-cpu-" + std::to_string(lane));
+                app_log::write(app_log::Level::info, "vml.test", "lane " + std::to_string(lane));
+            });
+        }
+        for (std::thread& thread : threads) {
+            thread.join();
+        }
+    }
+    app_log::stop_logging();
+    const std::string log = platform::read_file(logs / "VideoMetricsLab.log").value_or("");
+    for (int lane = 0; lane < 8; ++lane) {
+        EXPECT_NE(log.find("[vmaf-cpu-" + std::to_string(lane) + "] vml.test: lane " + std::to_string(lane)),
+                  std::string::npos);
+    }
 }
 
 }  // namespace

@@ -1,6 +1,7 @@
 #include "vml/app_log.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -62,14 +63,25 @@ void update_threshold(const State& log) {
     threshold = lowest;
 }
 
-thread_local std::string thread_name;
+// The calling thread's name, in plain characters, with nothing to destroy
+// when the thread ends: MinGW's emulated thread-local storage corrupted the
+// heap as threads holding a std::string here ended (6 runs in 20 of a test
+// whose lanes end at once).
+constexpr std::size_t name_room = 64;
+thread_local std::array<char, name_room> thread_name{};
 std::atomic<int> unnamed_threads{0};
 
-const std::string& current_thread_name() {
-    if (thread_name.empty()) {
-        thread_name = "Thread-" + std::to_string(++unnamed_threads);
+void name_this_thread(std::string_view name) {
+    const std::size_t length = std::min(name.size(), name_room - 1);
+    std::copy_n(name.data(), length, thread_name.data());
+    thread_name[length] = '\0';
+}
+
+std::string current_thread_name() {
+    if (thread_name[0] == '\0') {
+        name_this_thread("Thread-" + std::to_string(++unnamed_threads));
     }
-    return thread_name;
+    return thread_name.data();
 }
 
 std::string level_name(int level) {
@@ -219,7 +231,7 @@ std::optional<std::filesystem::path> start_logging(const std::optional<std::file
     }
     const std::uintmax_t size = std::filesystem::file_size(log.path, error);
     log.size = error ? 0 : size;
-    thread_name = "MainThread";
+    name_this_thread("MainThread");
     update_threshold(log);
     return log.path;
 }
@@ -255,7 +267,7 @@ void write(int level, std::string_view name, std::string_view text) {
     }
 }
 
-void set_thread_name(std::string name) { thread_name = std::move(name); }
+void set_thread_name(std::string name) { name_this_thread(name); }
 
 std::vector<std::filesystem::path> log_files(const std::optional<std::filesystem::path>& directory) {
     // As the Python app's glob("*.log*"): the log, its rotations, the crash
