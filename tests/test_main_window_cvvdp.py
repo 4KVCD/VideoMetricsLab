@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from tests.factories import fake_run_result, fake_video_info
 from vmaf_app.core import result_cache
-from vmaf_app.core.cvvdp import BUILTIN_PRESETS, DEFAULT_PRESET, CvvdpSettings
+from vmaf_app.core.cvvdp import BUILTIN_PRESETS, DEFAULT_PRESET, CvvdpDisplay, CvvdpSettings
 from vmaf_app.core.metric_results import MetricProvenance, MetricResultSet, SequenceMetricResult
 from vmaf_app.ui import main_window as main_window_module
 from vmaf_app.ui.main_window import COL_CVVDP, COL_VMAF, CompletedRun, CvvdpDisplayDialog, MainWindow
@@ -260,6 +260,20 @@ def test_renaming_a_preset_keeps_other_videos_on_it_without_asking(qapp, monkeyp
     assert second_data.cvvdp_preset == "Desk monitor"
     assert second_data.cvvdp.display.peak_luminance == 300
     win.close()
+
+
+def test_the_display_editor_keeps_the_values_the_user_did_not_change(qapp):
+    """Exactly, though the boxes show them rounded: "Apply without saving"
+    with nothing changed must leave the display, and its CVVDP score, as
+    they are. Compared with round(), which rounds a half to even where the
+    box rounds it up, 350.5 nits came back as 351 and 12.25 lux as 12.3."""
+    display = CvvdpDisplay(viewing_distance_m=0.74725, peak_luminance=350.5, ambient_lux=12.25,
+                           reflectivity=0.0123456789)
+    dialog = CvvdpDisplayDialog(display)
+    assert dialog.display() == display
+    dialog.peak_spin.setValue(400)
+    assert dialog.display().peak_luminance == 400
+    assert dialog.display().ambient_lux == 12.25
 
 
 def test_an_empty_cvvdp_cell_names_the_scores_saved_for_other_displays(qapp, tmp_path, monkeypatch):
