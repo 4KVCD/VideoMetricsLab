@@ -10,8 +10,9 @@
 // tools. What it cannot do yet (FFmpeg pairing the frames, with
 // VML_VMAF_PIPES=canvas) it says, and exits with code 2, rather than giving
 // other answers than the Python app would.
-// It neither reads nor saves the app's saved scores yet: it calculates
-// every score, as the Python app does with --recalculate, and keeps none.
+// Scores are read from and saved to the app's saved scores (metric_cache.h),
+// which both apps share: a score saved before is not calculated again
+// (unless --recalculate), and every result is saved as it comes in.
 #pragma once
 
 #include <filesystem>

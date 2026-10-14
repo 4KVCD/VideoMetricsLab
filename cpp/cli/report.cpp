@@ -351,9 +351,7 @@ std::string results_table(const VideoInfo& source, const std::vector<TestVideo>&
     add_summary(lines, videos, summaries);
     if (cancelled) {
         lines.emplace_back("");
-        // The Python app adds that the scores finished before were saved;
-        // this version saves none yet (compare.h).
-        lines.emplace_back("Cancelled.");
+        lines.emplace_back("Cancelled: the scores finished before that are saved.");
     }
     std::string text;
     for (std::size_t i = 0; i < lines.size(); ++i) {

@@ -490,7 +490,15 @@ void JobRun::finish() {
     // SSIMULACRA2 and Butteraugli, say) is reported like a failed task.
     const std::optional<PerceptualTaskOutput> perceptual = perceptual_so_far();
     const PerceptualFailures metric_failures = perceptual ? perceptual->failures : PerceptualFailures{};
-    const std::optional<ComparisonResult> result = merged();
+    // Cancelled before any task finished, the video is cancelled, whatever
+    // scores of it are saved.
+    const bool calculated = perceptual.has_value() || std::any_of(tasks_.begin(), tasks_.end(), [](const TaskState& state) {
+                                return state.result.has_value();
+                            });
+    std::optional<ComparisonResult> result;
+    if (!cancelled || calculated) {
+        result = merged();
+    }
     // The tasks' own results are not needed once the video's is made: a
     // long list would otherwise hold every video's scores twice.
     for (TaskState& state : tasks_) {
@@ -653,11 +661,17 @@ std::optional<ComparisonResult> JobRun::merged() const {
     if (ffmpeg == nullptr) {
         std::swap(ffmpeg, gpu);
     }
+    // The saved scores the run keeps, if it keeps any.
+    const bool cached = job_.cached_result && !job_.cached_metrics.empty();
     std::optional<ComparisonResult> result;
     if (ffmpeg != nullptr) {
         result = *ffmpeg;
+    } else if (cached) {
+        // FFmpeg's metrics are all saved: the saved result is the base, with
+        // its crops, frame count and the videos' details.
+        result = *job_.cached_result;
     }
-    if (result && gpu != nullptr) {
+    if (ffmpeg != nullptr && gpu != nullptr) {
         for (const std::string& key : gpu->metric_results.keys()) {
             if (const FrameMetricResult* frame = gpu->metric_results.frame(key)) {
                 result->metric_results.add(*frame);
@@ -697,6 +711,34 @@ std::optional<ComparisonResult> JobRun::merged() const {
             } else {
                 result->metric_results.add(*perceptual->metrics.sequence(key));
             }
+        }
+    }
+    if (result && cached) {
+        // Saved metrics fill in only what this run did not calculate: a new
+        // score always replaces the saved one.
+        bool carried_vmaf = false;
+        bool carried_v1 = false;
+        for (const std::string& key : job_.cached_metrics.keys()) {
+            if (result->has_metric(key)) {
+                continue;
+            }
+            if (const FrameMetricResult* frame = job_.cached_metrics.frame(key)) {
+                result->metric_results.add(*frame);
+            } else {
+                result->metric_results.add(*job_.cached_metrics.sequence(key));
+            }
+            carried_vmaf = carried_vmaf || key == "vmaf";
+            carried_v1 = carried_v1 || key == "vmaf_v1";
+        }
+        // A saved VMAF keeps its model when the run calculated no VMAF: with
+        // VMAF on the GPU, a part of FFmpeg's metrics that is all saved is
+        // not calculated again, and the saved result is not the base.
+        if (carried_vmaf && result->model.empty()) {
+            result->model = job_.cached_result->model;
+        }
+        if (carried_v1 && !result->model_choice_v1) {
+            result->model_v1 = job_.cached_result->model_v1;
+            result->model_choice_v1 = job_.cached_result->model_choice_v1;
         }
     }
     return result;
@@ -839,10 +881,22 @@ void Scheduler::drain_queue(Pool pool) {
 
 std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
                                    const std::vector<std::string>& metric_keys,
-                                   const PerceptualBackends& perceptual_backends) {
-    const bool vmaf = contains(metric_keys, "vmaf");
-    const bool neg = contains(metric_keys, "vmaf_neg");
-    const bool v1 = contains(metric_keys, "vmaf_v1");
+                                   const PerceptualBackends& perceptual_backends, const MetricResultSet& saved) {
+    // FFmpeg's metrics are calculated together: unless all of them are saved,
+    // a saved one is calculated again with the rest. The others are each
+    // left out when saved.
+    const bool ffmpeg_saved = std::all_of(metric_keys.begin(), metric_keys.end(), [&saved](const std::string& key) {
+        return is_perceptual_metric(key) || saved.has(key);
+    });
+    std::vector<std::string> keys;
+    for (const std::string& key : metric_keys) {
+        if (is_perceptual_metric(key) ? !saved.has(key) : !ffmpeg_saved) {
+            keys.push_back(key);
+        }
+    }
+    const bool vmaf = contains(keys, "vmaf");
+    const bool neg = contains(keys, "vmaf_neg");
+    const bool v1 = contains(keys, "vmaf_v1");
     GpuModels on_gpu;
     if (vmaf || neg || v1) {
         // The size frames are compared at, where it is known before the run:
@@ -863,7 +917,7 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     // GPU passes, holding the GPU meanwhile. CVVDP runs on the GPU only.
     MetricTask vship{std::string(perceptual_task), {}};
     MetricTask perceptual_cpu{std::string(perceptual_cpu_task), {}};
-    for (const std::string& key : metric_keys) {
+    for (const std::string& key : keys) {
         if (is_perceptual_metric(key)) {
             const auto chosen = perceptual_backends.find(key);
             const bool cpu = key != "cvvdp" && chosen != perceptual_backends.end() && chosen->second == "cpu";
@@ -873,6 +927,16 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
         const bool scored_on_gpu = std::any_of(on_gpu.begin(), on_gpu.end(),
                                                [&key](const auto& model) { return model.first == key; });
         (scored_on_gpu ? gpu : ffmpeg).metric_keys.push_back(key);
+    }
+    // Once FFmpeg's metrics are split between the GPU and the CPU, a part
+    // whose metrics are all saved is not run.
+    if (vmaf || neg || v1) {
+        for (MetricTask* part : {&ffmpeg, &gpu}) {
+            if (std::all_of(part->metric_keys.begin(), part->metric_keys.end(),
+                            [&saved](const std::string& key) { return saved.has(key); })) {
+                part->metric_keys.clear();
+            }
+        }
     }
     std::vector<MetricTask> tasks;
     for (MetricTask* task : {&ffmpeg, &gpu, &vship, &perceptual_cpu}) {

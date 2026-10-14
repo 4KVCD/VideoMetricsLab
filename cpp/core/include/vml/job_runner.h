@@ -70,9 +70,17 @@ using PerceptualBackends = std::map<std::string, std::string, std::less<>>;
 // SSIMULACRA2 and Butteraugli set to the CPU (`perceptual_backends`), which
 // make a task of their own on the CPU. `options.model` is the run's model=
 // value; `options.model_v1` is empty while VMAF v1's Auto is not resolved.
+//
+// Metrics with a saved score the run keeps (`saved`) are left out as the
+// Python app's planner leaves them out (build_execution_plan, _by_place):
+// SSIMULACRA2, Butteraugli and CVVDP each on its own; FFmpeg's together, as
+// they are calculated together, except that a part of them that runs in a
+// place of its own (VMAF on the GPU, or what stays on the CPU) is left out
+// when all of that part is saved.
 std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
                                    const std::vector<std::string>& metric_keys,
-                                   const PerceptualBackends& perceptual_backends = {});
+                                   const PerceptualBackends& perceptual_backends = {},
+                                   const MetricResultSet& saved = MetricResultSet());
 
 // One video to compare with its source, with what to calculate.
 struct VmafJob {
@@ -81,10 +89,16 @@ struct VmafJob {
     VmafOptions options;
     // Replaces the result's `distorted` path; none keeps distorted_info's.
     std::optional<std::filesystem::path> result_distorted_path;
-    std::vector<std::string> metric_keys;  // the metrics to calculate
+    std::vector<std::string> metric_keys;  // the metrics asked for
     std::vector<MetricTask> tasks;         // which calculate them (plan_tasks)
     PerceptualBackends perceptual_backends;
     CvvdpSettings cvvdp;  // the display CVVDP models
+    // The saved result, where the run keeps some of its scores, and those
+    // scores (the Python app's cached_result and cached_metrics): they fill
+    // in what the run does not calculate, and a new score replaces a saved
+    // one. With FFmpeg's metrics all saved, the saved result is the base.
+    std::optional<ComparisonResult> cached_result;
+    MetricResultSet cached_metrics;
 };
 
 // The state of one of a video's tasks, for its run line (run_line.h).

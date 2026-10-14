@@ -1,7 +1,8 @@
 // Running a list of videos' metrics (job_runner.h), with a stand-in for
 // run_vmaf: a video's tasks run at once and make one result, a task that
 // fails leaves the video's other metrics, a cancelled run keeps what had
-// finished, and videos share the CPU's two lanes and the GPU's one.
+// finished, videos share the CPU's two lanes and the GPU's one, and saved
+// scores are kept instead of calculated again.
 #include "vml/job_runner.h"
 
 #include <gtest/gtest.h>
@@ -398,6 +399,108 @@ TEST(JobRunner, PerceptualMetricsAloneMakeAResult) {
     EXPECT_EQ(result.source_crop, (CropBox{3840, 1608, 0, 276}));
     ASSERT_NE(result.metric_results.frame("ssimulacra2"), nullptr);
     EXPECT_EQ(result.metric_results.frame("ssimulacra2")->frame, (std::vector<int>{0, 3, 6}));
+}
+
+// Saved scores, scored on frames 0 and 1.
+MetricResultSet saved_scores(const std::vector<std::string>& keys) {
+    std::vector<std::pair<std::string, std::vector<int>>> metrics;
+    for (const std::string& key : keys) {
+        metrics.emplace_back(key, std::vector<int>{0, 1});
+    }
+    return result_with(metrics).metric_results;
+}
+
+// The saved scores a run keeps are left out of its tasks, as the Python app
+// plans them: FFmpeg's metrics are calculated together, so a saved one is
+// calculated again with the rest unless all of them are saved; SSIMULACRA2,
+// Butteraugli and CVVDP are each left out.
+TEST(JobRunner, SavedScoresAreNotCalculatedAgain) {
+    VideoInfo source;
+    source.path = "reference.mkv";
+    source.width = 1920;
+    source.height = 1080;
+    source.pix_fmt = "yuv420p";
+    VideoInfo test = source;
+    test.path = "encode.mkv";
+    VmafOptions options;
+    options.vmaf_on_gpu = false;  // VMAF with FFmpeg's other metrics
+    const std::vector<std::string> asked{"vmaf", "psnr", "ssimulacra2", "butteraugli"};
+
+    std::vector<MetricTask> planned = plan_tasks(source, test, options, asked, {}, saved_scores({"vmaf", "ssimulacra2"}));
+    ASSERT_EQ(planned.size(), 2u);
+    EXPECT_EQ(planned[0].backend, "ffmpeg");
+    EXPECT_EQ(planned[0].metric_keys, (std::vector<std::string>{"vmaf", "psnr"}));
+    EXPECT_EQ(planned[1].backend, perceptual_task);
+    EXPECT_EQ(planned[1].metric_keys, std::vector<std::string>{"butteraugli"});
+
+    planned = plan_tasks(source, test, options, asked, {}, saved_scores({"vmaf", "psnr", "butteraugli"}));
+    ASSERT_EQ(planned.size(), 1u);
+    EXPECT_EQ(planned[0].backend, perceptual_task);
+    EXPECT_EQ(planned[0].metric_keys, std::vector<std::string>{"ssimulacra2"});
+}
+
+// The saved scores a run keeps fill in its result where it calculates none,
+// with the saved VMAF's model; a score it calculates replaces the saved one.
+TEST(JobRunner, SavedScoresFillInWhatTheRunDoesNotCalculate) {
+    // The first video's VMAF is saved and not calculated; the second's is
+    // calculated again with its PSNR (VMAF on the CPU).
+    std::vector<VmafJob> jobs{job_of({{"ffmpeg", {"psnr"}}}), job_of({{"ffmpeg", {"vmaf", "psnr"}}})};
+    for (VmafJob& job : jobs) {
+        job.metric_keys = {"vmaf", "psnr", "ssimulacra2"};
+        job.cached_result = result_with({{"vmaf", {0, 1}}, {"ssimulacra2", {0, 1}}}, "version=vmaf_4k_v0.6.1");
+        job.cached_metrics = job.cached_result->metric_results;
+    }
+    Reported reported;
+    run_jobs(
+        jobs, 1, reported.events(),
+        [](const VmafJob&, const VmafOptions& options, const ProgressCallback&, const StatusCallback&,
+           const CancelToken&) {
+            if (!options.compute_vmaf) {
+                return result_with({{"psnr", {0, 1}}});
+            }
+            ComparisonResult result = result_with({{"psnr", {0, 1}}}, "version=vmaf_v0.6.1");
+            result.metric_results.add(FrameMetricResult{"vmaf", {0, 1}, {0.0, 1 / 24.0}, {80.0F, 90.0F}, {}});
+            return result;
+        },
+        24, CancelToken());
+
+    ASSERT_EQ(reported.finished.size(), 2u);
+    for (const auto& [index, result] : reported.finished) {
+        for (const std::string key : {"vmaf", "psnr", "ssimulacra2"}) {
+            EXPECT_TRUE(result.has_metric(key)) << index << " " << key;
+        }
+    }
+    const ComparisonResult& kept = reported.finished.at(0);
+    EXPECT_EQ(kept.model, "version=vmaf_4k_v0.6.1");
+    EXPECT_EQ(kept.metric_results.frame("vmaf")->values, (std::vector<float>{0.0F, 1.0F}));
+    const ComparisonResult& replaced = reported.finished.at(1);
+    EXPECT_EQ(replaced.model, "version=vmaf_v0.6.1");
+    EXPECT_EQ(replaced.metric_results.frame("vmaf")->values, (std::vector<float>{80.0F, 90.0F}));
+}
+
+// Cancelled before it calculated anything, a video is cancelled, whatever of
+// it is saved.
+TEST(JobRunner, AVideoCancelledBeforeAnyScoreIsCancelledWhateverIsSaved) {
+    VmafJob job = job_of({{"ffmpeg", {"psnr"}}});
+    job.metric_keys = {"vmaf", "psnr"};
+    job.cached_result = result_with({{"vmaf", {0, 1}}}, "version=vmaf_v0.6.1");
+    job.cached_metrics = job.cached_result->metric_results;
+    const std::vector<VmafJob> jobs{job};
+    CancelToken cancel;
+    Reported reported;
+    run_jobs(
+        jobs, 1, reported.events(),
+        [&cancel](const VmafJob&, const VmafOptions&, const ProgressCallback&, const StatusCallback&,
+                  const CancelToken&) -> ComparisonResult {
+            cancel.cancel();
+            throw Cancelled();
+        },
+        24, cancel);
+
+    EXPECT_TRUE(reported.finished.empty());
+    EXPECT_TRUE(reported.partial.empty());
+    EXPECT_TRUE(reported.failed.empty());
+    EXPECT_EQ(reported.cancelled, 1);
 }
 
 }  // namespace

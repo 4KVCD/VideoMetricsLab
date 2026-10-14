@@ -28,11 +28,12 @@ on every such GPU.
     .venv\Scripts\python.exe cpp\tests\reference\make_reference.py
 
 On real videos, `tests/golden/golden.py` holds the command lines to each
-other: it runs the cases in `cases.json` (67 runs covering the ways the app
+other: it runs the cases in `cases.json` (78 runs covering the ways the app
 scores videos) with either app, each with a fresh profile (and the case's
-own settings, where it has any), and compares the exit codes, the tables,
-the per-frame CSV files character for character, and the JSON results. The
-clips are 2-second cuts of real test videos
+own settings, where it has any; some cases save scores in it first, with
+either app), and compares the exit codes, the tables, the per-frame CSV
+files character for character, the JSON results, and what each run saved in
+the saved scores. The clips are 2-second cuts of real test videos
 (`clips.json`; `golden.py clips` makes them, outside the repository). Two
 runs of the Python app on this PC give identical results in every case, the
 GPU metrics included, so the C++ app is held to identical results here too.
@@ -41,7 +42,7 @@ not exactly what FFmpeg's scale filter gives (gpu_frames.py's plan_decode);
 both apps scale it the same way, and the `...-by-ffmpeg` case holds them to
 each other on FFmpeg's route too.
 
-    python cpp\tests\golden\golden.py run --out python-run
+    python cpp\tests\golden\golden.py run --out python-run --cpp-app path\to\vml-cli.exe
     python cpp\tests\golden\golden.py run --out cpp-run --app path\to\vml-cli.exe
     python cpp\tests\golden\golden.py compare python-run cpp-run
 
@@ -97,9 +98,11 @@ then calculate VMAF and the others on the CPU, and libjxl's tools
 SSIMULACRA2 and Butteraugli, as in the Python app. For a run it cannot do
 yet (FFmpeg pairing the frames with `VML_VMAF_PIPES=canvas`), it says what it
 cannot do and exits with code 2, rather than giving other answers than the
-Python app. It neither reads nor saves the app's saved scores yet, and
-calculates every score. `vml-cli devices` says FFmpeg's version and where
-each metric is calculated on the PC, as the Python app's does.
+Python app. It reads and saves the app's saved scores, in the same files as
+the Python app: a score either app saved is not calculated again (unless
+`--recalculate`), by the same rules. `vml-cli devices` says FFmpeg's
+version and where each metric is calculated on the PC, as the Python app's
+does.
 
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,vmaf_neg
     build\windows\cli\Release\vml-cli.exe compare reference.mkv encode.mkv -m vmaf,psnr --vmaf-on cpu

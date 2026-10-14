@@ -25,6 +25,7 @@
 #include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
 #include "vml/job_runner.h"
+#include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/platform/console.h"
@@ -521,11 +522,31 @@ private:
 
 // Runs the jobs (job_runner.h), keeping each video's result, or why it or
 // some of its metrics failed, in its TestVideo (`targets` holds each job's),
-// and showing the run's progress, as the Python app's command line does
-// (cli.run).
+// saving it in the saved scores under `cache_folder` unless the video's
+// save_scores is false, and showing the run's progress, as the Python app's
+// command line does (cli.run).
 void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targets, const std::vector<VmafJob>& jobs,
-         int parallel, bool gpu_metrics_together, Progress& progress, const CancelToken& cancel) {
+         int parallel, bool gpu_metrics_together, const std::filesystem::path& cache_folder, Progress& progress,
+         const CancelToken& cancel) {
     const auto video = [&targets](std::size_t index) -> TestVideo& { return *targets[index]; };
+    // A video's CVVDP on other displays is saved in the same comparison
+    // folder, and two jobs replacing its context.json at once can fail on
+    // Windows, losing a score: one save at a time.
+    std::mutex saving;
+    const auto keep = [&](std::size_t index, const ComparisonResult& result) {
+        TestVideo& target = video(index);
+        target.result = result;
+        if (!target.save_scores) {
+            return;
+        }
+        try {
+            const std::lock_guard lock(saving);
+            store_result(cache_folder, result.source, target.path, target.request.recipe, result,
+                         platform::path_text(target.path.stem()), target.request.metrics);
+        } catch (const std::exception& error) {
+            progress.message(target.label() + ": the scores could not be saved (" + error.what() + ")");
+        }
+    };
     RunEvents events;
     events.job_started = [&](std::size_t index) { progress.message(video(index).label() + ": started"); };
     events.task_progress = [&](std::size_t index, const std::vector<TaskSnapshot>& tasks) {
@@ -537,11 +558,11 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
             progress.job(index, video(index).label() + ": " + line);
         }
     };
-    // A video's result so far is kept when one of its tasks finishes while
-    // another still runs: kept if the rest is lost.
-    events.result_updated = [&](std::size_t index, const ComparisonResult& result) { video(index).result = result; };
+    // A video's result so far is kept, and saved, when one of its tasks
+    // finishes while another still runs: kept if the rest is lost.
+    events.result_updated = keep;
     events.job_finished = [&](std::size_t index, const ComparisonResult& result) {
-        video(index).result = result;
+        keep(index, result);
         progress.message(video(index).label() + ": done");
     };
     events.job_failed = [&](std::size_t index, const std::string& message, const std::string& /*stderr_tail*/) {
@@ -550,8 +571,8 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
     };
     events.job_partially_failed = [&](std::size_t index, const ComparisonResult& result, const std::string& message,
                                       const std::string& /*stderr_tail*/, const MetricFailures& failures) {
+        keep(index, result);
         TestVideo& target = video(index);
-        target.result = result;
         target.failures = failures.empty() ? MetricFailures{{"", message}} : failures;
         progress.message(target.label() + ": some metrics FAILED: " + message);
     };
@@ -570,6 +591,48 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
             return run_perceptual_task(request, keys, together, hooks, token);
         },
         gpu_metrics_together, environment.cores, cancel);
+}
+
+// Adds the job that calculates what `video` asks for, less what is saved
+// under `cache_folder` (when `use_saved`); with everything saved, takes the
+// saved result and adds none (the Python app's cli._queue). `options` are
+// the run's, with VMAF's model resolved. Returns what this version cannot
+// do yet of the job's VMAF on the GPU (gpu_not_yet), or nothing.
+std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, VmafOptions options,
+                                 const PerceptualBackends& backends, const CvvdpSettings& cvvdp, bool use_saved,
+                                 const std::filesystem::path& cache_folder, std::vector<VmafJob>& jobs) {
+    // The request the window makes for a row: what the saved scores are
+    // looked up and saved under, so that the two apps find each other's.
+    const std::map<std::string, std::string> chosen(backends.begin(), backends.end());
+    video.request = analysis_request(video.options, video.metrics, chosen, cvvdp);
+    std::optional<ComparisonResult> saved;
+    if (use_saved) {
+        if (auto found = load_result(cache_folder, source.path, video.path, video.request.recipe,
+                                     video.request.metrics, video.request.perceptual_backends)) {
+            saved = std::move(found->first);
+        }
+    }
+    // The saved scores the run keeps, by the window's rule.
+    MetricResultSet kept;
+    if (saved) {
+        kept = reusable(*saved, video.request.metrics, chosen, [](const std::string& key) { return gpu_can_score(key); },
+                        colour_tags(source, *video.info));
+    }
+    if (std::all_of(video.metrics.begin(), video.metrics.end(), [&kept](const std::string& key) { return kept.has(key); })) {
+        // Everything asked for is saved: nothing to run, as the window runs
+        // nothing for a row that has its scores.
+        video.result = std::move(saved);
+        video.from_cache = true;
+        return std::nullopt;
+    }
+    std::vector<MetricTask> tasks = plan_tasks(source, *video.info, options, video.metrics, backends, kept);
+    std::optional<std::string> missing = gpu_not_yet(tasks);
+    if (kept.empty()) {
+        saved.reset();
+    }
+    jobs.push_back(VmafJob{source, *video.info, std::move(options), video.path, video.metrics, std::move(tasks), backends,
+                           cvvdp, std::move(saved), std::move(kept)});
+    return missing;
 }
 
 std::string ffmpeg_problem(const ToolsStatus& status) {
@@ -693,8 +756,7 @@ int compare(const CompareArguments& arguments) {
     const Settings settings = Settings::load();
     set_gpu_backend(settings.gpu_backend);
     set_vship_backend(settings.gpu_backend);
-    const std::filesystem::path cache_folder =
-        settings.cache_dir_path().value_or(platform::home_directory() / ".videometricslab" / "results_cache");
+    const std::filesystem::path cache_folder = settings.cache_dir_path().value_or(default_cache_dir());
     set_crop_store([cache_folder] {
         std::filesystem::create_directories(cache_folder);
         return cache_folder / "black_bars.json";
@@ -741,6 +803,9 @@ int compare(const CompareArguments& arguments) {
     }
 
     const PerceptualBackends backends = perceptual_backends(arguments, settings);
+    // The saved scores know a video by its file, not by the colours it was
+    // read with, so --colour scores are neither read nor saved.
+    const bool use_saved = !arguments.recalculate && settings.use_cache && !arguments.colour;
     std::vector<TestVideo> videos;
     std::vector<VmafJob> jobs;
     // Each job's video: its index, and for CVVDP on a further display, which.
@@ -751,6 +816,7 @@ int compare(const CompareArguments& arguments) {
         }
         TestVideo& video = videos.emplace_back();
         video.path = path;
+        video.save_scores = !arguments.colour;
         try {
             video.info = with_assumed_colour(probe_video(path, tools.ffprobe.path), arguments.colour);
         } catch (const ProbeError& error) {
@@ -795,18 +861,19 @@ int compare(const CompareArguments& arguments) {
             const auto [width, height] = analysis_dimensions(source, *video.info, video.options);
             VmafOptions options = video.options;
             options.model = video.options.compute_vmaf ? resolve_model(video.options, width, height) : "";
-            std::vector<MetricTask> tasks = plan_tasks(source, *video.info, options, video.metrics, backends);
-            if (const std::optional<std::string> missing = gpu_not_yet(tasks)) {
-                print_error("The C++ command line cannot do this yet: " + *missing + ".");
-                return exit_usage;
-            }
             const bool cvvdp = std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") != video.metrics.end();
             if (cvvdp) {
                 video.display = displays.front().first;
             }
-            jobs.push_back(VmafJob{source, *video.info, std::move(options), video.path, video.metrics, std::move(tasks),
-                                   backends, displays.front().second});
-            job_videos.emplace_back(videos.size() - 1, std::nullopt);
+            const std::size_t queued = jobs.size();
+            if (const std::optional<std::string> missing = queue(video, source, std::move(options), backends,
+                                                                 displays.front().second, use_saved, cache_folder, jobs)) {
+                print_error("The C++ command line cannot do this yet: " + *missing + ".");
+                return exit_usage;
+            }
+            if (jobs.size() > queued) {
+                job_videos.emplace_back(videos.size() - 1, std::nullopt);
+            }
             // CVVDP on each further display: a comparison of its own, of
             // CVVDP alone.
             for (std::size_t display = 1; cvvdp && display < displays.size(); ++display) {
@@ -816,11 +883,13 @@ int compare(const CompareArguments& arguments) {
                 other.metrics = {"cvvdp"};
                 other.display = displays[display].first;
                 other.for_display_only = true;
+                other.save_scores = video.save_scores;
                 other.options = row_options(arguments, settings, other.metrics, *video.info);
-                jobs.push_back(VmafJob{source, *video.info, other.options, video.path, other.metrics,
-                                       plan_tasks(source, *video.info, other.options, other.metrics, backends),
-                                       backends, displays[display].second});
-                job_videos.emplace_back(videos.size() - 1, video.other_displays.size() - 1);
+                const std::size_t before = jobs.size();
+                queue(other, source, other.options, backends, displays[display].second, use_saved, cache_folder, jobs);
+                if (jobs.size() > before) {
+                    job_videos.emplace_back(videos.size() - 1, video.other_displays.size() - 1);
+                }
             }
         } catch (const std::exception& error) {
             video.error = error.what();
@@ -842,6 +911,9 @@ int compare(const CompareArguments& arguments) {
         }
         for (const std::string& note : video.notes) {
             progress->message(video.name() + ": " + note);
+        }
+        if (video.from_cache) {
+            progress->message(video.name() + ": every score is saved; nothing to calculate");
         }
     }
 
@@ -874,7 +946,7 @@ int compare(const CompareArguments& arguments) {
                                                     : DecodingCapabilities{},
                                          platform::logical_cores()};
         run(environment, job_targets, jobs, arguments.parallel.value_or(settings.parallel_jobs),
-            settings.gpu_metrics_together, *progress, cancel);
+            settings.gpu_metrics_together, cache_folder, *progress, cancel);
         progress->done();
         cancelled = cancel.cancelled();
         *running = false;

@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "vml/analysis_request.h"
 #include "vml/options.h"
 #include "vml/results.h"
 #include "vml/video.h"
@@ -18,6 +19,11 @@ struct TestVideo {
     std::optional<VideoInfo> info;
     VmafOptions options;
     std::vector<std::string> metrics;  // the metric keys it is compared on
+    // What it asks for, as its saved scores are looked up and saved under.
+    AnalysisRequest request;
+    // Whether its scores are saved: not those of videos read with --colour,
+    // as the saved scores know a video by its file, not by its colours.
+    bool save_scores = true;
     // What the reader should know: metrics left out and why.
     std::vector<std::string> notes;
     std::string error;  // why it was not compared at all

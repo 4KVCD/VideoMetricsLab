@@ -193,12 +193,13 @@ private:
         if (!path) {
             return;
         }
-        nlohmann::json boxes = nlohmann::json::array();
+        nlohmann::ordered_json boxes = nlohmann::ordered_json::array();
         for (const auto& [key, box] : boxes_) {
             boxes.push_back({{key.path, key.size, key.modified_ns, key.sampled_duration, key.limit},
                              {box.w, box.h, box.x, box.y}});
         }
-        const nlohmann::json data{{"version", store_version}, {"boxes", boxes}};
+        // The keys in the Python app's order (crop_detect._write_store).
+        const nlohmann::ordered_json data{{"version", store_version}, {"boxes", boxes}};
         std::filesystem::path partial = *path;
         partial += ".partial";
         {
