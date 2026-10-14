@@ -177,3 +177,17 @@ def test_playback_places_both_videos_by_the_shared_zoom(qapp, monkeypatch, tmp_p
     if ratio == 1:
         assert crop == (3, 4, 10, 5) and rectangle == (0, 0, 20, 10)
     cleanup(view)
+
+
+def test_a_video_that_cannot_play_is_named_as_the_user_knows_it(qapp, monkeypatch, tmp_path):
+    """A failed decoder's message names a test video by its number in the
+    list, and a failed source as the pair shown's. It said "Video
+    ('distorted', 0) could not play", the view's own key for it."""
+    view, _ = make_view(monkeypatch, tmp_path, 2)
+    said = []
+    view.status_changed.connect(said.append)
+    view._stream_failed(("distorted", 0), view._pool[("distorted", 0)], "device lost")
+    source_key = next(key for key in view._pool if key[0] == "source")
+    view._stream_failed(source_key, view._pool[source_key], "no such file")
+    assert said == ["Video 1 could not play: device lost", "Selected video failed: no such file"]
+    cleanup(view)
