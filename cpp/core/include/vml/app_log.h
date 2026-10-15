@@ -100,7 +100,8 @@ std::vector<std::string> export_logs(const std::filesystem::path& destination,
                                      const std::optional<std::filesystem::path>& directory = {});
 
 // The part of the log to paste into a post or chat, and whether it was
-// shortened; nothing when there is no log yet.
+// shortened; nothing when there is no log yet. Throws std::runtime_error
+// when a log file there cannot be read.
 //
 // The text runs from the start of the latest session that calculated
 // metrics to the end of the log, so a run that failed before the app was

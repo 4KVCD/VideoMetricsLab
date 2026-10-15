@@ -845,16 +845,7 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
         set_row_info(*row, result.distorted_info);  // its Scaling cell, with the crops the run used
     }
     if (final) {
-        QStringList labels;
-        for (const MetricDefinition& metric : metrics()) {
-            if (run->result.has_metric(std::string(metric.key))) {
-                labels.append(qt_text(metric.label));
-            }
-        }
-        const auto frames =
-            static_cast<long long>(frame_scores_from_results(run->result.metric_results).frame.size());
-        row_data.status_detail =
-            ntr("{count} scored frame; metrics: ", "{count} scored frames; metrics: ", frames) + labels.join(", ");
+        row_data.status_detail = scores_detail(run->result);
     }
     set_row_metrics(*row);
     // Straight onto the graph: a finished video is a line, and waiting for a
@@ -863,6 +854,17 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
                            run->graph_identity, !continuing});
     sync_frame_compare();
     return row;
+}
+
+QString MainWindow::scores_detail(const ComparisonResult& result) const {
+    QStringList labels;
+    for (const MetricDefinition& metric : metrics()) {
+        if (result.has_metric(std::string(metric.key))) {
+            labels.append(qt_text(metric.label));
+        }
+    }
+    const auto frames = static_cast<long long>(frame_scores_from_results(result.metric_results).frame.size());
+    return ntr("{count} scored frame; metrics: ", "{count} scored frames; metrics: ", frames) + labels.join(", ");
 }
 
 void MainWindow::on_job_partially_failed(int index, const ComparisonResult& result, const QString& message,

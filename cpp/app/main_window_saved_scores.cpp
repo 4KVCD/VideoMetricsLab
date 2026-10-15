@@ -160,6 +160,10 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     }
     row_data.completed_run = std::move(run);
     row_data.analysis_status = has_requested_results(row_data) ? std::optional(RowState::cached) : std::nullopt;
+    row_data.status_detail =
+        scores_detail(row_data.completed_run->result) +
+        app::tr("\nLoaded from a previous run (matching files and calculation settings) -- right-click to "
+                "recompute.");
     // The scores and crops come from the saved result, the video's details
     // from reading it now: an older result lacks tags a newer read has.
     if (row_data.options.resample_test) {

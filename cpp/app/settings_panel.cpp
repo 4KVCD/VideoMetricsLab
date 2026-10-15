@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <exception>
+#include <stdexcept>
 #include <utility>
 
 #include "file_writes.h"
@@ -562,7 +563,13 @@ void SettingsPanel::pick_directory(const QString& title, QLineEdit* edit) {
 }
 
 void SettingsPanel::on_copy_log() {
-    const std::optional<std::pair<std::string, bool>> shared = app_log::log_text_to_share();
+    std::optional<std::pair<std::string, bool>> shared;
+    try {
+        shared = app_log::log_text_to_share();
+    } catch (const std::runtime_error& error) {
+        status->setText(app::tr("Could not read the log: {error}", {{"error", QString::fromUtf8(error.what())}}));
+        return;
+    }
     if (!shared) {
         status->setText(app::tr("There is no log to copy yet."));
         return;

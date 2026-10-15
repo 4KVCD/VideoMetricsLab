@@ -12,6 +12,7 @@
 #include <limits>
 #include <mutex>
 #include <stdexcept>
+#include <system_error>
 
 #include <miniz.h>
 
@@ -347,11 +348,17 @@ std::optional<std::pair<std::string, bool>> log_text_to_share(const std::optiona
     files.push_back(current);
     std::vector<std::string> lines;
     for (const std::filesystem::path& file : files) {
-        if (const std::optional<std::string> content = platform::read_file(file)) {
-            const std::string text = replace_invalid_utf8(*content);
-            for (const std::string_view line : python_splitlines(text)) {
-                lines.emplace_back(line);
-            }
+        std::error_code ignored;
+        if (!std::filesystem::is_regular_file(file, ignored)) {
+            continue;
+        }
+        const std::optional<std::string> content = platform::read_file(file);
+        if (!content) {
+            throw std::runtime_error(platform::path_text(file) + " could not be read");
+        }
+        const std::string text = replace_invalid_utf8(*content);
+        for (const std::string_view line : python_splitlines(text)) {
+            lines.emplace_back(line);
         }
     }
     if (lines.empty()) {

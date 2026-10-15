@@ -264,6 +264,9 @@ private:
     // ----------------------------------------------------- the test videos
     int add_table_row(const std::filesystem::path& path);
     void set_row_metrics(int row);
+    // A row's detail for its scores: how many frames were scored, and which
+    // metrics ("{count} scored frames; metrics: VMAF, PSNR").
+    QString scores_detail(const ComparisonResult& result) const;
     RowState row_state(const RowData& row_data) const;
     void refresh_row_state(int row);
     void set_row_black_bars(int row, bool probe_failed = false);
