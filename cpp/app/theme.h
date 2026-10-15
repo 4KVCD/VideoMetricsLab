@@ -17,7 +17,6 @@
 
 #include <QColor>
 #include <QString>
-#include <QStringList>
 
 #include <optional>
 
@@ -25,9 +24,6 @@ class QTableWidgetItem;
 class QWidget;
 
 namespace vml::app::theme {
-
-// Settings.theme's values: "" follows Windows.
-const QStringList& themes();
 
 // The colours a chart is drawn in.
 struct ChartColours {

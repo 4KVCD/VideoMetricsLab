@@ -223,7 +223,6 @@ const VshipLibrary& vship_library(const VshipDevice& device);
 // An unknown name means "auto". A probe made for another choice is
 // forgotten.
 void set_vship_backend(const std::string& backend);
-std::string vship_backend();
 
 // The name shown for a build: "Vulkan", "CUDA" or "HIP".
 std::string backend_label(const std::string& backend);

@@ -32,16 +32,6 @@ QString bitrate_note(const VideoInfo& info) {
     return {};
 }
 
-QColor vmaf_band_colour(double mean) {
-    if (mean >= 95) {
-        return {198, 239, 206};  // green
-    }
-    if (mean >= 90) {
-        return {255, 235, 156};  // amber
-    }
-    return {255, 199, 206};  // pink
-}
-
 QString preset_label(const CvvdpPreset& preset) {
     const QString name = QString::fromStdString(preset.name);
     return preset.builtin ? tr(name) : name;

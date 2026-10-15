@@ -465,12 +465,6 @@ void set_vship_backend(const std::string& backend) {
     }
 }
 
-std::string vship_backend() {
-    ProbeState& state = probe_state();
-    const std::lock_guard lock(state.mutex);
-    return state.backend;
-}
-
 std::string backend_label(const std::string& backend) {
     static const std::map<std::string, std::string, std::less<>> labels{
         {"vulkan", "Vulkan"}, {"cuda", "CUDA"}, {"hip", "HIP"}};

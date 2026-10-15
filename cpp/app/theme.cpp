@@ -86,11 +86,6 @@ QString filled(const QString& template_text) {
 
 }  // namespace
 
-const QStringList& themes() {
-    static const QStringList all = {"", "light", "dark"};
-    return all;
-}
-
 bool is_dark() {
     if (QGuiApplication::instance() == nullptr) {
         return false;
