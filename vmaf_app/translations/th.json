@@ -718,7 +718,19 @@
   "{side} {number} of {count}": "{side} {number} จาก {count}",
   "Video bitrate (Mb/s)": "บิตเรตวิดีโอ (Mbps)",
   "GOP bitrate (Mb/s)": "บิตเรต GOP (Mbps)",
-  "Frame size (Mbit)": "ขนาดเฟรม (Mbit)"
+  "Frame size (Mbit)": "ขนาดเฟรม (Mbit)",
+  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞ ถูกวาดที่ {db:g} dB คะแนนที่บันทึกไว้และสถิติยังคงเป็นอนันต์",
+  "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: เส้นกราฟคือ JOD ของแต่ละวินาที วาดไว้ที่กึ่งกลางของวินาที คอลัมน์ CVVDP คือ JOD ของทั้งวิดีโอ ซึ่งไม่ใช่ค่าเฉลี่ยของวินาทีต่าง ๆ ค่าตั้งแต่มัธยฐานถึงสูงสุดอธิบายวินาทีต่าง ๆ",
+  "{rate:.0f} kb/s": "{rate:.0f} kbps",
+  "kb/s": "kbps",
+  "Mb/s": "Mbps",
+  "kbit": "kbit",
+  "Mbit": "Mbit",
+  " in": " นิ้ว",
+  " m": " ม.",
+  " lux": " ลักซ์",
+  "{rate:.1f} Mb/s": "{rate:.1f} Mbps",
+  "{rate} kb/s": "{rate} kbps"
  },
  "plurals": {
   "about {count} day": [

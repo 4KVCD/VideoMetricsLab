@@ -718,7 +718,19 @@
   "{side} {number} of {count}": "{side} {number} з {count}",
   "Video bitrate (Mb/s)": "Бітрейт відео (Мбіт/с)",
   "GOP bitrate (Mb/s)": "Бітрейт GOP (Мбіт/с)",
-  "Frame size (Mbit)": "Розмір кадру (Мбіт)"
+  "Frame size (Mbit)": "Розмір кадру (Мбіт)",
+  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞ відображається на рівні {db:g} дБ; у збережених оцінках і статистиці нескінченність зберігається.",
+  "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: крива — це JOD кожної секунди, відображений посередині секунди; стовпець CVVDP — це JOD усього відео, який не є середнім його секунд. Значення від «Медіана» до «Макс.» описують секунди.",
+  "{rate:.0f} kb/s": "{rate:.0f} кбіт/с",
+  "kb/s": "кбіт/с",
+  "Mb/s": "Мбіт/с",
+  "kbit": "кбіт",
+  "Mbit": "Мбіт",
+  " in": " дюйм.",
+  " m": " м",
+  " lux": " лк",
+  "{rate:.1f} Mb/s": "{rate:.1f} Мбіт/с",
+  "{rate} kb/s": "{rate} кбіт/с"
  },
  "plurals": {
   "about {count} day": [

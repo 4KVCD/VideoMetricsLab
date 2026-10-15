@@ -78,7 +78,7 @@ def _rate_text(kbps: float) -> str:
         return tr("{rate:.2f} Mb/s", rate=kbps / 1000)
     if kbps >= 1000:
         return tr("{rate:.3f} Mb/s", rate=kbps / 1000)
-    return f"{kbps:.0f} kb/s"
+    return tr("{rate:.0f} kb/s", rate=kbps)
 
 
 class BitratePanel(QWidget):
@@ -99,7 +99,7 @@ class BitratePanel(QWidget):
         # The graph's values are divided by this and shown in this unit
         # (see _refresh_plot).
         self._value_scale = 1
-        self._value_unit = "kb/s"
+        self._value_unit = tr("kb/s")
         self._populating = False
 
         root = QVBoxLayout(self)
@@ -568,13 +568,13 @@ class BitratePanel(QWidget):
         view = self._view_name()
         if view == "frame":
             self.chart.y_axis_label = tr("Frame size (Mbit)") if mega else tr("Frame size (kbit)")
-            self._value_unit = "Mbit" if mega else "kbit"
+            self._value_unit = tr("Mbit") if mega else tr("kbit")
         else:
             if view == "gop":
                 self.chart.y_axis_label = tr("GOP bitrate (Mb/s)") if mega else tr("GOP bitrate (kb/s)")
             else:
                 self.chart.y_axis_label = tr("Video bitrate (Mb/s)") if mega else tr("Video bitrate (kb/s)")
-            self._value_unit = "Mb/s" if mega else "kb/s"
+            self._value_unit = tr("Mb/s") if mega else tr("kb/s")
         for entry, plot in plots:
             series_id = id(entry.identity)
             self.chart.set_series(

@@ -116,12 +116,12 @@ _MEAN_COLUMNS = range(1, 1 + len(METRICS))
 #: statistics, the hover readout and exports are unaffected.
 _XPSNR_INFINITY_PLOT_DB = 123.0
 
-_XPSNR_INFINITY_NOTE = (
-    f"XPSNR: ∞ is plotted at {_XPSNR_INFINITY_PLOT_DB:g} dB; "
+_XPSNR_INFINITY_NOTE = N_(
+    "XPSNR: ∞ is plotted at {db:g} dB; "
     "stored scores and statistics retain infinity."
 )
 
-_CVVDP_NOTE = (
+_CVVDP_NOTE = N_(
     "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; "
     "the CVVDP column is the whole video's JOD, which is not the mean of its seconds. "
     "Median to Max describe the seconds."
@@ -1012,9 +1012,9 @@ class GraphPanel(QWidget):
         available = any(e.result.has_metric(metric.key) for e in self._entries.values())
         self.metric_hint.setText("" if available else tr("{label} was not calculated. Tick it in the {label} column in Videos, or load results containing it.", label=metric.label))
         if available and metric.key == "xpsnr":
-            self.metric_hint.setText(_XPSNR_INFINITY_NOTE)
+            self.metric_hint.setText(tr(_XPSNR_INFINITY_NOTE, db=_XPSNR_INFINITY_PLOT_DB))
         if available and metric.kind is MetricKind.SEQUENCE:
-            self.metric_hint.setText(_CVVDP_NOTE)
+            self.metric_hint.setText(tr(_CVVDP_NOTE))
         self.metric_hint.setVisible(bool(self.metric_hint.text()))
         for i, spec in enumerate(METRICS):
             self.tabs.setTabToolTip(i, "" if any(e.result.has_metric(spec.key) for e in self._entries.values()) else tr("Not calculated"))

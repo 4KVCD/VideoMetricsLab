@@ -286,10 +286,10 @@ class CvvdpDisplayDialog(QDialog):
         resolution.addWidget(self.height_spin)
         resolution.addStretch(1)
         form.addRow(tr("Resolution:"), resolution)
-        self.diagonal_spin = spin(1, 1000, display.diagonal_inches, 1, " in", 1,
+        self.diagonal_spin = spin(1, 1000, display.diagonal_inches, 1, tr(" in"), 1,
                                   tr("The screen's diagonal size."))
         form.addRow(tr("Screen size:"), self.diagonal_spin)
-        self.distance_spin = spin(0.05, 50, display.viewing_distance_m, 4, " m", 0.05,
+        self.distance_spin = spin(0.05, 50, display.viewing_distance_m, 4, tr(" m"), 0.05,
                                   tr("How far the viewer's eyes are from the screen. Closer makes "
                                   "small artifacts easier to see."))
         self.distance_note = QLabel()
@@ -307,7 +307,7 @@ class CvvdpDisplayDialog(QDialog):
                                   tr("Peak to black: about 1000:1 for a typical LCD, 1,000,000:1 "
                                   "for OLED or the official HDR displays."))
         form.addRow(tr("Contrast:"), self.contrast_spin)
-        self.ambient_spin = spin(0, 100_000, display.ambient_lux, 1, " lux", 10,
+        self.ambient_spin = spin(0, 100_000, display.ambient_lux, 1, tr(" lux"), 10,
                                  tr("Light falling on the screen: about 250 lux in an office, 50 in a "
                                  "lit living room, 5-10 watching a film with the lights low, 0 in the dark."))
         form.addRow(tr("Room light:"), self.ambient_spin)

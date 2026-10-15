@@ -718,7 +718,19 @@
   "{side} {number} of {count}": "{side} {number} van {count}",
   "Video bitrate (Mb/s)": "Videobitrate (Mbps)",
   "GOP bitrate (Mb/s)": "GOP-bitrate (Mbps)",
-  "Frame size (Mbit)": "Framegrootte (Mbit)"
+  "Frame size (Mbit)": "Framegrootte (Mbit)",
+  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞ wordt getekend op {db:g} dB; opgeslagen scores en statistieken behouden oneindig.",
+  "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: de curve is de JOD van elke seconde, getekend in het midden van de seconde; de kolom CVVDP is de JOD van de hele video, die niet het gemiddelde van zijn seconden is. Mediaan tot en met Max beschrijven de seconden.",
+  "{rate:.0f} kb/s": "{rate:.0f} kbps",
+  "kb/s": "kbps",
+  "Mb/s": "Mbps",
+  "kbit": "kbit",
+  "Mbit": "Mbit",
+  " in": " inch",
+  " m": " m",
+  " lux": " lux",
+  "{rate:.1f} Mb/s": "{rate:.1f} Mbps",
+  "{rate} kb/s": "{rate} kbps"
  },
  "plurals": {
   "about {count} day": [

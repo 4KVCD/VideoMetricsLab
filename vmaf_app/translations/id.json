@@ -718,7 +718,19 @@
   "{side} {number} of {count}": "{side} {number} dari {count}",
   "Video bitrate (Mb/s)": "Bitrate video (Mbps)",
   "GOP bitrate (Mb/s)": "Bitrate GOP (Mbps)",
-  "Frame size (Mbit)": "Ukuran bingkai (Mbit)"
+  "Frame size (Mbit)": "Ukuran bingkai (Mbit)",
+  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞ digambar pada {db:g} dB; skor yang disimpan dan statistik tetap menyimpan tak hingga.",
+  "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: kurva adalah JOD setiap detik, digambar di tengah detik; kolom CVVDP adalah JOD seluruh video, yang bukan rata-rata detiknya. Median hingga Maks menggambarkan detik-detik itu.",
+  "{rate:.0f} kb/s": "{rate:.0f} kbps",
+  "kb/s": "kbps",
+  "Mb/s": "Mbps",
+  "kbit": "kbit",
+  "Mbit": "Mbit",
+  " in": " inci",
+  " m": " m",
+  " lux": " lux",
+  "{rate:.1f} Mb/s": "{rate:.1f} Mbps",
+  "{rate} kb/s": "{rate} kbps"
  },
  "plurals": {
   "about {count} day": [

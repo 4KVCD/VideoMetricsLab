@@ -718,7 +718,19 @@
   "{side} {number} of {count}": "{side} {number}/{count}",
   "Video bitrate (Mb/s)": "Bitrate video (Mbps)",
   "GOP bitrate (Mb/s)": "Bitrate GOP (Mbps)",
-  "Frame size (Mbit)": "Kích thước khung (Mbit)"
+  "Frame size (Mbit)": "Kích thước khung (Mbit)",
+  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞ được vẽ ở {db:g} dB; điểm đã lưu và thống kê vẫn giữ giá trị vô cực.",
+  "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: đường cong là JOD của từng giây, vẽ ở giữa giây; cột CVVDP là JOD của toàn bộ video, không phải trung bình các giây của nó. Từ Trung vị đến Lớn nhất mô tả các giây.",
+  "{rate:.0f} kb/s": "{rate:.0f} kbps",
+  "kb/s": "kbps",
+  "Mb/s": "Mbps",
+  "kbit": "kbit",
+  "Mbit": "Mbit",
+  " in": " inch",
+  " m": " m",
+  " lux": " lux",
+  "{rate:.1f} Mb/s": "{rate:.1f} Mbps",
+  "{rate} kb/s": "{rate} kbps"
  },
  "plurals": {
   "about {count} day": [

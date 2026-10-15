@@ -37,8 +37,8 @@ def bitrate_string(info: VideoInfo) -> str:
         return NOT_COMPUTED
     approximate = "≈" if info.bit_rate_whole_file else ""
     if info.bit_rate >= 1_000_000:
-        return f"{approximate}{info.bit_rate / 1_000_000:.1f} Mb/s"
-    return f"{approximate}{info.bit_rate // 1000} kb/s"
+        return approximate + tr("{rate:.1f} Mb/s", rate=info.bit_rate / 1_000_000)
+    return approximate + tr("{rate} kb/s", rate=info.bit_rate // 1000)
 
 
 def bitrate_note(info: VideoInfo) -> str:
