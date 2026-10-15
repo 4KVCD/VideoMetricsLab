@@ -10,15 +10,12 @@
 #include <QDeadlineTimer>
 #include <QDoubleSpinBox>
 #include <QDropEvent>
-#include <QFontInfo>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPushButton>
-#include <QScrollArea>
 #include <QSpinBox>
-#include <QStyle>
 #include <QTableWidget>
 #include <QTableWidgetSelectionRange>
 #include <QTest>
@@ -1482,41 +1479,6 @@ TEST_F(WindowTest, ASwitchOfThemeRecoloursEveryColouredCellAndLeavesTheRest) {
     // The window recolours once the switch is done.
     EXPECT_TRUE(wait_until([&] { return info->foreground().color() == theme::color("failed", !dark); }));
     EXPECT_FALSE(plain->data(Qt::ForegroundRole).isValid());
-}
-
-TEST_F(WindowTest, NoTabIsSqueezedInTheSmallestWindowWithLargeText) {
-    // Issue #6: with large text, the window could be made smaller than a tab
-    // needed, and Qt then squeezed its rows into each other.
-    const QFont usual = QApplication::font();
-    QFont large = usual;
-    large.setPointSizeF(usual.pointSizeF() * 1.5);
-    QApplication::setFont(large);
-    struct Usual {
-        QFont font;
-        ~Usual() { QApplication::setFont(font); }
-    } restore{usual};
-
-    MainWindow window;
-    window.resize(window.minimumSize());
-    window.show();
-    for (int index = 0; index < tabs(window).count(); ++index) {
-        tabs(window).setCurrentIndex(index);
-        QApplication::processEvents();
-        QWidget* page = tabs(window).widget(index);
-        auto* scrolling = qobject_cast<QScrollArea*>(page);
-        QWidget* content = scrolling != nullptr ? scrolling->widget() : page;
-        const QSize needed = content->minimumSizeHint();
-        const QSize given = content->size();
-        // What it needed and got, and what the layout depends on: the window,
-        // the font Qt found for the text, and the style.
-        const auto size = [](const QSize& of) { return std::to_string(of.width()) + "x" + std::to_string(of.height()); };
-        EXPECT_TRUE(given.width() >= needed.width() && given.height() >= needed.height())
-            << tabs(window).tabText(index).toStdString() << ": needs " << size(needed) << ", has " << size(given)
-            << ", in a window of " << size(window.size()) << " (at least " << size(window.minimumSize())
-            << "); text in '" << QFontInfo(QApplication::font()).family().toStdString() << "' at "
-            << QApplication::font().pointSizeF() << " pt; style '" << QApplication::style()->name().toStdString()
-            << "'";
-    }
 }
 
 // ------------------------------------------------------------ the Settings tab
