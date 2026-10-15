@@ -59,13 +59,17 @@ class FrameComparisonEntry:
 
     `scores` is optional on purpose: the frames of a pair are comparable
     whether or not anyone has measured them, and the readout simply says so
-    when there is nothing to report.
+    when there is nothing to report. `row` is its row in the Videos tab,
+    which stays the same while `identity` changes with the scores the row
+    gets or loses, so that the video being watched stays chosen; None for
+    none.
     """
 
     identity: object
     label: str
     comparison: FrameComparison
     scores: FrameScores | None = None
+    row: object = None
 
 
 def parse_timestamp(value: str) -> float:
@@ -410,7 +414,15 @@ class FrameComparePanel(QWidget):
     def set_runs(self, entries: list[FrameComparisonEntry]) -> None:
         """Sets the comparisons to choose from, keeping the one shown if it is still there."""
         old_entry = self.current_entry
-        old_identity = old_entry.identity if old_entry else None
+
+        def was_shown(entry: FrameComparisonEntry) -> bool:
+            """Whether it is the entry chosen before: its row's, whatever scores it has now."""
+            if old_entry is None:
+                return False
+            if old_entry.row is not None:
+                return entry.row is old_entry.row
+            return entry.identity is old_entry.identity
+
         self._entries = [self._apply_auto_crop(entry) for entry in entries]
         self._generation += 1
         self._cancel_workers()
@@ -418,10 +430,7 @@ class FrameComparePanel(QWidget):
         # last update, so errors are cleared and tried again.
         self._errors.clear()
 
-        current = next(
-            (i for i, entry in enumerate(self._entries) if entry.identity is old_identity),
-            0,
-        )
+        current = next((i for i, entry in enumerate(self._entries) if was_shown(entry)), 0)
         self._current_index = min(current, max(0, len(self._entries) - 1))
         blocked = self.video_combo.blockSignals(True)
         self.video_combo.clear()
@@ -448,8 +457,7 @@ class FrameComparePanel(QWidget):
                 # Only when what is on screen changed. A result arrives for
                 # some video several times while a run goes on, which must
                 # not restart the video being watched.
-                if (old_entry is None or current.identity is not old_identity
-                        or current.comparison != old_entry.comparison):
+                if not was_shown(current) or current.comparison != old_entry.comparison:
                     self._load_current_video()
             else:
                 self._show_or_request()

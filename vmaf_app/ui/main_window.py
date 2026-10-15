@@ -4515,6 +4515,7 @@ class MainWindow(QMainWindow):
                     distorted_info=row.video_info or row.completed_run.result.distorted_info,
                 ),
                 scores=row.completed_run.result.frames,
+                row=row.frame_identity,
             )
 
         if self._source_info is None:
@@ -4550,6 +4551,7 @@ class MainWindow(QMainWindow):
                 frame_count=estimate_total_frames(reference, options, other),
                 auto_crop_pending=auto_crop_pending,
             ),
+            row=row.frame_identity,
         )
 
     def _open_or_update_graph(self, runs: list[CompletedRun], show: bool = True) -> None:

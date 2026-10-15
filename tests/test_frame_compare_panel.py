@@ -21,7 +21,7 @@ def qapp():
     return QApplication.instance() or QApplication([])
 
 
-def _entry(name: str, score: float = 90.0, count: int = 120) -> FrameComparisonEntry:
+def _entry(name: str, score: float = 90.0, count: int = 120, row: object = None) -> FrameComparisonEntry:
     source = VideoInfo(
         path=Path("source.mkv"), width=1920, height=1080, fps=24.0,
         duration=5.0, nb_frames=count, codec_name="h264",
@@ -46,10 +46,11 @@ def _entry(name: str, score: float = 90.0, count: int = 120) -> FrameComparisonE
         identity=object(), label=name,
         comparison=FrameComparison.from_result(result),
         scores=result.frames,
+        row=row,
     )
 
 
-def _unscored_entry(name: str, count: int = 120) -> FrameComparisonEntry:
+def _unscored_entry(name: str, count: int = 120, row: object = None) -> FrameComparisonEntry:
     """A pair that has only been probed -- no run, no scores."""
     source = VideoInfo(
         path=Path("source.mkv"), width=1920, height=1080, fps=24.0,
@@ -65,6 +66,7 @@ def _unscored_entry(name: str, count: int = 120) -> FrameComparisonEntry:
             source_info=source, distorted_info=distorted,
             fps=24.0, frame_count=count,
         ),
+        row=row,
     )
 
 
@@ -112,7 +114,8 @@ def test_frame_and_timestamp_stay_synchronized(qapp):
 
 def test_switching_distortions_preserves_frame_and_wraps(qapp):
     panel = FrameComparePanel()
-    panel.set_runs([_entry("first"), _entry("second")])
+    first, second = object(), object()  # their rows in the Videos tab
+    panel.set_runs([_entry("first", row=first), _entry("second", row=second)])
     panel.set_frame(48)
 
     panel.cycle_distorted(-1)
@@ -120,6 +123,10 @@ def test_switching_distortions_preserves_frame_and_wraps(qapp):
     assert panel.video_combo.currentText() == "second"
     assert panel.frame_spin.value() == 48
     assert "TEST 2 of 2" in panel.showing_label.text()
+    # The video watched stays chosen when its scores go (Recalculate), as
+    # when they come: its entry's identity changes, its row does not.
+    panel.set_runs([_entry("first", row=first), _unscored_entry("second", row=second)])
+    assert panel.video_combo.currentText() == "second"
 
 
 def test_holding_s_temporarily_shows_source(qapp, monkeypatch):
