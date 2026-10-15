@@ -6,6 +6,8 @@
 #include <QComboBox>
 #include <QDateTime>
 #include <QDesktopServices>
+#include <QFontMetrics>
+#include <QRawFont>
 #include <QFormLayout>
 #include <QFutureWatcher>
 #include <QGroupBox>
@@ -15,6 +17,8 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSizePolicy>
+#include <QStyle>
+#include <QStyleOptionComboBox>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
@@ -350,7 +354,32 @@ QGroupBox* SettingsPanel::build_window_box() {
         language->addItem(item.name, item.code);
     }
     language->setCurrentIndex(std::max(0, language->findData(text_of(settings_.language))));
-    language->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    // As wide as its widest name, measuring only the names the window's own
+    // font has the letters for, the one shown, and "Same as Windows", which
+    // is in the window's language. Measuring every name, as AdjustToContents
+    // does, makes Qt look for fonts for Chinese, Japanese, Korean and Thai,
+    // which reads every font on the PC: some 22 MB for as long as the app
+    // runs, though the list may never be opened. Those names are short.
+    // (QFontMetrics::inFontUcs4 would look for the fonts too; the raw font is
+    // the window's font alone.)
+    language->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    language->setMinimumContentsLength(1);
+    const QFontMetrics metrics = language->fontMetrics();
+    const QRawFont own = QRawFont::fromFont(language->font());
+    int widest = 0;
+    for (int index = 0; index < language->count(); ++index) {
+        const QString name = language->itemText(index);
+        const QList<uint> letters = name.toUcs4();
+        if (index == 0 || index == language->currentIndex() ||
+            std::all_of(letters.begin(), letters.end(), [&own](uint letter) { return own.supportsCharacter(letter); })) {
+            widest = std::max(widest, metrics.horizontalAdvance(name));
+        }
+    }
+    QStyleOptionComboBox option;
+    option.initFrom(language);
+    language->setMinimumWidth(
+        language->style()->sizeFromContents(QStyle::CT_ComboBox, &option, QSize(widest, metrics.height()), language)
+            .width());
     language->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     language->setToolTip(app::tr("The language of the window. Takes effect when the app is next started. The log, "
                                  "saved results and exported files stay in English."));

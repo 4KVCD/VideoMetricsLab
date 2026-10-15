@@ -3,6 +3,7 @@
 // is slightly wrong for how the app uses it.
 #pragma once
 
+#include <QFont>
 #include <QHeaderView>
 #include <QLabel>
 #include <QList>
@@ -172,5 +173,12 @@ public:
 private:
     void show_focus(QWidget* old, QWidget* now);
 };
+
+// The font for text with a symbol the window's font lacks (Video Compare's
+// "▶ Play" and "❚❚ Pause", Metric Graphs' "✕"): on Windows Segoe UI Symbol,
+// which has them, at `font`'s size; elsewhere `font`. A character Segoe UI
+// lacks makes Qt load its fallback fonts, Chinese, Japanese and Korean ones
+// among them: some 22 MB, for as long as the app runs.
+QFont symbol_font(const QFont& font);
 
 }  // namespace vml::app

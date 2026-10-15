@@ -359,4 +359,19 @@ void ScrollingPage::show_focus(QWidget* /*old*/, QWidget* now) {
     }
 }
 
+QFont symbol_font(const QFont& font) {
+#ifdef _WIN32
+    QFont symbols(QStringLiteral("Segoe UI Symbol"));
+    if (font.pointSizeF() > 0) {
+        symbols.setPointSizeF(font.pointSizeF());
+    } else {
+        symbols.setPixelSize(font.pixelSize());
+    }
+    symbols.setWeight(font.weight());
+    return symbols;
+#else
+    return font;
+#endif
+}
+
 }  // namespace vml::app

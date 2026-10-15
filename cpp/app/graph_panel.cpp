@@ -1495,6 +1495,7 @@ void GraphPanel::refresh_stats_table() {
         // A plain item, handled by cellClicked: a button in the cell was
         // drawn over the first column before the widths settled.
         auto* remove = new QTableWidgetItem(QStringLiteral("✕"));
+        remove->setFont(symbol_font(stats_table_->font()));
         remove->setFlags(Qt::ItemIsEnabled);
         remove->setTextAlignment(Qt::AlignCenter);
         remove->setToolTip(app::tr("Remove {label} from the graph", {{"label", entry.label}}));

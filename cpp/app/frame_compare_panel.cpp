@@ -427,6 +427,7 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
 
     auto* seek = new QHBoxLayout;
     play_button = new QPushButton(app::tr("\xE2\x96\xB6 Play"));
+    play_button->setFont(symbol_font(play_button->font()));
     connect(play_button, &QPushButton::clicked, this, [this] { on_play_clicked(); });
     audio_checkbox = new QCheckBox(app::tr("Audio"));
     audio_checkbox->setToolTip(app::tr(
