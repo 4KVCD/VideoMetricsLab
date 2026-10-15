@@ -186,7 +186,9 @@ Windows the build puts Qt's libraries beside the window and its tests
 (windeployqt), so that they run from the build folder.
 
 GitHub builds and tests every push of the `cpp-port` branch on all three
-(`.github/workflows/cpp.yml`), without Qt so far.
+(`.github/workflows/cpp.yml`); on Windows with Qt, so that the window
+and its tests are built and run there too (those that need a GPU or FFmpeg
+skip themselves).
 
 ## Rules for the code
 

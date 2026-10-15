@@ -2,7 +2,9 @@ name: C++ port
 
 # Builds the C++ port and runs its tests on Windows, Linux and macOS. The
 # Linux sanitizer job finds memory errors and undefined behaviour that the
-# other builds can pass over.
+# other builds can pass over. On Windows the window and its tests are built
+# too, with Qt (they are built where CMake finds Qt), and its tests run on
+# Qt's offscreen platform; those that need a GPU or FFmpeg skip themselves.
 on:
   push:
     branches: [cpp-port]
@@ -17,7 +19,7 @@ jobs:
   build-and-test:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -40,9 +42,24 @@ jobs:
       - name: Install Ninja (macOS)
         if: runner.os == 'macOS'
         run: brew install ninja
+      - name: Install Qt (Windows)
+        # Qt 6.12's MSVC 2022 build, as the app is developed with.
+        if: runner.os == 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.12.0'
+          arch: win64_msvc2022_64
+          cache: true
       - name: Configure
+        if: runner.os != 'Windows'
         run: cmake --preset ${{ matrix.configure }}
+      - name: Configure (with Qt)
+        if: runner.os == 'Windows'
+        run: cmake --preset ${{ matrix.configure }} "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR"
       - name: Build
         run: cmake --build --preset ${{ matrix.build }}
       - name: Test
+        # The offscreen platform finds no fonts of its own on Windows.
+        env:
+          QT_QPA_FONTDIR: ${{ runner.os == 'Windows' && 'C:\Windows\Fonts' || '' }}
         run: ctest --preset ${{ matrix.build }}
