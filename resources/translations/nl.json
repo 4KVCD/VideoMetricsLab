@@ -713,7 +713,10 @@
   "Light": "Licht",
   "Dark": "Donker",
   "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} × schermhoogte)",
-  "{side} {number} of {count}": "{side} {number} van {count}"
+  "{side} {number} of {count}": "{side} {number} van {count}",
+  "Video bitrate (Mb/s)": "Videobitrate (Mbps)",
+  "GOP bitrate (Mb/s)": "GOP-bitrate (Mbps)",
+  "Frame size (Mbit)": "Framegrootte (Mbit)"
  },
  "plurals": {
   "about {count} day": [

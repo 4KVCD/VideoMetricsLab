@@ -1698,9 +1698,17 @@ void MainWindow::fit_columns(std::initializer_list<int> columns) {
 
 void MainWindow::fit_pending_columns() {
     const std::set<int> columns = std::exchange(columns_to_fit_, {});
+    // Fitted as if no column were sorted: once one is, Qt makes room for the
+    // sort arrow in every heading, so a column fitted after sorting came out
+    // wider than the same column before (Video bitrate 84 -> 112 px), and
+    // File name narrower.
+    QHeaderView* header = distorted_table_->horizontalHeader();
+    const bool sorted_shown = header->isSortIndicatorShown();
+    header->setSortIndicatorShown(false);
     for (const int column : columns) {
         distorted_table_->resizeColumnToContents(column);
     }
+    header->setSortIndicatorShown(sorted_shown);
 }
 
 void MainWindow::set_row_scaling(int row) {

@@ -713,7 +713,10 @@
   "Light": "فاتح",
   "Dark": "داكن",
   "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}، {nits:g} نِت، {lux:g} لوكس، {distance:.2f} م ({heights:.1f} × ارتفاع الشاشة)",
-  "{side} {number} of {count}": "{side} {number} من {count}"
+  "{side} {number} of {count}": "{side} {number} من {count}",
+  "Video bitrate (Mb/s)": "معدل بت الفيديو (ميغابت/ث)",
+  "GOP bitrate (Mb/s)": "معدل بت GOP (ميغابت/ث)",
+  "Frame size (Mbit)": "حجم الإطار (ميغابت)"
  },
  "plurals": {
   "about {count} day": [

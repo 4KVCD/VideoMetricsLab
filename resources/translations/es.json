@@ -713,7 +713,10 @@
   "Light": "Claro",
   "Dark": "Oscuro",
   "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} × altura de la pantalla)",
-  "{side} {number} of {count}": "{side} {number} de {count}"
+  "{side} {number} of {count}": "{side} {number} de {count}",
+  "Video bitrate (Mb/s)": "Tasa de bits del video (Mb/s)",
+  "GOP bitrate (Mb/s)": "Tasa de bits por GOP (Mb/s)",
+  "Frame size (Mbit)": "Tamaño de fotograma (Mbit)"
  },
  "plurals": {
   "about {count} day": [

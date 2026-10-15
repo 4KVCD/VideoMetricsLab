@@ -686,20 +686,52 @@ void BitratePanel::refresh_plot() {
     // Every ticked file's line, for the graph chosen.
     chart->clear();
     current_plots_.clear();
-    const std::string view = view_name();
-    chart->set_y_axis_label(view == "frame" ? app::tr("Frame size (kbit)")
-                            : view == "gop" ? app::tr("GOP bitrate (kb/s)")
-                                            : app::tr("Video bitrate (kb/s)"));
+    std::vector<std::pair<const BitrateEntry*, std::shared_ptr<const BitratePlot>>> plots;
     for (auto& [key, entry] : entries_) {
         if (!entry.enabled) {
             continue;
         }
-        const std::shared_ptr<const BitratePlot> plot = entry_plot(entry);
-        if (!plot) {
-            continue;
+        if (std::shared_ptr<const BitratePlot> plot = entry_plot(entry)) {
+            plots.emplace_back(&entry, std::move(plot));
         }
-        chart->set_series(entry.series, {std::span(plot->times), std::span(plot->values), plot, entry.color, true});
-        current_plots_.emplace_back(file_name(entry.path), plot);
+    }
+    // In megabits once a line reaches 1000 kb/s, where the table also
+    // switches to Mb/s: a 4K film's busiest second put 250000 on the axis.
+    const bool mega = std::ranges::any_of(plots, [](const auto& item) {
+        const std::vector<float>& values = item.second->values;
+        return !values.empty() && *std::ranges::max_element(values) >= 1000;
+    });
+    value_scale_ = mega ? 1000 : 1;
+    const std::string view = view_name();
+    if (view == "frame") {
+        chart->set_y_axis_label(mega ? app::tr("Frame size (Mbit)") : app::tr("Frame size (kbit)"));
+        value_unit_ = mega ? QStringLiteral("Mbit") : QStringLiteral("kbit");
+    } else {
+        if (view == "gop") {
+            chart->set_y_axis_label(mega ? app::tr("GOP bitrate (Mb/s)") : app::tr("GOP bitrate (kb/s)"));
+        } else {
+            chart->set_y_axis_label(mega ? app::tr("Video bitrate (Mb/s)") : app::tr("Video bitrate (kb/s)"));
+        }
+        value_unit_ = mega ? QStringLiteral("Mb/s") : QStringLiteral("kb/s");
+    }
+    for (const auto& [entry, plot] : plots) {
+        if (mega) {
+            // The line in megabits, kept alive by the graph with the plot
+            // whose times it shares.
+            struct Scaled {
+                std::shared_ptr<const BitratePlot> plot;
+                std::vector<float> values;
+            };
+            auto scaled = std::make_shared<Scaled>(Scaled{plot, plot->values});
+            for (float& value : scaled->values) {
+                value /= 1000;
+            }
+            chart->set_series(entry->series,
+                              {std::span(plot->times), std::span(scaled->values), scaled, entry->color, true});
+        } else {
+            chart->set_series(entry->series, {std::span(plot->times), std::span(plot->values), plot, entry->color, true});
+        }
+        current_plots_.emplace_back(file_name(entry->path), plot);
     }
     chart->reset_view();
     on_hover_left();
@@ -723,8 +755,8 @@ void BitratePanel::on_hovered(double time) {
         }
         lines.append(python_format("{name}: {value:,.2f} {unit}",
                                    {{"name", name},
-                                    {"value", static_cast<double>(plot->values[index])},
-                                    {"unit", text_of(plot->value_label)}}));
+                                    {"value", static_cast<double>(plot->values[index]) / value_scale_},
+                                    {"unit", value_unit_}}));
     }
     hover_label->setText(lines.join('\n'));
 }

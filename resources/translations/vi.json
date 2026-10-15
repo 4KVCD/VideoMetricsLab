@@ -713,7 +713,10 @@
   "Light": "Sáng",
   "Dark": "Tối",
   "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}, {nits:g} nit, {lux:g} lux, {distance:.2f} m ({heights:.1f} × chiều cao màn hình)",
-  "{side} {number} of {count}": "{side} {number}/{count}"
+  "{side} {number} of {count}": "{side} {number}/{count}",
+  "Video bitrate (Mb/s)": "Bitrate video (Mbps)",
+  "GOP bitrate (Mb/s)": "Bitrate GOP (Mbps)",
+  "Frame size (Mbit)": "Kích thước khung (Mbit)"
  },
  "plurals": {
   "about {count} day": [

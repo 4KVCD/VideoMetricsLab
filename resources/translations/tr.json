@@ -713,7 +713,10 @@
   "Light": "Açık",
   "Dark": "Koyu",
   "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}, {nits:g} nit, {lux:g} lüks, {distance:.2f} m ({heights:.1f} × ekran yüksekliği)",
-  "{side} {number} of {count}": "{side} {number}/{count}"
+  "{side} {number} of {count}": "{side} {number}/{count}",
+  "Video bitrate (Mb/s)": "Video bit hızı (Mb/sn)",
+  "GOP bitrate (Mb/s)": "GOP bit hızı (Mb/sn)",
+  "Frame size (Mbit)": "Kare boyutu (Mbit)"
  },
  "plurals": {
   "about {count} day": [

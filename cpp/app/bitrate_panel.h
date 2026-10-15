@@ -180,6 +180,10 @@ private:
     int next_series_ = 0;
     // The lines drawn, in the table's order: each file's name and graph.
     std::vector<std::pair<QString, std::shared_ptr<const BitratePlot>>> current_plots_;
+    // The graph's values are divided by this and shown in this unit (see
+    // refresh_plot).
+    double value_scale_ = 1;
+    QString value_unit_ = QStringLiteral("kb/s");
 };
 
 }  // namespace vml::app

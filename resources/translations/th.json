@@ -713,7 +713,10 @@
   "Light": "สว่าง",
   "Dark": "มืด",
   "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range} {nits:g} นิต {lux:g} ลักซ์ {distance:.2f} ม. ({heights:.1f} × ความสูงจอ)",
-  "{side} {number} of {count}": "{side} {number} จาก {count}"
+  "{side} {number} of {count}": "{side} {number} จาก {count}",
+  "Video bitrate (Mb/s)": "บิตเรตวิดีโอ (Mbps)",
+  "GOP bitrate (Mb/s)": "บิตเรต GOP (Mbps)",
+  "Frame size (Mbit)": "ขนาดเฟรม (Mbit)"
  },
  "plurals": {
   "about {count} day": [
