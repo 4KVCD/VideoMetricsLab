@@ -9,6 +9,7 @@
 #pragma once
 
 #include <QColor>
+#include <QFont>
 #include <QPixmap>
 #include <QString>
 #include <QWidget>
@@ -104,6 +105,9 @@ public:
     // none for this metric.
     void set_curve(int series_id, const SeriesEntry& entry);
     void remove_curves(const std::vector<int>& series_ids);
+    // Gives the lines the new ids `renumbered` names (old to new), the
+    // panel's order (GraphPanel::apply_order).
+    void renumber(const std::map<int, int>& renumbered);
     void set_visible(int series_id, bool visible);
     const MetricCurve* curve(int series_id) const;
     const std::map<int, MetricCurve>& curves() const { return curves_; }
@@ -143,6 +147,10 @@ private:
     QString placeholder_;
     std::map<int, MetricCurve> curves_;  // by series, only lines with data
     QString hover_text_;
+    // The readout's monospaced font, which the label takes from the first
+    // hover on; the placeholder before it is in the window's.
+    QFont readout_font_;
+    bool showing_readout_ = false;
     // The readout's columns, worked out when the lines change, not at each
     // move of the pointer.
     int series_width_ = 0;
@@ -189,6 +197,11 @@ public:
     // Shows or hides a line on every page; its row stays, to show it again.
     void set_series_visible(int series_id, bool visible);
 
+    // Lists the lines in the order of `identities`, the Videos table's; lines
+    // not among them (results added here) follow, in the order they came.
+    // They were listed in the order their runs finished.
+    void set_order(std::vector<std::string> identities);
+
     // The metric to show when a run has it (Settings.graph_metric).
     void set_preferred_metric(const std::string& key);
     // Whether any run is shown.
@@ -234,6 +247,7 @@ private:
     void on_stats_item_changed(QTableWidgetItem* item);
     bool add_series(const Run& run);
     void series_changed();
+    bool apply_order();
     void set_visible(int series_id, bool visible);
     void refresh_stats_table();
     std::pair<std::vector<QString>, std::vector<std::tuple<QString, QColor, std::vector<QString>>>> export_table();
@@ -244,7 +258,11 @@ private:
     void on_file_writes_idle();
 
     VideoColors* colors_;
-    std::map<int, SeriesEntry> entries_;  // by series; ids rise as runs are added
+    // By series: ids rise as runs are added, and are given again in the
+    // order wanted (apply_order).
+    std::map<int, SeriesEntry> entries_;
+    // The lines' identities in the order wanted, the Videos table's.
+    std::vector<std::string> order_;
     std::set<std::string> suppressed_identities_;
     int next_id_ = 0;
     std::string preferred_metric_ = "vmaf";

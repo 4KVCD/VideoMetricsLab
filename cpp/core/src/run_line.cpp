@@ -386,6 +386,7 @@ MetricLine metric_line(const std::vector<TaskSnapshot>& tasks, bool paused, cons
         return std::string();
     };
     MetricLine line;
+    std::vector<std::pair<std::string, std::string>> heads;  // each part's head, and the step it starts on
     for (const std::string place : {"CPU", "GPU"}) {
         if (order[place].empty()) {
             continue;
@@ -416,9 +417,23 @@ MetricLine metric_line(const std::vector<TaskSnapshot>& tasks, bool paused, cons
         }
         if (shown.empty()) {
             line.parts.push_back(say("{kind} done", {{"kind", say(place_name(place), {})}}));
+            heads.emplace_back();
         }
         for (const MetricUnit* unit : shown) {
             line.parts.push_back(unit_text(head(*unit), *unit, paused, holder(*unit), wording));
+            heads.emplace_back(head(*unit), unit->state == "starting" ? step_text(unit->task->step, wording) : "");
+        }
+    }
+    // Every part starting on the same step (the CPU's and the GPU's metrics
+    // waiting for the black bars they share): the step said once, first,
+    // rather than after each part.
+    const bool one_step = std::all_of(heads.begin(), heads.end(), [&heads](const auto& part) {
+        return !part.second.empty() && part.second == heads.front().second;
+    });
+    if (line.parts.size() > 1 && one_step) {
+        line.parts = {heads.front().second};
+        for (const auto& [part_head, step] : heads) {
+            line.parts.push_back(part_head);
         }
     }
     for (const std::string place : {"CPU", "GPU"}) {

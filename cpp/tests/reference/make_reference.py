@@ -752,6 +752,7 @@ def run_line_cases() -> dict:
                              kind=GPU_VMAF_FAILED),
         "spaces and dots": "  Detecting black bars in distorted . …..  ",
         "only dots": "...",
+        "black bars": "Detecting black bars in source and distorted...",
         "gpu pass": Status("GPU metric 2/3: Butteraugli", kind=GPU_PASS),
         "vship": Status.decoding("Vship GPU (NVIDIA GeForce RTX 5090): calculating SSIMULACRA2",
                                  HwAccelPlan("cuda", None)),
@@ -825,6 +826,11 @@ def run_line_cases() -> dict:
                                      task("perceptual", ("ssimulacra2",), "waiting", lane="gpu", waiting="GPU",
                                           step="gpu wait")],
         "a step after decoding failed": [task("ffmpeg", every, "starting", step="decoding failed")],
+        # Both places waiting for the black bars they share: said once.
+        "both detecting black bars": [task("ffmpeg", cpu, "starting", step="black bars"),
+                                      task("vmaf_gpu", gpu, "starting", step="black bars")],
+        "each on a step of its own": [task("ffmpeg", cpu, "starting", step="in the app"),
+                                      task("vmaf_gpu", gpu, "starting", step="black bars")],
         # Vship's task: its passes, one at a time, sharing one progress count.
         "Vship's first pass": [task("perceptual", perceptual, "running", current=50, total=300, fps=30.0,
                                     passes=one_each, phase=(1, 3, 0), step="gpu pass")],

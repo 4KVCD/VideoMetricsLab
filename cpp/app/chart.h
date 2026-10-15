@@ -64,6 +64,9 @@ public:
     const QString& y_axis_label() const { return y_axis_label_; }
     // Removes lines, fitting the axes again once however many go.
     void remove_series(const std::vector<int>& keys);
+    // Gives the lines the new keys `renumbered` names (old to new), and so
+    // the new keys' order: the last is drawn over the others.
+    void renumber(const std::map<int, int>& renumbered);
     void set_series_visible(int key, bool visible);
     void clear();
     // Whether any shown line has points.

@@ -2,9 +2,11 @@
 // black bars found are kept.
 #include <QtGlobal>
 
+#include <algorithm>
 #include <atomic>
 
 #include "frame_compare_panel.h"
+#include "graph_panel.h"
 #include "main_window.h"
 #include "window_helpers.h"
 #include "vml/crop_detect.h"
@@ -12,6 +14,22 @@
 #include "vml/metric_cache.h"
 
 namespace vml::app {
+
+namespace {
+
+// The frames the tab offers: the shorter video's (a resolution test's
+// source's), as a run would bound them, but whatever duration limit the
+// metrics have. That limit is the metrics' alone: playback stopped at it,
+// three seconds into a four-minute video, and the frames past it show that
+// they were not scored.
+long long whole_video_frames(const FrameComparison& comparison, VmafOptions options) {
+    options.duration_limit = 0;
+    const bool resample = comparison.resample_target.has_value();
+    return estimate_total_frames(resample ? comparison.source_info : comparison.distorted_info, options,
+                                 resample ? nullptr : &comparison.source_info);
+}
+
+}  // namespace
 
 std::string new_frame_identity() {
     static std::atomic<long long> next{0};
@@ -23,14 +41,21 @@ void MainWindow::sync_frame_compare() {
     // only scored rows, on purpose. Seeing a source and an encode side by
     // side is useful in itself: to check framing, to find a scene worth
     // measuring, or to see whether an encode is the same content at all,
-    // before a feature-length calculation.
+    // before a feature-length calculation. Metric Graphs lists its lines in
+    // the table's order too: called after every change to the rows, this
+    // keeps both in step with it.
     std::vector<FrameComparisonEntry> entries;
+    std::vector<std::string> graph_order;
     for (const std::shared_ptr<RowData>& row_data : rows_) {
         if (std::optional<FrameComparisonEntry> entry = frame_comparison_entry(*row_data)) {
             entries.push_back(std::move(*entry));
         }
+        if (row_data->completed_run) {
+            graph_order.push_back(row_data->completed_run->graph_identity);
+        }
     }
     frame_compare_panel_->set_runs(std::move(entries));
+    graph_panel_->set_order(std::move(graph_order));
 }
 
 std::optional<FrameComparisonEntry> MainWindow::frame_comparison_entry(const RowData& row_data) const {
@@ -41,6 +66,7 @@ std::optional<FrameComparisonEntry> MainWindow::frame_comparison_entry(const Row
         FrameComparison comparison = FrameComparison::from_result(run->result);
         comparison.source_info = source_info_ ? *source_info_ : run->result.source_info;
         comparison.distorted_info = row_data.video_info ? *row_data.video_info : run->result.distorted_info;
+        comparison.frame_count = std::max(comparison.frame_count, whole_video_frames(comparison, row_data.options));
         return FrameComparisonEntry{run->graph_identity, run->label, std::move(comparison),
                                     std::shared_ptr<const ComparisonResult>(run, &run->result),
                                     row_data.frame_identity};
@@ -62,11 +88,8 @@ std::optional<FrameComparisonEntry> MainWindow::frame_comparison_entry(const Row
     comparison.scale_direction = options.scale_direction;
     comparison.scale_algorithm = options.scale_algorithm;
     comparison.resample_target = resample;
-    const VideoInfo& reference = comparison.distorted_info;
-    comparison.fps = reference.fps;
-    // The same bound a run uses, so that the timeline cannot offer frames
-    // past the end of the shorter video.
-    comparison.frame_count = estimate_total_frames(reference, options, resample ? nullptr : &*source_info_);
+    comparison.fps = comparison.distorted_info.fps;
+    comparison.frame_count = whole_video_frames(comparison, options);
     comparison.auto_crop_pending = options.crop_mode == CropMode::automatic;
     return FrameComparisonEntry{row_data.frame_identity, text_of(row_data.path.stem()), std::move(comparison),
                                 nullptr, row_data.frame_identity};

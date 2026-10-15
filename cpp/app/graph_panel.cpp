@@ -290,11 +290,13 @@ MetricPage::MetricPage(const MetricDefinition& metric, QWidget* parent)
 
     hover_label_ = new QLabel(placeholder_);
     hover_label_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    // The font is set on the label, not by a stylesheet: the readout is
-    // sized by measuring the label's font (fit_hover_label).
-    QFont mono(QStringLiteral("Consolas"));
-    mono.setStyleHint(QFont::Monospace);
-    hover_label_->setFont(mono);
+    // The readout is monospaced, so that its columns line up; the hint shown
+    // until the first hover keeps the window's font, as the rest of the tab
+    // (in the readout's, it looked out of place). The readout's font is set
+    // on the label, not by a stylesheet: the readout is sized by measuring
+    // it (fit_hover_label).
+    readout_font_ = QFont(QStringLiteral("Consolas"));
+    readout_font_.setStyleHint(QFont::Monospace);
     hover_label_->setStyleSheet(QStringLiteral("padding: 6px;"));
     // A fixed size, plain text, no wrapping: the readout is rewritten at
     // each move of the pointer, and a size hint that changed with it would
@@ -420,6 +422,16 @@ void MetricPage::remove_curves(const std::vector<int>& series_ids) {
     fit_hover_label();
 }
 
+void MetricPage::renumber(const std::map<int, int>& renumbered) {
+    std::map<int, MetricCurve> curves;
+    for (auto& [id, curve] : curves_) {
+        const auto found = renumbered.find(id);
+        curves.emplace(found == renumbered.end() ? id : found->second, std::move(curve));
+    }
+    curves_ = std::move(curves);
+    chart_->renumber(renumbered);
+}
+
 void MetricPage::set_visible(int series_id, bool visible) {
     const auto found = curves_.find(series_id);
     if (found == curves_.end()) {
@@ -442,7 +454,7 @@ void MetricPage::fit_hover_label() {
     // lines now: fixed, it cut off long names; sized at each hover, it laid
     // the tab out again each time.
     refresh_readout_layout();
-    const QFontMetrics metrics(hover_label_->font());
+    const QFontMetrics metrics(readout_font_);
     const std::vector<QString> labels = visible_labels();
     QStringList lines{app::tr("Time: {time}", {{"time", QStringLiteral("0:00:00.00")}})};
     std::map<std::string, std::optional<double>> widest;
@@ -455,18 +467,24 @@ void MetricPage::fit_hover_label() {
     if (labels.size() == 2) {
         lines.append(QStringLiteral("Δ (%1 − %2) = -88.88").arg(labels[0], labels[1]));
     }
-    // The label shows the readout or the placeholder, never resized between
-    // them: sized to the readout alone, a short name left the placeholder
-    // cut off when the pointer left.
+    // The label shows the placeholder, in the window's font, until the
+    // pointer first comes over the chart, then the readout, never resized
+    // between them: sized to the readout alone, a short name left the
+    // placeholder cut off.
     const QStringList placeholder_lines = placeholder_.split('\n');
+    const QFontMetrics hint(font());
     constexpr int padding = 28;  // the stylesheet's 6 px each side, and some room
     int width = 0;
-    for (const QString& line : lines + placeholder_lines) {
+    for (const QString& line : lines) {
         width = std::max(width, metrics.horizontalAdvance(line));
     }
+    for (const QString& line : placeholder_lines) {
+        width = std::max(width, hint.horizontalAdvance(line));
+    }
     // The taller of the two texts, not both: they are never shown together.
-    const int height =
-        static_cast<int>(std::max(lines.size(), placeholder_lines.size())) * metrics.lineSpacing() + padding;
+    const int height = std::max(static_cast<int>(lines.size()) * metrics.lineSpacing(),
+                                static_cast<int>(placeholder_lines.size()) * hint.lineSpacing()) +
+                       padding;
     // A maximum, not a fixed width: the label takes no more room than its
     // text needs, and can still shrink with the window.
     hover_label_->setMaximumWidth(width + padding);
@@ -580,6 +598,10 @@ void MetricPage::set_hover_text(const QString& text) {
     // drawn again.
     if (text != hover_text_) {
         hover_text_ = text;
+        if (!showing_readout_) {  // the hint gives way, once
+            showing_readout_ = true;
+            hover_label_->setFont(readout_font_);
+        }
         hover_label_->setText(text);
     }
 }
@@ -1264,9 +1286,49 @@ bool GraphPanel::add_series(const Run& run) {
 }
 
 void GraphPanel::series_changed() {
+    apply_order();
     select_available_metric();
     refresh_stats_table();
     refresh_frame_range();
+}
+
+void GraphPanel::set_order(std::vector<std::string> identities) {
+    order_ = std::move(identities);
+    if (apply_order()) {
+        refresh_stats_table();
+    }
+}
+
+bool GraphPanel::apply_order() {
+    // The lines given new ids in the order wanted, as every page and the
+    // table go by id; whether any moved.
+    std::map<std::string, std::size_t> position;
+    for (std::size_t index = 0; index < order_.size(); ++index) {
+        position.emplace(order_[index], index);
+    }
+    std::vector<int> wanted;
+    for (const auto& [id, entry] : entries_) {
+        wanted.push_back(id);
+    }
+    const auto place = [&](int id) {
+        const auto found = position.find(entries_.at(id).identity);
+        return std::pair(found == position.end() ? order_.size() : found->second, id);
+    };
+    if (std::is_sorted(wanted.begin(), wanted.end(), [&](int a, int b) { return place(a) < place(b); })) {
+        return false;
+    }
+    std::stable_sort(wanted.begin(), wanted.end(), [&](int a, int b) { return place(a) < place(b); });
+    std::map<int, int> renumbered;
+    std::map<int, SeriesEntry> entries;
+    for (const int old : wanted) {
+        renumbered.emplace(old, next_id_);
+        entries.emplace(next_id_++, std::move(entries_.at(old)));
+    }
+    entries_ = std::move(entries);
+    for (const auto& [key, page] : pages_) {
+        page->renumber(renumbered);
+    }
+    return true;
 }
 
 bool GraphPanel::remove_by_path(const std::filesystem::path& distorted) {

@@ -1973,7 +1973,7 @@ void MainWindow::apply_row_order(const std::vector<int>& order) {
     table->blockSignals(false);
     table->viewport()->update();
     on_table_selection_changed();
-    sync_frame_compare();  // Video Compare lists the videos in the table's order
+    sync_frame_compare();  // Video Compare and Metric Graphs list the videos in the table's order
 }
 
 void MainWindow::on_rows_dragged(const QList<int>& rows, int target) {

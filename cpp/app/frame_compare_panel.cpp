@@ -871,11 +871,15 @@ void FrameComparePanel::show_video_position() {
 }
 
 void FrameComparePanel::on_video_playing_changed(bool playing) {
+    play_button->setText(playing ? app::tr("\xE2\x9D\x9A\xE2\x9D\x9A Pause") : app::tr("\xE2\x96\xB6 Play"));
+    // Said before the frame line is drawn: drawn first, it went on saying
+    // "Playing" once playback had stopped.
+    video_status_ = playing ? QStringLiteral("Playing") : QStringLiteral("Paused");
     if (!playing && position_timer_->isActive()) {
         show_video_position();  // the frame it stopped on, now
+    } else if (is_video_mode()) {
+        update_frame_line();
     }
-    play_button->setText(playing ? app::tr("\xE2\x9D\x9A\xE2\x9D\x9A Pause") : app::tr("\xE2\x96\xB6 Play"));
-    video_status_ = playing ? QStringLiteral("Playing") : QStringLiteral("Paused");
     if (is_video_mode()) {
         update_color_status();
     }
@@ -894,6 +898,9 @@ void FrameComparePanel::on_video_status_changed(const QString& message) {
     }
     if (is_video_mode()) {
         update_color_status();
+        // Drawn only as the frame moved, the line kept the status from
+        // before: "Playing" at the end, the last test video's decoder.
+        update_frame_line();
     }
 }
 

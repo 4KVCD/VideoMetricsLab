@@ -95,6 +95,16 @@ void ChartWidget::set_series(int key, ChartSeries series) {
     invalidate(true);
 }
 
+void ChartWidget::renumber(const std::map<int, int>& renumbered) {
+    std::map<int, ChartSeries> series;
+    for (auto& [key, line] : series_) {
+        const auto found = renumbered.find(key);
+        series.emplace(found == renumbered.end() ? key : found->second, std::move(line));
+    }
+    series_ = std::move(series);
+    invalidate(false);
+}
+
 void ChartWidget::set_series_color(int key, const QColor& color) {
     // Drawn again, without reading the scores or resetting the zoom.
     const auto found = series_.find(key);
@@ -378,7 +388,11 @@ void ChartWidget::draw_axes(QPainter& painter, const QRect& rect, bool dark) con
     painter.setPen(QPen(colours.text, 1));
     for (const auto& [px, time] : time_ticks) {
         const QString label = time_text(time);
-        painter.drawText(px - metrics.horizontalAdvance(label) / 2, rect.bottom() + metrics.height() + 2, label);
+        // Centred on its tick, but kept inside the widget: a tick at the
+        // right end lost half its label ("0:00:0").
+        const int label_width = metrics.horizontalAdvance(label);
+        const int left = std::min(px - label_width / 2, width() - label_width - 1);
+        painter.drawText(left, rect.bottom() + metrics.height() + 2, label);
     }
     for (const auto& [py, label] : ticks) {
         painter.drawText(rect.left() - metrics.horizontalAdvance(label) - 6, py + metrics.ascent() / 2, label);

@@ -212,6 +212,13 @@ BitratePanel::BitratePanel(std::function<std::string()> ffprobe, VideoColors* co
     progress->setRange(0, 100);
     progress->setValue(0);
     progress->setMaximumWidth(220);
+    // Shown only while files are read: left at 100% it looked as if
+    // something were still going on. Its room is kept, so that the plot
+    // does not move when it comes and goes.
+    QSizePolicy keep_room = progress->sizePolicy();
+    keep_room.setRetainSizeWhenHidden(true);
+    progress->setSizePolicy(keep_room);
+    progress->setVisible(false);
     status_row->addWidget(status_label, 1);
     status_row->addWidget(progress);
     root->addLayout(status_row);
@@ -436,6 +443,8 @@ void BitratePanel::start_pending() {
             [this](const QString& path, const QString& error) { on_failed(path, error); });
     connect(worker, &QThread::finished, this, [this, worker] { on_worker_finished(worker); });
     update_buttons();
+    progress->setValue(0);
+    progress->setVisible(true);
     worker->start();
 }
 
@@ -538,6 +547,7 @@ void BitratePanel::on_worker_finished(BitrateWorker* worker) {
         status_label->setText(stopped ? app::tr("Bitrate analysis stopped. Completed results are kept.")
                                       : app::tr("Bitrate analysis complete. Values contain the first video "
                                                 "stream only."));
+        progress->setVisible(false);
         update_buttons();
     }
 }

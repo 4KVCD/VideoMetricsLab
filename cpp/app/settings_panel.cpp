@@ -43,12 +43,12 @@ namespace {
 
 const app_log::Logger logger("vml.settings_panel");
 
-// The "Default metrics" check boxes, in the order they are shown: the
-// metric's key and its label.
+// The "Default metrics" check boxes, in the order they are shown, the
+// Videos table's and Metric Graphs': the metric's key and its label.
 const std::vector<std::pair<std::string, QString>> default_metric_boxes{
     {"vmaf", "VMAF v0.6.1"},
-    {"vmaf_v1", "VMAF v1"},
     {"vmaf_neg", "VMAF NEG"},
+    {"vmaf_v1", "VMAF v1"},
     {"psnr", "PSNR"},
     {"ssim", "SSIM"},
     {"xpsnr", "XPSNR"},
@@ -252,7 +252,12 @@ QGroupBox* SettingsPanel::build_gpu_box(const std::vector<GpuVendor>& gpu_vendor
         return std::find(gpu_vendors.begin(), gpu_vendors.end(), vendor) != gpu_vendors.end();
     };
     gpu_backend = new QComboBox;
-    gpu_backend->addItem(app::tr("Auto (CUDA on NVIDIA, HIP on AMD, Vulkan on other GPUs)"), "auto");
+    // Under Auto, VMAF is calculated with Vulkan whatever the GPU (with CUDA
+    // only when CUDA is chosen here); the maker decides only Vship's build.
+    // The text said "CUDA on NVIDIA", which VMAF does not use under Auto.
+    gpu_backend->addItem(app::tr("Auto (VMAF: Vulkan; SSIMULACRA2, Butteraugli, CVVDP: CUDA on NVIDIA, HIP on AMD, "
+                                 "Vulkan on other GPUs)"),
+                         "auto");
     gpu_backend->addItem(app::tr("Vulkan (any GPU)"), "vulkan");
     if (has(GpuVendor::nvidia) || settings_.gpu_backend == "cuda") {
         gpu_backend->addItem(app::tr("CUDA (NVIDIA)"), "cuda");

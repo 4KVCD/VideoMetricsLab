@@ -1472,6 +1472,149 @@
    "decoder_source_only": ""
   },
   {
+   "name": "both detecting black bars",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "ffmpeg",
+     "metric_keys": [
+      "psnr",
+      "ssim",
+      "xpsnr"
+     ],
+     "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 0,
+     "total": 0,
+     "state": "starting",
+     "phase": null,
+     "fps": "0x0.0p+0",
+     "waiting_for": "",
+     "step": {
+      "text": "Detecting black bars in source and distorted...",
+      "kind": "step",
+      "brief": ""
+     },
+     "decode": null
+    },
+    {
+     "backend": "vmaf_gpu",
+     "metric_keys": [
+      "vmaf",
+      "vmaf_neg"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 0,
+     "total": 0,
+     "state": "starting",
+     "phase": null,
+     "fps": "0x0.0p+0",
+     "waiting_for": "",
+     "step": {
+      "text": "Detecting black bars in source and distorted...",
+      "kind": "step",
+      "brief": ""
+     },
+     "decode": null
+    }
+   ],
+   "line": [
+    "Detecting black bars in source and test video",
+    "CPU metrics 1\u20133 of 3: PSNR, SSIM, XPSNR",
+    "GPU metrics 1\u20132 of 2: VMAF v0.6.1, VMAF NEG"
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR starting\nCPU metrics 2 of 3: SSIM starting\nCPU metrics 3 of 3: XPSNR starting\nGPU metrics 1 of 2: VMAF v0.6.1 starting\nGPU metrics 2 of 2: VMAF NEG starting",
+   "decoder": "",
+   "decoder_source_only": ""
+  },
+  {
+   "name": "each on a step of its own",
+   "paused": false,
+   "tasks": [
+    {
+     "backend": "ffmpeg",
+     "metric_keys": [
+      "psnr",
+      "ssim",
+      "xpsnr"
+     ],
+     "lane": "cpu",
+     "passes": [
+      [
+       "psnr",
+       "ssim",
+       "xpsnr"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 0,
+     "total": 0,
+     "state": "starting",
+     "phase": null,
+     "fps": "0x0.0p+0",
+     "waiting_for": "",
+     "step": {
+      "text": "Running PSNR, SSIM and XPSNR in the app (GPU decode: source cuda, distorted cuda)...",
+      "kind": "step",
+      "brief": "Running PSNR, SSIM and XPSNR in the app"
+     },
+     "decode": null
+    },
+    {
+     "backend": "vmaf_gpu",
+     "metric_keys": [
+      "vmaf",
+      "vmaf_neg"
+     ],
+     "lane": "gpu",
+     "passes": [
+      [
+       "vmaf",
+       "vmaf_neg"
+      ]
+     ],
+     "cpu_keys": [],
+     "done_keys": [],
+     "current": 0,
+     "total": 0,
+     "state": "starting",
+     "phase": null,
+     "fps": "0x0.0p+0",
+     "waiting_for": "",
+     "step": {
+      "text": "Detecting black bars in source and distorted...",
+      "kind": "step",
+      "brief": ""
+     },
+     "decode": null
+    }
+   ],
+   "line": [
+    "CPU metrics 1\u20133 of 3: PSNR, SSIM, XPSNR (Running PSNR, SSIM and XPSNR in the app)",
+    "GPU metrics 1\u20132 of 2: VMAF v0.6.1, VMAF NEG (Detecting black bars in source and test video)"
+   ],
+   "tooltip": "CPU metrics 1 of 3: PSNR starting\nCPU metrics 2 of 3: SSIM starting\nCPU metrics 3 of 3: XPSNR starting\nGPU metrics 1 of 2: VMAF v0.6.1 starting\nGPU metrics 2 of 2: VMAF NEG starting",
+   "decoder": "",
+   "decoder_source_only": ""
+  },
+  {
    "name": "Vship's first pass",
    "paused": false,
    "tasks": [
@@ -2245,6 +2388,14 @@
     "brief": ""
    },
    "text": ""
+  },
+  {
+   "status": {
+    "text": "Detecting black bars in source and distorted...",
+    "kind": "step",
+    "brief": ""
+   },
+   "text": "Detecting black bars in source and test video"
   },
   {
    "status": {

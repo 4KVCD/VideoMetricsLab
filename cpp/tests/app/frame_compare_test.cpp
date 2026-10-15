@@ -386,6 +386,7 @@ TEST_F(FramePanelTest, APairThatCanPlayIsPlayedWithThePanelsControls) {
     panel->play_button->click();
     EXPECT_FALSE(panel->video_view->playback_requested());
     EXPECT_EQ(panel->play_button->text().toStdString(), "\xE2\x96\xB6 Play");
+    EXPECT_TRUE(panel->detail_label->full_text().contains("Paused")) << panel->detail_label->full_text().toStdString();
 
     panel->set_frame(5);
     ASSERT_TRUE(wait_until([&panel] {

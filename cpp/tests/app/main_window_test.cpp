@@ -1331,9 +1331,10 @@ TEST_F(WindowTest, ClosingTheWindowDuringARunEndsTheRunAndThenTheWindow) {
 
 TEST_F(WindowTest, AFinishedRunIsOnTheGraphAndARemovedVideoTakesItsLineAway) {
     // Metric Graphs shows exactly the videos with a result: a run's reach it
-    // without a button pressed, its tab brought to the front, and a video
-    // removed takes its line with it. (The Python app once shipped both
-    // wrong: a graph empty until Show graph was pressed, and lines left.)
+    // without a button pressed, its tab brought to the front, listed in the
+    // table's order (not the order they finished), and a video removed takes
+    // its line with it. (The Python app once shipped both wrong: a graph
+    // empty until Show graph was pressed, and lines left.)
     if (!have_clips()) {
         GTEST_SKIP() << "FFmpeg is not here";
     }
@@ -1345,8 +1346,10 @@ TEST_F(WindowTest, AFinishedRunIsOnTheGraphAndARemovedVideoTakesItsLineAway) {
     ASSERT_EQ(state(window, 1), RowState::complete);
     EXPECT_EQ(tabs(window).currentIndex(), tab_graph);
     EXPECT_EQ(graphed(window), (std::vector<std::string>{"a.mkv", "b.mkv"}));
+    drag_rows(window, {1}, 0);
+    EXPECT_EQ(graphed(window), (std::vector<std::string>{"b.mkv", "a.mkv"}));
 
-    select_rows(window, 0, 0);
+    select_rows(window, 1, 1);  // a.mkv, now second
     remove_selected(window);
     EXPECT_EQ(graphed(window), std::vector<std::string>{"b.mkv"});
 }
