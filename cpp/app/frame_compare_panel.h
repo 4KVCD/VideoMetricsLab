@@ -56,6 +56,10 @@ struct FrameComparisonEntry {
     QString label;
     FrameComparison comparison;
     std::shared_ptr<const ComparisonResult> scores;
+    // Its row in the Videos tab, which stays the same while `identity`
+    // changes with the scores the row gets or loses, so that the video
+    // being watched stays chosen; empty for none.
+    std::string row;
 };
 
 // Seconds, M:SS or H:MM:SS(.sss) as seconds. Throws std::invalid_argument

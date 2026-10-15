@@ -42,7 +42,8 @@ std::optional<FrameComparisonEntry> MainWindow::frame_comparison_entry(const Row
         comparison.source_info = source_info_ ? *source_info_ : run->result.source_info;
         comparison.distorted_info = row_data.video_info ? *row_data.video_info : run->result.distorted_info;
         return FrameComparisonEntry{run->graph_identity, run->label, std::move(comparison),
-                                    std::shared_ptr<const ComparisonResult>(run, &run->result)};
+                                    std::shared_ptr<const ComparisonResult>(run, &run->result),
+                                    row_data.frame_identity};
     }
     if (!source_info_) {
         return std::nullopt;  // nothing to compare against yet
@@ -68,7 +69,7 @@ std::optional<FrameComparisonEntry> MainWindow::frame_comparison_entry(const Row
     comparison.frame_count = estimate_total_frames(reference, options, resample ? nullptr : &*source_info_);
     comparison.auto_crop_pending = options.crop_mode == CropMode::automatic;
     return FrameComparisonEntry{row_data.frame_identity, text_of(row_data.path.stem()), std::move(comparison),
-                                nullptr};
+                                nullptr, row_data.frame_identity};
 }
 
 void MainWindow::use_crop_store() {

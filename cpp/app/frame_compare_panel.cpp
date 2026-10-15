@@ -517,8 +517,14 @@ void FrameComparePanel::set_runs(std::vector<FrameComparisonEntry> entries) {
     const FrameComparisonEntry* old_entry = current_entry();
     const std::optional<std::string> old_identity =
         old_entry != nullptr ? std::optional(old_entry->identity) : std::nullopt;
+    const std::optional<std::string> old_row =
+        old_entry != nullptr && !old_entry->row.empty() ? std::optional(old_entry->row) : std::nullopt;
     const std::optional<FrameComparison> old_comparison =
         old_entry != nullptr ? std::optional(old_entry->comparison) : std::nullopt;
+    // The entry chosen before: its row's, whatever scores it has now.
+    const auto was_shown = [&](const FrameComparisonEntry& entry) {
+        return old_row ? entry.row == *old_row : old_identity && entry.identity == *old_identity;
+    };
     entries_.clear();
     for (const FrameComparisonEntry& entry : entries) {
         entries_.push_back(apply_auto_crop(entry));
@@ -530,7 +536,7 @@ void FrameComparePanel::set_runs(std::vector<FrameComparisonEntry> entries) {
 
     std::size_t current = 0;
     for (std::size_t index = 0; index < entries_.size(); ++index) {
-        if (old_identity && entries_[index].identity == *old_identity) {
+        if (was_shown(entries_[index])) {
             current = index;
             break;
         }
@@ -569,7 +575,7 @@ void FrameComparePanel::set_runs(std::vector<FrameComparisonEntry> entries) {
             // video several times while a run goes on, which must not
             // restart the video being watched.
             const FrameComparisonEntry* shown = current_entry();
-            if (!old_identity || shown->identity != *old_identity || shown->comparison != *old_comparison) {
+            if (!was_shown(*shown) || shown->comparison != *old_comparison) {
                 load_current_video();
             }
         } else {

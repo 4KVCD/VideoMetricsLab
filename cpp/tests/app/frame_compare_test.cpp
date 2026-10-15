@@ -109,7 +109,8 @@ FrameComparisonEntry scored(const std::string& name, double score = 90.0, long l
         vmaf.values.push_back(static_cast<float>(score + frame / 100.0));
     }
     result->metric_results.add(std::move(vmaf));
-    return {"run:" + name, QString::fromStdString(name), FrameComparison::from_result(*result), result};
+    return {"run:" + name, QString::fromStdString(name), FrameComparison::from_result(*result), result,
+            "row:" + name};
 }
 
 // A pair that has only been read: no run, no scores.
@@ -119,7 +120,7 @@ FrameComparisonEntry unscored(const std::string& name, long long count = 120) {
     comparison.distorted_info = video(name + ".mkv", 1280, 720, count);
     comparison.fps = 24.0;
     comparison.frame_count = count;
-    return {"row:" + name, QString::fromStdString(name), comparison, nullptr};
+    return {"row:" + name, QString::fromStdString(name), comparison, nullptr, "row:" + name};
 }
 
 std::unique_ptr<FrameComparePanel> make_panel(std::string ffmpeg = "ffmpeg") {
@@ -139,7 +140,8 @@ TEST(FrameCompare, TimestampsAreReadInEveryFormTheUserMayType) {
 
 // The pairs are listed, on the frames they all have; a frame shown is in
 // every seek widget, with its score; a switch to another test video keeps
-// the frame and wraps around; an unscored pair is shown, and says so.
+// the frame and wraps around, and stays when that video's scores go; an
+// unscored pair is shown, and says so.
 TEST_F(FramePanelTest, ThePairsAreListedOnTheirCommonFramesAndStepTogether) {
     const auto panel = make_panel();
     panel->set_runs({scored("first", 90.0, 120), scored("second", 80.0, 90)});
@@ -163,6 +165,10 @@ TEST_F(FramePanelTest, ThePairsAreListedOnTheirCommonFramesAndStepTogether) {
     EXPECT_EQ(panel->frame_spin->value(), 48);
     EXPECT_TRUE(panel->showing_label->text().contains("TEST 2 of 2"));
     EXPECT_TRUE(panel->detail_label->full_text().contains("VMAF v0.6.1 80.48"));
+    // The video watched stays chosen when its scores go (Recalculate), as
+    // when they come: its entry's identity changes, its row does not.
+    panel->set_runs({scored("first", 90.0, 120), unscored("second", 90)});
+    EXPECT_EQ(panel->video_combo->currentText().toStdString(), "second");
 
     panel->timestamp_edit->setText("0:00:02.5");
     emit panel->timestamp_edit->editingFinished();
