@@ -11,9 +11,22 @@
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <vector>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <d3d9.h>
+#endif
 
 #include "i18n.h"
 #include "main_window.h"
@@ -107,6 +120,45 @@ void start_session_log() {
     std::set_terminate(log_uncaught_exception);
 }
 
+#ifdef _WIN32
+// Direct3D 9, started on a thread of its own while the window is built. Qt
+// starts it when it makes the window, to ask which display a GPU is on
+// (QWindowsWindow::forcedScreenForGLWindow), though the window is drawn
+// without the GPU; starting it loads the display driver and checks its
+// signature, 63 of the 120 ms the window's thread was busy as the window
+// first showed, on this PC. Kept until the window has shown, so that the
+// driver is still loaded for Qt.
+class Direct3DWarmup {
+public:
+    Direct3DWarmup()
+        : thread_([this] {
+              using Create = IDirect3D9*(WINAPI*)(UINT);
+              HMODULE library = LoadLibraryW(L"d3d9.dll");
+              const auto create =
+                  library != nullptr ? reinterpret_cast<Create>(GetProcAddress(library, "Direct3DCreate9")) : nullptr;
+              if (create != nullptr) {
+                  direct3d_ = create(D3D_SDK_VERSION);
+                  if (direct3d_ != nullptr) {
+                      D3DADAPTER_IDENTIFIER9 identifier{};
+                      direct3d_->GetAdapterIdentifier(0, 0, &identifier);
+                  }
+              }
+          }) {}
+    ~Direct3DWarmup() {
+        thread_.join();
+        if (direct3d_ != nullptr) {
+            direct3d_->Release();
+        }
+    }
+    Direct3DWarmup(const Direct3DWarmup&) = delete;
+    Direct3DWarmup& operator=(const Direct3DWarmup&) = delete;
+
+private:
+    IDirect3D9* direct3d_ = nullptr;
+    std::thread thread_;  // last: it starts once the rest is set up
+};
+#endif
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -116,6 +168,9 @@ int main(int argc, char** argv) {
         return run_isolated_task(words[1], platform::path_from_text(words[2]));
     }
     set_isolation_program(platform::executable_path());
+#ifdef _WIN32
+    auto direct3d_warmup = std::make_unique<Direct3DWarmup>();
+#endif
 
     QApplication app(argc, argv);
     QApplication::setApplicationName("VideoMetricsLab");
@@ -154,6 +209,9 @@ int main(int argc, char** argv) {
 
     app::MainWindow window;
     window.show();
+#ifdef _WIN32
+    direct3d_warmup.reset();
+#endif
     window.check_for_updates();  // once, now, and at no other time
     return QApplication::exec();
 }
