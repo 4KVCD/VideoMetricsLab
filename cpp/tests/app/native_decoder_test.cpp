@@ -175,22 +175,46 @@ protected:
 }  // namespace
 
 // Frame 30 of each clip, after a seek, is FFmpeg's frame 30 sample for
-// sample: an MP4 with B-frames and 8-bit H.264 (which the GPU decodes), 10-bit
-// HEVC in Matroska (the GPU too), and 10-bit H.264, which no GPU decodes
-// (FFmpeg's software decoder, the picture uploaded).
+// sample, for each codec native playback plays: an MP4 with B-frames and
+// 8-bit H.264 and 10-bit HEVC in Matroska, which every Direct3D 11 GPU
+// decodes; AV1, VP9 and MPEG-2, which most do; 10-bit H.264 and VVC, which
+// none does (FFmpeg's software decoder, the picture uploaded); and 10-bit
+// ProRes 4:2:2 (software too, its picture converted to 4:2:0 as GStreamer
+// converted it).
+// MPEG-2's standard leaves its inverse transform's last bit to each decoder,
+// so a GPU's MPEG-2 frame is FFmpeg's to within a few codes (RTX 5090: 1.7%
+// of samples, at most 4 codes, 0.018 mean square; Intel's graphics: 0.4%, 2,
+// 0.004): it is held to 0.5, where another frame is far more.
 TEST_F(NativeDecoderTest, TheFramesAreFfmpegsCountedFromTheFirst) {
     struct Case {
         std::string name;
-        std::string encoder;
-        std::string pix_fmt;
-        std::string decoder;
+        std::vector<std::string> encoding;  // FFmpeg's options after the input
+        std::string decoder;                // the decoder every GPU uses, or ""
+        bool exact = true;                  // false: MPEG-2's own leeway
     };
-    const std::vector<Case> cases{Case{"h264.mp4", "libx264", "yuv420p", "GPU: d3d11va h264"},
-                                  Case{"hevc.mkv", "libx265", "yuv420p10le", "GPU: d3d11va hevc"},
-                                  Case{"high10.mkv", "libx264", "yuv420p10le", "software: h264"}};
+    const std::vector<Case> cases{
+        {"h264.mp4", {"-c:v", "libx264", "-preset", "veryfast", "-bf", "3", "-pix_fmt", "yuv420p"}, "GPU: d3d11va h264"},
+        {"hevc.mkv", {"-c:v", "libx265", "-preset", "ultrafast", "-x265-params", "bframes=4:log-level=error",
+                      "-pix_fmt", "yuv420p10le"},
+         "GPU: d3d11va hevc"},
+        {"av1.mkv", {"-c:v", "libsvtav1", "-preset", "12", "-pix_fmt", "yuv420p"}, ""},
+        {"vp9.webm", {"-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "-pix_fmt", "yuv420p"}, ""},
+        {"mpeg2.mkv", {"-c:v", "mpeg2video", "-q:v", "4", "-pix_fmt", "yuv420p"}, "", false},
+        {"high10.mkv", {"-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p10le"}, "software: h264"},
+        {"vvc.mkv", {"-c:v", "libvvenc", "-preset", "faster", "-pix_fmt", "yuv420p10le"}, "software: vvc"},
+        {"prores.mov", {"-c:v", "prores_ks", "-profile:v", "2", "-pix_fmt", "yuv422p10le"}, "software: prores"},
+    };
     std::vector<FrameComparison> clips;
     for (const Case& item : cases) {
-        clips.push_back(clip(item.name, item.encoder, item.pix_fmt));
+        std::vector<std::string> arguments{"-f", "lavfi", "-i", "testsrc2=s=640x360:r=24000/1001:d=2"};
+        arguments.insert(arguments.end(), item.encoding.begin(), item.encoding.end());
+        arguments.push_back(platform::path_text(folder_ / item.name));
+        test::run_ffmpeg(*found_, arguments);
+        FrameComparison comparison;
+        comparison.source_info = probe_video(folder_ / item.name, found_->ffprobe);
+        comparison.distorted_info = comparison.source_info;
+        comparison.fps = comparison.source_info.fps;
+        clips.push_back(comparison);
     }
     for (const auto& [gpu, device] : devices_) {
         SCOPED_TRACE(gpu);
@@ -200,12 +224,24 @@ TEST_F(NativeDecoderTest, TheFramesAreFfmpegsCountedFromTheFirst) {
             QString status;
             const NativeFramePtr frame = decode_frame(device, clips[index], FrameSide::source, 30, status);
             ASSERT_NE(frame, nullptr) << "frame 30 never came";
-            EXPECT_TRUE(status.contains(QString::fromStdString("source " + item.decoder))) << status.toStdString();
+            if (!item.decoder.empty()) {
+                EXPECT_TRUE(status.contains(QString::fromStdString("source " + item.decoder))) << status.toStdString();
+            }
             const std::vector<int> native = read_luma(*device, *frame);
             std::vector<int> wanted =
                 ffmpeg_luma(*found_, clips[index].source_info.path, 30, frame->ten_bit, "", folder_ / "frame.raw");
             wanted.resize(native.size());
-            EXPECT_EQ(native, wanted) << "not FFmpeg's frame 30";
+            if (item.exact) {
+                EXPECT_EQ(native, wanted) << "not FFmpeg's frame 30; " << status.toStdString();
+            } else {
+                double squares = 0;
+                for (std::size_t sample = 0; sample < native.size(); ++sample) {
+                    const double difference = native[sample] - wanted[sample];
+                    squares += difference * difference;
+                }
+                EXPECT_LT(squares / static_cast<double>(native.size()), 0.5)
+                    << "not FFmpeg's frame 30; " << status.toStdString();
+            }
         }
     }
     // A video that starts 0.25 s (six frames) after its file does, behind
