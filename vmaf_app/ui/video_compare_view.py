@@ -22,6 +22,7 @@ from vmaf_app.core import proc as proc_util
 from vmaf_app.core.frame_extract import (
     FrameComparison,
     PreviewColorSettings,
+    _would_distort,
     comparison_dimensions,
     frame_input_path,
 )
@@ -72,6 +73,23 @@ def _found_on_disk(path) -> bool:
     return True
 
 
+def crops_change_nothing(pending: FrameComparison, cropped: FrameComparison) -> bool:
+    """Whether the black bars found for `pending` leave its pictures as they
+    are: none on either side (each crop the whole frame), the size compared
+    at unchanged, and neither side boxed while they were looked for (each
+    already the shape it is shown at). Then the frames playing are the ones
+    the crops give."""
+    size = comparison_dimensions(pending)
+    if size != comparison_dimensions(cropped):
+        return False
+    for info, crop in ((cropped.source_info, cropped.source_crop),
+                       (cropped.distorted_info, cropped.distorted_crop)):
+        if crop is not None and not crop.is_noop(info.width, info.height):
+            return False
+        if _would_distort(pending, info, None, *size):
+            return False
+    return True
+
 
 def _end_audio(process: subprocess.Popen, handle: ProcessHandle | None) -> None:
     """Ends a soundtrack's FFmpeg and anything it started."""
@@ -83,27 +101,21 @@ def _end_audio(process: subprocess.Popen, handle: ProcessHandle | None) -> None:
 
 class _PairedFrameWidget(DragsZoomedFrame, QWidget):
     """A native window the native presenter's window sits in
-    (LockedNativePool), painted dark by Qt while no native playback owns it.
-    A zoomed frame is dragged on it (the view's zoom)."""
+    (LockedNativePool), painted dark by Qt, which shows until the presenter
+    draws its first frame. A zoomed frame is dragged on it (the view's zoom)."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setAttribute(Qt.WA_NativeWindow)
         self.setAttribute(Qt.WA_DontCreateNativeAncestors)
-        self._native_playback = False
-
-    def set_native_playback(self, enabled: bool) -> None:
-        """Says whether native playback draws on it, which then covers all of it."""
-        self._native_playback = bool(enabled)
-        self.update()
 
     def paintEvent(self, _event) -> None:
-        """Paints it dark, unless native playback draws on it."""
-        # While native playback owns it, the presenter's window covers all
-        # of it, the bars beside a zoomed frame included.
-        if self._native_playback:
-            return
+        """Paints it dark."""
+        # Even while native playback owns it: its presenter's window covers
+        # all of it once it shows a frame, but until then (a pool just
+        # started) this is what shows, and unpainted it showed whatever the
+        # window last drew there -- the Videos tab.
         QPainter(self).fillRect(self.rect(), QColor("#171717"))
 
     def _zoom_context(self):
@@ -176,8 +188,6 @@ class _StreamSurface(_PairedFrameWidget):
     def paintEvent(self, event):
         """Draws the frame: fitted to the view, or where the zoom puts it, with
         dark bars around it."""
-        if self._native_playback:
-            return
         painter = QPainter(self)
         background = QColor("#171717")
         image = self._frame_image()
@@ -533,10 +543,23 @@ class VideoCompareView(QWidget):
         running = [worker for worker in self._retired_workers if worker.isRunning()]
         return list(dict.fromkeys([*running, *self._pool.values()]))
 
+    def _plays_as_is(self, series) -> bool:
+        """Whether `series` is the pairs playing, each as it is or with black
+        bars found since that change nothing: then they play as they are.
+        Loaded afresh instead, every decoder would start again (seconds at
+        4K), and the first switch to another test video after a pair's bars
+        were found took that long."""
+        if len(self._series) != len(series):
+            return False
+        return all(playing == now or (playing.auto_crop_pending and not now.auto_crop_pending
+                                      and crops_change_nothing(playing, now))
+                   for playing, now in zip(self._series, series, strict=True))
+
     def load(self, comparison, position_ms, *, playing=False, color_settings=None, series=None, source_native=True):
         """Shows a comparison (one of `series`) at `position_ms`. A different
-        test video of the same series keeps the decoders running. Returns
-        False if it cannot be played."""
+        test video of the same series keeps the decoders running; so does a
+        series whose black bars, found since, change nothing
+        (crops_change_nothing). Returns False if it cannot be played."""
         available, reason = self.can_play(comparison)
         if not available:
             self.clear()
@@ -545,11 +568,12 @@ class VideoCompareView(QWidget):
         series = list(series or [comparison])
         settings = color_settings or PreviewColorSettings()
         selected = series.index(comparison)
-        if self._series == series and self._color_settings == settings and self._comparison is not None and self._source_native == source_native:
+        if (self._color_settings == settings and self._comparison is not None
+                and self._source_native == source_native and self._plays_as_is(series)):
             timestamp = self.position
             changed = self._selected != selected
             self._selected = selected
-            self._comparison = comparison
+            self._comparison = self._series[selected]  # what plays, as it plays it
             self._frame = round(timestamp / 1000 * comparison.fps)
             if self._native_pool is not None:
                 if changed:

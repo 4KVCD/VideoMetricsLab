@@ -34,8 +34,6 @@ from vmaf_app.core.frame_extract import (
     FrameComparison,
     PreviewColorMode,
     PreviewColorSettings,
-    _would_distort,
-    comparison_dimensions,
     frame_filter,
     frame_video_info,
     hdr_kind,
@@ -48,7 +46,7 @@ from vmaf_app.i18n import N_, tr, tr_message
 from vmaf_app.ui import theme
 from vmaf_app.ui.crop_detect_worker import _MISSING, CropDetectWorker
 from vmaf_app.ui.frame_extract_worker import FrameExtractWorker
-from vmaf_app.ui.video_compare_view import VideoCompareView
+from vmaf_app.ui.video_compare_view import VideoCompareView, crops_change_nothing
 from vmaf_app.ui.widgets import ElidedLabel
 from vmaf_app.ui.zoom import DragsZoomedFrame, Zoom, parse_percent, percent_text
 
@@ -1164,26 +1162,6 @@ class FrameComparePanel(QWidget):
             ),
         )
 
-    @staticmethod
-    def _crops_change_nothing(pending: FrameComparison, cropped: FrameComparison) -> bool:
-        """Whether the black bars found for `pending` leave its pictures as
-        they are: none on either side (each crop the whole frame), the size
-        compared at unchanged, and neither side boxed while they were looked
-        for (each already the shape it is shown at). Then the frames playing
-        are the ones the crops give, and loading the pair again would restart
-        every decoder for nothing: 0.7-1.3 s of "Buffering locked pair" in
-        the middle of playback, wherever detection happens to finish."""
-        size = comparison_dimensions(pending)
-        if size != comparison_dimensions(cropped):
-            return False
-        for info, crop in ((cropped.source_info, cropped.source_crop),
-                           (cropped.distorted_info, cropped.distorted_crop)):
-            if crop is not None and not crop.is_noop(info.width, info.height):
-                return False
-            if _would_distort(pending, info, None, *size):
-                return False
-        return True
-
     def _ensure_auto_crop(self, entry: FrameComparisonEntry | None) -> None:
         """Starts detecting a comparison's black bars, if not known or under way."""
         if entry is None or not entry.comparison.auto_crop_pending:
@@ -1263,8 +1241,11 @@ class FrameComparePanel(QWidget):
             self._generation += 1
             self._update_labels()
             if self.is_video_mode:
+                # Loading the pair again would restart every decoder for
+                # nothing: 0.7-1.3 s of "Buffering locked pair" in the middle
+                # of playback, wherever detection happens to finish.
                 if (previous is not None and previous.comparison.auto_crop_pending
-                        and self._crops_change_nothing(previous.comparison, self.current_entry.comparison)):
+                        and crops_change_nothing(previous.comparison, self.current_entry.comparison)):
                     return  # the pair playing already shows what the crops give
                 self._load_current_video(playing=playing)
             else:

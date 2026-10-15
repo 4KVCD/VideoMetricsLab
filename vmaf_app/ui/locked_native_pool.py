@@ -91,7 +91,6 @@ class LockedNativePool:
         self.surface = _PairedFrameWidget(view)
         self.surface.setFocusProxy(view)
         self.surface.setGeometry(view.rect())
-        self.surface.set_native_playback(True)
         self.surface.show()
         self.output = self.audio = None
         try:
