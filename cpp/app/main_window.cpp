@@ -1557,10 +1557,10 @@ QString MainWindow::crop_detail(const QString& label, const VideoInfo& info, con
                        {{"label", label}, {"size", size_text(info.width, info.height)}});
     }
     QStringList sides;
-    for (const auto& [side, pixels] : {std::pair{"top {pixels} px", std::max(0, crop->y)},
-                                       std::pair{"bottom {pixels} px", std::max(0, info.height - crop->y - crop->h)},
-                                       std::pair{"left {pixels} px", std::max(0, crop->x)},
-                                       std::pair{"right {pixels} px", std::max(0, info.width - crop->x - crop->w)}}) {
+    for (const auto& [side, pixels] : {std::pair{N_("top {pixels} px"), std::max(0, crop->y)},
+                                       std::pair{N_("bottom {pixels} px"), std::max(0, info.height - crop->y - crop->h)},
+                                       std::pair{N_("left {pixels} px"), std::max(0, crop->x)},
+                                       std::pair{N_("right {pixels} px"), std::max(0, info.width - crop->x - crop->w)}}) {
         if (pixels != 0) {
             sides.append(app::tr(side, {{"pixels", pixels}}));
         }

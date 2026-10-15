@@ -7,6 +7,7 @@
 #include "vml/number_format.h"
 #include "vml/python_json.h"
 #include "vml/python_text.h"
+#include "vml/translatable.h"
 
 namespace vml {
 
@@ -221,21 +222,21 @@ const std::vector<CvvdpPreset>& builtin_cvvdp_presets() {
     // The names are identifiers, saved in settings; the window shows them
     // translated, and the descriptions too.
     static const std::vector<CvvdpPreset> presets{
-        official("30-inch 4K monitor, office", "Official 'standard_4k' -- the official tool's default display.",
+        official(N_("30-inch 4K monitor, office"), N_("Official 'standard_4k' -- the official tool's default display."),
                  3840, 2160, 30, 0.7472, 200, 1000, 250),
-        official("24-inch 1080p monitor, office", "Official 'standard_fhd'.", 1920, 1080, 24, 0.6, 200, 1000, 250),
-        official("30-inch 4K HDR monitor, dim room", "Official 'standard_hdr_pq' (HLG uses the same display).", 3840,
+        official(N_("24-inch 1080p monitor, office"), N_("Official 'standard_fhd'."), 1920, 1080, 24, 0.6, 200, 1000, 250),
+        official(N_("30-inch 4K HDR monitor, dim room"), N_("Official 'standard_hdr_pq' (HLG uses the same display)."), 3840,
                  2160, 30, 0.7472, 1500, 1'000'000, 10, true),
-        official("30-inch 4K HDR monitor, dark room", "Official 'standard_hdr_dark'.", 3840, 2160, 30, 0.7472, 1500,
+        official(N_("30-inch 4K HDR monitor, dark room"), N_("Official 'standard_hdr_dark'."), 3840, 2160, 30, 0.7472, 1500,
                  1'000'000, 0, true),
-        official("65-inch 4K HDR TV, 1000 nits, living room", "Official '65inch_hdr_pq_1Knit'.", 3840, 2160, 65,
+        official(N_("65-inch 4K HDR TV, 1000 nits, living room"), N_("Official '65inch_hdr_pq_1Knit'."), 3840, 2160, 65,
                  1.98, 1000, 1'000'000, 5, true),
-        official("65-inch 4K HDR TV, 2000 nits, living room", "Official '65inch_hdr_pq_2Knit'.", 3840, 2160, 65,
+        official(N_("65-inch 4K HDR TV, 2000 nits, living room"), N_("Official '65inch_hdr_pq_2Knit'."), 3840, 2160, 65,
                  1.98, 2000, 1'000'000, 5, true),
-        official("65-inch 4K HDR TV, 4000 nits, living room", "Official '65inch_hdr_pq_4knit'.", 3840, 2160, 65,
+        official(N_("65-inch 4K HDR TV, 4000 nits, living room"), N_("Official '65inch_hdr_pq_4knit'."), 3840, 2160, 65,
                  1.98, 4000, 1'000'000, 5, true),
-        official("6-inch phone",
-                 "Official 'standard_phone' (contrast unspecified there: 1000:1, the official default).", 2400, 1080,
+        official(N_("6-inch phone"),
+                 N_("Official 'standard_phone' (contrast unspecified there: 1000:1, the official default)."), 2400, 1080,
                  6, 0.4, 500, 1000, 250),
     };
     return presets;

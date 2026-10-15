@@ -8,6 +8,7 @@
 #include "vml/metrics.h"
 #include "vml/number_format.h"
 #include "vml/time_format.h"
+#include "vml/translatable.h"
 
 namespace vml {
 
@@ -46,7 +47,7 @@ std::string labels_of(const std::vector<std::string>& keys) {
 }
 
 // How each place is named on the line.
-std::string_view place_name(std::string_view place) { return place == "CPU" ? "CPU metrics" : "GPU metrics"; }
+std::string_view place_name(std::string_view place) { return place == "CPU" ? N_("CPU metrics") : N_("GPU metrics"); }
 
 // Where a task's metrics are calculated now: "CPU" for a task in the CPU's
 // queue, and for a task in the GPU's queue whose metrics the CPU has taken

@@ -1063,7 +1063,7 @@ void GraphPanel::setup_stats_table() {
     for (const MetricDefinition& each : metrics()) {
         headers.append(qt_text(each.label));
     }
-    for (const char* label : {"Median", "StDev", "Min", "Max"}) {
+    for (const char* label : {N_("Median"), N_("StDev"), N_("Min"), N_("Max")}) {
         headers.append(app::tr(label));
     }
     for (const char* share : tail_shares) {
