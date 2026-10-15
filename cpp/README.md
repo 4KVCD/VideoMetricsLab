@@ -134,7 +134,8 @@ results are saved and loaded as the Python app's are. Metric Graphs draws
 each metric's scores frame by frame, with each video's statistics, and
 exports them (PNG, CSV). Video Compare shows a pair of frames, or plays the
 videos locked together: decoded with FFmpeg's libraries, on the GPU where
-Direct3D 11 can, drawn by the app's presenter (HDR too) and timed by the
+Direct3D 11 can (else in software, AV1 by dav1d where it is bundled, as in
+the package), drawn by the app's presenter (HDR too) and timed by the
 source's soundtrack when it plays, or, where that cannot play them,
 through ffmpeg.exe.
 The Bitrate Viewer plots each video's bitrate by frame, second or GOP. The

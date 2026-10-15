@@ -145,6 +145,11 @@ bool decoder_available(std::string_view backend);
 // self-test: AV1 is among them only where dav1d is beside FFmpeg's libraries.
 std::pair<std::vector<std::string>, std::string> software_codecs();
 
+// dav1d.dll, which decodes AV1 in software, for the software decoder and
+// for Video Compare's playback: beside FFmpeg's libraries, where a packaged
+// build has the Python app's and a development build has none.
+std::filesystem::path dav1d_library_path();
+
 // Whether GPU `device`'s decoder takes the plan's codec, bit depth and size,
 // and why not; for the software decoder, whether its libraries decode the
 // codec. The software decoder is never asked to scale (FFmpeg scales on

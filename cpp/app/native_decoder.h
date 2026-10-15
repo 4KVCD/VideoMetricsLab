@@ -2,9 +2,10 @@
 // Python app's GstComparePipeline, on FFmpeg's libraries instead of
 // GStreamer): read with libavformat, decoded by Direct3D 11's video decoding
 // on the presenter's device where the GPU decodes the video, else by
-// FFmpeg's software decoder and uploaded, frames timed from the video's first
-// frame. It decodes freely, at most three frames ahead of what is taken;
-// seeks are made on its thread, only the latest one asked for.
+// FFmpeg's software decoder (dav1d for AV1, native_dav1d.h) and uploaded,
+// frames timed from the video's first frame. It decodes freely, at most
+// three frames ahead of what is taken; seeks are made on its thread, only
+// the latest one asked for.
 #pragma once
 
 #include <QString>
@@ -101,6 +102,10 @@ public:
     const std::optional<std::array<float, 16>>& shading() const override { return shading_; }
     void cancel() override;
 
+    // For the tests: decodes in software from the start, as on a GPU without
+    // a decoder for the video. Before start().
+    void decode_in_software() { gpu_decoding_ = false; }
+
     // One opening of the video (native_decoder.cpp).
     struct Decoding;
 
@@ -125,6 +130,7 @@ private:
     NativeShading shaded_ = NativeShading::none;
     // The size the source is scaled down to, when it is.
     std::optional<Size> scale_to_;
+    bool gpu_decoding_ = true;
 
     mutable std::mutex mutex_;
     std::condition_variable changed_;

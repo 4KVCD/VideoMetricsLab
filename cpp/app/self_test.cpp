@@ -24,6 +24,7 @@
 #include "vml/vmaf_v1_gpu.h"
 #include "vml/vship.h"
 #ifdef VML_NATIVE_PLAYBACK
+#include "native_dav1d.h"
 #include "native_device.h"
 #include "native_presentation.h"
 #endif
@@ -92,6 +93,12 @@ SelfTestReport self_test(const QApplication& app) {
             report.warn(std::string("no Direct3D 11 device, videos play through ffmpeg.exe: ") + error.what());
         }
         report.ok("Film grain for VVC videos in Video Compare (FFmpeg's VVC decoder draws it)");
+        if (const std::optional<QString> no_dav1d = Dav1dVideo::unavailable()) {
+            report.warn("Video Compare cannot decode AV1 in software (" + no_dav1d->toStdString() +
+                        "): on a GPU without an AV1 decoder, AV1 videos play through ffmpeg.exe");
+        } else {
+            report.ok("AV1 in software in Video Compare, where the GPU has no AV1 decoder (dav1d)");
+        }
     }
     if (const std::optional<QString> problem = NativePresentation::unavailable()) {
         report.warn("Native playback's presenter absent or out of date; videos play through FFmpeg");

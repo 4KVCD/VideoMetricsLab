@@ -15,9 +15,9 @@
 // (vmaf_app/core/gpu_frames.py) and hands them over with nvf_set_libraries;
 // this library links neither. It is compiled against FFmpeg's headers
 // (native/ffmpeg) and refuses libraries of another major version; of dav1d
-// it mirrors the few structures it uses, checked against its API version.
-// The app feeds the packets FFmpeg copies out of the container with their
-// timestamps, as for the GPU decoders.
+// it mirrors the few structures it uses (dav1d/dav1d_api.h), checked against
+// its API version. The app feeds the packets FFmpeg copies out of the
+// container with their timestamps, as for the GPU decoders.
 //
 // Their pictures are the same as FFmpeg's decode, sample for sample. The
 // film grain an H.264, HEVC or VVC stream asks for (H.274's, or AOM's AFGS1)
@@ -67,6 +67,7 @@ extern "C" {
 #include "libavutil/mem.h"
 }
 
+#include "dav1d/dav1d_api.h"
 #include "gpu_frames.h"
 
 namespace {
@@ -100,55 +101,7 @@ struct Ffmpeg {
 
 // ------------------------------------------------- dav1d's, as mirrored
 
-// dav1d's API 7 (dav1d 1.x from 1.3 on; GStreamer 1.28 ships 1.5).
-struct Dav1dUserData {
-    const uint8_t *data;
-    void *ref;
-};
-struct Dav1dDataProps {
-    int64_t timestamp, duration, offset;
-    size_t size;
-    Dav1dUserData user_data;
-};
-struct Dav1dData {
-    const uint8_t *data;
-    size_t sz;
-    void *ref;
-    Dav1dDataProps m;
-};
-struct Dav1dPictureParameters {
-    int w, h;
-    int layout;  // Dav1dPixelLayout: 1 is I420
-    int bpc;
-};
-struct Dav1dPicture {
-    void *seq_hdr, *frame_hdr;
-    void *data[3];
-    ptrdiff_t stride[2];
-    Dav1dPictureParameters p;
-    Dav1dDataProps m;
-    void *content_light, *mastering_display, *itut_t35;
-    size_t n_itut_t35;
-    uintptr_t reserved[4];
-    void *frame_hdr_ref, *seq_hdr_ref, *content_light_ref, *mastering_display_ref, *itut_t35_ref;
-    uintptr_t reserved_ref[4];
-    void *ref;
-    void *allocator_data;
-};
-struct Dav1dSettings {
-    int n_threads, max_frame_delay, apply_grain, operating_point, all_layers;
-    unsigned frame_size_limit;
-    void *allocator_cookie, *alloc_picture_callback, *release_picture_callback;
-    void *logger_cookie, *logger_callback;
-    int strict_std_compliance, output_invisible_frames, inloop_filters, decode_frame_type;
-    uint8_t reserved[16];
-};
-static_assert(offsetof(Dav1dPicture, p) == 56 && offsetof(Dav1dPicture, m) == 72, "Dav1dPicture");
-static_assert(offsetof(Dav1dSettings, logger_callback) == 56, "Dav1dSettings");
-constexpr int kDav1dI420 = 1;
-constexpr unsigned kDav1dApiMajor = 7;
-constexpr int kDav1dAgain = -11;  // DAV1D_ERR(EAGAIN)
-
+// The structures are in dav1d/dav1d_api.h; its functions, as this library calls them:
 struct Dav1d {
     unsigned (*version_api)();
     void (*default_settings)(Dav1dSettings *);

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "ffmpeg_api.h"
+#include "native_dav1d.h"
 #include "native_device.h"
 #include "vml/platform/system.h"
 
@@ -208,6 +209,8 @@ private:
 struct FfmpegNativeVideo::Decoding {
     AVFormatContext* format = nullptr;
     AVCodecContext* codec = nullptr;
+    // AV1's decoder in software, in place of `codec`.
+    std::unique_ptr<Dav1dVideo> dav1d;
     AVPacket* packet = nullptr;
     AVFrame* frame = nullptr;
     SwsContext* converter = nullptr;
@@ -235,6 +238,25 @@ struct FfmpegNativeVideo::Decoding {
         av_packet_free(&packet);
         avcodec_free_context(&codec);
         avformat_close_input(&format);
+    }
+
+    // As avcodec_send_packet, avcodec_receive_frame and avcodec_flush_buffers,
+    // with whichever decoder decodes.
+    int send(const AVPacket* given) { return dav1d ? dav1d->send(given) : avcodec_send_packet(codec, given); }
+    int receive(AVFrame* into) { return dav1d ? dav1d->receive(into) : avcodec_receive_frame(codec, into); }
+    void flush() {
+        if (dav1d) {
+            dav1d->flush();
+        } else {
+            avcodec_flush_buffers(codec);
+        }
+    }
+    // Lets the frame last received go.
+    void unref_frame() {
+        av_frame_unref(frame);
+        if (dav1d) {
+            dav1d->release();
+        }
     }
 };
 
@@ -393,10 +415,26 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::p
         error = QStringLiteral("no Direct3D 11 decoder for %1").arg(QString::fromUtf8(codec->name));
         return nullptr;
     }
-    decoding->codec = avcodec_alloc_context3(codec);
     decoding->packet = av_packet_alloc();
     decoding->frame = av_frame_alloc();
-    if (decoding->codec == nullptr || decoding->packet == nullptr || decoding->frame == nullptr) {
+    if (decoding->packet == nullptr || decoding->frame == nullptr) {
+        error = QStringLiteral("Out of memory");
+        return nullptr;
+    }
+    if (!hardware && codec->id == AV_CODEC_ID_AV1) {
+        // FFmpeg's AV1 decoder only drives a GPU's: dav1d decodes it, as
+        // GStreamer's dav1ddec did.
+        try {
+            decoding->dav1d = std::make_unique<Dav1dVideo>(*stream->codecpar);
+        } catch (const std::exception& problem) {
+            error = QStringLiteral("AV1 cannot be decoded in software: %1").arg(QString::fromUtf8(problem.what()));
+            return nullptr;
+        }
+        decoding->codec_name = "libdav1d";
+        return decoding;
+    }
+    decoding->codec = avcodec_alloc_context3(codec);
+    if (decoding->codec == nullptr) {
         error = QStringLiteral("Out of memory");
         return nullptr;
     }
@@ -498,9 +536,12 @@ void FfmpegNativeVideo::run() {
     const AVIOInterruptCB interrupt{&FfmpegNativeVideo::interrupted, this};
     QString why;
     // Direct3D 11's video decoding where the GPU decodes the video, else
-    // FFmpeg's software decoder; one that fails gives way to the other at
-    // the frame after the last given.
-    std::unique_ptr<Decoding> decoding = open_video(path, *device_, true, interrupt, why);
+    // software (FFmpeg's decoders, dav1d for AV1); the GPU's, if it fails,
+    // gives way to software at the frame after the last given.
+    std::unique_ptr<Decoding> decoding;
+    if (gpu_decoding_) {
+        decoding = open_video(path, *device_, true, interrupt, why);
+    }
     if (!decoding) {
         decoding = open_video(path, *device_, false, interrupt, why);
         if (!decoding) {
@@ -535,7 +576,7 @@ void FfmpegNativeVideo::run() {
         const std::int64_t stamp =
             av_rescale_q(*origin_ns + target_ns, AVRational{1, 1'000'000'000}, decoding->time_base);
         const int result = av_seek_frame(decoding->format, decoding->stream, stamp, AVSEEK_FLAG_BACKWARD);
-        avcodec_flush_buffers(decoding->codec);
+        decoding->flush();
         decoding->draining = false;
         at_end = false;
         // Accurate: the frames before it are decoded, not given, but the one
@@ -723,7 +764,7 @@ void FfmpegNativeVideo::run() {
             result = av_read_frame(decoding->format, decoding->packet);
             if (result == AVERROR_EOF) {
                 decoding->draining = true;
-                result = avcodec_send_packet(decoding->codec, nullptr);
+                result = decoding->send(nullptr);
             } else if (result < 0) {
                 if (!cancelled()) {
                     fail(QStringLiteral("Could not read the video: %1").arg(error_text(result)));
@@ -733,7 +774,7 @@ void FfmpegNativeVideo::run() {
                 av_packet_unref(decoding->packet);
                 continue;
             } else {
-                result = avcodec_send_packet(decoding->codec, decoding->packet);
+                result = decoding->send(decoding->packet);
                 av_packet_unref(decoding->packet);
             }
         }
@@ -743,7 +784,7 @@ void FfmpegNativeVideo::run() {
             failure = QStringLiteral("Decoding failed: %1").arg(error_text(result));
         }
         while (failure.isEmpty()) {
-            result = avcodec_receive_frame(decoding->codec, decoding->frame);
+            result = decoding->receive(decoding->frame);
             if (result == AVERROR(EAGAIN)) {
                 break;
             }
@@ -777,7 +818,7 @@ void FfmpegNativeVideo::run() {
                     last_given_ns = *time - *origin_ns;
                 }
             }
-            av_frame_unref(decoding->frame);
+            decoding->unref_frame();
         }
         if (failure.isEmpty()) {
             continue;

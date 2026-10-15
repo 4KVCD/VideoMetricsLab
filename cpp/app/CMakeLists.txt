@@ -68,9 +68,10 @@ if(WIN32 AND MSVC)
     endforeach()
     add_custom_target(vml_ffmpeg_imports DEPENDS ${vml_ffmpeg_imports})
     add_dependencies(vml_app vml_ffmpeg_imports)
-    target_sources(vml_app PRIVATE native_decoder.cpp native_device.cpp native_pool.cpp native_presentation.cpp
-                                   native_soundtrack.cpp)
-    target_include_directories(vml_app SYSTEM PRIVATE ${vml_ffmpeg}/include)
+    target_sources(vml_app PRIVATE native_dav1d.cpp native_decoder.cpp native_device.cpp native_pool.cpp
+                                   native_presentation.cpp native_soundtrack.cpp)
+    # dav1d's structures as the app mirrors them (native_dav1d.h).
+    target_include_directories(vml_app SYSTEM PRIVATE ${vml_ffmpeg}/include ${PROJECT_SOURCE_DIR}/../native/dav1d)
     target_link_libraries(vml_app PUBLIC ${vml_ffmpeg_imports} delayimp d3d11 dxgi dxguid)
     # VML_NATIVE_PLAYBACK public: the view's members depend on it, and the
     # tests must see the same view. NOMINMAX: no min and max macros from

@@ -243,13 +243,12 @@ std::filesystem::path library_path(std::string_view backend) {
 
 // The software decoder's libraries: FFmpeg's libavutil and libavcodec with
 // only the decoders it needs (LGPL, built by
-// scripts/build_ffmpeg_decoders.ps1), and dav1d for AV1, all beside each
-// other. The Python app takes dav1d from its bundled GStreamer instead,
-// which the C++ app does not have: without it, FFmpeg decodes AV1 videos
-// FFmpeg would decode in software.
+// scripts/build_ffmpeg_decoders.ps1), and dav1d for AV1 (dav1d_library_path),
+// all beside each other. The Python app takes dav1d from its bundled
+// GStreamer instead; a development build of the C++ app has none, and FFmpeg
+// decodes the AV1 videos FFmpeg would decode in software.
 std::filesystem::path software_folder() { return resource_folder() / "tools" / "ffmpeg"; }
 constexpr std::array<const char*, 2> ffmpeg_libraries{"avutil-61.dll", "avcodec-63.dll"};
-constexpr const char* dav1d_library = "dav1d.dll";
 
 // Loads a decoder library once, and keeps it for the life of the process.
 // Throws GpuDecodeUnavailableError when it is not bundled or will not load.
@@ -284,7 +283,7 @@ const DecoderLibrary& load_decoder(std::string_view backend) {
         std::array<void*, 3> handles{};
         const std::array<std::filesystem::path, 3> paths{software_folder() / ffmpeg_libraries[0],
                                                          software_folder() / ffmpeg_libraries[1],
-                                                         software_folder() / dav1d_library};
+                                                         dav1d_library_path()};
         for (std::size_t i = 0; i < paths.size(); ++i) {
             if (std::filesystem::is_regular_file(paths[i], ignored)) {
                 try {
@@ -894,6 +893,8 @@ std::pair<std::vector<std::string>, std::string> software_codecs() {
     }
     return {decodes, decodes.empty() ? why : std::string()};
 }
+
+std::filesystem::path dav1d_library_path() { return software_folder() / "dav1d.dll"; }
 
 std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan, std::string_view backend) {
     if (!decodes_codec(plan.codec, backend)) {

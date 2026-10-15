@@ -1,10 +1,10 @@
 // Video Compare's native decoding (native_decoder.h) on real clips: the
-// frames it gives are FFmpeg's own, counted from each video's first frame,
-// whether the GPU decodes the video or FFmpeg's software decoder does; and
-// the source scaled down to the test video's size is the source's picture.
-// Each test runs on every GPU of the PC (NVIDIA's and Intel's on the
-// development PC). They need a Direct3D 11 GPU and the bundled FFmpeg
-// libraries.
+// frames it gives are FFmpeg's own, luma and chroma, counted from each
+// video's first frame, whether the GPU decodes the video, FFmpeg's software
+// decoder does or dav1d; a seek back gives the frames from it on; and the
+// source scaled down to the test video's size is the source's picture. The
+// tests run on every GPU of the PC (NVIDIA's and Intel's on the development
+// PC). They need a Direct3D 11 GPU and the bundled FFmpeg libraries.
 #include "native_decoder.h"
 
 #include <d3d11.h>
@@ -17,12 +17,15 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <iterator>
+#include <numeric>
 #include <string>
 #include <vector>
 
+#include "native_dav1d.h"
 #include "native_device.h"
 #include "test_videos.h"
 #include "vml/ffprobe.h"
@@ -34,12 +37,16 @@ namespace vml::app {
 namespace {
 
 // The frame `wanted` of `comparison`'s `side`, decoded natively after a seek
-// to the frame before it, as the playback pool seeks.
+// to the frame before it, as the playback pool seeks; in `software`, as on a
+// GPU without a decoder for it.
 NativeFramePtr decode_frame(const std::shared_ptr<NativeDevice>& device, const FrameComparison& comparison,
-                            FrameSide side, long long wanted, QString& status) {
+                            FrameSide side, long long wanted, QString& status, bool software = false) {
     const double fps = comparison.fps;
     FfmpegNativeVideo video(device, comparison, side, {},
                             static_cast<int>(std::nearbyint(static_cast<double>(wanted - 1) * 1000 / fps)));
+    if (software) {
+        video.decode_in_software();
+    }
     video.start();
     NativeFramePtr got;
     const QDeadlineTimer deadline(30'000);
@@ -61,8 +68,10 @@ NativeFramePtr decode_frame(const std::shared_ptr<NativeDevice>& device, const F
     return got;
 }
 
-// The frame's luma, read back from the GPU: 8-bit samples, or 10-bit ones.
-std::vector<int> read_luma(NativeDevice& device, const NativeFrame& frame) {
+// The frame's picture, read back from the GPU as FFmpeg writes NV12 or P010
+// (ffmpeg_picture): the luma's rows, then the chroma's, its two samples side
+// by side; 8-bit samples, or 10-bit ones. The luma alone unless `chroma`.
+std::vector<int> read_picture(NativeDevice& device, const NativeFrame& frame, bool chroma = true) {
     D3D11_TEXTURE2D_DESC description{};
     frame.texture->GetDesc(&description);
     D3D11_TEXTURE2D_DESC staged = description;
@@ -73,30 +82,41 @@ std::vector<int> read_luma(NativeDevice& device, const NativeFrame& frame) {
     staged.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
     staged.MiscFlags = 0;
     Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;
-    std::vector<int> luma;
+    std::vector<int> samples;
     if (FAILED(device.device()->CreateTexture2D(&staged, nullptr, &staging))) {
         ADD_FAILURE() << "no staging texture";
-        return luma;
+        return samples;
     }
     const std::lock_guard lock(device.lock());
     device.context()->CopySubresourceRegion(staging.Get(), 0, 0, 0, 0, frame.texture, frame.subresource, nullptr);
     D3D11_MAPPED_SUBRESOURCE mapped{};
     if (FAILED(device.context()->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped))) {
         ADD_FAILURE() << "the frame could not be read back";
-        return luma;
+        return samples;
     }
-    for (int row = 0; row < frame.height; ++row) {
-        const auto* line = static_cast<const unsigned char*>(mapped.pData) + static_cast<std::size_t>(mapped.RowPitch) * row;
-        for (int x = 0; x < frame.width; ++x) {
-            luma.push_back(frame.ten_bit ? (line[2 * x] | (line[2 * x + 1] << 8)) >> 6 : line[x]);
+    const auto* base = static_cast<const unsigned char*>(mapped.pData);
+    const auto rows = [&](const unsigned char* plane, int count, int per_row) {
+        for (int row = 0; row < count; ++row) {
+            const unsigned char* line = plane + static_cast<std::size_t>(mapped.RowPitch) * row;
+            for (int x = 0; x < per_row; ++x) {
+                samples.push_back(frame.ten_bit ? (line[2 * x] | (line[2 * x + 1] << 8)) >> 6 : line[x]);
+            }
         }
+    };
+    rows(base, frame.height, frame.width);
+    if (chroma) {
+        // The chroma's rows follow the luma's, after the texture's whole
+        // height of them (a decoder's texture can be taller than its picture).
+        rows(base + static_cast<std::size_t>(mapped.RowPitch) * description.Height, (frame.height + 1) / 2,
+             2 * ((frame.width + 1) / 2));
     }
     device.context()->Unmap(staging.Get(), 0);
-    return luma;
+    return samples;
 }
 
-// FFmpeg's own luma of frame `wanted` of `path`, through `filter` after it.
-std::vector<int> ffmpeg_luma(const test::Tools& found, const std::filesystem::path& path, long long wanted,
+// FFmpeg's own picture of frame `wanted` of `path`, through `filter` after
+// it, in NV12 or P010: the luma's rows, then the chroma's.
+std::vector<int> ffmpeg_picture(const test::Tools& found, const std::filesystem::path& path, long long wanted,
                              bool ten_bit, const std::string& filter, const std::filesystem::path& raw) {
     std::string chain = "select=eq(n\\," + std::to_string(wanted) + ")";
     if (!filter.empty()) {
@@ -114,6 +134,25 @@ std::vector<int> ffmpeg_luma(const test::Tools& found, const std::filesystem::pa
         luma.push_back(ten_bit ? (bytes[index] | (bytes[index + 1] << 8)) >> 6 : bytes[index]);
     }
     return luma;
+}
+
+// The numbers of the first `count` frames `video` gives once its seek asked
+// for is made, as the playback pool takes them; fewer if they do not come.
+std::vector<long long> frames_after_seek(FfmpegNativeVideo& video, double fps, std::size_t count) {
+    std::vector<long long> numbers;
+    const QDeadlineTimer deadline(30'000);
+    while (numbers.size() < count && !deadline.hasExpired()) {
+        const NativeUpdate update = video.poll();
+        EXPECT_FALSE(update.error) << update.error->toStdString();
+        if (!video.seeking()) {
+            while (NativeFramePtr frame = video.try_pull()) {
+                numbers.push_back(std::llround(static_cast<double>(frame->time_ns) / 1e9 * fps));
+            }
+        }
+        QThread::msleep(2);
+    }
+    numbers.resize(std::min(numbers.size(), count));
+    return numbers;
 }
 
 // The PC's GPUs, by DXGI's order: each's number and name. Windows' software
@@ -227,10 +266,10 @@ TEST_F(NativeDecoderTest, TheFramesAreFfmpegsCountedFromTheFirst) {
             if (!item.decoder.empty()) {
                 EXPECT_TRUE(status.contains(QString::fromStdString("source " + item.decoder))) << status.toStdString();
             }
-            const std::vector<int> native = read_luma(*device, *frame);
+            const std::vector<int> native = read_picture(*device, *frame);
             std::vector<int> wanted =
-                ffmpeg_luma(*found_, clips[index].source_info.path, 30, frame->ten_bit, "", folder_ / "frame.raw");
-            wanted.resize(native.size());
+                ffmpeg_picture(*found_, clips[index].source_info.path, 30, frame->ten_bit, "", folder_ / "frame.raw");
+            ASSERT_EQ(wanted.size(), native.size());
             if (item.exact) {
                 EXPECT_EQ(native, wanted) << "not FFmpeg's frame 30; " << status.toStdString();
             } else {
@@ -263,10 +302,10 @@ TEST_F(NativeDecoderTest, TheFramesAreFfmpegsCountedFromTheFirst) {
         QString status;
         const NativeFramePtr frame = decode_frame(device, delayed, FrameSide::source, 30, status);
         ASSERT_NE(frame, nullptr);
-        const std::vector<int> native = read_luma(*device, *frame);
+        const std::vector<int> native = read_picture(*device, *frame);
         if (wanted.empty()) {
-            wanted = ffmpeg_luma(*found_, late, 30, frame->ten_bit, "", folder_ / "late.raw");
-            wanted.resize(native.size());
+            wanted = ffmpeg_picture(*found_, late, 30, frame->ten_bit, "", folder_ / "late.raw");
+            ASSERT_EQ(wanted.size(), native.size());
         }
         EXPECT_EQ(native, wanted) << "not the video's frame 30";
     }
@@ -286,9 +325,9 @@ TEST_F(NativeDecoderTest, TheSourceScaledDownIsTheSourcesPicture) {
     pair.distorted_info = smaller.source_info;
     const FrameComparison recipe = source_playback_comparison(pair, false);
     const std::vector<int> same =
-        ffmpeg_luma(*found_, pair.source_info.path, 30, true, "scale=320:180:flags=bilinear", folder_ / "a.raw");
+        ffmpeg_picture(*found_, pair.source_info.path, 30, true, "scale=320:180:flags=bilinear", folder_ / "a.raw");
     const std::vector<int> other =
-        ffmpeg_luma(*found_, pair.source_info.path, 33, true, "scale=320:180:flags=bilinear", folder_ / "b.raw");
+        ffmpeg_picture(*found_, pair.source_info.path, 33, true, "scale=320:180:flags=bilinear", folder_ / "b.raw");
     for (const auto& [gpu, device] : devices_) {
         SCOPED_TRACE(gpu);
         QString status;
@@ -297,7 +336,7 @@ TEST_F(NativeDecoderTest, TheSourceScaledDownIsTheSourcesPicture) {
         EXPECT_EQ(frame->width, 320);
         EXPECT_EQ(frame->height, 180);
         EXPECT_TRUE(frame->prepared);
-        const std::vector<int> native = read_luma(*device, *frame);
+        const std::vector<int> native = read_picture(*device, *frame, false);
         const auto psnr = [&native](const std::vector<int>& with) {
             double squares = 0;
             for (std::size_t index = 0; index < native.size(); ++index) {
@@ -311,6 +350,128 @@ TEST_F(NativeDecoderTest, TheSourceScaledDownIsTheSourcesPicture) {
         ASSERT_GE(other.size(), native.size());
         EXPECT_GT(psnr(same), 35.0);
         EXPECT_GT(psnr(same), psnr(other) + 3) << "not frame 30";
+    }
+}
+
+// On a GPU without an AV1 decoder, dav1d decodes AV1, as GStreamer's dav1ddec
+// did: frame 30 of an 8-bit clip tagged BT.709 and of a 10-bit full-range
+// one with film grain, after a seek, is FFmpeg's (whose AV1 decoder in
+// software is dav1d too, the grain added), sample for sample, in the video's
+// colours; and played from the start, every frame comes,
+// the last ones too (dav1d gives the frames its threads still decode only
+// when drained at the end). It needs dav1d.dll beside FFmpeg's libraries, as
+// in the package: a development build has none unless VML_RESOURCES names
+// the package's resources.
+TEST_F(NativeDecoderTest, AV1InSoftwareIsDecodedByDav1d) {
+    if (const std::optional<QString> problem = Dav1dVideo::unavailable()) {
+        GTEST_SKIP() << problem->toStdString();
+    }
+    const std::shared_ptr<NativeDevice>& device = devices_.front().second;
+    for (const auto& [name, options] :
+         {std::pair<std::string, std::vector<std::string>>{"av1.mkv", {"-pix_fmt", "yuv420p", "-colorspace", "bt709"}},
+          std::pair<std::string, std::vector<std::string>>{
+              "av1-10-bit.mkv",
+              {"-pix_fmt", "yuv420p10le", "-color_range", "pc", "-svtav1-params", "film-grain=8"}}}) {
+        SCOPED_TRACE(name);
+        std::vector<std::string> arguments{"-f", "lavfi", "-i", "testsrc2=s=640x360:r=24000/1001:d=2", "-c:v",
+                                           "libsvtav1", "-preset", "12"};
+        arguments.insert(arguments.end(), options.begin(), options.end());
+        arguments.push_back(platform::path_text(folder_ / name));
+        test::run_ffmpeg(*found_, arguments);
+        FrameComparison comparison;
+        comparison.source_info = probe_video(folder_ / name, found_->ffprobe);
+        comparison.distorted_info = comparison.source_info;
+        comparison.fps = comparison.source_info.fps;
+        QString status;
+        const NativeFramePtr frame = decode_frame(device, comparison, FrameSide::source, 30, status, true);
+        ASSERT_NE(frame, nullptr) << "frame 30 never came";
+        EXPECT_TRUE(status.contains(QStringLiteral("source software: libdav1d"))) << status.toStdString();
+        const bool ten_bit = name == "av1-10-bit.mkv";
+        EXPECT_EQ(frame->ten_bit, ten_bit);
+        // Untagged at 360 lines, BT.601's matrix, as GStreamer guessed it.
+        EXPECT_EQ(frame->matrix, ten_bit ? "bt601" : "bt709");
+        EXPECT_EQ(frame->full_range, ten_bit);
+        const std::vector<int> native = read_picture(*device, *frame);
+        std::vector<int> wanted =
+            ffmpeg_picture(*found_, comparison.source_info.path, 30, frame->ten_bit, "", folder_ / "frame.raw");
+        ASSERT_EQ(wanted.size(), native.size());
+        EXPECT_EQ(native, wanted) << "not FFmpeg's frame 30";
+
+        FfmpegNativeVideo video(device, comparison, FrameSide::source, {}, 0);
+        video.decode_in_software();
+        video.start();
+        std::vector<long long> numbers;
+        bool ended = false;
+        const QDeadlineTimer deadline(30'000);
+        while (!ended && !deadline.hasExpired()) {
+            const NativeUpdate update = video.poll();
+            EXPECT_FALSE(update.error) << update.error->toStdString();
+            ended = update.ended;
+            while (NativeFramePtr given = video.try_pull()) {
+                numbers.push_back(std::llround(static_cast<double>(given->time_ns) / 1e9 * comparison.fps));
+            }
+            QThread::msleep(2);
+        }
+        while (NativeFramePtr given = video.try_pull()) {
+            numbers.push_back(std::llround(static_cast<double>(given->time_ns) / 1e9 * comparison.fps));
+        }
+        std::vector<long long> all(48);  // two seconds at 24000/1001: frames 0 to 47
+        std::iota(all.begin(), all.end(), 0LL);
+        EXPECT_TRUE(ended);
+        EXPECT_EQ(numbers, all) << "not every frame, in order";
+    }
+}
+
+// A seek back, once frames past it were given, gives the frames from it on
+// and none decoded before it: each decoder forgets what it holds (a GPU's
+// and FFmpeg's software decoder decode frames ahead, and dav1d's threads
+// several at once). On each GPU's decoder, FFmpeg's software decoder, and
+// dav1d where it is beside FFmpeg's libraries.
+TEST_F(NativeDecoderTest, ASeekBackGivesTheFramesFromItOn) {
+    struct Case {
+        std::string name;
+        FrameComparison comparison;
+        std::shared_ptr<NativeDevice> device;
+        bool software = false;
+    };
+    std::vector<Case> cases;
+    const FrameComparison h264 = clip("seek.mkv", "libx264", "yuv420p");
+    for (const auto& [gpu, device] : devices_) {
+        cases.push_back({"H.264 on " + gpu, h264, device});
+    }
+    cases.push_back({"H.264 in software", h264, devices_.front().second, true});
+    if (!Dav1dVideo::unavailable()) {
+        test::run_ffmpeg(*found_, {"-f", "lavfi", "-i", "testsrc2=s=640x360:r=24000/1001:d=2", "-c:v", "libsvtav1",
+                                   "-preset", "12", "-pix_fmt", "yuv420p", platform::path_text(folder_ / "seek.webm")});
+        FrameComparison av1;
+        av1.source_info = probe_video(folder_ / "seek.webm", found_->ffprobe);
+        av1.distorted_info = av1.source_info;
+        av1.fps = av1.source_info.fps;
+        cases.push_back({"AV1 by dav1d", av1, devices_.front().second, true});
+    }
+    for (const Case& item : cases) {
+        SCOPED_TRACE(item.name);
+        const double fps = item.comparison.fps;
+        FfmpegNativeVideo video(item.device, item.comparison, FrameSide::source, {}, 0);
+        if (item.software) {
+            video.decode_in_software();
+        }
+        video.start();
+        // Played on to frame 40, the decoder holding the frames after it.
+        std::vector<long long> played;
+        const QDeadlineTimer deadline(30'000);
+        while ((played.empty() || played.back() < 40) && !deadline.hasExpired()) {
+            EXPECT_FALSE(video.poll().error);
+            if (NativeFramePtr frame = video.try_pull()) {
+                played.push_back(std::llround(static_cast<double>(frame->time_ns) / 1e9 * fps));
+            }
+            QThread::msleep(2);
+        }
+        ASSERT_FALSE(played.empty());
+        ASSERT_EQ(played.back(), 40);
+        QThread::msleep(200);  // time to decode what it may
+        video.seek(static_cast<int>(std::llround(10 * 1000 / fps)));
+        EXPECT_EQ(frames_after_seek(video, fps, 5), (std::vector<long long>{10, 11, 12, 13, 14}));
     }
 }
 
