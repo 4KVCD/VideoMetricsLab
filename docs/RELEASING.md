@@ -88,8 +88,9 @@ the Python app's own steps (3, 5, 6 and 7):
    Studio: it carries Microsoft's C++ runtime, and must start and pass its
    self-test there.
 6. Audit the notices of what the package adds (THIRD_PARTY.md): Qt 6.12.0
-   under the LGPL 3 (`licenses/`), Microsoft's C++ runtime, dav1d, FFmpeg's
-   libraries and the film grain library's VTM tables.
+   under the LGPL 3 and its translations under the BSD 3-Clause licence
+   (`licenses/`), Microsoft's C++ runtime, dav1d, FFmpeg's libraries and the
+   film grain library's VTM tables.
 
 The CI workflow checks code and offscreen tests, not GPU correctness or complete
 binary licensing. A source upload and a redistributable Windows release are

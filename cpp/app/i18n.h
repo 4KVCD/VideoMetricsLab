@@ -19,6 +19,7 @@
 #pragma once
 
 #include <QString>
+#include <QTranslator>
 
 #include <initializer_list>
 #include <string>
@@ -109,6 +110,16 @@ QString set_language(const QString& code);
 
 // The code of the language the window is shown in, such as "en" or "de".
 QString language();
+
+// Shows Qt's own dialogs and buttons (Yes, No, Cancel, the file dialogs) in
+// `code` too, from Qt's translation of them, qtbase_<code>.qm, in Qt's
+// translations folder, as the Python app does. On Windows that is the
+// translations folder beside the program, where the build and the package
+// put them, as for any program with Qt's libraries beside it. Returns the
+// translator installed, which the application owns, or nullptr where there
+// is none: for English, and for the languages Qt has not translated
+// (Indonesian, Thai and Vietnamese), whose Qt dialogs stay in English.
+QTranslator* install_qt_translations(const QString& code);
 
 // tr() and the rest give English on this thread while one lives: for text
 // the window shows that also goes to the log, which is always in English

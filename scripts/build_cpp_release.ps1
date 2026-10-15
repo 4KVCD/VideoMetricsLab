@@ -151,12 +151,21 @@ Copy-Item $commandLine $cli
 # whether the PC is online (networkinformation, never asked) and a TLS
 # backend that checks no certificate (qcertonlybackend: Windows' own,
 # schannel, is the one the update check uses). The runtime is copied below.
-# Qt's translations of its own dialogs are not deployed: a Qt built from
-# qtbase alone has none.
+# Qt's translations are the build's (below), not windeployqt's.
 Invoke-Program 'windeployqt' {
     & $windeployqt --release --no-translations --no-system-d3d-compiler --no-system-dxc-compiler --no-opengl-sw `
         --no-compiler-runtime --skip-plugin-types generic,networkinformation --exclude-plugins qcertonlybackend $exe
 }
+
+# Qt's translations of its own dialogs and buttons (Yes, No, Cancel, the file
+# dialogs), in the languages the window has and Qt has translated, where Qt
+# looks for them: the translations folder the build put beside the program
+# (cpp/app/CMakeLists.txt).
+$qtTranslations = Join-Path (Split-Path $window) 'translations'
+if (-not (Test-Path (Join-Path $qtTranslations 'qtbase_*.qm'))) {
+    throw "The build has no Qt translations: install Qt's translations (qttranslations) with Qt, then configure again"
+}
+Copy-Item $qtTranslations (Join-Path $output 'translations') -Recurse
 
 $resources = Join-Path $output 'resources'
 New-Item -ItemType Directory -Path (Join-Path $resources 'translations') -Force | Out-Null
@@ -283,4 +292,3 @@ Write-Host "  $output"
 Write-Host "  $zip"
 Write-Host ''
 Write-Host 'FFmpeg itself (ffmpeg.exe, ffprobe.exe) is not bundled, as with the Python app.' -ForegroundColor Yellow
-Write-Host "Qt's own dialogs (Yes, No, Cancel, the file dialogs) are in English: Qt's translations are not bundled." -ForegroundColor Yellow

@@ -5,8 +5,6 @@
 // isolated_argument, it runs that task and makes no window. Started with
 // --self-test, it checks what it finds at run time (self_test.h).
 #include <QApplication>
-#include <QLibraryInfo>
-#include <QTranslator>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
@@ -36,20 +34,14 @@ namespace {
 // when none is chosen, with English where there is no translation. Qt's own
 // dialogs and buttons follow, in Qt's translations where it has them, and a
 // right-to-left language mirrors the window.
-void apply_language(QApplication& app, const QString& chosen) {
+void apply_language(const QString& chosen) {
     const QString windows = vml::app::windows_language();
     const QString code = vml::app::set_language(chosen.isEmpty() ? windows : chosen);
     vml::app_log::write(vml::app_log::Level::info, "vml.main",
                         "Language: " + code.toStdString() + " (" +
                             (chosen.isEmpty() ? "as Windows" : "chosen in Settings") +
                             "; Windows: " + windows.toStdString() + ")");
-    if (code == "en") {
-        return;
-    }
-    auto* translator = new QTranslator(&app);
-    if (translator->load("qt_" + code, QLibraryInfo::path(QLibraryInfo::TranslationsPath))) {
-        QApplication::installTranslator(translator);
-    }
+    vml::app::install_qt_translations(code);
     if (vml::app::right_to_left(code)) {
         QApplication::setLayoutDirection(Qt::RightToLeft);
     }
@@ -141,7 +133,7 @@ int main(int argc, char** argv) {
         }
     });
     const Settings settings = Settings::load();
-    apply_language(app, QString::fromStdString(settings.language));
+    apply_language(QString::fromStdString(settings.language));
     // Before the window is built, which reads it to colour itself.
     app::theme::apply_theme(QString::fromStdString(settings.theme));
     app_log::write(app_log::Level::info, "vml.main",

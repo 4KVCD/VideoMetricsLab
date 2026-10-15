@@ -2,6 +2,11 @@
 // (reference/i18n.json, made by its vmaf_app/i18n.py).
 #include "i18n.h"
 
+#include <QCoreApplication>
+#include <QDialogButtonBox>
+#include <QFile>
+#include <QLibraryInfo>
+#include <QPushButton>
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
@@ -136,6 +141,21 @@ TEST(I18n, TheWindowsTextIsThePythonAppsInEachLanguage) {
                               code + ": " + message);
         }
     }
+}
+
+// Qt's own buttons, in Qt's translation (qtbase_de.qm), where Qt's folder has
+// its translations.
+TEST(I18n, QtsOwnButtonsAreInTheChosenLanguage) {
+    if (!QFile::exists(QLibraryInfo::path(QLibraryInfo::TranslationsPath) + "/qtbase_de.qm")) {
+        GTEST_SKIP() << "this Qt has no translations (qttranslations)";
+    }
+    QTranslator* german = install_qt_translations("de");
+    ASSERT_NE(german, nullptr);
+    const QDialogButtonBox buttons(QDialogButtonBox::Cancel);
+    const QString cancel = buttons.button(QDialogButtonBox::Cancel)->text();
+    QCoreApplication::removeTranslator(german);
+    delete german;
+    EXPECT_EQ(cancel.toStdString(), "Abbrechen");
 }
 
 }  // namespace

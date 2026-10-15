@@ -1,6 +1,8 @@
 #include "i18n.h"
 
+#include <QCoreApplication>
 #include <QHash>
+#include <QLibraryInfo>
 #include <QLocale>
 #include <QRegularExpression>
 #include <QStringList>
@@ -10,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <format>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -728,6 +731,18 @@ QString set_language(const QString& code) {
 }
 
 QString language() { return catalog.language; }
+
+QTranslator* install_qt_translations(const QString& code) {
+    if (code == "en") {
+        return nullptr;
+    }
+    auto translator = std::make_unique<QTranslator>(QCoreApplication::instance());
+    if (!translator->load("qtbase_" + code, QLibraryInfo::path(QLibraryInfo::TranslationsPath))) {
+        return nullptr;
+    }
+    QCoreApplication::installTranslator(translator.get());
+    return translator.release();
+}
 
 InEnglish::InEnglish() : before_(english_here) { english_here = true; }
 

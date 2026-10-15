@@ -101,12 +101,14 @@ if(TARGET vml_app)
         target_compile_definitions(vml_app_tests PRIVATE NOMINMAX)
     endif()
     if(WIN32)
-        # Qt beside the tests, with the platform they run on; before the
-        # tests are listed, which starts them.
+        # Qt beside the tests, with the platform they run on, and Qt's
+        # translations (app/CMakeLists.txt); before the tests are listed,
+        # which starts them.
         add_custom_command(TARGET vml_app_tests POST_BUILD
             COMMAND Qt6::windeployqt --no-translations --no-system-d3d-compiler --no-opengl-sw
                     --no-compiler-runtime --include-plugins qoffscreen $<TARGET_FILE:vml_app_tests>
             VERBATIM)
+        vml_deploy_qt_translations(vml_app_tests)
     endif()
     gtest_discover_tests(vml_app_tests)
 endif()

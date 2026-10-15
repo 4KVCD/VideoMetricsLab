@@ -42,9 +42,9 @@ jobs:
       - name: Install Ninja (macOS)
         if: runner.os == 'macOS'
         run: brew install ninja
-      # Qt 6.12's MSVC 2022 build (qtbase), as the app is developed with, from
-      # Qt's own servers. The archive is checked against the SHA-1 Qt publishes
-      # beside it.
+      # Qt 6.12's MSVC 2022 build, as the app is developed with: qtbase, and
+      # Qt's translations of its own dialogs, from Qt's own servers. Each
+      # archive is checked against the SHA-1 Qt publishes beside it.
       # (aqtinstall, which install-qt-action runs, cannot read Qt 6.12's
       # repository: "Failed to locate XML data for Qt version '6.12.0'".)
       - name: Cache Qt (Windows)
@@ -53,7 +53,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}\Qt
-          key: qt-6.12.0-0-202609280346-win64_msvc2022_64-qtbase
+          key: qt-6.12.0-0-202609280346-win64_msvc2022_64-qtbase-qttranslations
       - name: Install Qt (Windows)
         if: runner.os == 'Windows' && steps.qt-cache.outputs.cache-hit != 'true'
         run: |
@@ -62,7 +62,7 @@ jobs:
           $repository = 'https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_6120/qt6_6120_msvc2022_64/qt.qt6.6120.win64_msvc2022_64/6.12.0-0-202609280346'
           $qt = Join-Path $env:RUNNER_TEMP 'Qt'
           New-Item -ItemType Directory -Path $qt -Force | Out-Null
-          foreach ($module in 'qtbase') {
+          foreach ($module in 'qtbase', 'qttranslations') {
               $url = "$repository$module-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"
               $archive = Join-Path $env:RUNNER_TEMP "$module.7z"
               Invoke-WebRequest -Uri $url -OutFile $archive

@@ -87,14 +87,40 @@ if(MSVC)
 endif()
 
 if(WIN32)
+    # Qt's translations of its own dialogs and buttons (qtbase_<code>.qm), for
+    # each language the window has a catalog for (vmaf_app/translations) and
+    # Qt has translated, put in the translations folder beside `target`: Qt
+    # looks there for a program with its libraries beside it (QLibraryInfo;
+    # install_qt_translations in i18n.h). The package takes the program's.
+    # windeployqt's own would join every module's catalogs with lconvert,
+    # which a Qt of qtbase alone does not have. Nothing where Qt's
+    # translations (qttranslations) are not installed.
+    function(vml_deploy_qt_translations target)
+        set(qt_translations "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_TRANSLATIONS}")
+        file(GLOB catalogs "${PROJECT_SOURCE_DIR}/../vmaf_app/translations/*.json")
+        set(files "")
+        foreach(catalog IN LISTS catalogs)
+            get_filename_component(code "${catalog}" NAME_WE)
+            if(EXISTS "${qt_translations}/qtbase_${code}.qm")
+                list(APPEND files "${qt_translations}/qtbase_${code}.qm")
+            endif()
+        endforeach()
+        if(files)
+            add_custom_command(TARGET ${target} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target}>/translations"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different ${files} "$<TARGET_FILE_DIR:${target}>/translations"
+                VERBATIM)
+        endif()
+    endfunction()
+
     # Qt's libraries and plugins beside the program, so that it runs from the
     # build folder, the same ones as the packaged app's
-    # (scripts/build_cpp_release.ps1 says why the others are left out). Qt's
-    # own translations (its dialogs' buttons) are in neither: a Qt built from
-    # qtbase alone has none to deploy.
+    # (scripts/build_cpp_release.ps1 says why the others are left out), and
+    # Qt's translations.
     add_custom_command(TARGET VideoMetricsLab POST_BUILD
         COMMAND Qt6::windeployqt --no-translations --no-system-d3d-compiler --no-system-dxc-compiler
                 --no-opengl-sw --no-compiler-runtime --skip-plugin-types generic,networkinformation
                 --exclude-plugins qcertonlybackend $<TARGET_FILE:VideoMetricsLab>
         VERBATIM)
+    vml_deploy_qt_translations(VideoMetricsLab)
 endif()

@@ -142,16 +142,16 @@ through ffmpeg.exe.
 The Bitrate Viewer plots each video's bitrate by frame, second or GOP. The
 Settings tab and the log are the Python app's too. It reads and writes the
 Python app's settings.json, and shows its text in the user's language from
-the Python app's catalogs (`vmaf_app/translations`), in the light or dark
-theme. Like the command line, the program is also the process of its own
-that GPU code runs in.
+the Python app's catalogs (`vmaf_app/translations`), with Qt's own dialogs
+and buttons in Qt's translations of them, in the light or dark theme. Like
+the command line, the program is also the process of its own that GPU code
+runs in.
 
 Not ported yet: on AMD's GPUs, the GPU metrics' decoding through Windows'
 own decoders, and their pictures handed over on the GPU, which the Python
-app does (`core/include/vml/gpu_frames.h`); H.274 film grain on 4:2:2,
+app does (`core/include/vml/gpu_frames.h`); and H.274 film grain on 4:2:2,
 4:4:4 or 12-bit VVC video, which the Python app draws (VVenC makes none of
-these); and Qt's translations of its own dialogs' buttons, which a Qt built
-from qtbase alone does not have.
+these).
 
 ## The package
 
@@ -186,7 +186,9 @@ The window and its tests are built where CMake finds Qt 6.5 or newer; name
 Qt's folder when configuring, as in
 `cmake --preset windows -DCMAKE_PREFIX_PATH=C:/Qt/6.12.0/msvc2022_64`. On
 Windows the build puts Qt's libraries beside the window and its tests
-(windeployqt), so that they run from the build folder.
+(windeployqt), so that they run from the build folder, and Qt's translations
+of its own dialogs where they are installed with Qt (qttranslations), which
+the package needs.
 
 GitHub builds and tests every push of the `cpp-port` branch on all three
 (`.github/workflows/cpp.yml`); on Windows with Qt, so that the window
