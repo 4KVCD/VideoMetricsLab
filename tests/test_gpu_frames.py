@@ -6,6 +6,7 @@ built (its library is not in git)."""
 from __future__ import annotations
 
 import contextlib
+import functools
 import hashlib
 import subprocess
 import threading
@@ -70,6 +71,12 @@ def _need(plan: nv.DecodePlan, backend: str) -> None:
         pytest.skip(f"no {backend} decoder for this on this PC")
 
 
+def _need_decoder(codec: str, pix_fmt: str, backend: str) -> None:
+    """Skips before a clip is made where this PC has no `backend` decoder for
+    the codec at its depth: making the clip takes longer than the skip."""
+    _need(nv.plan_decode(_info(codec_name=codec, pix_fmt=pix_fmt, width=640, height=360), None), backend)
+
+
 def _clip(path: Path, codec: str, pix_fmt: str, extra: list[str] | None = None, seconds: float = 2.0) -> Path:
     encoder = {"h264": ["-c:v", "libx264", "-preset", "veryfast", "-bf", "3"],
                "hevc": ["-c:v", "libx265", "-preset", "ultrafast", "-x265-params", "bframes=4:log-level=error"]}[codec]
@@ -77,6 +84,26 @@ def _clip(path: Path, codec: str, pix_fmt: str, extra: list[str] | None = None, 
                     "-i", f"testsrc2=s=640x360:r=24000/1001:d={seconds}", "-pix_fmt", pix_fmt, *encoder,
                     *(extra or []), str(path)], check=True)
     return path
+
+
+@pytest.fixture(scope="module")
+def clip(tmp_path_factory):
+    """_clip's clips, each made once for the module's tests: (codec, pix_fmt,
+    seconds=2.0) -> the clip."""
+    folder = tmp_path_factory.mktemp("clips")
+    made: dict[tuple, Path] = {}
+
+    def make(codec: str, pix_fmt: str, seconds: float = 2.0) -> Path:
+        key = (codec, pix_fmt, seconds)
+        if key not in made:
+            made[key] = _clip(folder / f"{len(made)}.mkv", codec, pix_fmt, seconds=seconds)
+        return made[key]
+
+    return make
+
+
+#: A clip's details, read once.
+_probed = functools.cache(probe_video)
 
 
 def _decode(info: VideoInfo, plan: nv.DecodePlan, backend: str = "nvidia") -> tuple[list[str], list[int]]:
@@ -102,18 +129,25 @@ def _decode(info: VideoInfo, plan: nv.DecodePlan, backend: str = "nvidia") -> tu
 
 
 def _ffmpeg_decode(path: Path, plan: nv.DecodePlan) -> list[str]:
-    fmt = "yuv420p10le" if plan.bit_depth > 8 else "yuv420p"
+    return list(_ffmpeg_sums(path, plan.crop_w, plan.crop_h, plan.crop_x, plan.crop_y, plan.bit_depth))
+
+
+@functools.cache
+def _ffmpeg_sums(path: Path, crop_w: int, crop_h: int, crop_x: int, crop_y: int, bit_depth: int) -> tuple[str, ...]:
+    """Each picture's MD5 from FFmpeg's decode, once for each clip and crop."""
+    fmt = "yuv420p10le" if bit_depth > 8 else "yuv420p"
     out = subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:v:0",
-                          "-vf", f"crop={plan.crop_w}:{plan.crop_h}:{plan.crop_x}:{plan.crop_y},format={fmt}",
+                          "-vf", f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},format={fmt}",
                           "-fps_mode", "passthrough", "-f", "framemd5", "-"],
                          capture_output=True, text=True, check=True).stdout
-    return [line.split(",")[5].strip() for line in out.splitlines() if line and not line.startswith("#")]
+    return tuple(line.split(",")[5].strip() for line in out.splitlines() if line and not line.startswith("#"))
 
 
-def test_pictures_are_ffmpegs_decode(tmp_path_factory, subtests):
-    def check(codec, pix_fmt, crop, backend, tmp_path):
-        path = _clip(tmp_path / "clip.mkv", codec, pix_fmt)
-        info = probe_video(path)
+def test_pictures_are_ffmpegs_decode(clip, subtests):
+    def check(codec, pix_fmt, crop, backend):
+        _need_decoder(codec, pix_fmt, backend)
+        path = clip(codec, pix_fmt)
+        info = _probed(path)
         plan = nv.plan_decode(info, crop, shift=6)
         _need(plan, backend)
         sums, stamps = _decode(info, plan, backend)
@@ -128,13 +162,14 @@ def test_pictures_are_ffmpegs_decode(tmp_path_factory, subtests):
     ]:
         for backend in BACKENDS:
             with subtests.test(codec=codec, pix_fmt=pix_fmt, crop=crop, backend=backend):
-                check(codec, pix_fmt, crop, backend, tmp_path_factory.mktemp("case"))
+                check(codec, pix_fmt, crop, backend)
 
 
-def test_ten_bit_kept_in_the_top_bits_is_the_shifted_picture_times_64(tmp_path_factory, subtests):
-    def check(backend, tmp_path):
-        path = _clip(tmp_path / "clip.mkv", "hevc", "yuv420p10le", seconds=0.5)
-        info = probe_video(path)
+def test_ten_bit_kept_in_the_top_bits_is_the_shifted_picture_times_64(clip, subtests):
+    def check(backend):
+        _need_decoder("hevc", "yuv420p10le", backend)
+        path = clip("hevc", "yuv420p10le", seconds=0.5)
+        info = _probed(path)
         shifted, kept = nv.plan_decode(info, None, shift=6), nv.plan_decode(info, None, shift=0)
         _need(shifted, backend)
         pictures = []
@@ -158,19 +193,22 @@ def test_ten_bit_kept_in_the_top_bits_is_the_shifted_picture_times_64(tmp_path_f
 
     for backend in BACKENDS:
         with subtests.test(backend=backend):
-            check(backend, tmp_path_factory.mktemp("case"))
+            check(backend)
 
 
-def test_frames_an_mp4_edit_list_cuts_off_are_not_handed_out(tmp_path_factory, subtests):
+def test_frames_an_mp4_edit_list_cuts_off_are_not_handed_out(tmp_path, subtests):
     """A copy cut out of an MP4 starts at a keyframe before the cut, and its
     edit list marks the frames before the cut discard: FFmpeg decodes them
     (the frames after refer to them) and drops them."""
-    def check(backend, tmp_path):
-        whole = _clip(tmp_path / "whole.mp4", "h264", "yuv420p", ["-g", "48"], seconds=4.0)
-        cut = tmp_path / "cut.mp4"
-        subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-ss", "1.3", "-i", str(whole), "-c", "copy",
-                        str(cut)], check=True)
-        info = probe_video(cut)
+    cut = tmp_path / "cut.mp4"
+
+    def check(backend):
+        _need_decoder("h264", "yuv420p", backend)
+        if not cut.exists():
+            whole = _clip(tmp_path / "whole.mp4", "h264", "yuv420p", ["-g", "48"], seconds=4.0)
+            subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-ss", "1.3", "-i", str(whole),
+                            "-c", "copy", str(cut)], check=True)
+        info = _probed(cut)
         plan = nv.plan_decode(info, None)
         _need(plan, backend)
         sums, _stamps = _decode(info, plan, backend)
@@ -179,9 +217,10 @@ def test_frames_an_mp4_edit_list_cuts_off_are_not_handed_out(tmp_path_factory, s
 
     for backend in BACKENDS:
         with subtests.test(backend=backend):
-            check(backend, tmp_path_factory.mktemp("case"))
+            check(backend)
 
 
+@functools.cache
 def _ffmpeg_frames(path: Path, chain: str, depth: int) -> np.ndarray:
     raw = subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-i", str(path), "-map", "0:v:0", "-vf", chain,
                           "-fps_mode", "passthrough", "-f", "rawvideo", "pipe:1"],
@@ -211,7 +250,7 @@ def _frames(info: VideoInfo, plan: nv.DecodePlan, backend: str) -> np.ndarray:
     return np.concatenate(pictures)
 
 
-def test_scaled_pictures_are_ffmpegs_but_for_rounding(tmp_path_factory, subtests):
+def test_scaled_pictures_are_ffmpegs_but_for_rounding(clip, subtests):
     """Not FFmpeg's scale filter's to the sample (a comparison scaled any way
     is the same comparison), but the same filter: on this synthetic picture's
     hard edges and odd sizes, where they differ most -- the CPU scaler of
@@ -219,10 +258,11 @@ def test_scaled_pictures_are_ffmpegs_but_for_rounding(tmp_path_factory, subtests
     faster, so its cap falls after the other pass -- all but 1 in 200
     samples within 1, none more than 6 (on film, every sample within 1). A
     wrong plane, siting or filter is tens to hundreds off."""
-    def check(pix_fmt, size, algorithm, backend, tmp_path):
+    def check(pix_fmt, size, algorithm, backend):
         codec = "hevc" if pix_fmt == "yuv420p10le" else "h264"
-        path = _clip(tmp_path / "clip.mkv", codec, pix_fmt, seconds=0.5)
-        info = probe_video(path)
+        _need_decoder(codec, pix_fmt, backend)
+        path = clip(codec, pix_fmt, seconds=0.5)
+        info = _probed(path)
         plan = nv.plan_decode(info, None, shift=6, size=size, algorithm=algorithm)
         _need(plan, backend)
         ours = _frames(info, plan, backend).astype(np.int32)
@@ -242,14 +282,15 @@ def test_scaled_pictures_are_ffmpegs_but_for_rounding(tmp_path_factory, subtests
     ]:
         for backend in BACKENDS:
             with subtests.test(pix_fmt=pix_fmt, size=size, algorithm=algorithm, backend=backend):
-                check(pix_fmt, size, algorithm, backend, tmp_path_factory.mktemp("case"))
+                check(pix_fmt, size, algorithm, backend)
 
 
-def test_widened_eight_bit_is_ffmpegs_conversion_to_ten(tmp_path_factory, subtests):
+def test_widened_eight_bit_is_ffmpegs_conversion_to_ten(clip, subtests):
     """Widening is exact: v << 2, as FFmpeg converts limited-range 8-bit."""
-    def check(backend, tmp_path):
-        path = _clip(tmp_path / "clip.mkv", "h264", "yuv420p", seconds=0.5)
-        info = probe_video(path)
+    def check(backend):
+        _need_decoder("h264", "yuv420p", backend)
+        path = clip("h264", "yuv420p", seconds=0.5)
+        info = _probed(path)
         plan = nv.plan_decode(info, None, widen=nv.WIDEN_SHIFT)
         _need(plan, backend)
         ours = _frames(info, plan, backend)
@@ -257,15 +298,16 @@ def test_widened_eight_bit_is_ffmpegs_conversion_to_ten(tmp_path_factory, subtes
 
     for backend in BACKENDS:
         with subtests.test(backend=backend):
-            check(backend, tmp_path_factory.mktemp("case"))
+            check(backend)
 
 
-def test_widened_full_range_luma_has_its_top_bits_repeated(tmp_path_factory, subtests):
+def test_widened_full_range_luma_has_its_top_bits_repeated(clip, subtests):
     """255 becomes 1023, as FFmpeg widens full-range video; the chroma is
     shifted as ever."""
-    def check(backend, tmp_path):
-        path = _clip(tmp_path / "clip.mkv", "h264", "yuv420p", seconds=0.5)
-        info = probe_video(path)
+    def check(backend):
+        _need_decoder("h264", "yuv420p", backend)
+        path = clip("h264", "yuv420p", seconds=0.5)
+        info = _probed(path)
         plan = nv.plan_decode(info, None, widen=nv.WIDEN_REPEAT)
         _need(plan, backend)
         ours = _frames(info, plan, backend).reshape(-1, 640 * 360 * 3 // 2)
@@ -276,7 +318,7 @@ def test_widened_full_range_luma_has_its_top_bits_repeated(tmp_path_factory, sub
 
     for backend in BACKENDS:
         with subtests.test(backend=backend):
-            check(backend, tmp_path_factory.mktemp("case"))
+            check(backend)
 
 
 # ------------------------------------------------- scaling on the GPU (Intel, AMD)
@@ -328,12 +370,13 @@ def test_the_scaling_shader_gives_the_cpu_scalers_picture(subtests):
                 check(gpu, depth, size, to, algorithm, shift, luma_only, crop)
 
 
-def test_decoded_pictures_are_scaled_on_the_gpu_and_are_the_cpus(tmp_path_factory, subtests):
-    def check(backend, pix_fmt, size, algorithm, tmp_path):
+def test_decoded_pictures_are_scaled_on_the_gpu_and_are_the_cpus(clip, subtests):
+    def check(backend, pix_fmt, size, algorithm):
         from dataclasses import replace
 
         codec = "hevc" if pix_fmt == "yuv420p10le" else "h264"
-        info = probe_video(_clip(tmp_path / "clip.mkv", codec, pix_fmt, seconds=0.5))
+        _need_decoder(codec, pix_fmt, backend)
+        info = _probed(clip(codec, pix_fmt, seconds=0.5))
         plan = nv.plan_decode(info, None, shift=6, size=size, algorithm=algorithm)
         _need(plan, backend)
         stream = nv.GpuFrameStream(info, plan, backend=backend)
@@ -356,17 +399,18 @@ def test_decoded_pictures_are_scaled_on_the_gpu_and_are_the_cpus(tmp_path_factor
             ("yuv420p", (1920, 1080), "lanczos"),
         ]:
             with subtests.test(backend=backend, pix_fmt=pix_fmt, size=size, algorithm=algorithm):
-                check(backend, pix_fmt, size, algorithm, tmp_path_factory.mktemp("case"))
+                check(backend, pix_fmt, size, algorithm)
 
 
 @pytest.mark.parametrize("backend", ["intel", "amd"])
-def test_a_gpu_picture_that_is_not_the_cpus_hands_the_scaling_to_the_cpu(tmp_path, backend):
+def test_a_gpu_picture_that_is_not_the_cpus_hands_the_scaling_to_the_cpu(clip, backend):
     """A driver whose shader arithmetic differed would change the scores:
     the decoders scale their first pictures on the CPU as well, and at the
     first that differs the CPU's is the one handed out, from then on."""
     from dataclasses import replace
 
-    info = probe_video(_clip(tmp_path / "clip.mkv", "h264", "yuv420p", seconds=0.5))
+    _need_decoder("h264", "yuv420p", backend)
+    info = _probed(clip("h264", "yuv420p", seconds=0.5))
     plan = nv.plan_decode(info, None, size=(320, 180))
     _need(plan, backend)
     spoiled = replace(plan, cpu_scaling=2)  # the GPU's first picture is made wrong
@@ -446,10 +490,11 @@ def _handed_over(info: VideoInfo, plan: nv.DecodePlan, planes: bool, pin: bool) 
     return sums
 
 
-def test_pictures_amd_hands_over_are_ffmpegs_decode(amd_decoder, tmp_path_factory, subtests):
-    def check(codec, pix_fmt, crop, luma_only, planes, pin, tmp_path):
-        path = _clip(tmp_path / "clip.mkv", codec, pix_fmt, seconds=1.0)
-        info = probe_video(path)
+def test_pictures_amd_hands_over_are_ffmpegs_decode(amd_decoder, clip, subtests):
+    def check(codec, pix_fmt, crop, luma_only, planes, pin):
+        _need_decoder(codec, pix_fmt, "amd")
+        path = clip(codec, pix_fmt, seconds=1.0)
+        info = _probed(path)
         plan = nv.plan_decode(info, crop, shift=6, luma_only=luma_only)
         _need(plan, "amd")
         if luma_only:  # the luma of FFmpeg's pictures
@@ -467,7 +512,7 @@ def test_pictures_amd_hands_over_are_ffmpegs_decode(amd_decoder, tmp_path_factor
     ]:
         for planes, pin in [(False, False), (True, False), (True, True)]:
             with subtests.test(codec=codec, pix_fmt=pix_fmt, crop=crop, luma_only=luma_only, planes=planes, pin=pin):
-                check(codec, pix_fmt, crop, luma_only, planes, pin, tmp_path_factory.mktemp("case"))
+                check(codec, pix_fmt, crop, luma_only, planes, pin)
 
 
 def _ffmpeg_pictures(path: Path, plan: nv.DecodePlan) -> list[bytes]:
@@ -479,11 +524,13 @@ def _ffmpeg_pictures(path: Path, plan: nv.DecodePlan) -> list[bytes]:
     return [raw[i:i + size] for i in range(0, len(raw), size)]
 
 
-def test_two_amd_decoders_handing_over_at_once_give_ffmpegs_pictures(tmp_path, amd_decoder):
+def test_two_amd_decoders_handing_over_at_once_give_ffmpegs_pictures(clip, amd_decoder):
     """Scoring decodes both videos at once, and the decoders share the
     hand-over's Vulkan device, its queue and what is imported and pinned."""
-    paths = [_clip(tmp_path / "a.mkv", "hevc", "yuv420p10le"), _clip(tmp_path / "b.mkv", "h264", "yuv420p")]
-    infos = [probe_video(path) for path in paths]
+    _need_decoder("hevc", "yuv420p10le", "amd")
+    _need_decoder("h264", "yuv420p", "amd")
+    paths = [clip("hevc", "yuv420p10le"), clip("h264", "yuv420p")]
+    infos = [_probed(path) for path in paths]
     plans = [nv.plan_decode(info, None, shift=6) for info in infos]
     for plan in plans:
         _need(plan, "amd")
@@ -550,10 +597,15 @@ _SOFTWARE_ENCODERS = {
 }
 
 
+@functools.cache
+def _encoders() -> str:
+    """FFmpeg's list of its encoders."""
+    return subprocess.run([ffmpeg_path(), "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
+
+
 def _software_clip(path: Path, codec: str, pix_fmt: str, seconds: float = 1.0) -> Path:
     encoder = _SOFTWARE_ENCODERS[codec]
-    listed = subprocess.run([ffmpeg_path(), "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
-    if f" {encoder[1]} " not in listed:
+    if f" {encoder[1]} " not in _encoders():
         pytest.skip(f"this FFmpeg has no {encoder[1]}")
     subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-f", "lavfi",
                     "-i", f"testsrc2=s=320x240:r=24000/1001:d={seconds}", "-pix_fmt", pix_fmt, *encoder, str(path)],
@@ -561,12 +613,19 @@ def _software_clip(path: Path, codec: str, pix_fmt: str, seconds: float = 1.0) -
     return path
 
 
-def test_the_software_decoders_pictures_are_ffmpegs_decode(tmp_path_factory, subtests):
+def test_the_software_decoders_pictures_are_ffmpegs_decode(tmp_path, subtests):
     """Every codec it is asked for, sample for sample: whichever FFmpeg
     decodes them, the decoders' pictures are the same."""
-    def check(codec, pix_fmt, crop, tmp_path):
-        path = _software_clip(tmp_path / f"clip.{'webm' if codec == 'vp9' else 'mkv'}", codec, pix_fmt)
-        info = probe_video(path)
+    if not nv.LIBRARIES[nv.SOFTWARE].is_file():
+        pytest.skip("the software decoder is not built")
+    made: dict[tuple[str, str], Path] = {}
+
+    def check(codec, pix_fmt, crop):
+        if (codec, pix_fmt) not in made:
+            made[codec, pix_fmt] = _software_clip(tmp_path / f"{len(made)}.{'webm' if codec == 'vp9' else 'mkv'}",
+                                                  codec, pix_fmt)
+        path = made[codec, pix_fmt]
+        info = _probed(path)
         plan = nv.plan_decode(info, crop, shift=6)
         _need(plan, nv.SOFTWARE)
         sums, stamps = _decode(info, plan, nv.SOFTWARE)
@@ -574,19 +633,19 @@ def test_the_software_decoders_pictures_are_ffmpegs_decode(tmp_path_factory, sub
         assert sums == _ffmpeg_decode(path, plan)
         assert stamps == sorted(stamps)
 
-    for codec, pix_fmt in [
-        ("h264", "yuv420p10le"),  # no GPU decoder here takes it
-        ("vvc", "yuv420p10le"),   # in Matroska, whose decode times FFmpeg's copy would "repair" (_CODECS)
-        ("vp9", "yuv420p10le"),
-        ("av1", "yuv420p10le"),   # dav1d's
-        ("av1", "yuv420p"),
-        ("mpeg2video", "yuv420p"),
-        ("ffv1", "yuv420p10le"),
-        ("ffv1", "yuv420p"),
+    for codec, pix_fmt, crop in [
+        ("h264", "yuv420p10le", None),  # no GPU decoder here takes it
+        ("h264", "yuv420p10le", CropBox(318, 236, 1, 3)),  # the crop is the same for every codec
+        ("vvc", "yuv420p10le", None),   # in Matroska, whose decode times FFmpeg's copy would "repair" (_CODECS)
+        ("vp9", "yuv420p10le", None),
+        ("av1", "yuv420p10le", None),   # dav1d's
+        ("av1", "yuv420p", None),
+        ("mpeg2video", "yuv420p", None),
+        ("ffv1", "yuv420p10le", None),
+        ("ffv1", "yuv420p", None),
     ]:
-        for crop in [None, CropBox(318, 236, 1, 3)]:
-            with subtests.test(codec=codec, pix_fmt=pix_fmt, crop=crop):
-                check(codec, pix_fmt, crop, tmp_path_factory.mktemp("case"))
+        with subtests.test(codec=codec, pix_fmt=pix_fmt, crop=crop):
+            check(codec, pix_fmt, crop)
 
 
 def test_a_video_not_at_the_depth_planned_fails_once_it_is_seen(tmp_path):
@@ -633,8 +692,7 @@ def test_film_grain_is_added_as_ffmpegs_decode_adds_it(tmp_path, codec, pix_fmt,
     7.1's VVC decoder's were not (a VVC encode with AFGS1 grain: 43 of 300
     pictures the same)."""
     encoder = _SOFTWARE_ENCODERS[codec]
-    listed = subprocess.run([ffmpeg_path(), "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
-    if f" {encoder[1]} " not in listed:
+    if f" {encoder[1]} " not in _encoders():
         pytest.skip(f"this FFmpeg has no {encoder[1]}")
     path = tmp_path / "grain.mkv"
     subprocess.run([ffmpeg_path(), "-nostdin", "-v", "error", "-y", "-f", "lavfi",

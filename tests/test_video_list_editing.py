@@ -119,6 +119,25 @@ def test_files_dropped_are_added_once_and_each_list_opens_its_own_last_folder(wi
     assert asked[-1] == ("tests", str(sources))
 
 
+def test_a_path_left_in_the_reference_box_is_not_read_as_the_window_closes(win, tmp_path):
+    """The focus leaves the box as the window hides, and the box read the
+    path left in it: the reading started then outlived the window, and the
+    app crashed as it closed ("QThread: Destroyed while thread is still
+    running")."""
+    from PySide6.QtTest import QTest
+
+    reference = tmp_path / "ref.mkv"
+    reference.write_bytes(b"")
+    win.show()
+    win.activateWindow()
+    QApplication.processEvents()
+    win.source_edit.setFocus()
+    QTest.keyClicks(win.source_edit, str(reference))
+    assert win.source_edit.hasFocus()
+    win.close()
+    assert win.probed_sources == []
+
+
 # ------------------------------------------------------------------ sorting
 
 
@@ -131,6 +150,17 @@ def test_a_metric_sorts_by_its_score_with_unscored_rows_last_either_way(win):
     assert _names(win) == ["d.mkv", "a.mkv", "c.mkv", "b.mkv"]
     win._on_header_clicked(COL_VMAF)
     assert _names(win) == ["c.mkv", "a.mkv", "d.mkv", "b.mkv"]
+
+
+def test_file_names_sort_as_a_person_reads_them(win):
+    """9 before 10 and 007 before 9, whatever the case, with digits of any
+    script read as numbers. A superscript is text: "10²5" stopped the sort
+    with an error, as "²" counts as a digit to str.isdigit() and not to int()."""
+    _add(win, "clip 10.mkv", "Clip 9.mkv", "clip 1.mkv", "clip 2.mkv", "clip 10²5.mkv", "clip ٣.mkv",
+         "clip 007.mkv")
+    win._on_header_clicked(COL_PATH)
+    assert _names(win) == ["clip 1.mkv", "clip 2.mkv", "clip ٣.mkv", "clip 007.mkv", "Clip 9.mkv", "clip 10.mkv",
+                           "clip 10²5.mkv"]
 
 
 # ------------------------------------------------------------------ videos reopened at the next start

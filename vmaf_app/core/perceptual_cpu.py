@@ -29,6 +29,7 @@ import numpy as np
 import psutil
 
 from vmaf_app.core import proc as proc_util
+from vmaf_app.core import temp_files
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.colour import FFMPEG_MATRICES, colour_of, describe_png
 from vmaf_app.core.comparison_recipe import ComparisonRecipe
@@ -864,7 +865,7 @@ def run_perceptual_task(
                 # 100%.
                 on_progress(units, max(total_units, units + step), rate)
 
-    with tempfile.TemporaryDirectory(prefix="videometricslab-perceptual-") as temp:
+    with tempfile.TemporaryDirectory(prefix=temp_files.prefix("videometricslab-perceptual-")) as temp:
         pairs = _png_pairs(
             source, distorted, request.recipe, source_crop, distorted_crop, step,
             Path(temp), cancel_event, process_handle,

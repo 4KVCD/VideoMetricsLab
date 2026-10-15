@@ -48,7 +48,7 @@ from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core import libvmaf, vmaf_gpu, vmaf_vulkan
+from vmaf_app.core import libvmaf, temp_files, vmaf_gpu, vmaf_vulkan
 
 _log = logging.getLogger(__name__)
 
@@ -244,7 +244,7 @@ def _use_cpu_features(lib: ctypes.CDLL, context: ctypes.c_void_p, options: dict[
 def _output_names(lib: ctypes.CDLL, context: ctypes.c_void_p) -> list[str]:
     """Returns the names of the features a context has scores for. libvmaf
     has no call that lists them, so they are read from its JSON output."""
-    handle, path = tempfile.mkstemp(prefix="vml-vmaf-v1-", suffix=".json")
+    handle, path = tempfile.mkstemp(prefix=temp_files.prefix("vml-vmaf-v1-"), suffix=".json")
     os.close(handle)
     try:
         libvmaf.check(lib.vmaf_write_output(context, libvmaf.path_bytes(path), _VMAF_OUTPUT_FORMAT_JSON),
@@ -440,7 +440,12 @@ class V1Scorer:
             if self._cpu_features:
                 workers = threads if threads is not None else max(2, min(16, (os.cpu_count() or 4) - 2))
                 configuration = libvmaf.Configuration(libvmaf.LOG_LEVEL_ERROR, workers, 1, 0, 0)
-                libvmaf.check(lib.vmaf_init(ctypes.byref(self._cpu), configuration), "Starting libvmaf")
+                # Kept only once started: when vmaf_init fails, it has freed
+                # the context it made but left the pointer to it set, which
+                # close() would free a second time.
+                context = ctypes.c_void_p()
+                libvmaf.check(lib.vmaf_init(ctypes.byref(context), configuration), "Starting libvmaf")
+                self._cpu = context
                 _use_cpu_features(lib, self._cpu, options, self._on_gpu)
                 pictures = libvmaf.PictureConfiguration(
                     libvmaf.PictureParameters(width, height, bit_depth, libvmaf.PIX_FMT_YUV420P),

@@ -1395,7 +1395,9 @@ class MainWindow(QMainWindow):
         """A path typed or pasted into the reference box, read when Enter is
         pressed or the box is left. Quotes, as Explorer's "Copy as path"
         puts them, are taken off."""
-        if self._run_active or self.source_edit.isReadOnly():
+        # Not as the window closes: the focus leaves the box as it hides, and
+        # reading started then outlived the window, which crashed the app.
+        if self._run_active or self._closing or self.source_edit.isReadOnly():
             return
         text = self.source_edit.text().strip().strip('"').strip()
         shown = self._shown_source_path()
@@ -2513,7 +2515,9 @@ class MainWindow(QMainWindow):
         row_data = self._rows[row]
         info = row_data.video_info
         if column == COL_PATH:
-            return [int(part) if part.isdigit() else part.casefold()
+            # isdecimal, not isdigit: a superscript "²" is a digit to isdigit
+            # and not to int(), nor to \d, which leaves it in the text.
+            return [int(part) if part.isdecimal() else part.casefold()
                     for part in re.split(r"(\d+)", row_data.path.name)]
         if column == COL_INFO:
             return None if info is None else (info.width * info.height, info.fps, info.duration)
@@ -3037,6 +3041,7 @@ class MainWindow(QMainWindow):
         if self._run_active:
             return
         menu = _StayOpenMenu(self)
+        menu.setAttribute(Qt.WA_DeleteOnClose)  # one menu for each opening otherwise stays in the window
         menu.setToolTipsVisible(True)
         shown = [item for item in _METRIC_COLUMNS if item.key not in self._hidden_metrics]
         for item in _METRIC_COLUMNS:

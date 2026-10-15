@@ -23,7 +23,10 @@ its attributes. While the child runs:
   started, and raises `cancelled`;
 - the child's log records are logged here, under their own logger names;
 - if the child crashes, where each of its threads was (from faulthandler) is
-  logged here with the crash.
+  logged here with the crash;
+- the child's temporary files go in a folder of its own, which is removed
+  here however the child ends, so that one ended part-way (a Cancel, a crash,
+  a Ctrl+C that reached it too) leaves nothing in the temporary folder.
 """
 from __future__ import annotations
 
@@ -33,12 +36,13 @@ import faulthandler
 import logging
 import multiprocessing
 import os
+import shutil
 import signal
 import sys
 import tempfile
 import threading
+import time
 import traceback
-import uuid
 from collections.abc import Callable, Iterable
 from multiprocessing.connection import wait
 from multiprocessing.reduction import ForkingPickler
@@ -46,12 +50,20 @@ from pathlib import Path
 
 import psutil
 
-from vmaf_app.core import proc
+from vmaf_app.core import proc, temp_files
 
 _log = logging.getLogger(__name__)
 
 #: How often the parent checks the cancel event while the child sends nothing.
 _POLL_SECONDS = 0.05
+
+#: How long the parent keeps trying to remove the child's folder while a
+#: program the child started (FFmpeg) is still ending with a file in it open.
+_FOLDER_WAIT_SECONDS = 5.0
+
+#: The file in the child's folder where its threads' stacks are written if
+#: it crashes: a native crash ends the child before it can send anything.
+_CRASH_FILE = "crash.txt"
 
 
 class IsolatedCrashError(RuntimeError):
@@ -107,9 +119,7 @@ def run_isolated(
         kwargs.pop(name, None)
     context = multiprocessing.get_context("spawn")
     receiver, sender = context.Pipe(duplex=False)
-    # Where the child writes its threads' stacks if it crashes: a native
-    # crash ends the child before it can send anything.
-    crash_path = Path(tempfile.gettempdir()) / f"vml-isolated-{os.getpid()}-{uuid.uuid4().hex[:12]}.txt"
+    folder = _child_folder()
     # The lowest level any of the app's loggers takes. The app's log is at
     # INFO on the app's package logger while the root logger stays at
     # WARNING, and the root's level alone would drop every INFO line the
@@ -120,10 +130,15 @@ def run_isolated(
     child = context.Process(
         target=_child_main,
         args=(sender, level, target, args, kwargs,
-              tuple(calls), process_handle is not None, cancel_event is not None, str(crash_path)),
+              tuple(calls), process_handle is not None, cancel_event is not None, folder),
         name=f"isolated-{what}", daemon=True,
     )
-    child.start()
+    try:
+        child.start()
+    except BaseException:
+        if folder is not None:
+            _remove_folder(folder)
+        raise
     proc.end_with_app(child.pid)
     sender.close()
     attached: set[int] = set()
@@ -173,10 +188,11 @@ def run_isolated(
         if process_handle is not None:
             for pid in attached:
                 process_handle.detach(pid)
-        # Read (and removed) here, however the loop was left: a Cancel or a
-        # failed callback raises out of it, and the file must not be left in
-        # the temp folder.
-        crash_threads = _take_text(crash_path)
+        # The child's folder goes however the loop was left (a Cancel or a
+        # failed callback raises out of it), once its crash report is read.
+        if folder is not None:
+            crash_threads = _read_text(folder / _CRASH_FILE)
+            _remove_folder(folder)
     if cancel_event is not None and cancel_event.is_set():
         # Cancel also ends the child's FFmpeg, so whatever the child made of
         # that (a failed read, a broken pipe) is not the outcome.
@@ -191,15 +207,38 @@ def run_isolated(
     return outcome[1]
 
 
-def _take_text(path: Path) -> str:
-    """Returns the text of `path` and removes the file; "" if there is none."""
+def _child_folder() -> Path | None:
+    """Makes the child's own folder (see the module docstring), for its
+    temporary files and its crash report. None if the temporary folder
+    cannot be written to: the child then runs without either."""
     try:
-        text = path.read_text(encoding="utf-8", errors="replace").strip()
+        return Path(tempfile.mkdtemp(prefix=temp_files.prefix("vml-isolated-")))
+    except OSError:
+        return None
+
+
+def _read_text(path: Path) -> str:
+    """Returns the text of `path`; "" if there is none."""
+    try:
+        return path.read_text(encoding="utf-8", errors="replace").strip()
     except OSError:
         return ""
-    with contextlib.suppress(OSError):
-        path.unlink()
-    return text
+
+
+def _remove_folder(folder: Path) -> None:
+    """Removes the child's folder once the child has ended. A program the
+    child started can still have a file in it open for a moment: FFmpeg,
+    ended with the child by a Cancel, or reached by the same Ctrl+C. The
+    folder is tried again until that program has ended too."""
+    deadline = time.monotonic() + _FOLDER_WAIT_SECONDS
+    while True:
+        shutil.rmtree(folder, ignore_errors=True)
+        if not folder.exists():
+            return
+        if time.monotonic() >= deadline:
+            _log.info("%s was left: a file in it is still open", folder)
+            return
+        time.sleep(_POLL_SECONDS)
 
 
 def _end_tree(pid: int | None) -> None:
@@ -282,15 +321,21 @@ class _LogForwarder(logging.Handler):
 
 
 def _child_main(connection, log_level: int, target: Callable, args: tuple, kwargs: dict,
-                callback_names: tuple[str, ...], has_handle: bool, has_cancel: bool, crash_path: str) -> None:
-    """The child process: sets up crash reports, logging and the stand-ins
-    for the parent's callbacks, handle and cancel event, then runs `target`
-    and sends back its result or its exception."""
-    try:
-        crash_file = open(crash_path, "w", encoding="utf-8")  # noqa: SIM115 -- open while the process lives
-        faulthandler.enable(crash_file, all_threads=True)
-    except (OSError, RuntimeError):
-        pass  # the work runs the same without it
+                callback_names: tuple[str, ...], has_handle: bool, has_cancel: bool, folder: Path | None) -> None:
+    """The child process: sets up its folder, crash reports, logging and the
+    stand-ins for the parent's callbacks, handle and cancel event, then runs
+    `target` and sends back its result or its exception."""
+    if folder is not None:
+        # Every temporary file of the work (FFmpeg's timestamps in a Vship
+        # pass) is made in the folder the parent removes, however this
+        # process ends.
+        tempfile.tempdir = str(folder)
+        try:
+            # Open for as long as the process lives.
+            crash_file = open(folder / _CRASH_FILE, "w", encoding="utf-8")  # noqa: SIM115
+            faulthandler.enable(crash_file, all_threads=True)
+        except (OSError, RuntimeError):
+            pass  # the work runs the same without it
     sender = _Sender(connection)
     root = logging.getLogger()
     for handler in list(root.handlers):

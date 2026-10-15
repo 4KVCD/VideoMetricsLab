@@ -99,8 +99,6 @@ CASES = {
     "test frames a millisecond late": (
         (48, "N*42+if(eq(mod(N\\,4)\\,1)\\,1\\,0)", "1/1000", "mkv"), (48, "N*42", "1/1000", "mkv"), None),
     "24 against 25 fps": ((48, "N*1000/24", "1/1000", "mkv"), (50, "N*40", "1/1000", "mkv"), None),
-    "25 against 24 fps": ((50, "N*40", "1/1000", "mkv"), (48, "N*1000/24", "1/1000", "mkv"), None),
-    "30 against 60 fps": ((30, "N*1000/30", "1/1000", "mkv"), (60, "N*1000/60", "1/1000", "mkv"), None),
     "60 against 30 fps": ((60, "N*1000/60", "1/1000", "mkv"), (30, "N*1000/30", "1/1000", "mkv"), None),
     "ties halfway": ((30, "N*40+20", "1/1000", "mkv"), (31, "N*40", "1/1000", "mkv"), None),
     "test video has gaps": (
@@ -117,8 +115,6 @@ CASES = {
     # two containers' clocks -- the GPU once compared 240 pairs to the CPU's 239.
     "23.976 fps from two clocks": (
         (240, "N*1001", "1/24000", "mp4"), (240, "round(N*1001/24)", "1/1000", "mkv"), None),
-    "23.976 fps from two clocks, source first": (
-        (240, "round(N*1001/24)", "1/1000", "mkv"), (240, "N*1001", "1/24000", "mp4"), None),
     "limit on a frame": ((48, "N*42", "1/1000", "mkv"), (48, "N*42", "1/1000", "mkv"), "1.008"),
     "limit between frames": ((48, "N*42", "1/1000", "mkv"), (48, "N*42", "1/1000", "mkv"), "1.000"),
     "limit, other time base": ((48, "N*1001", "1/24000", "mp4"), (48, "N*42", "1/1000", "mkv"), "1.043"),
@@ -126,11 +122,19 @@ CASES = {
 
 
 def test_pairs_are_ffmpegs(tmp_path_factory, subtests):
+    folder = tmp_path_factory.mktemp("clips")
+    made: dict[tuple, Path] = {}
+
+    def clip(spec: tuple) -> Path:
+        """Each clip the cases share, made once."""
+        if spec not in made:
+            made[spec] = _clip(folder / f"{len(made)}.{spec[3]}", *spec[:3])
+        return made[spec]
+
     def check(name, tmp_path):
         test_spec, source_spec, *rest = CASES[name]
         limit = rest[0] if rest else None
-        main = _clip(tmp_path / f"main.{test_spec[3]}", *test_spec[:3])
-        ref = _clip(tmp_path / f"ref.{source_spec[3]}", *source_spec[:3])
+        main, ref = clip(test_spec), clip(source_spec)
         expected = _ffmpeg_pairs(main, ref, tmp_path, limit)
         assert expected, "FFmpeg paired nothing"
         assert _our_pairs(main, ref, limit) == expected

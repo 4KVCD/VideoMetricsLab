@@ -28,6 +28,7 @@ decoder's NV12 or P010 layout has only its chroma split into planes here
 """
 from __future__ import annotations
 
+import collections
 import contextlib
 import ctypes
 import logging
@@ -46,7 +47,7 @@ from pathlib import Path
 
 import numpy as np
 
-from vmaf_app.core import frame_sync_by_time, gpu_frames
+from vmaf_app.core import frame_sync_by_time, gpu_frames, temp_files
 from vmaf_app.core import proc as proc_util
 from vmaf_app.core.analysis_request import AnalysisRequest, MetricRequestSpec
 from vmaf_app.core.colour import UnsupportedColourError, video_colour
@@ -926,6 +927,9 @@ _RING_SLOTS = _LANES_PER_METRIC + 3
 #: the decoder is. With 64 MB, one 4K 10-bit HEVC stream went from 55 to
 #: 107 fps alone, and from 46 to 78 fps with the two videos in parallel.
 _PIPE_BYTES = proc_util.FRAME_PIPE_BYTES
+#: How many of a decoding FFmpeg's last error lines are kept for a failure's
+#: message, which shows their last 2,000 bytes.
+_STDERR_LINES_KEPT = 100
 _EOF = -1
 #: What FFmpeg writes about each frame it sends to Vship (-stats_enc_pre)
 #: when pairing by timestamp (frame_sync.by_timestamp): the picture's
@@ -1236,7 +1240,7 @@ class _FrameStream:
         pairing by timestamp. Returns (frames, exit code, error output)."""
         if not self._timestamps:
             return self._decode_with(command, None)
-        descriptor, name = tempfile.mkstemp(prefix="vml-vship-pts-", suffix=".txt")
+        descriptor, name = tempfile.mkstemp(prefix=temp_files.prefix("vml-vship-pts-"), suffix=".txt")
         os.close(descriptor)
         stamps_path = Path(name)
         try:
@@ -1257,9 +1261,12 @@ class _FrameStream:
             self._process, self._reader = process, reader
         if self._process_handle is not None:
             self._process_handle.attach(process.pid)
-        stderr_tail: list[bytes] = []
+        # FFmpeg's last error lines, for a failure's message. Its whole error
+        # output was held until it ended: without end over a long film if it
+        # warned on every frame.
+        stderr_tail: collections.deque[bytes] = collections.deque(maxlen=_STDERR_LINES_KEPT)
         drain = threading.Thread(
-            target=lambda: stderr_tail.append(process.stderr.read()[-2000:]) if process.stderr else None,
+            target=lambda: stderr_tail.extend(process.stderr) if process.stderr else None,
             daemon=True,
         )
         drain.start()
@@ -1301,7 +1308,7 @@ class _FrameStream:
             drain.join(timeout=5)
             if self._process_handle is not None:
                 self._process_handle.detach(process.pid)
-        message = b"".join(stderr_tail).decode("utf-8", errors="replace").strip()
+        message = b"".join(stderr_tail)[-2000:].decode("utf-8", errors="replace").strip()
         return frames, code, message
 
     def _y4m_header(self, reader) -> bool:

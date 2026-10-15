@@ -763,6 +763,25 @@ def store_result(
     return directory
 
 
+def _loaded_model(results: MetricResultSet, specs: tuple[MetricRequestSpec, ...], key: str,
+                  saved: tuple[str, str | None]) -> tuple[str, str | None]:
+    """The model and model choice of VMAF or VMAF v1 (`key`) in a result of
+    saved scores. When it was loaded: the model its score was made with, as
+    its file records it, and the choice of the request it answers, as
+    calculating that request would give them. Otherwise `saved`, which are
+    context.json's: those of the result saved last, which can be another
+    display's CVVDP alone (model "") or VMAF with another model chosen."""
+    model, choice = saved
+    metric = results.get(key)
+    spec = next((spec for spec in specs if spec.key == key), None)
+    if metric is None or spec is None:
+        return model, choice
+    ran = metric.provenance.parameters.get("model")
+    if isinstance(ran, str) and ran:
+        model = ran
+    return model, dict(spec.parameters).get("model_choice", choice)
+
+
 def load_result(
     base: Path, source: Path, distorted: Path, recipe: ComparisonRecipe,
     specs: tuple[MetricRequestSpec, ...], supplemental_specs: tuple[MetricRequestSpec, ...] = (),
@@ -815,16 +834,21 @@ def load_result(
         # result's own (it is not part of the comparison's identity), so the
         # saved one is kept.
         target = context.get("resample_target")
+        asked = (*specs, *supplemental_specs)
+        model, model_choice = _loaded_model(results, asked, "vmaf",
+                                            (context.get("model") or "", context.get("model_choice")))
+        model_v1, model_choice_v1 = _loaded_model(results, asked, "vmaf_v1",
+                                                  (context.get("model_v1") or "", context.get("model_choice_v1")))
         result = ComparisonResult(
             source=Path(context["source"]), distorted=Path(context["distorted"]),
-            frames=frame_view, fps=context["fps"], model=context.get("model", ""),
+            frames=frame_view, fps=context["fps"], model=model,
             source_crop=crop_from_dict(context.get("source_crop")), distorted_crop=crop_from_dict(context.get("distorted_crop")),
             source_info=video_info_from_dict(context["source_info"]), distorted_info=video_info_from_dict(context["distorted_info"]),
             scale_direction=ScaleDirection(context.get("scale_direction", recipe.scale_direction.value)),
             scale_algorithm=context.get("scale_algorithm") or recipe.scale_algorithm,
             resample_target=ResampleTarget(**target) if target else recipe.resample_test,
-            compared_frame_count=context.get("compared_frame_count", 0), model_choice=context.get("model_choice"),
-            model_v1=context.get("model_v1") or "", model_choice_v1=context.get("model_choice_v1"),
+            compared_frame_count=context.get("compared_frame_count", 0), model_choice=model_choice,
+            model_v1=model_v1, model_choice_v1=model_choice_v1,
             metric_results=results,
         )
         return result, context.get("label") or Path(context["distorted"]).stem

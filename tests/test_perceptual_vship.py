@@ -701,11 +701,16 @@ def _selected_by_time(path: Path, step: int, limit: str | None) -> list[int]:
 def test_the_selection_is_the_ffmpeg_chains(tmp_path_factory, subtests):
     """_FrameSelection, and _TimedFrameSelection when pairing by timestamp,
     give the frames FFmpeg's chain pipes."""
-    def check(name, clip, step, limit, tmp_path):
+    folder = tmp_path_factory.mktemp("clips")
+    made: dict[tuple, Path] = {}
+
+    def check(name, clip, step, limit):
         count, expression, *rest = clip
         time_base = rest[0] if rest else "1/1000"
         suffix = rest[1] if len(rest) > 1 else "mkv"
-        path = _numbered_clip(tmp_path / f"clip.{suffix}", count, expression, time_base)
+        if clip not in made:  # the cases share clips: each made once
+            made[clip] = _numbered_clip(folder / f"{len(made)}.{suffix}", count, expression, time_base)
+        path = made[clip]
         expected = _ffmpeg_piped(path, step, limit)
         assert expected
         assert _selected(path, count, step, limit) == expected
@@ -724,7 +729,7 @@ def test_the_selection_is_the_ffmpeg_chains(tmp_path_factory, subtests):
         ("mp4, 1/90000", (48, "N*3754", "1/90000", "mp4"), 2, "1.250000"),
     ]:
         with subtests.test(name=name, clip=clip, step=step, limit=limit):
-            check(name, clip, step, limit, tmp_path_factory.mktemp("case"))
+            check(name, clip, step, limit)
 
 
 def test_hardware_decode_refused_before_any_frame_is_retried_in_software(monkeypatch):

@@ -343,6 +343,9 @@ def main() -> int:
         return 1 if report.failed else 0
 
     start_session_log()
+    from vmaf_app.core import temp_files
+
+    temp_files.start_removing_leftovers()  # what runs ended outright left: End task, a crash
     if adopted:
         logging.getLogger("vmaf_app.main").info("ffmpeg folder moved from the registry to the settings: %s", adopted)
     from vmaf_app.core.settings import Settings

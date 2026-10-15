@@ -3,12 +3,15 @@
 The scheduling itself -- lanes, pausing, cancelling, halves -- is tested
 through the window's VmafWorker in test_worker.py; these make sure the core
 runs on its own, as a script or another front end would use it."""
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
 from vmaf_app.core import job_runner
 from vmaf_app.core.job_runner import JobScheduler, RunEvents, VmafJob
+from vmaf_app.core.metric_results import FrameMetricResult, MetricProvenance, MetricResultSet
 from vmaf_app.core.models import ComparisonResult, FrameScore, VideoInfo, VmafOptions
+from vmaf_app.core.perceptual_cpu import PerceptualTaskOutput
 from vmaf_app.core.vmaf_runner import Cancelled
 
 
@@ -75,3 +78,65 @@ def test_a_cancelled_run_says_so_once_however_many_videos_stopped(monkeypatch):
                  events=RunEvents(cancelled=lambda: seen.append("cancelled"))).run()
 
     assert seen == ["cancelled"]
+
+
+def test_a_videos_result_so_far_never_arrives_after_its_whole_result(monkeypatch):
+    """The half of a video that finishes first sends the result so far while
+    the other half runs. When the other half finished just then, that result
+    could arrive after the video's whole result and replace it: the command
+    line's table and JSON then lacked the other half's metrics. Here the
+    result so far is held between taking the halves' results and sending
+    them, until the other half has sent the whole result or has had to wait
+    to."""
+    copied = threading.Event()  # the result so far has taken the halves' results
+    released = threading.Event()  # and may be sent
+
+    class WatchedLock:
+        """The video's emit lock, saying when a thread has to wait for it."""
+
+        def __init__(self):
+            self._lock = threading.RLock()
+
+        def __enter__(self):
+            if not self._lock.acquire(blocking=False):
+                released.set()
+                self._lock.acquire()
+            return self
+
+        def __exit__(self, *_error):
+            self._lock.release()
+
+    real_init, real_merged = job_runner.JobRun.__init__, job_runner.JobRun._merged
+
+    def init(run, *args, **kwargs):
+        real_init(run, *args, **kwargs)
+        run.emit_lock = WatchedLock()
+
+    def merged(run, task_results, perceptual):
+        if set(task_results) == {"perceptual"}:  # the result so far: the GPU half's alone
+            copied.set()
+            assert released.wait(30)
+        return real_merged(run, task_results, perceptual)
+
+    def ffmpeg(_source, distorted, *_args, **_kwargs):
+        assert copied.wait(30), "the GPU half sent no result so far"
+        return _result(distorted.path.name)
+
+    metric = FrameMetricResult("ssimulacra2", [0], [0.0], [87.0], MetricProvenance("test", "1", "gpu", "test-v1"))
+    monkeypatch.setattr(job_runner.JobRun, "__init__", init)
+    monkeypatch.setattr(job_runner.JobRun, "_merged", merged)
+    monkeypatch.setattr(job_runner, "run_vmaf", ffmpeg)
+    monkeypatch.setattr(job_runner, "apply_vship_cpu_fallback",
+                        lambda *_args, **_kwargs: PerceptualTaskOutput(MetricResultSet([metric]), None, None, 1))
+    delivered = []
+
+    def finished(_index, result):
+        delivered.append(result)
+        released.set()
+
+    job = VmafJob(_info("s.mp4"), _info("d.mp4"), VmafOptions(), label="d.mp4", metric_keys=("vmaf", "ssimulacra2"))
+    JobScheduler([job], parallel_jobs=2, events=RunEvents(
+        job_finished=finished, result_updated=lambda _index, result: delivered.append(result))).run()
+
+    assert len(delivered) == 2  # the result so far, then the whole result
+    assert delivered[-1].has_metric("vmaf") and delivered[-1].has_metric("ssimulacra2")

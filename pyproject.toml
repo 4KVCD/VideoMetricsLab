@@ -1,9 +1,12 @@
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-# In parallel: one worker per core, at most 12 (a run took 36 s on one core and
-# 10 s on 12 workers; more workers only add start-up). `-n 0` runs serially.
-addopts = "-n auto --maxprocesses=12"
+# In parallel: one worker per core, at most 12 (more only add start-up), and a
+# worker that runs out of tests takes over another's queued ones (worksteal):
+# handed out in fixed shares, one worker had 19 s of the GPU tests while most
+# had 6 to 9 (2026-10-13, 24 s a run; 16 s with worksteal). `-n 0` runs
+# serially.
+addopts = "-n auto --maxprocesses=12 --dist worksteal"
 markers = [
     "packaging: checks the release build's file lists against the installed PySide6 and GStreamer wheels; slow, run with --packaging (CI and releases do)",
 ]
