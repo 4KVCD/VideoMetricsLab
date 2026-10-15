@@ -1329,6 +1329,7 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
     std::condition_variable xpsnr_ended;
     bool xpsnr_done = !beside;
     std::thread xpsnr_thread;
+    std::thread relay;
     if (beside) {
         VmafOptions xpsnr_options = options;
         xpsnr_options.extra_features.clear();  // only XPSNR: PSNR and SSIM would be scored there again
@@ -1347,20 +1348,35 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
             xpsnr_done = true;
             xpsnr_ended.notify_all();
         });
-    }
-    // Waits for XPSNR's run, passing a Cancel on to it.
-    const auto wait_for_xpsnr = [&] {
-        if (!xpsnr_thread.joinable()) {
-            return;
-        }
-        std::unique_lock lock(xpsnr_mutex);
-        while (!xpsnr_ended.wait_for(lock, std::chrono::milliseconds(100), [&] { return xpsnr_done; })) {
-            if (cancel.cancelled()) {
-                stop.cancel();
+        // The run's Cancel and Pause passed on to XPSNR's FFmpeg for as long
+        // as it runs. Its token is its own, so that it can be stopped alone
+        // when the app's scoring fails; with only a Cancel passed on, and only
+        // once that scoring had ended, it went on scoring through a Pause
+        // (the Python app hands it the run's own process handle).
+        relay = std::thread([&] {
+            std::unique_lock lock(xpsnr_mutex);
+            while (!xpsnr_ended.wait_for(lock, std::chrono::milliseconds(50), [&] { return xpsnr_done; })) {
+                lock.unlock();
+                if (cancel.cancelled()) {
+                    stop.cancel();
+                }
+                if (cancel.paused() && !stop.paused()) {
+                    stop.pause();
+                } else if (!cancel.paused() && stop.paused()) {
+                    stop.resume();
+                }
+                lock.lock();
             }
+        });
+    }
+    // Waits for XPSNR's run.
+    const auto wait_for_xpsnr = [&] {
+        if (relay.joinable()) {
+            relay.join();
         }
-        lock.unlock();
-        xpsnr_thread.join();
+        if (xpsnr_thread.joinable()) {
+            xpsnr_thread.join();
+        }
     };
 
     VmafOptions scored = options;
