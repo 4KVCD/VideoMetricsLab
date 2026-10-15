@@ -12,7 +12,6 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFont>
-#include <QFutureWatcher>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -37,7 +36,6 @@
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
-#include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
 #include <cctype>
@@ -45,6 +43,7 @@
 #include <cmath>
 #include <functional>
 #include <numeric>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <variant>
@@ -316,6 +315,10 @@ MainWindow::MainWindow() {
 }
 
 MainWindow::~MainWindow() {
+    if (open_videos_lookup_) {
+        const std::lock_guard lock(open_videos_lookup_->mutex);
+        open_videos_lookup_->window = nullptr;  // its answer has no window to go to now
+    }
     // Hidden first, while the window is whole: hiding moves the focus, and
     // the reference box reads what it holds when the focus leaves it.
     hide();
@@ -469,7 +472,9 @@ void MainWindow::store_open_videos() {
 void MainWindow::restore_open_videos() {
     // Looked for on a thread of its own: a path on a network drive that is
     // not there can take many seconds to say so, and the window would not
-    // respond meanwhile.
+    // respond meanwhile. A thread let go of, not Qt's pool, which the app
+    // waits for as it ends: closed meanwhile, it would stay running until
+    // the drive had answered (the Python app's thread is a daemon too).
     if (!settings_.remember_videos) {
         return;
     }
@@ -481,13 +486,9 @@ void MainWindow::restore_open_videos() {
     if (reference.isEmpty() && tests.isEmpty()) {
         return;
     }
-    auto* watcher = new QFutureWatcher<std::pair<QString, QStringList>>(this);
-    connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher] {
-        const auto [present_reference, present] = watcher->result();
-        watcher->deleteLater();
-        reopen_videos(present_reference, present);
-    });
-    watcher->setFuture(QtConcurrent::run([reference, tests] {
+    open_videos_lookup_ = std::make_shared<OpenVideosLookup>();
+    open_videos_lookup_->window = this;
+    std::thread([lookup = open_videos_lookup_, reference, tests] {
         const QString present_reference = !reference.isEmpty() && QFileInfo(reference).isFile() ? reference : QString();
         QStringList present;
         for (const QString& path : tests) {
@@ -495,13 +496,21 @@ void MainWindow::restore_open_videos() {
                 present.append(path);
             }
         }
-        return std::pair{present_reference, present};
-    }));
+        // Held while the call is queued, so that the window cannot go in
+        // between; one gone before the call comes takes it with it.
+        const std::lock_guard lock(lookup->mutex);
+        if (MainWindow* window = lookup->window) {
+            QMetaObject::invokeMethod(
+                window, [window, present_reference, present] { window->reopen_videos(present_reference, present); },
+                Qt::QueuedConnection);
+        }
+    }).detach();
 }
 
 void MainWindow::reopen_videos(const QString& reference, const QStringList& tests) {
-    // Added unless the window has gained videos of its own since.
-    if (!rows_.empty() || source_info_ || source_reading_ || run_active_) {
+    // Added unless the window has gained videos of its own since, or is
+    // closing: their reading would hold the close up.
+    if (!rows_.empty() || source_info_ || source_reading_ || run_active_ || closing_) {
         return;
     }
     const std::size_t remembered = settings_.remembered_tests.size();

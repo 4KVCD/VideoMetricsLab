@@ -26,6 +26,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
@@ -430,6 +431,13 @@ private:
     QString reading_text_;        // the status line's "Reading..." while it shows
     bool run_active_ = false;
     bool closing_ = false;
+    // The window, for the thread that looks for the videos open last time
+    // (restore_open_videos), which may outlive it: nullptr once it is gone.
+    struct OpenVideosLookup {
+        std::mutex mutex;
+        MainWindow* window = nullptr;
+    };
+    std::shared_ptr<OpenVideosLookup> open_videos_lookup_;
     bool syncing_panel_ = false;
     bool syncing_table_ = false;
     bool theme_refresh_due_ = true;  // until the window is built
