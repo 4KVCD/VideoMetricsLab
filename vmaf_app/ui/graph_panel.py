@@ -38,10 +38,8 @@ from vmaf_app.core.metrics import FRAME_METRICS, METRICS, MetricDefinition, Metr
 from vmaf_app.core.models import ComparisonResult, synthetic_scale_direction_variant_path
 from vmaf_app.core.run_io import (
     RESULT_FILE_FILTER,
-    RESULT_SUFFIX,
     export_csv,
     load_run,
-    save_run,
     unique_output_path,
 )
 from vmaf_app.core.stats import VmafStats, aggregate_scores, compute_stats
@@ -1641,17 +1639,6 @@ class GraphPanel(QWidget):
         self.status_label.setText(
             ntr("Exporting {count} CSV file to {directory}...", "Exporting {count} CSV files to {directory}...",
                 len(self._entries), directory=directory)
-        )
-
-    def save_run_for_later(self, result: ComparisonResult, label: str) -> None:
-        """Saves a result to a run file, off the window's thread."""
-        path, _ = QFileDialog.getSaveFileName(
-            self, tr("Save analysis results"), f"{label}{RESULT_SUFFIX}", tr("Analysis results (*{suffix})", suffix=RESULT_SUFFIX)
-        )
-        if not path:
-            return
-        self._file_writes.submit(
-            f"save {Path(path).name}", partial(save_run, result, Path(path), label=label)
         )
 
     # ------------------------------------------------------------------ stats table

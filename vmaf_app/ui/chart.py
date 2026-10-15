@@ -254,18 +254,6 @@ class ChartWidget(QWidget):
         x0, x1 = self.x_range()
         return rect.left() + round((t - x0) / max(1e-9, x1 - x0) * rect.width())
 
-    def time_tick_labels(self) -> list[str]:
-        """The time axis's labels for the current view, in order: the same
-        ones _draw_axes draws."""
-        x0, x1 = self.x_range()
-        step = _nice_time_step(x1 - x0)
-        tick = np.ceil(x0 / step) * step
-        labels = []
-        while tick <= x1:
-            labels.append(format_hms(float(tick)))
-            tick += step
-        return labels
-
     def value_ticks(self, rect: QRect | None = None) -> list[tuple[int, str]]:
         """The value axis's grid lines for the current range, as (pixel row,
         label), lowest value first: the same ones _draw_axes draws."""

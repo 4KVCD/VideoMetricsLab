@@ -104,10 +104,6 @@ class _TaskCancelToken:
             self._job_cancel.wait(0.05 if left is None else min(left, 0.05))
         return True
 
-    def cancel_job(self) -> None:
-        """Cancels this job's other tasks."""
-        self._job_cancel.set()
-
 
 @dataclass
 class VmafJob:

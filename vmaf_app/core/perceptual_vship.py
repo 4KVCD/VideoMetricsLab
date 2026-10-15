@@ -442,11 +442,6 @@ def set_vship_backend(backend: str) -> None:
             _probed = None
 
 
-def vship_backend() -> str:
-    """The Vship build to try first, or "auto"."""
-    return _backend
-
-
 def backend_label(backend: str) -> str:
     """The name shown for a Vship build: "Vulkan", "CUDA" or "HIP"."""
     return _BACKEND_LABELS.get(backend, backend)

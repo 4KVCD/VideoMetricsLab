@@ -1,27 +1,17 @@
-"""How probe results and scores are rendered as text/colour in the table.
+"""How probe results, CVVDP presets and displays are rendered as text in the
+window.
 
 Pure presentation: every function here takes data and returns something to
-display, with no widget state involved, so the wording and thresholds are in
-one place instead of scattered through the row-populating code.
+display, with no widget state involved, so the wording is in one place
+instead of scattered through the row-populating code.
 """
 from __future__ import annotations
-
-from PySide6.QtGui import QColor
 
 from vmaf_app.core.models import VideoInfo
 from vmaf_app.i18n import tr
 
 # Shown wherever a value genuinely doesn't exist, as opposed to being 0.
 NOT_COMPUTED = "N/A"
-
-# VMAF is conventionally read in bands rather than as a raw number: ~95+ is
-# visually transparent, 90-95 is good, below that is where artefacts show.
-_GOOD_VMAF = 95
-_FAIR_VMAF = 90
-
-_COLOUR_GOOD = QColor(198, 239, 206)  # green
-_COLOUR_FAIR = QColor(255, 235, 156)  # amber
-_COLOUR_POOR = QColor(255, 199, 206)  # pink
 
 
 def media_info_string(info: VideoInfo) -> str:
@@ -47,16 +37,6 @@ def bitrate_note(info: VideoInfo) -> str:
     if info.bit_rate and info.bit_rate_whole_file:
         return tr("The whole file's bitrate, soundtrack included: the file does not record the video's own.")
     return ""
-
-
-def vmaf_band_colour(mean: float) -> QColor:
-    """A soft background tint by VMAF band, so a column of encodes can be
-    scanned at a glance the way FFMetrics' highlighted scores can be."""
-    if mean >= _GOOD_VMAF:
-        return _COLOUR_GOOD
-    if mean >= _FAIR_VMAF:
-        return _COLOUR_FAIR
-    return _COLOUR_POOR
 
 
 def preset_label(preset) -> str:

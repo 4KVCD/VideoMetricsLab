@@ -237,17 +237,9 @@ class Settings:
         value = value.strip()
         return Path(value) if value else None
 
-    def ffmpeg_dir_path(self) -> Path | None:
-        """The FFmpeg folder, or None."""
-        return self._dir(self.ffmpeg_dir)
-
     def cache_dir_path(self) -> Path | None:
         """The results folder, or None for the default."""
         return self._dir(self.cache_dir)
-
-    def export_dir_path(self) -> Path | None:
-        """The exports folder, or None to ask each time."""
-        return self._dir(self.export_dir)
 
     def default_extra_features(self) -> list[str]:
         """The libvmaf features these defaults ask for. XPSNR is left out on

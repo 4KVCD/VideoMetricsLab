@@ -1142,8 +1142,8 @@ class MainWindow(QMainWindow):
         self.metric_header.sectionClicked.connect(self._on_header_clicked)
         # Every column can be resized by dragging, including PATH.
         # FillColumnTable also makes PATH fill whatever space is left over
-        # (see its docstring). The INFO, BITRATE and VMAF columns are kept as
-        # wide as their content (see _set_row_info and _set_row_vmaf_text).
+        # (see its docstring). The INFO, BITRATE and SCALING columns are kept
+        # as wide as their content (see _set_row_info).
         # When the columns do not all fit, a horizontal scroll bar appears;
         # the columns are not squeezed to fit the window.
         header = self.distorted_table.horizontalHeader()
@@ -2144,22 +2144,6 @@ class MainWindow(QMainWindow):
         # Keeps these snug to whatever's actually in them (never wider than
         # needed) while staying user-draggable in between updates.
         self._fit_columns(COL_INFO, COL_BITRATE, COL_SCALING)
-
-    def _set_row_vmaf_text(self, row: int, text: str, *, bold: bool = False, color=None) -> None:
-        """Shows `text` in a row's VMAF cell in place of its tick box."""
-        item = self.distorted_table.item(row, COL_VMAF)
-        # Text in this cell replaces the tick box, the same way a score does:
-        # a check indicator beside "Frame 900/1200" reads as something to
-        # click, and it is not.
-        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-        item.setData(Qt.CheckStateRole, None)
-        item.setText(text)
-        font = QFont()
-        font.setBold(bold)
-        item.setFont(font)
-        if color is not None:
-            item.setForeground(color)
-        self._fit_columns(COL_VMAF)
 
     def _set_resample_row_info(self, row: int, target: ResampleTarget) -> None:
         """Shows what a resolution-test row scales the reference to and back."""
