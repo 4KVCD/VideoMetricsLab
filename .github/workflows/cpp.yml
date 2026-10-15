@@ -1,15 +1,18 @@
 name: C++ port
 
-# Builds the C++ port and runs its tests on Windows, Linux and macOS. The
-# Linux sanitizer job finds memory errors and undefined behaviour that the
-# other builds can pass over. On Windows the window and its tests are built
-# too, with Qt (they are built where CMake finds Qt), and its tests run on
+# Builds the C++ port and runs its tests on Windows, the window and its
+# tests too, with Qt (they are built where CMake finds Qt), its tests on
 # Qt's offscreen platform; those that need a GPU or FFmpeg skip themselves.
+# The Linux sanitizer job finds memory errors and undefined behaviour in the
+# engine, which Windows runs too, that the Windows build can pass over. The
+# Linux (GCC 11, GCC 13) and macOS (Apple Clang) builds come back when the
+# port reaches those systems.
+#
+# It runs only when asked (Actions > C++ port > Run workflow): at the end of
+# each phase of the port, and before a release. In between, the suites run
+# on the development PC before each commit, GPU tests included, which
+# GitHub's runners cannot run.
 on:
-  push:
-    branches: [cpp-port]
-  pull_request:
-    paths: ['cpp/**', '.github/workflows/cpp.yml']
   workflow_dispatch:
 
 permissions:
@@ -27,10 +30,7 @@ jobs:
           # Visual Studio 2022: the compiler Qt 6.12 supports on Windows, and the
           # windows preset's (newer runner images have only Visual Studio 2026).
           - { name: Windows (MSVC 2022), os: windows-2022, configure: windows, build: windows-release }
-          - { name: Linux (GCC 11), os: ubuntu-22.04, configure: linux, build: linux-release }
-          - { name: Linux (GCC 13), os: ubuntu-24.04, configure: linux, build: linux-release }
           - { name: Linux sanitizers, os: ubuntu-24.04, configure: linux-sanitizers, build: linux-sanitizers-debug }
-          - { name: macOS (Apple Clang), os: macos-15, configure: macos, build: macos-release }
     defaults:
       run:
         working-directory: cpp
@@ -39,9 +39,6 @@ jobs:
       - name: Install Ninja (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ninja-build
-      - name: Install Ninja (macOS)
-        if: runner.os == 'macOS'
-        run: brew install ninja
       # Qt 6.12's MSVC 2022 build, as the app is developed with: qtbase, and
       # Qt's translations of its own dialogs, from Qt's own servers. Each
       # archive is checked against the SHA-1 Qt publishes beside it, and

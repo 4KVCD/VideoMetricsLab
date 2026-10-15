@@ -190,10 +190,14 @@ Windows the build puts Qt's libraries beside the window and its tests
 of its own dialogs where they are installed with Qt (qttranslations), which
 the package needs.
 
-GitHub builds and tests every push of the `cpp-port` branch on all three
-(`.github/workflows/cpp.yml`); on Windows with Qt, so that the window
-and its tests are built and run there too (those that need a GPU or FFmpeg
-skip themselves).
+GitHub builds and tests the port when asked (`.github/workflows/cpp.yml`:
+Actions > C++ port > Run workflow), at the end of each phase of the port and
+before a release: on Windows, with
+Qt, so that the window and its tests are built and run there too (those
+that need a GPU or FFmpeg skip themselves), and with Linux's sanitizer
+preset. Until the port reaches Linux and macOS, it does not build their
+release presets. During the port, the suites run on the development PC
+before each commit.
 
 ## Rules for the code
 
