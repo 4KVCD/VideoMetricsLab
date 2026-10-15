@@ -205,6 +205,9 @@ private:
     void stream_ready(const std::string& key, PlaybackDecoder* worker, const QString& detail);
     void stream_failed(const std::string& key, PlaybackDecoder* worker, const QString& error);
     void stream_finished(const std::string& key, PlaybackDecoder* worker);
+    // Lets go of a decoder taken out of pool_ (cancelled first): deleted
+    // once, now or when its thread's finished comes (ended_).
+    void retire(PlaybackDecoder* worker);
     long long target_frame() const;
     void tick();
     void pool_status();
@@ -237,6 +240,12 @@ private:
     std::map<std::string, PlaybackDecoder*> pool_;
     // Decoders being stopped, which still count against the limit.
     std::set<QThread*> retired_;
+    // The decoders in pool_ whose thread's finished has been handled
+    // (stream_finished kept them for their frames): one retired goes at
+    // once, the others when their finished comes. isRunning() cannot tell
+    // the two apart: it is false a moment before finished is sent, so a
+    // decoder deleted on it would be deleted again by stream_finished.
+    std::set<PlaybackDecoder*> ended_;
     // Native playback's presenter being ended, which counts only as running.
     std::set<QThread*> stopping_;
 #ifdef VML_NATIVE_PLAYBACK

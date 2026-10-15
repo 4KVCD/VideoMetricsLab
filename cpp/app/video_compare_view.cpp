@@ -794,11 +794,7 @@ void VideoCompareView::sync_pool() {
         worker->second->cancel();
         // One that has finished (at the end of a short clip, or failed) goes
         // now: kept, it held its queued frames until the window closed.
-        if (worker->second->isRunning()) {
-            retired_.insert(worker->second);
-        } else {
-            worker->second->deleteLater();
-        }
+        retire(worker->second);
         history_.erase(worker->first);
         details_.erase(worker->first);
         failures_.erase(worker->first);
@@ -869,11 +865,21 @@ void VideoCompareView::stream_failed(const std::string& key, PlaybackDecoder* wo
 void VideoCompareView::stream_finished(const std::string& key, PlaybackDecoder* worker) {
     retired_.erase(worker);
     // A worker at the end of a short clip keeps its frames until they are
-    // shown; one no longer wanted can go now.
+    // shown, and goes when it is retired; one no longer wanted can go now.
     if (const auto found = pool_.find(key); found == pool_.end() || found->second != worker) {
         worker->deleteLater();
+    } else {
+        ended_.insert(worker);
     }
     launch_missing();
+}
+
+void VideoCompareView::retire(PlaybackDecoder* worker) {
+    if (ended_.erase(worker) > 0) {
+        worker->deleteLater();  // its finished has come and gone
+    } else {
+        retired_.insert(worker);  // stream_finished deletes it when its finished comes
+    }
 }
 
 long long VideoCompareView::target_frame() const {
@@ -1189,11 +1195,7 @@ void VideoCompareView::stop_decoder(bool keep_frame) {
     pool_timer_->stop();
     for (const auto& [key, worker] : pool_) {
         worker->cancel();
-        if (worker->isRunning()) {
-            retired_.insert(worker);
-        } else {
-            worker->deleteLater();
-        }
+        retire(worker);
     }
     pool_.clear();
     history_.clear();

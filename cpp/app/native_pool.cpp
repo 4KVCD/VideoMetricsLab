@@ -3,6 +3,7 @@
 #include <QGuiApplication>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPointer>
 #include <QThread>
 
 #include <QStringList>
@@ -194,9 +195,13 @@ NativePool::~NativePool() { stop(); }
 void NativePool::retire_video(NativeVideo* video) {
     video->cancel();
     view_.retired_.insert(video);
-    QObject::connect(video, &QThread::finished, &view_, [view = &view_, video] {
+    // isFinished() is true a moment before finished is sent: a video caught
+    // in between is deleted below, and finished then finds it gone.
+    QObject::connect(video, &QThread::finished, &view_, [view = &view_, video, alive = QPointer<NativeVideo>(video)] {
         view->retired_.erase(video);
-        video->deleteLater();
+        if (alive) {
+            alive->deleteLater();
+        }
     });
     if (video->isFinished()) {
         view_.retired_.erase(video);
