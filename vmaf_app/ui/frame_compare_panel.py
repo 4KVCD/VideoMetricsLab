@@ -892,8 +892,10 @@ class FrameComparePanel(QWidget):
         comparison = entry.comparison
         side = tr("SOURCE") if self._showing_source else tr("TEST")
         name = comparison.source_info.path.name if self._showing_source else entry.label
-        suffix = "" if self._showing_source else f" {self._current_index + 1} of {len(self._entries)}"
-        self.showing_label.setText(f"{side}{suffix} — {name}")
+        if not self._showing_source:
+            side = tr("{side} {number} of {count}", side=side, number=self._current_index + 1,
+                      count=len(self._entries))
+        self.showing_label.setText(f"{side} — {name}")
         self._update_frame_line()
         self._update_color_status()
 

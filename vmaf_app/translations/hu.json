@@ -713,7 +713,9 @@
   "Theme:": "Téma:",
   "Same as Windows": "Mint a Windows",
   "Light": "Világos",
-  "Dark": "Sötét"
+  "Dark": "Sötét",
+  "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}, {nits:g} nit, {lux:g} lux, {distance:.2f} m ({heights:.1f} × képernyőmagasság)",
+  "{side} {number} of {count}": "{side} {number}/{count}"
  },
  "plurals": {
   "about {count} day": [

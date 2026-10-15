@@ -30,7 +30,7 @@ from vmaf_app.core.model_select import AUTO_MODEL_CHOICE, CUSTOM_MODEL_CHOICE
 from vmaf_app.core.models import CropMode, GpuVendor, ScaleDirection, VmafOptions
 from vmaf_app.i18n import N_, tr
 from vmaf_app.ui import theme
-from vmaf_app.ui.formatting import preset_label
+from vmaf_app.ui.formatting import display_description, preset_label
 
 # The VMAF v0.6.1 column's models. VMAF v1 has a column and a list of its
 # own (V1_MODEL_CHOICES).
@@ -434,7 +434,7 @@ class OptionsPanel(QGroupBox):
         self.cvvdp_delete_btn.setEnabled(match is not None and not match.builtin)
         self.cvvdp_display_label.setText(
             tr("The selected videos use different displays; choosing a preset sets them all.")
-            if mixed_display else settings.display.describe()
+            if mixed_display else display_description(settings.display)
         )
         box = self.cvvdp_resize_check
         box.blockSignals(True)

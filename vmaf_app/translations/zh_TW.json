@@ -713,7 +713,9 @@
   "Theme:": "主題：",
   "Same as Windows": "與 Windows 相同",
   "Light": "淺色",
-  "Dark": "深色"
+  "Dark": "深色",
+  "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}，{nits:g} 尼特，{lux:g} 勒克斯，{distance:.2f} 公尺（{heights:.1f} × 螢幕高度）",
+  "{side} {number} of {count}": "{side} {number}/{count}"
  },
  "plurals": {
   "about {count} day": [

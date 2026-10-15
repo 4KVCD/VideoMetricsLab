@@ -713,7 +713,9 @@
   "Theme:": "Тема:",
   "Same as Windows": "Как в Windows",
   "Light": "Светлая",
-  "Dark": "Тёмная"
+  "Dark": "Тёмная",
+  "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}, {nits:g} нит, {lux:g} лк, {distance:.2f} м ({heights:.1f} × высота экрана)",
+  "{side} {number} of {count}": "{side} {number} из {count}"
  },
  "plurals": {
   "about {count} day": [

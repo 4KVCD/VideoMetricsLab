@@ -713,7 +713,9 @@
   "Theme:": "테마:",
   "Same as Windows": "Windows와 같게",
   "Light": "밝게",
-  "Dark": "어둡게"
+  "Dark": "어둡게",
+  "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}, {nits:g}니트, {lux:g}럭스, {distance:.2f}m ({heights:.1f} × 화면 높이)",
+  "{side} {number} of {count}": "{side} {number}/{count}"
  },
  "plurals": {
   "about {count} day": [

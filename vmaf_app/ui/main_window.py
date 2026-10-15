@@ -115,7 +115,13 @@ from vmaf_app.i18n import N_, in_english, ntr, tr, tr_message
 from vmaf_app.ui import theme
 from vmaf_app.ui.bitrate_panel import BitratePanel
 from vmaf_app.ui.file_worker import FileWriteQueue
-from vmaf_app.ui.formatting import bitrate_note, bitrate_string, media_info_string, preset_label
+from vmaf_app.ui.formatting import (
+    bitrate_note,
+    bitrate_string,
+    display_description,
+    media_info_string,
+    preset_label,
+)
 from vmaf_app.ui.frame_compare_panel import FrameComparePanel, FrameComparisonEntry
 from vmaf_app.ui.graph_panel import GraphPanel
 from vmaf_app.ui.options_panel import MODEL_CHOICES, OptionsPanel
@@ -1885,7 +1891,7 @@ class MainWindow(QMainWindow):
         lines = []
         for settings, score in sorted(others, key=lambda item: -item[1]):
             preset = matching_preset(settings, self._settings.cvvdp_presets)
-            name = preset_label(preset) if preset else tr("Custom ({display})", display=settings.display.describe())
+            name = preset_label(preset) if preset else tr("Custom ({display})", display=display_description(settings.display))
             scaled = tr(", video scaled to fill it") if settings.resize_to_display else ""
             lines.append(tr("• {name}{scaled}: {score:.3f} JOD", name=name, scaled=scaled, score=score))
         return (tr("\n\nNo CVVDP score for this video's display yet. Saved for other displays "
@@ -1895,7 +1901,7 @@ class MainWindow(QMainWindow):
     def _cvvdp_note(self, row_data: RowData) -> str:
         """Tooltip for a CVVDP score: what the number means and which display it is for."""
         preset = matching_preset(row_data.cvvdp, self._settings.cvvdp_presets, row_data.cvvdp_preset)
-        display = row_data.cvvdp.display.describe()
+        display = display_description(row_data.cvvdp.display)
         return (
             tr("CVVDP of the whole video, in JOD (just-objectionable differences): 10 means no visible difference, "
                 "and one JOD lower means 75% of viewers would pick the reference as better.\n\nFor the display "
