@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <fstream>
 #include <iterator>
@@ -29,12 +30,16 @@
 #include <tuple>
 #include <vector>
 
+#include "grain_params.h"
 #include "native_dav1d.h"
 #include "native_device.h"
 #include "native_grain.h"
 #include "test_videos.h"
 #include "vml/ffprobe.h"
+#include "vml/film_grain.h"
+#include "vml/model_select.h"
 #include "vml/npz.h"
+#include "vml/platform/library.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/video_playback.h"
@@ -645,6 +650,185 @@ TEST_F(NativeDecoderTest, VvcFilmGrainIsDrawnAsThePythonAppDrawsIt) {
                 }
                 EXPECT_EQ(pictures[index], picture) << "frame " << index;
             }
+        }
+    }
+}
+
+// A texture's samples read back as stored: an NV12 or P010 texture's luma
+// rows (`height` of `width`), then its chroma rows, two samples side by side.
+std::vector<int> read_stored(NativeDevice& device, ID3D11Texture2D* texture, int width, int height) {
+    D3D11_TEXTURE2D_DESC description{};
+    texture->GetDesc(&description);
+    D3D11_TEXTURE2D_DESC staged = description;
+    staged.Usage = D3D11_USAGE_STAGING;
+    staged.BindFlags = 0;
+    staged.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;
+    std::vector<int> samples;
+    if (FAILED(device.device()->CreateTexture2D(&staged, nullptr, &staging))) {
+        ADD_FAILURE() << "no staging texture";
+        return samples;
+    }
+    const std::lock_guard lock(device.lock());
+    device.context()->CopyResource(staging.Get(), texture);
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    if (FAILED(device.context()->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped))) {
+        ADD_FAILURE() << "the texture could not be read back";
+        return samples;
+    }
+    const bool wide = description.Format == DXGI_FORMAT_P010;
+    const auto* base = static_cast<const unsigned char*>(mapped.pData);
+    const auto rows = [&](const unsigned char* plane, int count, int per_row) {
+        for (int row = 0; row < count; ++row) {
+            const unsigned char* line = plane + static_cast<std::size_t>(mapped.RowPitch) * row;
+            for (int x = 0; x < per_row; ++x) {
+                samples.push_back(wide ? line[2 * x] | (line[2 * x + 1] << 8) : line[x]);
+            }
+        }
+    };
+    rows(base, height, width);
+    rows(base + static_cast<std::size_t>(mapped.RowPitch) * description.Height, (height + 1) / 2,
+         2 * ((width + 1) / 2));
+    device.context()->Unmap(staging.Get(), 0);
+    return samples;
+}
+
+// VVC film grain on video other than 4:2:0 of 8 or 10 bits, which VVenC
+// does not make, so the frames are made here: 4:2:2, 4:4:4 (of an odd size),
+// 4:0:0 and 12-bit. Each plane gets the grain library's own drawing of it in
+// memory (vmaf_grain_planes, the Python app's drawing), and the texture shown
+// holds it as NV12 or P010: the luma as drawn, the chroma averaged down to
+// 4:2:0, the last column and row repeated past an odd edge, and neutral
+// chroma for 4:0:0.
+TEST_F(NativeDecoderTest, FilmGrainOnOtherFormatsIsTheLibrarysDrawingShownAs420) {
+    if (const std::optional<QString> problem = NativeGrain::unavailable()) {
+        GTEST_SKIP() << problem->toStdString();
+    }
+    const platform::DynamicLibrary library(resource_folder() / "native" / "d3d11_film_grain.dll");
+    const auto reference =
+        library.function<int (*)(const void* const*, void* const*, int, const GrainParams*, int)>("vmaf_grain_planes");
+    FilmGrainMessage message;
+    message.log2_scale_factor = 3;
+    message.components = {std::vector<FilmGrainInterval>{{0, 255, {120, 8, 14}}},
+                          std::vector<FilmGrainInterval>{{0, 255, {60, 14, 2}}},
+                          std::vector<FilmGrainInterval>{{0, 255, {60, 2, 14}}}};
+    struct Format {
+        const char* name;
+        int width;
+        int height;
+        int depth;
+        int count;
+        std::pair<int, int> shift;
+    };
+    for (const Format& format : {Format{"4:2:2, 10-bit", 64, 48, 10, 3, {1, 0}},
+                                 Format{"4:4:4, 12-bit, 65x47", 65, 47, 12, 3, {0, 0}},
+                                 Format{"4:2:0, 12-bit", 64, 48, 12, 3, {1, 1}},
+                                 Format{"4:0:0, 8-bit", 64, 48, 8, 1, {0, 0}},
+                                 Format{"4:2:0, 8-bit", 64, 48, 8, 3, {1, 1}}}) {
+        SCOPED_TRACE(format.name);
+        const std::vector<std::pair<int, int>> sizes =
+            grain_plane_sizes(format.width, format.height, format.shift, format.count);
+        const std::optional<GrainParams> params = grain_params(message, 37, format.depth, sizes, format.shift);
+        ASSERT_TRUE(params.has_value());
+        const bool wide = format.depth > 8;
+        const std::size_t sample = wide ? 2 : 1;
+        // The frame's planes: a pattern of codes, the same in every run; and
+        // the library's drawing of the grain on them.
+        std::vector<std::vector<unsigned char>> planes(sizes.size()), drawn(sizes.size());
+        std::vector<const void*> in;
+        std::vector<void*> out;
+        for (std::size_t c = 0; c < sizes.size(); ++c) {
+            const auto [plane_width, plane_height] = sizes[c];
+            for (int y = 0; y < plane_height; ++y) {
+                for (int x = 0; x < plane_width; ++x) {
+                    const int code = ((x * 7 + y * 13 + static_cast<int>(c) * 29) * 37) % (1 << format.depth);
+                    planes[c].push_back(static_cast<unsigned char>(code & 0xFF));
+                    if (wide) {
+                        planes[c].push_back(static_cast<unsigned char>(code >> 8));
+                    }
+                }
+            }
+            drawn[c].resize(planes[c].size());
+            in.push_back(planes[c].data());
+            out.push_back(drawn[c].data());
+        }
+        ASSERT_EQ(reference(in.data(), out.data(), format.count, &*params, 0), 0);
+        ASSERT_NE(drawn[0], planes[0]) << "no grain was drawn";
+        const auto code = [&](std::size_t c, int x, int y) {
+            const std::size_t at = (static_cast<std::size_t>(y) * sizes[c].first + x) * sample;
+            return wide ? drawn[c][at] | (drawn[c][at + 1] << 8) : drawn[c][at];
+        };
+        const int scale = wide ? 1 << (16 - format.depth) : 1;
+        for (const auto& [gpu, device] : devices_) {
+            SCOPED_TRACE(gpu);
+            NativeGrain grain(device->device());
+            std::array<Microsoft::WRL::ComPtr<ID3D11Texture2D>, 3> textures;
+            for (std::size_t c = 0; c < sizes.size(); ++c) {
+                D3D11_TEXTURE2D_DESC description{};
+                description.Width = static_cast<UINT>(sizes[c].first);
+                description.Height = static_cast<UINT>(sizes[c].second);
+                description.MipLevels = 1;
+                description.ArraySize = 1;
+                description.Format = wide ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R8_UNORM;
+                description.SampleDesc.Count = 1;
+                description.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+                const D3D11_SUBRESOURCE_DATA data{planes[c].data(), static_cast<UINT>(sizes[c].first * sample), 0};
+                ASSERT_TRUE(SUCCEEDED(device->device()->CreateTexture2D(&description, &data, &textures[c])));
+            }
+            D3D11_TEXTURE2D_DESC shown{};
+            shown.Width = static_cast<UINT>((format.width + 1) & ~1);
+            shown.Height = static_cast<UINT>((format.height + 1) & ~1);
+            shown.MipLevels = 1;
+            shown.ArraySize = 1;
+            shown.Format = wide ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
+            shown.SampleDesc.Count = 1;
+            shown.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+            Microsoft::WRL::ComPtr<ID3D11Texture2D> target;
+            ASSERT_TRUE(SUCCEEDED(device->device()->CreateTexture2D(&shown, nullptr, &target)));
+            {
+                const std::lock_guard lock(device->lock());
+                ID3D11Texture2D* const given[3] = {textures[0].Get(), textures[1].Get(), textures[2].Get()};
+                const std::optional<QString> failed =
+                    grain.draw(given, format.count, *params, format.shift, target.Get());
+                ASSERT_FALSE(failed.has_value()) << failed->toStdString();
+            }
+            const std::vector<int> stored = read_stored(*device, target.Get(), format.width, format.height);
+            ASSERT_EQ(stored.size(), static_cast<std::size_t>(format.width * format.height +
+                                                              (format.height + 1) / 2 * 2 * ((format.width + 1) / 2)));
+            int wrong = 0;
+            for (int y = 0; y < format.height; ++y) {
+                for (int x = 0; x < format.width; ++x) {
+                    wrong += stored[static_cast<std::size_t>(y * format.width + x)] != code(0, x, y) * scale;
+                }
+            }
+            EXPECT_EQ(wrong, 0) << "luma samples differ";
+            // Each chroma sample: the average of the chroma samples its 2x2
+            // luma square covers, rounded either way, or the middle code.
+            const int step_x = 2 >> format.shift.first;
+            const int step_y = 2 >> format.shift.second;
+            wrong = 0;
+            const std::size_t chroma_at = static_cast<std::size_t>(format.width * format.height);
+            const int chroma_width = (format.width + 1) / 2;
+            for (int y = 0; y < (format.height + 1) / 2; ++y) {
+                for (int x = 0; x < chroma_width; ++x) {
+                    for (std::size_t c = 1; c < 3; ++c) {
+                        double expected = static_cast<double>(1 << (format.depth - 1)) * scale;
+                        if (format.count == 3) {
+                            double sum = 0;
+                            for (int dy = 0; dy < step_y; ++dy) {
+                                for (int dx = 0; dx < step_x; ++dx) {
+                                    sum += code(c, std::min(x * step_x + dx, sizes[c].first - 1),
+                                                std::min(y * step_y + dy, sizes[c].second - 1));
+                                }
+                            }
+                            expected = sum / (step_x * step_y) * scale;
+                        }
+                        const int got = stored[chroma_at + static_cast<std::size_t>(y * 2 * chroma_width + 2 * x) + c - 1];
+                        wrong += std::abs(got - expected) > 0.5;
+                    }
+                }
+            }
+            EXPECT_EQ(wrong, 0) << "chroma samples differ";
         }
     }
 }

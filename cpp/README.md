@@ -149,10 +149,6 @@ and buttons in Qt's translations of them, in the light or dark theme. Like
 the command line, the program is also the process of its own that GPU code
 runs in.
 
-Not ported yet: H.274 film grain on 4:2:2, 4:4:4 or 12-bit VVC video,
-which the Python app draws (VVenC makes none of
-these).
-
 ## The package
 
 `scripts/build_cpp_release.ps1` builds the app's Windows package: the

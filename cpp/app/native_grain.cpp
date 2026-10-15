@@ -23,7 +23,7 @@ struct GrainLibrary {
     void* (*create)(ID3D11Device*) = nullptr;
     const char* (*error)(void*) = nullptr;
     int (*apply_planes)(void*, ID3D11Texture2D* const*, const unsigned*, int, const GrainParams*) = nullptr;
-    int (*pack)(void*, ID3D11Texture2D* const*, ID3D11Texture2D*) = nullptr;
+    int (*pack)(void*, ID3D11Texture2D* const*, int, int, int, int, ID3D11Texture2D*) = nullptr;
     void (*destroy)(void*) = nullptr;
 };
 
@@ -91,14 +91,14 @@ NativeGrain::NativeGrain(ID3D11Device* device) {
 
 NativeGrain::~NativeGrain() { grain_library().destroy(drawer_); }
 
-std::optional<QString> NativeGrain::draw(ID3D11Texture2D* const planes[3], const GrainParams& params,
-                                         ID3D11Texture2D* target) {
+std::optional<QString> NativeGrain::draw(ID3D11Texture2D* const planes[3], int count, const GrainParams& params,
+                                         std::pair<int, int> chroma_shift, ID3D11Texture2D* target) {
     const GrainLibrary& functions = grain_library();
     const unsigned subresources[3] = {0, 0, 0};
-    if (functions.apply_planes(drawer_, planes, subresources, 3, &params) != 0) {
+    if (functions.apply_planes(drawer_, planes, subresources, count, &params) != 0) {
         return QStringLiteral("drawing the grain failed: %1").arg(library_error(drawer_));
     }
-    if (functions.pack(drawer_, planes, target) != 0) {
+    if (functions.pack(drawer_, planes, count, params.depth, chroma_shift.first, chroma_shift.second, target) != 0) {
         return QStringLiteral("copying the grained frame failed: %1").arg(library_error(drawer_));
     }
     return std::nullopt;

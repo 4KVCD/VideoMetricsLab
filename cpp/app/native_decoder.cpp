@@ -653,15 +653,22 @@ void FfmpegNativeVideo::run() {
     // `frame`'s film grain (`given`, its message as FFmpeg gave it) drawn on
     // its planes, uploaded, and packed into the texture it is shown from;
     // nothing when it cannot be drawn so (it is then shown without it): only
-    // 4:2:0 video of 8 or 10 bits, and H.274's frequency model.
+    // H.274's frequency model, on planar 4:2:0, 4:2:2, 4:4:4 or 4:0:0 video
+    // of 8 to 12 bits, as the Python app draws it.
     const auto grained = [&](const AVFrame* frame,
                              const AVFilmGrainParams& given) -> std::shared_ptr<ID3D11Texture2D> {
-        const auto format = static_cast<AVPixelFormat>(frame->format);
-        if (given.type != AV_FILM_GRAIN_PARAMS_H274 ||
-            (format != AV_PIX_FMT_YUV420P && format != AV_PIX_FMT_YUV420P10LE)) {
+        const AVPixFmtDescriptor* layout = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(frame->format));
+        if (given.type != AV_FILM_GRAIN_PARAMS_H274 || layout == nullptr ||
+            (layout->flags & (AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_RGB | AV_PIX_FMT_FLAG_ALPHA |
+                              AV_PIX_FMT_FLAG_BE | AV_PIX_FMT_FLAG_HWACCEL)) != AV_PIX_FMT_FLAG_PLANAR ||
+            (layout->nb_components != 1 && layout->nb_components != 3) || layout->comp[0].depth < 8 ||
+            layout->comp[0].depth > 12 || layout->log2_chroma_w > 1 || layout->log2_chroma_h > 1) {
             return nullptr;
         }
-        const bool ten_bit = format == AV_PIX_FMT_YUV420P10LE;
+        const int depth = layout->comp[0].depth;
+        const int count = layout->nb_components;
+        const std::pair<int, int> chroma_shift =
+            count == 3 ? std::pair<int, int>(layout->log2_chroma_w, layout->log2_chroma_h) : std::pair(0, 0);
         const AVFilmGrainH274Params& h274 = given.codec.h274;
         FilmGrainMessage message;
         message.model_id = h274.model_id;
@@ -679,16 +686,17 @@ void FfmpegNativeVideo::run() {
                 message.components[c].push_back(std::move(interval));
             }
         }
-        const std::vector<std::pair<int, int>> sizes = grain_plane_sizes(frame->width, frame->height, {1, 1}, 3);
+        const std::vector<std::pair<int, int>> sizes =
+            grain_plane_sizes(frame->width, frame->height, chroma_shift, count);
         // The seed is the frame's picture order count, which can be negative.
         const std::optional<GrainParams> params =
-            grain_params(message, static_cast<int>(given.seed), ten_bit ? 10 : 8, sizes, {1, 1});
+            grain_params(message, static_cast<int>(given.seed), depth, sizes, chroma_shift);
         if (!params) {
             return nullptr;
         }
-        const DXGI_FORMAT plane_format = ten_bit ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R8_UNORM;
+        const DXGI_FORMAT plane_format = depth > 8 ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R8_UNORM;
         ID3D11Device* gpu = device_->device();
-        for (std::size_t c = 0; c < 3; ++c) {
+        for (std::size_t c = 0; c < static_cast<std::size_t>(count); ++c) {
             D3D11_TEXTURE2D_DESC existing{};
             if (decoding->grain_planes[c]) {
                 decoding->grain_planes[c]->GetDesc(&existing);
@@ -715,20 +723,20 @@ void FfmpegNativeVideo::run() {
                 gpu, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET);
         }
         std::shared_ptr<ID3D11Texture2D> target = decoding->grain_targets->take(
-            (frame->width + 1) & ~1, (frame->height + 1) & ~1, ten_bit ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12);
+            (frame->width + 1) & ~1, (frame->height + 1) & ~1, depth > 8 ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12);
         if (!target) {
             return nullptr;
         }
         std::optional<QString> failed;
         {
             const std::lock_guard lock(device_->lock());
-            for (std::size_t c = 0; c < 3; ++c) {
+            for (std::size_t c = 0; c < static_cast<std::size_t>(count); ++c) {
                 device_->context()->UpdateSubresource(decoding->grain_planes[c].Get(), 0, nullptr, frame->data[c],
                                                       static_cast<UINT>(frame->linesize[c]), 0);
             }
             ID3D11Texture2D* const planes[3] = {decoding->grain_planes[0].Get(), decoding->grain_planes[1].Get(),
                                                 decoding->grain_planes[2].Get()};
-            failed = decoding->grain->draw(planes, *params, target.get());
+            failed = decoding->grain->draw(planes, count, *params, chroma_shift, target.get());
         }
         if (failed) {
             logger.warning("Film grain could not be drawn, and is left off: " + failed->toStdString());

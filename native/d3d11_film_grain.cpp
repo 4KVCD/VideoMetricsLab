@@ -745,15 +745,27 @@ extern "C" __declspec(dllexport) int vmaf_grain_apply_planes(void* drawer, ID3D1
     return draw_planes(d, planes, subresources, count, params);
 }
 
-// The shaders that copy three planes into an NV12 or P010 texture: a
+// The shaders that copy a frame's planes into an NV12 or P010 texture: a
 // triangle covering the target, and a pixel shader for each of its planes.
 // The planes hold their codes in their low bits, P010 in its high bits:
-// `scale` is 64 there (the codes moved up 6 bits), and 1 for NV12.
+// `scale` moves them up (64 for 10-bit codes, 16 for 12-bit ones; 1 into
+// NV12). Each of the target's chroma samples covers 2x2 luma samples: the
+// planes' chroma samples in that square, 1, 2 or 4 of them (4:2:0, 4:2:2,
+// 4:4:4: `shift` is their subsampling as powers of two), are averaged, the
+// last column and row (`last`) repeated past an odd edge. A frame without
+// chroma planes (4:0:0) gets `neutral` chroma.
 static const char pack_shader_source[] = R"(
 Texture2D<float> plane_y : register(t0);
 Texture2D<float> plane_u : register(t1);
 Texture2D<float> plane_v : register(t2);
-cbuffer Pack : register(b0) { float scale; float3 unused; };
+cbuffer Pack : register(b0) {
+    float scale;
+    float neutral;
+    int2 shift;
+    int2 last;
+    int has_chroma;
+    int unused;
+};
 
 float4 cover(uint id : SV_VertexID) : SV_Position {
     float2 corner = float2((id << 1) & 2, id & 2);
@@ -763,8 +775,18 @@ float luma(float4 at : SV_Position) : SV_Target {
     return plane_y.Load(int3(at.xy, 0)) * scale;
 }
 float2 chroma(float4 at : SV_Position) : SV_Target {
-    int3 place = int3(at.xy, 0);
-    return float2(plane_u.Load(place), plane_v.Load(place)) * scale;
+    if (has_chroma == 0)
+        return float2(neutral, neutral);
+    int2 step = int2(2, 2) >> shift;
+    int2 first = int2(at.xy) * step;
+    float2 sum = float2(0, 0);
+    for (int y = 0; y < step.y; y++) {
+        for (int x = 0; x < step.x; x++) {
+            int3 place = int3(min(first + int2(x, y), last), 0);
+            sum += float2(plane_u.Load(place), plane_v.Load(place));
+        }
+    }
+    return sum / float(step.x * step.y) * scale;
 }
 )";
 
@@ -798,7 +820,7 @@ static HRESULT prepare_pack(GrainDrawer* d) {
                                           &d->pack_chroma);
     if (SUCCEEDED(hr)) {
         D3D11_BUFFER_DESC desc = {};
-        desc.ByteWidth = 16;
+        desc.ByteWidth = 32;
         desc.Usage = D3D11_USAGE_DEFAULT;
         desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         hr = d->device->CreateBuffer(&desc, nullptr, &d->pack_constants);
@@ -806,23 +828,39 @@ static HRESULT prepare_pack(GrainDrawer* d) {
     return hr;
 }
 
-// Copies `planes` (Y, Cb, Cr, as vmaf_grain_apply_planes takes them) into
-// the two planes of `target`, an NV12 or P010 texture made with
-// D3D11_BIND_RENDER_TARGET whose size is the luma plane's, rounded up to
-// even. Returns 0 on success, or a negative number with vmaf_grain_error
-// saying why.
-extern "C" __declspec(dllexport) int vmaf_grain_pack(void* drawer, ID3D11Texture2D* const* planes,
-                                                     ID3D11Texture2D* target) {
+// Copies a frame's `count` planes (Y, and Cb and Cr where `count` is 3, as
+// vmaf_grain_apply_planes takes them: `depth`-bit codes, in R8 textures or
+// in the low bits of R16 ones) into the two planes of `target`, an NV12
+// texture for 8-bit codes or a P010 one above, made with
+// D3D11_BIND_RENDER_TARGET, whose size is the luma plane's rounded up to
+// even. Chroma subsampled less than 4:2:0 (`shift_x` and `shift_y`: the
+// chroma planes' subsampling as powers of two, 1 or 0) is averaged down to
+// it; a frame without chroma planes (`count` 1) gets neutral chroma.
+// Returns 0 on success, or a negative number with vmaf_grain_error saying
+// why.
+extern "C" __declspec(dllexport) int vmaf_grain_pack(void* drawer, ID3D11Texture2D* const* planes, int count,
+                                                     int depth, int shift_x, int shift_y, ID3D11Texture2D* target) {
     GrainDrawer* d = (GrainDrawer*)drawer;
-    if (!d || !planes || !target)
+    if (!d || !planes || !target || (count != 1 && count != 3) || depth < 8 || depth > 16 || shift_x < 0 ||
+        shift_x > 1 || shift_y < 0 || shift_y > 1)
         return -1;
     d->error.clear();
     D3D11_TEXTURE2D_DESC desc;
     target->GetDesc(&desc);
     const bool ten_bit = desc.Format == DXGI_FORMAT_P010;
-    if ((!ten_bit && desc.Format != DXGI_FORMAT_NV12) || !(desc.BindFlags & D3D11_BIND_RENDER_TARGET)) {
-        d->error = "a target of DXGI format " + std::to_string((int)desc.Format) + " that cannot be drawn to";
+    if (ten_bit != (depth > 8) || (!ten_bit && desc.Format != DXGI_FORMAT_NV12) ||
+        !(desc.BindFlags & D3D11_BIND_RENDER_TARGET)) {
+        d->error = "a target of DXGI format " + std::to_string((int)desc.Format) + " that cannot take " +
+                   std::to_string(depth) + "-bit codes";
         return -2;
+    }
+    // Where the chroma planes end, for the averages at an odd edge.
+    int last[2] = {0, 0};
+    if (count == 3) {
+        D3D11_TEXTURE2D_DESC chroma;
+        planes[1]->GetDesc(&chroma);
+        last[0] = (int)chroma.Width - 1;
+        last[1] = (int)chroma.Height - 1;
     }
     ID3D11RenderTargetView* views[2] = {};
     ID3D11ShaderResourceView* sources[3] = {};
@@ -837,12 +875,19 @@ extern "C" __declspec(dllexport) int vmaf_grain_pack(void* drawer, ID3D11Texture
         view.Format = ten_bit ? DXGI_FORMAT_R16G16_UNORM : DXGI_FORMAT_R8G8_UNORM;
         hr = d->device->CreateRenderTargetView(target, &view, &views[1]);
     }
-    for (int c = 0; c < 3 && SUCCEEDED(hr); c++)
+    for (int c = 0; c < count && SUCCEEDED(hr); c++)
         hr = d->device->CreateShaderResourceView(planes[c], nullptr, &sources[c]);
     if (SUCCEEDED(hr)) {
-        const float constants[4] = {ten_bit ? 64.0f : 1.0f, 0, 0, 0};
+        // The codes moved up into P010's high bits, and the middle code
+        // (neutral chroma) as the target holds it.
+        const float scale = depth > 8 ? (float)(1 << (16 - depth)) : 1.0f;
+        const float neutral = (float)(1 << (depth - 1)) / (depth > 8 ? 65535.0f : 255.0f) * scale;
+        struct {
+            float scale, neutral;
+            int shift[2], last[2], has_chroma, unused;
+        } constants = {scale, neutral, {shift_x, shift_y}, {last[0], last[1]}, count == 3 ? 1 : 0, 0};
         ID3D11DeviceContext* c = d->context;
-        c->UpdateSubresource(d->pack_constants, 0, nullptr, constants, 0, 0);
+        c->UpdateSubresource(d->pack_constants, 0, nullptr, &constants, 0, 0);
         c->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         c->IASetInputLayout(nullptr);
         c->VSSetShader(d->pack_cover, nullptr, 0);
