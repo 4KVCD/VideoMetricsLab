@@ -34,6 +34,7 @@ add_executable(vml_tests
     unit/temp_files_test.cpp
     unit/update_check_test.cpp
     unit/native_playback_test.cpp
+    unit/soundtrack_clock_test.cpp
     unit/video_playback_test.cpp
     unit/vmaf_cuda_test.cpp
     unit/vmaf_v1_gpu_test.cpp

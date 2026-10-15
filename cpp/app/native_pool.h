@@ -2,9 +2,9 @@
 // decoder per video (the source, and the selected test video with its
 // neighbours), each test frame paired with the source frame of the same
 // number before the one presenter draws either, in time with the source's
-// soundtrack where it has a clock, else with the wall clock (ffplay's has
-// none). The frames are always paired here, never shown by separate sinks,
-// so the two videos cannot drift apart.
+// soundtrack (with the wall clock where it cannot play). The frames are
+// always paired here, never shown by separate sinks, so the two videos
+// cannot drift apart.
 #pragma once
 
 #include <QString>
@@ -22,36 +22,13 @@
 
 #include "native_decoder.h"
 #include "native_presentation.h"
+#include "native_soundtrack.h"
 #include "vml/frame_extract.h"
 
 namespace vml::app {
 
 class NativeDevice;
 class VideoCompareView;
-
-// The soundtrack native playback is timed by (the Python app's
-// SingleSoundtrack): the source's, across switches between test videos.
-class Soundtrack {
-public:
-    virtual ~Soundtrack() = default;
-    // Its clock (ms from the video's first frame), smoothed between the
-    // clock's steps; nothing while it has none.
-    virtual std::optional<double> poll() = 0;
-    // The clock's own last reading, to judge lag by.
-    virtual std::optional<double> reading_ms() const = 0;
-    // Whether it is ready to play from where it was last sought.
-    virtual bool ready() const = 0;
-    // Why it cannot play, if it cannot.
-    virtual std::optional<QString> failed() const = 0;
-    virtual void set_failed(const QString& why) = 0;
-    virtual int offset_ms() const = 0;
-    // Where the source's first frame is on the file's timeline, so that its
-    // clock counts from it; `position_ms` is where playback is.
-    virtual void set_offset(int first_ms, int position_ms) = 0;
-    virtual void set_playing(bool playing) = 0;
-    virtual void seek(int position_ms) = 0;
-    virtual void set_enabled(bool enabled) = 0;
-};
 
 // A native window the presenter's window sits in, painted dark by Qt while
 // nothing draws on it; a zoomed frame is dragged on it (the view's zoom).
@@ -85,7 +62,7 @@ public:
                                                     QObject* owner)>;
     // What a pool is made of, a test seam: the decoders, the presenter and
     // the soundtrack. By default FFmpeg's decoders on the session's device,
-    // its presenter over the view, and ffplay playing the source's sound.
+    // its presenter over the view, and the source's sound played in the app.
     struct Parts {
         VideoFactory make_video;
         std::function<std::unique_ptr<NativeOutput>(PairedFrameWidget& surface)> make_presentation;
@@ -104,7 +81,7 @@ public:
 
     // The parts a pool plays with on this PC, or why native playback cannot
     // run here at all.
-    static Parts default_parts(VideoCompareView& view, const PreviewColorSettings& colors);
+    static Parts default_parts(const PreviewColorSettings& colors);
     static std::optional<QString> unavailable();
 
     // Selects a test video: keeps the decoders still needed, stops the

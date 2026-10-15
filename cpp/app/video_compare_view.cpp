@@ -243,13 +243,13 @@ VideoCompareView::VideoCompareView(std::function<std::string()> ffmpeg, Zoom& zo
     };
     clock = seconds_now;
 #ifdef VML_NATIVE_PLAYBACK
-    native_parts = [this](const PreviewColorSettings& colors, QString& why) -> std::optional<NativePool::Parts> {
+    native_parts = [](const PreviewColorSettings& colors, QString& why) -> std::optional<NativePool::Parts> {
         if (const std::optional<QString> problem = NativePool::unavailable()) {
             why = *problem;
             return std::nullopt;
         }
         try {
-            return NativePool::default_parts(*this, colors);
+            return NativePool::default_parts(colors);
         } catch (const std::exception& error) {
             why = QString::fromUtf8(error.what());
             return std::nullopt;

@@ -55,7 +55,7 @@ if(WIN32 AND MSVC)
     # first), so that the window starts without them.
     set(vml_ffmpeg ${PROJECT_SOURCE_DIR}/../native/ffmpeg)
     set(vml_ffmpeg_imports)
-    foreach(library avcodec-63 avformat-63 avutil-61 swscale-10)
+    foreach(library avcodec-63 avformat-63 avutil-61 swresample-7 swscale-10)
         set(import ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg/${library}.lib)
         add_custom_command(OUTPUT ${import}
             COMMAND ${CMAKE_AR} /nologo /machine:x64 /def:${vml_ffmpeg}/lib/${library}.def /name:${library}.dll
@@ -67,7 +67,8 @@ if(WIN32 AND MSVC)
     endforeach()
     add_custom_target(vml_ffmpeg_imports DEPENDS ${vml_ffmpeg_imports})
     add_dependencies(vml_app vml_ffmpeg_imports)
-    target_sources(vml_app PRIVATE native_decoder.cpp native_device.cpp native_pool.cpp native_presentation.cpp)
+    target_sources(vml_app PRIVATE native_decoder.cpp native_device.cpp native_pool.cpp native_presentation.cpp
+                                   native_soundtrack.cpp)
     target_include_directories(vml_app SYSTEM PRIVATE ${vml_ffmpeg}/include)
     target_link_libraries(vml_app PUBLIC ${vml_ffmpeg_imports} delayimp d3d11 dxgi)
     # VML_NATIVE_PLAYBACK public: the view's members depend on it, and the

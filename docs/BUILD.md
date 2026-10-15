@@ -82,8 +82,9 @@ case anyone overrides that.
   all that way.
 - **FFmpeg's libraries** (`vmaf_app/tools/ffmpeg`: `avcodec-63.dll`,
   `avutil-61.dll`, `swresample-7.dll`, which libavcodec imports, and
-  `avformat-63.dll` and `swscale-10.dll`, which the C++ app's Video Compare
-  playback also reads videos and converts pictures with; 13.0 MB), for the
+  `avformat-63.dll` and `swscale-10.dll`, with which the C++ app's Video
+  Compare playback also reads videos and soundtracks and converts pictures
+  and sound; 13.0 MB), for the
   software frame decoder: FFmpeg 9.0.2's libraries with only the decoders,
   parsers and demuxers the script lists (those six video decoders, AV1 and
   ProRes, the soundtracks' audio decoders, and the containers the bundled

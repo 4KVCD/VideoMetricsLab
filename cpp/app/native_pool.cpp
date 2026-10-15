@@ -15,7 +15,6 @@
 #include "native_device.h"
 #include "video_compare_view.h"
 #include "vml/native_playback.h"
-#include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/video_playback.h"
 
@@ -47,70 +46,6 @@ protected:
 
 private:
     std::function<void()> end_;
-};
-
-// The source's soundtrack played by ffplay, as FFmpeg's playback plays it
-// (build_audio_command), with no clock to time the frames by: playback then
-// follows the wall clock, as the Python app's native playback does when its
-// soundtrack cannot play.
-class FfplaySoundtrack : public Soundtrack {
-public:
-    FfplaySoundtrack(std::function<std::string()> ffmpeg, FrameComparison source, int position_ms, bool enabled)
-        : ffmpeg_(std::move(ffmpeg)), source_(std::move(source)), position_ms_(position_ms), enabled_(enabled) {
-        if (!ffplay_beside(ffmpeg_())) {
-            failed_ = QStringLiteral("ffplay is not beside FFmpeg");
-        }
-    }
-
-    std::optional<double> poll() override { return std::nullopt; }
-    std::optional<double> reading_ms() const override { return std::nullopt; }
-    bool ready() const override { return true; }
-    std::optional<QString> failed() const override { return failed_; }
-    void set_failed(const QString& why) override {
-        failed_ = why;
-        set_playing(false);
-    }
-    int offset_ms() const override { return offset_ms_; }
-    void set_offset(int first_ms, int /*position_ms*/) override { offset_ms_ = first_ms; }
-    void set_playing(bool playing) override {
-        playing_ = playing;
-        process_.reset();  // ends ffplay
-        if (!playing_ || !enabled_ || failed_) {
-            return;
-        }
-        const std::optional<std::filesystem::path> ffplay = ffplay_beside(ffmpeg_());
-        const long long frame = source_.fps > 0 ? round_even(position_ms_ / 1000.0 * source_.fps) : 0;
-        if (!ffplay) {
-            return;
-        }
-        if (const std::optional<std::vector<std::string>> command = build_audio_command(*ffplay, source_, frame)) {
-            try {
-                process_.emplace(platform::ChildProcess::start(*command));
-            } catch (const platform::ProcessError&) {
-                // No soundtrack: the pictures play on.
-            }
-        }
-    }
-    void seek(int position_ms) override {
-        position_ms_ = position_ms;
-        if (playing_) {
-            set_playing(true);
-        }
-    }
-    void set_enabled(bool enabled) override {
-        enabled_ = enabled;
-        set_playing(playing_);
-    }
-
-private:
-    std::function<std::string()> ffmpeg_;
-    FrameComparison source_;
-    int position_ms_ = 0;
-    int offset_ms_ = 0;
-    bool enabled_ = true;
-    bool playing_ = false;
-    std::optional<QString> failed_;
-    std::optional<platform::ChildProcess> process_;
 };
 
 }  // namespace
@@ -200,7 +135,7 @@ std::optional<QString> NativePool::unavailable() {
     return NativePresentation::unavailable();
 }
 
-NativePool::Parts NativePool::default_parts(VideoCompareView& view, const PreviewColorSettings& colors) {
+NativePool::Parts NativePool::default_parts(const PreviewColorSettings& colors) {
     const std::shared_ptr<NativeDevice> device = NativeDevice::shared();
     Parts parts;
     parts.make_video = [device](const FrameComparison& comparison, FrameSide side, const PreviewColorSettings& wanted,
@@ -211,8 +146,9 @@ NativePool::Parts NativePool::default_parts(VideoCompareView& view, const Previe
     parts.make_presentation = [device, hdr_display](PairedFrameWidget& surface) -> std::unique_ptr<NativeOutput> {
         return std::make_unique<NativePresentation>(device, reinterpret_cast<HWND__*>(surface.winId()), hdr_display);
     };
-    parts.make_soundtrack = [&view](const FrameComparison& source, int position_ms, bool enabled) {
-        return std::make_unique<FfplaySoundtrack>(view.ffmpeg_, source, position_ms, enabled);
+    parts.make_soundtrack = [](const FrameComparison& source, int position_ms,
+                               bool enabled) -> std::unique_ptr<Soundtrack> {
+        return std::make_unique<FfmpegSoundtrack>(frame_input_path(source, FrameSide::source), position_ms, enabled);
     };
     return parts;
 }
@@ -596,15 +532,17 @@ void NativePool::stop() {
     PairedFrameWidget* surface = surface_;
     if (audio_) {
         audio_->set_enabled(false);
-        audio_.reset();  // ends ffplay
     }
     if (surface != nullptr) {
         surface->hide();
     }
-    if (output_) {
-        // The presenter's window sits in the surface: the surface goes once
-        // the presenter has.
-        auto* ender = new Ender([output = std::shared_ptr<NativeOutput>(std::move(output_))]() mutable {
+    if (output_ || audio_) {
+        // The presenter and the sound end on a thread of their own, each
+        // waiting for its thread; the presenter's window sits in the surface,
+        // which goes once the presenter has.
+        auto* ender = new Ender([output = std::shared_ptr<NativeOutput>(std::move(output_)),
+                                 audio = std::shared_ptr<Soundtrack>(std::move(audio_))]() mutable {
+            audio.reset();
             output.reset();
         }, &view_);
         view_.stopping_.insert(ender);
