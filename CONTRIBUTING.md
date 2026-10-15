@@ -5,57 +5,72 @@ large changes, new playback backends, or changes to metric definitions.
 
 ## Development setup
 
-Use Windows for the native playback path. From the repository root:
+The app is C++ (`cpp`), built on Windows for now; macOS and Linux come
+later. You need Visual Studio 2022 or its Build Tools with the C++ tools,
+CMake 3.25 or newer, Qt 6.12's MSVC 2022 build with Qt's translations, and
+MinGW-w64's `g++` for the native libraries. From the repository root:
+
+```powershell
+./scripts/build_gpu_frames.ps1
+./scripts/build_d3d11_tonemap.ps1
+./scripts/build_d3d11_film_grain.ps1
+cd cpp
+cmake --preset windows -DCMAKE_PREFIX_PATH=C:/Qt/6.12.0/msvc2022_64
+cmake --build --preset windows-release
+build\windows\app\Release\VideoMetricsLab.exe
+```
+
+[cpp/README.md](cpp/README.md) has the rest: the other systems' presets, the
+layout, and how the app is checked. Install FFmpeg 9 or newer with `libvmaf`
+and `xpsnr`, and put its `bin` directory on PATH, with `ffprobe` beside it.
+See [known limitations](docs/KNOWN_ISSUES.md).
+
+The repository's scripts are Python (3.11 or newer):
 
 ```powershell
 py -3 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.venv\Scripts\python.exe -m pip check
-.venv\Scripts\python.exe -m vmaf_app.main
 ```
-
-Install FFmpeg 9+ with `libvmaf` and `xpsnr`, and put its `bin` directory on
-PATH. `ffprobe` and, for fallback audio, `ffplay` should accompany it.
-Native HDR tone mapping needs the optional shader build described in
-[BUILD.md](docs/BUILD.md). See [known limitations](docs/KNOWN_ISSUES.md) before
-choosing a Python version; Python 3.14.0 has an unresolved crash in our tests.
 
 ## Tests and style
 
+From `cpp`, after building Release and Debug:
+
 ```powershell
-.venv\Scripts\python.exe -m ruff check vmaf_app tests scripts
-.venv\Scripts\python.exe -m mypy
-.venv\Scripts\python.exe -m pytest -q
+ctest --preset windows-release
+ctest --preset windows-debug
+```
+
+These are the unit tests, at most 100 ms each. The integration tests, which
+decode, score and play real videos with FFmpeg and the GPU, run with
+`ctest --preset windows-release-integration`; run them when you change
+their area. Tests that need a GPU, or FFmpeg, skip themselves without it.
+
+From the repository root, after changing a script or the window's text:
+
+```powershell
+.venv\Scripts\python.exe -m ruff check scripts cpp/tests
+.venv\Scripts\python.exe scripts\i18n_catalog.py check
 git diff --check
 ```
 
-mypy checks the modules not listed under `[[tool.mypy.overrides]]` in
-pyproject.toml. When a listed module passes, take it off the list.
-
-The tests run in parallel by default (pytest-xdist, one worker per core, at
-most 12; see `addopts` in pyproject.toml). Add `-n 0` to run serially, for
-example to debug one test with `print` or a debugger.
-
-Add `--packaging` when you change what the Windows build ships
-(`scripts/qt_bundle.py`, `scripts/gstreamer_bundle.py`): it also checks
-those lists against the installed PySide6 and GStreamer wheels, which takes
-about 12 seconds. CI always runs them.
-
-Tests run offscreen and isolate settings and result caches. Preserve that
+Tests run offscreen and isolate settings and saved scores. Preserve that
 isolation in new tests. Some tests run actual FFmpeg encodes; do not replace
 those with mocked success merely to make CI green. Hardware playback, HDR,
 audio sync and performance still need interactive testing on real hardware.
 
-Follow `ruff.toml` and nearby code. Use NumPy arrays for per-frame hot paths,
-keep expensive work off the UI thread, and route subprocesses through
-`vmaf_app.core.proc`. Read [the architecture guide](docs/ARCHITECTURE.md).
+Follow `cpp/README.md`'s rules for the code and nearby code: warnings are
+errors, keep per-frame work in arrays, keep expensive work off the window's
+thread, and start programs through `vml_platform` (`process.h`). Read [the
+architecture guide](docs/ARCHITECTURE.md).
 
 ## Pull requests
 
-- One bug fix per commit, with its regression tests in the same commit.
+- One bug fix per commit, with its test in the same commit where a test can
+  catch the bug coming back.
 - Explain the symptom, cause, fix and verification in the commit body.
 - Keep refactors separate from behavior changes. Avoid unrelated formatting.
-- For bug fixes, check that the new test fails without the fix when feasible.
+- For bug fixes, check that the new test fails without the fix.
 - Treat persistence/cache changes as deliberate behavior changes and document them.
 - Document new settings and any changes to score interpretation.
 - Include screenshots for UI changes, using generated or shareable media.

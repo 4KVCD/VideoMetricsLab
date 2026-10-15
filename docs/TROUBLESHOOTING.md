@@ -34,12 +34,10 @@ Use a short shareable clip to investigate synchronization or frame mismatches.
 
 ## Crash or hang
 
-Preserve the exact error and action sequence. Include Windows, Python, PySide6,
-FFmpeg and GStreamer versions and the commit/release. For a source launch:
-
-```powershell
-.venv\Scripts\python.exe -X faulthandler -m vmaf_app.main
-```
+Preserve the exact error and action sequence. Include the Windows, FFmpeg and
+GPU driver versions and the commit/release, and the log (Settings > Copy
+log), which says what the app did up to then. From source, the Debug build
+(`cmake --build --preset windows-debug`) checks every index and iterator.
 
 Windows Event Viewer → Windows Logs → Application may identify the faulting
 module. Redact personal paths before reporting and check

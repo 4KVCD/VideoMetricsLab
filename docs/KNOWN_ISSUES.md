@@ -6,7 +6,7 @@ behavior on every GPU, display, driver or media format.
 ## Media and platform limits
 
 - Windows is the primary tested platform. Native D3D11/HDR playback is Windows-only.
-- Codec and GPU support depend on the installed GStreamer/FFmpeg build and driver.
+- Codec and GPU support depend on the GPU, its driver and the installed FFmpeg build.
   H.266 may require software decoding; real-time playback is not guaranteed.
 - HDR appearance depends on metadata and display configuration. The fallback
   path does not offer all native presentation guarantees.
@@ -14,7 +14,6 @@ behavior on every GPU, display, driver or media format.
   are not automatically synchronized by scene content.
 - XPSNR-only retains all frames; libvmaf-backed runs can be subsampled.
 - Quality bands outside VMAF are heuristic, not standardized equivalents.
-- Current dependency ranges are not a fully locked, reproducible environment.
 - Unsigned builds can trigger Windows warnings. Verify provenance rather than
   bypassing warnings for downloads you do not trust.
 

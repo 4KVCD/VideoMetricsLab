@@ -123,7 +123,7 @@ bitrate is video packet bytes × 8 divided by the measured video duration.
 ## Command line
 
 `VideoMetricsLab-cli.exe`, beside the app, calculates metrics without the
-window (from source: `python -m vmaf_app.cli`):
+window (from a source build: `cpp\build\windows\cli\Release\vml-cli.exe`):
 
 ```powershell
 .\VideoMetricsLab-cli.exe compare reference.mkv encode1.mkv encode2.mkv

@@ -6,8 +6,8 @@ This is an actively developed desktop application. There is no long-term
 support branch or guaranteed response time. Reports should identify the exact
 commit or release and whether the issue reproduces on the current code.
 
-Media parsing uses native libraries and external tools. Keep Python, Qt,
-GStreamer, FFmpeg and GPU drivers maintained. Do not treat the app as a sandbox
+Media parsing uses native libraries and external tools. Keep the app, FFmpeg
+and GPU drivers up to date. Do not treat the app as a sandbox
 for hostile files, and do not run it as administrator for ordinary use.
 
 ## Private reporting
