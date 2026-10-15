@@ -715,7 +715,10 @@
   "Light": "Világos",
   "Dark": "Sötét",
   "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}, {nits:g} nit, {lux:g} lux, {distance:.2f} m ({heights:.1f} × képernyőmagasság)",
-  "{side} {number} of {count}": "{side} {number}/{count}"
+  "{side} {number} of {count}": "{side} {number}/{count}",
+  "Video bitrate (Mb/s)": "Videó bitrátája (Mb/s)",
+  "GOP bitrate (Mb/s)": "GOP bitrátája (Mb/s)",
+  "Frame size (Mbit)": "Képkockaméret (Mbit)"
  },
  "plurals": {
   "about {count} day": [

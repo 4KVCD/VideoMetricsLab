@@ -715,7 +715,10 @@
   "Light": "Світла",
   "Dark": "Темна",
   "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}, {nits:g} ніт, {lux:g} лк, {distance:.2f} м ({heights:.1f} × висота екрана)",
-  "{side} {number} of {count}": "{side} {number} з {count}"
+  "{side} {number} of {count}": "{side} {number} з {count}",
+  "Video bitrate (Mb/s)": "Бітрейт відео (Мбіт/с)",
+  "GOP bitrate (Mb/s)": "Бітрейт GOP (Мбіт/с)",
+  "Frame size (Mbit)": "Розмір кадру (Мбіт)"
  },
  "plurals": {
   "about {count} day": [

@@ -96,6 +96,10 @@ class BitratePanel(QWidget):
         self._worker: BitrateWorker | None = None
         self._stopping = False
         self._current_plots: dict[int, tuple[BitrateEntry, BitratePlot]] = {}
+        # The graph's values are divided by this and shown in this unit
+        # (see _refresh_plot).
+        self._value_scale = 1
+        self._value_unit = "kb/s"
         self._populating = False
 
         root = QVBoxLayout(self)
@@ -555,22 +559,27 @@ class BitratePanel(QWidget):
         """Draws the graph again with every used file's line."""
         self.chart.clear()
         self._current_plots.clear()
-        axis_label = (
-            tr("Frame size (kbit)") if self._view_name() == "frame"
-            else tr("GOP bitrate (kb/s)") if self._view_name() == "gop"
-            else tr("Video bitrate (kb/s)")
-        )
-        self.chart.y_axis_label = axis_label
-        for entry in self._entries.values():
-            if not entry.enabled:
-                continue
-            plot = self._entry_plot(entry)
-            if plot is None:
-                continue
+        plots = [(entry, plot) for entry in self._entries.values()
+                 if entry.enabled and (plot := self._entry_plot(entry)) is not None]
+        # In megabits once a line reaches 1000 kb/s, where the table also
+        # switches to Mb/s: a 4K film's busiest second put 250000 on the axis.
+        mega = any(len(plot.values) and float(plot.values.max()) >= 1000 for _entry, plot in plots)
+        self._value_scale = 1000 if mega else 1
+        view = self._view_name()
+        if view == "frame":
+            self.chart.y_axis_label = tr("Frame size (Mbit)") if mega else tr("Frame size (kbit)")
+            self._value_unit = "Mbit" if mega else "kbit"
+        else:
+            if view == "gop":
+                self.chart.y_axis_label = tr("GOP bitrate (Mb/s)") if mega else tr("GOP bitrate (kb/s)")
+            else:
+                self.chart.y_axis_label = tr("Video bitrate (Mb/s)") if mega else tr("Video bitrate (kb/s)")
+            self._value_unit = "Mb/s" if mega else "kb/s"
+        for entry, plot in plots:
             series_id = id(entry.identity)
             self.chart.set_series(
                 series_id,
-                ChartSeries(plot.times, plot.values, entry.color),
+                ChartSeries(plot.times, plot.values / self._value_scale if mega else plot.values, entry.color),
             )
             self._current_plots[series_id] = (entry, plot)
         self.chart.reset_view()
@@ -589,7 +598,7 @@ class BitratePanel(QWidget):
             if index and abs(plot.times[index - 1] - time_value) <= abs(plot.times[index] - time_value):
                 index -= 1
             lines.append(
-                f"{entry.path.name}: {float(plot.values[index]):,.2f} {plot.value_label}"
+                f"{entry.path.name}: {float(plot.values[index]) / self._value_scale:,.2f} {self._value_unit}"
             )
         self.hover_label.setText("\n".join(lines))
 

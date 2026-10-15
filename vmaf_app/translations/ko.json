@@ -715,7 +715,10 @@
   "Light": "밝게",
   "Dark": "어둡게",
   "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}, {nits:g}니트, {lux:g}럭스, {distance:.2f}m ({heights:.1f} × 화면 높이)",
-  "{side} {number} of {count}": "{side} {number}/{count}"
+  "{side} {number} of {count}": "{side} {number}/{count}",
+  "Video bitrate (Mb/s)": "영상 비트레이트(Mb/s)",
+  "GOP bitrate (Mb/s)": "GOP 비트레이트(Mb/s)",
+  "Frame size (Mbit)": "프레임 크기(Mbit)"
  },
  "plurals": {
   "about {count} day": [

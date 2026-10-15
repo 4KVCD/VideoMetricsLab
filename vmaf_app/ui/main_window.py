@@ -2092,8 +2092,16 @@ class MainWindow(QMainWindow):
     def _fit_pending_columns(self) -> None:
         """Fits the columns waiting to be fitted to their contents."""
         columns, self._columns_to_fit = self._columns_to_fit, set()
+        # Fitted as if no column were sorted: once one is, Qt makes room for
+        # the sort arrow in every heading, so a column fitted after sorting
+        # came out wider than the same column before (Video bitrate 84 ->
+        # 112 px), and File name narrower.
+        header = self.distorted_table.horizontalHeader()
+        sorted_shown = header.isSortIndicatorShown()
+        header.setSortIndicatorShown(False)
         for column in sorted(columns):
             self.distorted_table.resizeColumnToContents(column)
+        header.setSortIndicatorShown(sorted_shown)
 
     def _set_row_scaling(self, row: int) -> None:
         """Shows in a row's Scaling cell which video is resized."""
