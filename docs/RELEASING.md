@@ -61,6 +61,36 @@
 10. Compute a SHA-256 checksum for the final zip using `Get-FileHash -Algorithm SHA256`.
 11. Upload the zip and checksum to a GitHub Release only after approval.
 
+## The C++ app
+
+The C++ app (`cpp/`) is built and tested but not released yet. For a release
+of it, steps 1, 2, 4 and 8 to 11 above apply as they are, and these replace
+the Python app's own steps (3, 5, 6 and 7):
+
+1. Build with `scripts/build_cpp_release.ps1` (`cpp/README.md`, "The
+   package"), without `-AllowLocalLibvmaf`. Its self-test must report no
+   failure, and only the warnings the PC explains (another GPU maker's
+   decoder, say).
+2. Run the golden suite (`cpp/README.md`) with the Python app being
+   replaced as its baseline: the release branch's command line as `--app`
+   and `--python-app`, not the copy of the Python app on the C++ app's
+   branch. Every case must be the same.
+3. Run the C++ suites, Release and Debug (`ctest`), and the GCC check; and,
+   on a PC of each GPU maker, the window's native decoding tests with the
+   package's own files, so that dav1d and the film grain library are there:
+   `VML_RESOURCES=<package>\resources`, then
+   `vml_app_tests --gtest_filter=NativeDecoderTest.*`.
+4. Test Video Compare's playback on a PC of each GPU maker: H.264, HEVC,
+   AV1, VP9, VVC (with H.274 and AFGS1 film grain) and ProRes, a raw `.266`
+   stream, HDR on an HDR display and tone mapped on an SDR one, the
+   soundtrack, seeking, and holding and releasing the source.
+5. Launch the extracted zip from another folder on a PC without Visual
+   Studio: it carries Microsoft's C++ runtime, and must start and pass its
+   self-test there.
+6. Audit the notices of what the package adds (THIRD_PARTY.md): Qt 6.12.0
+   under the LGPL 3 (`licenses/`), Microsoft's C++ runtime, dav1d, FFmpeg's
+   libraries and the film grain library's VTM tables.
+
 The CI workflow checks code and offscreen tests, not GPU correctness or complete
 binary licensing. A source upload and a redistributable Windows release are
 different deliverables. Never include real user caches or settings in either.

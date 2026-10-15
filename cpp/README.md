@@ -148,8 +148,10 @@ that GPU code runs in.
 
 Not ported yet: on AMD's GPUs, the GPU metrics' decoding through Windows'
 own decoders, and their pictures handed over on the GPU, which the Python
-app does (`core/include/vml/gpu_frames.h`); and Qt's translations of its
-own dialogs' buttons, which a Qt built from qtbase alone does not have.
+app does (`core/include/vml/gpu_frames.h`); H.274 film grain on 4:2:2,
+4:4:4 or 12-bit VVC video, which the Python app draws (VVenC makes none of
+these); and Qt's translations of its own dialogs' buttons, which a Qt built
+from qtbase alone does not have.
 
 ## The package
 
@@ -162,7 +164,8 @@ the native libraries and the programs first, checks that everything they
 import is in the folder or is Windows', then runs the window's self-test
 (`VideoMetricsLab.exe --self-test`) and `VideoMetricsLab-cli.exe devices`
 from the folder, in a profile of their own, and zips it. FFmpeg itself is
-not bundled, as with the Python app.
+not bundled, as with the Python app. What a release of it is checked for
+is in `docs/RELEASING.md` ("The C++ app").
 
     ./scripts/build_cpp_release.ps1 -QtPath C:\Qt\6.12.0\msvc2022_64
 
