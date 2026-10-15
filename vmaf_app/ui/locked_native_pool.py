@@ -136,6 +136,20 @@ class LockedNativePool:
                 self._retire(self.entries.pop(key)[0])
                 self.frames.pop(key, None)
                 self.eos.discard(key)
+        # A test video decoded beside the one shown, chosen now, can be far
+        # behind it: a decoder slower than playback (4K VVC on the CPU) stops
+        # once it falls behind, the few frames it holds kept as ones still to
+        # come. Decoded on from there, it held playback up for as long as it
+        # had been away; sought to the frame shown, it starts as a new
+        # decoder does.
+        chosen = ("distorted", selected)
+        entry = self.entries.get(chosen)
+        queue = self.frames.get(chosen)
+        if entry is not None and not entry[0].seeking and queue and max(queue) < self.frame - int(self.fps / 2):
+            queue.clear()
+            self.eos.discard(chosen)
+            # One frame early, as seek() does.
+            entry[0].seek(max(0, self.position - round(1000 / self.fps)))
         self.launch_missing()
         self._choose_pair(self.frame)
 
