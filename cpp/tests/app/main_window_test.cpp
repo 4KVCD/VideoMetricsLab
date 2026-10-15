@@ -10,6 +10,7 @@
 #include <QDeadlineTimer>
 #include <QDoubleSpinBox>
 #include <QDropEvent>
+#include <QFontInfo>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -17,6 +18,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
+#include <QStyle>
 #include <QTableWidget>
 #include <QTableWidgetSelectionRange>
 #include <QTest>
@@ -1505,8 +1507,15 @@ TEST_F(WindowTest, NoTabIsSqueezedInTheSmallestWindowWithLargeText) {
         QWidget* content = scrolling != nullptr ? scrolling->widget() : page;
         const QSize needed = content->minimumSizeHint();
         const QSize given = content->size();
+        // What it needed and got, and what the layout depends on: the window,
+        // the font Qt found for the text, and the style.
+        const auto size = [](const QSize& of) { return std::to_string(of.width()) + "x" + std::to_string(of.height()); };
         EXPECT_TRUE(given.width() >= needed.width() && given.height() >= needed.height())
-            << tabs(window).tabText(index).toStdString();
+            << tabs(window).tabText(index).toStdString() << ": needs " << size(needed) << ", has " << size(given)
+            << ", in a window of " << size(window.size()) << " (at least " << size(window.minimumSize())
+            << "); text in '" << QFontInfo(QApplication::font()).family().toStdString() << "' at "
+            << QApplication::font().pointSizeF() << " pt; style '" << QApplication::style()->name().toStdString()
+            << "'";
     }
 }
 
