@@ -716,7 +716,19 @@
   "{side} {number} of {count}": "{side} {number} von {count}",
   "Video bitrate (Mb/s)": "Video-Bitrate (Mb/s)",
   "GOP bitrate (Mb/s)": "GOP-Bitrate (Mb/s)",
-  "Frame size (Mbit)": "Bildgröße (Mbit)"
+  "Frame size (Mbit)": "Bildgröße (Mbit)",
+  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞ wird bei {db:g} dB gezeichnet; gespeicherte Werte und Statistiken behalten unendlich.",
+  "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: Die Kurve ist der JOD jeder Sekunde, gezeichnet in der Mitte der Sekunde; die Spalte CVVDP ist der JOD des gesamten Videos, der nicht der Mittelwert seiner Sekunden ist. Median bis Max. beschreiben die Sekunden.",
+  "{rate:.0f} kb/s": "{rate:.0f} kb/s",
+  "kb/s": "kb/s",
+  "Mb/s": "Mb/s",
+  "kbit": "kbit",
+  "Mbit": "Mbit",
+  " in": " Zoll",
+  " m": " m",
+  " lux": " Lux",
+  "{rate:.1f} Mb/s": "{rate:.1f} Mb/s",
+  "{rate} kb/s": "{rate} kb/s"
  },
  "plurals": {
   "about {count} day": [

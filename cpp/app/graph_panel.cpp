@@ -65,12 +65,12 @@ constexpr int export_row_padding = 6;
 // pointer.
 constexpr double widest_sample = -88.88;
 
-// The metric notes under the graph (English, as in the Python app).
+// The metric notes under the graph.
 const char* const xpsnr_infinity_note =
-    "XPSNR: ∞ is plotted at 123 dB; stored scores and statistics retain infinity.";
+    N_("XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.");
 const char* const cvvdp_note =
-    "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole "
-    "video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.";
+    N_("CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the "
+       "whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.");
 
 // The table's columns: the series, then one mean per metric, then the
 // selected metric's detail, then the remove button.
@@ -979,10 +979,10 @@ void GraphPanel::update_metric_hint() {
                                        "results containing it.",
                                        {{"label", qt_text(metric.label)}});
     if (available && metric.key == "xpsnr") {
-        hint = QString::fromUtf8(xpsnr_infinity_note);
+        hint = app::tr(xpsnr_infinity_note, {{"db", xpsnr_infinity_plot_db}});
     }
     if (available && metric.kind == MetricKind::sequence) {
-        hint = QString::fromUtf8(cvvdp_note);
+        hint = app::tr(cvvdp_note);
     }
     metric_hint_->setText(hint);
     metric_hint_->setVisible(!hint.isEmpty());

@@ -716,7 +716,19 @@
   "{side} {number} of {count}": "{side} {number}/{count}",
   "Video bitrate (Mb/s)": "影片位元速率 (Mb/s)",
   "GOP bitrate (Mb/s)": "GOP 位元速率 (Mb/s)",
-  "Frame size (Mbit)": "影格大小 (Mbit)"
+  "Frame size (Mbit)": "影格大小 (Mbit)",
+  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR：∞ 繪製在 {db:g} dB 處；儲存的分數和統計值仍為無限大。",
+  "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP：曲線為每一秒的 JOD，繪製在該秒的中點；CVVDP 欄是整部影片的 JOD，並不是各秒的平均值。中位數到最大值描述的是各秒。",
+  "{rate:.0f} kb/s": "{rate:.0f} kb/s",
+  "kb/s": "kb/s",
+  "Mb/s": "Mb/s",
+  "kbit": "kbit",
+  "Mbit": "Mbit",
+  " in": " 吋",
+  " m": " 公尺",
+  " lux": " 勒克斯",
+  "{rate:.1f} Mb/s": "{rate:.1f} Mb/s",
+  "{rate} kb/s": "{rate} kb/s"
  },
  "plurals": {
   "about {count} day": [

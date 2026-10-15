@@ -716,7 +716,19 @@
   "{side} {number} of {count}": "{side} {number}/{count}",
   "Video bitrate (Mb/s)": "動画ビットレート (Mb/s)",
   "GOP bitrate (Mb/s)": "GOP ビットレート (Mb/s)",
-  "Frame size (Mbit)": "フレームサイズ (Mbit)"
+  "Frame size (Mbit)": "フレームサイズ (Mbit)",
+  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR：∞ は {db:g} dB の位置に描画されます。保存されたスコアと統計では無限大のままです。",
+  "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP：曲線は各秒の JOD で、その秒の中央に描画されます。CVVDP 列は動画全体の JOD で、各秒の平均ではありません。中央値から最大は各秒を表します。",
+  "{rate:.0f} kb/s": "{rate:.0f} kb/s",
+  "kb/s": "kb/s",
+  "Mb/s": "Mb/s",
+  "kbit": "kbit",
+  "Mbit": "Mbit",
+  " in": " インチ",
+  " m": " m",
+  " lux": " ルクス",
+  "{rate:.1f} Mb/s": "{rate:.1f} Mb/s",
+  "{rate} kb/s": "{rate} kb/s"
  },
  "plurals": {
   "about {count} day": [

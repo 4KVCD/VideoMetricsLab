@@ -716,7 +716,19 @@
   "{side} {number} of {count}": "{side} {number} من {count}",
   "Video bitrate (Mb/s)": "معدل بت الفيديو (ميغابت/ث)",
   "GOP bitrate (Mb/s)": "معدل بت GOP (ميغابت/ث)",
-  "Frame size (Mbit)": "حجم الإطار (ميغابت)"
+  "Frame size (Mbit)": "حجم الإطار (ميغابت)",
+  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: تُرسم ∞ عند {db:g} dB؛ وتحتفظ الدرجات المحفوظة والإحصاءات باللانهاية.",
+  "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: المنحنى هو JOD لكل ثانية، مرسومًا عند منتصف الثانية؛ عمود CVVDP هو JOD للفيديو كاملًا، وهو ليس متوسط ثوانيه. القيم من الوسيط إلى الأعلى تصف الثواني.",
+  "{rate:.0f} kb/s": "{rate:.0f} كيلوبت/ث",
+  "kb/s": "كيلوبت/ث",
+  "Mb/s": "ميغابت/ث",
+  "kbit": "كيلوبت",
+  "Mbit": "ميغابت",
+  " in": " بوصة",
+  " m": " م",
+  " lux": " لوكس",
+  "{rate:.1f} Mb/s": "{rate:.1f} ميغابت/ث",
+  "{rate} kb/s": "{rate} كيلوبت/ث"
  },
  "plurals": {
   "about {count} day": [

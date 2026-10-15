@@ -716,7 +716,19 @@
   "{side} {number} of {count}": "{side} {number}/{count}",
   "Video bitrate (Mb/s)": "Videó bitrátája (Mb/s)",
   "GOP bitrate (Mb/s)": "GOP bitrátája (Mb/s)",
-  "Frame size (Mbit)": "Képkockaméret (Mbit)"
+  "Frame size (Mbit)": "Képkockaméret (Mbit)",
+  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: a ∞ {db:g} dB-nél van ábrázolva; a mentett pontszámok és a statisztikák megtartják a végtelent.",
+  "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: a görbe az egyes másodpercek JOD-értéke, a másodperc közepén ábrázolva; a CVVDP oszlop a teljes videó JOD-értéke, amely nem a másodpercei átlaga. A Mediántól a Max.-ig terjedő értékek a másodperceket írják le.",
+  "{rate:.0f} kb/s": "{rate:.0f} kb/s",
+  "kb/s": "kb/s",
+  "Mb/s": "Mb/s",
+  "kbit": "kbit",
+  "Mbit": "Mbit",
+  " in": " hüvelyk",
+  " m": " m",
+  " lux": " lux",
+  "{rate:.1f} Mb/s": "{rate:.1f} Mb/s",
+  "{rate} kb/s": "{rate} kb/s"
  },
  "plurals": {
   "about {count} day": [

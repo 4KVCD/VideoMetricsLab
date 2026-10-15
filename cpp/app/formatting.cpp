@@ -19,11 +19,10 @@ QString bitrate_string(const VideoInfo& info) {
     }
     const QString approximate = info.bit_rate_whole_file ? QStringLiteral("≈") : QString();
     if (info.bit_rate >= 1'000'000) {
-        return approximate +
-               QString::fromStdString(std::format("{:.1f} Mb/s", static_cast<double>(info.bit_rate) / 1'000'000.0));
+        return approximate + tr("{rate:.1f} Mb/s", {{"rate", static_cast<double>(info.bit_rate) / 1'000'000.0}});
     }
     // Python's floor division: bitrates are never negative.
-    return approximate + QString::fromStdString(std::format("{} kb/s", info.bit_rate / 1000));
+    return approximate + tr("{rate} kb/s", {{"rate", info.bit_rate / 1000}});
 }
 
 QString bitrate_note(const VideoInfo& info) {

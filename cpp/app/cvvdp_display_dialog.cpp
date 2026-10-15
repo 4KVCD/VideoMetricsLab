@@ -78,9 +78,9 @@ CvvdpDisplayDialog::CvvdpDisplayDialog(const CvvdpDisplay& display, QWidget* par
     resolution->addWidget(height_spin);
     resolution->addStretch(1);
     form->addRow(app::tr("Resolution:"), resolution);
-    diagonal_spin = spin(1, 1000, display.diagonal_inches, 1, " in", 1, app::tr("The screen's diagonal size."));
+    diagonal_spin = spin(1, 1000, display.diagonal_inches, 1, app::tr(" in"), 1, app::tr("The screen's diagonal size."));
     form->addRow(app::tr("Screen size:"), diagonal_spin);
-    distance_spin = spin(0.05, 50, display.viewing_distance_m, 4, " m", 0.05,
+    distance_spin = spin(0.05, 50, display.viewing_distance_m, 4, app::tr(" m"), 0.05,
                          app::tr("How far the viewer's eyes are from the screen. Closer makes small artifacts "
                                  "easier to see."));
     distance_note = new QLabel;
@@ -98,7 +98,7 @@ CvvdpDisplayDialog::CvvdpDisplayDialog(const CvvdpDisplay& display, QWidget* par
                          app::tr("Peak to black: about 1000:1 for a typical LCD, 1,000,000:1 for OLED or the official "
                                  "HDR displays."));
     form->addRow(app::tr("Contrast:"), contrast_spin);
-    ambient_spin = spin(0, 100'000, display.ambient_lux, 1, " lux", 10,
+    ambient_spin = spin(0, 100'000, display.ambient_lux, 1, app::tr(" lux"), 10,
                         app::tr("Light falling on the screen: about 250 lux in an office, 50 in a lit living room, "
                                 "5-10 watching a film with the lights low, 0 in the dark."));
     form->addRow(app::tr("Room light:"), ambient_spin);

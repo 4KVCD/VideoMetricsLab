@@ -716,7 +716,19 @@
   "{side} {number} of {count}": "{side} {number}/{count}",
   "Video bitrate (Mb/s)": "영상 비트레이트(Mb/s)",
   "GOP bitrate (Mb/s)": "GOP 비트레이트(Mb/s)",
-  "Frame size (Mbit)": "프레임 크기(Mbit)"
+  "Frame size (Mbit)": "프레임 크기(Mbit)",
+  "XPSNR: ∞ is plotted at {db:g} dB; stored scores and statistics retain infinity.": "XPSNR: ∞는 {db:g} dB에 그려집니다. 저장된 점수와 통계에는 무한대가 그대로 유지됩니다.",
+  "CVVDP: the curve is the JOD of each second, plotted at the middle of the second; the CVVDP column is the whole video's JOD, which is not the mean of its seconds. Median to Max describe the seconds.": "CVVDP: 곡선은 각 초의 JOD이며 그 초의 가운데에 그려집니다. CVVDP 열은 영상 전체의 JOD로, 각 초의 평균이 아닙니다. 중앙값부터 최대까지는 각 초를 나타냅니다.",
+  "{rate:.0f} kb/s": "{rate:.0f} kb/s",
+  "kb/s": "kb/s",
+  "Mb/s": "Mb/s",
+  "kbit": "kbit",
+  "Mbit": "Mbit",
+  " in": " 인치",
+  " m": " m",
+  " lux": " 럭스",
+  "{rate:.1f} Mb/s": "{rate:.1f} Mb/s",
+  "{rate} kb/s": "{rate} kb/s"
  },
  "plurals": {
   "about {count} day": [

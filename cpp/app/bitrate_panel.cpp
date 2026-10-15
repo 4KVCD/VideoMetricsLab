@@ -61,7 +61,7 @@ QString rate_text(double kbps) {
     if (kbps >= 1000) {
         return app::tr("{rate:.3f} Mb/s", {{"rate", kbps / 1000}});
     }
-    return python_format("{rate:.0f} kb/s", {{"rate", kbps}});
+    return app::tr("{rate:.0f} kb/s", {{"rate", kbps}});
 }
 
 QString status_text(const BitrateEntry& entry) {
@@ -705,14 +705,14 @@ void BitratePanel::refresh_plot() {
     const std::string view = view_name();
     if (view == "frame") {
         chart->set_y_axis_label(mega ? app::tr("Frame size (Mbit)") : app::tr("Frame size (kbit)"));
-        value_unit_ = mega ? QStringLiteral("Mbit") : QStringLiteral("kbit");
+        value_unit_ = mega ? app::tr("Mbit") : app::tr("kbit");
     } else {
         if (view == "gop") {
             chart->set_y_axis_label(mega ? app::tr("GOP bitrate (Mb/s)") : app::tr("GOP bitrate (kb/s)"));
         } else {
             chart->set_y_axis_label(mega ? app::tr("Video bitrate (Mb/s)") : app::tr("Video bitrate (kb/s)"));
         }
-        value_unit_ = mega ? QStringLiteral("Mb/s") : QStringLiteral("kb/s");
+        value_unit_ = mega ? app::tr("Mb/s") : app::tr("kb/s");
     }
     for (const auto& [entry, plot] : plots) {
         if (mega) {
