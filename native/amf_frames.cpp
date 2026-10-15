@@ -4,7 +4,7 @@
 // vpl_frames.cpp, with the same C API (gpu_frames.h).
 //
 // AMF's decoder parses the stream itself: the app feeds it the packets FFmpeg
-// copies out of the container (vmaf_app/core/nvdec_frames.py) with their
+// copies out of the container (cpp/core/src/gpu_frames.cpp) with their
 // timestamps, and gets the pictures back in display order. Each is brought to
 // system memory by AMF (Convert to host memory), and nvf_download makes one
 // CPU pass from there into the caller's buffer (Vship's): the crop's luma,

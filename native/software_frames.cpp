@@ -9,11 +9,12 @@
 // such frames a second however fast the decoding is. Here they are decoded
 // in this process by FFmpeg's own decoders: FFmpeg 9.0.2's libavcodec and
 // libavutil, built for the app with only the decoders below (LGPL;
-// vmaf_app/tools/ffmpeg, from scripts/build_ffmpeg_decoders.ps1). AV1 is
-// decoded by dav1d, the bundled GStreamer's (BSD), because this FFmpeg has
-// no dav1d wrapper and FFmpeg's own AV1 decoder only drives a GPU's. The app loads them
-// (vmaf_app/core/gpu_frames.py) and hands them over with nvf_set_libraries;
-// this library links neither. It is compiled against FFmpeg's headers
+// resources/tools/ffmpeg, from scripts/build_ffmpeg_decoders.ps1). AV1 is
+// decoded by dav1d (BSD; beside them, from scripts/build_dav1d.ps1), because
+// this FFmpeg has no dav1d wrapper and FFmpeg's own AV1 decoder only drives a
+// GPU's. The app loads them (cpp/core/src/gpu_frames.cpp) and hands them
+// over with nvf_set_libraries; this library links neither. It is compiled
+// against FFmpeg's headers
 // (native/ffmpeg) and refuses libraries of another major version; of dav1d
 // it mirrors the few structures it uses (dav1d/dav1d_api.h), checked against
 // its API version. The app feeds the packets FFmpeg copies out of the

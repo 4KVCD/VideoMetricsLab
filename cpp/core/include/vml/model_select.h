@@ -18,7 +18,7 @@ inline constexpr std::string_view uhd_model = "version=vmaf_4k_v0.6.1";
 // The folder the app's own files are in (the VMAF models, the bundled tools):
 // the folder the VML_RESOURCES environment variable names; else a packaged
 // build's "resources" folder beside its programs; else the one this build
-// was made to use (the repository's vmaf_app folder, in a development
+// was made to use (the repository's resources folder, in a development
 // build).
 std::filesystem::path resource_folder();
 

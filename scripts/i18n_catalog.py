@@ -7,8 +7,8 @@ The keys are the English text of the C++ window's tr("..."), N_("...") and
 ntr("...", "...") calls with literal text (cpp/app), the engine's texts
 the window shows (N_("...") in cpp/core, and the run line's say("...")),
 and the engine's message shapes it translates (the templates in
-cpp/app/i18n.cpp). A
-catalog, vmaf_app/translations/<code>.json, holds {"strings": {English:
+cpp/app/i18n.cpp). A catalog,
+resources/translations/<code>.json, holds {"strings": {English:
 translation}, "plurals": {English singular: [forms]}} with as many forms
 as the language's plural rules have (plural_forms, as cpp/app/i18n.cpp's
 plural_index gives them). Run `check` after changing the window's text.
@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # The window's code, and the engine's, whose texts the window shows.
 SOURCES = (ROOT / "cpp" / "app", ROOT / "cpp" / "core")
 I18N = ROOT / "cpp" / "app" / "i18n.cpp"
-TRANSLATIONS_DIR = ROOT / "vmaf_app" / "translations"
+TRANSLATIONS_DIR = ROOT / "resources" / "translations"
 
 
 # ------------------------------------------------------------- C++ sources

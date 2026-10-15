@@ -1,4 +1,4 @@
-# Builds Vship's Vulkan library (vmaf_app/tools/vship/vulkan/libvship.dll)
+# Builds Vship's Vulkan library (resources/tools/vship/vulkan/libvship.dll)
 # from a pinned commit (the v5.1.2 release's tag) with the MinGW-w64 g++
 # that builds the D3D11 tone mapper (WinLibs, UCRT, POSIX threads).
 #
@@ -20,7 +20,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $projectDirectory = Split-Path $PSScriptRoot -Parent
-$output = Join-Path $projectDirectory 'vmaf_app/tools/vship/vulkan/libvship.dll'
+$output = Join-Path $projectDirectory 'resources/tools/vship/vulkan/libvship.dll'
 
 function Invoke-Checked([string]$what, [scriptblock]$command) {
     & $command

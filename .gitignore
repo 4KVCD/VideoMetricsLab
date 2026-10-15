@@ -1,7 +1,6 @@
 .venv/
 __pycache__/
 *.pyc
-.pytest_cache/
 *.vmafrun.json
 
 # throwaway benchmark/QA scratch space (includes sample .mp4s)
@@ -9,8 +8,5 @@ tests_scratch/
 # stdout/stderr captured from launching the GUI
 gui_stdout.log
 gui_stderr.log
-vmaf_app/native/*.dll
-
-# PyInstaller build output
-build/
-dist/
+# The native libraries, built from native/ by the scripts' build_*.ps1
+resources/native/*.dll

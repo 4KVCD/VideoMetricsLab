@@ -1,7 +1,7 @@
 // The C API every frame decoder library of the app's exports
 // (nvdec_frames.dll for NVIDIA, vpl_frames.dll for Intel, amf_frames.dll for
 // AMD, software_frames.dll for what FFmpeg decodes in software), so
-// vmaf_app/core/gpu_frames.py drives any of them the same way:
+// the app (cpp/core/src/gpu_frames.cpp) drives any of them the same way:
 //
 //   nvf_open(params) -> decoder, nvf_push(packet, pts) ... nvf_finish(),
 //   nvf_pop() -> (slot, pts) in display order, nvf_download(slot, host) or

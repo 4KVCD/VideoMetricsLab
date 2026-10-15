@@ -67,7 +67,7 @@ The C++ app (`cpp/`) is built and tested but not released yet. For a release
 of it, steps 1, 2, 4 and 8 to 11 above apply as they are, and these replace
 the Python app's own steps (3, 5, 6 and 7):
 
-1. Build with `scripts/build_cpp_release.ps1` (`cpp/README.md`, "The
+1. Build with `scripts/build_release.ps1` (`cpp/README.md`, "The
    package"), without `-AllowLocalLibvmaf`. Its self-test must report no
    failure, and only the warnings the PC explains (another GPU maker's
    decoder, say).
@@ -77,7 +77,7 @@ the Python app's own steps (3, 5, 6 and 7):
    branch. Every case must be the same.
 3. Run both C++ suites, unit and integration, Release and Debug
    (`ctest --preset windows-release-all`, `windows-debug-all`), and the C++
-   workflow on GitHub (Actions > C++ port > Run workflow); and, on a PC of each GPU
+   workflow on GitHub (Actions > CI > Run workflow); and, on a PC of each GPU
    maker, the window's native decoding tests with the package's own files:
    `VML_RESOURCES=<package>\resources`, then
    `vml_app_tests --gtest_filter=NativeDecoderTest.*`.

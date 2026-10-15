@@ -1,10 +1,11 @@
 # VideoMetricsLab in C++
 
-The C++ port of VideoMetricsLab, made to run faster and in less memory than
-the Python app, and to come to macOS and Linux after Windows. The Python app
-in the rest of this repository keeps shipping until the C++ app does
-everything it does; until then, the C++ code is built and tested but not
-released.
+VideoMetricsLab is a C++ app from v3.0 on. It was ported from the Python
+app (v2.1 and before; its last release is the `release/v2.1` branch) to
+run faster and in less memory, and to come to macOS and Linux after
+Windows. A comment that names a `vmaf_app/...` file or a Python test
+(`tests/test_...py`) means the Python app's code the C++ code was ported
+from, on that branch.
 
 ## How it is checked
 
@@ -20,11 +21,14 @@ The C++ code must give the Python app's answers:
 
 The tests read the Python app's answers from `tests/reference`, which
 `tests/reference/make_reference.py` makes by running the Python app's own
-code. After changing the Python code it uses (its docstring lists it), run
-it again from the repository's root and commit what it writes. Its Vulkan
-cases need a GPU that Vulkan scores VMAF on; what they write is the same
-on every such GPU.
+code: a checkout of its last release (the `release/v2.1` branch), in the
+folder `VML_PYTHON_APP` names, run with a Python that has its
+requirements. After changing what it covers (its docstring lists it: the
+window's catalogs, say), run it again from the repository's root and
+commit what it writes. Its Vulkan cases need a GPU that Vulkan scores VMAF
+on; what they write is the same on every such GPU.
 
+    set VML_PYTHON_APP=<the checkout>
     .venv\Scripts\python.exe cpp\tests\reference\make_reference.py
 
 On real videos, `tests/golden/golden.py` holds the command lines to each
@@ -42,6 +46,7 @@ not exactly what FFmpeg's scale filter gives (gpu_frames.py's plan_decode);
 both apps scale it the same way, and the `...-by-ffmpeg` case holds them to
 each other on FFmpeg's route too.
 
+    set VML_PYTHON_APP=<a checkout of release/v2.1>
     python cpp\tests\golden\golden.py run --out python-run --cpp-app path\to\vml-cli.exe
     python cpp\tests\golden\golden.py run --out cpp-run --app path\to\vml-cli.exe
     python cpp\tests\golden\golden.py compare python-run cpp-run
@@ -57,13 +62,18 @@ each other on FFmpeg's route too.
 | `tests/unit` | The tests (GoogleTest). |
 | `tests/app` | The window's tests, run with no screen (Qt's offscreen platform), each in a profile of its own. |
 | `tests/reference` | The Python app's answers, and the script that makes them. |
+| `tests/fixtures` | Small videos the window's tests play, and the script that made them. |
 | `tests/golden` | The comparison of the two apps' command lines on real videos. |
 | `third_party` | Vendored libraries: see its README. |
 | `packaging` | What the Windows package adds to the build (Qt's licence texts). |
 
-The native libraries the app loads (Video Compare's presenter, the GPU
-metrics' frame decoders) are the Python app's, built from the repository's
-`native` folder by its scripts.
+The native libraries the app loads (Video Compare's presenter, its film
+grain, the GPU metrics' frame decoders) are built from the repository's
+`native` folder by its scripts, into `resources/native`, beside the rest
+of the app's own files (`resources`: the VMAF models, the translations,
+the bundled tools). `native/vulkan_presenter.cpp`, the Python app's
+presenter for macOS and Linux, is kept for those systems; the C++ app does
+not use it yet.
 
 ## The command line
 
@@ -89,15 +99,15 @@ are Vship's metrics, in the GPU's queue after VMAF, and SSIMULACRA2 and
 Butteraugli set to the CPU, in the CPU's queue. For VMAF and Vship's
 metrics on the GPU, and PSNR, SSIM and XPSNR in the app, it decodes the
 videos itself, as the Python app does: with the GPU's own decoder (NVIDIA's,
-Intel's or AMD's, through the app's libraries in `vmaf_app/native`; for VMAF
+Intel's or AMD's, through the app's libraries in `resources/native`; for VMAF
 v1 on an AMD GPU, Windows' own decoder where it opens, its pictures read by
 Vulkan where the decoder left them), or with
 FFmpeg's decoders built into the app for a video FFmpeg would decode in
 software; FFmpeg only copies the compressed stream out of its container. A
 video it cannot decode is decoded by an FFmpeg of its own. (The software decoder's AV1 decoder is
 dav1d, VideoLAN's, built by `scripts/build_dav1d.ps1` beside FFmpeg's
-libraries in `vmaf_app/tools/ffmpeg`; the Python app takes its bundled
-GStreamer's.) That work runs in a process of its own (the
+libraries in `resources/tools/ffmpeg`.) That work runs in a process of its
+own (the
 program again, with `--vml-isolated`), so that a crash in libvmaf, Vship
 or the GPU's driver ends that process and not the run: FFmpeg's filters
 then calculate VMAF and the others on the CPU, and libjxl's tools
@@ -142,26 +152,26 @@ through ffmpeg.exe.
 The Bitrate Viewer plots each video's bitrate by frame, second or GOP. The
 Settings tab and the log are the Python app's too. It reads and writes the
 Python app's settings.json, and shows its text in the user's language from
-the Python app's catalogs (`vmaf_app/translations`), with Qt's own dialogs
+the catalogs in `resources/translations`, with Qt's own dialogs
 and buttons in Qt's translations of them, in the light or dark theme. Like
 the command line, the program is also the process of its own that GPU code
 runs in.
 
 ## The package
 
-`scripts/build_cpp_release.ps1` builds the app's Windows package: the
+`scripts/build_release.ps1` builds the app's Windows package: the
 window and the command line (`VideoMetricsLab-cli.exe`, named as the Python
 app's), Qt and Microsoft's C++ runtime beside them, and the app's own files
 in `resources` (the VMAF models, the translations, the bundled tools and the
-native libraries, from `vmaf_app`), where the programs find them. It builds
+native libraries, from the repository's `resources`), where the programs
+find them. It builds
 the native libraries and the programs first, checks that everything they
 import is in the folder or is Windows', then runs the window's self-test
 (`VideoMetricsLab.exe --self-test`) and `VideoMetricsLab-cli.exe devices`
 from the folder, in a profile of their own, and zips it. FFmpeg itself is
-not bundled, as with the Python app. What a release of it is checked for
-is in `docs/RELEASING.md` ("The C++ app").
+not bundled. What a release is checked for is in `docs/RELEASING.md`.
 
-    ./scripts/build_cpp_release.ps1 -QtPath C:\Qt\6.12.0\msvc2022_64
+    ./scripts/build_release.ps1 -QtPath C:\Qt\6.12.0\msvc2022_64
 
 ## Building and testing
 
@@ -193,10 +203,10 @@ Windows the build puts Qt's libraries beside the window and its tests
 of its own dialogs where they are installed with Qt (qttranslations), which
 the package needs.
 
-GitHub builds and tests the port when asked (`.github/workflows/cpp.yml`:
-Actions > C++ port > Run workflow), at the end of each phase of the port and
-before a release: on Windows, with
-Qt, so that the window and its tests are built and run there too (those
+GitHub builds and tests the app when asked (`.github/workflows/ci.yml`:
+Actions > CI > Run workflow), at the end of each phase of the work and
+before a release: on Windows, with Qt, so that the window and its tests
+are built and run there too (those
 that need a GPU or FFmpeg skip themselves), and with Linux's sanitizer
 preset, both suites. Until the port reaches Linux and macOS, it does not
 build their release presets. During the port, the unit tests run on the

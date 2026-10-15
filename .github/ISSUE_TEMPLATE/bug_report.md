@@ -21,8 +21,7 @@ instead of this public template.
 
 - Release or commit:
 - Windows version:
-- Python / PySide6 (source installs):
-- FFmpeg / GStreamer versions:
+- FFmpeg version:
 - GPU and driver / HDR enabled:
 - Native or fallback playback, if relevant:
 

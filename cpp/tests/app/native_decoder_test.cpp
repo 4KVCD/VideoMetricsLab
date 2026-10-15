@@ -502,8 +502,7 @@ TEST_F(NativeDecoderTest, ASeekBackGivesTheFramesFromItOn) {
 // again from its start) is FFmpeg's frame of that number, luma and chroma;
 // played from the start, every frame comes, in order. Raw H.264 with
 // B-frames and 10-bit HEVC on each GPU's decoder, H.264 in software too, and
-// the film grain test's VVC stream (tests/fixtures/vvc_grain.266) in
-// software.
+// the film grain test's VVC stream (fixtures/vvc_grain.266) in software.
 TEST_F(NativeDecoderTest, ARawStreamsFramesAreCountedFromItsStart) {
     struct Case {
         std::string name;
@@ -521,9 +520,7 @@ TEST_F(NativeDecoderTest, ARawStreamsFramesAreCountedFromItsStart) {
     test::run_ffmpeg(*found_, {"-f", "lavfi", "-i", "testsrc2=s=640x360:r=24000/1001:d=2", "-c:v", "libx265",
                                "-preset", "ultrafast", "-x265-params", "bframes=4:log-level=error", "-pix_fmt",
                                "yuv420p10le", "-f", "hevc", platform::path_text(hevc)});
-    const std::filesystem::path vvc =
-        std::filesystem::path(VML_REFERENCE_DIR).parent_path().parent_path().parent_path() / "tests" / "fixtures" /
-        "vvc_grain.266";
+    const std::filesystem::path vvc = std::filesystem::path(VML_FIXTURES_DIR) / "vvc_grain.266";
     std::vector<Case> cases;
     for (const auto& [gpu, device] : devices_) {
         cases.push_back({"H.264 on " + gpu, h264, device});
@@ -578,19 +575,18 @@ TEST_F(NativeDecoderTest, ARawStreamsFramesAreCountedFromItsStart) {
 
 // A VVC video's film grain is drawn as the Python app draws it: played from
 // the start, every frame of the film grain test's 8-bit stream
-// (tests/fixtures/vvc_grain.266) and of its 10-bit one (vvc_grain_10bit.266)
-// is the Python app's frame (vvc_grain_app.npz, from make_vvc_grain.py
-// --app), luma and chroma. That is FFmpeg's own frame where FFmpeg draws
-// the grain (8-bit, a message that persists), and the grain library's where
-// it does not (10-bit, a message for its own frame only), and the frame as
-// decoded where there is none. It needs the grain library
-// (vmaf_app/native/d3d11_film_grain.dll, scripts/build_d3d11_film_grain.ps1).
+// (fixtures/vvc_grain.266) and of its 10-bit one (vvc_grain_10bit.266) is
+// the Python app's frame (vvc_grain_app.npz, from make_vvc_grain.py --app),
+// luma and chroma. That is FFmpeg's own frame where FFmpeg draws the grain
+// (8-bit, a message that persists), and the grain library's where it does
+// not (10-bit, a message for its own frame only), and the frame as decoded
+// where there is none. It needs the grain library
+// (resources/native/d3d11_film_grain.dll, scripts/build_d3d11_film_grain.ps1).
 TEST_F(NativeDecoderTest, VvcFilmGrainIsDrawnAsThePythonAppDrawsIt) {
     if (const std::optional<QString> problem = NativeGrain::unavailable()) {
         GTEST_SKIP() << problem->toStdString();
     }
-    const std::filesystem::path fixtures =
-        std::filesystem::path(VML_REFERENCE_DIR).parent_path().parent_path().parent_path() / "tests" / "fixtures";
+    const std::filesystem::path fixtures = VML_FIXTURES_DIR;
     const std::optional<std::map<std::string, NpyArray>> expected = read_npz(fixtures / "vvc_grain_app.npz");
     ASSERT_TRUE(expected.has_value());
     constexpr int width = 64;
@@ -835,15 +831,12 @@ TEST_F(NativeDecoderTest, FilmGrainOnOtherFormatsIsTheLibrarysDrawingShownAs420)
 
 // AV1's film grain in a VVC video (AFGS1), which the grain library does not
 // draw, is left to FFmpeg, which does: frames 0 and 9 of a VVC clip with it
-// (tests/fixtures/vvc_afgs1.mkv: FFmpeg's test pattern, 10-bit, its grain
+// (fixtures/vvc_afgs1.mkv: FFmpeg's test pattern, 10-bit, its grain
 // from the AFGS1 Grain Workbench) are ffmpeg.exe's, luma and chroma, the
 // grain drawn on them. (The Python app's GStreamer draws none.)
 TEST_F(NativeDecoderTest, Afgs1FilmGrainIsLeftToFfmpeg) {
     FrameComparison comparison;
-    comparison.source_info = probe_video(
-        std::filesystem::path(VML_REFERENCE_DIR).parent_path().parent_path().parent_path() / "tests" / "fixtures" /
-            "vvc_afgs1.mkv",
-        found_->ffprobe);
+    comparison.source_info = probe_video(std::filesystem::path(VML_FIXTURES_DIR) / "vvc_afgs1.mkv", found_->ffprobe);
     comparison.distorted_info = comparison.source_info;
     comparison.fps = comparison.source_info.fps;
     for (const long long wanted : {0LL, 9LL}) {

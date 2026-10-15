@@ -3,7 +3,7 @@
 // GPU with Vulkan uses.
 //
 // On NVIDIA's GPUs the pictures are decoded into GPU memory
-// (vmaf_app/native/nvdec_frames.dll); Intel's and AMD's decoders hand them
+// (resources/native/nvdec_frames.dll); Intel's and AMD's decoders hand them
 // over in system memory (vpl_frames.dll, amf_frames.dll), but for VMAF v1
 // on the GPU AMD's pictures stay on the GPU too: decoded by Windows' own
 // decoder (Media Foundation's, through Direct3D 11: mf_frames.dll) where it

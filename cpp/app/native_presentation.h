@@ -1,6 +1,6 @@
 // How Video Compare's native playback shows its frames (the Python app's
 // LockedPresentation): the app's own Direct3D 11 presenter
-// (vmaf_app/native/d3d11_tonemap.dll, native/d3d11_tonemap.cpp) draws them
+// (resources/native/d3d11_tonemap.dll, native/d3d11_tonemap.cpp) draws them
 // into a swapchain in a window of its own over the view, on the decoders'
 // device, taking one frame per display refresh.
 //

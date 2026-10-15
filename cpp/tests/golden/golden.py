@@ -24,7 +24,10 @@ results and saved scores: exactly, or with --digits N, numbers to N
 significant digits (for results made on another PC or system).
 
 The clips live outside the repository, in the folder VML_GOLDEN_CLIPS names,
-or Documents/VideoMetricsLab-golden/clips. Run with the app's Python from the
+or Documents/VideoMetricsLab-golden/clips. The Python app is a checkout of
+its last release (the release/v2.1 branch), in the folder VML_PYTHON_APP
+names, run with the Python this script runs with, which needs the Python
+app's requirements (that checkout's requirements.txt). Run from the
 repository's root:
 
     .venv\\Scripts\\python.exe cpp\\tests\\golden\\golden.py run --out run1
@@ -46,8 +49,18 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 REPOSITORY = HERE.parents[2]
-#: The Python app's command line, run as python -c this.
-PYTHON_CLI = "import sys; from vmaf_app.cli import main; sys.exit(main(sys.argv[1:]))"
+#: The Python app's command line, run as python -c this with the checkout's
+#: folder first on the path.
+PYTHON_CLI = "import sys; sys.path.insert(0, {checkout!r}); from vmaf_app.cli import main; " \
+             "sys.exit(main(sys.argv[1:]))"
+
+
+def python_cli() -> list[str]:
+    """The Python app's command line, from the checkout VML_PYTHON_APP names."""
+    named = os.environ.get("VML_PYTHON_APP")
+    if not named or not (Path(named) / "vmaf_app" / "cli.py").is_file():
+        sys.exit("name a checkout of the Python app (the release/v2.1 branch) with VML_PYTHON_APP")
+    return [sys.executable, "-c", PYTHON_CLI.format(checkout=str(Path(named).resolve()))]
 
 
 def clips_folder() -> Path:
@@ -96,7 +109,7 @@ def run_cases(out: Path, app: Path | None, names: list[str],
     A case with "seeds" has runs before its own, in the same profile, to
     save scores that its own run finds: each as a seed says ({"app":
     "python" or "cpp", and the run's "tests" and "args", the case's own
-    where not given}). Their Python app is `python_app` (this repository's
+    where not given}). Their Python app is `python_app` (VML_PYTHON_APP's
     if None), their C++ app `cpp_app` (`app` if None): so each app is held
     to reading the other's saved scores."""
     cases = [case for case in load("cases.json")["cases"] if not names or case["name"] in names]
@@ -104,8 +117,10 @@ def run_cases(out: Path, app: Path | None, names: list[str],
     if missing:
         print(f"no case called {', '.join(sorted(missing))}")
         return 2
-    python_cli = [sys.executable, "-c", PYTHON_CLI]
-    seeders = {"python": [str(python_app)] if python_app else python_cli,
+    needs_python = not app or (not python_app and any(seed["app"] == "python" for case in cases
+                                                      for seed in case.get("seeds", ())))
+    python = python_cli() if needs_python else []
+    seeders = {"python": [str(python_app)] if python_app else python,
                "cpp": [str(cpp_app or app)] if cpp_app or app else None}
     if seeders["cpp"] is None and any(seed["app"] == "cpp" for case in cases for seed in case.get("seeds", ())):
         print("the C++ app saves scores first in some of these cases: name it with --cpp-app")
@@ -117,7 +132,7 @@ def run_cases(out: Path, app: Path | None, names: list[str],
         folder.mkdir(parents=True, exist_ok=True)
         videos = [str(clips / case["reference"]), *(str(clips / name) for name in case["tests"])]
         options = [*case["args"], "--json", str(folder / "results.json"), "--csv", str(folder / "csv"), "-q"]
-        command = ([str(app)] if app else python_cli) + ["compare", *videos, *options]
+        command = ([str(app)] if app else python) + ["compare", *videos, *options]
         with tempfile.TemporaryDirectory(prefix="vml-golden-profile-") as profile:
             # A fresh home: no saved scores, no black bars kept, and no
             # settings but the case's own, in both apps' settings.json.
@@ -273,15 +288,16 @@ def compare_runs(first: Path, second: Path, digits: int | None) -> int:
 
 
 #: A bundled model's path as a saved score records it, "path=" and the path
-#: to vmaf_app/models: each app saves its own copy's, and the two apps
+#: to the app's models folder (the Python app's vmaf_app/models, the C++
+#: app's resources/models): each app saves its own copy's, and the two apps
 #: compared here run from different folders.
-_BUNDLED_MODEL = re.compile(r"path=.*?(vmaf_app[\\/]models[\\/])")
+_BUNDLED_MODEL = re.compile(r"path=.*?(?:vmaf_app|resources)[\\/]models[\\/]")
 
 
 def _app_relative(value):
     """`value` with each bundled model's path from the app's own folder on."""
     if isinstance(value, str):
-        return _BUNDLED_MODEL.sub(r"path=<app>/\1", value)
+        return _BUNDLED_MODEL.sub("path=<app>/models/", value)
     if isinstance(value, dict):
         return {key: _app_relative(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -304,9 +320,10 @@ def main() -> int:
     commands.add_parser("clips", help="make the clips")
     run = commands.add_parser("run", help="run the cases")
     run.add_argument("--out", type=Path, required=True, help="the folder for the results")
-    run.add_argument("--app", type=Path, help="the C++ app's vml-cli (default: the Python app)")
+    run.add_argument("--app", type=Path, help="the C++ app's vml-cli (default: the Python app, "
+                                             "from VML_PYTHON_APP)")
     run.add_argument("--python-app", type=Path, help="the Python app's command line for the cases it saves scores "
-                                                     "for first (default: this repository's)")
+                                                     "for first (default: VML_PYTHON_APP's)")
     run.add_argument("--cpp-app", type=Path, help="the C++ app's vml-cli for the cases it saves scores for first "
                                                   "(default: --app)")
     run.add_argument("--case", action="append", default=[], help="run only this case (repeatable)")

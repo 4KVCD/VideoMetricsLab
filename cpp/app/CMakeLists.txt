@@ -48,7 +48,7 @@ target_compile_definitions(vml_app PUBLIC VML_APP_VERSION="${PROJECT_VERSION}-de
                                           VML_APP_RELEASE="${PROJECT_VERSION}")
 
 if(WIN32 AND MSVC)
-    # Video Compare's native playback: FFmpeg's libraries (vmaf_app/tools/
+    # Video Compare's native playback: FFmpeg's libraries (resources/tools/
     # ffmpeg, built by scripts/build_ffmpeg_decoders.ps1, which vendors their
     # headers and exports into native/ffmpeg) and Direct3D 11. They are
     # linked through import libraries made from their exports, and loaded
@@ -88,7 +88,7 @@ endif()
 
 if(WIN32)
     # Qt's translations of its own dialogs and buttons (qtbase_<code>.qm), for
-    # each language the window has a catalog for (vmaf_app/translations) and
+    # each language the window has a catalog for (resources/translations) and
     # Qt has translated, put in the translations folder beside `target`: Qt
     # looks there for a program with its libraries beside it (QLibraryInfo;
     # install_qt_translations in i18n.h). The package takes the program's.
@@ -97,7 +97,7 @@ if(WIN32)
     # translations (qttranslations) are not installed.
     function(vml_deploy_qt_translations target)
         set(qt_translations "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_TRANSLATIONS}")
-        file(GLOB catalogs "${PROJECT_SOURCE_DIR}/../vmaf_app/translations/*.json")
+        file(GLOB catalogs "${PROJECT_SOURCE_DIR}/../resources/translations/*.json")
         set(files "")
         foreach(catalog IN LISTS catalogs)
             get_filename_component(code "${catalog}" NAME_WE)
@@ -115,7 +115,7 @@ if(WIN32)
 
     # Qt's libraries and plugins beside the program, so that it runs from the
     # build folder, the same ones as the packaged app's
-    # (scripts/build_cpp_release.ps1 says why the others are left out), and
+    # (scripts/build_release.ps1 says why the others are left out), and
     # Qt's translations.
     add_custom_command(TARGET VideoMetricsLab POST_BUILD
         COMMAND Qt6::windeployqt --no-translations --no-system-d3d-compiler --no-system-dxc-compiler

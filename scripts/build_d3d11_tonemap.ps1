@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $projectDirectory = Split-Path $PSScriptRoot -Parent
-$outputDirectory = Join-Path $projectDirectory 'vmaf_app/native'
+$outputDirectory = Join-Path $projectDirectory 'resources/native'
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 & g++ -std=c++17 -O2 -shared -static `
     (Join-Path $projectDirectory 'native/d3d11_tonemap.cpp') `

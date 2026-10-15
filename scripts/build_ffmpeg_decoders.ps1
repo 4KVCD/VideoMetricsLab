@@ -1,5 +1,5 @@
 # Builds the FFmpeg the app decodes with in its own processes, into
-# vmaf_app/tools/ffmpeg:
+# resources/tools/ffmpeg:
 #   avcodec-63.dll, avutil-61.dll   FFmpeg's libavcodec and libavutil, which
 #                                   the software frame decoder (native/
 #                                   software_frames.cpp) decodes with
@@ -14,7 +14,7 @@
 # archive. It is configured LGPL (no --enable-gpl, no --enable-nonfree), with
 # no external library, program, filter or network: only the decoders, parsers
 # and demuxers listed below (the videos and soundtracks the Python app's
-# GStreamer plays), Direct3D 11's video decoding for H.264, HEVC, VP9, AV1 and
+# GStreamer played), Direct3D 11's video decoding for H.264, HEVC, VP9, AV1 and
 # MPEG-2, NASM's assembly, Windows' threads, and the C runtime's support
 # linked in, so the DLLs need only Windows. libavcodec imports libswresample
 # (the Opus decoder resamples). The DLLs and headers are committed, as
@@ -30,7 +30,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $projectDirectory = Split-Path $PSScriptRoot -Parent
-$output = Join-Path $projectDirectory 'vmaf_app/tools/ffmpeg'
+$output = Join-Path $projectDirectory 'resources/tools/ffmpeg'
 $headers = Join-Path $projectDirectory 'native/ffmpeg'
 # Outside the repository: it normally lives in OneDrive (docs/BUILD.md).
 $work = Join-Path $env:LOCALAPPDATA "VideoMetricsLab-build/ffmpeg-$Version"

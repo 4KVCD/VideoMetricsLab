@@ -1,7 +1,6 @@
 // The grain of a frame as d3d11_film_grain.dll takes it: worked out from a
-// film grain characteristics SEI message (H.274) by the Python app
-// (vmaf_app/core/d3d11_film_grain.py, native_params) and by the C++ app
-// (cpp/core/include/vml/film_grain.h), both laid out as here.
+// film grain characteristics SEI message (H.274) by the app
+// (cpp/core/include/vml/film_grain.h), laid out as here.
 #pragma once
 
 #include <stdint.h>

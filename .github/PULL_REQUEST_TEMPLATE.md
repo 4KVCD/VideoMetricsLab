@@ -4,8 +4,8 @@ What changed and why? Link relevant issues.
 
 ## Verification
 
-- [ ] Regression tests added for fixes; one bug fix per commit
-- [ ] Ruff and pytest pass (or failures/skips explained below)
+- [ ] A test for each fix where one would catch the bug coming back; one bug fix per commit
+- [ ] The unit tests pass, Release and Debug (or failures/skips explained below)
 - [ ] Persistence and cache behavior considered
 - [ ] Documentation updated where behavior changes
 - [ ] No private media, secrets, user settings or result caches included

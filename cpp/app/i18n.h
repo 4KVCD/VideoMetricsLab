@@ -1,6 +1,6 @@
 // The window's text in the user's language, as the Python app's
 // vmaf_app/i18n.py gives it, from the same catalogs
-// (vmaf_app/translations/<code>.json).
+// (resources/translations/<code>.json).
 //
 // The app opens in Windows' display language when it has a translation for
 // it, and in English otherwise; Settings > Window > Language can choose

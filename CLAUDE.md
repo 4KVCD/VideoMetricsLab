@@ -1,15 +1,22 @@
 # Rules for Claude Code sessions on VideoMetricsLab
 
-Repository: github.com/4KVCD/VideoMetricsLab. Work on the current release
-branch (`release/v2.0` at the time of writing) unless told otherwise, and pull
-before you start. Follow these rules for all work.
+Repository: github.com/4KVCD/VideoMetricsLab. Work on the current branch of
+the app (`cpp-port`, the C++ app, v3.0, at the time of writing) unless told
+otherwise, and pull before you start. Follow these rules for all work.
 
 ## Setup
 
-- Python: `.venv\Scripts\python.exe` (3.14). FFmpeg 9 or newer must be
-  installed.
-- After pulling, rebuild the GPU decoder DLLs with
-  `scripts\build_gpu_frames.ps1` if your copies are older than the pull.
+- The app is C++ (`cpp`; building it: `cpp\README.md`): Visual Studio 2022 or
+  its Build Tools, CMake 3.25+, Qt 6.12 (its MSVC 2022 build, with Qt's
+  translations), and MinGW-w64's g++ for the native libraries. FFmpeg 9 or
+  newer must be installed.
+- Python: `.venv\Scripts\python.exe` (3.14, `requirements-dev.txt`), for the
+  repository's scripts. The Python app, whose answers the C++ app's
+  reference values and golden suite hold it to, is a checkout of its last
+  release (the `release/v2.1` branch) in the folder `VML_PYTHON_APP` names.
+- After pulling, rebuild the native libraries with
+  `scripts\build_gpu_frames.ps1`, `build_d3d11_tonemap.ps1` and
+  `build_d3d11_film_grain.ps1` if your copies are older than the pull.
 - `libvmaf.dll` and `vmaf_vulkan.dll` are committed and come from libvmaf-fast
   (github.com/4KVCD/libvmaf-fast). A change to libvmaf or the Vulkan shaders
   is made in that fork, not here. During development they are a build of the
@@ -64,17 +71,22 @@ A fixed step between "tests pass" and "commit".
 
 ## Tests
 
-- Before every commit run both, and both must pass (set `PYTHONUTF8=1`):
+- Before every commit build Release and Debug and run these from `cpp`, and
+  they must pass:
 
-      .venv\Scripts\python.exe -m ruff check --output-format concise vmaf_app tests scripts
-      .venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+      ctest --preset windows-release
+      ctest --preset windows-debug
 
-- If the suite hangs, rerun with `-n 0 -o faulthandler_timeout=60` to find
-  where.
-- The C++ app's unit tests too, Release and Debug, from `cpp`:
-  `ctest --preset windows-release` and `ctest --preset windows-debug`. Its
-  integration tests (`windows-release-integration`) run when their code
-  changes, at the end of each phase of work and before a release.
+  and, from the repository's root, after changing a Python script or the
+  window's text (set `PYTHONUTF8=1`):
+
+      .venv\Scripts\python.exe -m ruff check --output-format concise scripts cpp/tests
+      .venv\Scripts\python.exe scripts\i18n_catalog.py check
+
+- The integration tests (`ctest --preset windows-release-integration`) run
+  when their code changes, at the end of each phase of work and before a
+  release.
+- If a test hangs, run its program alone with `--gtest_filter` to find where.
 - A unit test takes at most 100 ms (gtest's time, Release build). A slower
   one is an integration test: put it on an integration list in
   `cpp/tests/CMakeLists.txt`.

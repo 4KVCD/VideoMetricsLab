@@ -1,6 +1,6 @@
 # Builds dav1d, the AV1 decoder the app decodes AV1 with in software (the
 # software frame decoder, native/software_frames.cpp, and Video Compare's
-# playback, cpp/app/native_dav1d.cpp), into vmaf_app/tools/ffmpeg beside
+# playback, cpp/app/native_dav1d.cpp), into resources/tools/ffmpeg beside
 # FFmpeg's libraries, where the app looks for it:
 #   dav1d.dll                     VideoLAN's dav1d
 #   licenses/COPYING.dav1d.txt    its licence (BSD 2-clause)
@@ -42,7 +42,7 @@ function Invoke-Program([string]$What, [scriptblock]$Command) {
 }
 
 $projectDirectory = Split-Path $PSScriptRoot -Parent
-$output = Join-Path $projectDirectory 'vmaf_app/tools/ffmpeg'
+$output = Join-Path $projectDirectory 'resources/tools/ffmpeg'
 # Outside the repository: it normally lives in OneDrive (docs/BUILD.md).
 $work = Join-Path $env:LOCALAPPDATA "VideoMetricsLab-build/dav1d-$Version"
 

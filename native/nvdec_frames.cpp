@@ -3,7 +3,7 @@
 // without a copy through system memory or a CPU conversion.
 //
 // The app feeds it the compressed packets (FFmpeg copies the stream out of
-// its container: vmaf_app/core/nvdec_frames.py) with their timestamps. NVIDIA's
+// its container: cpp/core/src/gpu_frames.cpp) with their timestamps. NVIDIA's
 // parser (nvcuvid) finds the pictures in them, the decoder decodes them, and
 // each picture, in display order, is converted by a small kernel from the
 // decoder's NV12/P016 surface into a slot of a pool in GPU memory: the luma,

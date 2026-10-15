@@ -1,5 +1,5 @@
 // The app's own libvmaf: libvmaf-fast (github.com/4KVCD/libvmaf-fast), a
-// fork of libvmaf shipped in vmaf_app/tools/libvmaf. The app calls it in its
+// fork of libvmaf shipped in resources/tools/libvmaf. The app calls it in its
 // own process: to have libvmaf predict VMAF from the features the Vulkan
 // engine measures, for VMAF and NEG with CUDA, and for PSNR, SSIM and XPSNR.
 // A port of vmaf_app/core/libvmaf.py.

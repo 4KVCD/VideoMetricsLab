@@ -1,5 +1,5 @@
 // FFmpeg's headers as Video Compare's native playback uses them: the
-// bundled libraries (vmaf_app/tools/ffmpeg, scripts/build_ffmpeg_decoders.ps1,
+// bundled libraries (resources/tools/ffmpeg, scripts/build_ffmpeg_decoders.ps1,
 // which vendors these headers and what they include into native/ffmpeg by
 // reading this file). Windows only, for now: Direct3D 11's video decoding,
 // and WASAPI for the soundtrack.

@@ -4,8 +4,8 @@
 // with the same C API (gpu_frames.h).
 //
 // oneVPL parses the stream itself, as NVIDIA's decoder does: the app feeds
-// it the packets FFmpeg copies out of the container (vmaf_app/core/
-// nvdec_frames.py) with their timestamps, and gets the pictures back in
+// it the packets FFmpeg copies out of the container (cpp/core/src/
+// gpu_frames.cpp) with their timestamps, and gets the pictures back in
 // display order, in system memory. On Intel's integrated GPUs that is the
 // GPU's own memory, filled by the GPU. nvf_download then makes the one CPU pass a
 // picture costs: the crop's luma copied, U and V split out of their

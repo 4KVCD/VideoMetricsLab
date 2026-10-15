@@ -1,5 +1,5 @@
 # Builds the frame decoders the GPU metrics read their frames from, into
-# vmaf_app/native: nvdec_frames.dll (NVIDIA, native/nvdec_frames.cpp),
+# resources/native: nvdec_frames.dll (NVIDIA, native/nvdec_frames.cpp),
 # vpl_frames.dll (Intel, native/vpl_frames.cpp), amf_frames.dll (AMD,
 # native/amf_frames.cpp), mf_frames.dll (AMD, Windows' own decoders:
 # native/mf_frames.cpp) and software_frames.dll (what FFmpeg decodes in
@@ -14,7 +14,7 @@
 # headers (all MIT; amf_frames hands its pictures over to Vulkan on the GPU).
 $ErrorActionPreference = 'Stop'
 $projectDirectory = Split-Path $PSScriptRoot -Parent
-$outputDirectory = Join-Path $projectDirectory 'vmaf_app/native'
+$outputDirectory = Join-Path $projectDirectory 'resources/native'
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 $native = Join-Path $projectDirectory 'native'
 foreach ($build in @(

@@ -1,6 +1,6 @@
 # Builds libvmaf-fast (https://github.com/4KVCD/libvmaf-fast) from the latest
 # commit of a branch of its local clone (the fast branch of
-# Documents\libvmaf-fast by default) into vmaf_app/tools, where
+# Documents\libvmaf-fast by default) into resources/tools, where
 # fetch_libvmaf_fast.ps1 puts a release:
 #   libvmaf/libvmaf.dll          libvmaf with CUDA
 #   vmaf_vulkan/vmaf_vulkan.dll  VMAF's features with Vulkan
@@ -32,7 +32,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $projectDirectory = Split-Path $PSScriptRoot -Parent
-$tools = Join-Path $projectDirectory 'vmaf_app/tools'
+$tools = Join-Path $projectDirectory 'resources/tools'
 
 function Invoke-Checked([string]$what, [scriptblock]$command) {
     & $command

@@ -1,5 +1,5 @@
-"""Makes the film grain test's fixtures: tests/fixtures/vvc_grain.266 (a small
-VVC stream with film grain messages) and tests/fixtures/vvc_grain.npz
+"""Makes the film grain tests' fixtures, in this folder: vvc_grain.266 (a
+small VVC stream with film grain messages) and vvc_grain.npz
 (FFmpeg's decoded frames of it, with and without the grain).
 
 How the stream is made:
@@ -17,15 +17,20 @@ How the stream is made:
      for its own frame, but does not draw it: the stream's frames record
      which frames FFmpeg actually changed.
 
-The test checks the app's parser and GPU synthesis against these results.
+The Python app's test (tests/test_film_grain.py, on the release/v2.1 branch)
+checks its parser and GPU synthesis against these results; the C++ app's
+tests play the stream (cpp/tests/app/native_decoder_test.cpp).
 
-Usage (needs FFmpeg 8 or newer, built with libvvenc, on PATH):
-    python tests/fixtures/make_vvc_grain.py
-    python tests/fixtures/make_vvc_grain.py --app   (see app_main)
+The Python app is a checkout of its last release (the release/v2.1 branch),
+in the folder VML_PYTHON_APP names, run with a Python that has its
+requirements. Usage (needs FFmpeg 8 or newer, built with libvvenc, on PATH):
+    python cpp/tests/fixtures/make_vvc_grain.py
+    python cpp/tests/fixtures/make_vvc_grain.py --app   (see app_main)
 """
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -33,8 +38,11 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT))
+FIXTURES = Path(__file__).resolve().parent
+PYTHON_APP = Path(os.environ.get("VML_PYTHON_APP") or "")
+if not (PYTHON_APP / "vmaf_app" / "__init__.py").is_file():
+    sys.exit("name a checkout of the Python app (the release/v2.1 branch) with VML_PYTHON_APP")
+sys.path.insert(0, str(PYTHON_APP))
 from vmaf_app.core import film_grain
 
 WIDTH, HEIGHT, FRAMES = 64, 48, 17
@@ -164,14 +172,14 @@ def main() -> None:
         "-f", "vvc", str(encoded))
 
     stream = with_grain_messages(encoded)
-    fixture = ROOT / "tests" / "fixtures" / "vvc_grain.266"
+    fixture = FIXTURES / "vvc_grain.266"
     fixture.write_bytes(stream)
 
     grained = decode(fixture, "yuv420p")
     plain = decode(fixture, "yuv420p", "-export_side_data", "film_grain")
     seeds = grain_seeds(fixture)
     applied = (grained != plain).any(axis=1)
-    np.savez_compressed(ROOT / "tests" / "fixtures" / "vvc_grain.npz",
+    np.savez_compressed(FIXTURES / "vvc_grain.npz",
                         plain=plain, grained=grained, seeds=np.array(seeds), applied=applied)
     print(f"{fixture.name}: {len(stream)} bytes, {len(plain)} frames, seeds {seeds}, "
           f"frames FFmpeg drew grain on: {int(applied.sum())}")
@@ -218,20 +226,21 @@ def grain_seeds(fixture: Path) -> list[int]:
 def app_main() -> None:
     """--app: the frames the Python app draws the grain on, every one of them,
     for the C++ app's test of its own drawing (cpp/tests/app/
-    native_decoder_test.cpp): tests/fixtures/vvc_grain_10bit.266, the same
-    schedule of messages in a 10-bit stream, and tests/fixtures/
-    vvc_grain_app.npz, the Python app's frames of both fixtures (the grain
+    native_decoder_test.cpp): vvc_grain_10bit.266, the same schedule of
+    messages in a 10-bit stream, and vvc_grain_app.npz, the Python app's
+    frames of both fixtures (the grain
     library on Windows' software renderer). FFmpeg draws no grain on 10-bit
     video, nor a message that does not persist on its own frame (see the top
-    of the file), so these frames are the Python app's alone. Needs
-    vmaf_app/native/d3d11_film_grain.dll (scripts/build_d3d11_film_grain.ps1)."""
+    of the file), so these frames are the Python app's alone. Needs the
+    checkout's vmaf_app/native/d3d11_film_grain.dll (its
+    scripts/build_d3d11_film_grain.ps1)."""
     from vmaf_app.core import d3d11_film_grain
 
     encoded = Path(tempfile.mkdtemp()) / "encoded.266"
     run("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={WIDTH}x{HEIGHT}:rate=24",
         "-frames:v", str(FRAMES), "-vf", "noise=alls=12:allf=t,format=yuv420p10le", "-c:v", "libvvenc",
         "-preset", "faster", "-qp", "28", "-vvenc-params", "IntraPeriod=16", "-f", "vvc", str(encoded))
-    ten_bit = ROOT / "tests" / "fixtures" / "vvc_grain_10bit.266"
+    ten_bit = FIXTURES / "vvc_grain_10bit.266"
     ten_bit.write_bytes(with_grain_messages(encoded))
 
     def drawn(fixture: Path, frames: np.ndarray, depth: int) -> np.ndarray:
@@ -259,9 +268,9 @@ def app_main() -> None:
                                          d3d11_film_grain.synthesize(planes, params, software=True)])
         return out
 
-    eight_bit = ROOT / "tests" / "fixtures" / "vvc_grain.266"
+    eight_bit = FIXTURES / "vvc_grain.266"
     plain_10 = decode(ten_bit, "yuv420p10le", "-export_side_data", "film_grain")
-    np.savez_compressed(ROOT / "tests" / "fixtures" / "vvc_grain_app.npz",
+    np.savez_compressed(FIXTURES / "vvc_grain_app.npz",
                         grained_8=drawn(eight_bit, decode(eight_bit, "yuv420p", "-export_side_data", "film_grain"), 8),
                         plain_10=plain_10, grained_10=drawn(ten_bit, plain_10, 10),
                         seeds_10=np.array(grain_seeds(ten_bit)))

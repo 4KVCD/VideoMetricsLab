@@ -64,6 +64,6 @@ target_include_directories(vml_core PUBLIC ../../native/h274)
 target_include_directories(vml_core SYSTEM PUBLIC ../third_party/libvmaf-fast/include)
 target_link_libraries(vml_core PUBLIC vml_platform nlohmann_json PRIVATE vml_compile_options vml_miniz)
 # The app's own files (VMAF models, bundled tools) in a development build:
-# the repository's vmaf_app folder. An installed app sets VML_RESOURCES.
-cmake_path(SET resources NORMALIZE "${PROJECT_SOURCE_DIR}/../vmaf_app")
+# the repository's resources folder. An installed app sets VML_RESOURCES.
+cmake_path(SET resources NORMALIZE "${PROJECT_SOURCE_DIR}/../resources")
 target_compile_definitions(vml_core PRIVATE VML_DEFAULT_RESOURCES="${resources}")

@@ -22,9 +22,14 @@ The ffprobe cases use ffprobe's real output on the golden clips
 (cpp/tests/golden; golden.py clips makes them), kept in the file, so the
 tests need neither the clips nor ffprobe.
 
-Run it with the app's Python from the repository's root, after changing any
-of those, and commit what it writes:
+The Python app is a checkout of its last release (the release/v2.1 branch),
+in the folder VML_PYTHON_APP names; the window's text is this repository's
+catalogs (resources/translations) as the Python app reads them. Run it,
+with a Python that has the Python app's requirements (that checkout's
+requirements.txt), from the repository's root after changing any of those,
+and commit what it writes:
 
+    set VML_PYTHON_APP=<the checkout>
     .venv\\Scripts\\python.exe cpp\\tests\\reference\\make_reference.py
 
 Numbers are written with float.hex() ("0x1.7a00000000000p+6", "inf", "nan"),
@@ -36,15 +41,22 @@ from __future__ import annotations
 import contextlib
 import json
 import math
+import os
 import random
 import re
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parents[2]))  # the repository's root, for vmaf_app
+REPOSITORY = HERE.parents[2]
+#: The Python app, whose answers these are: a checkout of its last release
+#: (the release/v2.1 branch), in the folder VML_PYTHON_APP names.
+PYTHON_APP = Path(os.environ.get("VML_PYTHON_APP") or "")
+if not (PYTHON_APP / "vmaf_app" / "__init__.py").is_file():
+    sys.exit("name a checkout of the Python app (the release/v2.1 branch) with VML_PYTHON_APP")
+sys.path.insert(0, str(PYTHON_APP))  # for vmaf_app
+sys.path.insert(0, str(REPOSITORY))  # first, for this repository's scripts
 
-import os
 import struct
 import subprocess
 import tempfile
@@ -461,7 +473,7 @@ def decision_cases() -> dict:
                  "size": list(compared_dimensions(video(width=s[0], height=s[1]), video(width=t[0], height=t[1]), d))}
                 for s, t in (((3840, 2160), (1920, 1080)), ((1920, 1080), (1920, 1080)), ((1920, 800), (3840, 1600)))
                 for d in ScaleDirection]
-    root = Path(__file__).resolve().parents[3] / "vmaf_app"
+    root = PYTHON_APP.resolve() / "vmaf_app"
 
     def model(choice: str, choice_v1: str, size: tuple[int, int]) -> dict:
         options = VmafOptions(model_choice=choice, model_choice_v1=choice_v1, custom_model_path="C:/m/custom.json")
@@ -539,7 +551,7 @@ def run_cases() -> dict:
     crops = {"none": (None, None), "letterbox": (CropBox(3840, 1608, 0, 276), CropBox(1920, 804, 0, 138))}
     plans = {"software": HwAccelPlan(), "cuda": HwAccelPlan("cuda", "cuda"), "cuda source": HwAccelPlan(source="cuda"),
              "qsv": HwAccelPlan("qsv", "qsv"), "d3d11va test": HwAccelPlan(distorted="d3d11va")}
-    v1_model = Path(__file__).resolve().parents[3] / "vmaf_app" / "models" / "vmaf_v1.0.16" / "vmaf_v1.0.16_3d0h.json"
+    v1_model = PYTHON_APP.resolve() / "vmaf_app" / "models" / "vmaf_v1.0.16" / "vmaf_v1.0.16_3d0h.json"
     choices = {
         "vmaf": dict(compute_vmaf=True),
         "vmaf, neg": dict(compute_vmaf=True, compute_vmaf_neg=True),
@@ -966,8 +978,9 @@ def argument_cases() -> list[dict]:
     import contextlib
     import io
 
-    from vmaf_app import APP_NAME, __version__
     from vmaf_app.cli import build_parser
+
+    from vmaf_app import APP_NAME, __version__
 
     version = f"{APP_NAME} {__version__}"
     saved = {name: os.environ.get(name) for name in ("COLUMNS", "NO_COLOR")}
@@ -1093,7 +1106,6 @@ def predict_cases() -> list[dict]:
     scores are clipped at 0 and one at 100. The features are given under
     the names libvmaf's extractors use."""
     import numpy as np
-
     from vmaf_app.core import vmaf_vulkan
 
     values = random.Random(11)
@@ -1835,9 +1847,10 @@ def devices_cases() -> list[dict]:
     import io
     from types import SimpleNamespace
 
-    from vmaf_app import cli
     from vmaf_app.core import ffmpeg_locate, libvmaf, perceptual_vship, vmaf_gpu, vmaf_runner, vmaf_v1_gpu
     from vmaf_app.core.models import GpuVendor
+
+    from vmaf_app import cli
 
     real_settings = cli.Settings
 
@@ -1958,7 +1971,6 @@ def run_file_cases() -> dict:
     import tempfile
 
     import numpy as np
-
     from vmaf_app.core import run_io
     from vmaf_app.core.builtin_models import builtin_choice
     from vmaf_app.core.metric_results import (
@@ -2126,7 +2138,6 @@ def metric_cache_cases() -> dict:
     from types import SimpleNamespace
 
     import numpy as np
-
     from vmaf_app.core import metric_cache
     from vmaf_app.core.builtin_models import builtin_choice
     from vmaf_app.core.cvvdp import CvvdpDisplay, CvvdpSettings
@@ -2511,7 +2522,6 @@ def graph_cases() -> dict:
     wide) and at set frames, with all three lines shown and with one hidden."""
     import numpy as np
     from PySide6.QtWidgets import QApplication
-
     from vmaf_app.core.metric_results import (
         FrameMetricResult,
         MetricProvenance,
@@ -2601,7 +2611,6 @@ def chart_cases() -> dict:
     values."""
     import numpy as np
     from PySide6.QtWidgets import QApplication
-
     from vmaf_app.ui import chart
 
     app = QApplication.instance() or QApplication(["make_reference", "-platform", "offscreen"])
@@ -2661,8 +2670,10 @@ def i18n_cases() -> dict:
     fields, the counted texts, and the engine's messages (one of each
     template, and the ways the window meets them: trimmed, with "..." for
     "…", one inside another, several lines)."""
-    from scripts.i18n_catalog import keys
+    from scripts.i18n_catalog import TRANSLATIONS_DIR, keys
     from vmaf_app import i18n
+
+    i18n.TRANSLATIONS_DIR = TRANSLATIONS_DIR  # this repository's catalogs, not the checkout's
 
     strings, plurals = keys()
     counts = [*range(230), 1000, 1001, 1002, 1011, 1012, 1021, 1100, 1111, 10**6, 10**6 + 1, 2**31 + 1]
@@ -3146,7 +3157,6 @@ def bitrate_cases() -> dict:
     import io
 
     import numpy as np
-
     from vmaf_app.core import bitrate as br
     from vmaf_app.core.models import VideoInfo
 
@@ -3261,7 +3271,7 @@ def film_grain_cases() -> dict:
     """The film grain library's parameters for a VVC frame's film grain
     message (core/d3d11_film_grain.py: plane_sizes and native_params), from
     the Python app's own functions: the film grain test's messages
-    (tests/fixtures/make_vvc_grain.py) and messages that reach each of the
+    (cpp/tests/fixtures/make_vvc_grain.py) and messages that reach each of the
     conversion's rules (model values missing, cutoffs past either end, a
     strong grain, the autoregressive model), on frames of each chroma
     subsampling, depth and an odd size. Only each plane's used intervals

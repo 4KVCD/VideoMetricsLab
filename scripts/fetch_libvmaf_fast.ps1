@@ -1,5 +1,5 @@
 # Fetches libvmaf-fast (https://github.com/4KVCD/libvmaf-fast), the fork of
-# Netflix's libvmaf the app's GPU VMAF comes from, into vmaf_app/tools:
+# Netflix's libvmaf the app's GPU VMAF comes from, into resources/tools:
 #   libvmaf/libvmaf.dll          libvmaf with CUDA: VMAF and VMAF NEG on NVIDIA
 #                                GPUs, and the libvmaf every GPU scorer
 #                                predicts with and VMAF v1's CAMBI and SpEED
@@ -27,7 +27,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $projectDirectory = Split-Path $PSScriptRoot -Parent
-$tools = Join-Path $projectDirectory 'vmaf_app/tools'
+$tools = Join-Path $projectDirectory 'resources/tools'
 $name = "libvmaf-fast-$Version-windows-x64"
 $work = Join-Path $env:TEMP "fetch-$name"
 if (Test-Path $work) { Remove-Item -Recurse -Force $work }

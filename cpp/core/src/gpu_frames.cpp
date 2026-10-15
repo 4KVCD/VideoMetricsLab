@@ -279,10 +279,9 @@ std::filesystem::path library_path(std::string_view backend) {
 
 // The software decoder's libraries: FFmpeg's libavutil and libavcodec with
 // only the decoders it needs (LGPL, built by
-// scripts/build_ffmpeg_decoders.ps1), and dav1d for AV1 (dav1d_library_path),
-// all beside each other. The Python app takes dav1d from its bundled
-// GStreamer instead; a development build of the C++ app has none, and FFmpeg
-// decodes the AV1 videos FFmpeg would decode in software.
+// scripts/build_ffmpeg_decoders.ps1), and dav1d for AV1 (dav1d_library_path,
+// built by scripts/build_dav1d.ps1), all beside each other. Without dav1d,
+// FFmpeg decodes the AV1 videos FFmpeg would decode in software.
 std::filesystem::path software_folder() { return resource_folder() / "tools" / "ffmpeg"; }
 constexpr std::array<const char*, 2> ffmpeg_libraries{"avutil-61.dll", "avcodec-63.dll"};
 
