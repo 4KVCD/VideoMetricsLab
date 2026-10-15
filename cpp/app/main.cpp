@@ -26,6 +26,7 @@
 #include "vml/platform/system.h"
 #include "vml/settings.h"
 #include "vml/temp_files.h"
+#include "vml/vmaf_v1_gpu.h"
 #include "vml/vship.h"
 
 namespace {
@@ -143,9 +144,13 @@ int main(int argc, char** argv) {
     // The first probes load Vship and start the GPU's driver, which would
     // freeze the window for as long if it came when the first video is
     // added, and hold up the first run's VMAF; started now, they are done by
-    // then.
+    // then. VMAF v1's (1.75 s on its own) too, when it is calculated by
+    // default on the GPU: the first run waited for it.
     (void)QtConcurrent::run([] { detect_vship_device(); });
     (void)QtConcurrent::run([] { gpu_vmaf_backend(); });
+    if (settings.default_compute_vmaf_v1 && settings.default_vmaf_on_gpu) {
+        (void)QtConcurrent::run([] { v1_available(); });
+    }
 
     app::MainWindow window;
     window.show();

@@ -1,5 +1,10 @@
 #include "devices.h"
 
+#include <future>
+#include <optional>
+#include <string>
+#include <utility>
+
 #include "arguments.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/libvmaf.h"
@@ -58,14 +63,20 @@ int devices() {
     const Settings settings = Settings::load();
     set_gpu_backend(settings.gpu_backend);
     set_vship_backend(settings.gpu_backend);
+    // The GPU checks together rather than one after another: each starts a
+    // process of its own (Vship's took 1.8 s, VMAF's and VMAF v1's 0.5 s).
+    std::future<std::pair<std::optional<VshipDevice>, std::string>> vship_check =
+        std::async(std::launch::async, [] { return detect_vship_device(); });
+    std::future<GpuVmafBackend> vmaf_check = std::async(std::launch::async, [] { return gpu_vmaf_backend(); });
+    std::future<V1Probe> v1_check = std::async(std::launch::async, [] { return v1_available(); });
     DeviceFindings found;
     found.tools = check_tools(settings);
     found.gpu_backend = settings.gpu_backend;
-    const auto [vship, no_vship] = detect_vship_device();
+    const auto [vship, no_vship] = vship_check.get();
     found.vship = vship;
     found.no_vship = no_vship;
-    found.vmaf = gpu_vmaf_backend();
-    found.v1 = v1_available();
+    found.vmaf = vmaf_check.get();
+    found.v1 = v1_check.get();
     found.cpu_metrics_in_app = cpu_metrics_in_app();
     found.libvmaf_fast_version = libvmaf_fast_version();
     std::string text = version_line() + "\n";

@@ -39,6 +39,7 @@
 #include "vml/temp_files.h"
 #include "vml/time_format.h"
 #include "vml/vship.h"
+#include "vml/vmaf_v1_gpu.h"
 #include "vml/vship_run.h"
 
 namespace vml::cli {
@@ -315,6 +316,34 @@ PerceptualBackends perceptual_backends(const CompareArguments& arguments, const 
         chosen[key] = asked ? *asked : saved == "cpu" ? "cpu" : "gpu";
     }
     return chosen;
+}
+
+// Starts the GPU checks a run of `metrics` needs, together and in the
+// background, rather than one after another as the videos are set up: each
+// starts a process of its own (Vship's took 1.8 s, VMAF's and VMAF v1's
+// 0.5 s each). Their answers are kept, and a caller that asks while one
+// runs waits for it. The checks still running when the futures go are
+// waited for.
+std::vector<std::future<void>> start_gpu_checks(const CompareArguments& arguments, const Settings& settings,
+                                                const std::vector<std::string>& metrics) {
+    const auto asked = [&metrics](std::string_view key) {
+        return std::find(metrics.begin(), metrics.end(), key) != metrics.end();
+    };
+    const PerceptualBackends backends = perceptual_backends(arguments, settings);
+    const std::optional<std::string> vmaf_on = where(arguments, "vmaf");
+    const bool vmaf_on_gpu = vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu;
+    std::vector<std::future<void>> checks;
+    if (asked("cvvdp") || (asked("ssimulacra2") && backends.at("ssimulacra2") == "gpu") ||
+        (asked("butteraugli") && backends.at("butteraugli") == "gpu")) {
+        checks.push_back(std::async(std::launch::async, [] { detect_vship_device(); }));
+    }
+    if (vmaf_on_gpu && (asked("vmaf") || asked("vmaf_neg"))) {
+        checks.push_back(std::async(std::launch::async, [] { gpu_vmaf_backend(); }));
+    }
+    if (vmaf_on_gpu && asked("vmaf_v1")) {
+        checks.push_back(std::async(std::launch::async, [] { v1_available(); }));
+    }
+    return checks;
 }
 
 // A display CVVDP models, by its preset's name.
@@ -803,6 +832,7 @@ int compare(const CompareArguments& arguments) {
         print_error("The C++ command line cannot do this yet: " + *missing + ".");
         return exit_usage;
     }
+    const std::vector<std::future<void>> gpu_checks = start_gpu_checks(arguments, settings, asked);
 
     VideoInfo source;
     try {
