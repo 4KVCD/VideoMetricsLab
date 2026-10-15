@@ -46,6 +46,13 @@ std::filesystem::path resource_folder() {
     if (const std::optional<std::string> named = platform::environment_variable("VML_RESOURCES")) {
         return platform::path_from_text(*named).make_preferred();
     }
+    // A packaged build's, beside its programs (scripts/build_cpp_release.ps1);
+    // else the repository's, for a build run from its folder.
+    static const std::filesystem::path beside = platform::executable_path().parent_path() / "resources";
+    std::error_code error;
+    if (std::filesystem::is_directory(beside / "models", error)) {
+        return beside;
+    }
     return platform::path_from_text(VML_DEFAULT_RESOURCES).make_preferred();
 }
 

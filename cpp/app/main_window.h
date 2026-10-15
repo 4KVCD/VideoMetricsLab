@@ -6,14 +6,13 @@
 // information and its scores. Each row has its own VmafOptions (crop
 // handling, model, GPU decoding and so on), not one setting shared by all.
 //
-// Ported so far: the window's frame, its tabs, the Videos tab's files panel
-// (the reference, the test-video table and its buttons, the best and worst
-// scores highlighted; resolution tests not yet), the Options panel
-// (main_window_options.cpp), runs: the ticked videos' metrics calculated,
-// with their progress, and the scores shown in the table
-// (main_window_run.cpp), and the saved scores: looked up for each row, saved
-// as a run goes, forgotten by Recalculate (main_window_saved_scores.cpp). The
-// other tabs are still the Python app's alone.
+// Besides this file's: the Options panel (main_window_options.cpp); runs,
+// the ticked videos' metrics calculated with their progress and the scores
+// shown in the table (main_window_run.cpp); the saved scores, looked up for
+// each row, saved as a run goes and forgotten by Recalculate
+// (main_window_saved_scores.cpp); saved analysis results
+// (main_window_run_files.cpp); and the Metric Graphs and Video Compare tabs'
+// glue (main_window_graph.cpp, main_window_compare.cpp).
 #pragma once
 
 #include <QMainWindow>

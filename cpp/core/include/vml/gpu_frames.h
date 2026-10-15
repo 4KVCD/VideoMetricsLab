@@ -140,6 +140,11 @@ bool software_decoder_bundled();
 // asked).
 bool decoder_available(std::string_view backend);
 
+// The codecs (FFmpeg's names) the software decoder can decode on this PC,
+// after loading its libraries, and why when it can decode none. For the
+// self-test: AV1 is among them only where dav1d is beside FFmpeg's libraries.
+std::pair<std::vector<std::string>, std::string> software_codecs();
+
 // Whether GPU `device`'s decoder takes the plan's codec, bit depth and size,
 // and why not; for the software decoder, whether its libraries decode the
 // codec. The software decoder is never asked to scale (FFmpeg scales on

@@ -31,6 +31,7 @@ add_library(vml_app STATIC
     probe_worker.cpp
     row_state.cpp
     run_worker.cpp
+    self_test.cpp
     series_colors.cpp
     settings_panel.cpp
     theme.cpp
@@ -70,7 +71,7 @@ if(WIN32 AND MSVC)
     target_sources(vml_app PRIVATE native_decoder.cpp native_device.cpp native_pool.cpp native_presentation.cpp
                                    native_soundtrack.cpp)
     target_include_directories(vml_app SYSTEM PRIVATE ${vml_ffmpeg}/include)
-    target_link_libraries(vml_app PUBLIC ${vml_ffmpeg_imports} delayimp d3d11 dxgi)
+    target_link_libraries(vml_app PUBLIC ${vml_ffmpeg_imports} delayimp d3d11 dxgi dxguid)
     # VML_NATIVE_PLAYBACK public: the view's members depend on it, and the
     # tests must see the same view. NOMINMAX: no min and max macros from
     # Windows' headers.
@@ -86,10 +87,13 @@ endif()
 
 if(WIN32)
     # Qt's libraries and plugins beside the program, so that it runs from the
-    # build folder. Qt's own translations (its dialogs' buttons) come with the
-    # packaged app: a Qt built from qtbase alone has none to deploy.
+    # build folder, the same ones as the packaged app's
+    # (scripts/build_cpp_release.ps1 says why the others are left out). Qt's
+    # own translations (its dialogs' buttons) are in neither: a Qt built from
+    # qtbase alone has none to deploy.
     add_custom_command(TARGET VideoMetricsLab POST_BUILD
-        COMMAND Qt6::windeployqt --no-translations --no-system-d3d-compiler --no-opengl-sw
-                --no-compiler-runtime $<TARGET_FILE:VideoMetricsLab>
+        COMMAND Qt6::windeployqt --no-translations --no-system-d3d-compiler --no-system-dxc-compiler
+                --no-opengl-sw --no-compiler-runtime --skip-plugin-types generic,networkinformation
+                --exclude-plugins qcertonlybackend $<TARGET_FILE:VideoMetricsLab>
         VERBATIM)
 endif()

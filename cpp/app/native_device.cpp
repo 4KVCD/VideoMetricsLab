@@ -2,6 +2,7 @@
 
 #include <dxgi1_2.h>
 
+#include <algorithm>
 #include <array>
 #include <stdexcept>
 #include <vector>
@@ -99,5 +100,36 @@ NativeDevice::NativeDevice(unsigned adapter_index) {
 NativeDevice::~NativeDevice() { av_buffer_unref(&hardware_); }
 
 bool NativeDevice::lost() const { return device_->GetDeviceRemovedReason() != S_OK; }
+
+std::vector<std::string> NativeDevice::gpu_decoders() const {
+    // The profiles FFmpeg's D3D11VA decoders use, in this order.
+    const std::array<std::pair<GUID, const char*>, 8> known{{
+        {D3D11_DECODER_PROFILE_H264_VLD_NOFGT, "H.264"},
+        {D3D11_DECODER_PROFILE_HEVC_VLD_MAIN, "HEVC"},
+        {D3D11_DECODER_PROFILE_HEVC_VLD_MAIN10, "HEVC 10-bit"},
+        {D3D11_DECODER_PROFILE_AV1_VLD_PROFILE0, "AV1"},
+        {D3D11_DECODER_PROFILE_VP9_VLD_PROFILE0, "VP9"},
+        {D3D11_DECODER_PROFILE_VP9_VLD_10BIT_PROFILE2, "VP9 10-bit"},
+        {D3D11_DECODER_PROFILE_MPEG2_VLD, "MPEG-2"},
+        {D3D11_DECODER_PROFILE_MPEG2and1_VLD, "MPEG-2"},
+    }};
+    std::vector<std::string> found;
+    ComPtr<ID3D11VideoDevice> video;
+    if (FAILED(device_.As(&video))) {
+        return found;
+    }
+    std::vector<GUID> profiles(video->GetVideoDecoderProfileCount());
+    for (UINT index = 0; index < profiles.size(); ++index) {
+        video->GetVideoDecoderProfile(index, &profiles[index]);
+    }
+    for (const auto& [profile, name] : known) {
+        const bool taken = std::any_of(profiles.begin(), profiles.end(),
+                                       [&profile](const GUID& offered) { return offered == profile; });
+        if (taken && std::find(found.begin(), found.end(), name) == found.end()) {
+            found.emplace_back(name);
+        }
+    }
+    return found;
+}
 
 }  // namespace vml::app

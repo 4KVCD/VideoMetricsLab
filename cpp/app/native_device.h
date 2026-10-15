@@ -12,6 +12,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
 struct AVBufferRef;
 
@@ -46,6 +47,9 @@ public:
     // decoding (given it as its lock), uploads and the presenter's drawing.
     std::recursive_mutex& lock() { return mutex_; }
     bool lost() const;
+    // The codecs the GPU's Direct3D 11 video decoding takes, as the self-test
+    // names them ("H.264", "HEVC 10-bit"...).
+    std::vector<std::string> gpu_decoders() const;
 
 private:
     Microsoft::WRL::ComPtr<ID3D11Device> device_;

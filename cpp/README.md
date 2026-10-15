@@ -59,8 +59,11 @@ each other on FFmpeg's route too.
 | `tests/reference` | The Python app's answers, and the script that makes them. |
 | `tests/golden` | The comparison of the two apps' command lines on real videos. |
 | `third_party` | Vendored libraries: see its README. |
+| `packaging` | What the Windows package adds to the build (Qt's licence texts). |
 
-The presenters join as they are ported.
+The native libraries the app loads (Video Compare's presenter, the GPU
+metrics' frame decoders) are the Python app's, built from the repository's
+`native` folder by its scripts.
 
 ## The command line
 
@@ -93,7 +96,7 @@ video it cannot decode is decoded by an FFmpeg of its own. (The Python app
 takes dav1d, the software decoder's AV1 decoder, from its bundled GStreamer;
 the C++ app looks for it beside FFmpeg's libraries in `vmaf_app/tools/ffmpeg`,
 where a development build has none, so an AV1 video FFmpeg would decode in
-software is decoded by FFmpeg.) That work runs in a process of its own (the
+software is decoded by FFmpeg; the package has the Python app's.) That work runs in a process of its own (the
 program again, with `--vml-isolated`), so that a crash in libvmaf, Vship
 or the GPU's driver ends that process and not the run: FFmpeg's filters
 then calculate VMAF and the others on the CPU, and libjxl's tools
@@ -112,26 +115,54 @@ does.
 
 ## The window
 
-`VideoMetricsLab` is the Python app's window as far as it has been ported
-(`app/main_window.h` says how far): so far its frame and tabs, and the
-Videos tab. The reference and the test videos are picked, dropped, pasted
-or reopened from the last session, read off the window's thread, and
-dragged or sorted into order; each row's metrics are ticked in its cells or
-for every row in the headings, and hidden or shown from the metrics menu;
-the Options panel sets the selected videos' own settings, CVVDP's display
-and its presets among them, and "Test both" adds a row scoring a video the
-other way round (resolution tests are not ported yet). Calculate
-metrics runs the ticked videos as the command line does, with each video's
-progress on a line of its own, Pause, Cancel and the videos in parallel
-changed while it runs, and shows their scores in the table, each metric's
-best and worst in green and red if asked (Highlight best/worst results).
-Scores are saved as a run goes, and a video added again shows them; the
-saved scores are the Python app's and the command line's too, and
-Recalculate (right-click) forgets a video's. It reads and writes the Python
-app's settings.json, and shows its text in the user's language from the
-Python app's catalogs (`vmaf_app/translations`), in the light or dark
-theme. The other tabs are still the Python app's alone. Like the command
-line, the program is also the process of its own that GPU code runs in.
+`VideoMetricsLab` is the Python app's window, all its tabs. In the Videos
+tab the reference and the test videos are picked, dropped, pasted or
+reopened from the last session, read off the window's thread, and dragged
+or sorted into order; each row's metrics are ticked in its cells or for
+every row in the headings, and hidden or shown from the metrics menu; the
+Options panel sets the selected videos' own settings, CVVDP's display and
+its presets among them; "Test both" adds a row scoring a video the other
+way round, and a resolution test a row scoring the reference scaled down
+and back up. Calculate metrics runs the ticked videos as the command line
+does, with each video's progress on a line of its own, Pause, Cancel and
+the videos in parallel changed while it runs, and shows their scores in the
+table, each metric's best and worst in green and red if asked (Highlight
+best/worst results). Scores are saved as a run goes, and a video added
+again shows them; the saved scores are the Python app's and the command
+line's too, and Recalculate (right-click) forgets a video's. Analysis
+results are saved and loaded as the Python app's are. Metric Graphs draws
+each metric's scores frame by frame, with each video's statistics, and
+exports them (PNG, CSV). Video Compare shows a pair of frames, or plays the
+videos locked together: decoded with FFmpeg's libraries, on the GPU where
+Direct3D 11 can, drawn by the app's presenter (HDR too) and timed by the
+source's soundtrack when it plays, or, where that cannot play them,
+through ffmpeg.exe.
+The Bitrate Viewer plots each video's bitrate by frame, second or GOP. The
+Settings tab and the log are the Python app's too. It reads and writes the
+Python app's settings.json, and shows its text in the user's language from
+the Python app's catalogs (`vmaf_app/translations`), in the light or dark
+theme. Like the command line, the program is also the process of its own
+that GPU code runs in.
+
+Not ported yet: on AMD's GPUs, the GPU metrics' decoding through Windows'
+own decoders, and their pictures handed over on the GPU, which the Python
+app does (`core/include/vml/gpu_frames.h`); and Qt's translations of its
+own dialogs' buttons, which a Qt built from qtbase alone does not have.
+
+## The package
+
+`scripts/build_cpp_release.ps1` builds the app's Windows package: the
+window and the command line (`VideoMetricsLab-cli.exe`, named as the Python
+app's), Qt and Microsoft's C++ runtime beside them, and the app's own files
+in `resources` (the VMAF models, the translations, the bundled tools and the
+native libraries, from `vmaf_app`), where the programs find them. It builds
+the native libraries and the programs first, checks that everything they
+import is in the folder or is Windows', then runs the window's self-test
+(`VideoMetricsLab.exe --self-test`) and `VideoMetricsLab-cli.exe devices`
+from the folder, in a profile of their own, and zips it. FFmpeg itself is
+not bundled, as with the Python app.
+
+    ./scripts/build_cpp_release.ps1 -QtPath C:\Qt\6.12.0\msvc2022_64
 
 ## Building and testing
 

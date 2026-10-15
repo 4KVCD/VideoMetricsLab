@@ -1,14 +1,15 @@
-// VideoMetricsLab's window, in C++: the Python app's vmaf_app/main.py, as
-// far as main_window.h says the window has been ported.
+// VideoMetricsLab's window, in C++: the Python app's vmaf_app/main.py.
 //
 // This program is also the process of its own that native GPU code runs in
 // (isolated.h), as the Python app's packaged program is: started with
-// isolated_argument, it runs that task and makes no window.
+// isolated_argument, it runs that task and makes no window. Started with
+// --self-test, it checks what it finds at run time (self_test.h).
 #include <QApplication>
 #include <QLibraryInfo>
 #include <QTranslator>
 #include <QtConcurrent/QtConcurrentRun>
 
+#include <algorithm>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -18,6 +19,7 @@
 
 #include "i18n.h"
 #include "main_window.h"
+#include "self_test.h"
 #include "theme.h"
 #include "vml/app_log.h"
 #include "vml/gpu_vmaf.h"
@@ -124,6 +126,9 @@ int main(int argc, char** argv) {
 
     QApplication app(argc, argv);
     QApplication::setApplicationName("VideoMetricsLab");
+    if (std::find(words.begin(), words.end(), "--self-test") != words.end()) {
+        return app::run_self_test(app, std::find(words.begin(), words.end(), "--quiet") != words.end());
+    }
     start_session_log();
     // What runs ended outright (End task, a crash) left in the temporary
     // folder, removed on a thread of its own so that a large folder does not

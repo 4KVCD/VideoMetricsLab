@@ -875,6 +875,26 @@ bool decoder_available(std::string_view backend) {
     }
 }
 
+std::pair<std::vector<std::string>, std::string> software_codecs() {
+    const DecoderLibrary* library = nullptr;
+    try {
+        library = &load_decoder(software_decoder);
+    } catch (const GpuDecodeUnavailableError& error) {
+        return {{}, error.what()};
+    }
+    std::vector<std::string> decodes;
+    std::string why;
+    for (const Codec& codec : codecs) {
+        std::array<char, 512> error{};
+        if (library->supports(0, codec.number, 8, 64, 64, error.data(), static_cast<int>(error.size())) != 0) {
+            decodes.emplace_back(codec.name);
+        } else if (why.empty()) {
+            why = buffer_text(error.data(), error.size());
+        }
+    }
+    return {decodes, decodes.empty() ? why : std::string()};
+}
+
 std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan, std::string_view backend) {
     if (!decodes_codec(plan.codec, backend)) {
         return {false, plan.codec + " is not decoded by the " + std::string(backend) + " decoder"};
