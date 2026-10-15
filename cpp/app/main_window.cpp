@@ -253,7 +253,7 @@ MainWindow::MainWindow() {
                 (settings_.default_vmaf_on_gpu ? "GPU" : "CPU") + ", SSIMULACRA2 on " +
                 upper(settings_.default_ssimulacra2_backend) + ", Butteraugli on " +
                 upper(settings_.default_butteraugli_backend) + ", GPU metrics " +
-                (settings_.gpu_metrics_together ? "together in one pass" : "one pass each") + " on the " +
+                (settings_.gpu_metrics_together ? "always in one pass" : "in one pass when the GPU has the memory") + " on the " +
                 settings_.gpu_backend + " backend, saved results " + (settings_.use_cache ? "reused" : "not reused") +
                 " (" + (settings_.cache_dir.empty() ? std::string("default folder") : settings_.cache_dir) + ")");
     if (settings_.remember_window_size) {

@@ -3,7 +3,8 @@
 
 #include "text_windows.h"  // before <dxgi.h>: it sets <windows.h> up
 
-#include <dxgi.h>
+#include <dxgi1_4.h>
+#include <pdh.h>
 
 #include <algorithm>
 #include <cctype>
@@ -308,6 +309,66 @@ std::optional<unsigned> first_gpu_adapter() {
     }
     const std::vector<std::pair<UINT, unsigned>> gpus = listed_gpus();
     return gpus.empty() ? std::nullopt : std::optional<unsigned>(gpus.front().first);
+}
+
+namespace {
+
+// What every process holds of a GPU's own memory, by Windows' "GPU Adapter
+// Memory" counter for the adapter `luid` (as Task Manager shows it).
+std::optional<unsigned long long> gpu_memory_used(const LUID& luid) {
+    wchar_t path[96];
+    swprintf(path, std::size(path), L"\\GPU Adapter Memory(luid_0x%08lx_0x%08lx_phys_0)\\Dedicated Usage",
+             static_cast<unsigned long>(luid.HighPart), luid.LowPart);
+    PDH_HQUERY query = nullptr;
+    if (PdhOpenQueryW(nullptr, 0, &query) != ERROR_SUCCESS) {
+        return std::nullopt;
+    }
+    std::optional<unsigned long long> used;
+    PDH_HCOUNTER counter = nullptr;
+    PDH_FMT_COUNTERVALUE value{};
+    if (PdhAddEnglishCounterW(query, path, 0, &counter) == ERROR_SUCCESS && PdhCollectQueryData(query) == ERROR_SUCCESS &&
+        PdhGetFormattedCounterValue(counter, PDH_FMT_LARGE, nullptr, &value) == ERROR_SUCCESS && value.largeValue >= 0) {
+        used = static_cast<unsigned long long>(value.largeValue);
+    }
+    PdhCloseQuery(query);
+    return used;
+}
+
+}  // namespace
+
+std::optional<unsigned long long> gpu_memory_available(std::string_view name) {
+    IDXGIFactory1* factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) {
+        return std::nullopt;
+    }
+    std::optional<unsigned long long> available;
+    IDXGIAdapter1* adapter = nullptr;
+    for (UINT index = 0; !available && factory->EnumAdapters1(index, &adapter) != DXGI_ERROR_NOT_FOUND; ++index) {
+        DXGI_ADAPTER_DESC1 description{};
+        IDXGIAdapter3* queried = nullptr;
+        // A GPU with little memory of its own shares the PC's (integrated):
+        // its memory says nothing of how much a pass can take.
+        constexpr SIZE_T own_memory_least = 1ULL << 30;
+        if (SUCCEEDED(adapter->GetDesc1(&description)) && !(description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) &&
+            description.DedicatedVideoMemory >= own_memory_least && narrow(description.Description) == name &&
+            SUCCEEDED(adapter->QueryInterface(__uuidof(IDXGIAdapter3), reinterpret_cast<void**>(&queried)))) {
+            // Windows' budget for this process alone is near the whole GPU's
+            // memory, as it would push other programs' memory out to make
+            // room; what is free is the GPU's memory less what every process
+            // holds (4.3 GB of 32 GB on an idle desktop here).
+            DXGI_QUERY_VIDEO_MEMORY_INFO memory{};
+            const std::optional<unsigned long long> used = gpu_memory_used(description.AdapterLuid);
+            if (used && SUCCEEDED(queried->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &memory))) {
+                const unsigned long long total = description.DedicatedVideoMemory;
+                const unsigned long long budget = memory.Budget > memory.CurrentUsage ? memory.Budget - memory.CurrentUsage : 0;
+                available = std::min(budget, total > *used ? total - *used : 0);
+            }
+            queried->Release();
+        }
+        adapter->Release();
+    }
+    factory->Release();
+    return available;
 }
 
 std::optional<long long> modified_ns(const std::filesystem::path& file) {

@@ -277,7 +277,8 @@ QGroupBox* SettingsPanel::build_gpu_box(const std::vector<GpuVendor>& gpu_vendor
     backend_row->addWidget(gpu_backend);
     backend_row->addStretch(1);
     gpu_layout->addLayout(backend_row);
-    gpu_together = new QCheckBox(app::tr("Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video"));
+    gpu_together =
+        new QCheckBox(app::tr("Always calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video"));
     gpu_together->setToolTip(app::tr(
         "Each video is decoded once for all its GPU metrics instead of once for each. Where the "
         "GPU decodes the videos this gains little; where the CPU does -- 4K VVC, which no GPU "
@@ -289,8 +290,10 @@ QGroupBox* SettingsPanel::build_gpu_box(const std::vector<GpuVendor>& gpu_vendor
     gpu_together->setChecked(settings_.gpu_metrics_together);
     connect(gpu_together, &QCheckBox::toggled, this, [this] { on_edited(); });
     gpu_layout->addWidget(gpu_together);
-    auto* gpu_note = new QLabel(app::tr("Decodes each video once instead of once per metric: much less CPU work for "
-                                        "4K VVC. Very heavy on GPU memory at 4K: about 7.3 GB for all three together."));
+    auto* gpu_note = new QLabel(
+        app::tr("Unticked, the three are calculated together when the GPU has the memory for it as each video starts, "
+                "and one at a time otherwise. Together, each video is decoded once instead of once per metric: much "
+                "less CPU work for 4K VVC, and about 7.3 GB of GPU memory at 4K."));
     gpu_note->setWordWrap(true);
     theme::style(gpu_note, "color: {muted};");
     gpu_layout->addWidget(gpu_note);

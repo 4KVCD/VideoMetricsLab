@@ -89,9 +89,7 @@
   "CUDA (NVIDIA)": "CUDA (NVIDIA)",
   "HIP (AMD)": "HIP (AMD)",
   "Which of Vship's builds calculates the GPU metrics. Auto uses the fastest one whose scores agree with the reference: CUDA on NVIDIA, HIP on AMD, and Vulkan on other GPUs, such as Intel's. Vulkan runs on any GPU. If the chosen build cannot run here, the others are tried.": "A Vship melyik változata számolja a GPU-metrikákat. Az Automatikus a leggyorsabbat használja azok közül, amelyek pontszámai egyeznek a referenciával: NVIDIA-n CUDA, AMD-n HIP, más GPU-kon – például az Intelén – Vulkan. A Vulkan bármely GPU-n fut. Ha a választott változat itt nem futtatható, a többivel próbálkozik.",
-  "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2, Butteraugli és CVVDP számítása együtt, videónként egy menetben",
   "Each video is decoded once for all its GPU metrics instead of once for each. Where the GPU decodes the videos this gains little; where the CPU does -- 4K VVC, which no GPU decodes -- it saves most of the decoding.\n\nVery heavy on GPU memory at 4K: about 7.3 GB for all three at once, against at most 4.8 GB one at a time (CVVDP). A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "Minden videó egyszer dekódolódik az összes GPU-metrikához, nem metrikánként egyszer. Ha a GPU dekódolja a videót, a nyereség kicsi; ha a CPU teszi ezt (4K VVC, amelyet egyetlen GPU sem dekódol), a dekódolás nagy része megspórolható.\n\n4K-ban nagyon sok GPU-memóriát igényel: kb. 7,3 GB mindhárom egyszerre, szemben az egyetlen metrika (CVVDP) legfeljebb 4,8 GB-jával. A közös menetben sikertelen metrika – például GPU-memória hiánya miatt – külön újraszámolódik.\n\nA pontszámok mindkét módon azonosak. A következő futtatástól érvényes.",
-  "Decodes each video once instead of once per metric: much less CPU work for 4K VVC. Very heavy on GPU memory at 4K: about 7.3 GB for all three together.": "Minden videót egyszer dekódol, nem metrikánként egyszer: 4K VVC esetén sokkal kevesebb munka a CPU-nak. 4K-ban nagyon sok GPU-memóriát igényel: kb. 7,3 GB mindhárom egyszerre.",
   "How many test videos keep decoding while one is shown, so the left and right arrows switch to a video that is already running: the selected one, then the one to its right, its left, the next right, the next left, and so on. Each is a running GPU decoder (about 250 MB of RAM for 4K), plus the source. Takes effect immediately, even during playback.": "Hány tesztvideó dekódolódik tovább, amíg egyet néz, hogy a bal/jobb nyíl egy már futó videóra váltson: a kijelöltre, aztán a jobbra lévőre, a balra lévőre, a következő jobbra, a következő balra és így tovább. Mindegyik egy működő GPU-dekóder (4K-nál kb. 250 MB memória), plusz a forrás. Azonnal érvényes, lejátszás közben is.",
   "Number of test videos decoded simultaneously for fast comparison switching": "Együtt dekódolt tesztvideók az összehasonlítások gyors váltásához",
   "Window": "Ablak",
@@ -728,7 +726,9 @@
   " m": " m",
   " lux": " lux",
   "{rate:.1f} Mb/s": "{rate:.1f} Mb/s",
-  "{rate} kb/s": "{rate} kb/s"
+  "{rate} kb/s": "{rate} kb/s",
+  "Always calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2, Butteraugli és CVVDP számítása mindig együtt, videónként egy menetben",
+  "Unticked, the three are calculated together when the GPU has the memory for it as each video starts, and one at a time otherwise. Together, each video is decoded once instead of once per metric: much less CPU work for 4K VVC, and about 7.3 GB of GPU memory at 4K.": "Bejelölés nélkül a három metrika együtt számítódik, ha a GPU-nak minden videó kezdetén van rá elég memóriája, különben egymás után. Együtt minden videó egyszer dekódolódik, nem metrikánként egyszer: 4K VVC esetén sokkal kevesebb munka a CPU-nak, és 4K-ban kb. 7,3 GB GPU-memória."
  },
  "plurals": {
   "about {count} day": [

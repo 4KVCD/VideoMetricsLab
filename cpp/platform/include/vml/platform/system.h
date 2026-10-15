@@ -132,6 +132,13 @@ std::vector<unsigned> gpu_vendor_ids();
 // names a maker with no GPU here (as with no GPU, none to draw on).
 std::optional<unsigned> first_gpu_adapter();
 
+// The GPU memory free on the GPU named `name` (as DirectX names it, which is
+// how Vship and the drivers name it too): its own memory less what every
+// process holds, and no more than Windows' budget for this process. Nothing
+// elsewhere, when no GPU has that name or Windows does not say, or for a GPU
+// with less than 1 GB of its own memory, which shares the PC's (integrated).
+std::optional<unsigned long long> gpu_memory_available(std::string_view name);
+
 // When a file was last written, in nanoseconds since 1970 (Python's
 // st_mtime_ns), or nothing when it cannot be read.
 std::optional<long long> modified_ns(const std::filesystem::path& file);

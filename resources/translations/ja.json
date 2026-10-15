@@ -89,9 +89,7 @@
   "CUDA (NVIDIA)": "CUDA (NVIDIA)",
   "HIP (AMD)": "HIP (AMD)",
   "Which of Vship's builds calculates the GPU metrics. Auto uses the fastest one whose scores agree with the reference: CUDA on NVIDIA, HIP on AMD, and Vulkan on other GPUs, such as Intel's. Vulkan runs on any GPU. If the chosen build cannot run here, the others are tried.": "GPU 指標を計算する Vship のビルド。自動では、スコアが基準と一致するビルドのうち最速のものを使います：NVIDIA では CUDA、AMD では HIP、Intel などその他の GPU では Vulkan。Vulkan はどの GPU でも動きます。選んだビルドがここで動かない場合は、ほかのビルドを試します。",
-  "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2、Butteraugli、CVVDP を動画ごとに 1 回のパスでまとめて計算する",
   "Each video is decoded once for all its GPU metrics instead of once for each. Where the GPU decodes the videos this gains little; where the CPU does -- 4K VVC, which no GPU decodes -- it saves most of the decoding.\n\nVery heavy on GPU memory at 4K: about 7.3 GB for all three at once, against at most 4.8 GB one at a time (CVVDP). A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "各動画を指標ごとではなく、すべての GPU 指標に対して 1 回だけデコードします。GPU が動画をデコードする場合は効果が小さく、CPU がデコードする場合（どの GPU もデコードできない 4K VVC など）はデコードの大半を省けます。\n\n4K では GPU メモリを非常に多く使います：3 つ同時で約 7.3 GB、1 つずつなら最大 4.8 GB（CVVDP）です。共有パスで失敗した指標（GPU メモリ不足など）は単独で計算し直されます。\n\nどちらの方法でもスコアは同じです。次回の実行から適用されます。",
-  "Decodes each video once instead of once per metric: much less CPU work for 4K VVC. Very heavy on GPU memory at 4K: about 7.3 GB for all three together.": "各動画を指標ごとではなく 1 回だけデコードします：4K VVC の CPU 負荷が大幅に減ります。4K では GPU メモリを非常に多く使います：3 つ合わせて約 7.3 GB。",
   "How many test videos keep decoding while one is shown, so the left and right arrows switch to a video that is already running: the selected one, then the one to its right, its left, the next right, the next left, and so on. Each is a running GPU decoder (about 250 MB of RAM for 4K), plus the source. Takes effect immediately, even during playback.": "1 本を表示している間もデコードを続けるテスト動画の本数。左右の矢印キーで、すでに再生中の動画に切り替えられます：選択中の動画、その右、左、さらに右、さらに左…の順です。それぞれが動作中の GPU デコーダー（4K で約 250 MB の RAM）で、ほかにソースが 1 つ加わります。再生中でもすぐに反映されます。",
   "Number of test videos decoded simultaneously for fast comparison switching": "比較を素早く切り替えるため同時にデコードするテスト動画の本数",
   "Window": "ウィンドウ",
@@ -728,7 +726,9 @@
   " m": " m",
   " lux": " ルクス",
   "{rate:.1f} Mb/s": "{rate:.1f} Mb/s",
-  "{rate} kb/s": "{rate} kb/s"
+  "{rate} kb/s": "{rate} kb/s",
+  "Always calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2、Butteraugli、CVVDP を常に動画ごとに 1 回のパスでまとめて計算する",
+  "Unticked, the three are calculated together when the GPU has the memory for it as each video starts, and one at a time otherwise. Together, each video is decoded once instead of once per metric: much less CPU work for 4K VVC, and about 7.3 GB of GPU memory at 4K.": "オフのときは、各動画の開始時に GPU のメモリが足りれば 3 つをまとめて計算し、足りなければ 1 つずつ計算します。まとめると各動画を指標ごとではなく 1 回だけデコードします：4K VVC の CPU 負荷が大幅に減り、4K では GPU メモリを約 7.3 GB 使います。"
  },
  "plurals": {
   "about {count} day": [

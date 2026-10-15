@@ -89,9 +89,7 @@
   "CUDA (NVIDIA)": "CUDA (NVIDIA)",
   "HIP (AMD)": "HIP (AMD)",
   "Which of Vship's builds calculates the GPU metrics. Auto uses the fastest one whose scores agree with the reference: CUDA on NVIDIA, HIP on AMD, and Vulkan on other GPUs, such as Intel's. Vulkan runs on any GPU. If the chosen build cannot run here, the others are tried.": "أيّ إصدار من إصدارات Vship يحسب مقاييس GPU. يستخدم «تلقائي» أسرعها ممّا تتفق درجاته مع المرجع: CUDA على NVIDIA، وHIP على AMD، وVulkan على وحدات GPU الأخرى مثل Intel. يعمل Vulkan على أي GPU. إذا تعذّر تشغيل الإصدار المختار هنا، تُجرَّب الإصدارات الأخرى.",
-  "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "حساب SSIMULACRA2 وButteraugli وCVVDP معًا في مرور واحد لكل فيديو",
   "Each video is decoded once for all its GPU metrics instead of once for each. Where the GPU decodes the videos this gains little; where the CPU does -- 4K VVC, which no GPU decodes -- it saves most of the decoding.\n\nVery heavy on GPU memory at 4K: about 7.3 GB for all three at once, against at most 4.8 GB one at a time (CVVDP). A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "يُفك ترميز كل فيديو مرة واحدة لكل مقاييس GPU بدلًا من مرة لكل مقياس. إذا كانت GPU تفك ترميز الفيديو فالمكسب ضئيل؛ وإذا كان المعالج هو من يفعل ذلك (4K VVC الذي لا تفك ترميزه أي GPU) فيُوفَّر معظم فك الترميز.\n\nيستهلك ذاكرة GPU بشدة في 4K: نحو 7.3 غيغابايت للمقاييس الثلاثة معًا، مقابل 4.8 غيغابايت كحد أقصى لكل مقياس وحده (CVVDP). المقياس الذي يفشل في المرور المشترك، لنفاد ذاكرة GPU مثلًا، يُعاد حسابه وحده.\n\nالدرجات هي نفسها في الحالتين. يُطبَّق بدءًا من التشغيل التالي.",
-  "Decodes each video once instead of once per metric: much less CPU work for 4K VVC. Very heavy on GPU memory at 4K: about 7.3 GB for all three together.": "يفك ترميز كل فيديو مرة واحدة بدلًا من مرة لكل مقياس: عمل أقل بكثير للمعالج مع 4K VVC. يستهلك ذاكرة GPU بشدة في 4K: نحو 7.3 غيغابايت للثلاثة معًا.",
   "How many test videos keep decoding while one is shown, so the left and right arrows switch to a video that is already running: the selected one, then the one to its right, its left, the next right, the next left, and so on. Each is a running GPU decoder (about 250 MB of RAM for 4K), plus the source. Takes effect immediately, even during playback.": "عدد فيديوهات الاختبار التي يستمر فك ترميزها أثناء عرض أحدها، كي تنتقل الأسهم يمينًا ويسارًا إلى فيديو يعمل بالفعل: المحدد، ثم الذي على يمينه، ثم يساره، ثم التالي يمينًا، ثم التالي يسارًا، وهكذا. كل واحد منها وحدة فك ترميز GPU عاملة (نحو 250 ميغابايت من الذاكرة لـ 4K)، إضافة إلى المصدر. يُطبَّق فورًا، حتى أثناء التشغيل.",
   "Number of test videos decoded simultaneously for fast comparison switching": "عدد فيديوهات الاختبار المفكوك ترميزها معًا للتبديل السريع بين المقارنات",
   "Window": "النافذة",
@@ -728,7 +726,9 @@
   " m": " م",
   " lux": " لوكس",
   "{rate:.1f} Mb/s": "{rate:.1f} ميغابت/ث",
-  "{rate} kb/s": "{rate} كيلوبت/ث"
+  "{rate} kb/s": "{rate} كيلوبت/ث",
+  "Always calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "حساب SSIMULACRA2 وButteraugli وCVVDP معًا دائمًا في مرور واحد لكل فيديو",
+  "Unticked, the three are calculated together when the GPU has the memory for it as each video starts, and one at a time otherwise. Together, each video is decoded once instead of once per metric: much less CPU work for 4K VVC, and about 7.3 GB of GPU memory at 4K.": "عند عدم التحديد، تُحسب الثلاثة معًا إذا كانت لدى GPU الذاكرة الكافية عند بدء كل فيديو، وإلا فواحدًا تلو الآخر. معًا، يُفك ترميز كل فيديو مرة واحدة بدلًا من مرة لكل مقياس: عمل أقل بكثير للمعالج مع 4K VVC، ونحو 7.3 غيغابايت من ذاكرة GPU في 4K."
  },
  "plurals": {
   "about {count} day": [

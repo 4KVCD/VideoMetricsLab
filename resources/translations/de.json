@@ -89,9 +89,7 @@
   "CUDA (NVIDIA)": "CUDA (NVIDIA)",
   "HIP (AMD)": "HIP (AMD)",
   "Which of Vship's builds calculates the GPU metrics. Auto uses the fastest one whose scores agree with the reference: CUDA on NVIDIA, HIP on AMD, and Vulkan on other GPUs, such as Intel's. Vulkan runs on any GPU. If the chosen build cannot run here, the others are tried.": "Welcher Build von Vship die GPU-Metriken berechnet. Automatisch nimmt den schnellsten, dessen Werte mit der Referenz übereinstimmen: CUDA auf NVIDIA, HIP auf AMD und Vulkan auf anderen GPUs, etwa von Intel. Vulkan läuft auf jeder GPU. Kann der gewählte Build hier nicht laufen, werden die anderen versucht.",
-  "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2, Butteraugli und CVVDP zusammen in einem Durchgang pro Video berechnen",
   "Each video is decoded once for all its GPU metrics instead of once for each. Where the GPU decodes the videos this gains little; where the CPU does -- 4K VVC, which no GPU decodes -- it saves most of the decoding.\n\nVery heavy on GPU memory at 4K: about 7.3 GB for all three at once, against at most 4.8 GB one at a time (CVVDP). A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "Jedes Video wird für alle GPU-Metriken einmal dekodiert statt einmal pro Metrik. Wenn die GPU die Videos dekodiert, bringt das wenig; wenn die CPU es tut – bei 4K-VVC, das keine GPU dekodiert – spart es den Großteil der Dekodierung.\n\nSehr hoher GPU-Speicherbedarf bei 4K: etwa 7,3 GB für alle drei zusammen, gegenüber höchstens 4,8 GB einzeln (CVVDP). Eine Metrik, die im gemeinsamen Durchgang fehlschlägt, etwa weil der GPU-Speicher nicht reicht, wird einzeln erneut berechnet.\n\nDie Ergebnisse sind in beiden Fällen gleich. Gilt ab dem nächsten Durchlauf.",
-  "Decodes each video once instead of once per metric: much less CPU work for 4K VVC. Very heavy on GPU memory at 4K: about 7.3 GB for all three together.": "Dekodiert jedes Video einmal statt einmal pro Metrik: viel weniger CPU-Arbeit bei 4K-VVC. Sehr hoher GPU-Speicherbedarf bei 4K: etwa 7,3 GB für alle drei zusammen.",
   "How many test videos keep decoding while one is shown, so the left and right arrows switch to a video that is already running: the selected one, then the one to its right, its left, the next right, the next left, and so on. Each is a running GPU decoder (about 250 MB of RAM for 4K), plus the source. Takes effect immediately, even during playback.": "Wie viele Testvideos weiter dekodiert werden, während eines angezeigt wird, damit die Pfeiltasten links und rechts zu einem Video wechseln, das bereits läuft: das ausgewählte, dann das rechts davon, das links davon, das nächste rechts, das nächste links usw. Jedes ist ein laufender GPU-Decoder (etwa 250 MB RAM bei 4K), dazu die Quelle. Wirkt sofort, auch während der Wiedergabe.",
   "Number of test videos decoded simultaneously for fast comparison switching": "Anzahl gleichzeitig dekodierter Testvideos für schnelles Umschalten beim Vergleich",
   "Window": "Fenster",
@@ -728,7 +726,9 @@
   " m": " m",
   " lux": " Lux",
   "{rate:.1f} Mb/s": "{rate:.1f} Mb/s",
-  "{rate} kb/s": "{rate} kb/s"
+  "{rate} kb/s": "{rate} kb/s",
+  "Always calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2, Butteraugli und CVVDP immer zusammen in einem Durchgang pro Video berechnen",
+  "Unticked, the three are calculated together when the GPU has the memory for it as each video starts, and one at a time otherwise. Together, each video is decoded once instead of once per metric: much less CPU work for 4K VVC, and about 7.3 GB of GPU memory at 4K.": "Ohne Haken werden die drei zusammen berechnet, wenn die GPU beim Start jedes Videos genug Speicher hat, sonst nacheinander. Zusammen wird jedes Video einmal statt einmal pro Metrik dekodiert: viel weniger CPU-Arbeit bei 4K-VVC, und etwa 7,3 GB GPU-Speicher bei 4K."
  },
  "plurals": {
   "about {count} day": [

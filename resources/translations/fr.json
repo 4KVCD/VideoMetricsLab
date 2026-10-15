@@ -89,9 +89,7 @@
   "CUDA (NVIDIA)": "CUDA (NVIDIA)",
   "HIP (AMD)": "HIP (AMD)",
   "Which of Vship's builds calculates the GPU metrics. Auto uses the fastest one whose scores agree with the reference: CUDA on NVIDIA, HIP on AMD, and Vulkan on other GPUs, such as Intel's. Vulkan runs on any GPU. If the chosen build cannot run here, the others are tried.": "Quelle version de Vship calcule les métriques GPU. Automatique prend la plus rapide dont les scores concordent avec la référence : CUDA sur NVIDIA, HIP sur AMD et Vulkan sur les autres GPU, comme ceux d'Intel. Vulkan fonctionne sur tout GPU. Si la version choisie ne peut pas fonctionner ici, les autres sont essayées.",
-  "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "Calculer SSIMULACRA2, Butteraugli et CVVDP ensemble, en une seule passe par vidéo",
   "Each video is decoded once for all its GPU metrics instead of once for each. Where the GPU decodes the videos this gains little; where the CPU does -- 4K VVC, which no GPU decodes -- it saves most of the decoding.\n\nVery heavy on GPU memory at 4K: about 7.3 GB for all three at once, against at most 4.8 GB one at a time (CVVDP). A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "Chaque vidéo est décodée une seule fois pour toutes ses métriques GPU au lieu d'une fois par métrique. Si le GPU décode les vidéos, le gain est faible ; si c'est le CPU (4K VVC, qu'aucun GPU ne décode), cela économise l'essentiel du décodage.\n\nTrès gourmand en mémoire GPU en 4K : environ 7,3 Go pour les trois ensemble, contre 4,8 Go au plus une par une (CVVDP). Une métrique qui échoue dans la passe commune, par manque de mémoire GPU par exemple, est recalculée seule.\n\nLes scores sont identiques dans les deux cas. S'applique à partir de la prochaine exécution.",
-  "Decodes each video once instead of once per metric: much less CPU work for 4K VVC. Very heavy on GPU memory at 4K: about 7.3 GB for all three together.": "Décode chaque vidéo une fois au lieu d'une fois par métrique : beaucoup moins de travail CPU en 4K VVC. Très gourmand en mémoire GPU en 4K : environ 7,3 Go pour les trois ensemble.",
   "How many test videos keep decoding while one is shown, so the left and right arrows switch to a video that is already running: the selected one, then the one to its right, its left, the next right, the next left, and so on. Each is a running GPU decoder (about 250 MB of RAM for 4K), plus the source. Takes effect immediately, even during playback.": "Combien de vidéos de test restent décodées pendant qu'une est affichée, pour que les flèches gauche et droite passent à une vidéo déjà en cours : celle sélectionnée, puis celle à sa droite, à sa gauche, la suivante à droite, la suivante à gauche, et ainsi de suite. Chacune est un décodeur GPU en marche (environ 250 Mo de RAM en 4K), plus la source. S'applique immédiatement, même pendant la lecture.",
   "Number of test videos decoded simultaneously for fast comparison switching": "Nombre de vidéos de test décodées simultanément pour passer vite d'une comparaison à l'autre",
   "Window": "Fenêtre",
@@ -728,7 +726,9 @@
   " m": " m",
   " lux": " lux",
   "{rate:.1f} Mb/s": "{rate:.1f} Mb/s",
-  "{rate} kb/s": "{rate} kb/s"
+  "{rate} kb/s": "{rate} kb/s",
+  "Always calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "Toujours calculer SSIMULACRA2, Butteraugli et CVVDP ensemble, en une seule passe par vidéo",
+  "Unticked, the three are calculated together when the GPU has the memory for it as each video starts, and one at a time otherwise. Together, each video is decoded once instead of once per metric: much less CPU work for 4K VVC, and about 7.3 GB of GPU memory at 4K.": "Non cochée, les trois sont calculées ensemble lorsque le GPU a assez de mémoire au début de chaque vidéo, et une par une sinon. Ensemble, chaque vidéo est décodée une fois au lieu d'une fois par métrique : beaucoup moins de travail CPU en 4K VVC, et environ 7,3 Go de mémoire GPU en 4K."
  },
  "plurals": {
   "about {count} day": [

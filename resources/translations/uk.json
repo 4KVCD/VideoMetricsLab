@@ -89,9 +89,7 @@
   "CUDA (NVIDIA)": "CUDA (NVIDIA)",
   "HIP (AMD)": "HIP (AMD)",
   "Which of Vship's builds calculates the GPU metrics. Auto uses the fastest one whose scores agree with the reference: CUDA on NVIDIA, HIP on AMD, and Vulkan on other GPUs, such as Intel's. Vulkan runs on any GPU. If the chosen build cannot run here, the others are tried.": "Яка збірка Vship обчислює метрики GPU. «Авто» вибирає найшвидшу з тих, чиї оцінки збігаються з еталоном: CUDA на NVIDIA, HIP на AMD і Vulkan на інших GPU, наприклад Intel. Vulkan працює на будь-якому GPU. Якщо вибрана збірка тут не запускається, пробуються інші.",
-  "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "Обчислювати SSIMULACRA2, Butteraugli і CVVDP разом, за один прохід на відео",
   "Each video is decoded once for all its GPU metrics instead of once for each. Where the GPU decodes the videos this gains little; where the CPU does -- 4K VVC, which no GPU decodes -- it saves most of the decoding.\n\nVery heavy on GPU memory at 4K: about 7.3 GB for all three at once, against at most 4.8 GB one at a time (CVVDP). A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "Кожне відео декодується один раз для всіх метрик GPU, а не раз на метрику. Якщо відео декодує GPU, виграш невеликий; якщо CPU (4K VVC, який не декодує жоден GPU), заощаджується більша частина декодування.\n\nДуже вимогливо до пам'яті GPU у 4K: близько 7,3 ГБ для всіх трьох разом проти максимум 4,8 ГБ для однієї метрики окремо (CVVDP). Метрику, що не вдалася в спільному проході, наприклад через нестачу пам'яті GPU, буде переобчислено окремо.\n\nОцінки однакові в обох випадках. Діє з наступного запуску.",
-  "Decodes each video once instead of once per metric: much less CPU work for 4K VVC. Very heavy on GPU memory at 4K: about 7.3 GB for all three together.": "Декодує кожне відео один раз, а не раз на метрику: значно менше роботи для CPU з 4K VVC. Дуже вимогливо до пам'яті GPU у 4K: близько 7,3 ГБ для всіх трьох разом.",
   "How many test videos keep decoding while one is shown, so the left and right arrows switch to a video that is already running: the selected one, then the one to its right, its left, the next right, the next left, and so on. Each is a running GPU decoder (about 250 MB of RAM for 4K), plus the source. Takes effect immediately, even during playback.": "Скільки тестових відео продовжують декодуватися, поки ви дивитеся одне, щоб стрілки ліворуч/праворуч перемикали на відео, що вже відтворюється: вибране, потім праворуч від нього, потім ліворуч, далі наступне праворуч, наступне ліворуч і так далі. Кожне — це робочий GPU-декодер (близько 250 МБ пам'яті для 4K), плюс вихідне відео. Діє одразу, навіть під час відтворення.",
   "Number of test videos decoded simultaneously for fast comparison switching": "Тестових відео, що декодуються разом, для швидкого перемикання між порівняннями",
   "Window": "Вікно",
@@ -728,7 +726,9 @@
   " m": " м",
   " lux": " лк",
   "{rate:.1f} Mb/s": "{rate:.1f} Мбіт/с",
-  "{rate} kb/s": "{rate} кбіт/с"
+  "{rate} kb/s": "{rate} кбіт/с",
+  "Always calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "Завжди обчислювати SSIMULACRA2, Butteraugli і CVVDP разом, за один прохід на відео",
+  "Unticked, the three are calculated together when the GPU has the memory for it as each video starts, and one at a time otherwise. Together, each video is decoded once instead of once per metric: much less CPU work for 4K VVC, and about 7.3 GB of GPU memory at 4K.": "Без позначки всі три обчислюються разом, якщо на початку кожного відео GPU має досить пам'яті, а інакше по одній. Разом кожне відео декодується один раз, а не раз на метрику: значно менше роботи для CPU з 4K VVC і близько 7,3 ГБ пам'яті GPU у 4K."
  },
  "plurals": {
   "about {count} day": [
