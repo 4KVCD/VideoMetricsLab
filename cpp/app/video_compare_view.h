@@ -12,6 +12,7 @@
 // holding up the pair shown. The source's soundtrack plays with ffplay.
 #pragma once
 
+#include <QFutureWatcher>
 #include <QImage>
 #include <QPointF>
 #include <QRect>
@@ -258,6 +259,8 @@ private:
     std::set<QThread*> stopping_;
 #ifdef VML_NATIVE_PLAYBACK
     std::unique_ptr<NativePool> native_pool_;
+    // What native playback first needs being made (NativePool::load).
+    QFutureWatcher<void>* native_loading_ = nullptr;
 #endif
     // Why FFmpeg plays, not native playback: said in the status.
     QString pool_reason_;

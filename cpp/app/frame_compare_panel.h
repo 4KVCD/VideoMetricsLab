@@ -325,6 +325,10 @@ private:
     QTimer* seek_timer_ = nullptr;
     QTimer* display_timer_ = nullptr;
     QTimer* position_timer_ = nullptr;
+    // Off screen, what playback holds is let go of in stages (hideEvent).
+    QTimer* release_timer_ = nullptr;
+    enum class ReleaseStage { decoders, trim, device };
+    ReleaseStage release_stage_ = ReleaseStage::decoders;
     // Playback moving the seek widgets, which must not seek it back.
     bool syncing_video_position_ = false;
     // Playback's status as the view said it, in English.

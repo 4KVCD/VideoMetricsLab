@@ -8,9 +8,13 @@
 
 #include <QStringList>
 
+#include <QtConcurrent/QtConcurrentRun>
+
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
 
 #include "native_device.h"
@@ -118,6 +122,70 @@ void PairedFrameWidget::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 // ------------------------------------------------------------------ the pool
+
+namespace {
+
+std::atomic<bool>& native_loaded() {
+    static std::atomic<bool> loaded{false};
+    return loaded;
+}
+
+// The loading started (NativePool::load), until unload.
+struct Loading {
+    std::mutex mutex;
+    std::optional<QFuture<void>> future;
+};
+
+Loading& native_loading() {
+    static Loading loading;
+    return loading;
+}
+
+}  // namespace
+
+QFuture<void> NativePool::load() {
+    Loading& state = native_loading();
+    const std::lock_guard lock(state.mutex);
+    std::optional<QFuture<void>>& loading = state.future;
+    if (!loading) {
+        loading = QtConcurrent::run([] {
+            if (!unavailable()) {
+                try {
+                    (void)NativeDevice::shared();
+                    NativePresentation::prepare();
+                } catch (const std::exception&) {
+                    // Said when playback starts, which makes them again.
+                }
+            }
+            native_loaded() = true;
+        });
+    }
+    return *loading;
+}
+
+void NativePool::trim() {
+    // Direct3D frees what was let go of only when the device is next used:
+    // its state cleared and its work flushed, it frees it now.
+    if (const std::shared_ptr<NativeDevice> device = NativeDevice::existing()) {
+        const std::lock_guard lock(device->lock());
+        device->context()->ClearState();
+        device->context()->Flush();
+    }
+}
+
+void NativePool::unload() {
+    {
+        Loading& state = native_loading();
+        const std::lock_guard lock(state.mutex);
+        state.future.reset();
+        native_loaded() = false;
+    }
+    NativeDevice::release_shared();
+}
+
+bool NativePool::loaded() {
+    return native_loaded() || QGuiApplication::platformName() == QStringLiteral("offscreen");
+}
 
 std::optional<QString> NativePool::unavailable() {
     if (QGuiApplication::platformName() == QStringLiteral("offscreen")) {

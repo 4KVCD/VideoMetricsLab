@@ -29,6 +29,9 @@
 #include "i18n.h"
 #include "theme.h"
 #include "video_compare_view.h"
+#ifdef VML_NATIVE_PLAYBACK
+#include "native_pool.h"
+#endif
 #include "widgets.h"
 #include "vml/crop_detect.h"
 #include "vml/metrics.h"
@@ -49,6 +52,14 @@ const char* const nothing_to_compare = N_("Select a source video and add a test 
 // bytes.
 constexpr std::size_t cache_limit = 12;
 constexpr qsizetype cache_byte_limit = 192LL * 1024 * 1024;
+
+// How long the tab may be off screen before playback lets go of its
+// decoders (hideEvent), and then of the GPU's device: a return within a few
+// minutes finds the device ready (made again, the display driver's start
+// held the window's timers up for 110-280 ms as playback started).
+constexpr int release_after_ms = 30'000;
+constexpr int trim_after_ms = 2'000;  // once what was let go of has ended
+constexpr int unload_after_ms = 5 * 60'000;
 
 QString text_of(const std::string& text) { return QString::fromStdString(text); }
 
@@ -495,6 +506,37 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     position_timer_->setSingleShot(true);
     position_timer_->setInterval(100);
     connect(position_timer_, &QTimer::timeout, this, [this] { show_video_position(); });
+    // Off screen for a while, playback lets go of its decoders, frames,
+    // presenter and sound, then of what Direct3D keeps of them, then of the
+    // GPU's device: for a 4K source and three 4K test videos (the source and
+    // the VVC one decoded in software), 5.9 GB of RAM and 1.6 GB of GPU
+    // memory, then 0.35 GB and 149 MB, then 53 MB and none. Shown again, the
+    // tab plays from the same frame (showEvent).
+    release_timer_ = new QTimer(this);
+    release_timer_->setSingleShot(true);
+    connect(release_timer_, &QTimer::timeout, this, [this] {
+        switch (release_stage_) {
+            case ReleaseStage::decoders:
+                if (video_view != nullptr) {
+                    video_view->clear();
+                }
+                release_stage_ = ReleaseStage::trim;
+                release_timer_->start(trim_after_ms);
+                break;
+            case ReleaseStage::trim:
+#ifdef VML_NATIVE_PLAYBACK
+                NativePool::trim();
+#endif
+                release_stage_ = ReleaseStage::device;
+                release_timer_->start(unload_after_ms - release_after_ms - trim_after_ms);
+                break;
+            case ReleaseStage::device:
+#ifdef VML_NATIVE_PLAYBACK
+                NativePool::unload();
+#endif
+                break;
+        }
+    });
 
     // This panel's own widgets' keys, rather than the whole application's:
     // a filter on the application would keep every window closed alive.
@@ -673,6 +715,7 @@ void FrameComparePanel::cancel() {
 void FrameComparePanel::showEvent(QShowEvent* event) {
     // Watches the window's keys and moves, and shows the current pair.
     QWidget::showEvent(event);
+    release_timer_->stop();
     if (!window_filters_installed_) {
         QWidget* top = window();
         top->installEventFilter(this);
@@ -692,7 +735,8 @@ void FrameComparePanel::showEvent(QShowEvent* event) {
 }
 
 void FrameComparePanel::hideEvent(QHideEvent* event) {
-    // Stops the workers, and pauses playback.
+    // Stops the workers, and pauses playback, which lets go of its decoders
+    // if the tab stays off screen.
     seek_timer_->stop();
     display_timer_->stop();
     ++generation_;
@@ -700,6 +744,8 @@ void FrameComparePanel::hideEvent(QHideEvent* event) {
     cancel_crop_workers();
     if (video_view != nullptr) {
         video_view->set_playing(false);
+        release_stage_ = ReleaseStage::decoders;
+        release_timer_->start(release_after_ms);
     }
     showing_source_ = false;
     update_labels();

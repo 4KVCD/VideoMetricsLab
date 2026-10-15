@@ -52,10 +52,39 @@ std::optional<std::string> load_ffmpeg_libraries() {
     return problem;
 }
 
+namespace {
+
+struct SharedDevice {
+    std::mutex mutex;
+    std::shared_ptr<NativeDevice> device;
+};
+
+SharedDevice& shared_device() {
+    static SharedDevice shared;
+    return shared;
+}
+
+}  // namespace
+
+std::shared_ptr<NativeDevice> NativeDevice::existing() {
+    SharedDevice& shared = shared_device();
+    const std::lock_guard lock(shared.mutex);
+    return shared.device;
+}
+
+void NativeDevice::release_shared() {
+    std::shared_ptr<NativeDevice> going;
+    {
+        SharedDevice& shared = shared_device();
+        const std::lock_guard lock(shared.mutex);
+        going = std::move(shared.device);
+    }
+}
+
 std::shared_ptr<NativeDevice> NativeDevice::shared() {
-    static std::mutex mutex;
-    static std::shared_ptr<NativeDevice> device;
-    const std::lock_guard lock(mutex);
+    SharedDevice& shared = shared_device();
+    const std::lock_guard lock(shared.mutex);
+    std::shared_ptr<NativeDevice>& device = shared.device;
     if (!device || device->lost()) {
         const std::optional<unsigned> adapter = platform::first_gpu_adapter();
         if (!adapter) {

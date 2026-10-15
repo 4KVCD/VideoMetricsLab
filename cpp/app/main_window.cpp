@@ -56,6 +56,9 @@
 #include "graph_panel.h"
 #include "i18n.h"
 #include "options_panel.h"
+#ifdef VML_NATIVE_PLAYBACK
+#include "native_pool.h"
+#endif
 #include "run_worker.h"
 #include "series_colors.h"
 #include "settings_panel.h"
@@ -563,6 +566,14 @@ void MainWindow::build_ui() {
     // window is too small for it (ScrollingPage).
     tabs_ = new QuietTabWidget;
     root->addWidget(tabs_, 1);
+#ifdef VML_NATIVE_PLAYBACK
+    // The pointer on Video Compare's tab starts making what its playback
+    // first needs (NativePool::load), 130 ms here, during the moment before
+    // the click: opened then, its first frames showed after 133 ms instead
+    // of 309 ms.
+    tabs_->tabBar()->setMouseTracking(true);
+    tabs_->tabBar()->installEventFilter(this);
+#endif
 
     auto* videos_page = new QWidget;
     auto* videos_layout = new QVBoxLayout(videos_page);
@@ -1148,6 +1159,14 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     // A file dropped on the reference box replaces the reference; the line
     // edit's own drop would only paste the file's URL in as text.
     const QEvent::Type type = event->type();
+#ifdef VML_NATIVE_PLAYBACK
+    if (type == QEvent::MouseMove && watched == tabs_->tabBar() && !NativePool::loaded()) {
+        const auto* move = static_cast<QMouseEvent*>(event);
+        if (tabs_->tabBar()->tabAt(move->position().toPoint()) == tab_frame_compare) {
+            (void)NativePool::load();  // once: the same loading while it runs
+        }
+    }
+#endif
     if (watched == source_edit_ && (type == QEvent::DragEnter || type == QEvent::DragMove || type == QEvent::Drop)) {
         auto* drop = static_cast<QDropEvent*>(event);
         // Found when the drag enters: a drag move comes with every mouse

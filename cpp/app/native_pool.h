@@ -7,6 +7,7 @@
 // cannot drift apart.
 #pragma once
 
+#include <QFuture>
 #include <QString>
 #include <QWidget>
 
@@ -82,6 +83,24 @@ public:
     // run here at all.
     static Parts default_parts(const PreviewColorSettings& colors);
     static std::optional<QString> unavailable();
+    // What native playback's first start needs, made off the window's
+    // thread: FFmpeg's libraries, the GPU's device and the presenter's
+    // shaders. Made on the window's thread, the device alone held it up for
+    // 79 ms (the display driver loading) as Video Compare first opened.
+    // `load` starts it once and gives the same future after; `loaded` is
+    // true once it is done, and on the offscreen platform, which has no
+    // native playback.
+    static QFuture<void> load();
+    static bool loaded();
+    // Frees what Direct3D still keeps of decoders and presenters gone: after
+    // 4K playback, 181 of the 330 MB of GPU memory left, and 190 MB of RAM.
+    // For when none is left.
+    static void trim();
+    // Lets go of the GPU's device: it goes once the decoders and the
+    // presenter still ending have, with the rest of the GPU memory and the
+    // RAM the display driver held for it (about 300 MB after 4K playback);
+    // the next start makes it again (load).
+    static void unload();
 
     // Selects a test video: keeps the decoders still needed, stops the
     // others and starts the missing ones.

@@ -720,6 +720,22 @@ void VideoCompareView::restart_decoder(bool realtime) {
     std::optional<NativePool::Parts> parts;
     if (const std::optional<std::string> problem = native_playback_problem(*comparison_, colors_)) {
         reason = QString::fromStdString(*problem);
+    } else if (!NativePool::loaded()) {
+        // The first start: what native playback needs is made off the
+        // window's thread, and playback starts once it is.
+        wanted_playing_ = realtime;
+        if (native_loading_ == nullptr) {
+            native_loading_ = new QFutureWatcher<void>(this);
+            connect(native_loading_, &QFutureWatcher<void>::finished, this, [this] {
+                native_loading_->deleteLater();
+                native_loading_ = nullptr;
+                if (comparison_) {
+                    restart_decoder(wanted_playing_);
+                }
+            });
+            native_loading_->setFuture(NativePool::load());
+        }
+        return;
     } else {
         parts = native_parts(colors_, reason);
     }
