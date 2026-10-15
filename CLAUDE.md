@@ -71,9 +71,17 @@ A fixed step between "tests pass" and "commit".
 
 - If the suite hangs, rerun with `-n 0 -o faulthandler_timeout=60` to find
   where.
+- The C++ app's unit tests too, Release and Debug, from `cpp`:
+  `ctest --preset windows-release` and `ctest --preset windows-debug`. Its
+  integration tests (`windows-release-integration`) run when their code
+  changes, at the end of each phase of work and before a release.
+- A unit test takes at most 100 ms (gtest's time, Release build). A slower
+  one is an integration test: put it on an integration list in
+  `cpp/tests/CMakeLists.txt`.
 - Never write or keep a test that depends on real elapsed time or machine
   load. Use a fake clock. Delete a flaky test rather than loosening it.
-- Add a test for each bug you fix where one is possible without real hardware.
+- Write few tests, only important ones: a test for a bug you fix where it
+  would catch that bug coming back, without real hardware.
 
 ## GitHub
 

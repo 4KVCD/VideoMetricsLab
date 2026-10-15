@@ -170,6 +170,15 @@ iterator, so run them too; on Linux, the sanitizer preset does that job.
 The tests that need a GPU, or a library the app does not ship for the
 system yet, are skipped without it, as on GitHub's runners.
 
+The tests come in two suites. The unit tests take at most 100 ms each, a
+few seconds together, and are the check before every commit:
+`ctest --preset windows-release`. The integration tests decode, score and
+play real videos with FFmpeg, the GPU and the window, and take longer:
+`ctest --preset windows-release-integration`, or both suites with
+`windows-release-all`. They run at the end of each phase of the work,
+before a release, and when their code changes. A test that takes longer
+than 100 ms goes on an integration list in `tests/CMakeLists.txt`.
+
 | System | Needs | Commands (from `cpp`) |
 | --- | --- | --- |
 | Windows | Visual Studio 2022 or its Build Tools (the compiler Qt 6.12 supports), CMake 3.25+ | `cmake --preset windows`, `cmake --build --preset windows-release`, `ctest --preset windows-release` |
@@ -189,9 +198,9 @@ Actions > C++ port > Run workflow), at the end of each phase of the port and
 before a release: on Windows, with
 Qt, so that the window and its tests are built and run there too (those
 that need a GPU or FFmpeg skip themselves), and with Linux's sanitizer
-preset. Until the port reaches Linux and macOS, it does not build their
-release presets. During the port, the suites run on the development PC
-before each commit.
+preset, both suites. Until the port reaches Linux and macOS, it does not
+build their release presets. During the port, the unit tests run on the
+development PC before each commit.
 
 ## Rules for the code
 

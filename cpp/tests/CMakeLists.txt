@@ -64,12 +64,54 @@ target_link_libraries(vml_test_library PRIVATE vml_compile_options)
 add_dependencies(vml_tests vml_test_child vml_test_library vml-cli)
 
 include(GoogleTest)
-# The tests that run work on the PC's GPU share a lock, so that ctest -j runs
-# them one at a time: side by side they could use up a smaller PC's memory
-# (they crashed a 14 GB laptop with an AMD 780M). The others run in parallel.
+# Two suites, by label. A unit test takes at most 100 ms (gtest's own time, in
+# a Release build); they are the check before every commit. The integration
+# tests are the slower ones that decode, score or play real videos with
+# FFmpeg, the GPU or the window; they run at the end of each phase of work,
+# before a release, and when their code changes. A test over 100 ms goes on
+# an integration list here. `ctest --preset <name>` runs the unit tests,
+# `<name>-integration` the others and `<name>-all` both (CMakePresets.json).
+#
+# The tests that run work on the PC's GPU also share a lock, so that ctest -j
+# runs them one at a time: side by side they could use up a smaller PC's
+# memory (they crashed a 14 GB laptop with an AMD 780M). The others run in
+# parallel.
 set(gpu_suites "GpuFrames.*:VmafCuda.*:VmafV1Gpu.*:VmafVulkan.*:Vship.*")
-gtest_discover_tests(vml_tests TEST_FILTER "-${gpu_suites}")
-gtest_discover_tests(vml_tests TEST_FILTER "${gpu_suites}" PROPERTIES RESOURCE_LOCK gpu)
+set(gpu_integration
+    "GpuFrames.DecodingThatFailsHandsTheRunToFfmpeg"
+    "GpuFrames.PacketsWithoutTimestampsAreRefusedForTheReasonThePythonAppGives"
+    "GpuFrames.PicturesAreFfmpegsDecoding"
+    "GpuFrames.VmafOnTheGpuScoresTheAppsPicturesAsFfmpegsFrames"
+    "GpuFrames.VmafV1ScoresThePicturesKeptOnTheGpuAsFfmpegsFrames"
+    "VmafCuda.*"
+    "VmafV1Gpu.*"
+    "VmafVulkan.ProbeAcceptsThisPcsGpu"
+    "VmafVulkan.ScoresAsThePythonApp"
+    "Vship.ProbeTriesTheChosenBuildFirst")
+set(cpu_integration
+    "AppLog.StartsAgainAtFiveMegabytesKeepingFourOlderFiles"
+    "Bitrate.ReadsAClipsPacketsWithFfprobe"
+    "FfmpegRun.BuildsThePythonAppsFilterGraphAndCommand"
+    "Ffprobe.ReadingAVideoIsEndedByCancel"
+    "FrameExtract.ExtractsTheFrameAskedFor"
+    "LibvmafCpu.*"
+    "PerceptualCpu.APairIsScoredOnceFFmpegHasLetGoOfItsPictures"
+    "PerceptualCpu.ATaskScoresEveryPairInOrder"
+    "PerceptualCpu.CancelEndsEveryPairBeingScored"
+    "PerceptualCpu.PairedByTimestampAFrameDroppedFromTheTestVideoPairsTheRestByTime"
+    "PerceptualCpu.ThePicturesAreEachVideosFrameNCutAtTheLimit"
+    "Process.AProgramRunningTooLongIsEnded"
+    "Process.TerminateEndsARunningProgram")
+list(JOIN gpu_integration ":" gpu_integration)
+list(JOIN cpu_integration ":" cpu_integration)
+gtest_discover_tests(vml_tests TEST_FILTER "-${gpu_suites}:${cpu_integration}"
+    PROPERTIES LABELS unit)
+gtest_discover_tests(vml_tests TEST_FILTER "${gpu_suites}-${gpu_integration}"
+    PROPERTIES LABELS unit RESOURCE_LOCK gpu)
+gtest_discover_tests(vml_tests TEST_FILTER "${cpu_integration}"
+    PROPERTIES LABELS integration)
+gtest_discover_tests(vml_tests TEST_FILTER "${gpu_integration}"
+    PROPERTIES LABELS integration RESOURCE_LOCK gpu)
 
 # The window's tests, where the window is built (app/CMakeLists.txt). They
 # run with no screen, each in a profile of its own (app/main.cpp).
@@ -110,5 +152,41 @@ if(TARGET vml_app)
             VERBATIM)
         vml_deploy_qt_translations(vml_app_tests)
     endif()
-    gtest_discover_tests(vml_app_tests)
+    # Unit and integration tests, as for vml_tests above.
+    set(app_integration
+        "NativeDecoderTest.*"
+        "BitratePanelTest.StopEndsTheScanAndKeepsWhatWasRead"
+        "FramePanelTest.APairThatCanPlayIsPlayedWithThePanelsControls"
+        "FramePanelTest.TheFramesShownAreFfmpegsFramesOfBothVideos"
+        "PlaybackTest.AFailedDecoderResumesDownABoundedLadderWithoutReplaying"
+        "PlaybackTest.ARealPairShowsTheSameFrameOfBothVideos"
+        "WindowTest.AFinishedRunIsOnTheGraphAndARemovedVideoTakesItsLineAway"
+        "WindowTest.AFinishedRunsVideosAreReadInTheBitrateViewer"
+        "WindowTest.ANewReferenceRemovesTheResolutionTestsMadeFromTheOldOne"
+        "WindowTest.ANewReferenceTakesAwayHowARunAgainstTheOldOneEnded"
+        "WindowTest.ANewReferenceTakesAwayTheScoresMeasuredAgainstTheOldOne"
+        "WindowTest.ANewerReleaseIsOfferedUntilTheUserSkipsIt"
+        "WindowTest.AReferencePathPastedWithQuotesIsReadWhenEnterIsPressed"
+        "WindowTest.AResolutionTestLoadedFromASavedRunDescribesTheTest"
+        "WindowTest.AResolutionTestScoresTheReferenceScaledDownAndBackUp"
+        "WindowTest.ARunPausedOnTheWayScoresAsTheCommandLineAndItsTimeLeavesThePauseOut"
+        "WindowTest.ARunsScoresAreSavedForTheNextTimeItsVideosAreAddedUnlessRecalculated"
+        "WindowTest.ASavedRunLoadsIntoAnotherWindowAsAnUntickedRowWithItsScores"
+        "WindowTest.ASavedRunsOtherReferenceTakenInRemovesTheResolutionTestsOfTheOldOne"
+        "WindowTest.ASwitchOfThemeRecoloursEveryColouredCellAndLeavesTheRest"
+        "WindowTest.CancelEndsAPausedRunAndMarksTheVideoItWasCalculating"
+        "WindowTest.ClickingAMetricTickBoxSelectsThatMetricForTheRow"
+        "WindowTest.ClosingTheWindowDuringARunEndsTheRunAndThenTheWindow"
+        "WindowTest.EachSettingIsSavedAsItIsEditedAndNewVideosTakeTheDefaults"
+        "WindowTest.FilesDroppedAreAddedOnceReadOffTheWindowsThreadAndEachListOpensItsOwnFolder"
+        "WindowTest.HighlightBestWorstColoursEachMetricsBestAndWorstScore"
+        "WindowTest.ScoresSavedSinceAVideoWasAddedComeBackWhenItsMetricsAreTickedOrShown"
+        "WindowTest.TestBothAddsARowScoringTheSameVideoTheOtherWayRound"
+        "WindowTest.TheVideosOpenAtClosingAreReopenedThoseStillThere"
+        "WindowTest.VideoCompareListsTheVideosReadScoredOrNotAndFollowsTheTable")
+    list(JOIN app_integration ":" app_integration)
+    gtest_discover_tests(vml_app_tests TEST_FILTER "-${app_integration}"
+        PROPERTIES LABELS unit)
+    gtest_discover_tests(vml_app_tests TEST_FILTER "${app_integration}"
+        PROPERTIES LABELS integration)
 endif()
