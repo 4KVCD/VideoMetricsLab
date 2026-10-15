@@ -320,8 +320,13 @@ protected:
         }
         mime.setUrls(urls);
         // As a drag delivers it: Qt gives the drop to the widget that took
-        // the drag as it entered, and to no other.
+        // the drag as it entered, and to no other. Qt 6.12 takes the point as
+        // a QPointF and deprecates the QPoint that Qt 6.11 and older take.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 12, 0)
         QDragEnterEvent enter(QPointF(5, 5), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+#else
+        QDragEnterEvent enter(QPoint(5, 5), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+#endif
         QApplication::sendEvent(target, &enter);
         QDropEvent drop(QPointF(5, 5), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
         QApplication::sendEvent(target, &drop);
