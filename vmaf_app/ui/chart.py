@@ -129,6 +129,12 @@ class ChartWidget(QWidget):
             self._series = dict(sorted(self._series.items()))
             self._invalidate()
 
+    def renumber(self, renumbered: dict[int, int]) -> None:
+        """Gives the lines the new keys `renumbered` names (old: new), and
+        puts them in the new keys' order."""
+        self._series = {renumbered.get(key, key): series for key, series in self._series.items()}
+        self.sort_series()
+
     def set_series_color(self, key: int, color: str) -> None:
         """Repaint a color change without scanning scores or resetting zoom."""
         series = self._series.get(key)
@@ -383,7 +389,10 @@ class ChartWidget(QWidget):
         painter.setPen(QPen(colours.text, 1))
         for px, tick_time in time_ticks:
             label = format_hms(tick_time)
-            painter.drawText(px - metrics.horizontalAdvance(label) // 2,
+            # Centred on its tick, but kept inside the widget: a tick at the
+            # right end lost half its label ("0:00:0").
+            label_width = metrics.horizontalAdvance(label)
+            painter.drawText(min(px - label_width // 2, self.width() - label_width - 1),
                              rect.bottom() + metrics.height() + 2, label)
         for py, label in value_ticks:
             painter.drawText(rect.left() - metrics.horizontalAdvance(label) - 6,

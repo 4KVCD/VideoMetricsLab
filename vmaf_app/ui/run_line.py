@@ -186,6 +186,7 @@ def metric_line(snapshots, paused: bool) -> tuple[list[str], str, dict[str, HwAc
         return ""
 
     parts = []
+    heads = []  # each part's head, and the step it is starting on, if any
     for place in ("CPU", "GPU"):
         if not order[place]:
             continue
@@ -196,8 +197,16 @@ def metric_line(snapshots, paused: bool) -> tuple[list[str], str, dict[str, HwAc
                  or [unit for unit in mine if unit.state == "failed"])
         if not shown:
             parts.append(tr("{kind} done", kind=tr(_PLACE_NAMES[place])))
+            heads.append(("", ""))
         for unit in shown:
             parts.append(_unit_text(head(unit), unit, paused, holder(unit)))
+            heads.append((head(unit), step_text(unit.task.get("step") or "") if unit.state == "starting" else ""))
+    # Every part starting on the same step (the CPU's and the GPU's metrics
+    # waiting for the black bars they share): the step said once, first,
+    # rather than after each part.
+    steps = {step for _head, step in heads}
+    if len(parts) > 1 and len(steps) == 1 and "" not in steps:
+        parts = [steps.pop()] + [part_head for part_head, _step in heads]
     lines = []
     for place in ("CPU", "GPU"):
         for key in order[place]:

@@ -431,6 +431,18 @@ def _rough_duration(seconds: float) -> str:
     return ntr("about {count} minute", "about {count} minutes", minutes)
 
 
+def _whole_video_frames(comparison: FrameComparison, options: VmafOptions) -> int:
+    """The frames Video Compare offers: the shorter video's (a resolution
+    test's source's), as a run would bound them, but whatever duration limit
+    the metrics have. That limit is the metrics' alone: playback stopped at
+    it, three seconds into a four-minute video, and the frames past it show
+    that they were not scored."""
+    resample = comparison.resample_target is not None
+    return estimate_total_frames(comparison.source_info if resample else comparison.distorted_info,
+                                 replace(options, duration_limit=0.0),
+                                 None if resample else comparison.source_info)
+
+
 class CompletedRun:
     """A finished run, its display label, and its graph identity.
 
@@ -2497,7 +2509,7 @@ class MainWindow(QMainWindow):
             table.blockSignals(False)
         table.viewport().update()
         self._on_table_selection_changed()
-        self._sync_frame_compare()  # Video Compare lists the videos in the table's order
+        self._sync_frame_compare()  # Video Compare and Metric Graphs list the videos in the table's order
 
     def _on_rows_dragged(self, rows: list[int], target: int) -> None:
         """Rows dragged within the table: they go, in their order, before `target`."""
@@ -4495,6 +4507,9 @@ class MainWindow(QMainWindow):
         measuring, or to see whether an encode is the same content at all.
         Requiring a finished run first would hide the tab when it is most
         useful, before starting a feature-length calculation.
+
+        Metric Graphs lists its lines in the table's order too: called after
+        every change to the rows, this keeps both in step with it.
         """
         entries = []
         for row in self._rows:
@@ -4502,20 +4517,24 @@ class MainWindow(QMainWindow):
             if entry is not None:
                 entries.append(entry)
         self.frame_compare_panel.set_runs(entries)
+        self.graph_panel.set_order([row.completed_run.graph_identity for row in self._rows
+                                    if row.completed_run is not None])
 
     def _frame_comparison_entry(self, row: RowData) -> FrameComparisonEntry | None:
         """One Frame Compare entry for a row, scored or not."""
         if row.completed_run is not None:
             # A finished run knows the geometry it really used, including
             # crops that were detected at run time.
+            comparison = replace(
+                FrameComparison.from_result(row.completed_run.result),
+                source_info=self._source_info or row.completed_run.result.source_info,
+                distorted_info=row.video_info or row.completed_run.result.distorted_info,
+            )
             return FrameComparisonEntry(
                 identity=row.completed_run.graph_identity,
                 label=row.completed_run.label,
-                comparison=replace(
-                    FrameComparison.from_result(row.completed_run.result),
-                    source_info=self._source_info or row.completed_run.result.source_info,
-                    distorted_info=row.video_info or row.completed_run.result.distorted_info,
-                ),
+                comparison=replace(comparison, frame_count=max(comparison.frame_count,
+                                                               _whole_video_frames(comparison, row.options))),
                 scores=row.completed_run.result.frames,
                 row=row.frame_identity,
             )
@@ -4534,25 +4553,21 @@ class MainWindow(QMainWindow):
         source_crop = distorted_crop = None
 
         distorted_info = self._source_info if resample is not None else row.video_info
-        reference = self._source_info if resample is not None else distorted_info
-        other = None if resample is not None else self._source_info
+        comparison = FrameComparison(
+            source_info=self._source_info,
+            distorted_info=distorted_info,
+            source_crop=source_crop,
+            distorted_crop=distorted_crop,
+            scale_direction=options.scale_direction,
+            scale_algorithm=options.scale_algorithm,
+            resample_target=resample,
+            fps=distorted_info.fps,
+            auto_crop_pending=auto_crop_pending,
+        )
         return FrameComparisonEntry(
             identity=row.frame_identity,
             label=row.path.stem,
-            comparison=FrameComparison(
-                source_info=self._source_info,
-                distorted_info=distorted_info,
-                source_crop=source_crop,
-                distorted_crop=distorted_crop,
-                scale_direction=options.scale_direction,
-                scale_algorithm=options.scale_algorithm,
-                resample_target=resample,
-                fps=reference.fps,
-                # The same bound a run would use, so the timeline cannot
-                # offer frames past the end of the shorter input.
-                frame_count=estimate_total_frames(reference, options, other),
-                auto_crop_pending=auto_crop_pending,
-            ),
+            comparison=replace(comparison, frame_count=_whole_video_frames(comparison, options)),
             row=row.frame_identity,
         )
 

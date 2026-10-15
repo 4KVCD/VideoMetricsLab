@@ -314,14 +314,17 @@ class _MetricPage(QWidget):
 
         self.hover_label = QLabel(self._placeholder)
         self.hover_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-        # The font goes through setFont, not the stylesheet: _fit_hover_label
-        # measures with QFontMetrics(self.hover_label.font()), and a
-        # stylesheet font-family never reaches .font(). Measuring the
-        # proportional default while rendering in wider monospace made the
-        # readout too narrow, clipping the last few characters.
-        mono = QFont("Consolas")
-        mono.setStyleHint(QFont.Monospace)
-        self.hover_label.setFont(mono)
+        # The readout is monospaced, so that its columns line up; the hint
+        # shown until the first hover keeps the window's font, as the rest
+        # of the tab (in the readout's, it looked out of place). The readout's
+        # font goes through setFont, not the stylesheet: _fit_hover_label
+        # measures with QFontMetrics of it, and a stylesheet font-family never
+        # reaches .font(). Measuring the proportional default while rendering
+        # in wider monospace made the readout too narrow, clipping the last
+        # few characters.
+        self._readout_font = QFont("Consolas")
+        self._readout_font.setStyleHint(QFont.Monospace)
+        self._showing_readout = False
         self.hover_label.setStyleSheet("padding: 6px;")
         # Explicit size + plain text + no wrap, all for the same reason: this
         # is rewritten on every mouse move, and anything that lets its size
@@ -398,6 +401,13 @@ class _MetricPage(QWidget):
             self._curves = dict(sorted(self._curves.items()))
         self.chart.sort_series()
 
+    def renumber(self, renumbered: dict[int, int]) -> None:
+        """Gives the lines the new ids `renumbered` names (old: new), the
+        panel's order (GraphPanel._apply_order)."""
+        self._curves = {renumbered.get(sid, sid): curve for sid, curve in self._curves.items()}
+        self.chart.renumber(renumbered)
+        self._keep_lines_in_added_order()
+
     def _set_timeline_curve(self, series_id: int, entry: SeriesEntry, color: str) -> None:
         """Draws a whole-video metric's timeline: CVVDP's JOD for each second.
 
@@ -464,7 +474,7 @@ class _MetricPage(QWidget):
         out from the lines here and left alone while the mouse moves.
         """
         self._refresh_readout_layout()
-        fm = QFontMetrics(self.hover_label.font())
+        fm = QFontMetrics(self._readout_font)
         labels = self._visible_labels()
 
         # The widest each line can get, with digits standing in at their
@@ -479,20 +489,22 @@ class _MetricPage(QWidget):
             lines.append(f"Δ ({labels[0]} − {labels[1]}) = -88.88")
 
         # The label shows one of TWO texts and never resizes between them:
-        # the readout while the cursor is over the plot, and the placeholder
-        # once it leaves. Sizing to only the readout meant a series named "a"
-        # produced a box too small for the placeholder that comes back the
-        # moment the pointer moves away, clipping it.
+        # the placeholder, in the window's font, until the pointer first
+        # comes over the plot, then the readout. Sizing to only the readout
+        # meant a series named "a" produced a box too small for the
+        # placeholder, clipping it.
         placeholder_lines = self._placeholder.splitlines()
+        hint = QFontMetrics(self.font())
 
         # 6px of stylesheet padding top AND bottom come out of the fixed
         # height, so the allowance has to cover both plus a little slack --
         # too small and the last series' line is cut off.
         padding = 28
-        width = max(fm.horizontalAdvance(line) for line in lines + placeholder_lines) + padding
+        width = max([fm.horizontalAdvance(line) for line in lines]
+                    + [hint.horizontalAdvance(line) for line in placeholder_lines]) + padding
         # The taller of the two states, not their sum: they are never shown
         # at the same time.
-        height = max(len(lines), len(placeholder_lines)) * fm.lineSpacing() + padding
+        height = max(len(lines) * fm.lineSpacing(), len(placeholder_lines) * hint.lineSpacing()) + padding
 
         # A maximum rather than a fixed width: the label never claims more
         # room than its text needs (hover repaint cost scales with the damaged
@@ -610,6 +622,9 @@ class _MetricPage(QWidget):
         # every time; repainting it again is pure waste.
         if text != self._hover_text:
             self._hover_text = text
+            if not self._showing_readout:  # the hint gives way, once
+                self._showing_readout = True
+                self.hover_label.setFont(self._readout_font)
             self.hover_label.setText(text)
 
     # ------------------------------------------------------------------ hover
@@ -856,6 +871,9 @@ class GraphPanel(QWidget):
         self._video_colors = colors if colors is not None else VideoColors()
         self._video_colors.changed.connect(self._on_video_color_changed)
         self._entries: dict[int, SeriesEntry] = {}
+        # The lines' identities in the order wanted, the Videos table's
+        # (set_order).
+        self._order: list[object] = []
         self._suppressed_identities: set[object] = set()
         self._next_id = 0
         self._preferred_metric = "vmaf"
@@ -1310,9 +1328,32 @@ class GraphPanel(QWidget):
 
     def _series_changed(self) -> None:
         """Updates the page, table and frame range after lines changed."""
+        self._apply_order()
         self._select_available_metric()
         self._refresh_stats_table()
         self._refresh_frame_range()
+
+    def set_order(self, identities: list[object]) -> None:
+        """Lists the lines in the order of `identities`, the Videos table's;
+        lines not among them (results added here) follow, in the order they
+        came. They were listed in the order their runs finished."""
+        self._order = list(identities)
+        if self._apply_order():
+            self._refresh_stats_table()
+
+    def _apply_order(self) -> bool:
+        """Gives the lines new ids in the order wanted, as every page and the
+        table go by id; returns whether any moved."""
+        position = {identity: index for index, identity in enumerate(self._order)}
+        wanted = sorted(self._entries, key=lambda sid: (position.get(self._entries[sid].identity, len(position)), sid))
+        if wanted == sorted(self._entries):
+            return False
+        renumbered = {old: self._next_id + index for index, old in enumerate(wanted)}
+        self._next_id += len(wanted)
+        self._entries = {renumbered[sid]: self._entries[sid] for sid in wanted}
+        for page in self._pages.values():
+            page.renumber(renumbered)
+        return True
 
     def remove_by_path(self, distorted: Path) -> bool:
         """Drops the series for a distorted file, if it has one.

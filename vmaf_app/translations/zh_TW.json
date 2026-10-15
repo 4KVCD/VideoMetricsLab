@@ -84,7 +84,7 @@
   "The display CVVDP models for newly added videos, whatever their format. Saving a preset of your own in the Options panel makes it the default; choose here to change that.": "CVVDP 為新增影片模擬的顯示器，不論影片格式為何。在選項面板中儲存你自己的預設集會將其設為預設；可在此處變更。",
   "GPU metrics": "GPU 指標",
   "GPU backend:": "GPU 後端：",
-  "Auto (CUDA on NVIDIA, HIP on AMD, Vulkan on other GPUs)": "自動（NVIDIA 上用 CUDA，AMD 上用 HIP，其他 GPU 上用 Vulkan）",
+  "Auto (VMAF: Vulkan; SSIMULACRA2, Butteraugli, CVVDP: CUDA on NVIDIA, HIP on AMD, Vulkan on other GPUs)": "自動（VMAF：Vulkan；SSIMULACRA2、Butteraugli、CVVDP：NVIDIA 上用 CUDA，AMD 上用 HIP，其他 GPU 上用 Vulkan）",
   "Vulkan (any GPU)": "Vulkan（任何 GPU）",
   "CUDA (NVIDIA)": "CUDA (NVIDIA)",
   "HIP (AMD)": "HIP (AMD)",

@@ -730,10 +730,14 @@ class FrameComparePanel(QWidget):
 
     def _on_video_playing_changed(self, playing: bool) -> None:
         """Shows Play or Pause."""
+        self.play_btn.setText(tr("❚❚ Pause") if playing else tr("▶ Play"))
+        # Said before the frame line is drawn: drawn first, it went on
+        # saying "Playing" once playback had stopped.
+        self._video_status = "Playing" if playing else "Paused"
         if not playing and self._position_timer.isActive():
             self._show_video_position()  # the frame it stopped on, now
-        self.play_btn.setText(tr("❚❚ Pause") if playing else tr("▶ Play"))
-        self._video_status = "Playing" if playing else "Paused"
+        elif self.is_video_mode:
+            self._update_frame_line()
         if self.is_video_mode:
             self._update_color_status()
 
@@ -746,6 +750,9 @@ class FrameComparePanel(QWidget):
             self.advanced_info_btn.setToolTip(tooltip)
         if self.is_video_mode:
             self._update_color_status()
+            # Drawn only as the frame moved, the line kept the status from
+            # before: "Playing" at the end, the last test video's decoder.
+            self._update_frame_line()
 
     def _on_video_selected(self, index: int) -> None:
         """Shows the test video chosen in the list."""

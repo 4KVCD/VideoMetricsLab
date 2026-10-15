@@ -84,7 +84,7 @@
   "The display CVVDP models for newly added videos, whatever their format. Saving a preset of your own in the Options panel makes it the default; choose here to change that.": "형식과 관계없이 새로 추가하는 영상에 대해 CVVDP가 모델링하는 디스플레이입니다. [옵션] 패널에서 내 사전 설정을 저장하면 기본값이 되며, 여기서 바꿀 수 있습니다.",
   "GPU metrics": "GPU 지표",
   "GPU backend:": "GPU 백엔드:",
-  "Auto (CUDA on NVIDIA, HIP on AMD, Vulkan on other GPUs)": "자동 (NVIDIA에서는 CUDA, AMD에서는 HIP, 다른 GPU에서는 Vulkan)",
+  "Auto (VMAF: Vulkan; SSIMULACRA2, Butteraugli, CVVDP: CUDA on NVIDIA, HIP on AMD, Vulkan on other GPUs)": "자동 (VMAF: Vulkan; SSIMULACRA2, Butteraugli, CVVDP: NVIDIA에서는 CUDA, AMD에서는 HIP, 다른 GPU에서는 Vulkan)",
   "Vulkan (any GPU)": "Vulkan (모든 GPU)",
   "CUDA (NVIDIA)": "CUDA (NVIDIA)",
   "HIP (AMD)": "HIP (AMD)",

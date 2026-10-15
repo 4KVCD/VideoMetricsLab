@@ -84,7 +84,7 @@
   "The display CVVDP models for newly added videos, whatever their format. Saving a preset of your own in the Options panel makes it the default; choose here to change that.": "Màn hình mà CVVDP mô phỏng cho video mới thêm, bất kể định dạng. Lưu cài đặt sẵn riêng trong bảng Tùy chọn sẽ biến nó thành mặc định; chọn ở đây để đổi.",
   "GPU metrics": "Chỉ số GPU",
   "GPU backend:": "Backend GPU:",
-  "Auto (CUDA on NVIDIA, HIP on AMD, Vulkan on other GPUs)": "Tự động (CUDA trên NVIDIA, HIP trên AMD, Vulkan trên GPU khác)",
+  "Auto (VMAF: Vulkan; SSIMULACRA2, Butteraugli, CVVDP: CUDA on NVIDIA, HIP on AMD, Vulkan on other GPUs)": "Tự động (VMAF: Vulkan; SSIMULACRA2, Butteraugli, CVVDP: CUDA trên NVIDIA, HIP trên AMD, Vulkan trên GPU khác)",
   "Vulkan (any GPU)": "Vulkan (mọi GPU)",
   "CUDA (NVIDIA)": "CUDA (NVIDIA)",
   "HIP (AMD)": "HIP (AMD)",

@@ -182,6 +182,13 @@ class BitratePanel(QWidget):
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.progress.setMaximumWidth(220)
+        # Shown only while files are read: left at 100% it looked as if
+        # something were still going on. Its room is kept, so that the plot
+        # does not move when it comes and goes.
+        keep_room = self.progress.sizePolicy()
+        keep_room.setRetainSizeWhenHidden(True)
+        self.progress.setSizePolicy(keep_room)
+        self.progress.setVisible(False)
         status_row.addWidget(self.status_label, stretch=1)
         status_row.addWidget(self.progress)
         root.addLayout(status_row)
@@ -333,6 +340,8 @@ class BitratePanel(QWidget):
         worker.failed.connect(self._on_failed)
         worker.finished.connect(lambda w=worker: self._on_worker_finished(w))
         self._update_buttons()
+        self.progress.setValue(0)
+        self.progress.setVisible(True)
         worker.start()
 
     def _on_file_started(self, path: Path) -> None:
@@ -405,6 +414,7 @@ class BitratePanel(QWidget):
                 tr("Bitrate analysis stopped. Completed results are kept.") if stopped else
                 tr("Bitrate analysis complete. Values contain the first video stream only.")
             )
+            self.progress.setVisible(False)
             self._update_buttons()
 
     # --------------------------------------------------------------- table UI

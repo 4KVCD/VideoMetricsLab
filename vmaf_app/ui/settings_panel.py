@@ -48,10 +48,10 @@ from vmaf_app.ui.formatting import preset_label
 
 _log = logging.getLogger(__name__)
 
-#: The "Default metrics" check boxes, in the order they are shown: the
-#: metric's key and its label.
+#: The "Default metrics" check boxes, in the order they are shown, the
+#: Videos table's and Metric Graphs': the metric's key and its label.
 _DEFAULT_METRICS = (
-    ("vmaf", "VMAF v0.6.1"), ("vmaf_v1", "VMAF v1"), ("vmaf_neg", "VMAF NEG"), ("psnr", "PSNR"),
+    ("vmaf", "VMAF v0.6.1"), ("vmaf_neg", "VMAF NEG"), ("vmaf_v1", "VMAF v1"), ("psnr", "PSNR"),
     ("ssim", "SSIM"), ("xpsnr", "XPSNR"), ("ssimulacra2", "SSIMULACRA2"), ("butteraugli", "Butteraugli"),
     ("cvvdp", "CVVDP"),
 )
@@ -236,7 +236,12 @@ class SettingsPanel(QWidget):
         # with an AMD one, or when already chosen, so that a GPU detection
         # missed does not lose the choice.
         self.gpu_backend = QComboBox()
-        choices = [(tr("Auto (CUDA on NVIDIA, HIP on AMD, Vulkan on other GPUs)"), "auto"),
+        # Under Auto, VMAF is calculated with Vulkan whatever the GPU (with
+        # CUDA only when CUDA is chosen here); the maker decides only Vship's
+        # build. The text said "CUDA on NVIDIA", which VMAF does not use under
+        # Auto.
+        choices = [(tr("Auto (VMAF: Vulkan; SSIMULACRA2, Butteraugli, CVVDP: CUDA on NVIDIA, HIP on AMD, "
+                       "Vulkan on other GPUs)"), "auto"),
                    (tr("Vulkan (any GPU)"), "vulkan")]
         if GpuVendor.NVIDIA in gpu_vendors or settings.gpu_backend == "cuda":
             choices.append((tr("CUDA (NVIDIA)"), "cuda"))
