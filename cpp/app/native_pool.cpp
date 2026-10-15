@@ -230,6 +230,22 @@ void NativePool::sync(int selected) {
         eos_.erase(entry->first);
         entry = entries_.erase(entry);
     }
+    // A test video decoded beside the one shown, chosen now, can be far
+    // behind it: a decoder slower than playback (4K VVC on the CPU) stops
+    // once it falls behind, the few frames it holds kept as ones still to
+    // come. Decoded on from there, it held playback up for as long as it had
+    // been away (47 frames in 15 s, after 30 s away); sought to the frame
+    // shown, it starts as a new decoder does.
+    const std::string chosen = distorted_key(selected_);
+    if (const auto entry = entries_.find(chosen); entry != entries_.end() && !entry->second->seeking()) {
+        std::map<long long, NativeFramePtr>& queue = frames_[chosen];
+        if (!queue.empty() && queue.rbegin()->first < frame_ - static_cast<long long>(fps_ / 2)) {
+            queue.clear();
+            eos_.erase(chosen);
+            // One frame early, as seek() does.
+            entry->second->seek(std::max(0, position_ - static_cast<int>(round_even(1000 / fps_))));
+        }
+    }
     launch_missing();
     choose_pair(frame_);
 }
