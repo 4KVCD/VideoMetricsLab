@@ -399,7 +399,11 @@ TEST(GpuFrames, VmafV1ScoresThePicturesKeptOnTheGpuAsFfmpegsFrames) {
                 GpuFrameStream source_stream(source, source_plan, 0, pool, backend, found->ffmpeg, found->ffprobe,
                                              true);
                 ASSERT_TRUE(test_stream.handover() && source_stream.handover());
-                ASSERT_EQ(test_stream.gives_textures() && source_stream.gives_textures(), pictures);
+                // Windows' decoder gives its pictures as textures whichever way
+                // they are scored; reading them in place is the scorer's choice.
+                if (pictures) {
+                    ASSERT_TRUE(test_stream.gives_textures() && source_stream.gives_textures());
+                }
                 std::optional<MultiScorer> scorer;
                 scorer.emplace(640, 360, bits, checked.models, checked.step, "vulkan", std::nullopt, &test_stream,
                                pictures);
