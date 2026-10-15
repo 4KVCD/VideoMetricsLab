@@ -728,7 +728,8 @@
   "{rate:.1f} Mb/s": "{rate:.1f} ميغابت/ث",
   "{rate} kb/s": "{rate} كيلوبت/ث",
   "Always calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "حساب SSIMULACRA2 وButteraugli وCVVDP معًا دائمًا في مرور واحد لكل فيديو",
-  "Unticked, the three are calculated together when the GPU has the memory for it as each video starts, and one at a time otherwise. Together, each video is decoded once instead of once per metric: much less CPU work for 4K VVC, and about 7.3 GB of GPU memory at 4K.": "عند عدم التحديد، تُحسب الثلاثة معًا إذا كانت لدى GPU الذاكرة الكافية عند بدء كل فيديو، وإلا فواحدًا تلو الآخر. معًا، يُفك ترميز كل فيديو مرة واحدة بدلًا من مرة لكل مقياس: عمل أقل بكثير للمعالج مع 4K VVC، ونحو 7.3 غيغابايت من ذاكرة GPU في 4K."
+  "Unticked, the three are calculated together when the GPU has the memory for it as each video starts, and one at a time otherwise. Together, each video is decoded once instead of once per metric: much less CPU work for 4K VVC, and about 7.3 GB of GPU memory at 4K.": "عند عدم التحديد، تُحسب الثلاثة معًا إذا كانت لدى GPU الذاكرة الكافية عند بدء كل فيديو، وإلا فواحدًا تلو الآخر. معًا، يُفك ترميز كل فيديو مرة واحدة بدلًا من مرة لكل مقياس: عمل أقل بكثير للمعالج مع 4K VVC، ونحو 7.3 غيغابايت من ذاكرة GPU في 4K.",
+  "Checking the GPU before the run…": "جارٍ فحص GPU قبل التشغيل…"
  },
  "plurals": {
   "about {count} day": [

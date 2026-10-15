@@ -3,11 +3,13 @@
 // the status line saying how much is done and for how long, a line for each
 // video in progress, and each video's scores in its row as they arrive.
 #include <QCheckBox>
+#include <QFutureWatcher>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QTableWidgetItem>
 #include <QTimer>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
 #include <cmath>
@@ -27,12 +29,15 @@
 #include "vml/crop_detect.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/geometry.h"
+#include "vml/gpu_vmaf.h"
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/perceptual.h"
 #include "vml/run_line.h"
 #include "vml/time_format.h"
+#include "vml/vmaf_v1_gpu.h"
+#include "vml/vship.h"
 
 // The window's text is app::tr's, as in main_window.cpp.
 namespace vml::app {
@@ -128,6 +133,9 @@ void MainWindow::on_run_clicked() {
                              app::tr("Select at least one metric for every checked video, or uncheck videos you do "
                                      "not want to calculate."));
         return;
+    }
+    if (wait_for_gpu_checks(checked)) {
+        return;  // clicked again once they are done
     }
 
     // A ticked row that already has a score (say it was ticked before more
@@ -296,6 +304,39 @@ bool MainWindow::confirm_skipping(const std::vector<std::pair<std::shared_ptr<Ro
            QMessageBox::Yes;
 }
 
+bool MainWindow::wait_for_gpu_checks(const std::vector<int>& checked) {
+    // The GPU checks the run's plan reads (which metrics the GPU takes: Vship,
+    // VMAF on the GPU, and VMAF v1's when a row has it on the GPU), waited
+    // for off the window's thread. They start with the app, but take seconds,
+    // and a run asked for before they were done stood the window still until
+    // they were (2.3 s here; a slower PC takes longer).
+    bool v1 = false;
+    for (const int row : checked) {
+        const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        v1 = v1 || (row_data.options.vmaf_on_gpu && contains(requested_metrics(row_data), "vmaf_v1"));
+    }
+    if (vship_probe_ready() && gpu_vmaf_probe_ready() && (!v1 || v1_probe_ready())) {
+        return false;
+    }
+    if (gpu_check_watcher_ == nullptr) {
+        show_status(app::tr("Checking the GPU before the run\xE2\x80\xA6"));
+        gpu_check_watcher_ = new QFutureWatcher<void>(this);
+        connect(gpu_check_watcher_, &QFutureWatcher<void>::finished, this, [this] {
+            gpu_check_watcher_->deleteLater();
+            gpu_check_watcher_ = nullptr;
+            on_run_clicked();
+        });
+        gpu_check_watcher_->setFuture(QtConcurrent::run([v1] {
+            detect_vship_device();
+            gpu_vmaf_backend();
+            if (v1) {
+                v1_available();
+            }
+        }));
+    }
+    return true;
+}
+
 bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<RowData>>& job_rows) {
     // Asks before SSIMULACRA2 or Butteraugli on the CPU for a video over ten
     // minutes. The CPU tools score one pair of still images at a time, 1-2 s
@@ -331,7 +372,7 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
         std::vector<std::string> cpu_keys;
         QStringList cpu_metrics;
         for (const std::string& key : pending) {
-            if (backend(key) != "cpu" && !gpu_missing.value_or(false) && gpu_can_score(key)) {
+            if (backend(key) != "cpu" && !gpu_missing.value_or(false) && gpu_scores(key)) {
                 continue;
             }
             cpu_keys.push_back(key);

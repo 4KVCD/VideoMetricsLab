@@ -15,6 +15,7 @@
 // glue (main_window_graph.cpp, main_window_compare.cpp).
 #pragma once
 
+#include <QFutureWatcher>
 #include <QMainWindow>
 #include <QPointer>
 #include <QString>
@@ -388,6 +389,10 @@ private:
     void on_run_clicked();
     bool confirm_skipping(const std::vector<std::pair<std::shared_ptr<RowData>, QString>>& skipped, bool others);
     bool confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<RowData>>& job_rows);
+    // Starts waiting for the GPU checks the run needs, unless they are done:
+    // true while they are not, the run then starting by itself.
+    bool wait_for_gpu_checks(const std::vector<int>& checked);
+    void refresh_metric_cells();
     void set_run_ui_active(bool active);
     int parallel_jobs() const;
     void on_parallel_jobs_changed(bool on);
@@ -537,6 +542,8 @@ private:
     BitratePanel* bitrate_panel_ = nullptr;
     // The newer release offered, while its message is open.
     QPointer<QMessageBox> update_box_;
+    // The GPU checks a run is waiting for (wait_for_gpu_checks), while it is.
+    QFutureWatcher<void>* gpu_check_watcher_ = nullptr;
     // The Settings tab, and the latest check of FFmpeg, which it shows.
     SettingsPanel* settings_panel_ = nullptr;
     ToolsStatus tools_status_;

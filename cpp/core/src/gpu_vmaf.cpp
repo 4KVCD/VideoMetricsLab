@@ -246,6 +246,12 @@ GpuVmafBackend gpu_vmaf_backend() {
     return *probe.found;
 }
 
+bool gpu_vmaf_probe_ready() {
+    Probe& probe = probe_state();
+    const std::unique_lock lock(probe.mutex, std::try_to_lock);
+    return lock.owns_lock() && probe.found.has_value();
+}
+
 void forget_failed_gpu_vmaf_probe() {
     Probe& probe = probe_state();
     const std::lock_guard lock(probe.mutex);

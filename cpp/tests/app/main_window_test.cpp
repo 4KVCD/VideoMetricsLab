@@ -52,11 +52,13 @@
 #include "vml/app_log.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/ffprobe.h"
+#include "vml/gpu_vmaf.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/run_file.h"
+#include "vml/vship.h"
 #include "widgets.h"
 
 namespace vml::app {
@@ -146,7 +148,9 @@ protected:
     static std::string job_line(MainWindow& window, std::size_t line) {
         return window.job_progress_labels_[line]->full_text().toStdString();
     }
-    static bool running(MainWindow& window) { return window.run_active_; }
+    // A run asked for and not over: running, or waiting for the GPU checks
+    // it needs (MainWindow::wait_for_gpu_checks).
+    static bool running(MainWindow& window) { return window.run_active_ || window.gpu_check_watcher_ != nullptr; }
     static RowState state(MainWindow& window, int row) {
         return window.row_state(*window.rows_[static_cast<std::size_t>(row)]);
     }
@@ -650,6 +654,10 @@ TEST_F(WindowTest, ARunPausedOnTheWayScoresAsTheCommandLineAndItsTimeLeavesThePa
     double now = 100;
     set_clock(window, [&now] { return now; });
     open_clips(window);
+    // The GPU checks done, as the app starts them as it opens: a run asked
+    // for before they are done waits for them (wait_for_gpu_checks).
+    (void)detect_vship_device();
+    (void)gpu_vmaf_backend();
 
     run_button(window).click();
     // Frozen at once: nothing that changes what a running video means can

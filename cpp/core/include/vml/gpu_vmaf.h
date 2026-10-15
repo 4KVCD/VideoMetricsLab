@@ -57,6 +57,9 @@ struct GpuVmafBackend {
 // process of its own where a program to run it is set (isolated.h), as the
 // Python app checks it.
 GpuVmafBackend gpu_vmaf_backend();
+// Whether gpu_vmaf_backend would answer now, without probing or waiting for a
+// probe in progress.
+bool gpu_vmaf_probe_ready();
 
 // Before a run of the window, which stays open for long: forgets an answer
 // that the CPU scores VMAF found a minute or more ago, so that the run asks

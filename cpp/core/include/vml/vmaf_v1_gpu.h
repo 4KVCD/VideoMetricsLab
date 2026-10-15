@@ -216,6 +216,9 @@ V1Probe probe_v1();
 // probe_v1's answer, found once, in a process of its own where a program to
 // run it is set (isolated.h).
 V1Probe v1_available();
+// Whether v1_available would answer now, without probing or waiting for a
+// probe in progress.
+bool v1_probe_ready();
 
 // Whether a run's VMAF v1 is calculated with the GPU: `model` (its
 // "path=<file>", or empty while Auto is not yet resolved) is a VMAF v1 model,

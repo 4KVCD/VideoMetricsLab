@@ -318,10 +318,15 @@ const VshipLibrary& kept_build(const std::string& backend,
 // ----------------------------------------------------- the probe's state
 
 struct ProbeState {
-    std::mutex mutex;
+    std::mutex mutex;  // held for the whole of a probe
     std::string backend = "auto";
     std::optional<std::pair<std::optional<VshipDevice>, std::string>> probed;
     std::chrono::steady_clock::time_point probed_at;
+    // The last finished probe's result, under a lock of its own that a probe
+    // in progress does not hold (known_vship_device).
+    std::mutex known_mutex;
+    std::optional<std::pair<std::optional<VshipDevice>, std::string>> known;
+    std::function<void()> on_finished;  // under known_mutex
 };
 
 // How long a probe that found no GPU is kept before a run probes again
@@ -619,8 +624,31 @@ std::pair<std::optional<VshipDevice>, std::string> detect_vship_device() {
         } else {
             app_log::write(app_log::Level::warning, "vml.perceptual_vship", "Vship GPU unavailable: " + reason);
         }
+        const std::lock_guard known_lock(state.known_mutex);
+        state.known = state.probed;
+        if (state.on_finished) {
+            state.on_finished();
+        }
     }
     return *state.probed;
+}
+
+void on_vship_probe_finished(std::function<void()> callback) {
+    ProbeState& state = probe_state();
+    const std::lock_guard lock(state.known_mutex);
+    state.on_finished = std::move(callback);
+}
+
+std::optional<std::pair<std::optional<VshipDevice>, std::string>> known_vship_device() {
+    ProbeState& state = probe_state();
+    const std::lock_guard lock(state.known_mutex);
+    return state.known;
+}
+
+bool vship_probe_ready() {
+    ProbeState& state = probe_state();
+    const std::unique_lock lock(state.mutex, std::try_to_lock);
+    return lock.owns_lock() && state.probed.has_value();
 }
 
 void forget_failed_vship_probe() {
@@ -635,6 +663,14 @@ void forget_failed_vship_probe() {
 bool gpu_can_score(const std::string& key) {
     const auto [device, reason] = detect_vship_device();
     return device && scores_correctly(*device, key);
+}
+
+std::optional<bool> known_gpu_can_score(const std::string& key) {
+    const std::optional<std::pair<std::optional<VshipDevice>, std::string>> known = known_vship_device();
+    if (!known) {
+        return std::nullopt;
+    }
+    return known->first && scores_correctly(*known->first, key);
 }
 
 // ------------------------------------------------------------- frame layouts

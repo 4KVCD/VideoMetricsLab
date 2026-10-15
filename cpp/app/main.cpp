@@ -141,11 +141,11 @@ int main(int argc, char** argv) {
                    "Theme: " + (settings.theme.empty() ? std::string("as Windows") : settings.theme));
     set_gpu_backend(settings.gpu_backend);
     set_vship_backend(settings.gpu_backend);
-    // The first probes load Vship and start the GPU's driver, which would
-    // freeze the window for as long if it came when the first video is
-    // added, and hold up the first run's VMAF; started now, they are done by
-    // then. VMAF v1's (1.75 s on its own) too, when it is calculated by
-    // default on the GPU: the first run waited for it.
+    // The first probes load Vship and start the GPU's driver, which takes
+    // seconds; started now, they are usually done before a run is asked for.
+    // The window never waits for them (window_helpers.h), but a run does
+    // (MainWindow::wait_for_gpu_checks). VMAF v1's (1.75 s on its own) too,
+    // when it is calculated by default on the GPU.
     (void)QtConcurrent::run([] { detect_vship_device(); });
     (void)QtConcurrent::run([] { gpu_vmaf_backend(); });
     if (settings.default_compute_vmaf_v1 && settings.default_vmaf_on_gpu) {

@@ -315,9 +315,16 @@ MainWindow::MainWindow() {
     check_ffmpeg(true);  // the start's check: both tools present, ffmpeg new enough
     restore_open_videos();
     on_table_selection_changed();
+    // The rows say which metrics can be calculated here (CVVDP needs a GPU
+    // Vship can use) without waiting for the GPU check that starts with the
+    // app (window_helpers.h), and are brought up to date when it finishes.
+    on_vship_probe_finished([this] {
+        QMetaObject::invokeMethod(this, [this] { refresh_metric_cells(); }, Qt::QueuedConnection);
+    });
 }
 
 MainWindow::~MainWindow() {
+    on_vship_probe_finished(nullptr);  // the window is going: a check finishing now has nothing to tell
     if (open_videos_lookup_) {
         const std::lock_guard lock(open_videos_lookup_->mutex);
         open_videos_lookup_->window = nullptr;  // its answer has no window to go to now
@@ -1433,6 +1440,15 @@ int MainWindow::add_table_row(const std::filesystem::path& path) {
     return row;
 }
 
+void MainWindow::refresh_metric_cells() {
+    // Every row's metric cells again, after a GPU check: which metrics this
+    // PC can calculate, and which saved scores answer the rows, depend on it.
+    for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
+        set_row_metrics(row);
+    }
+    schedule_best_worst();
+}
+
 void MainWindow::set_row_metrics(int row) {
     // Each metric cell shows its score, or a tick box for calculating it. A
     // metric that has been measured shows only the number: there is no
@@ -2448,7 +2464,7 @@ std::vector<std::string> MainWindow::reusable_metric_keys(const RowData& row_dat
                          analysis_request(row_data.options, requested_metrics(row_data), row_data.metric_backends,
                                           row_data.cvvdp)
                              .metrics,
-                         row_data.metric_backends, [](const std::string& key) { return gpu_can_score(key); }, infos);
+                         row_data.metric_backends, [](const std::string& key) { return gpu_scores(key); }, infos);
 }
 
 MetricResultSet MainWindow::reusable_results(const RowData& row_data) const {
@@ -2483,7 +2499,7 @@ bool MainWindow::backend_matches(const RowData& row_data, const std::string& key
     // made_as_chosen); a metric without a GPU or CPU choice always is.
     const auto choice = row_data.metric_backends.find(key);
     return made_as_chosen(key, choice == row_data.metric_backends.end() ? std::nullopt : std::optional(choice->second),
-                          provenance.compute_backend, [](const std::string& metric) { return gpu_can_score(metric); });
+                          provenance.compute_backend, [](const std::string& metric) { return gpu_scores(metric); });
 }
 
 QString MainWindow::backend_note(const RowData& row_data, const std::string& key, const FrameMetricResult* metric) {

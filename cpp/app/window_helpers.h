@@ -5,6 +5,8 @@
 #include <QString>
 
 #include <filesystem>
+#include <optional>
+#include <string>
 #include <string_view>
 
 #include "vml/platform/system.h"
@@ -50,8 +52,18 @@ inline bool same_file(const std::filesystem::path& a, const std::filesystem::pat
     return same_path(resolved(a), resolved(b));
 }
 
-// Whether a GPU Vship can use is here (CVVDP runs on it); the probe is kept
-// after the first time.
-inline bool vship_available() { return detect_vship_device().first.has_value(); }
+// Whether a GPU Vship can use is here (CVVDP runs on it), and whether it
+// scores `key` correctly (vship.h's gpu_can_score), as the last GPU check to
+// finish found. The window never waits for a check: one starts with the app
+// and takes seconds, and a run checks again after a failed one. Until the
+// first has finished, a GPU is taken to be there, and the rows are brought up
+// to date when it finishes (MainWindow::refresh_metric_cells); a run waits
+// for it, off the window's thread (MainWindow::wait_for_gpu_checks).
+inline bool vship_available() {
+    const auto known = known_vship_device();
+    return !known || known->first.has_value();
+}
+
+inline bool gpu_scores(const std::string& key) { return known_gpu_can_score(key).value_or(true); }
 
 }  // namespace vml::app

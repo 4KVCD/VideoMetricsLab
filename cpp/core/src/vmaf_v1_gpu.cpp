@@ -1308,10 +1308,22 @@ V1Probe probe_v1() {
     }
 }
 
+namespace {
+
+// The probe's result, kept for the process, and the lock held while it runs.
+std::mutex v1_probe_mutex;
+std::optional<V1Probe> v1_probed;
+
+}  // namespace
+
+bool v1_probe_ready() {
+    const std::unique_lock lock(v1_probe_mutex, std::try_to_lock);
+    return lock.owns_lock() && v1_probed.has_value();
+}
+
 V1Probe v1_available() {
-    static std::mutex mutex;
-    static std::optional<V1Probe> probed;
-    const std::lock_guard lock(mutex);
+    std::optional<V1Probe>& probed = v1_probed;
+    const std::lock_guard lock(v1_probe_mutex);
     if (!probed) {
         try {
             if (!isolation_program()) {

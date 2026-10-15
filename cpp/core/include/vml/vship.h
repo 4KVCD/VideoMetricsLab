@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <utility>
@@ -258,6 +259,19 @@ std::optional<VshipDevice> vship_device_from(const nlohmann::json& text);
 // is none.
 std::pair<std::optional<VshipDevice>, std::string> detect_vship_device();
 
+// What the last probe to finish found, at once: never waiting for a probe in
+// progress, which takes seconds (one starts with the app, and a run probes
+// again after a failed one). Nothing before the first has finished. For the
+// window's thread, which must not stop for a probe.
+std::optional<std::pair<std::optional<VshipDevice>, std::string>> known_vship_device();
+// Whether detect_vship_device would answer now, without probing or waiting
+// for a probe.
+bool vship_probe_ready();
+// Calls `callback` each time a probe finishes, on the thread that ran it,
+// with known_vship_device up to date; nothing for none. It is not called
+// once this returns, so that its owner can go: it must be quick.
+void on_vship_probe_finished(std::function<void()> callback);
+
 // Forgets a probe that found no GPU a minute or more ago, so that the next
 // run probes again: the failure may have been temporary (a driver being
 // updated or restarted, a GPU briefly unavailable), and without this every
@@ -268,6 +282,9 @@ void forget_failed_vship_probe();
 // GPU here: when Vship can use a GPU, and its build scores the metric
 // correctly.
 bool gpu_can_score(const std::string& key);
+// gpu_can_score from what the last probe to finish found
+// (known_vship_device): nothing before the first has finished.
+std::optional<bool> known_gpu_can_score(const std::string& key);
 
 // The planar layout FFmpeg sends a video's frames in (`pixel_format`), and
 // how Vship reads it. `family` is 1 for RGB, whose planes are all full size
