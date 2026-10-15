@@ -302,12 +302,12 @@ std::vector<unsigned> gpu_vendor_ids() {
     return vendors;
 }
 
-unsigned first_gpu_adapter() {
+std::optional<unsigned> first_gpu_adapter() {
     if (!named_vendor_ids()) {
         return 0;
     }
     const std::vector<std::pair<UINT, unsigned>> gpus = listed_gpus();
-    return gpus.empty() ? 0 : gpus.front().first;
+    return gpus.empty() ? std::nullopt : std::optional<unsigned>(gpus.front().first);
 }
 
 std::optional<long long> modified_ns(const std::filesystem::path& file) {

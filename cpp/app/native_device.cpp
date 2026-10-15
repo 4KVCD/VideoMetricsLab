@@ -57,7 +57,11 @@ std::shared_ptr<NativeDevice> NativeDevice::shared() {
     static std::shared_ptr<NativeDevice> device;
     const std::lock_guard lock(mutex);
     if (!device || device->lost()) {
-        device = std::make_shared<NativeDevice>(platform::first_gpu_adapter());
+        const std::optional<unsigned> adapter = platform::first_gpu_adapter();
+        if (!adapter) {
+            throw std::runtime_error("D3D11 device unavailable");  // VML_GPU_VENDOR names a maker not here
+        }
+        device = std::make_shared<NativeDevice>(*adapter);
     }
     return device;
 }

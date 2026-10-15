@@ -128,8 +128,9 @@ bool keep_system_awake(bool awake);
 // CUDA and Vulkan).
 std::vector<unsigned> gpu_vendor_ids();
 // DirectX's number for the GPU that Video Compare decodes and draws on: 0,
-// the first, unless VML_GPU_VENDOR names another maker's.
-unsigned first_gpu_adapter();
+// the first, unless VML_GPU_VENDOR names another maker's; nothing when it
+// names a maker with no GPU here (as with no GPU, none to draw on).
+std::optional<unsigned> first_gpu_adapter();
 
 // When a file was last written, in nanoseconds since 1970 (Python's
 // st_mtime_ns), or nothing when it cannot be read.
