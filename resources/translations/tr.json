@@ -433,7 +433,7 @@
   "No videos loaded": "Video yüklenmedi",
   "▶ Play": "▶ Oynat",
   "Audio": "Ses",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "GStreamer, S ile geçişler ve kodlama değişiklikleri boyunca kaynağın bir ses parçasını kesintisiz çalar. Eksik veya desteklenmeyen kaynak sesi sessiz kalır. FFmpeg yedeği de kaynağın ses parçasını çalar. Videonun arabelleğe alınması sesi de duraklatır.",
+  "Native playback plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "Özgün oynatma, S ile geçişler ve kodlama değişiklikleri boyunca kaynağın bir ses parçasını kesintisiz çalar. Eksik veya desteklenmeyen kaynak sesi sessiz kalır. FFmpeg yedeği de kaynağın ses parçasını çalar. Videonun arabelleğe alınması sesi de duraklatır.",
   "− Frame": "− Kare",
   "Enter seconds, M:SS, or H:MM:SS.sss": "Saniye, M:SS veya H:MM:SS.sss girin",
   "+ Frame": "+ Kare",

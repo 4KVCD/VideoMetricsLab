@@ -430,7 +430,7 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     connect(play_button, &QPushButton::clicked, this, [this] { on_play_clicked(); });
     audio_checkbox = new QCheckBox(app::tr("Audio"));
     audio_checkbox->setToolTip(app::tr(
-        "GStreamer plays one source soundtrack continuously across S and encode switches. "
+        "Native playback plays one source soundtrack continuously across S and encode switches. "
         "Missing/unsupported source audio stays silent. The FFmpeg fallback plays the "
         "source's soundtrack too. Video buffering also pauses audio."));
     audio_checkbox->setChecked(true);

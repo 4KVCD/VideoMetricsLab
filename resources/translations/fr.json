@@ -433,7 +433,7 @@
   "No videos loaded": "Aucune vidéo chargée",
   "▶ Play": "▶ Lecture",
   "Audio": "Audio",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "GStreamer lit une piste son de la source en continu lors des bascules avec S et entre encodages. Un son de source absent ou non pris en charge reste muet. Le repli FFmpeg lit aussi la piste de la source. La mise en mémoire tampon vidéo met aussi le son en pause.",
+  "Native playback plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "La lecture native lit une piste son de la source en continu lors des bascules avec S et entre encodages. Un son de source absent ou non pris en charge reste muet. Le repli FFmpeg lit aussi la piste de la source. La mise en mémoire tampon vidéo met aussi le son en pause.",
   "− Frame": "− Image",
   "Enter seconds, M:SS, or H:MM:SS.sss": "Saisissez des secondes, M:SS ou H:MM:SS.sss",
   "+ Frame": "+ Image",

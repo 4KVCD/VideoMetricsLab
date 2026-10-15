@@ -433,7 +433,7 @@
   "No videos loaded": "불러온 영상 없음",
   "▶ Play": "▶ 재생",
   "Audio": "오디오",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "GStreamer는 S 키 전환과 인코딩 전환 동안에도 원본의 오디오 트랙 하나를 끊김 없이 재생합니다. 원본 오디오가 없거나 지원되지 않으면 무음입니다. FFmpeg 대체 방식도 원본의 오디오 트랙을 재생합니다. 영상이 버퍼링되는 동안 오디오도 일시 중지됩니다.",
+  "Native playback plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "기본 재생은 S 키 전환과 인코딩 전환 동안에도 원본의 오디오 트랙 하나를 끊김 없이 재생합니다. 원본 오디오가 없거나 지원되지 않으면 무음입니다. FFmpeg 대체 방식도 원본의 오디오 트랙을 재생합니다. 영상이 버퍼링되는 동안 오디오도 일시 중지됩니다.",
   "− Frame": "− 프레임",
   "Enter seconds, M:SS, or H:MM:SS.sss": "초, M:SS 또는 H:MM:SS.sss 입력",
   "+ Frame": "+ 프레임",

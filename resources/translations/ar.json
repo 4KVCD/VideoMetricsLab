@@ -433,7 +433,7 @@
   "No videos loaded": "لا مقاطع محمّلة",
   "▶ Play": "▶ تشغيل",
   "Audio": "الصوت",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "يشغّل GStreamer مسارًا صوتيًا واحدًا من المصدر باستمرار عبر التبديل بـ S وبين الترميزات. يبقى صوت المصدر المفقود أو غير المدعوم صامتًا. يشغّل بديل FFmpeg صوت المصدر أيضًا. التخزين المؤقت للفيديو يوقف الصوت أيضًا.",
+  "Native playback plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "يشغّل التشغيل الأصلي مسارًا صوتيًا واحدًا من المصدر باستمرار عبر التبديل بـ S وبين الترميزات. يبقى صوت المصدر المفقود أو غير المدعوم صامتًا. يشغّل بديل FFmpeg صوت المصدر أيضًا. التخزين المؤقت للفيديو يوقف الصوت أيضًا.",
   "− Frame": "− إطار",
   "Enter seconds, M:SS, or H:MM:SS.sss": "أدخل الثواني، أو M:SS، أو H:MM:SS.sss",
   "+ Frame": "+ إطار",

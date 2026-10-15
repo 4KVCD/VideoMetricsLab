@@ -433,7 +433,7 @@
   "No videos loaded": "動画が読み込まれていません",
   "▶ Play": "▶ 再生",
   "Audio": "音声",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "GStreamer は S キーやエンコードの切り替えをまたいで、ソースの音声トラックを途切れずに再生します。ソース音声がない、または非対応の場合は無音です。FFmpeg の代替手段でもソースの音声トラックを再生します。動画のバッファリング中は音声も一時停止します。",
+  "Native playback plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "ネイティブ再生は S キーやエンコードの切り替えをまたいで、ソースの音声トラックを途切れずに再生します。ソース音声がない、または非対応の場合は無音です。FFmpeg の代替手段でもソースの音声トラックを再生します。動画のバッファリング中は音声も一時停止します。",
   "− Frame": "− フレーム",
   "Enter seconds, M:SS, or H:MM:SS.sss": "秒、M:SS、または H:MM:SS.sss を入力",
   "+ Frame": "+ フレーム",

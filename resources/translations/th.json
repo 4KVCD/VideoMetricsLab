@@ -433,7 +433,7 @@
   "No videos loaded": "ไม่ได้โหลดวิดีโอ",
   "▶ Play": "▶ เล่น",
   "Audio": "เสียง",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "GStreamer เล่นแทร็กเสียงเดียวของต้นฉบับต่อเนื่องขณะสลับด้วย S และระหว่างการเข้ารหัส เสียงต้นฉบับที่ไม่มีหรือไม่รองรับจะเงียบ ทางสำรอง FFmpeg ก็เล่นเสียงของต้นฉบับเช่นกัน การบัฟเฟอร์วิดีโอจะหยุดเสียงชั่วคราวด้วย",
+  "Native playback plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "การเล่นแบบดั้งเดิมเล่นแทร็กเสียงเดียวของต้นฉบับต่อเนื่องขณะสลับด้วย S และระหว่างการเข้ารหัส เสียงต้นฉบับที่ไม่มีหรือไม่รองรับจะเงียบ ทางสำรอง FFmpeg ก็เล่นเสียงของต้นฉบับเช่นกัน การบัฟเฟอร์วิดีโอจะหยุดเสียงชั่วคราวด้วย",
   "− Frame": "− เฟรม",
   "Enter seconds, M:SS, or H:MM:SS.sss": "ป้อนวินาที, M:SS หรือ H:MM:SS.sss",
   "+ Frame": "+ เฟรม",

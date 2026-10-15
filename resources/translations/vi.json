@@ -433,7 +433,7 @@
   "No videos loaded": "Chưa tải video",
   "▶ Play": "▶ Phát",
   "Audio": "Âm thanh",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "GStreamer phát liên tục một rãnh âm thanh của nguồn khi chuyển bằng S và giữa các bản mã hóa. Âm thanh nguồn bị thiếu hoặc không được hỗ trợ sẽ im lặng. Phương án dự phòng FFmpeg cũng phát âm thanh của nguồn. Khi video đệm, âm thanh cũng tạm dừng.",
+  "Native playback plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "Chế độ phát gốc phát liên tục một rãnh âm thanh của nguồn khi chuyển bằng S và giữa các bản mã hóa. Âm thanh nguồn bị thiếu hoặc không được hỗ trợ sẽ im lặng. Phương án dự phòng FFmpeg cũng phát âm thanh của nguồn. Khi video đệm, âm thanh cũng tạm dừng.",
   "− Frame": "− Khung",
   "Enter seconds, M:SS, or H:MM:SS.sss": "Nhập giây, M:SS hoặc H:MM:SS.sss",
   "+ Frame": "+ Khung",

@@ -433,7 +433,7 @@
   "No videos loaded": "Tidak ada video yang dimuat",
   "▶ Play": "▶ Putar",
   "Audio": "Audio",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "GStreamer memutar satu trek audio sumber tanpa putus saat beralih dengan S dan antar-enkode. Audio sumber yang tidak ada atau tidak didukung tetap senyap. Cadangan FFmpeg juga memutar audio sumber. Buffering video juga menjeda audio.",
+  "Native playback plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "Pemutaran asli memutar satu trek audio sumber tanpa putus saat beralih dengan S dan antar-enkode. Audio sumber yang tidak ada atau tidak didukung tetap senyap. Cadangan FFmpeg juga memutar audio sumber. Buffering video juga menjeda audio.",
   "− Frame": "− Bingkai",
   "Enter seconds, M:SS, or H:MM:SS.sss": "Masukkan detik, M:SS, atau H:MM:SS.sss",
   "+ Frame": "+ Bingkai",

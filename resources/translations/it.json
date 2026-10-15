@@ -433,7 +433,7 @@
   "No videos loaded": "Nessun video caricato",
   "▶ Play": "▶ Riproduci",
   "Audio": "Audio",
-  "GStreamer plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "GStreamer riproduce una traccia audio dell'originale senza interruzioni durante i passaggi con S e tra le codifiche. L'audio originale mancante o non supportato resta muto. Anche l'alternativa FFmpeg riproduce la traccia dell'originale. Anche il buffering video mette in pausa l'audio.",
+  "Native playback plays one source soundtrack continuously across S and encode switches. Missing/unsupported source audio stays silent. The FFmpeg fallback plays the source's soundtrack too. Video buffering also pauses audio.": "La riproduzione nativa riproduce una traccia audio dell'originale senza interruzioni durante i passaggi con S e tra le codifiche. L'audio originale mancante o non supportato resta muto. Anche l'alternativa FFmpeg riproduce la traccia dell'originale. Anche il buffering video mette in pausa l'audio.",
   "− Frame": "− Fotogramma",
   "Enter seconds, M:SS, or H:MM:SS.sss": "Inserisci secondi, M:SS o H:MM:SS.sss",
   "+ Frame": "+ Fotogramma",
