@@ -458,6 +458,23 @@ std::pair<bool, std::string> VideoCompareView::can_play(const FrameComparison& c
     return {true, ""};
 }
 
+bool VideoCompareView::crops_change_nothing(const FrameComparison& pending, const FrameComparison& cropped) {
+    const Size size = comparison_dimensions(pending);
+    if (size != comparison_dimensions(cropped)) {
+        return false;
+    }
+    for (const auto& [info, crop] : {std::pair(&cropped.source_info, &cropped.source_crop),
+                                     std::pair(&cropped.distorted_info, &cropped.distorted_crop)}) {
+        if (*crop && !(*crop)->is_noop(info->width, info->height)) {
+            return false;
+        }
+        if (would_distort(pending, *info, std::nullopt, size.first, size.second)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 int VideoCompareView::position() const {
     if (!comparison_ || comparison_->fps <= 0) {
         return 0;
@@ -497,12 +514,30 @@ bool VideoCompareView::load(const FrameComparison& comparison, int position_ms, 
     } else {
         played = {comparison};
     }
-    if (series_ == played && colors_ == colors && comparison_ && source_native_ == source_native) {
+    // The pairs playing, each as it is or with black bars found since that
+    // change nothing: then they play as they are. Loaded afresh instead,
+    // every decoder would start again (seconds at 4K), and the first switch
+    // to another test video after a pair's bars were found took that long.
+    const auto plays_as_is = [this, &played] {
+        if (series_.size() != played.size()) {
+            return false;
+        }
+        for (std::size_t index = 0; index < played.size(); ++index) {
+            const FrameComparison& playing = series_[index];
+            if (!(playing == played[index]) &&
+                !(playing.auto_crop_pending && !played[index].auto_crop_pending &&
+                  crops_change_nothing(playing, played[index]))) {
+                return false;
+            }
+        }
+        return true;
+    };
+    if (colors_ == colors && comparison_ && source_native_ == source_native && plays_as_is()) {
         // Another test video of the same series: the decoders go on.
         const int timestamp = position();
         const bool changed = selected_ != selected;
         selected_ = selected;
-        comparison_ = comparison;
+        comparison_ = series_[static_cast<std::size_t>(selected)];  // what plays, as it plays it
         frame_ = static_cast<long long>(std::nearbyint(timestamp / 1000.0 * comparison.fps));
 #ifdef VML_NATIVE_PLAYBACK
         if (native_pool_) {

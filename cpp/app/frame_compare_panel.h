@@ -299,7 +299,6 @@ private:
     void on_video_playing_changed(bool playing);
     void on_video_status_changed(const QString& message);
     QString concise_playback_status() const;
-    static bool crops_change_nothing(const FrameComparison& pending, const FrameComparison& cropped);
 
     std::function<std::string()> ffmpeg_;
     int decoded_videos_;

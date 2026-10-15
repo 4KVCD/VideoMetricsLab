@@ -59,17 +59,12 @@ PairedFrameWidget::PairedFrameWidget(VideoCompareView* view) : QWidget(view), vi
     setAttribute(Qt::WA_DontCreateNativeAncestors);
 }
 
-void PairedFrameWidget::set_native_playback(bool enabled) {
-    native_playback_ = enabled;
-    update();
-}
-
 void PairedFrameWidget::paintEvent(QPaintEvent* /*event*/) {
-    // While native playback owns it, the presenter's window covers all of it,
-    // the bars beside a zoomed frame included.
-    if (!native_playback_) {
-        QPainter(this).fillRect(rect(), QColor("#171717"));
-    }
+    // Painted dark even while native playback owns it: its presenter's window
+    // covers all of it once it shows a frame, but until then (a pool just
+    // started) this is what shows, and unpainted it showed whatever the
+    // window last drew there -- the Videos tab.
+    QPainter(this).fillRect(rect(), QColor("#171717"));
 }
 
 bool PairedFrameWidget::can_drag() const {
@@ -178,7 +173,6 @@ NativePool::NativePool(VideoCompareView& view, std::vector<FrameComparison> seri
     surface_ = new PairedFrameWidget(&view_);
     surface_->setFocusProxy(&view_);
     surface_->setGeometry(view_.rect());
-    surface_->set_native_playback(true);
     surface_->show();
     try {
         output_ = parts_.make_presentation(*surface_);

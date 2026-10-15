@@ -100,9 +100,16 @@ public:
     // a file missing, or a raw stream whose guessed frame rate disagrees.
     static std::pair<bool, std::string> can_play(const FrameComparison& comparison);
 
+    // Whether the black bars found for `pending` leave its pictures as they
+    // are: none on either side, the size compared at unchanged, and neither
+    // side boxed while they were looked for. Then the frames playing are
+    // the ones the crops give.
+    static bool crops_change_nothing(const FrameComparison& pending, const FrameComparison& cropped);
+
     // Shows `comparison` (one of `series`, the pairs that can play) at
     // `position_ms`. Another test video of the same series keeps the
-    // decoders running. False when it cannot be played.
+    // decoders running; so does a series whose black bars, found since,
+    // change nothing (crops_change_nothing). False when it cannot be played.
     bool load(const FrameComparison& comparison, int position_ms, bool playing, const PreviewColorSettings& colors,
               const std::vector<FrameComparison>& series, bool source_native);
     // Stops playback and shows nothing.
@@ -175,6 +182,7 @@ private:
     friend class PlaybackTest;  // the view's tests (tests/app)
     friend class NativePool;    // native playback, which plays on the view's clock and limits
     friend class NativePoolTest;  // its tests (tests/app)
+    friend class FramePanelTest;  // the panel's tests: which decoders play (tests/app)
 
     // What a decoder decodes: a pair (the source's recipe, or a test video's
     // comparison) and its side.

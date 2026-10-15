@@ -47,6 +47,21 @@ protected:
     static std::size_t frames_kept(const FrameComparePanel& panel) { return panel.cache_.size(); }
     static const QImage* current_image(const FrameComparePanel& panel) { return panel.current_image(); }
     static QWidget* shown_page(const FrameComparePanel& panel) { return panel.content_stack_->currentWidget(); }
+    // What plays the view's videos: its native playback, or its source's
+    // FFmpeg decoder; another object once the view has started them again.
+    static const void* decoders(const VideoCompareView& view) {
+#ifdef VML_NATIVE_PLAYBACK
+        if (view.native_pool_) {
+            return view.native_pool_.get();
+        }
+#endif
+        for (const auto& [key, worker] : view.pool_) {
+            if (key.starts_with("s:")) {
+                return worker;
+            }
+        }
+        return nullptr;
+    }
     // The sides whose current frame is kept, as they are now made.
     static std::vector<std::string> kept(const FrameComparePanel& panel) {
         std::vector<std::string> sides;
@@ -331,7 +346,10 @@ TEST_F(FramePanelTest, TheBlackBarsFoundAgainstOneReferenceAreNotUsedWithAnother
 // A pair of real clips plays in the tab: the playback view takes the still
 // frames' place, Play and Space play and pause it (the button says which),
 // the frame box follows the frames played, and a frame chosen while paused
-// is shown there.
+// is shown there. Their black bars, found while they play, change nothing,
+// and the next test video (Right) then plays on the same decoders: loaded
+// afresh, every decoder started again, seconds at 4K, and the window showed
+// what it had drawn there before.
 TEST_F(FramePanelTest, APairThatCanPlayIsPlayedWithThePanelsControls) {
     const std::optional<test::Tools> found = test::tools();
     if (!found) {
@@ -345,11 +363,16 @@ TEST_F(FramePanelTest, APairThatCanPlayIsPlayedWithThePanelsControls) {
         test::make_clip(*found, folder / "encode.mkv", "libx265", "yuv420p", 2.0, {}, "160x90"), found->ffprobe);
     comparison.fps = comparison.distorted_info.fps;
     comparison.frame_count = 47;
+    comparison.auto_crop_pending = true;  // black bars to be found, as a pair just read
+    FrameComparison other = comparison;
+    other.distorted_info = probe_video(
+        test::make_clip(*found, folder / "encode2.mkv", "libx265", "yuv420p", 2.0, {}, "160x90"), found->ffprobe);
     const auto panel = make_panel(found->ffmpeg);
     panel->audio_checkbox->setChecked(false);
     panel->resize(800, 600);
     panel->show();
-    panel->set_runs({{"row:encode", "encode", comparison, nullptr}});
+    panel->set_runs({{"row:encode", "encode", comparison, nullptr, "row:encode"},
+                     {"row:encode2", "encode2", other, nullptr, "row:encode2"}});
     ASSERT_NE(panel->video_view, nullptr);
     EXPECT_EQ(shown_page(*panel), panel->video_view);
     EXPECT_TRUE(panel->play_button->isEnabled());
@@ -369,6 +392,14 @@ TEST_F(FramePanelTest, APairThatCanPlayIsPlayedWithThePanelsControls) {
         return panel->video_view->position() == static_cast<int>(std::nearbyint(5 / panel->current_entry()->comparison.fps * 1000));
     }));
     EXPECT_EQ(panel->frame_spin->value(), 5);
+
+    ASSERT_TRUE(wait_until([&panel] { return !panel->current_entry()->comparison.auto_crop_pending; }))
+        << "the black bars were not found";
+    const void* playing = decoders(*panel->video_view);
+    ASSERT_NE(playing, nullptr);
+    panel->cycle_distorted(1);  // what Right does
+    EXPECT_EQ(panel->video_combo->currentText().toStdString(), "encode2");
+    EXPECT_EQ(decoders(*panel->video_view), playing) << "the decoders were started again";
     panel->cancel();
     ASSERT_TRUE(wait_until([&panel] { return FramePanelTest::idle(*panel); }));
 }

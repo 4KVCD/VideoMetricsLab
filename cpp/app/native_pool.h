@@ -30,14 +30,14 @@ namespace vml::app {
 class NativeDevice;
 class VideoCompareView;
 
-// A native window the presenter's window sits in, painted dark by Qt while
-// nothing draws on it; a zoomed frame is dragged on it (the view's zoom).
+// A native window the presenter's window sits in, painted dark by Qt, which
+// shows until the presenter draws its first frame; a zoomed frame is dragged
+// on it (the view's zoom).
 class PairedFrameWidget : public QWidget {
     Q_OBJECT
 
 public:
     explicit PairedFrameWidget(VideoCompareView* view);
-    void set_native_playback(bool enabled);
     void refresh_cursor();
 
 protected:
@@ -50,7 +50,6 @@ private:
     bool can_drag() const;
 
     VideoCompareView* view_;
-    bool native_playback_ = false;
     std::optional<QPointF> drag_from_;
 };
 

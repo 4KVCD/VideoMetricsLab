@@ -1454,7 +1454,10 @@ void FrameComparePanel::on_auto_crop_ready(const PairKey& key, const DetectedCro
         ++generation_;
         update_labels();
         if (is_video_mode()) {
-            if (previous && previous->auto_crop_pending && crops_change_nothing(*previous, current->comparison)) {
+            // Loading the pair again would restart every decoder for nothing
+            // (0.7-1.3 s of buffering mid-playback, in the Python app).
+            if (previous && previous->auto_crop_pending &&
+                VideoCompareView::crops_change_nothing(*previous, current->comparison)) {
                 return;  // the pair playing already shows what the crops give
             }
             load_current_video(playing);
@@ -1462,29 +1465,6 @@ void FrameComparePanel::on_auto_crop_ready(const PairKey& key, const DetectedCro
             show_or_request();
         }
     }
-}
-
-bool FrameComparePanel::crops_change_nothing(const FrameComparison& pending, const FrameComparison& cropped) {
-    // Whether the black bars found for `pending` leave its pictures as they
-    // are: none on either side, the size compared at unchanged, and neither
-    // side boxed while they were looked for. Then the frames playing are
-    // the ones the crops give, and loading the pair again would restart
-    // every decoder for nothing (0.7-1.3 s of buffering mid-playback, in the
-    // Python app).
-    const Size size = comparison_dimensions(pending);
-    if (size != comparison_dimensions(cropped)) {
-        return false;
-    }
-    for (const auto& [info, crop] : {std::pair(&cropped.source_info, &cropped.source_crop),
-                                     std::pair(&cropped.distorted_info, &cropped.distorted_crop)}) {
-        if (*crop && !(*crop)->is_noop(info->width, info->height)) {
-            return false;
-        }
-        if (would_distort(pending, *info, std::nullopt, size.first, size.second)) {
-            return false;
-        }
-    }
-    return true;
 }
 
 void FrameComparePanel::cancel_crop_workers() {
