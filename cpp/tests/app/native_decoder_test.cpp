@@ -1,10 +1,12 @@
 // Video Compare's native decoding (native_decoder.h) on real clips: the
 // frames it gives are FFmpeg's own, luma and chroma, counted from each
-// video's first frame, whether the GPU decodes the video, FFmpeg's software
-// decoder does or dav1d; a seek back gives the frames from it on; and the
-// source scaled down to the test video's size is the source's picture. The
-// tests run on every GPU of the PC (NVIDIA's and Intel's on the development
-// PC). They need a Direct3D 11 GPU and the bundled FFmpeg libraries.
+// video's first frame (a raw stream's from its start), whether the GPU
+// decodes the video, FFmpeg's software decoder does or dav1d; a seek back
+// gives the frames from it on; the source scaled down to the test video's
+// size is the source's picture; and a VVC video's film grain is drawn as the
+// Python app draws it, or by FFmpeg where that is AV1's. The tests run on
+// every GPU of the PC (NVIDIA's and Intel's on the development PC). They
+// need a Direct3D 11 GPU and the bundled FFmpeg libraries.
 #include "native_decoder.h"
 
 #include <d3d11.h>
@@ -21,14 +23,18 @@
 #include <cmath>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <numeric>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "native_dav1d.h"
 #include "native_device.h"
+#include "native_grain.h"
 #include "test_videos.h"
 #include "vml/ffprobe.h"
+#include "vml/npz.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/video_playback.h"
@@ -562,6 +568,110 @@ TEST_F(NativeDecoderTest, ARawStreamsFramesAreCountedFromItsStart) {
         EXPECT_TRUE(ended);
         EXPECT_EQ(numbers, all) << "not every frame, in order";
         EXPECT_EQ(video.first_frame_ms(), 0);
+    }
+}
+
+// A VVC video's film grain is drawn as the Python app draws it: played from
+// the start, every frame of the film grain test's 8-bit stream
+// (tests/fixtures/vvc_grain.266) and of its 10-bit one (vvc_grain_10bit.266)
+// is the Python app's frame (vvc_grain_app.npz, from make_vvc_grain.py
+// --app), luma and chroma. That is FFmpeg's own frame where FFmpeg draws
+// the grain (8-bit, a message that persists), and the grain library's where
+// it does not (10-bit, a message for its own frame only), and the frame as
+// decoded where there is none. It needs the grain library
+// (vmaf_app/native/d3d11_film_grain.dll, scripts/build_d3d11_film_grain.ps1).
+TEST_F(NativeDecoderTest, VvcFilmGrainIsDrawnAsThePythonAppDrawsIt) {
+    if (const std::optional<QString> problem = NativeGrain::unavailable()) {
+        GTEST_SKIP() << problem->toStdString();
+    }
+    const std::filesystem::path fixtures =
+        std::filesystem::path(VML_REFERENCE_DIR).parent_path().parent_path().parent_path() / "tests" / "fixtures";
+    const std::optional<std::map<std::string, NpyArray>> expected = read_npz(fixtures / "vvc_grain_app.npz");
+    ASSERT_TRUE(expected.has_value());
+    constexpr int width = 64;
+    constexpr int height = 48;
+    constexpr std::size_t samples = width * height * 3 / 2;
+    for (const auto& [name, frames, ten_bit] :
+         {std::tuple<std::string, std::string, bool>{"vvc_grain.266", "grained_8", false},
+          std::tuple<std::string, std::string, bool>{"vvc_grain_10bit.266", "grained_10", true}}) {
+        SCOPED_TRACE(name);
+        const NpyArray& wanted = expected->at(frames);
+        ASSERT_EQ(wanted.shape.size(), 2u);
+        ASSERT_EQ(wanted.shape[1], samples);
+        ASSERT_EQ(wanted.descr, ten_bit ? "<u2" : "|u1");
+        FrameComparison comparison;
+        comparison.source_info = probe_video(fixtures / name, found_->ffprobe);
+        comparison.distorted_info = comparison.source_info;
+        comparison.fps = comparison.source_info.fps;
+        for (const auto& [gpu, device] : devices_) {
+            SCOPED_TRACE(gpu);
+            FfmpegNativeVideo video(device, comparison, FrameSide::source, {}, 0);
+            video.start();
+            std::vector<std::vector<int>> pictures;
+            QString status;
+            bool ended = false;
+            const QDeadlineTimer deadline(30'000);
+            while (!ended && !deadline.hasExpired()) {
+                const NativeUpdate update = video.poll();
+                EXPECT_FALSE(update.error) << update.error->toStdString();
+                if (update.status) {
+                    status = *update.status;
+                }
+                ended = update.ended;
+                while (NativeFramePtr frame = video.try_pull()) {
+                    pictures.push_back(read_picture(*device, *frame));
+                }
+                QThread::msleep(2);
+            }
+            while (NativeFramePtr frame = video.try_pull()) {
+                pictures.push_back(read_picture(*device, *frame));
+            }
+            EXPECT_TRUE(status.contains(QStringLiteral("film grain synthesized"))) << status.toStdString();
+            ASSERT_EQ(pictures.size(), wanted.shape[0]);
+            for (std::size_t index = 0; index < pictures.size(); ++index) {
+                // The Python app's planes, Y, Cb and Cr, in the order the
+                // read-back gives them: Cb and Cr side by side.
+                std::vector<int> planar(samples);
+                for (std::size_t at = 0; at < samples; ++at) {
+                    const std::size_t offset = (index * samples + at) * (ten_bit ? 2 : 1);
+                    const auto byte = [&](std::size_t i) { return static_cast<unsigned char>(wanted.data[i]); };
+                    planar[at] = ten_bit ? byte(offset) | byte(offset + 1) << 8 : byte(offset);
+                }
+                std::vector<int> picture(planar.begin(), planar.begin() + width * height);
+                const std::size_t chroma = (width / 2) * (height / 2);
+                for (std::size_t at = 0; at < chroma; ++at) {
+                    picture.push_back(planar[width * height + at]);
+                    picture.push_back(planar[width * height + chroma + at]);
+                }
+                EXPECT_EQ(pictures[index], picture) << "frame " << index;
+            }
+        }
+    }
+}
+
+// AV1's film grain in a VVC video (AFGS1), which the grain library does not
+// draw, is left to FFmpeg, which does: frames 0 and 9 of a VVC clip with it
+// (tests/fixtures/vvc_afgs1.mkv: FFmpeg's test pattern, 10-bit, its grain
+// from the AFGS1 Grain Workbench) are ffmpeg.exe's, luma and chroma, the
+// grain drawn on them. (The Python app's GStreamer draws none.)
+TEST_F(NativeDecoderTest, Afgs1FilmGrainIsLeftToFfmpeg) {
+    FrameComparison comparison;
+    comparison.source_info = probe_video(
+        std::filesystem::path(VML_REFERENCE_DIR).parent_path().parent_path().parent_path() / "tests" / "fixtures" /
+            "vvc_afgs1.mkv",
+        found_->ffprobe);
+    comparison.distorted_info = comparison.source_info;
+    comparison.fps = comparison.source_info.fps;
+    for (const long long wanted : {0LL, 9LL}) {
+        SCOPED_TRACE(wanted);
+        QString status;
+        const NativeFramePtr frame = decode_frame(devices_.front().second, comparison, FrameSide::source, wanted, status);
+        ASSERT_NE(frame, nullptr);
+        const std::vector<int> native = read_picture(*devices_.front().second, *frame);
+        const std::vector<int> ffmpeg =
+            ffmpeg_picture(*found_, comparison.source_info.path, wanted, frame->ten_bit, "", folder_ / "afgs1.yuv");
+        ASSERT_EQ(native.size(), ffmpeg.size());
+        EXPECT_EQ(native, ffmpeg) << status.toStdString();
     }
 }
 

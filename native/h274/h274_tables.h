@@ -1,7 +1,7 @@
 // The tables of SMPTE RDD 5-2006's film grain synthesis (H.274's frequency
 // filtering model), as JVET's VVC reference software (VTM) has them:
 // source/Lib/CommonLib/SEIFilmGrainSynthesizer.cpp, under the BSD licence
-// below (native/licenses/LICENSE.vtm.txt). The 64-point inverse transform
+// below (native/h274/LICENSE.vtm.txt). The 64-point inverse transform
 // is not here: d3d11_film_grain.cpp works it out (RDD 5's R64T is
 // round(32 * sqrt(2) * cos(pi * (2y + 1) * k / 128)), 32 for k = 0).
 /* The copyright in this software is being made available under the BSD

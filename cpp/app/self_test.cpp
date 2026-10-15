@@ -26,6 +26,7 @@
 #ifdef VML_NATIVE_PLAYBACK
 #include "native_dav1d.h"
 #include "native_device.h"
+#include "native_grain.h"
 #include "native_presentation.h"
 #endif
 
@@ -92,7 +93,12 @@ SelfTestReport self_test(const QApplication& app) {
         } catch (const std::exception& error) {
             report.warn(std::string("no Direct3D 11 device, videos play through ffmpeg.exe: ") + error.what());
         }
-        report.ok("Film grain for VVC videos in Video Compare (FFmpeg's VVC decoder draws it)");
+        if (const std::optional<QString> no_grain = NativeGrain::unavailable()) {
+            report.warn("Film grain for VVC videos unavailable (" + no_grain->toStdString() +
+                        "); only FFmpeg's is drawn: on 8-bit video, and AV1's");
+        } else {
+            report.ok("Film grain for VVC videos in Video Compare (d3d11_film_grain.dll; AV1's by FFmpeg)");
+        }
         if (const std::optional<QString> no_dav1d = Dav1dVideo::unavailable()) {
             report.warn("Video Compare cannot decode AV1 in software (" + no_dav1d->toStdString() +
                         "): on a GPU without an AV1 decoder, AV1 videos play through ffmpeg.exe");

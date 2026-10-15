@@ -33,6 +33,7 @@ add_executable(vml_tests
     unit/stats_test.cpp
     unit/temp_files_test.cpp
     unit/update_check_test.cpp
+    unit/film_grain_test.cpp
     unit/native_playback_test.cpp
     unit/soundtrack_clock_test.cpp
     unit/video_playback_test.cpp

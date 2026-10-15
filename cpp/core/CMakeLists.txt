@@ -12,6 +12,7 @@ add_library(vml_core
     src/ffmpeg_run.cpp
     src/ffmpeg_tools.cpp
     src/ffprobe.cpp
+    src/film_grain.cpp
     src/frame_extract.cpp
     src/frame_sync.cpp
     src/frame_sync_by_time.cpp
@@ -55,6 +56,9 @@ add_library(vml_core
     src/vmaf_vulkan.cpp
 )
 target_include_directories(vml_core PUBLIC include)
+# The film grain library's parameters (native/h274/grain_params.h, plain C),
+# which film_grain.h works out.
+target_include_directories(vml_core PUBLIC ../../native/h274)
 # libvmaf-fast's public headers, at the commit of the library the app ships
 # (third_party/README.md). SYSTEM: their warnings are not ours to fix.
 target_include_directories(vml_core SYSTEM PUBLIC ../third_party/libvmaf-fast/include)

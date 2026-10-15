@@ -135,8 +135,9 @@ each metric's scores frame by frame, with each video's statistics, and
 exports them (PNG, CSV). Video Compare shows a pair of frames, or plays the
 videos locked together: decoded with FFmpeg's libraries, on the GPU where
 Direct3D 11 can (else in software, AV1 by dav1d where it is bundled, as in
-the package), drawn by the app's presenter (HDR too) and timed by the
-source's soundtrack when it plays, or, where that cannot play them,
+the package), a VVC video's film grain drawn as the Python app draws it
+(AV1's, AFGS1, by FFmpeg), drawn by the app's presenter (HDR too) and timed
+by the source's soundtrack when it plays, or, where that cannot play them,
 through ffmpeg.exe.
 The Bitrate Viewer plots each video's bitrate by frame, second or GOP. The
 Settings tab and the log are the Python app's too. It reads and writes the

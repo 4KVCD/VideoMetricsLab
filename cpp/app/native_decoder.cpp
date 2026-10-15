@@ -15,6 +15,9 @@
 #include "ffmpeg_api.h"
 #include "native_dav1d.h"
 #include "native_device.h"
+#include "native_grain.h"
+#include "vml/app_log.h"
+#include "vml/film_grain.h"
 #include "vml/platform/system.h"
 
 using Microsoft::WRL::ComPtr;
@@ -22,6 +25,8 @@ using Microsoft::WRL::ComPtr;
 namespace vml::app {
 
 namespace {
+
+const app_log::Logger logger("vml.gstreamer_playback");
 
 // Frames decoded and not yet taken: GStreamer's appsink held three.
 constexpr std::size_t queued_frames = 3;
@@ -211,6 +216,12 @@ struct FfmpegNativeVideo::Decoding {
     AVCodecContext* codec = nullptr;
     // AV1's decoder in software, in place of `codec`.
     std::unique_ptr<Dav1dVideo> dav1d;
+    // A VVC video's film grain, drawn on its frames when FFmpeg gives each
+    // frame's grain message rather than drawing it; the planes a frame with
+    // grain is uploaded to, and the textures it is shown from.
+    std::unique_ptr<NativeGrain> grain;
+    std::array<ComPtr<ID3D11Texture2D>, 3> grain_planes;
+    std::shared_ptr<UploadTextures> grain_targets;
     AVPacket* packet = nullptr;
     AVFrame* frame = nullptr;
     SwsContext* converter = nullptr;
@@ -372,10 +383,12 @@ namespace {
 
 // Opens `path` and its video's decoder: with Direct3D 11's video decoding on
 // `device` (`hardware`), or FFmpeg's software decoder; its reading stops when
-// `interrupt` says so. Returns nothing, with `error` set, when it cannot.
+// `interrupt` says so. A VVC video's film grain is drawn by the grain library
+// where it can be (`library_grain`), else by FFmpeg. Returns nothing, with
+// `error` set, when it cannot.
 std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::path& path, NativeDevice& device,
                                                          bool hardware, const AVIOInterruptCB& interrupt,
-                                                         QString& error) {
+                                                         QString& error, bool library_grain = true) {
     auto decoding = std::make_unique<FfmpegNativeVideo::Decoding>();
     decoding->format = avformat_alloc_context();
     if (decoding->format == nullptr) {
@@ -440,6 +453,18 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::p
     }
     avcodec_parameters_to_context(decoding->codec, stream->codecpar);
     decoding->codec->pkt_timebase = stream->time_base;
+    if (!hardware && library_grain && codec->id == AV_CODEC_ID_VVC && !NativeGrain::unavailable()) {
+        // Each frame's film grain message given, not drawn: FFmpeg draws
+        // H.274 grain on 8-bit video only, the grain library on every frame,
+        // as the Python app draws it. (AV1's grain, AFGS1, the library does
+        // not draw: a video with it is opened again with FFmpeg drawing it.)
+        try {
+            decoding->grain = std::make_unique<NativeGrain>(device.device());
+            decoding->codec->export_side_data |= AV_CODEC_EXPORT_DATA_FILM_GRAIN;
+        } catch (const std::exception& error) {
+            logger.warning(std::string("Film grain could not be drawn, and is left to FFmpeg: ") + error.what());
+        }
+    }
     if (hardware) {
         decoding->codec->hw_device_ctx = av_buffer_ref(device.hardware());
         decoding->codec->get_format = direct3d_format;
@@ -570,6 +595,10 @@ void FfmpegNativeVideo::run() {
                                    : number * decoding->frame_ns;
     };
 
+    // Whether FFmpeg draws the video's grain: AV1's (AFGS1), which the
+    // grain library does not draw.
+    bool grain_by_ffmpeg = false;
+
     // Makes the seek asked for, if any (once the first frame is known).
     const auto make_seek = [&]() {
         std::optional<int> wanted;
@@ -593,7 +622,8 @@ void FfmpegNativeVideo::run() {
             decoding->draining = false;
             at_end = false;
         } else if (target_ns - counted_time_ns(1) / 2 < counted_time_ns(*counted)) {
-            std::unique_ptr<Decoding> again = open_video(path, *device_, decoding->hardware, interrupt, why);
+            std::unique_ptr<Decoding> again =
+                open_video(path, *device_, decoding->hardware, interrupt, why, !grain_by_ffmpeg);
             sought = again != nullptr;
             if (again) {
                 decoding = std::move(again);
@@ -612,6 +642,102 @@ void FfmpegNativeVideo::run() {
         if (at_end) {
             ended_ = true;  // sought past the end of a counted stream already decoded to it
         }
+    };
+
+    // What the status line says about the film grain: drawn, or turned off
+    // by an error (then not tried again for this video).
+    std::optional<QString> grain_note;
+    std::optional<QString> reported_grain_note;
+    bool grain_off = false;
+
+    // `frame`'s film grain (`given`, its message as FFmpeg gave it) drawn on
+    // its planes, uploaded, and packed into the texture it is shown from;
+    // nothing when it cannot be drawn so (it is then shown without it): only
+    // 4:2:0 video of 8 or 10 bits, and H.274's frequency model.
+    const auto grained = [&](const AVFrame* frame,
+                             const AVFilmGrainParams& given) -> std::shared_ptr<ID3D11Texture2D> {
+        const auto format = static_cast<AVPixelFormat>(frame->format);
+        if (given.type != AV_FILM_GRAIN_PARAMS_H274 ||
+            (format != AV_PIX_FMT_YUV420P && format != AV_PIX_FMT_YUV420P10LE)) {
+            return nullptr;
+        }
+        const bool ten_bit = format == AV_PIX_FMT_YUV420P10LE;
+        const AVFilmGrainH274Params& h274 = given.codec.h274;
+        FilmGrainMessage message;
+        message.model_id = h274.model_id;
+        message.log2_scale_factor = h274.log2_scale_factor;
+        for (std::size_t c = 0; c < 3; ++c) {
+            if (h274.component_model_present[c] == 0) {
+                continue;
+            }
+            for (int i = 0; i < h274.num_intensity_intervals[c]; ++i) {
+                FilmGrainInterval interval{h274.intensity_interval_lower_bound[c][i],
+                                           h274.intensity_interval_upper_bound[c][i], {}};
+                for (int v = 0; v < h274.num_model_values[c]; ++v) {
+                    interval.values.push_back(h274.comp_model_value[c][i][v]);
+                }
+                message.components[c].push_back(std::move(interval));
+            }
+        }
+        const std::vector<std::pair<int, int>> sizes = grain_plane_sizes(frame->width, frame->height, {1, 1}, 3);
+        // The seed is the frame's picture order count, which can be negative.
+        const std::optional<GrainParams> params =
+            grain_params(message, static_cast<int>(given.seed), ten_bit ? 10 : 8, sizes, {1, 1});
+        if (!params) {
+            return nullptr;
+        }
+        const DXGI_FORMAT plane_format = ten_bit ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R8_UNORM;
+        ID3D11Device* gpu = device_->device();
+        for (std::size_t c = 0; c < 3; ++c) {
+            D3D11_TEXTURE2D_DESC existing{};
+            if (decoding->grain_planes[c]) {
+                decoding->grain_planes[c]->GetDesc(&existing);
+            }
+            if (!decoding->grain_planes[c] || existing.Width != static_cast<UINT>(sizes[c].first) ||
+                existing.Height != static_cast<UINT>(sizes[c].second) || existing.Format != plane_format) {
+                D3D11_TEXTURE2D_DESC description{};
+                description.Width = static_cast<UINT>(sizes[c].first);
+                description.Height = static_cast<UINT>(sizes[c].second);
+                description.MipLevels = 1;
+                description.ArraySize = 1;
+                description.Format = plane_format;
+                description.SampleDesc.Count = 1;
+                description.Usage = D3D11_USAGE_DEFAULT;
+                description.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+                decoding->grain_planes[c].Reset();
+                if (FAILED(gpu->CreateTexture2D(&description, nullptr, &decoding->grain_planes[c]))) {
+                    return nullptr;
+                }
+            }
+        }
+        if (!decoding->grain_targets) {
+            decoding->grain_targets = std::make_shared<UploadTextures>(
+                gpu, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET);
+        }
+        std::shared_ptr<ID3D11Texture2D> target = decoding->grain_targets->take(
+            (frame->width + 1) & ~1, (frame->height + 1) & ~1, ten_bit ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12);
+        if (!target) {
+            return nullptr;
+        }
+        std::optional<QString> failed;
+        {
+            const std::lock_guard lock(device_->lock());
+            for (std::size_t c = 0; c < 3; ++c) {
+                device_->context()->UpdateSubresource(decoding->grain_planes[c].Get(), 0, nullptr, frame->data[c],
+                                                      static_cast<UINT>(frame->linesize[c]), 0);
+            }
+            ID3D11Texture2D* const planes[3] = {decoding->grain_planes[0].Get(), decoding->grain_planes[1].Get(),
+                                                decoding->grain_planes[2].Get()};
+            failed = decoding->grain->draw(planes, *params, target.get());
+        }
+        if (failed) {
+            logger.warning("Film grain could not be drawn, and is left off: " + failed->toStdString());
+            grain_off = true;
+            grain_note = QStringLiteral("film grain off (error)");
+            return nullptr;
+        }
+        grain_note = QStringLiteral("film grain synthesized");
+        return target;
     };
 
     // Gives `frame`: its texture held for as long as the frame is.
@@ -640,6 +766,18 @@ void FfmpegNativeVideo::run() {
                 return false;
             }
             made->ten_bit = description->comp[0].depth > 8;
+            const AVFrameSideData* grain = decoding->grain && !grain_off
+                                               ? av_frame_get_side_data(frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS)
+                                               : nullptr;
+            if (grain != nullptr) {
+                if (std::shared_ptr<ID3D11Texture2D> texture =
+                        grained(frame, *reinterpret_cast<const AVFilmGrainParams*>(grain->data))) {
+                    made->texture = texture.get();
+                    made->keep = std::move(texture);
+                }
+            }
+        }
+        if (made->texture == nullptr) {
             const DXGI_FORMAT format = made->ten_bit ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
             // NV12 and P010 textures have even sizes; the picture is drawn
             // from its own size.
@@ -748,8 +886,9 @@ void FfmpegNativeVideo::run() {
                 decoding->downscale_failed = true;
             }
         }
-        if (!reported) {
+        if (!reported || grain_note != reported_grain_note) {
             reported = true;
+            reported_grain_note = grain_note;
             QStringList details{QString::fromUtf8("%1\xC3\x97%2 %3")
                                     .arg(made->width)
                                     .arg(made->height)
@@ -759,6 +898,9 @@ void FfmpegNativeVideo::run() {
                                                          .arg(side_name, QString::fromStdString(decoding->codec_name))
                                                    : QStringLiteral("%1 software: %2")
                                                          .arg(side_name, QString::fromStdString(decoding->codec_name))};
+            if (grain_note) {
+                details.append(*grain_note);
+            }
             if (shaded_ == NativeShading::sdr) {
                 details.append(QString::fromUtf8("GPU HDR\xE2\x86\x92SDR \xC2\xB7 fixed Reinhard 1000\xE2\x86\x92" "100 nit"));
             } else if (shaded_ == NativeShading::hdr) {
@@ -845,6 +987,19 @@ void FfmpegNativeVideo::run() {
                 const std::lock_guard lock(mutex_);
                 first_frame_ms_ = static_cast<int>(std::llround(static_cast<double>(*origin_ns - file_start) / 1e6));
             }
+            if (decoding->grain) {
+                const AVFrameSideData* grain = av_frame_get_side_data(decoding->frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS);
+                if (grain != nullptr &&
+                    reinterpret_cast<const AVFilmGrainParams*>(grain->data)->type == AV_FILM_GRAIN_PARAMS_AV1) {
+                    // AV1's grain in a VVC video (AFGS1): FFmpeg draws it, so
+                    // the video is decoded again from this frame with
+                    // FFmpeg drawing it, as below.
+                    logger.info("The video's film grain is AV1's (AFGS1): FFmpeg draws it");
+                    grain_by_ffmpeg = true;
+                    decoding->unref_frame();
+                    break;
+                }
+            }
             if (*time - *origin_ns >= keep_from_ns) {
                 if (!give(decoding->frame, *time - *origin_ns)) {
                     failure = QStringLiteral("A decoded picture could not be shown");
@@ -854,17 +1009,19 @@ void FfmpegNativeVideo::run() {
             }
             decoding->unref_frame();
         }
-        if (failure.isEmpty()) {
+        // Whether FFmpeg is to draw the grain the grain library was to draw.
+        const bool regrain = grain_by_ffmpeg && decoding->grain;
+        if (failure.isEmpty() && !regrain) {
             continue;
         }
-        if (!decoding->hardware) {
+        if (!decoding->hardware && !regrain) {
             fail(failure);
             return;
         }
         // The GPU's decoder failed (a profile it does not take, a device
-        // lost): FFmpeg's software decoder goes on from the frame after the
-        // last given, or from the start.
-        std::unique_ptr<Decoding> software = open_video(path, *device_, false, interrupt, why);
+        // lost), or FFmpeg is to draw the grain: FFmpeg's software decoder
+        // goes on from the frame after the last given, or from the start.
+        std::unique_ptr<Decoding> software = open_video(path, *device_, false, interrupt, why, !grain_by_ffmpeg);
         if (!software) {
             if (!cancelled()) {
                 fail(why);

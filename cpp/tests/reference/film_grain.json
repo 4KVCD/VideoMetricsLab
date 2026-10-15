@@ -1,0 +1,5192 @@
+{
+ "cases": [
+  {
+   "name": "fixture A, 64x48 8-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 3,
+   "components": [
+    [
+     {
+      "lower": 16,
+      "upper": 100,
+      "values": [
+       60,
+       10,
+       4
+      ]
+     },
+     {
+      "lower": 120,
+      "upper": 235,
+      "values": [
+       36,
+       14,
+       14
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       40,
+       4,
+       12
+      ]
+     }
+    ],
+    []
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     24
+    ],
+    [
+     32,
+     24
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 3,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 2,
+      "lower": [
+       16,
+       120
+      ],
+      "upper": [
+       100,
+       235
+      ],
+      "scale": [
+       60,
+       36
+      ],
+      "h": [
+       8,
+       12
+      ],
+      "v": [
+       2,
+       12
+      ]
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       20
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture A, 1920x1080 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 3,
+   "components": [
+    [
+     {
+      "lower": 16,
+      "upper": 100,
+      "values": [
+       60,
+       10,
+       4
+      ]
+     },
+     {
+      "lower": 120,
+      "upper": 235,
+      "values": [
+       36,
+       14,
+       14
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       40,
+       4,
+       12
+      ]
+     }
+    ],
+    []
+   ],
+   "seed": 37,
+   "width": 1920,
+   "height": 1080,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1920,
+     1080
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 3,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1920,
+      "height": 1080,
+      "intervals": 2,
+      "lower": [
+       16,
+       120
+      ],
+      "upper": [
+       100,
+       235
+      ],
+      "scale": [
+       60,
+       36
+      ],
+      "h": [
+       8,
+       12
+      ],
+      "v": [
+       2,
+       12
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       20
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture A, 1919x1079 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 3,
+   "components": [
+    [
+     {
+      "lower": 16,
+      "upper": 100,
+      "values": [
+       60,
+       10,
+       4
+      ]
+     },
+     {
+      "lower": 120,
+      "upper": 235,
+      "values": [
+       36,
+       14,
+       14
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       40,
+       4,
+       12
+      ]
+     }
+    ],
+    []
+   ],
+   "seed": 37,
+   "width": 1919,
+   "height": 1079,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1919,
+     1079
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 3,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1919,
+      "height": 1079,
+      "intervals": 2,
+      "lower": [
+       16,
+       120
+      ],
+      "upper": [
+       100,
+       235
+      ],
+      "scale": [
+       60,
+       36
+      ],
+      "h": [
+       8,
+       12
+      ],
+      "v": [
+       2,
+       12
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       20
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture A, 64x48 10-bit, chroma shift (1, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 3,
+   "components": [
+    [
+     {
+      "lower": 16,
+      "upper": 100,
+      "values": [
+       60,
+       10,
+       4
+      ]
+     },
+     {
+      "lower": 120,
+      "upper": 235,
+      "values": [
+       36,
+       14,
+       14
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       40,
+       4,
+       12
+      ]
+     }
+    ],
+    []
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     48
+    ],
+    [
+     32,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 3,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 2,
+      "lower": [
+       16,
+       120
+      ],
+      "upper": [
+       100,
+       235
+      ],
+      "scale": [
+       60,
+       36
+      ],
+      "h": [
+       8,
+       12
+      ],
+      "v": [
+       2,
+       12
+      ]
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       28
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       10
+      ]
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture A, 64x48 8-bit, chroma shift (0, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 3,
+   "components": [
+    [
+     {
+      "lower": 16,
+      "upper": 100,
+      "values": [
+       60,
+       10,
+       4
+      ]
+     },
+     {
+      "lower": 120,
+      "upper": 235,
+      "values": [
+       36,
+       14,
+       14
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       40,
+       4,
+       12
+      ]
+     }
+    ],
+    []
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    0,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 3,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 2,
+      "lower": [
+       16,
+       120
+      ],
+      "upper": [
+       100,
+       235
+      ],
+      "scale": [
+       60,
+       36
+      ],
+      "h": [
+       8,
+       12
+      ],
+      "v": [
+       2,
+       12
+      ]
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       40
+      ],
+      "h": [
+       2
+      ],
+      "v": [
+       10
+      ]
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture A, 64x48 8-bit, chroma shift (1, 1), 1 planes",
+   "model_id": 0,
+   "log2_scale_factor": 3,
+   "components": [
+    [
+     {
+      "lower": 16,
+      "upper": 100,
+      "values": [
+       60,
+       10,
+       4
+      ]
+     },
+     {
+      "lower": 120,
+      "upper": 235,
+      "values": [
+       36,
+       14,
+       14
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       40,
+       4,
+       12
+      ]
+     }
+    ],
+    []
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 1,
+   "sizes": [
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 3,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 2,
+      "lower": [
+       16,
+       120
+      ],
+      "upper": [
+       100,
+       235
+      ],
+      "scale": [
+       60,
+       36
+      ],
+      "h": [
+       8,
+       12
+      ],
+      "v": [
+       2,
+       12
+      ]
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture B, 64x48 8-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 2,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       30,
+       6,
+       6
+      ]
+     }
+    ],
+    [],
+    [
+     {
+      "lower": 60,
+      "upper": 200,
+      "values": [
+       50,
+       12,
+       8
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     24
+    ],
+    [
+     32,
+     24
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 2,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       30
+      ],
+      "h": [
+       4
+      ],
+      "v": [
+       4
+      ]
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 1,
+      "lower": [
+       60
+      ],
+      "upper": [
+       200
+      ],
+      "scale": [
+       25
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture B, 1920x1080 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 2,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       30,
+       6,
+       6
+      ]
+     }
+    ],
+    [],
+    [
+     {
+      "lower": 60,
+      "upper": 200,
+      "values": [
+       50,
+       12,
+       8
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 1920,
+   "height": 1080,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1920,
+     1080
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 2,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1920,
+      "height": 1080,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       30
+      ],
+      "h": [
+       4
+      ],
+      "v": [
+       4
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       60
+      ],
+      "upper": [
+       200
+      ],
+      "scale": [
+       25
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture B, 1919x1079 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 2,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       30,
+       6,
+       6
+      ]
+     }
+    ],
+    [],
+    [
+     {
+      "lower": 60,
+      "upper": 200,
+      "values": [
+       50,
+       12,
+       8
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 1919,
+   "height": 1079,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1919,
+     1079
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 2,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1919,
+      "height": 1079,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       30
+      ],
+      "h": [
+       4
+      ],
+      "v": [
+       4
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       60
+      ],
+      "upper": [
+       200
+      ],
+      "scale": [
+       25
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture B, 64x48 10-bit, chroma shift (1, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 2,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       30,
+       6,
+       6
+      ]
+     }
+    ],
+    [],
+    [
+     {
+      "lower": 60,
+      "upper": 200,
+      "values": [
+       50,
+       12,
+       8
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     48
+    ],
+    [
+     32,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 2,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       30
+      ],
+      "h": [
+       4
+      ],
+      "v": [
+       4
+      ]
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       60
+      ],
+      "upper": [
+       200
+      ],
+      "scale": [
+       35
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       6
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture B, 64x48 8-bit, chroma shift (0, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 2,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       30,
+       6,
+       6
+      ]
+     }
+    ],
+    [],
+    [
+     {
+      "lower": 60,
+      "upper": 200,
+      "values": [
+       50,
+       12,
+       8
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    0,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 2,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       30
+      ],
+      "h": [
+       4
+      ],
+      "v": [
+       4
+      ]
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       60
+      ],
+      "upper": [
+       200
+      ],
+      "scale": [
+       50
+      ],
+      "h": [
+       10
+      ],
+      "v": [
+       6
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture B, 64x48 8-bit, chroma shift (1, 1), 1 planes",
+   "model_id": 0,
+   "log2_scale_factor": 2,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       30,
+       6,
+       6
+      ]
+     }
+    ],
+    [],
+    [
+     {
+      "lower": 60,
+      "upper": 200,
+      "values": [
+       50,
+       12,
+       8
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 1,
+   "sizes": [
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 2,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       30
+      ],
+      "h": [
+       4
+      ],
+      "v": [
+       4
+      ]
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture once, 64x48 8-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 4,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       120,
+       8,
+       14
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       60,
+       14,
+       2
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       60,
+       2,
+       14
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     24
+    ],
+    [
+     32,
+     24
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 4,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       120
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       30
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       2
+      ]
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       30
+      ],
+      "h": [
+       2
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture once, 1920x1080 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 4,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       120,
+       8,
+       14
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       60,
+       14,
+       2
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       60,
+       2,
+       14
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 1920,
+   "height": 1080,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1920,
+     1080
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 4,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1920,
+      "height": 1080,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       120
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       30
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       2
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       30
+      ],
+      "h": [
+       2
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture once, 1919x1079 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 4,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       120,
+       8,
+       14
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       60,
+       14,
+       2
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       60,
+       2,
+       14
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 1919,
+   "height": 1079,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1919,
+     1079
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 4,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1919,
+      "height": 1079,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       120
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       30
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       2
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       30
+      ],
+      "h": [
+       2
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture once, 64x48 10-bit, chroma shift (1, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 4,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       120,
+       8,
+       14
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       60,
+       14,
+       2
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       60,
+       2,
+       14
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     48
+    ],
+    [
+     32,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 4,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       120
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       42
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       0
+      ]
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       42
+      ],
+      "h": [
+       2
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture once, 64x48 8-bit, chroma shift (0, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 4,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       120,
+       8,
+       14
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       60,
+       14,
+       2
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       60,
+       2,
+       14
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    0,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 4,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       120
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       60
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       0
+      ]
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       60
+      ],
+      "h": [
+       0
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "fixture once, 64x48 8-bit, chroma shift (1, 1), 1 planes",
+   "model_id": 0,
+   "log2_scale_factor": 4,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       120,
+       8,
+       14
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       60,
+       14,
+       2
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       60,
+       2,
+       14
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 1,
+   "sizes": [
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 4,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       120
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "one model value, 64x48 8-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 2,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       50
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 128,
+      "values": [
+       21
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 129,
+      "upper": 255,
+      "values": [
+       -33
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     24
+    ],
+    [
+     32,
+     24
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 2,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       50
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       128
+      ],
+      "scale": [
+       10
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 1,
+      "lower": [
+       129
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -17
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "one model value, 1920x1080 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 2,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       50
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 128,
+      "values": [
+       21
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 129,
+      "upper": 255,
+      "values": [
+       -33
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 1920,
+   "height": 1080,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1920,
+     1080
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 2,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1920,
+      "height": 1080,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       50
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       128
+      ],
+      "scale": [
+       10
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       129
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -17
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "one model value, 1919x1079 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 2,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       50
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 128,
+      "values": [
+       21
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 129,
+      "upper": 255,
+      "values": [
+       -33
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 1919,
+   "height": 1079,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1919,
+     1079
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 2,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1919,
+      "height": 1079,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       50
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       128
+      ],
+      "scale": [
+       10
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       129
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -17
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "one model value, 64x48 10-bit, chroma shift (1, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 2,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       50
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 128,
+      "values": [
+       21
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 129,
+      "upper": 255,
+      "values": [
+       -33
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     48
+    ],
+    [
+     32,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 2,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       50
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       128
+      ],
+      "scale": [
+       14
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       129
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -24
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       6
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "one model value, 64x48 8-bit, chroma shift (0, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 2,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       50
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 128,
+      "values": [
+       21
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 129,
+      "upper": 255,
+      "values": [
+       -33
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    0,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 2,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       50
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       128
+      ],
+      "scale": [
+       21
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       129
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -33
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "one model value, 64x48 8-bit, chroma shift (1, 1), 1 planes",
+   "model_id": 0,
+   "log2_scale_factor": 2,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       50
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 128,
+      "values": [
+       21
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 129,
+      "upper": 255,
+      "values": [
+       -33
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 1,
+   "sizes": [
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 2,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       50
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "two model values, 64x48 8-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 5,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       50,
+       9
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -7,
+       3
+      ]
+     }
+    ],
+    []
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     24
+    ],
+    [
+     32,
+     24
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 5,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       50
+      ],
+      "h": [
+       7
+      ],
+      "v": [
+       7
+      ]
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -4
+      ],
+      "h": [
+       4
+      ],
+      "v": [
+       4
+      ]
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "two model values, 1920x1080 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 5,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       50,
+       9
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -7,
+       3
+      ]
+     }
+    ],
+    []
+   ],
+   "seed": 37,
+   "width": 1920,
+   "height": 1080,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1920,
+     1080
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 5,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1920,
+      "height": 1080,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       50
+      ],
+      "h": [
+       7
+      ],
+      "v": [
+       7
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -4
+      ],
+      "h": [
+       4
+      ],
+      "v": [
+       4
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "two model values, 1919x1079 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 5,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       50,
+       9
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -7,
+       3
+      ]
+     }
+    ],
+    []
+   ],
+   "seed": 37,
+   "width": 1919,
+   "height": 1079,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1919,
+     1079
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 5,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1919,
+      "height": 1079,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       50
+      ],
+      "h": [
+       7
+      ],
+      "v": [
+       7
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -4
+      ],
+      "h": [
+       4
+      ],
+      "v": [
+       4
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "two model values, 64x48 10-bit, chroma shift (1, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 5,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       50,
+       9
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -7,
+       3
+      ]
+     }
+    ],
+    []
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     48
+    ],
+    [
+     32,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 5,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       50
+      ],
+      "h": [
+       7
+      ],
+      "v": [
+       7
+      ]
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -5
+      ],
+      "h": [
+       4
+      ],
+      "v": [
+       1
+      ]
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "two model values, 64x48 8-bit, chroma shift (0, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 5,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       50,
+       9
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -7,
+       3
+      ]
+     }
+    ],
+    []
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    0,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 5,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       50
+      ],
+      "h": [
+       7
+      ],
+      "v": [
+       7
+      ]
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -7
+      ],
+      "h": [
+       1
+      ],
+      "v": [
+       1
+      ]
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "two model values, 64x48 8-bit, chroma shift (1, 1), 1 planes",
+   "model_id": 0,
+   "log2_scale_factor": 5,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       50,
+       9
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -7,
+       3
+      ]
+     }
+    ],
+    []
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 1,
+   "sizes": [
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 5,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       50
+      ],
+      "h": [
+       7
+      ],
+      "v": [
+       7
+      ]
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "cutoffs past either end, 64x48 8-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 1,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 99,
+      "values": [
+       10,
+       1,
+       20
+      ]
+     },
+     {
+      "lower": 100,
+      "upper": 255,
+      "values": [
+       -40,
+       15,
+       0
+      ]
+     }
+    ],
+    [],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       70,
+       0,
+       7
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     24
+    ],
+    [
+     32,
+     24
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 1,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 2,
+      "lower": [
+       0,
+       100
+      ],
+      "upper": [
+       99,
+       255
+      ],
+      "scale": [
+       10,
+       -40
+      ],
+      "h": [
+       0,
+       12
+      ],
+      "v": [
+       12,
+       0
+      ]
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       35
+      ],
+      "h": [
+       0
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "cutoffs past either end, 1920x1080 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 1,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 99,
+      "values": [
+       10,
+       1,
+       20
+      ]
+     },
+     {
+      "lower": 100,
+      "upper": 255,
+      "values": [
+       -40,
+       15,
+       0
+      ]
+     }
+    ],
+    [],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       70,
+       0,
+       7
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 1920,
+   "height": 1080,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1920,
+     1080
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 1,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1920,
+      "height": 1080,
+      "intervals": 2,
+      "lower": [
+       0,
+       100
+      ],
+      "upper": [
+       99,
+       255
+      ],
+      "scale": [
+       10,
+       -40
+      ],
+      "h": [
+       0,
+       12
+      ],
+      "v": [
+       12,
+       0
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       35
+      ],
+      "h": [
+       0
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "cutoffs past either end, 1919x1079 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 1,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 99,
+      "values": [
+       10,
+       1,
+       20
+      ]
+     },
+     {
+      "lower": 100,
+      "upper": 255,
+      "values": [
+       -40,
+       15,
+       0
+      ]
+     }
+    ],
+    [],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       70,
+       0,
+       7
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 1919,
+   "height": 1079,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1919,
+     1079
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 1,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1919,
+      "height": 1079,
+      "intervals": 2,
+      "lower": [
+       0,
+       100
+      ],
+      "upper": [
+       99,
+       255
+      ],
+      "scale": [
+       10,
+       -40
+      ],
+      "h": [
+       0,
+       12
+      ],
+      "v": [
+       12,
+       0
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       35
+      ],
+      "h": [
+       0
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "cutoffs past either end, 64x48 10-bit, chroma shift (1, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 1,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 99,
+      "values": [
+       10,
+       1,
+       20
+      ]
+     },
+     {
+      "lower": 100,
+      "upper": 255,
+      "values": [
+       -40,
+       15,
+       0
+      ]
+     }
+    ],
+    [],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       70,
+       0,
+       7
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     48
+    ],
+    [
+     32,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 1,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 2,
+      "lower": [
+       0,
+       100
+      ],
+      "upper": [
+       99,
+       255
+      ],
+      "scale": [
+       10,
+       -40
+      ],
+      "h": [
+       0,
+       12
+      ],
+      "v": [
+       12,
+       0
+      ]
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       49
+      ],
+      "h": [
+       0
+      ],
+      "v": [
+       5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "cutoffs past either end, 64x48 8-bit, chroma shift (0, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 1,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 99,
+      "values": [
+       10,
+       1,
+       20
+      ]
+     },
+     {
+      "lower": 100,
+      "upper": 255,
+      "values": [
+       -40,
+       15,
+       0
+      ]
+     }
+    ],
+    [],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       70,
+       0,
+       7
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    0,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 1,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 2,
+      "lower": [
+       0,
+       100
+      ],
+      "upper": [
+       99,
+       255
+      ],
+      "scale": [
+       10,
+       -40
+      ],
+      "h": [
+       0,
+       12
+      ],
+      "v": [
+       12,
+       0
+      ]
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       70
+      ],
+      "h": [
+       0
+      ],
+      "v": [
+       5
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "cutoffs past either end, 64x48 8-bit, chroma shift (1, 1), 1 planes",
+   "model_id": 0,
+   "log2_scale_factor": 1,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 99,
+      "values": [
+       10,
+       1,
+       20
+      ]
+     },
+     {
+      "lower": 100,
+      "upper": 255,
+      "values": [
+       -40,
+       15,
+       0
+      ]
+     }
+    ],
+    [],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       70,
+       0,
+       7
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 1,
+   "sizes": [
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 1,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 2,
+      "lower": [
+       0,
+       100
+      ],
+      "upper": [
+       99,
+       255
+      ],
+      "scale": [
+       10,
+       -40
+      ],
+      "h": [
+       0,
+       12
+      ],
+      "v": [
+       12,
+       0
+      ]
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "strong grain, 64x48 8-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 0,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       32767,
+       8,
+       8
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -32768,
+       8,
+       8
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -1,
+       8,
+       8
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     24
+    ],
+    [
+     32,
+     24
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 0,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       32767
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -16384
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 32,
+      "height": 24,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -1
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "strong grain, 1920x1080 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 0,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       32767,
+       8,
+       8
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -32768,
+       8,
+       8
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -1,
+       8,
+       8
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 1920,
+   "height": 1080,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1920,
+     1080
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 0,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1920,
+      "height": 1080,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       32767
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -16384
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -1
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "strong grain, 1919x1079 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 0,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       32767,
+       8,
+       8
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -32768,
+       8,
+       8
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -1,
+       8,
+       8
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 1919,
+   "height": 1079,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1919,
+     1079
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 0,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 1919,
+      "height": 1079,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       32767
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -16384
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     },
+     {
+      "width": 960,
+      "height": 540,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -1
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       12
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "strong grain, 64x48 10-bit, chroma shift (1, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 0,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       32767,
+       8,
+       8
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -32768,
+       8,
+       8
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -1,
+       8,
+       8
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     48
+    ],
+    [
+     32,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 10,
+    "log2_scale_factor": 0,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       32767
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -23168
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 32,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -1
+      ],
+      "h": [
+       12
+      ],
+      "v": [
+       6
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "strong grain, 64x48 8-bit, chroma shift (0, 0), 3 planes",
+   "model_id": 0,
+   "log2_scale_factor": 0,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       32767,
+       8,
+       8
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -32768,
+       8,
+       8
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -1,
+       8,
+       8
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    0,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 0,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       32767
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -32768
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       -1
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "strong grain, 64x48 8-bit, chroma shift (1, 1), 1 planes",
+   "model_id": 0,
+   "log2_scale_factor": 0,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       32767,
+       8,
+       8
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -32768,
+       8,
+       8
+      ]
+     }
+    ],
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       -1,
+       8,
+       8
+      ]
+     }
+    ]
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 1,
+   "sizes": [
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": {
+    "depth": 8,
+    "log2_scale_factor": 0,
+    "poc": 37,
+    "planes": [
+     {
+      "width": 64,
+      "height": 48,
+      "intervals": 1,
+      "lower": [
+       0
+      ],
+      "upper": [
+       255
+      ],
+      "scale": [
+       32767
+      ],
+      "h": [
+       6
+      ],
+      "v": [
+       6
+      ]
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     },
+     {
+      "width": 0,
+      "height": 0,
+      "intervals": 0,
+      "lower": [],
+      "upper": [],
+      "scale": [],
+      "h": [],
+      "v": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "autoregressive, 64x48 8-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 1,
+   "log2_scale_factor": 0,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       10
+      ]
+     }
+    ],
+    [],
+    []
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     24
+    ],
+    [
+     32,
+     24
+    ]
+   ],
+   "expected": null
+  },
+  {
+   "name": "autoregressive, 1920x1080 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 1,
+   "log2_scale_factor": 0,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       10
+      ]
+     }
+    ],
+    [],
+    []
+   ],
+   "seed": 37,
+   "width": 1920,
+   "height": 1080,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1920,
+     1080
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": null
+  },
+  {
+   "name": "autoregressive, 1919x1079 10-bit, chroma shift (1, 1), 3 planes",
+   "model_id": 1,
+   "log2_scale_factor": 0,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       10
+      ]
+     }
+    ],
+    [],
+    []
+   ],
+   "seed": 37,
+   "width": 1919,
+   "height": 1079,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     1919,
+     1079
+    ],
+    [
+     960,
+     540
+    ],
+    [
+     960,
+     540
+    ]
+   ],
+   "expected": null
+  },
+  {
+   "name": "autoregressive, 64x48 10-bit, chroma shift (1, 0), 3 planes",
+   "model_id": 1,
+   "log2_scale_factor": 0,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       10
+      ]
+     }
+    ],
+    [],
+    []
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 10,
+   "chroma_shift": [
+    1,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     32,
+     48
+    ],
+    [
+     32,
+     48
+    ]
+   ],
+   "expected": null
+  },
+  {
+   "name": "autoregressive, 64x48 8-bit, chroma shift (0, 0), 3 planes",
+   "model_id": 1,
+   "log2_scale_factor": 0,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       10
+      ]
+     }
+    ],
+    [],
+    []
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    0,
+    0
+   ],
+   "planes": 3,
+   "sizes": [
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ],
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": null
+  },
+  {
+   "name": "autoregressive, 64x48 8-bit, chroma shift (1, 1), 1 planes",
+   "model_id": 1,
+   "log2_scale_factor": 0,
+   "components": [
+    [
+     {
+      "lower": 0,
+      "upper": 255,
+      "values": [
+       10
+      ]
+     }
+    ],
+    [],
+    []
+   ],
+   "seed": 37,
+   "width": 64,
+   "height": 48,
+   "depth": 8,
+   "chroma_shift": [
+    1,
+    1
+   ],
+   "planes": 1,
+   "sizes": [
+    [
+     64,
+     48
+    ]
+   ],
+   "expected": null
+  }
+ ]
+}

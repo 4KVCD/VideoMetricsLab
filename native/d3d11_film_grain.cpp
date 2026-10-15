@@ -40,13 +40,17 @@
 //      which is then copied over the plane: a decoded frame's textures
 //      cannot be written by a compute shader directly.
 //
-// The frames come from GStreamer's VVC decoder (avdec_h266) via d3d11upload:
-// one texture per plane, R8 or R16, holding the codes in their low bits
-// (the I420 format and its 10- and 12-bit forms).
+// The Python app's frames come from GStreamer's VVC decoder (avdec_h266) via
+// d3d11upload: one texture per plane, R8 or R16, holding the codes in their
+// low bits (the I420 format and its 10- and 12-bit forms). The C++ app's
+// come from FFmpeg's VVC decoder, which gives each frame's grain message
+// instead of drawing it: it uploads the planes so, draws the grain on them
+// (vmaf_grain_apply_planes) and copies them into the NV12 or P010 texture it
+// shows (vmaf_grain_pack).
 //
-// The caller holds the device's lock (gst_d3d11_device_lock) during every
-// call, because this draws on the device's immediate context, as GStreamer's
-// decoders and the app's presenter do.
+// The caller holds the device's lock (gst_d3d11_device_lock in the Python
+// app) during every call, because this draws on the device's immediate
+// context, as the decoders and the app's presenter do.
 #include <windows.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>
@@ -57,28 +61,8 @@
 #include <new>
 #include <string>
 #include <vector>
+#include "h274/grain_params.h"
 #include "h274/h274_tables.h"
-
-// The grain of one plane, as the app works it out (d3d11_film_grain.py). The
-// model values are already adapted to the plane's subsampling, and the cutoff
-// frequencies are already indices into the pattern database.
-struct GrainPlane {
-    int width, height;  // the plane's picture size, in samples
-    int intervals;      // how many intensity intervals; 0 means no grain on this plane
-    uint8_t lower[256];  // each interval's bounds, as 8-bit codes
-    uint8_t upper[256];
-    int16_t scale[256];  // each interval's grain strength
-    uint8_t h[256];      // each interval's horizontal cutoff index, 0-12 (H.274's cutoffs 2-14)
-    uint8_t v[256];      // and vertical cutoff index
-};
-
-// The grain of one frame.
-struct GrainParams {
-    int depth;  // the video's bit depth: 8 to 12
-    int log2_scale_factor;
-    int poc;  // the frame's picture order count, which seeds the random pattern
-    GrainPlane plane[3];
-};
 
 // The constant buffer both shaders read, describing one plane.
 struct alignas(16) ShaderConstants {
@@ -382,6 +366,11 @@ struct GrainDrawer {
     UINT offsets_capacity = 0;
     WorkTexture block_interval;  // each 8x8 block's interval
     WorkTexture output;          // the grained plane, before it is copied back
+    // vmaf_grain_pack's shaders and constants, made on its first call.
+    ID3D11VertexShader* pack_cover = nullptr;
+    ID3D11PixelShader* pack_luma = nullptr;
+    ID3D11PixelShader* pack_chroma = nullptr;
+    ID3D11Buffer* pack_constants = nullptr;
     std::string error;
 };
 
@@ -399,6 +388,14 @@ static void destroy_drawer(GrainDrawer* d) {
     release_offsets(d);
     release_texture(&d->block_interval);
     release_texture(&d->output);
+    if (d->pack_constants)
+        d->pack_constants->Release();
+    if (d->pack_chroma)
+        d->pack_chroma->Release();
+    if (d->pack_luma)
+        d->pack_luma->Release();
+    if (d->pack_cover)
+        d->pack_cover->Release();
     if (d->patterns_srv)
         d->patterns_srv->Release();
     if (d->patterns)
@@ -726,6 +723,160 @@ extern "C" __declspec(dllexport) int vmaf_grain_apply(void* drawer, void* buffer
 extern "C" __declspec(dllexport) void vmaf_grain_destroy(void* drawer) {
     if (drawer)
         destroy_drawer((GrainDrawer*)drawer);
+}
+
+// The C++ app's frames are not GStreamer's: they come decoded in system
+// memory (FFmpeg's VVC decoder) and are shown from NV12 or P010 textures.
+// It uploads a frame's planes into textures of its own, one per plane (R8,
+// or R16 with the codes in their low bits, as GStreamer's I420 frames hold
+// them), draws the grain on them with vmaf_grain_apply_planes, and copies
+// them into the texture it shows with vmaf_grain_pack. The caller holds
+// the device's lock during both.
+
+// Draws the grain of `params` on `planes` (each one's slice `subresources[c]`),
+// in place. Returns as vmaf_grain_apply does.
+extern "C" __declspec(dllexport) int vmaf_grain_apply_planes(void* drawer, ID3D11Texture2D* const* planes,
+                                                             const UINT* subresources, int count,
+                                                             const GrainParams* params) {
+    GrainDrawer* d = (GrainDrawer*)drawer;
+    if (!d || !planes || !subresources || !params || count < 1 || count > 3)
+        return -1;
+    d->error.clear();
+    return draw_planes(d, planes, subresources, count, params);
+}
+
+// The shaders that copy three planes into an NV12 or P010 texture: a
+// triangle covering the target, and a pixel shader for each of its planes.
+// The planes hold their codes in their low bits, P010 in its high bits:
+// `scale` is 64 there (the codes moved up 6 bits), and 1 for NV12.
+static const char pack_shader_source[] = R"(
+Texture2D<float> plane_y : register(t0);
+Texture2D<float> plane_u : register(t1);
+Texture2D<float> plane_v : register(t2);
+cbuffer Pack : register(b0) { float scale; float3 unused; };
+
+float4 cover(uint id : SV_VertexID) : SV_Position {
+    float2 corner = float2((id << 1) & 2, id & 2);
+    return float4(corner * float2(2, -2) + float2(-1, 1), 0, 1);
+}
+float luma(float4 at : SV_Position) : SV_Target {
+    return plane_y.Load(int3(at.xy, 0)) * scale;
+}
+float2 chroma(float4 at : SV_Position) : SV_Target {
+    int3 place = int3(at.xy, 0);
+    return float2(plane_u.Load(place), plane_v.Load(place)) * scale;
+}
+)";
+
+static HRESULT prepare_pack(GrainDrawer* d) {
+    if (d->pack_chroma)
+        return S_OK;
+    static ID3DBlob* compiled[3] = {};
+    const char* entries[3] = {"cover", "luma", "chroma"};
+    const char* targets[3] = {"vs_5_0", "ps_5_0", "ps_5_0"};
+    {
+        std::lock_guard<std::mutex> guard(compile_lock);
+        for (int i = 0; i < 3; i++) {
+            if (compiled[i])
+                continue;
+            ID3DBlob* errors = nullptr;
+            HRESULT hr = D3DCompile(pack_shader_source, sizeof(pack_shader_source) - 1, nullptr, nullptr, nullptr,
+                                    entries[i], targets[i], D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &compiled[i], &errors);
+            if (errors)
+                errors->Release();
+            if (FAILED(hr))
+                return hr;
+        }
+    }
+    HRESULT hr = d->device->CreateVertexShader(compiled[0]->GetBufferPointer(), compiled[0]->GetBufferSize(), nullptr,
+                                               &d->pack_cover);
+    if (SUCCEEDED(hr))
+        hr = d->device->CreatePixelShader(compiled[1]->GetBufferPointer(), compiled[1]->GetBufferSize(), nullptr,
+                                          &d->pack_luma);
+    if (SUCCEEDED(hr))
+        hr = d->device->CreatePixelShader(compiled[2]->GetBufferPointer(), compiled[2]->GetBufferSize(), nullptr,
+                                          &d->pack_chroma);
+    if (SUCCEEDED(hr)) {
+        D3D11_BUFFER_DESC desc = {};
+        desc.ByteWidth = 16;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        hr = d->device->CreateBuffer(&desc, nullptr, &d->pack_constants);
+    }
+    return hr;
+}
+
+// Copies `planes` (Y, Cb, Cr, as vmaf_grain_apply_planes takes them) into
+// the two planes of `target`, an NV12 or P010 texture made with
+// D3D11_BIND_RENDER_TARGET whose size is the luma plane's, rounded up to
+// even. Returns 0 on success, or a negative number with vmaf_grain_error
+// saying why.
+extern "C" __declspec(dllexport) int vmaf_grain_pack(void* drawer, ID3D11Texture2D* const* planes,
+                                                     ID3D11Texture2D* target) {
+    GrainDrawer* d = (GrainDrawer*)drawer;
+    if (!d || !planes || !target)
+        return -1;
+    d->error.clear();
+    D3D11_TEXTURE2D_DESC desc;
+    target->GetDesc(&desc);
+    const bool ten_bit = desc.Format == DXGI_FORMAT_P010;
+    if ((!ten_bit && desc.Format != DXGI_FORMAT_NV12) || !(desc.BindFlags & D3D11_BIND_RENDER_TARGET)) {
+        d->error = "a target of DXGI format " + std::to_string((int)desc.Format) + " that cannot be drawn to";
+        return -2;
+    }
+    ID3D11RenderTargetView* views[2] = {};
+    ID3D11ShaderResourceView* sources[3] = {};
+    HRESULT hr = prepare_pack(d);
+    D3D11_RENDER_TARGET_VIEW_DESC view = {};
+    view.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+    if (SUCCEEDED(hr)) {
+        view.Format = ten_bit ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R8_UNORM;
+        hr = d->device->CreateRenderTargetView(target, &view, &views[0]);
+    }
+    if (SUCCEEDED(hr)) {
+        view.Format = ten_bit ? DXGI_FORMAT_R16G16_UNORM : DXGI_FORMAT_R8G8_UNORM;
+        hr = d->device->CreateRenderTargetView(target, &view, &views[1]);
+    }
+    for (int c = 0; c < 3 && SUCCEEDED(hr); c++)
+        hr = d->device->CreateShaderResourceView(planes[c], nullptr, &sources[c]);
+    if (SUCCEEDED(hr)) {
+        const float constants[4] = {ten_bit ? 64.0f : 1.0f, 0, 0, 0};
+        ID3D11DeviceContext* c = d->context;
+        c->UpdateSubresource(d->pack_constants, 0, nullptr, constants, 0, 0);
+        c->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        c->IASetInputLayout(nullptr);
+        c->VSSetShader(d->pack_cover, nullptr, 0);
+        c->PSSetConstantBuffers(0, 1, &d->pack_constants);
+        c->PSSetShaderResources(0, 3, sources);
+        D3D11_VIEWPORT viewport = {0, 0, (float)desc.Width, (float)desc.Height, 0, 1};
+        c->RSSetViewports(1, &viewport);
+        c->OMSetRenderTargets(1, &views[0], nullptr);
+        c->PSSetShader(d->pack_luma, nullptr, 0);
+        c->Draw(3, 0);
+        viewport.Width = (float)(desc.Width / 2);
+        viewport.Height = (float)(desc.Height / 2);
+        c->RSSetViewports(1, &viewport);
+        c->OMSetRenderTargets(1, &views[1], nullptr);
+        c->PSSetShader(d->pack_chroma, nullptr, 0);
+        c->Draw(3, 0);
+        // Nothing left bound, as the presenter expects to find the context.
+        ID3D11ShaderResourceView* no_sources[3] = {};
+        ID3D11Buffer* no_buffers[1] = {};
+        c->OMSetRenderTargets(0, nullptr, nullptr);
+        c->PSSetShaderResources(0, 3, no_sources);
+        c->PSSetConstantBuffers(0, 1, no_buffers);
+        c->PSSetShader(nullptr, nullptr, 0);
+        c->VSSetShader(nullptr, nullptr, 0);
+    } else {
+        d->error = "could not set up the planes' copy into the frame";
+    }
+    for (ID3D11ShaderResourceView* source : sources)
+        if (source)
+            source->Release();
+    for (ID3D11RenderTargetView* target_view : views)
+        if (target_view)
+            target_view->Release();
+    return SUCCEEDED(hr) ? 0 : -3;
 }
 
 // Draws the grain of `params` on planes held in memory (8-bit samples, or

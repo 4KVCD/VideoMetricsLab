@@ -3257,6 +3257,62 @@ def bitrate_cases() -> dict:
             "streams": stream_cases}
 
 
+def film_grain_cases() -> dict:
+    """The film grain library's parameters for a VVC frame's film grain
+    message (core/d3d11_film_grain.py: plane_sizes and native_params), from
+    the Python app's own functions: the film grain test's messages
+    (tests/fixtures/make_vvc_grain.py) and messages that reach each of the
+    conversion's rules (model values missing, cutoffs past either end, a
+    strong grain, the autoregressive model), on frames of each chroma
+    subsampling, depth and an odd size. Only each plane's used intervals
+    are given."""
+    from vmaf_app.core.d3d11_film_grain import native_params, plane_sizes
+    from vmaf_app.core.film_grain import FilmGrainH274, FrameGrain
+
+    def message(log2_scale_factor, components, model_id=0):
+        intervals = tuple(tuple((lower, upper, tuple(values)) for lower, upper, values in component or ())
+                          for component in components)
+        return FilmGrainH274(model_id, 0, log2_scale_factor, intervals, True)
+
+    messages = {
+        "fixture A": message(3, [[(16, 100, (60, 10, 4)), (120, 235, (36, 14, 14))], [(0, 255, (40, 4, 12))], None]),
+        "fixture B": message(2, [[(0, 255, (30, 6, 6))], None, [(60, 200, (50, 12, 8))]]),
+        "fixture once": message(4, [[(0, 255, (120, 8, 14))], [(0, 255, (60, 14, 2))], [(0, 255, (60, 2, 14))]]),
+        "one model value": message(2, [[(0, 255, (50,))], [(0, 128, (21,))], [(129, 255, (-33,))]]),
+        "two model values": message(5, [[(0, 255, (50, 9))], [(0, 255, (-7, 3))], None]),
+        "cutoffs past either end": message(1, [[(0, 99, (10, 1, 20)), (100, 255, (-40, 15, 0))], None,
+                                               [(0, 255, (70, 0, 7))]]),
+        "strong grain": message(0, [[(0, 255, (32767, 8, 8))], [(0, 255, (-32768, 8, 8))], [(0, 255, (-1, 8, 8))]]),
+        "autoregressive": message(0, [[(0, 255, (10,))], None, None], model_id=1),
+    }
+    frames = [(64, 48, 8, (1, 1), 3), (1920, 1080, 10, (1, 1), 3), (1919, 1079, 10, (1, 1), 3),
+              (64, 48, 10, (1, 0), 3), (64, 48, 8, (0, 0), 3), (64, 48, 8, (1, 1), 1)]
+    cases = []
+    for name, grain in messages.items():
+        for width, height, depth, chroma_shift, planes in frames:
+            sizes = plane_sizes(width, height, chroma_shift, planes)
+            params = native_params(FrameGrain(grain, 37), depth, sizes, chroma_shift)
+            expected = None
+            if params is not None:
+                expected = {"depth": params.depth, "log2_scale_factor": params.log2_scale_factor, "poc": params.poc,
+                            "planes": []}
+                for plane in params.plane:
+                    count = plane.intervals
+                    expected["planes"].append({
+                        "width": plane.width, "height": plane.height, "intervals": count,
+                        "lower": list(plane.lower[:count]), "upper": list(plane.upper[:count]),
+                        "scale": list(plane.scale[:count]), "h": list(plane.h[:count]), "v": list(plane.v[:count])})
+            cases.append({
+                "name": f"{name}, {width}x{height} {depth}-bit, chroma shift {chroma_shift}, {planes} planes",
+                "model_id": grain.model_id, "log2_scale_factor": grain.log2_scale_factor,
+                "components": [[{"lower": lower, "upper": upper, "values": list(values)}
+                                for lower, upper, values in component] for component in grain.intervals],
+                "seed": 37, "width": width, "height": height, "depth": depth,
+                "chroma_shift": list(chroma_shift), "planes": planes,
+                "sizes": [list(size) for size in sizes], "expected": expected})
+    return {"cases": cases}
+
+
 if __name__ == "__main__":
     # Its texts as they are, not escaped: the file is a third the size.
     (HERE / "i18n.json").write_text(json.dumps(i18n_cases(), indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -3270,6 +3326,7 @@ if __name__ == "__main__":
     write("bitrate.json", bitrate_cases())
     write("playback.json", playback_cases())
     write("native.json", native_cases())
+    write("film_grain.json", film_grain_cases())
     write("devices.json", devices_cases())
     write("perceptual_cpu.json", perceptual_cpu_cases())
     write("timed_pairing.json", timed_pairing_cases())
