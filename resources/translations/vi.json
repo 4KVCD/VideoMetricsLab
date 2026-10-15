@@ -711,7 +711,9 @@
   "Theme:": "Giao diện:",
   "Same as Windows": "Giống Windows",
   "Light": "Sáng",
-  "Dark": "Tối"
+  "Dark": "Tối",
+  "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}, {nits:g} nit, {lux:g} lux, {distance:.2f} m ({heights:.1f} × chiều cao màn hình)",
+  "{side} {number} of {count}": "{side} {number}/{count}"
  },
  "plurals": {
   "about {count} day": [

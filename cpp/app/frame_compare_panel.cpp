@@ -1079,12 +1079,13 @@ void FrameComparePanel::update_labels() {
         return;
     }
     const FrameComparison& comparison = entry->comparison;
-    const QString side = showing_source_ ? app::tr("SOURCE") : app::tr("TEST");
+    const QString side =
+        showing_source_ ? app::tr("SOURCE")
+                        : app::tr("{side} {number} of {count}",
+                                  {{"side", app::tr("TEST")}, {"number", current_index_ + 1}, {"count", entries_.size()}});
     const QString name = showing_source_ ? text_of(platform::path_text(comparison.source_info.path.filename()))
                                          : entry->label;
-    const QString suffix = showing_source_ ? QString()
-                                           : QString(" %1 of %2").arg(current_index_ + 1).arg(entries_.size());
-    showing_label->setText(side + suffix + QString::fromUtf8(" \xE2\x80\x94 ") + name);
+    showing_label->setText(side + QString::fromUtf8(" \xE2\x80\x94 ") + name);
     update_frame_line();
     update_color_status();
 }

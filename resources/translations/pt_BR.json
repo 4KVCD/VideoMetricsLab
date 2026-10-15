@@ -711,7 +711,9 @@
   "Theme:": "Tema:",
   "Same as Windows": "Igual ao Windows",
   "Light": "Claro",
-  "Dark": "Escuro"
+  "Dark": "Escuro",
+  "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} x screen height)": "{diagonal:g}\" {width}x{height} {range}, {nits:g} nits, {lux:g} lux, {distance:.2f} m ({heights:.1f} × altura da tela)",
+  "{side} {number} of {count}": "{side} {number} de {count}"
  },
  "plurals": {
   "about {count} day": [
