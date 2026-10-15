@@ -11,6 +11,7 @@ and a single shared answer would have to be "no" whenever either was not.
 from __future__ import annotations
 
 import ctypes
+import os
 import re
 import sys
 import threading
@@ -89,6 +90,10 @@ PCI_VENDORS = {0x10DE: GpuVendor.NVIDIA, 0x1002: GpuVendor.AMD, 0x1022: GpuVendo
 def detected_gpu_vendors() -> list[GpuVendor]:
     """The makers of the GPUs DirectX lists (Windows only): NVIDIA first,
     then Intel, then AMD, the order in which "auto" tries their decoders.
+    With VML_GPU_VENDOR set to nvidia, intel or amd, only that maker, as on
+    a PC with no other: for testing one maker's route on a PC that has
+    several (CUDA_VISIBLE_DEVICES and VK_LOADER_DRIVERS_DISABLE hide the
+    others from CUDA and Vulkan).
 
     DXGI is asked in this process, which takes milliseconds. Don't use a
     PowerShell query (Get-CimInstance Win32_VideoController) instead: it
@@ -100,7 +105,9 @@ def detected_gpu_vendors() -> list[GpuVendor]:
         found = {PCI_VENDORS.get(vendor_id) for vendor_id in _dxgi_vendor_ids()}
     except OSError:
         return []
-    return [vendor for vendor in (GpuVendor.NVIDIA, GpuVendor.INTEL, GpuVendor.AMD) if vendor in found]
+    named = os.environ.get("VML_GPU_VENDOR", "").strip().lower()
+    return [vendor for vendor in (GpuVendor.NVIDIA, GpuVendor.INTEL, GpuVendor.AMD)
+            if vendor in found and (not named or vendor.name.lower() == named)]
 
 
 class _Guid(ctypes.Structure):
