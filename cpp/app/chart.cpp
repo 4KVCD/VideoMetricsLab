@@ -7,8 +7,9 @@
 #include <QPainter>
 #include <QPen>
 #include <QPointF>
-#include <QPolygonF>
+#include <QRegion>
 #include <QResizeEvent>
+#include <QScreen>
 #include <QTimer>
 #include <QWheelEvent>
 
@@ -86,6 +87,25 @@ ChartWidget::ChartWidget(QString y_axis_label, std::optional<double> fixed_y_max
     resize_settle_->setSingleShot(true);
     resize_settle_->setInterval(100);
     connect(resize_settle_, &QTimer::timeout, this, [this] { update(); });
+    hover_pace_ = new QTimer(this);
+    hover_pace_->setSingleShot(true);
+    hover_pace_->setTimerType(Qt::PreciseTimer);
+    connect(hover_pace_, &QTimer::timeout, this, [this] {
+        if (pending_hover_) {
+            const QPoint pos = *pending_hover_;
+            pending_hover_.reset();
+            report_hover(pos);
+        }
+    });
+    paint_pace_ = new QTimer(this);
+    paint_pace_->setSingleShot(true);
+    paint_pace_->setTimerType(Qt::PreciseTimer);
+    connect(paint_pace_, &QTimer::timeout, this, [this] {
+        if (paint_due_) {
+            paint_due_ = false;
+            request_paint();
+        }
+    });
 }
 
 // --------------------------------------------------------------------- data
@@ -283,8 +303,26 @@ void ChartWidget::invalidate(bool refit) {
     if (refit) {
         recompute_y_range();
     }
-    cache_.reset();
+    cache_stale_ = true;
+    request_paint();
+}
+
+void ChartWidget::request_paint() {
+    // Drawn again, at most once a frame of the screen: dragged by a mouse
+    // that reports a move every millisecond, the chart was drawn afresh 390
+    // times a second, 87% of a core, where the screen showed 120.
+    if (paint_pace_->isActive()) {
+        paint_due_ = true;  // drawn when this frame's time is up
+        return;
+    }
     update();
+    paint_pace_->start(frame_ms());
+}
+
+int ChartWidget::frame_ms() const {
+    // A frame of the screen the chart is on, in whole milliseconds.
+    const double rate = screen() != nullptr ? screen()->refreshRate() : 60.0;
+    return static_cast<int>(1000.0 / std::clamp(rate, 30.0, 500.0));
 }
 
 void ChartWidget::resizeEvent(QResizeEvent* event) {
@@ -294,7 +332,7 @@ void ChartWidget::resizeEvent(QResizeEvent* event) {
         } else {
             // Resized while hidden (the window resized on another tab): drawn
             // afresh when shown, not stretched for 100 ms.
-            cache_.reset();
+            cache_stale_ = true;
         }
     }
     QWidget::resizeEvent(event);
@@ -304,7 +342,7 @@ void ChartWidget::changeEvent(QEvent* event) {
     // The window's theme changed: drawn again in its colours.
     if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ApplicationPaletteChange ||
         event->type() == QEvent::StyleChange) {
-        cache_.reset();
+        cache_stale_ = true;
         update();
     }
     QWidget::changeEvent(event);
@@ -312,8 +350,8 @@ void ChartWidget::changeEvent(QEvent* event) {
 
 void ChartWidget::paintEvent(QPaintEvent* /*event*/) {
     // The kept drawing, with the crosshair.
-    if (!cache_matches_display()) {
-        if (cache_ && resize_settle_->isActive()) {
+    if (cache_stale_ || !cache_matches_display()) {
+        if (!cache_stale_ && cache_ && resize_settle_->isActive()) {
             QPainter painter(this);
             painter.drawPixmap(rect(), *cache_);  // stretched, still being resized
             return;
@@ -333,8 +371,19 @@ void ChartWidget::paintEvent(QPaintEvent* /*event*/) {
 }
 
 void ChartWidget::rebuild_cache() {
+    // Drawn over the kept drawing when it is the size wanted: a new picture
+    // for every step of a zoom or a pan took 2.7 of the 4.3 ms a 1570x536
+    // chart took to draw (175% display scaling), most of it to get 10 MB of
+    // memory from Windows; drawn over, 0.27 ms.
     cache_dark_ = theme::is_dark();
-    cache_ = render(cache_dark_);
+    const double ratio = devicePixelRatioF();
+    const QSize size(static_cast<int>(std::ceil(width() * ratio)), static_cast<int>(std::ceil(height() * ratio)));
+    if (!cache_ || cache_->size() != size || cache_->devicePixelRatioF() != ratio) {
+        cache_.emplace(size);
+        cache_->setDevicePixelRatio(ratio);
+    }
+    draw(*cache_, cache_dark_);
+    cache_stale_ = false;
     ++renders_;
 }
 
@@ -343,6 +392,12 @@ QPixmap ChartWidget::render(bool dark) const {
     const double ratio = devicePixelRatioF();
     QPixmap pixmap(static_cast<int>(std::ceil(width() * ratio)), static_cast<int>(std::ceil(height() * ratio)));
     pixmap.setDevicePixelRatio(ratio);
+    draw(pixmap, dark);
+    return pixmap;
+}
+
+void ChartWidget::draw(QPixmap& pixmap, bool dark) const {
+    // The chart, over all of `pixmap`.
     const theme::ChartColours colours = theme::chart_colours(dark);
     pixmap.fill(colours.background);
     QPainter painter(&pixmap);
@@ -355,7 +410,6 @@ QPixmap ChartWidget::render(bool dark) const {
     painter.setPen(QPen(colours.axis, 1));
     painter.drawRect(plot.adjusted(0, 0, -1, -1));
     painter.end();
-    return pixmap;
 }
 
 bool ChartWidget::cache_matches_display() const {
@@ -433,27 +487,39 @@ void ChartWidget::draw_series(QPainter& painter, const QRect& rect, const ChartS
     if (hi - lo <= static_cast<std::ptrdiff_t>(width) * 2) {
         // Few enough points to draw honestly as a line, a finite stretch at a
         // time: joined across a missing frame, it would invent a line through
-        // it, and an infinity in a QPointF is undefined.
+        // it, and an infinity in a QPointF is undefined. Drawn as segments,
+        // not as one polyline: with display scaling, which makes the 1 px pen
+        // wider than a pixel, Qt outlines a polyline as a shape and fills it,
+        // 19 times slower (three lines of 720 frames: 13.7 ms against 0.73 ms
+        // at 175%); the segments differ from it only by a pixel at the tip
+        // of some sharp turns.
         const double x_span = std::max(1e-9, x1 - x0);
-        QPolygonF points;
-        const auto draw = [&painter, &points] {
-            if (points.size() == 1) {
-                painter.drawPoint(points.front());
-            } else if (points.size() > 1) {
-                painter.drawPolyline(points);
+        std::vector<QLineF> segments;
+        segments.reserve(static_cast<std::size_t>(hi - lo));
+        std::optional<QPointF> previous;  // the stretch's last point
+        bool joined = false;              // whether it is in a segment
+        const auto end_stretch = [&painter, &previous, &joined] {
+            if (previous && !joined) {
+                painter.drawPoint(*previous);  // a stretch of one frame
             }
-            points.clear();
+            previous.reset();
+            joined = false;
         };
         for (std::ptrdiff_t i = lo; i < hi; ++i) {
             const auto value = static_cast<double>(values[static_cast<std::size_t>(i)]);
             if (!std::isfinite(value)) {
-                draw();
+                end_stretch();
                 continue;
             }
-            points.append(
-                QPointF(rect.left() + (times[static_cast<std::size_t>(i)] - x0) / x_span * width, to_py(value)));
+            const QPointF point(rect.left() + (times[static_cast<std::size_t>(i)] - x0) / x_span * width, to_py(value));
+            if (previous) {
+                segments.emplace_back(*previous, point);
+            }
+            joined = previous.has_value();
+            previous = point;
         }
-        draw();
+        end_stretch();
+        painter.drawLines(segments.data(), static_cast<int>(segments.size()));
         return;
     }
 
@@ -510,12 +576,23 @@ void ChartWidget::set_cursor_time(std::optional<double> t) {
     }
     const std::optional<int> old = cursor_x_;
     cursor_x_ = px;
+    QRegion strips;
     for (const std::optional<int>& x : {old, px}) {
         if (x) {
             // Pen caps and fractional display scaling can touch pixels beside
             // the line: the fringe is painted again at both ends too.
-            update(QRect(*x - 1, plot.top() - 2, 3, plot.height() + 4));
+            strips += QRect(*x - 1, plot.top() - 2, 3, plot.height() + 4);
         }
+    }
+    // Painted and put on screen now. Left to the next paint, the strips would
+    // go with whatever else is due then (the readout below the chart, at each
+    // move of the pointer), and Windows copies the rectangle around all of
+    // it to the screen: most of the chart, which took more than the rest of
+    // the move.
+    if (isVisible()) {
+        repaint(strips);
+    } else {
+        update(strips);
     }
 }
 
@@ -535,19 +612,41 @@ void ChartWidget::mouseMoveEvent(QMouseEvent* event) {
         return;
     }
     if (!plot_rect().contains(pos)) {
+        forget_hover();
         emit left();
         return;
     }
+    if (hover_pace_->isActive()) {
+        pending_hover_ = pos;  // reported when this frame's time is up
+        return;
+    }
+    report_hover(pos);
+}
+
+void ChartWidget::report_hover(QPoint pos) {
+    // Says the time and value at `pos`, then waits a frame of the screen
+    // before saying the next. A mouse reports far more moves than a screen
+    // shows: each repainted the readout, 500 times a second while the
+    // pointer swept the chart, which kept a core busy, and the moves
+    // between two frames were never seen.
     emit hovered(time_at(pos.x()), value_at(pos.y()));
+    hover_pace_->start(frame_ms());
+}
+
+void ChartWidget::forget_hover() {
+    hover_pace_->stop();
+    pending_hover_.reset();
 }
 
 void ChartWidget::leaveEvent(QEvent* event) {
+    forget_hover();
     emit left();
     QWidget::leaveEvent(event);
 }
 
 void ChartWidget::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
+        forget_hover();
         pan_origin_ = event->position().toPoint();
         pan_view_ = x_range();
         setCursor(Qt::ClosedHandCursor);

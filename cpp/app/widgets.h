@@ -16,6 +16,7 @@
 
 #include <optional>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 class QMimeData;
@@ -140,6 +141,51 @@ private:
 
     QString full_;
     QString tooltip_;
+};
+
+// Lines of plain text that change as the pointer moves over a chart (its
+// readout), drawn as a QLabel draws them. A QLabel suits text that is set
+// now and then: at every new text it lays its parent out again, and, being
+// see-through, has every widget behind it painted again, which at each move
+// of the pointer was most of what the move cost. This one is opaque, in the
+// colour of the tab it sits on, a new text repaints the text alone, and
+// nothing is laid out again unless the text has outgrown it.
+class ReadoutLabel : public QWidget {
+    Q_OBJECT
+
+public:
+    explicit ReadoutLabel(const QString& text = QString(), QWidget* parent = nullptr);
+
+    void set_text(const QString& text);
+    const QString& text() const { return text_; }
+    // How far the text is set in from the left and top, inside the margins.
+    void set_indent(int indent);
+    // Never less tall than `lines` lines of text, so that a text of fewer
+    // lines (a hint, before the pointer comes) does not resize what is
+    // around it.
+    void reserve_lines(int lines);
+
+    QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    void changeEvent(QEvent* event) override;
+
+private:
+    QSize measure(const QString& text) const;
+    int alignment() const;
+    QRect text_rect() const;
+    void remeasure();
+
+    QString text_;
+    bool right_to_left_ = false;
+    // The text's size as QLabel measures it, worked out when the layout
+    // asks, and the line count and longest line of the text it was for.
+    mutable std::optional<QSize> text_size_;
+    mutable std::pair<int, qsizetype> sized_for_{0, 0};
+    int indent_ = 0;
+    int reserved_lines_ = 0;
 };
 
 // A QTabWidget that lays itself out again, and repaints, only when that can

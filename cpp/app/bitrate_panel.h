@@ -25,6 +25,7 @@
 #include "vml/bitrate.h"
 #include "vml/cancel.h"
 #include "vml/video.h"
+#include "widgets.h"
 
 class QCheckBox;
 class QDragEnterEvent;
@@ -128,7 +129,7 @@ public:
     QPushButton* reset_zoom_button = nullptr;
     QPushButton* export_button = nullptr;
     ChartWidget* chart = nullptr;
-    QLabel* hover_label = nullptr;
+    ReadoutLabel* hover_label = nullptr;
     QLabel* status_label = nullptr;
     QProgressBar* progress = nullptr;
 

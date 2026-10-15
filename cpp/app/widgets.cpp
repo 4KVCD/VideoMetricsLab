@@ -15,6 +15,7 @@
 #include <QShowEvent>
 #include <QSizePolicy>
 #include <QStyle>
+#include <QStyleOption>
 #include <QStyleOptionButton>
 #include <QTabBar>
 #include <QUrl>
@@ -308,6 +309,141 @@ void ElidedLabel::fit() {
     QLabel::setText(shown);
     const bool cut = shown != full_;
     setToolTip(cut ? full_ + (tooltip_.isEmpty() ? QString() : "\n\n" + tooltip_) : tooltip_);
+}
+
+// ---------------------------------------------------------------- ReadoutLabel
+
+namespace {
+
+// A text's line count and its longest line's length in characters.
+std::pair<int, qsizetype> text_extent(const QString& text) {
+    int lines = 1;
+    qsizetype longest = 0;
+    qsizetype start = 0;
+    for (qsizetype at = 0; at <= text.size(); ++at) {
+        if (at == text.size() || text[at] == QLatin1Char('\n')) {
+            longest = std::max(longest, at - start);
+            start = at + 1;
+            lines += at < text.size() ? 1 : 0;
+        }
+    }
+    return {lines, longest};
+}
+
+}  // namespace
+
+ReadoutLabel::ReadoutLabel(const QString& text, QWidget* parent) : QWidget(parent), text_(text) {
+    // The tab's colour, which the pane it sits on is drawn in, and a label's
+    // text colour.
+    setBackgroundRole(QPalette::Base);
+    setForegroundRole(QPalette::WindowText);
+    setAutoFillBackground(true);
+    right_to_left_ = text_.isRightToLeft();
+}
+
+void ReadoutLabel::set_text(const QString& text) {
+    if (text == text_) {
+        return;
+    }
+    text_ = text;
+    right_to_left_ = text_.isRightToLeft();
+    text_size_.reset();
+    // The text is not measured here: as QLabel measures it, a readout took
+    // 0.13 ms, and painting it measures it again. It is laid out again only
+    // when it has more lines, or a longer one, than the text it was last
+    // sized for (sizeHint): a readout's lines keep their lengths as the
+    // values in them change.
+    const auto [lines, longest] = text_extent(text_);
+    if (lines > sized_for_.first || longest > sized_for_.second) {
+        updateGeometry();
+    }
+    update(contentsRect());  // the text's room; its indent moves to the right for right-to-left text
+}
+
+void ReadoutLabel::set_indent(int indent) {
+    indent_ = indent;
+    remeasure();
+}
+
+void ReadoutLabel::reserve_lines(int lines) {
+    if (lines != reserved_lines_) {
+        reserved_lines_ = lines;
+        updateGeometry();
+    }
+}
+
+QSize ReadoutLabel::sizeHint() const {
+    // As QLabel sizes plain text that does not wrap (QLabelPrivate::
+    // sizeForWidth): the text, the indent at the left and top, the margins.
+    // Measured only here, when the layout asks.
+    if (!text_size_) {
+        text_size_ = measure(text_);
+        sized_for_ = text_extent(text_);
+    }
+    int height = text_size_->height();
+    if (reserved_lines_ > 0) {
+        QStringList lines;
+        for (int line = 0; line < reserved_lines_; ++line) {
+            lines.append(QStringLiteral("x"));
+        }
+        height = std::max(height, measure(lines.join('\n')).height());
+    }
+    const QMargins margins = contentsMargins();
+    return QSize(text_size_->width() + indent_ + margins.left() + margins.right(),
+                 height + indent_ + margins.top() + margins.bottom())
+        .expandedTo(minimumSize());
+}
+
+QSize ReadoutLabel::minimumSizeHint() const { return sizeHint(); }  // as QLabel's, for text that does not wrap
+
+void ReadoutLabel::paintEvent(QPaintEvent* /*event*/) {
+    // As QLabel paints plain text; the background is filled already.
+    QPainter painter(this);
+    QStyleOption option;
+    option.initFrom(this);
+    const int flags = alignment() | (right_to_left_ ? Qt::TextForceRightToLeft : Qt::TextForceLeftToRight);
+    style()->drawItemText(&painter, text_rect(), flags, option.palette, isEnabled(), text_, foregroundRole());
+}
+
+void ReadoutLabel::changeEvent(QEvent* event) {
+    if (event->type() == QEvent::FontChange) {
+        remeasure();
+    }
+    QWidget::changeEvent(event);
+}
+
+QSize ReadoutLabel::measure(const QString& text) const {
+    // As QLabel measures it: laid out within 2000 pixels, less the indent
+    // and margins.
+    const QMargins margins = contentsMargins();
+    const int width = 2000 - (indent_ + margins.left() + margins.right());
+    return fontMetrics().boundingRect(0, 0, width, 2000, alignment(), text).size();
+}
+
+int ReadoutLabel::alignment() const {
+    // At the left and top, or at the right for right-to-left text.
+    return static_cast<int>(QStyle::visualAlignment(right_to_left_ ? Qt::RightToLeft : Qt::LeftToRight,
+                                                    Qt::AlignLeft | Qt::AlignTop));
+}
+
+QRect ReadoutLabel::text_rect() const {
+    // The room for the text: the contents, less the indent on the side the
+    // text starts and at the top (QLabelPrivate::documentRect).
+    QRect rect = contentsRect();
+    if (right_to_left_) {
+        rect.setRight(rect.right() - indent_);
+    } else {
+        rect.setLeft(rect.left() + indent_);
+    }
+    rect.setTop(rect.top() + indent_);
+    return rect;
+}
+
+void ReadoutLabel::remeasure() {
+    text_size_.reset();
+    sized_for_ = {0, 0};
+    updateGeometry();
+    update();
 }
 
 // --------------------------------------------------------------- QuietTabWidget

@@ -29,6 +29,7 @@
 #include "vml/metrics.h"
 #include "vml/results.h"
 #include "vml/stats.h"
+#include "widgets.h"
 
 class QLabel;
 class QPushButton;
@@ -126,6 +127,7 @@ private:
     void set_timeline_curve(int series_id, const SeriesEntry& entry);
     void update_no_data_label();
     void fit_hover_label();
+    void fit_readout_margins();
     std::vector<QString> visible_labels() const;
     QString readout_prefix(const QString& label, int frame, double time) const;
     std::vector<const MetricDefinition*> extra_columns() const;
@@ -158,7 +160,7 @@ private:
     std::vector<std::pair<const MetricDefinition*, int>> columns_;
     ChartWidget* chart_ = nullptr;
     QLabel* no_data_label_ = nullptr;
-    QLabel* hover_label_ = nullptr;
+    ReadoutLabel* hover_label_ = nullptr;
 };
 
 // The tab: one page per metric, and the table of lines and statistics.

@@ -129,15 +129,21 @@ private:
     void invalidate(bool refit = false);
     void rebuild_cache();
     QPixmap render(bool dark) const;
+    void draw(QPixmap& pixmap, bool dark) const;
     bool cache_matches_display() const;
     void draw_axes(QPainter& painter, const QRect& rect, bool dark) const;
     void draw_series(QPainter& painter, const QRect& rect, const ChartSeries& series) const;
+    void report_hover(QPoint pos);
+    void forget_hover();
+    void request_paint();
+    int frame_ms() const;
 
     QString y_axis_label_;
     std::optional<double> fixed_y_max_;
     bool invert_y_ = false;
     std::map<int, ChartSeries> series_;  // by key; keys rise as lines are added
     std::optional<QPixmap> cache_;
+    bool cache_stale_ = true;  // to be drawn again before it is shown
     bool cache_dark_ = false;  // the theme the cache was drawn in
     int renders_ = 0;          // how many times the cache has been drawn (for the tests)
     std::optional<int> cursor_x_;
@@ -149,6 +155,13 @@ private:
     // drawing is shown stretched, and drawn again once the size settles.
     // Drawn at every size, a dozen two-hour lines took 54 ms a step.
     QTimer* resize_settle_ = nullptr;
+    // The pointer is reported at most once per frame of the screen
+    // (report_hover): the last move since, when the frame's time is up.
+    QTimer* hover_pace_ = nullptr;
+    std::optional<QPoint> pending_hover_;
+    // The chart is drawn again at most once per frame too (request_paint).
+    QTimer* paint_pace_ = nullptr;
+    bool paint_due_ = false;
 };
 
 }  // namespace vml::app

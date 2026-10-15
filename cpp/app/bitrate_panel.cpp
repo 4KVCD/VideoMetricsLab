@@ -31,6 +31,7 @@
 #include "vml/ffprobe.h"
 #include "vml/platform/system.h"
 #include "vml/time_format.h"
+#include "widgets.h"
 
 namespace vml::app {
 
@@ -201,8 +202,11 @@ BitratePanel::BitratePanel(std::function<std::string()> ffprobe, VideoColors* co
     connect(chart, &ChartWidget::left, this, [this] { on_hover_left(); });
     root->addWidget(chart, 1);
 
-    hover_label = new QLabel(app::tr(hover_hint));
-    hover_label->setTextFormat(Qt::PlainText);
+    // The readout, rewritten at each move of the pointer (ReadoutLabel),
+    // with room for every line's value (refresh_plot): sized to the hint,
+    // the graph shrank as the pointer came over it and grew back as it left,
+    // drawn afresh each time.
+    hover_label = new ReadoutLabel(app::tr(hover_hint));
     root->addWidget(hover_label);
 
     auto* status_row = new QHBoxLayout;
@@ -733,6 +737,7 @@ void BitratePanel::refresh_plot() {
         }
         current_plots_.emplace_back(file_name(entry->path), plot);
     }
+    hover_label->reserve_lines(1 + static_cast<int>(current_plots_.size()));  // the time, then each line
     chart->reset_view();
     on_hover_left();
     update_buttons();
@@ -758,12 +763,12 @@ void BitratePanel::on_hovered(double time) {
                                     {"value", static_cast<double>(plot->values[index]) / value_scale_},
                                     {"unit", value_unit_}}));
     }
-    hover_label->setText(lines.join('\n'));
+    hover_label->set_text(lines.join('\n'));
 }
 
 void BitratePanel::on_hover_left() {
     chart->set_cursor_time(std::nullopt);
-    hover_label->setText(app::tr(hover_hint));
+    hover_label->set_text(app::tr(hover_hint));
 }
 
 void BitratePanel::on_export_png() {

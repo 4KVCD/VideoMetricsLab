@@ -288,21 +288,15 @@ MetricPage::MetricPage(const MetricDefinition& metric, QWidget* parent)
     no_data_label_->setVisible(false);
     layout->addWidget(no_data_label_);
 
-    hover_label_ = new QLabel(placeholder_);
-    hover_label_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-    // The readout is monospaced, so that its columns line up; the hint shown
-    // until the first hover keeps the window's font, as the rest of the tab
-    // (in the readout's, it looked out of place). The readout's font is set
-    // on the label, not by a stylesheet: the readout is sized by measuring
-    // it (fit_hover_label).
+    // The readout, rewritten at each move of the pointer (ReadoutLabel). It
+    // is monospaced, so that its columns line up; the hint shown until the
+    // first hover keeps the window's font, as the rest of the tab (in the
+    // readout's, it looked out of place). Its height is fixed and its width
+    // capped (fit_hover_label).
+    hover_label_ = new ReadoutLabel(placeholder_);
     readout_font_ = QFont(QStringLiteral("Consolas"));
     readout_font_.setStyleHint(QFont::Monospace);
-    hover_label_->setStyleSheet(QStringLiteral("padding: 6px;"));
-    // A fixed size, plain text, no wrapping: the readout is rewritten at
-    // each move of the pointer, and a size hint that changed with it would
-    // lay out the whole tab again each time, most of what a hover costs.
-    hover_label_->setWordWrap(false);
-    hover_label_->setTextFormat(Qt::PlainText);
+    fit_readout_margins();
     fit_hover_label();
     auto* hover_row = new QHBoxLayout;
     hover_row->setContentsMargins(0, 0, 0, 0);
@@ -473,7 +467,7 @@ void MetricPage::fit_hover_label() {
     // placeholder cut off.
     const QStringList placeholder_lines = placeholder_.split('\n');
     const QFontMetrics hint(font());
-    constexpr int padding = 28;  // the stylesheet's 6 px each side, and some room
+    constexpr int padding = 28;  // the margins' 6 px each side, and some room
     int width = 0;
     for (const QString& line : lines) {
         width = std::max(width, metrics.horizontalAdvance(line));
@@ -489,6 +483,16 @@ void MetricPage::fit_hover_label() {
     // text needs, and can still shrink with the window.
     hover_label_->setMaximumWidth(width + padding);
     hover_label_->setFixedHeight(height);
+}
+
+void MetricPage::fit_readout_margins() {
+    // The room around the readout's text, as the style sheet's 6 px of
+    // padding it once had laid it out: QLabel took that padding for a frame,
+    // so it indented the text by half an x at the left and top, and made
+    // room for a whole x. In the label's font, the window's or the readout's.
+    const int x = hover_label_->fontMetrics().horizontalAdvance(QLatin1Char('x'));
+    hover_label_->set_indent(x / 2);
+    hover_label_->setContentsMargins(6, 6, 6 + x - x / 2, 6);
 }
 
 std::vector<QString> MetricPage::visible_labels() const {
@@ -601,8 +605,9 @@ void MetricPage::set_hover_text(const QString& text) {
         if (!showing_readout_) {  // the hint gives way, once
             showing_readout_ = true;
             hover_label_->setFont(readout_font_);
+            fit_readout_margins();
         }
-        hover_label_->setText(text);
+        hover_label_->set_text(text);
     }
 }
 
