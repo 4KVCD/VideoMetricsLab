@@ -135,6 +135,8 @@ bool keep_system_awake(bool /*awake*/) { return false; }
 
 std::vector<unsigned> gpu_vendor_ids() { return {}; }
 
+unsigned first_gpu_adapter() { return 0; }
+
 std::optional<long long> modified_ns(const std::filesystem::path& file) {
     struct stat status {};
     if (stat(file.c_str(), &status) != 0) {

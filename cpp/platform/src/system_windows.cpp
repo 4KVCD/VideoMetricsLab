@@ -6,12 +6,14 @@
 #include <dxgi.h>
 
 #include <algorithm>
+#include <cctype>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <cwctype>
 #include <thread>
+#include <utility>
 #ifdef _MSC_VER
 #include <crtdbg.h>
 #endif
@@ -245,22 +247,67 @@ bool keep_system_awake(bool awake) {
     return SetThreadExecutionState(ES_CONTINUOUS | (awake ? ES_SYSTEM_REQUIRED : 0)) != 0;
 }
 
-std::vector<unsigned> gpu_vendor_ids() {
-    std::vector<unsigned> vendors;
+namespace {
+
+// The PCI vendor IDs of the maker VML_GPU_VENDOR names, or nothing when it
+// is not set (every maker's GPUs are listed).
+std::optional<std::vector<unsigned>> named_vendor_ids() {
+    std::optional<std::string> maker = environment_variable("VML_GPU_VENDOR");
+    if (!maker || maker->empty()) {
+        return std::nullopt;
+    }
+    std::transform(maker->begin(), maker->end(), maker->begin(),
+                   [](unsigned char letter) { return static_cast<char>(std::tolower(letter)); });
+    if (*maker == "nvidia") {
+        return std::vector<unsigned>{0x10DE};
+    }
+    if (*maker == "intel") {
+        return std::vector<unsigned>{0x8086};
+    }
+    if (*maker == "amd") {
+        return std::vector<unsigned>{0x1002, 0x1022};
+    }
+    return std::vector<unsigned>{};  // a maker not known here: none of the GPUs
+}
+
+// The hardware GPUs DirectX lists, as their adapter number and PCI vendor
+// ID, in its order; only the maker's that VML_GPU_VENDOR names, if set.
+std::vector<std::pair<UINT, unsigned>> listed_gpus() {
+    std::vector<std::pair<UINT, unsigned>> gpus;
     IDXGIFactory1* factory = nullptr;
     if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) {
-        return vendors;
+        return gpus;
     }
+    const std::optional<std::vector<unsigned>> named = named_vendor_ids();
     IDXGIAdapter1* adapter = nullptr;
     for (UINT index = 0; factory->EnumAdapters1(index, &adapter) != DXGI_ERROR_NOT_FOUND; ++index) {
         DXGI_ADAPTER_DESC1 description{};
-        if (SUCCEEDED(adapter->GetDesc1(&description)) && !(description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
-            vendors.push_back(description.VendorId);
+        if (SUCCEEDED(adapter->GetDesc1(&description)) && !(description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) &&
+            (!named || std::find(named->begin(), named->end(), description.VendorId) != named->end())) {
+            gpus.emplace_back(index, description.VendorId);
         }
         adapter->Release();
     }
     factory->Release();
+    return gpus;
+}
+
+}  // namespace
+
+std::vector<unsigned> gpu_vendor_ids() {
+    std::vector<unsigned> vendors;
+    for (const auto& [index, vendor] : listed_gpus()) {
+        vendors.push_back(vendor);
+    }
     return vendors;
+}
+
+unsigned first_gpu_adapter() {
+    if (!named_vendor_ids()) {
+        return 0;
+    }
+    const std::vector<std::pair<UINT, unsigned>> gpus = listed_gpus();
+    return gpus.empty() ? 0 : gpus.front().first;
 }
 
 std::optional<long long> modified_ns(const std::filesystem::path& file) {

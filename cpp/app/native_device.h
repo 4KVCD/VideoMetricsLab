@@ -27,9 +27,10 @@ std::optional<std::string> load_ffmpeg_libraries();
 class NativeDevice {
 public:
     // The session's device on the first GPU (adapter 0, as the Python app's
-    // GStreamer took), made the first time and again once lost (a GPU
-    // reset). Making one takes about 0.14 s while the driver loads, so it is
-    // not made per comparison. Throws std::runtime_error when there is none.
+    // GStreamer took; VML_GPU_VENDOR's first, platform::first_gpu_adapter),
+    // made the first time and again once lost (a GPU reset). Making one
+    // takes about 0.14 s while the driver loads, so it is not made per
+    // comparison. Throws std::runtime_error when there is none.
     static std::shared_ptr<NativeDevice> shared();
 
     // A device on the GPU DXGI lists `adapter`th (the tests try each).

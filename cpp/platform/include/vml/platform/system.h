@@ -121,8 +121,15 @@ void raise_thread_priority();
 bool keep_system_awake(bool awake);
 
 // The PCI vendor IDs of the hardware GPUs DirectX lists (Windows only; empty
-// elsewhere): 0x10DE NVIDIA, 0x1002 and 0x1022 AMD, 0x8086 Intel.
+// elsewhere): 0x10DE NVIDIA, 0x1002 and 0x1022 AMD, 0x8086 Intel. With
+// VML_GPU_VENDOR set to nvidia, intel or amd, only that maker's, as on a PC
+// with no other: for testing one maker's route on a PC that has several
+// (CUDA_VISIBLE_DEVICES and VK_LOADER_DRIVERS_DISABLE hide the others from
+// CUDA and Vulkan).
 std::vector<unsigned> gpu_vendor_ids();
+// DirectX's number for the GPU that Video Compare decodes and draws on: 0,
+// the first, unless VML_GPU_VENDOR names another maker's.
+unsigned first_gpu_adapter();
 
 // When a file was last written, in nanoseconds since 1970 (Python's
 // st_mtime_ns), or nothing when it cannot be read.

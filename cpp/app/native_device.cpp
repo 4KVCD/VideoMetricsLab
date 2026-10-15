@@ -57,7 +57,7 @@ std::shared_ptr<NativeDevice> NativeDevice::shared() {
     static std::shared_ptr<NativeDevice> device;
     const std::lock_guard lock(mutex);
     if (!device || device->lost()) {
-        device = std::make_shared<NativeDevice>();
+        device = std::make_shared<NativeDevice>(platform::first_gpu_adapter());
     }
     return device;
 }
