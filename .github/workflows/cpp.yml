@@ -42,20 +42,43 @@ jobs:
       - name: Install Ninja (macOS)
         if: runner.os == 'macOS'
         run: brew install ninja
-      - name: Install Qt (Windows)
-        # Qt 6.12's MSVC 2022 build, as the app is developed with.
+      # Qt 6.12's MSVC 2022 build (qtbase), as the app is developed with, from
+      # Qt's own servers. The archive is checked against the SHA-1 Qt publishes
+      # beside it.
+      # (aqtinstall, which install-qt-action runs, cannot read Qt 6.12's
+      # repository: "Failed to locate XML data for Qt version '6.12.0'".)
+      - name: Cache Qt (Windows)
         if: runner.os == 'Windows'
-        uses: jurplel/install-qt-action@v4
+        id: qt-cache
+        uses: actions/cache@v6
         with:
-          version: '6.12.0'
-          arch: win64_msvc2022_64
-          cache: true
+          path: ${{ runner.temp }}\Qt
+          key: qt-6.12.0-0-202609280346-win64_msvc2022_64-qtbase
+      - name: Install Qt (Windows)
+        if: runner.os == 'Windows' && steps.qt-cache.outputs.cache-hit != 'true'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $repository = 'https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_6120/qt6_6120_msvc2022_64/qt.qt6.6120.win64_msvc2022_64/6.12.0-0-202609280346'
+          $qt = Join-Path $env:RUNNER_TEMP 'Qt'
+          New-Item -ItemType Directory -Path $qt -Force | Out-Null
+          foreach ($module in 'qtbase') {
+              $url = "$repository$module-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"
+              $archive = Join-Path $env:RUNNER_TEMP "$module.7z"
+              Invoke-WebRequest -Uri $url -OutFile $archive
+              Invoke-WebRequest -Uri "$url.sha1" -OutFile "$archive.sha1"
+              $expected = (Get-Content -Raw "$archive.sha1").Trim().Split(' ')[0]
+              $actual = (Get-FileHash -Algorithm SHA1 $archive).Hash
+              if ($actual -ne $expected) { throw "$module.7z: SHA-1 $actual, Qt publishes $expected" }
+              & "$env:SystemRoot\System32\tar.exe" -xf $archive -C $qt
+              if ($LASTEXITCODE -ne 0) { throw "$module.7z did not unpack" }
+          }
       - name: Configure
         if: runner.os != 'Windows'
         run: cmake --preset ${{ matrix.configure }}
       - name: Configure (with Qt)
         if: runner.os == 'Windows'
-        run: cmake --preset ${{ matrix.configure }} "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR"
+        run: cmake --preset ${{ matrix.configure }} "-DCMAKE_PREFIX_PATH=$env:RUNNER_TEMP\Qt"
       - name: Build
         run: cmake --build --preset ${{ matrix.build }}
       - name: Test
