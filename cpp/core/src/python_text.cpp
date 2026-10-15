@@ -3,7 +3,10 @@
 #include <cctype>
 #include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
+
+#include "vml/platform/system.h"
 
 namespace vml {
 
@@ -257,6 +260,30 @@ std::string python_string_repr(std::string_view text) {
         }
     }
     return quoted + quote;
+}
+
+std::string python_os_error(const std::error_code& error, const std::filesystem::path& path) {
+    std::string prefix = "[Errno " + std::to_string(error.value()) + "] ";
+    std::string reason;
+#ifdef _WIN32
+    if (error.category() == std::system_category()) {
+        prefix = "[WinError " + std::to_string(error.value()) + "] ";
+        reason = error.message();
+    } else {
+        // The C library's own words, as Python's strerror() (the standard
+        // library's generic category words them in lower case).
+        char text[256] = {};
+        strerror_s(text, sizeof text, error.value());
+        reason = text;
+    }
+#else
+    reason = error.message();
+#endif
+    // Windows' text ends in a full stop, which Python leaves out.
+    while (!reason.empty() && (reason.back() == '.' || std::isspace(static_cast<unsigned char>(reason.back())))) {
+        reason.pop_back();
+    }
+    return prefix + reason + ": " + python_string_repr(platform::path_text(path));
 }
 
 std::vector<std::string_view> python_splitlines(std::string_view text) {

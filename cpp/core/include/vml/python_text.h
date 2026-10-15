@@ -3,9 +3,11 @@
 #pragma once
 
 #include <cstddef>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 namespace vml {
@@ -44,6 +46,12 @@ std::string last_characters(std::string_view text, std::size_t count);
 // double one, ASCII control characters escaped. Characters past ASCII are
 // kept, as repr() keeps the printable ones.
 std::string python_string_repr(std::string_view text);
+
+// The system's reason a file or folder could not be made, as Python's
+// OSError words it: "[Errno 13] Permission denied: 'C:\\out\\a.json'" for a C
+// library code (errno), "[WinError 123] The filename, directory name, or
+// volume label syntax is incorrect: 'C:\\out'" for a Windows one.
+std::string python_os_error(const std::error_code& error, const std::filesystem::path& path);
 
 // `text`'s lines, as Python's str.splitlines() cuts well-formed UTF-8 text:
 // at \n, \r, \r\n, the separators \v, \f and 0x1C to 0x1E, and U+0085,

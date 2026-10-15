@@ -1,6 +1,7 @@
 #include "vml/run_file.h"
 
 #include <cctype>
+#include <cerrno>
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
@@ -280,11 +281,16 @@ std::string run_file_text(const ComparisonResult& result, const std::string& lab
 
 void save_run(const ComparisonResult& result, const std::filesystem::path& path, const std::string& label) {
     const std::string text = run_file_text(result, label);
+    errno = 0;
     std::ofstream file(path, std::ios::binary);
+    const int opened = errno;
     file.write(text.data(), static_cast<std::streamsize>(text.size()));
     file.close();
     if (!file) {
-        throw std::runtime_error("Could not write " + platform::path_text(path));
+        // Why, as the Python app's OSError says it ("Could not write" and
+        // the path left a user guessing).
+        const int code = opened != 0 ? opened : (errno != 0 ? errno : EIO);
+        throw std::runtime_error(python_os_error(std::error_code(code, std::generic_category()), path));
     }
 }
 

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <cerrno>
 #include <chrono>
 #include <fstream>
 #include <future>
@@ -972,15 +973,29 @@ int compare(const CompareArguments& arguments) {
     } else {
         platform::write_text(platform::Stream::output, results_table(source, videos, summaries, cancelled) + "\n");
         if (json_file) {
-            std::error_code error;
+            // Why it could not be written, as the Python app's OSError says
+            // it: the path alone left a user guessing.
+            std::string failure;
             if (json_file->has_parent_path()) {
+                std::error_code error;
                 std::filesystem::create_directories(json_file->parent_path(), error);
+                if (error) {
+                    failure = python_os_error(error, json_file->parent_path());
+                }
             }
-            std::ofstream file(*json_file, std::ios::binary);
-            file << text_file(python_json_dumps(document) + "\n");
-            file.close();
-            if (error || !file) {
-                print_error("The JSON file could not be written: " + platform::path_text(*json_file));
+            if (failure.empty()) {
+                errno = 0;
+                std::ofstream file(*json_file, std::ios::binary);
+                const int opened = errno;
+                file << text_file(python_json_dumps(document) + "\n");
+                file.close();
+                if (!file) {
+                    const int code = opened != 0 ? opened : (errno != 0 ? errno : EIO);
+                    failure = python_os_error(std::error_code(code, std::generic_category()), *json_file);
+                }
+            }
+            if (!failure.empty()) {
+                print_error("The JSON file could not be written: " + failure);
                 written = false;
             } else {
                 progress->message("Results as JSON in " + platform::path_text(*json_file));
