@@ -806,8 +806,10 @@ class MainWindow(QMainWindow):
 
     def _reopen_videos(self, reference: str, tests: list) -> None:
         """The remembered videos still there (_restore_open_videos), added
-        unless the window has gained videos of its own since."""
-        if self._rows or self._source_info is not None or self._source_reading is not None or self._run_active:
+        unless the window has gained videos of its own since, or is closing:
+        their reading would hold the close up."""
+        if (self._rows or self._source_info is not None or self._source_reading is not None or self._run_active
+                or self._closing):
             return
         remembered = self._settings.remembered_tests
         if len(tests) < len(remembered):
