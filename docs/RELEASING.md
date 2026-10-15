@@ -75,9 +75,9 @@ the Python app's own steps (3, 5, 6 and 7):
    replaced as its baseline: the release branch's command line as `--app`
    and `--python-app`, not the copy of the Python app on the C++ app's
    branch. Every case must be the same.
-3. Run the C++ suites, Release and Debug (`ctest`), and the GCC check; and,
-   on a PC of each GPU maker, the window's native decoding tests with the
-   package's own files, so that dav1d and the film grain library are there:
+3. Run the C++ suites, Release and Debug (`ctest`), and the C++ workflow on
+   GitHub (Actions > C++ port > Run workflow); and, on a PC of each GPU
+   maker, the window's native decoding tests with the package's own files:
    `VML_RESOURCES=<package>\resources`, then
    `vml_app_tests --gtest_filter=NativeDecoderTest.*`.
 4. Test Video Compare's playback on a PC of each GPU maker: H.264, HEVC,

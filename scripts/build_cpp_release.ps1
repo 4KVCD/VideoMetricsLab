@@ -16,9 +16,6 @@ param(
     [string]$OutputRoot = (Join-Path $env:LOCALAPPDATA 'VideoMetricsLab-build\cpp'),
     # Qt's folder, for a build folder that has not been configured with it.
     [string]$QtPath = '',
-    # dav1d, which the software frame decoder decodes AV1 with: the Python
-    # app's, from its GStreamer wheel (gstreamer_plugins_libs), by default.
-    [string]$Dav1d = '',
     # Builds with a local build of libvmaf-fast, to test; see build_release.ps1.
     [switch]$AllowLocalLibvmaf
 )
@@ -49,13 +46,6 @@ if (-not $libvmafFast.release -and -not $AllowLocalLibvmaf) {
     throw ("libvmaf-fast is a local build ($($libvmafFast.version)): publish libvmaf-fast and install " +
            'its release with scripts/fetch_libvmaf_fast.ps1 (docs/RELEASING.md), or pass ' +
            '-AllowLocalLibvmaf to build one to test')
-}
-if (-not $Dav1d) {
-    $Dav1d = Join-Path $projectDirectory '.venv/Lib/site-packages/gstreamer_plugins_libs/bin/dav1d.dll'
-}
-if (-not (Test-Path $Dav1d)) {
-    throw ("dav1d.dll is not at $Dav1d`: install the Python app's requirements in .venv, or name it " +
-           'with -Dav1d (without it, AV1 videos the app would decode in software are decoded by FFmpeg)')
 }
 $ffmpeg = Get-Command ffmpeg.exe -ErrorAction SilentlyContinue
 if (-not $ffmpeg -or -not (Get-Command ffprobe.exe -ErrorAction SilentlyContinue)) {
@@ -173,10 +163,13 @@ Copy-Item (Join-Path $appFiles 'models') (Join-Path $resources 'models') -Recurs
 Copy-Item (Join-Path $appFiles 'translations/*.json') (Join-Path $resources 'translations')
 $tools = Join-Path $resources 'tools'
 New-Item -ItemType Directory -Path $tools -Force | Out-Null
+# FFmpeg's libraries come with dav1d (scripts/build_dav1d.ps1).
 foreach ($tool in @('ffmpeg', 'libjxl', 'libvmaf', 'vmaf_vulkan', 'vship')) {
     Copy-Item (Join-Path $appFiles "tools/$tool") (Join-Path $tools $tool) -Recurse
 }
-Copy-Item $Dav1d (Join-Path $tools 'ffmpeg/dav1d.dll')
+if (-not (Test-Path (Join-Path $tools 'ffmpeg/dav1d.dll'))) {
+    throw 'vmaf_app/tools/ffmpeg has no dav1d.dll: build it with scripts/build_dav1d.ps1'
+}
 
 # The native libraries the C++ app loads, with the notices of what is
 # compiled into them (headers, and the film grain library's VTM tables).

@@ -94,11 +94,10 @@ v1 on an AMD GPU, Windows' own decoder where it opens, its pictures read by
 Vulkan where the decoder left them), or with
 FFmpeg's decoders built into the app for a video FFmpeg would decode in
 software; FFmpeg only copies the compressed stream out of its container. A
-video it cannot decode is decoded by an FFmpeg of its own. (The Python app
-takes dav1d, the software decoder's AV1 decoder, from its bundled GStreamer;
-the C++ app looks for it beside FFmpeg's libraries in `vmaf_app/tools/ffmpeg`,
-where a development build has none, so an AV1 video FFmpeg would decode in
-software is decoded by FFmpeg; the package has the Python app's.) That work runs in a process of its own (the
+video it cannot decode is decoded by an FFmpeg of its own. (The software decoder's AV1 decoder is
+dav1d, VideoLAN's, built by `scripts/build_dav1d.ps1` beside FFmpeg's
+libraries in `vmaf_app/tools/ffmpeg`; the Python app takes its bundled
+GStreamer's.) That work runs in a process of its own (the
 program again, with `--vml-isolated`), so that a crash in libvmaf, Vship
 or the GPU's driver ends that process and not the run: FFmpeg's filters
 then calculate VMAF and the others on the CPU, and libjxl's tools
@@ -136,8 +135,7 @@ results are saved and loaded as the Python app's are. Metric Graphs draws
 each metric's scores frame by frame, with each video's statistics, and
 exports them (PNG, CSV). Video Compare shows a pair of frames, or plays the
 videos locked together: decoded with FFmpeg's libraries, on the GPU where
-Direct3D 11 can (else in software, AV1 by dav1d where it is bundled, as in
-the package), a VVC video's film grain drawn as the Python app draws it
+Direct3D 11 can (else in software, AV1 by dav1d), a VVC video's film grain drawn as the Python app draws it
 (AV1's, AFGS1, by FFmpeg), drawn by the app's presenter (HDR too) and timed
 by the source's soundtrack when it plays, or, where that cannot play them,
 through ffmpeg.exe.
