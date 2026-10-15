@@ -73,6 +73,12 @@ struct ProcessOutput {
     bool stopped = false;    // it was ended because the caller's `stop` said so
 };
 
+// An exit code as text, as Python's returncode shows it: on Windows the
+// unsigned code the process ended with (3221225477 for an access violation,
+// the number people search for, not -1073741819); elsewhere as wait() gives
+// it, minus the signal for a program a signal ended.
+std::string exit_code_text(int exit_code);
+
 // A running program, its standard output read line by line here and its
 // standard error collected in the background. Ended (with everything it
 // started) when this is destroyed.

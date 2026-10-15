@@ -284,6 +284,8 @@ void ChildProcess::gather(std::size_t bytes, const std::atomic<bool>& stop) {
     static_cast<void>(stop);
 }
 
+std::string exit_code_text(int exit_code) { return std::to_string(exit_code); }
+
 int ChildProcess::wait() {
     state_->reap(true);
     return state_->exit_code;

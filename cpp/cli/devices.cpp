@@ -5,6 +5,7 @@
 #include "vml/libvmaf.h"
 #include "vml/metrics.h"
 #include "vml/platform/console.h"
+#include "vml/platform/system.h"
 #include "vml/settings.h"
 
 namespace vml::cli {
@@ -51,6 +52,9 @@ std::vector<std::string> device_lines(const DeviceFindings& found) {
 }
 
 int devices() {
+    // Ctrl+C ends the command at once with exit code 130, as the Python
+    // app's KeyboardInterrupt ends it; a check under way ends with it.
+    platform::on_interrupt([] { platform::end_process_now(exit_cancelled); });
     const Settings settings = Settings::load();
     set_gpu_backend(settings.gpu_backend);
     set_vship_backend(settings.gpu_backend);

@@ -333,7 +333,7 @@ BitrateData analyze_video_bitrate(const std::string& ffprobe, const VideoInfo& i
             }
         }
         const std::string detail(python_strip(replace_invalid_utf8(said)));
-        throw BitrateError(detail.empty() ? "ffprobe exited with code " + std::to_string(exit_code) + "."
+        throw BitrateError(detail.empty() ? "ffprobe exited with code " + platform::exit_code_text(exit_code) + "."
                                           : last_characters(detail, 2000));
     }
     BitrateData data = packets.finish(info.path);

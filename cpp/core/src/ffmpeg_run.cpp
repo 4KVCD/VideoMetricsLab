@@ -430,7 +430,7 @@ const app_log::Logger logger("vml.vmaf_runner");
 // An FFmpeg that failed, in the log: its exit code, the decode plan, whether
 // another plan is tried, and the end of its error output.
 void log_failed_attempt(const FfmpegOutcome& outcome, const HardwareDecoding& plan, bool retrying) {
-    logger.warning("FFmpeg exited with code " + std::to_string(outcome.exit_code) + " (GPU decode: " +
+    logger.warning("FFmpeg exited with code " + platform::exit_code_text(outcome.exit_code) + " (GPU decode: " +
                    plan.describe() + ")" + (retrying ? "; retrying" : "") + ". Last output:\n" +
                    last_lines(outcome.errors, 25));
 }
@@ -723,7 +723,7 @@ ParsedScores execute_run(const CommandBuilder& build_command, const VmafOptions&
         }
     }
     if (outcome.exit_code != 0) {
-        throw VmafRunError("ffmpeg exited with code " + std::to_string(outcome.exit_code),
+        throw VmafRunError("ffmpeg exited with code " + platform::exit_code_text(outcome.exit_code),
                            last_lines(outcome.errors, 25));
     }
 
@@ -901,7 +901,7 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
         log_failed_attempt(outcome, decode, attempt_number + 1 < ladder.size());
     }
     if (outcome.exit_code != 0) {
-        throw VmafRunError("ffmpeg exited with code " + std::to_string(outcome.exit_code),
+        throw VmafRunError("ffmpeg exited with code " + platform::exit_code_text(outcome.exit_code),
                            last_lines(outcome.errors, 25));
     }
     if (!scored) {

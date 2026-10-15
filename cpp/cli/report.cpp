@@ -420,7 +420,7 @@ bool write_csvs(const std::vector<TestVideo>& videos, const std::filesystem::pat
     std::error_code error;
     std::filesystem::create_directories(folder, error);
     if (error) {
-        message("The CSV folder could not be made: " + error.message());
+        message("The CSV folder could not be made: " + python_os_error(error, folder));
         return false;
     }
     bool written = true;

@@ -729,7 +729,7 @@ private:
             // No packets at all is a failure too: FFmpeg can exit with 0 when
             // it refused to open an output.
             const std::string errors = error_text();
-            throw GpuDecodeFailedError("FFmpeg failed copying the video's packets (exit code " + std::to_string(code) +
+            throw GpuDecodeFailedError("FFmpeg failed copying the video's packets (exit code " + platform::exit_code_text(code) +
                                        ")" + (errors.empty() ? "" : ": " + errors));
         }
         return false;

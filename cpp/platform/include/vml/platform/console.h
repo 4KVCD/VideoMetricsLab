@@ -13,7 +13,9 @@ enum class Stream { output, error };
 
 // Writes UTF-8 text to standard output or error. Text written to a
 // Windows console shows every character; text written to a file or a pipe
-// is UTF-8, with "\n" made "\r\n" on Windows, as Python's print writes it.
+// is UTF-8, with "\n" made "\r\n" on Windows. (The Python app's print
+// writes Windows' ANSI code page there, with "?" for a character the code
+// page lacks: UTF-8 keeps every file name as it is.)
 void write_text(Stream stream, std::string_view text);
 
 // Whether the stream is a terminal (where a progress line can be redrawn).

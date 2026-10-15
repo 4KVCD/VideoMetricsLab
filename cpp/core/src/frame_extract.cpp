@@ -246,7 +246,7 @@ std::string extract_frame_png(const std::string& ffmpeg, const FrameComparison& 
     if (exit_code != 0) {
         cancel.throw_if_cancelled();
         const std::string detail(python_strip(replace_invalid_utf8(process.standard_error())));
-        throw FrameExtractError(detail.empty() ? "ffmpeg exited with code " + std::to_string(exit_code) + "."
+        throw FrameExtractError(detail.empty() ? "ffmpeg exited with code " + platform::exit_code_text(exit_code) + "."
                                                : last_characters(detail, 2000));
     }
     if (png.empty()) {

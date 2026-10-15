@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cerrno>
 #include <cmath>
 #include <fstream>
 #include <limits>
@@ -14,6 +15,7 @@
 #include "vml/model_select.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
+#include "vml/python_text.h"
 
 namespace vml {
 
@@ -120,9 +122,17 @@ void export_csv(const ComparisonResult& result, const std::filesystem::path& pat
         names.emplace_back("cvvdp_video_jod");
     }
 
+    // A failure says why, as the Python app's OSError does ("[Errno 13]
+    // Permission denied: '...'"); the path alone left a user guessing.
+    errno = 0;
     std::ofstream file(path, std::ios::binary);
+    const int opened = errno;
+    const auto failed = [&] {
+        const int code = opened != 0 ? opened : (errno != 0 ? errno : EIO);
+        return std::runtime_error(python_os_error(std::error_code(code, std::generic_category()), path));
+    };
     if (!file) {
-        throw std::runtime_error("cannot write " + platform::path_text(path));
+        throw failed();
     }
     // Python's csv.writer: comma-separated, rows ended with CR LF; none of
     // these cells needs quotes.
@@ -139,8 +149,9 @@ void export_csv(const ComparisonResult& result, const std::filesystem::path& pat
         }
         file << line << "\r\n";
     }
+    file.close();
     if (!file) {
-        throw std::runtime_error("cannot write " + platform::path_text(path));
+        throw failed();
     }
 }
 

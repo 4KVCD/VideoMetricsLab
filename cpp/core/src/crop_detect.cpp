@@ -354,7 +354,7 @@ std::optional<CropBox> run_single_window(const std::string& ffmpeg, const std::s
     if (code != 0) {
         // The last line of FFmpeg's error output (the output as a whole
         // stripped of spaces at both ends first, as Python strips it).
-        std::string tail = "ffmpeg exited with code " + std::to_string(code);
+        std::string tail = "ffmpeg exited with code " + platform::exit_code_text(code);
         const std::size_t first = errors.find_first_not_of(" \t\r\n\f\v");
         if (first != std::string::npos) {
             const std::string stripped = errors.substr(first, errors.find_last_not_of(" \t\r\n\f\v") - first + 1);

@@ -173,13 +173,20 @@ bool sorts_before(const std::filesystem::path& a, const std::filesystem::path& b
     return parts(a) < parts(b);
 }
 
-// A path resolved, as Python compares path.resolve() with another: two
-// paths name the same file when these are equal.
-std::string resolved(const std::filesystem::path& path) {
+// A path resolved, as Python's path.resolve() resolves it: a path that
+// cannot be followed (under a folder that cannot be read, on a drive Windows
+// cannot resolve) stays as it is, made absolute. weakly_canonical gives an
+// empty path then, which made every such video the same one.
+std::filesystem::path resolved_path(const std::filesystem::path& path) {
     std::error_code error;
     const std::filesystem::path absolute = std::filesystem::absolute(path, error);
-    return comparable(std::filesystem::weakly_canonical(absolute, error));
+    const std::filesystem::path resolved = std::filesystem::weakly_canonical(absolute, error);
+    return error ? absolute : resolved;
 }
+
+// Two paths name the same file when these are equal, as Python compares
+// path.resolve() with another.
+std::string resolved(const std::filesystem::path& path) { return comparable(resolved_path(path)); }
 
 // ------------------------------------------------------------------- colours
 
@@ -287,9 +294,7 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
         options.model_choice = std::string(uhd_model);
     } else {
         options.model_choice = std::string(custom_model_choice);
-        std::error_code error;
-        const std::filesystem::path absolute = std::filesystem::absolute(python_path(arguments.model), error);
-        options.custom_model_path = platform::path_text(std::filesystem::weakly_canonical(absolute, error));
+        options.custom_model_path = platform::path_text(resolved_path(python_path(arguments.model)));
     }
     for (const std::string& key : metric_keys) {
         if (metric_definition(key).ffmpeg_binding) {
@@ -755,6 +760,24 @@ std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& 
 }
 
 int compare(const CompareArguments& arguments) {
+    // Ctrl+C: outside the run, the command ends at once with exit code 130
+    // and nothing more, as the Python app's KeyboardInterrupt ends it -- an
+    // FFmpeg check or ffprobe under way included, which ends with this
+    // process's job. During the run, the run is cancelled and what finished
+    // is reported. Set up first: the checks and probes before the run can
+    // take a while (60 s for ffprobe on a slow share). The handler outlives
+    // this function, so it shares what it uses.
+    CancelToken cancel;
+    const auto progress = std::make_shared<Progress>(arguments.quiet);
+    const auto running = std::make_shared<std::atomic<bool>>(false);
+    platform::on_interrupt([cancel, progress, running]() mutable {
+        if (!*running) {
+            platform::end_process_now(exit_cancelled);
+        }
+        progress->message("Cancelling...");
+        app_log::write(app_log::Level::info, "vml.job_runner", "Run: cancel requested");
+        cancel.cancel();
+    });
     const Settings settings = Settings::load();
     set_gpu_backend(settings.gpu_backend);
     set_vship_backend(settings.gpu_backend);
@@ -781,21 +804,6 @@ int compare(const CompareArguments& arguments) {
         return exit_usage;
     }
 
-    // Ctrl+C: before the run, the command stops with exit code 130 and
-    // nothing more; during it, the run is cancelled and what finished is
-    // reported. The handler outlives this function, so it shares what it
-    // uses.
-    CancelToken cancel;
-    const auto progress = std::make_shared<Progress>(arguments.quiet);
-    const auto running = std::make_shared<std::atomic<bool>>(false);
-    platform::on_interrupt([cancel, progress, running]() mutable {
-        if (*running) {
-            progress->message("Cancelling...");
-            app_log::write(app_log::Level::info, "vml.job_runner", "Run: cancel requested");
-        }
-        cancel.cancel();
-    });
-
     VideoInfo source;
     try {
         source = with_assumed_colour(probe_video(python_path(arguments.reference), tools.ffprobe.path),
@@ -814,9 +822,6 @@ int compare(const CompareArguments& arguments) {
     // Each job's video: its index, and for CVVDP on a further display, which.
     std::vector<std::pair<std::size_t, std::optional<std::size_t>>> job_videos;
     for (const std::filesystem::path& path : expand_tests(arguments.tests, python_path(arguments.reference))) {
-        if (cancel.cancelled()) {
-            return exit_cancelled;
-        }
         TestVideo& video = videos.emplace_back();
         video.path = path;
         video.save_scores = !arguments.colour;
@@ -900,9 +905,6 @@ int compare(const CompareArguments& arguments) {
                 video.error += " Here: --frames N or --duration SECONDS.";
             }
         }
-    }
-    if (cancel.cancelled()) {
-        return exit_cancelled;
     }
     if (videos.empty()) {
         print_error("No test videos: the patterns find only the reference.");

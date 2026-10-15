@@ -169,7 +169,7 @@ ToolStatus check_tool(std::string_view name, const Settings& settings) {
     if (output.exit_code != 0) {
         std::string said = strip(output.standard_error.empty() ? output.standard_output : output.standard_error);
         said = said.substr(0, 300);
-        status.error = said.empty() ? "exited with code " + std::to_string(output.exit_code) : said;
+        status.error = said.empty() ? "exited with code " + platform::exit_code_text(output.exit_code) : said;
         return status;
     }
     status.runnable = true;

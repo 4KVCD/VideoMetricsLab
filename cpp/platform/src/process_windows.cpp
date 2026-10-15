@@ -14,11 +14,14 @@
 #include "vml/platform/process.h"
 
 #include <algorithm>
+#include <cctype>
 #include <condition_variable>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <mutex>
 #include <string_view>
+#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -260,9 +263,17 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
                                          CREATE_UNICODE_ENVIRONMENT,
                                      nullptr, folder.empty() ? nullptr : folder.c_str(), &startup.StartupInfo,
                                      &started);
+    const DWORD start_error = made ? ERROR_SUCCESS : GetLastError();
     DeleteProcThreadAttributeList(attributes);
     if (!made) {
-        fail("could not start " + arguments.front());
+        // As Python's OSError says it, which the callers' messages carry:
+        // "[WinError 2] The system cannot find the file specified" when
+        // FFmpeg is not where it was looked for.
+        std::string reason = std::system_category().message(static_cast<int>(start_error));
+        while (!reason.empty() && (reason.back() == '.' || std::isspace(static_cast<unsigned char>(reason.back())))) {
+            reason.pop_back();
+        }
+        throw ProcessError("[WinError " + std::to_string(start_error) + "] " + reason);
     }
     auto state = std::make_unique<State>();
     state->process = Handle(started.hProcess);
@@ -383,6 +394,8 @@ void ChildProcess::gather(std::size_t bytes, const std::atomic<bool>& stop) {
         }
     }
 }
+
+std::string exit_code_text(int exit_code) { return std::to_string(static_cast<std::uint32_t>(exit_code)); }
 
 int ChildProcess::wait() {
     WaitForSingleObject(state_->process.get(), INFINITE);
