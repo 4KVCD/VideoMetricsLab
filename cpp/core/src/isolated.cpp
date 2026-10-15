@@ -41,6 +41,12 @@ std::optional<std::filesystem::path>& program() {
 // (FFmpeg) is still ending with a file in it open.
 constexpr std::chrono::seconds folder_wait{5};
 
+// How long a child that has sent its answer is given to end, before it is
+// ended: one that hangs as it ends (a GPU driver unloading) would hold the
+// run for good, and its answer is all that is wanted (the Python app's
+// join(timeout=5)).
+constexpr std::chrono::seconds answered_wait{5};
+
 // The file in a child's folder where it reports a crash.
 constexpr std::string_view crash_report_name = "crash.txt";
 
@@ -153,6 +159,8 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
     std::optional<nlohmann::json> result;
     std::optional<std::string> failure;
     bool stopped = false;
+    std::optional<std::chrono::steady_clock::time_point> answered;  // when its result or error came
+    bool ended_after_answer = false;
     try {
         std::unique_lock lock(mutex);
         while (true) {
@@ -184,6 +192,15 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
             if (ended) {
                 break;
             }
+            if ((result || failure) && !ended_after_answer) {
+                const auto now = std::chrono::steady_clock::now();
+                if (!answered) {
+                    answered = now;
+                } else if (now - *answered >= answered_wait) {
+                    child.terminate();  // its answer is here; it and what it started go
+                    ended_after_answer = true;
+                }
+            }
         }
     } catch (...) {
         child.terminate();  // on_message threw: the child must not outlive the run
@@ -192,6 +209,11 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
     }
     reader.join();
     const int exit_code = child.wait();
+    if (ended_after_answer) {
+        app_log::write(app_log::Level::warning, "vml.isolated",
+                       std::string(what) + " did not end within " + std::to_string(answered_wait.count()) +
+                           " s of its answer, and was ended");
+    }
     if (stopped || cancel.cancelled()) {
         throw Cancelled();
     }
