@@ -90,7 +90,12 @@ A fixed step between "tests pass" and "commit".
   sessions may be running.
 - Never change power or display settings.
 - Do not write information about the PC's state into the app's log.
-- Ask before downloading anything: say the file name, the source and the size.
+- You may download what you need to build and test the code (packages,
+  toolchains, SDKs, libraries, test data) without asking, from official
+  sources only: package managers, or the project's or vendor's own site or
+  GitHub releases. Keep downloads out of the repository, and say in your
+  report what you downloaded, from where, and its size. Ask first for
+  anything else, or anything from an unofficial source.
 - Do not change the user's real app profile or settings unless the task needs
   it. Use a temporary profile for tests.
 - If you change the app and it is running, check it is idle, then relaunch it.
