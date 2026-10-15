@@ -2,7 +2,7 @@
 
 Calculate VMAF, VMAF NEG, VMAF v1, SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD and Intel GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly to easily spot differences.
 
-New in v2.0: VMAF, VMAF NEG and VMAF v1 on any GPU (NVIDIA, AMD or Intel), PSNR, SSIM and XPSNR up to **11x** faster with far less memory, a command line, and 120 fps 4K HDR playback in Video Compare. See the [changelog](CHANGELOG.md).
+New in v2.1: VideoMetricsLab is now a C++ app: a **39 MB** download instead of 87 MB, **1.25x** faster runs, and a window that opens **3x** faster and idles in a third of the memory. See the [changelog](CHANGELOG.md) and [the C++ port](docs/CPP_PORT.md).
 
 ## Features
 
@@ -77,14 +77,13 @@ extract it, and run `VideoMetricsLab.exe`.
 The app requires **FFmpeg 9 or newer with libvmaf**. FFmpeg is not bundled; the
 app prompts for its location if it is not available on `PATH`.
 
-### Run from source
+### Build from source
 
-Requires Python 3.11 or newer:
+Requires Visual Studio 2022, CMake 3.25+, Qt 6.12 and MinGW-w64; see the
+[contributing guide](CONTRIBUTING.md):
 
 ```powershell
-py -3 -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe -m vmaf_app.main
+./scripts/build_release.ps1 -QtPath C:\Qt\6.12.0\msvc2022_64
 ```
 
 ## Requirements
@@ -92,14 +91,14 @@ py -3 -m venv .venv
 - Windows 10 or 11
 - FFmpeg 9+ with `ffmpeg`, `ffprobe`, and `libvmaf`
 - Optional NVIDIA, Intel, or AMD GPU for hardware decoding and the GPU metrics
-- Python 3.11+ when running from source
 
 ## Development
 
 ```powershell
-.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.venv\Scripts\python.exe -m pytest
-.venv\Scripts\python.exe -m ruff check vmaf_app tests scripts
+cd cpp
+cmake --preset windows -DCMAKE_PREFIX_PATH=C:/Qt/6.12.0/msvc2022_64
+cmake --build --preset windows-release
+ctest --preset windows-release
 ```
 
 Build the distributable with `./scripts/build_release.ps1`. See the

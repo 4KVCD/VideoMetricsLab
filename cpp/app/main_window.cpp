@@ -949,8 +949,7 @@ void MainWindow::on_update_answer(const std::string& body, const QString& error)
         logger.info(std::string("Update check: GitHub could not be asked (") + failure.what() + ")");
         return;
     }
-    // Compared with the release this build is ("3.0.0" for 3.0.0-dev).
-    if (!is_newer(release->version, VML_APP_RELEASE)) {
+    if (!is_newer(release->version, VML_APP_VERSION)) {
         logger.info("Update check: VideoMetricsLab " VML_APP_VERSION " is the latest release");
         return;
     }

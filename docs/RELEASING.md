@@ -48,7 +48,9 @@
    backend-specific cache reuse, still comparison and independent bitrate
    analysis. On an NVIDIA GPU, compare a long run (30 minutes of 4K) with
    Performance > VMAF compute set to GPU and to CPU: every metric but VMAF
-   and NEG identical, those within 0.001 per frame. After updating
+   and NEG identical, those within 0.002 per frame (libvmaf's GPU and CPU
+   code round ADM and motion differently; official Netflix CUDA, without
+   the fixes libvmaf-fast carries, was off by up to 0.13 at cuts). After updating
    libvmaf-fast, run the integration tests `VmafVulkan.*`, `VmafV1Gpu.*` and
    `VmafCuda.*` on a PC of each GPU maker; changes to libvmaf, its pull
    requests or the Vulkan engine are made in libvmaf-fast, which runs its

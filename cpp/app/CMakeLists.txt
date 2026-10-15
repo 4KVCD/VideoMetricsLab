@@ -42,10 +42,9 @@ add_library(vml_app STATIC
 set_target_properties(vml_app PROPERTIES AUTOMOC ON)
 target_include_directories(vml_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(vml_app PUBLIC vml_core Qt6::Concurrent Qt6::Network Qt6::Widgets PRIVATE vml_compile_options)
-# The version shown, and the release it will be, which the update check
-# compares with GitHub's latest.
-target_compile_definitions(vml_app PUBLIC VML_APP_VERSION="${PROJECT_VERSION}-dev"
-                                          VML_APP_RELEASE="${PROJECT_VERSION}")
+# The version: shown, and compared by the update check with GitHub's latest
+# release.
+target_compile_definitions(vml_app PUBLIC VML_APP_VERSION="${PROJECT_VERSION}")
 
 if(WIN32 AND MSVC)
     # Video Compare's native playback: FFmpeg's libraries (resources/tools/

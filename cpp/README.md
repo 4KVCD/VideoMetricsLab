@@ -1,7 +1,7 @@
 # VideoMetricsLab in C++
 
-VideoMetricsLab is a C++ app from v3.0 on. It was ported from the Python
-app (v2.1 and before; its last release is the `release/v2.1` branch) to
+VideoMetricsLab is a C++ app from v2.1 on. It was ported from the Python
+app (v2.0 and before; its last code is the `release/v2.1` branch) to
 run faster and in less memory, and to come to macOS and Linux after
 Windows. A comment that names a `vmaf_app/...` file or a Python test
 (`tests/test_...py`) means the Python app's code the C++ code was ported

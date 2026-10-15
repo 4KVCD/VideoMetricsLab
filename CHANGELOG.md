@@ -1,30 +1,81 @@
 # Changelog
 
-## v2.1 (in development)
+## v2.1
+
+v2.1 is VideoMetricsLab rewritten in C++: a smaller download, faster runs,
+and a window that opens faster and uses far less memory. [The C++
+port](docs/CPP_PORT.md) has the details and measurements.
 
 ### Metric performance
 
-- VMAF v0.6.1 and VMAF NEG now use Vulkan on NVIDIA GPUs when the GPU backend is
-  Auto.
+- VMAF v0.6.1 and VMAF NEG now use Vulkan on NVIDIA GPUs too when the GPU
+  backend is Auto, **3.2x-4.4x** faster than with CUDA.
+- SSIMULACRA2, Butteraugli and CVVDP now share one pass over the videos when
+  the GPU has the memory for it, making runs with them **1.1x** faster.
+
+### System performance
+
+- The download is **39 MB** instead of 87 MB.
+- Runs are **1.25x** faster with 28% less CPU (three 4K test videos, every
+  metric).
+- The app opens **3x** faster and idles in 26 MB of memory instead of 87 MB.
+- Moving the pointer over a graph uses **6x** less CPU.
+- Video Compare now frees its memory 30 s after you leave it: 0.1 GB instead
+  of 7.6 GB with four 4K videos.
 
 ### New features
 
 - Added film grain synthesis for VVC encodes in Video Compare.
-- Added a colour picker for each video's line in Metric Graphs and Bitrate Viewer.
-- Command line: added `--frames N` to compare only the first N frames, for a short encode of a longer reference.
-- Command line: added `--colour` for videos without colour tags, such as HDR10 in .y4m files, and a warning when colours are guessed.
-- Command line: added `--cvvdp-display` to choose the display CVVDP models; repeat it to score on several displays.
+- Added a colour picker for each video's line in Metric Graphs and Bitrate
+  Viewer.
+- Command line: added `--frames N` to compare only the first N frames, for a
+  short encode of a longer reference.
+- Command line: added `--colour` for videos without colour tags, such as
+  HDR10 in .y4m files, and a warning when colours are guessed.
+- Command line: added `--cvvdp-display` to choose the display CVVDP models;
+  repeat it to score on several displays.
 
 ### Other changes
 
-- Every metric now pairs the two videos' frames by frame number, on the CPU and
-  the GPU alike.
+- Every metric now pairs the two videos' frames by frame number, on the CPU
+  and the GPU alike.
+- Video Compare now plays videos with FFmpeg instead of GStreamer.
+- GPU VMAF now uses
+  [libvmaf-fast v1.1](https://github.com/4KVCD/libvmaf-fast/releases/tag/libvmaf-fast-v1.1).
 
 ### Bug fixes
 
-- Fixed a video's colour changing between Metric Graphs and Bitrate Viewer, or after it was removed and added again.
+- Fixed a crash when closing the window with a path typed in the reference
+  box.
+- Fixed a possible crash of VMAF v1 on the GPU when libvmaf failed to start.
+- Fixed SSIMULACRA2 and Butteraugli on the CPU sometimes failing to read a
+  frame.
+- Fixed long runs using too much memory: up to 2.1 GB with VMAF on the CPU and
+  770 MB with VMAF on the GPU over 3 hours at 60 fps.
+- Fixed runs that crashed or were ended in Task Manager leaving temporary
+  files behind, up to 1.4 GB for a 4K run.
+- Fixed the command line sometimes losing a video's metrics from its table
+  and JSON.
+- Fixed a saved VMAF score being shown with the wrong model.
 - Fixed "frames compared" being one frame short with some duration limits.
-- Fixed the Settings tab's rows overlapping on high-DPI screens or in a small window; tabs now scroll instead (#6).
+- Fixed Video Compare jumping to the first test video when scores arrived.
+- Fixed Video Compare showing the Videos tab for seconds at the first switch
+  after black bars were found.
+- Fixed Video Compare playing no frames of a test video decoded in the
+  background that had fallen behind.
+- Fixed Video Compare keeping old black bars and still frames after the
+  reference or the scaling changed.
+- Fixed Video Compare keeping each finished test video's decoder until the
+  window closed.
+- Fixed loading a saved run keeping the old reference's resolution tests, and
+  a loaded resolution test showing the reference's details.
+- Fixed the CVVDP display editor changing values that were not edited.
+- Fixed a video's colour changing between Metric Graphs and Bitrate Viewer, or
+  after it was removed and added again.
+- Fixed the Settings tab's rows overlapping on high-DPI screens or in a small
+  window; tabs now scroll instead (#6).
+- Fixed texts that stayed in English in Video Compare, Metric Graphs, Bitrate
+  Viewer, the run line and the CVVDP display editor.
 
 ## v2.0
 

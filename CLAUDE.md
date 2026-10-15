@@ -1,7 +1,7 @@
 # Rules for Claude Code sessions on VideoMetricsLab
 
 Repository: github.com/4KVCD/VideoMetricsLab. Work on the current branch of
-the app (`cpp-port`, the C++ app, v3.0, at the time of writing) unless told
+the app (`cpp-port`, the C++ app, v2.1, at the time of writing) unless told
 otherwise, and pull before you start. Follow these rules for all work.
 
 ## Setup
