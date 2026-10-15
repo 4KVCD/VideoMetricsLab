@@ -218,6 +218,9 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     if (arguments.empty()) {
         throw ProcessError("no program to start");
     }
+    // The job first: made after the program, a job that could not be made
+    // left the program started suspended, for good.
+    Handle job = make_job();
     Pipe output = make_pipe(options.output_pipe_bytes);
     Pipe error = make_pipe();
     SECURITY_ATTRIBUTES inheritable{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
@@ -265,7 +268,7 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     state->process = Handle(started.hProcess);
     Handle thread(started.hThread);
     state->id = started.dwProcessId;
-    state->job = make_job();
+    state->job = std::move(job);
     if (!AssignProcessToJobObject(state->job.get(), state->process.get())) {
         TerminateProcess(state->process.get(), 1);
         fail("could not put " + arguments.front() + " in a job object");
