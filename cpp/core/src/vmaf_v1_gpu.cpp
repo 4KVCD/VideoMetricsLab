@@ -6,6 +6,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <deque>
 #include <fstream>
 #include <initializer_list>
 #include <limits>
@@ -49,6 +50,10 @@ constexpr std::array<std::pair<const char*, const char*>, 2> gpu_features{
 // What vv_v1_cambi and vv_v1_speed answer for options they do not
 // calculate: libvmaf's CPU code calculates that feature.
 constexpr int unsupported_options = -4;
+
+// The flag of a context that reads the decoders' pictures where they left
+// them (vv_pictures).
+constexpr int pictures_flag = 1 << 2;
 
 // The models the probe holds the GPU to libvmaf's CPU values with, and the
 // bits of the frames it gives each.
@@ -490,6 +495,21 @@ struct V1Scorer::State {
         std::uint32_t stride = 0;
     };
     std::optional<SharedChroma> shared_chroma;
+    // Whether the GPU, rather than this thread, waits for the decoder's
+    // copies into the shared buffers (through the decoder's timeline
+    // semaphore, imported): this thread then goes on to the next pair at once.
+    bool after = false;
+    // Whether the engine reads the decoders' pictures where they are
+    // (vv_pictures).
+    bool pictures = false;
+    // The decoders' slots given back through release_later that the engine
+    // may still read: the last frame that reads each, its stream and slot.
+    struct Held {
+        long long last = 0;
+        GpuFrameStream* stream = nullptr;
+        int slot = 0;
+    };
+    std::deque<Held> held;
     // libvmaf's pictures page-locked for the decoder that downloads into
     // them, or nullptr for those it could not lock.
     std::map<void*, GpuFrameStream*> pinned;
@@ -503,6 +523,7 @@ struct V1Scorer::State {
         if (gpu != nullptr) {
             engine.destroy(gpu);  // waits for its frames
         }
+        release_all();
         // Locked memory is unlocked before vmaf_close frees the pictures it
         // is in: CUDA must let go of memory before it is freed. No download
         // into it is under way (each returns once its copy is done).
@@ -549,11 +570,53 @@ struct V1Scorer::State {
             pinned[address] = stream.pin(address, size) ? &stream : nullptr;
         }
     }
+
+    // Gives libvmaf's extractors a pair the decoders hold, as frame `count`:
+    // the whole test frame (CAMBI reads its luma) and the source's chroma
+    // (SpEED reads both videos' chroma; nothing here reads the source's
+    // luma), downloaded straight into libvmaf's pictures.
+    void to_libvmaf_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot) {
+        to_libvmaf(
+            [&](VmafPicture& reference_picture, VmafPicture& distorted_picture) {
+                pin(reference_picture, test);
+                pin(distorted_picture, test);
+                const std::array<std::int64_t, 3> pitches{distorted_picture.stride[0], distorted_picture.stride[1],
+                                                          distorted_picture.stride[2]};
+                test.download_planes(test_slot,
+                                     {distorted_picture.data[0], distorted_picture.data[1], distorted_picture.data[2]},
+                                     pitches);
+                reference.download_planes(reference_slot,
+                                          {nullptr, reference_picture.data[1], reference_picture.data[2]}, pitches);
+            },
+            count);
+    }
+
+    // Gives back the slots held by release_later that the engine is done
+    // with. The engine has finished every frame up to one round of shared
+    // slots back, because starting a frame in a shared slot waits for the
+    // frame that used the slot before.
+    void release_done() {
+        const long long done = static_cast<long long>(count) - static_cast<long long>(shared->count());
+        while (!held.empty() && held.front().last <= done) {
+            const Held given = held.front();
+            held.pop_front();
+            given.stream->release(given.slot);
+        }
+    }
+
+    // Gives back every slot release_later holds, once the engine is done.
+    void release_all() {
+        while (!held.empty()) {
+            const Held given = held.front();
+            held.pop_front();
+            given.stream->release(given.slot);
+        }
+    }
 };
 
 V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::path& model, int n_subsample,
                    std::optional<int> device, std::optional<int> threads, std::string name, GpuFrameStream* shared,
-                   bool gpu_cambi, bool gpu_speed)
+                   bool gpu_cambi, bool gpu_speed, bool pictures)
     : state_(std::make_unique<State>()) {
     State& s = *state_;
     const VulkanEngine& engine = s.engine;
@@ -611,7 +674,10 @@ V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::
         }
         throw VmafV1Error("the model has ADM or motion options the GPU does not calculate: " + listed);
     }
-    const int flags = (vulkan_frames_in_flight << 8) | (shared != nullptr ? vulkan_shared_flag : 0);
+    int flags = (vulkan_frames_in_flight << 8) | (shared != nullptr ? vulkan_shared_flag : 0);
+    if (pictures && shared != nullptr && engine.pictures != nullptr && engine.pictures_mode != nullptr) {
+        flags |= pictures_flag;
+    }
     s.check(engine.create_v1(&s.gpu, *device, width, height, bit_depth, flags, values.data()), "Starting Vulkan");
     if (shared != nullptr) {
         if ((width & 1) != 0 || (height & 1) != 0) {
@@ -646,6 +712,13 @@ V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::
             s.shared_chroma = chroma;
         }
     }
+    if (s.shared && engine.import_timeline != nullptr && engine.commit_after != nullptr) {
+        if (void* const timeline = shared->timeline(); timeline != nullptr) {
+            s.after = engine.import_timeline(s.gpu, timeline) == 0;
+            platform::close_native_handle(timeline);
+        }
+    }
+    s.pictures = (flags & pictures_flag) != 0 && engine.pictures_mode(s.gpu) == 1;
     // libvmaf's CPU extractors run only for the features the GPU does not
     // calculate.
     if (!s.on_gpu.contains(v1_cambi) || !s.on_gpu.contains(v1_speed)) {
@@ -710,7 +783,42 @@ void V1Scorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFra
         throw std::logic_error("a decoder's pictures for a scorer that shares no memory with it");
     }
     const bool score = s.count % s.step == 0;
+    const std::string what = "Scoring frame " + std::to_string(s.count);
     const SharedSlots::Next next = s.shared->next();
+    if (s.pictures) {
+        // The engine reads both pictures where the decoders left them.
+        s.release_done();
+        const GpuFrameStream::Texture ref = reference.slot_texture(reference_slot);
+        const GpuFrameStream::Texture dis = test.slot_texture(test_slot);
+        s.check(s.engine.pictures(s.gpu, ref.handle, ref.width, ref.height, ref.x, ref.y, dis.handle, dis.width,
+                                  dis.height, dis.x, dis.y),
+                what);
+        s.check(s.engine.commit(s.gpu, score ? 1 : 0), what);
+        if (score && s.cpu_features()) {
+            s.to_libvmaf_decoded(reference, reference_slot, test, test_slot);
+        }
+        ++s.count;
+        return;
+    }
+    // The copies into the shared buffers. When the GPU waits for them
+    // (after), this thread does not: each copy gives the value the decoder's
+    // timeline reaches once it is done, else 0.
+    const auto copy_luma = [&s, &next](GpuFrameStream& stream, int slot, std::uint64_t address) -> std::uint64_t {
+        if (s.after) {
+            return stream.copy_luma_async(slot, address, next.pitch);
+        }
+        stream.copy_luma(slot, address, next.pitch);
+        return 0;
+    };
+    const auto copy_planes = [&s](GpuFrameStream& stream, int slot, const std::array<std::uint64_t, 3>& addresses,
+                                  const std::array<std::int64_t, 3>& pitches) -> std::uint64_t {
+        if (s.after) {
+            return stream.copy_planes_async(slot, addresses, pitches);
+        }
+        stream.copy_planes(slot, addresses, pitches);
+        return 0;
+    };
+    std::uint64_t copied = 0;
     const bool chroma_copied = score && s.on_gpu.contains(v1_speed) && s.shared_chroma;
     if (chroma_copied) {
         // Each picture's chroma planes go into the slot's shared buffer along
@@ -718,42 +826,40 @@ void V1Scorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFra
         const State::SharedChroma& chroma = *s.shared_chroma;
         const auto at = [&](std::uint64_t plane) { return next.base + chroma.offset + plane * chroma.spacing; };
         const std::array<std::int64_t, 3> pitches{next.pitch, chroma.stride, chroma.stride};
-        reference.copy_planes(reference_slot, {next.reference, at(0), at(1)}, pitches);
-        test.copy_planes(test_slot, {next.distorted, at(2), at(3)}, pitches);
+        const std::uint64_t reference_copied =
+            copy_planes(reference, reference_slot, {next.reference, at(0), at(1)}, pitches);
+        const std::uint64_t test_copied = copy_planes(test, test_slot, {next.distorted, at(2), at(3)}, pitches);
+        copied = std::max(reference_copied, test_copied);
     } else {
-        reference.copy_luma(reference_slot, next.reference, next.pitch);
+        copied = copy_luma(reference, reference_slot, next.reference);
         if (score) {
-            test.copy_luma(test_slot, next.distorted, next.pitch);
+            copied = std::max(copied, copy_luma(test, test_slot, next.distorted));
         }
+    }
+    if (copied != 0) {
+        s.check(s.engine.commit_after(s.gpu, copied), what);
     }
     if (score && s.on_gpu.contains(v1_speed) && !chroma_copied) {
         // The chroma planes are downloaded into the engine's memory for them.
         std::array<std::uint8_t*, 4> chroma{};
         std::uint32_t stride = 0;
-        s.check(s.engine.chroma_staging(s.gpu, chroma.data(), &stride), "Scoring frame " + std::to_string(s.count));
+        s.check(s.engine.chroma_staging(s.gpu, chroma.data(), &stride), what);
         const std::array<std::int64_t, 3> pitches{0, stride, stride};
         reference.download_planes(reference_slot, {nullptr, chroma[0], chroma[1]}, pitches);
         test.download_planes(test_slot, {nullptr, chroma[2], chroma[3]}, pitches);
     }
-    s.check(s.engine.commit(s.gpu, score ? 1 : 0), "Scoring frame " + std::to_string(s.count));
+    s.check(s.engine.commit(s.gpu, score ? 1 : 0), what);
     if (score && s.cpu_features()) {
-        // As add: the whole test frame, and the source's chroma, downloaded
-        // straight into libvmaf's pictures.
-        s.to_libvmaf(
-            [&](VmafPicture& reference_picture, VmafPicture& distorted_picture) {
-                s.pin(reference_picture, test);
-                s.pin(distorted_picture, test);
-                const std::array<std::int64_t, 3> pitches{distorted_picture.stride[0], distorted_picture.stride[1],
-                                                          distorted_picture.stride[2]};
-                test.download_planes(test_slot,
-                                     {distorted_picture.data[0], distorted_picture.data[1], distorted_picture.data[2]},
-                                     pitches);
-                reference.download_planes(reference_slot,
-                                          {nullptr, reference_picture.data[1], reference_picture.data[2]}, pitches);
-            },
-            s.count);
+        s.to_libvmaf_decoded(reference, reference_slot, test, test_slot);
     }
     ++s.count;
+}
+
+bool V1Scorer::pictures() const { return state_->pictures; }
+
+void V1Scorer::release_later(GpuFrameStream& stream, int slot, bool reference) {
+    State& s = *state_;
+    s.held.push_back({static_cast<long long>(s.count) - 1 + (reference ? 1 : 0), &stream, slot});
 }
 
 V1Features V1Scorer::features() {
@@ -816,10 +922,12 @@ PairScores V1Scorer::finish() {
     State& s = *state_;
     PairScores result;
     if (s.count == 0) {
+        s.release_all();
         result.by_metric.emplace_back(s.name, std::vector<double>());
         return result;
     }
     const V1Features measured = features();
+    s.release_all();  // the engine has finished every frame
     result.by_metric.emplace_back(s.name, predict_v1(s.model, measured));
     result.frames = measured.frames;
     return result;
@@ -965,7 +1073,8 @@ VulkanProbeFrames v1_probe_frames(int bits, int count) {
 // --------------------------------------------------------------- MultiScorer
 
 MultiScorer::MultiScorer(int width, int height, int bit_depth, const GpuModels& models, int n_subsample,
-                         const std::string& backend, std::optional<int> device, GpuFrameStream* shared) {
+                         const std::string& backend, std::optional<int> device, GpuFrameStream* shared,
+                         bool pictures) {
     GpuModels vmaf_models;
     std::optional<std::string> v1_model;
     for (const auto& [key, model] : models) {
@@ -989,7 +1098,8 @@ MultiScorer::MultiScorer(int width, int height, int bit_depth, const GpuModels& 
                                           ? std::string_view(*v1_model).substr(5)
                                           : std::string_view(*v1_model);
         v1_ = std::make_unique<V1Scorer>(width, height, bit_depth, platform::path_from_text(file), n_subsample,
-                                         vulkan ? device : std::nullopt, std::nullopt, "vmaf_v1", shared);
+                                         vulkan ? device : std::nullopt, std::nullopt, "vmaf_v1", shared, true, true,
+                                         pictures);
     }
     if (!vulkan_ && !cuda_ && !v1_) {
         throw std::invalid_argument("no model to score");
@@ -1026,6 +1136,12 @@ void MultiScorer::add_decoded(GpuFrameStream& reference, int reference_slot, Gpu
     if (v1_) {
         v1_->add_decoded(reference, reference_slot, test, test_slot);
     }
+}
+
+bool MultiScorer::pictures() const { return v1_ && v1_->pictures(); }
+
+void MultiScorer::release_later(GpuFrameStream& stream, int slot, bool reference) {
+    v1_->release_later(stream, slot, reference);
 }
 
 PairScores MultiScorer::finish() {
@@ -1078,18 +1194,37 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
         plans.push_back(decoded);
     }
     const std::optional<int> device = plan.device >= 0 ? std::optional(plan.device) : std::nullopt;
-    GpuFrameStream test(distorted, plans[0], 0, 4, test_backend, ffmpeg, ffprobe);
-    GpuFrameStream reference(source, plans[1], 0, 4, source_backend, ffmpeg, ffprobe);
+    // When the engine reads pictures where the decoder left them (V1Scorer's
+    // pictures mode), they stay the decoder's until the GPU is done with them:
+    // two pairs being matched up, the frames in flight (3), and the previous
+    // source picture for motion. That takes six of a decoder's slots, and is
+    // faster (the Python app's, 4K HEVC: 98.2 -> 106.1 fps). It is used for
+    // two H.264 videos too. Windows' H.264 decoder gives layers of a texture
+    // array, which are copied into textures of their own anyway
+    // (native/mf_frames.cpp), so the speed is the same (1080p: 251.0 -> 251.3
+    // fps), but it uses less GPU memory, because the engine's buffers for the
+    // planes are not made (1080p: 342 -> 291 MB committed).
+    const bool v1 = std::any_of(plan.models.begin(), plan.models.end(),
+                                [](const auto& model) { return model.first == "vmaf_v1"; });
+    const int pool = plan.backend == "vulkan" && v1 && source_backend == test_backend &&
+                             hands_over_textures(test_backend)
+                         ? 6
+                         : 4;
+    GpuFrameStream test(distorted, plans[0], 0, pool, test_backend, ffmpeg, ffprobe, true);
+    GpuFrameStream reference(source, plans[1], 0, pool, source_backend, ffmpeg, ffprobe, true);
     // Declared after the streams so that it goes first: it holds on to the
     // decoders' memory.
     std::optional<MultiScorer> scorer;
-    // The pictures stay on the GPU when the decoder and Vulkan share memory,
-    // which needs NVIDIA's decoder for both videos.
+    // The decoder's pictures stay on the GPU and reach the scorers without a
+    // copy through the CPU. This works with NVIDIA's decoder, and with AMD's
+    // when it hands over to Vulkan (not to libvmaf's CUDA code), when the
+    // same decoder decodes both videos.
     bool on_gpu = false;
-    if (source_backend == "nvidia" && test_backend == "nvidia") {
+    if (test.handover() && reference.handover() && source_backend == test_backend &&
+        (test_backend == "nvidia" || plan.backend == "vulkan")) {
         try {
             scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.backend, device,
-                           &test);
+                           &test, pool > 4 && test.gives_textures() && reference.gives_textures());
             on_gpu = true;
         } catch (const LibvmafError& error) {
             logger.info(std::string("VMAF v1 with the GPU: the frames go through system memory (") + error.what() +
@@ -1110,6 +1245,11 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
     }
     test.start();
     reference.start();
+    SlotReleases releases;
+    if (on_gpu && scorer->pictures()) {  // given back once the GPU has read them
+        releases.test = [&](int slot) { scorer->release_later(test, slot, false); };
+        releases.reference = [&](int slot) { scorer->release_later(reference, slot, true); };
+    }
     score_frame_pairs(
         test, reference, distorted, duration_limit, total_frames,
         [&](int test_slot, int reference_slot) {
@@ -1121,7 +1261,7 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                 scorer->add(buffers[0], buffers[1]);
             }
         },
-        on_progress, cancel);
+        on_progress, cancel, releases);
     return scorer->finish();
 }
 

@@ -89,7 +89,9 @@ are Vship's metrics, in the GPU's queue after VMAF, and SSIMULACRA2 and
 Butteraugli set to the CPU, in the CPU's queue. For VMAF and Vship's
 metrics on the GPU, and PSNR, SSIM and XPSNR in the app, it decodes the
 videos itself, as the Python app does: with the GPU's own decoder (NVIDIA's,
-Intel's or AMD's, through the app's libraries in `vmaf_app/native`), or with
+Intel's or AMD's, through the app's libraries in `vmaf_app/native`; for VMAF
+v1 on an AMD GPU, Windows' own decoder where it opens, its pictures read by
+Vulkan where the decoder left them), or with
 FFmpeg's decoders built into the app for a video FFmpeg would decode in
 software; FFmpeg only copies the compressed stream out of its container. A
 video it cannot decode is decoded by an FFmpeg of its own. (The Python app
@@ -147,10 +149,8 @@ and buttons in Qt's translations of them, in the light or dark theme. Like
 the command line, the program is also the process of its own that GPU code
 runs in.
 
-Not ported yet: on AMD's GPUs, the GPU metrics' decoding through Windows'
-own decoders, and their pictures handed over on the GPU, which the Python
-app does (`core/include/vml/gpu_frames.h`); and H.274 film grain on 4:2:2,
-4:4:4 or 12-bit VVC video, which the Python app draws (VVenC makes none of
+Not ported yet: H.274 film grain on 4:2:2, 4:4:4 or 12-bit VVC video,
+which the Python app draws (VVenC makes none of
 these).
 
 ## The package

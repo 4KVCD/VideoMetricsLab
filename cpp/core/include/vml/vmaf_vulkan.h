@@ -90,6 +90,20 @@ struct VulkanEngine {
                      int score);
     int (*chroma_staging)(VulkanContext* context, std::uint8_t** planes, std::uint32_t* stride);
     int (*shared_chroma)(VulkanContext* context, std::uint64_t* offset, std::uint32_t* spacing, std::uint32_t* stride);
+    // For AMD's decoder handing over, each nullptr in an engine without it:
+    // the GPU, driver and memory type a decoder's own Vulkan device must
+    // match to import the shared buffers; the decoder's timeline semaphore,
+    // which its copies signal, and the value the next commit's frame waits
+    // for on the GPU; a frame's pictures where Windows' decoder left them
+    // (textures), and whether a context takes them.
+    int (*shared_device)(VulkanContext* context, std::uint8_t* device_uuid, std::uint8_t* driver_uuid,
+                         std::uint32_t* memory_type);
+    int (*import_timeline)(VulkanContext* context, void* handle);
+    int (*commit_after)(VulkanContext* context, std::uint64_t value);
+    int (*pictures)(VulkanContext* context, void* reference, std::uint32_t reference_width,
+                    std::uint32_t reference_height, int reference_x, int reference_y, void* distorted,
+                    std::uint32_t distorted_width, std::uint32_t distorted_height, int distorted_x, int distorted_y);
+    int (*pictures_mode)(VulkanContext* context);
 };
 
 // How many frames the engine works on at once, as the Python app asks for
@@ -123,7 +137,9 @@ std::optional<VulkanDevice> best_vulkan_device(const std::vector<VulkanDevice>& 
 // The buffers that a context made with vulkan_shared_flag reads each pair's
 // planes from: GPU memory that a decoder on the same GPU imports and copies
 // the planes into, so that they never leave the GPU (the Python app's
-// SharedLumas). Only NVIDIA's decoder imports it.
+// SharedLumas). NVIDIA's decoder imports it, and AMD's handing over, into a
+// Vulkan device of its own that must be the engine's GPU and driver
+// (vv_shared_device).
 class SharedSlots {
 public:
     // Throws VmafVulkanError when the decoder and Vulkan cannot share memory

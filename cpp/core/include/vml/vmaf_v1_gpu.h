@@ -14,8 +14,9 @@
 // libvmaf then predicts the score from the four features, so the score is
 // libvmaf's CPU score.
 //
-// Not yet: the pictures AMD's decoders hand over on the GPU (the Python
-// app's pictures mode, timelines and Vulkan imports).
+// The frames decoded in the app stay on the GPU with NVIDIA's decoder, and
+// with AMD's, which hands them over to Vulkan (gpu_frames.h); Windows' own
+// decoder's pictures are even read where it left them, as textures.
 #pragma once
 
 #include <cstddef>
@@ -77,12 +78,16 @@ public:
     // copied on the GPU into memory the decoder and Vulkan share, and the
     // planes libvmaf's extractors read are downloaded straight into their
     // pictures. `gpu_cambi` and `gpu_speed` false calculate those two with
-    // libvmaf's CPU code even where the engine could. Throws VmafV1Error
-    // (or VmafVulkanError, LibvmafError).
+    // libvmaf's CPU code even where the engine could. `pictures` means the
+    // decoders give their pictures as textures (GpuFrameStream::
+    // gives_textures): the engine then reads them where they are, without
+    // copying them, if it can, and pictures() says whether it does; each
+    // pair's slots are then given back through release_later. Throws
+    // VmafV1Error (or VmafVulkanError, LibvmafError).
     V1Scorer(int width, int height, int bit_depth, const std::filesystem::path& model, int n_subsample = 1,
              std::optional<int> device = std::nullopt, std::optional<int> threads = std::nullopt,
              std::string name = "vmaf_v1", GpuFrameStream* shared = nullptr, bool gpu_cambi = true,
-             bool gpu_speed = true);
+             bool gpu_speed = true, bool pictures = false);
     ~V1Scorer() override;
     V1Scorer(const V1Scorer&) = delete;
     V1Scorer& operator=(const V1Scorer&) = delete;
@@ -94,6 +99,15 @@ public:
     // Scores one more pair held by the decoders, for a scorer made with
     // `shared`. The CPU copies none of it.
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
+
+    // Whether the engine reads the decoders' pictures where they are.
+    bool pictures() const;
+
+    // In pictures mode, gives `stream`'s `slot`, which the pairs given so far
+    // no longer need, back once the engine has read it: after the last frame
+    // given, or for a source picture (`reference`) after the next frame too,
+    // because the next frame's motion feature reads it.
+    void release_later(GpuFrameStream& stream, int slot, bool reference);
 
     // The features of the frames scored. Call it once every frame has been
     // given.
@@ -141,9 +155,10 @@ public:
     // its model's "path=<file>". VMAF v0.6.1 and NEG are scored by
     // `backend`: "vulkan" on Vulkan's GPU `device` (nothing: the best), or
     // "cuda" by libvmaf's CUDA code, with VMAF v1 on the best GPU. `shared`
-    // as V1Scorer's.
+    // and `pictures` as V1Scorer's.
     MultiScorer(int width, int height, int bit_depth, const GpuModels& models, int n_subsample,
-                const std::string& backend, std::optional<int> device, GpuFrameStream* shared = nullptr);
+                const std::string& backend, std::optional<int> device, GpuFrameStream* shared = nullptr,
+                bool pictures = false);
     ~MultiScorer() override;
 
     std::size_t frame_bytes() const override;
@@ -152,6 +167,13 @@ public:
     // Scores one more pair held by the decoders, without a copy through the
     // CPU (for scorers made with `shared`).
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
+
+    // Whether VMAF v1's scorer reads the decoders' pictures where they are;
+    // the decoders' slots are then given back through release_later.
+    bool pictures() const;
+
+    // In pictures mode, V1Scorer::release_later.
+    void release_later(GpuFrameStream& stream, int slot, bool reference);
 
     // The frames scored, and every scorer's scores for them, VMAF v0.6.1's
     // and NEG's before VMAF v1's.
@@ -166,8 +188,8 @@ private:
 
 // score_decoded (gpu_vmaf.h) for a run with VMAF v1: both videos decoded in
 // this process as whole frames, because SpEED reads the chroma; with
-// NVIDIA's decoder for both, the planes stay on the GPU. Throws as
-// score_decoded does, and VmafV1Error.
+// NVIDIA's decoder for both, or AMD's with Vulkan, the planes stay on the
+// GPU. Throws as score_decoded does, and VmafV1Error.
 PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                             const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                             const GpuPlan& plan, int n_subsample, const std::optional<std::string>& duration_limit,

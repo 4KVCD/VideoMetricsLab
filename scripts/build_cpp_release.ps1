@@ -181,12 +181,11 @@ Copy-Item $Dav1d (Join-Path $tools 'ffmpeg/dav1d.dll')
 # The native libraries the C++ app loads, with the notices of what is
 # compiled into them (headers, and the film grain library's VTM tables).
 # (Not the Python app's Vulkan presenter, which the C++ app does without on
-# Windows, nor mf_frames.dll, AMD's decoding through Windows' own decoders,
-# not ported yet.)
+# Windows.)
 $native = Join-Path $resources 'native'
 New-Item -ItemType Directory -Path (Join-Path $native 'licenses') -Force | Out-Null
 foreach ($library in @('d3d11_tonemap.dll', 'd3d11_film_grain.dll', 'nvdec_frames.dll', 'vpl_frames.dll',
-        'amf_frames.dll', 'software_frames.dll')) {
+        'amf_frames.dll', 'mf_frames.dll', 'software_frames.dll')) {
     Copy-Item (Join-Path $appFiles "native/$library") $native
 }
 foreach ($notice in @('ffnvcodec/LICENSE.nv-codec-headers.txt', 'onevpl/LICENSE.onevpl.txt', 'amf/LICENSE.amf.txt',

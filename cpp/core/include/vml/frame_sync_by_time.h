@@ -108,6 +108,7 @@ private:
 };
 
 class GpuFrameStream;
+struct SlotReleases;  // gpu_frames.h
 
 // Scores two videos decoded in the app pair by pair, paired by timestamp as
 // FFmpeg's overlay pairs them (the Python app's
@@ -115,14 +116,14 @@ class GpuFrameStream;
 // first frame is below `duration_limit` (-t's text) in the test video's
 // time base, where FFmpeg's trim filter cuts. Both streams must already be
 // started. `score` is called with each pair's slots (the test video's, then
-// the source's); a slot is given back to its decoder once no later pair
-// uses it, so a source frame may be scored with several test frames.
+// the source's); a slot is given back (`releases`, both set) once no later
+// pair uses it, so a source frame may be scored with several test frames.
 // Progress goes to `on_progress` every quarter of a second. Throws
 // GpuDecodeFailedError, and Cancelled.
 void score_timed_pairs(GpuFrameStream& test, GpuFrameStream& reference,
                        const std::optional<std::string>& duration_limit, long long total_frames,
                        const std::function<void(int, int)>& score,
                        const std::function<void(long long, long long, double)>& on_progress,
-                       const CancelToken& cancel);
+                       const CancelToken& cancel, const SlotReleases& releases);
 
 }  // namespace vml

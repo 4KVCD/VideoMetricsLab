@@ -160,7 +160,7 @@ void score_timed_pairs(GpuFrameStream& test, GpuFrameStream& reference,
                        const std::optional<std::string>& duration_limit, long long total_frames,
                        const std::function<void(int, int)>& score,
                        const std::function<void(long long, long long, double)>& on_progress,
-                       const CancelToken& cancel) {
+                       const CancelToken& cancel, const SlotReleases& releases) {
     const Rational test_base = test.time_base(cancel);
     const Rational reference_base = reference.time_base(cancel);
     const std::optional<long long> stop =
@@ -175,8 +175,7 @@ void score_timed_pairs(GpuFrameStream& test, GpuFrameStream& reference,
             return TimedPairs::Frame{picture->slot, picture->pts};
         };
     };
-    TimedPairs pairs(puller(test), puller(reference), test_base, reference_base,
-                     [&test](int slot) { test.release(slot); }, [&reference](int slot) { reference.release(slot); });
+    TimedPairs pairs(puller(test), puller(reference), test_base, reference_base, releases.test, releases.reference);
     const auto started = std::chrono::steady_clock::now();
     auto reported = started;
     long long count = 0;

@@ -116,7 +116,12 @@ VulkanEngine::VulkanEngine(const std::filesystem::path& path)
       v1_speed_scores(optional_function<decltype(v1_speed_scores)>(library, "vv_v1_speed_scores")),
       submit_v1(optional_function<decltype(submit_v1)>(library, "vv_submit_v1")),
       chroma_staging(optional_function<decltype(chroma_staging)>(library, "vv_chroma_staging")),
-      shared_chroma(optional_function<decltype(shared_chroma)>(library, "vv_shared_chroma")) {}
+      shared_chroma(optional_function<decltype(shared_chroma)>(library, "vv_shared_chroma")),
+      shared_device(optional_function<decltype(shared_device)>(library, "vv_shared_device")),
+      import_timeline(optional_function<decltype(import_timeline)>(library, "vv_import_timeline")),
+      commit_after(optional_function<decltype(commit_after)>(library, "vv_commit_after")),
+      pictures(optional_function<decltype(pictures)>(library, "vv_pictures")),
+      pictures_mode(optional_function<decltype(pictures_mode)>(library, "vv_pictures_mode")) {}
 
 void check_vulkan(const VulkanEngine& engine, int error, const std::string& what) {
     if (error < 0) {
@@ -168,10 +173,21 @@ std::optional<VulkanDevice> best_vulkan_device(const std::vector<VulkanDevice>& 
 SharedSlots::SharedSlots(const VulkanEngine& engine, VulkanContext* context, GpuFrameStream& decoder)
     : engine_(engine), context_(context), decoder_(decoder) {
     try {
+        // AMD's decoder imports nothing without it (GpuFrameStream::import_memory).
+        std::optional<SharedDevice> exporter;
+        if (engine_.shared_device != nullptr) {
+            SharedDevice described;
+            check_vulkan(engine_,
+                         engine_.shared_device(context_, described.device_uuid.data(), described.driver_uuid.data(),
+                                               &described.memory_type),
+                         "Sharing Vulkan's memory");
+            exporter = described;
+        }
         void* handle = nullptr;
         std::uint64_t size = 0;
         while (engine_.export_memory(context_, static_cast<int>(imports_.size()), &handle, &size) == 0) {
-            const std::optional<std::pair<std::uint64_t, void*>> imported = decoder_.import_memory(handle, size);
+            const std::optional<std::pair<std::uint64_t, void*>> imported =
+                decoder_.import_memory(handle, size, exporter ? &*exporter : nullptr);
             platform::close_native_handle(handle);
             if (!imported) {
                 throw VmafVulkanError("the decoder cannot write into Vulkan's memory");

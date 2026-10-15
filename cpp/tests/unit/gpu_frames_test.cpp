@@ -8,8 +8,12 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
+#include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "reference.h"
@@ -18,8 +22,10 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
 #include "vml/gpu_vmaf.h"
+#include "vml/model_select.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
+#include "vml/vmaf_v1_gpu.h"
 
 namespace vml {
 namespace {
@@ -323,6 +329,103 @@ TEST(GpuFrames, VmafOnTheGpuScoresTheAppsPicturesAsFfmpegsFrames) {
     EXPECT_EQ(routes[1], routes[0]) << "the padded width took other routes";
     if (routes[0] == 0) {
         GTEST_SKIP() << "no decoder of the app's on this PC";
+    }
+}
+
+// VMAF v1 on the GPU from the pictures a decoder keeps on the GPU (NVIDIA's,
+// and AMD's handed over to Vulkan) scores what it scores from FFmpeg's
+// frames: with each picture copied on the GPU, and with Windows' decoder's
+// pictures read where it left them (pictures mode, their slots given back
+// once the GPU has read them), HEVC's and H.264's (layers of a texture
+// array there, copied into textures of their own); every frame and every
+// other, and with VMAF v0.6.1 beside it.
+TEST(GpuFrames, VmafV1ScoresThePicturesKeptOnTheGpuAsFfmpegsFrames) {
+    const std::optional<Tools> found = tools();
+    if (!found) {
+        GTEST_SKIP() << "no FFmpeg";
+    }
+    if (!v1_available().available) {
+        GTEST_SKIP() << "VMAF v1 is not calculated with this PC's GPU";
+    }
+    const std::string v1 = "path=" + platform::path_text(resource_folder() / "models" / "vmaf_v1.0.16" /
+                                                         "vmaf_v1.0.16_3d0h.json");
+    const struct {
+        const char* codec;
+        GpuModels models;
+        int step;
+    } cases[] = {{"hevc", {{"vmaf_v1", v1}}, 1},
+                 {"hevc", {{"vmaf_v1", v1}}, 2},
+                 {"hevc", {{"vmaf", "vmaf_v0.6.1"}, {"vmaf_v1", v1}}, 1},
+                 {"h264", {{"vmaf_v1", v1}}, 1}};
+    int routes = 0;
+    for (const auto& checked : cases) {
+        SCOPED_TRACE(std::string(checked.codec) + ", " + std::to_string(checked.models.size()) + " models, every " +
+                     std::to_string(checked.step));
+        const bool h264 = std::string_view(checked.codec) == "h264";
+        const int bits = h264 ? 8 : 10;
+        const Folder folder;
+        const auto clip = [&](const char* name, const char* quality) {
+            return make_clip(*found, folder / name, h264 ? "libx264" : "libx265", h264 ? "yuv420p" : "yuv420p10le",
+                             2.0, {"-crf", quality});
+        };
+        const VideoInfo source = probe_video(clip("source.mkv", "10"), found->ffprobe);
+        const VideoInfo test = probe_video(clip("test.mkv", "32"), found->ffprobe);
+        const DecodePlan source_plan = plan_decode(source, std::nullopt, 6);
+        const DecodePlan test_plan = plan_decode(test, std::nullopt, 6);
+        const std::size_t frame_bytes = source_plan.frame_bytes();
+
+        // FFmpeg's frames, from system memory.
+        const std::string source_frames = ffmpeg_pictures(*found, source.path, source_plan);
+        const std::string test_frames = ffmpeg_pictures(*found, test.path, test_plan);
+        ASSERT_EQ(source_frames.size(), test_frames.size());
+        ASSERT_GT(source_frames.size() / frame_bytes, 20u);
+        MultiScorer from_ffmpeg(640, 360, bits, checked.models, checked.step, "vulkan", std::nullopt);
+        for (std::size_t at = 0; at + frame_bytes <= source_frames.size(); at += frame_bytes) {
+            const auto frame = [&](const std::string& frames) {
+                return std::span(reinterpret_cast<const std::uint8_t*>(frames.data() + at), frame_bytes);
+            };
+            from_ffmpeg.add(frame(source_frames), frame(test_frames));
+        }
+        const PairScores expected = from_ffmpeg.finish();
+
+        for (const std::string backend : {"nvidia", "amd"}) {
+            for (const bool pictures : {false, true}) {
+                if (!decoder_supports(0, test_plan, backend).first || (pictures && !hands_over_textures(backend))) {
+                    continue;  // no such decoder on this PC
+                }
+                SCOPED_TRACE(backend + (pictures ? ", pictures read in place" : ", pictures copied"));
+                const int pool = pictures ? 6 : 4;
+                GpuFrameStream test_stream(test, test_plan, 0, pool, backend, found->ffmpeg, found->ffprobe, true);
+                GpuFrameStream source_stream(source, source_plan, 0, pool, backend, found->ffmpeg, found->ffprobe,
+                                             true);
+                ASSERT_TRUE(test_stream.handover() && source_stream.handover());
+                ASSERT_EQ(test_stream.gives_textures() && source_stream.gives_textures(), pictures);
+                std::optional<MultiScorer> scorer;
+                scorer.emplace(640, 360, bits, checked.models, checked.step, "vulkan", std::nullopt, &test_stream,
+                               pictures);
+                ASSERT_EQ(scorer->pictures(), pictures);
+                test_stream.start();
+                source_stream.start();
+                SlotReleases releases;
+                if (pictures) {
+                    releases.test = [&](int slot) { scorer->release_later(test_stream, slot, false); };
+                    releases.reference = [&](int slot) { scorer->release_later(source_stream, slot, true); };
+                }
+                score_frame_pairs(
+                    test_stream, source_stream, test, std::nullopt, 0,
+                    [&](int test_slot, int source_slot) {
+                        scorer->add_decoded(source_stream, source_slot, test_stream, test_slot);
+                    },
+                    {}, CancelToken(), releases);
+                const PairScores got = scorer->finish();
+                EXPECT_EQ(got.frames, expected.frames);
+                EXPECT_EQ(got.by_metric, expected.by_metric);
+                ++routes;
+            }
+        }
+    }
+    if (routes == 0) {
+        GTEST_SKIP() << "no decoder on this PC that keeps its pictures on the GPU";
     }
 }
 

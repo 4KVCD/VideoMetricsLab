@@ -155,9 +155,16 @@ struct NativeParams {
     int handover;
 };
 
+// A function of `library` that some builds of it lack: nullptr where it has
+// none.
+template <typename F>
+F optional_function(const platform::DynamicLibrary& library, const char* name) {
+    return reinterpret_cast<F>(library.find(name));
+}
+
 // A decoder library and the functions of it the app calls.
 struct DecoderLibrary {
-    DecoderLibrary(const std::filesystem::path& path, bool hands_over, bool takes_libraries, bool scales)
+    DecoderLibrary(const std::filesystem::path& path, std::string_view backend)
         : library(path),
           open(library.function<decltype(open)>("nvf_open")),
           push(library.function<decltype(push)>("nvf_push")),
@@ -170,19 +177,32 @@ struct DecoderLibrary {
           close(library.function<decltype(close)>("nvf_close")),
           error(library.function<decltype(error)>("nvf_error")),
           supports(library.function<decltype(supports)>("nvf_supports")) {
-        if (hands_over) {
-            import_memory = library.function<decltype(import_memory)>("nvf_import");
+        const bool amd = backend == "amd" || backend == media_foundation_decoder;
+        if (backend == "nvidia" || amd) {  // pictures handed over with no CPU copy
             unimport = library.function<decltype(unimport)>("nvf_unimport");
             pin = library.function<decltype(pin)>("nvf_pin");
             unpin = library.function<decltype(unpin)>("nvf_unpin");
             download_planes = library.function<decltype(download_planes)>("nvf_download_planes");
             copy_planes = library.function<decltype(copy_planes)>("nvf_copy_planes");
+            // NVIDIA's CUDA imports any export; AMD's Vulkan only one from its
+            // own GPU and driver.
+            if (amd) {
+                import_vulkan = library.function<decltype(import_vulkan)>("nvf_import_vulkan");
+            } else {
+                import_memory = library.function<decltype(import_memory)>("nvf_import");
+            }
         }
-        if (takes_libraries) {
+        // AMD's: copies the GPU waits for, rather than the CPU; and a slot's
+        // picture in place (Windows' decoder).
+        timeline = optional_function<decltype(timeline)>(library, "nvf_timeline");
+        copy_luma_async = optional_function<decltype(copy_luma_async)>(library, "nvf_copy_luma_async");
+        copy_planes_async = optional_function<decltype(copy_planes_async)>(library, "nvf_copy_planes_async");
+        slot_texture = optional_function<decltype(slot_texture)>(library, "nvf_slot_texture");
+        if (backend == software_decoder) {
             set_libraries = library.function<decltype(set_libraries)>("nvf_set_libraries");
             libraries_error = library.function<decltype(libraries_error)>("nvf_libraries_error");
         }
-        if (scales) {
+        if (backend == "intel" || amd) {
             scale_note = library.function<decltype(scale_note)>("nvf_scale_note");
         }
     }
@@ -199,17 +219,32 @@ struct DecoderLibrary {
     void (*close)(void* decoder);
     int (*error)(void* decoder, char* out, int size);
     int (*supports)(int device, int codec, int bit_depth, int width, int height, char* error, int error_size);
-    // NVIDIA's, whose pictures stay on the GPU: GPU memory another API
-    // allocated, as memory copy_luma writes into; memory of this process
-    // page-locked for its copies; a picture's planes copied each to its own
-    // place, in this process's memory or in imported GPU memory.
+    // NVIDIA's and AMD's, whose pictures can stay on the GPU: GPU memory
+    // another API allocated, as memory copy_luma writes into (NVIDIA's
+    // through CUDA, AMD's through a Vulkan device of its own, which must be
+    // the exporter's GPU and driver); memory of this process page-locked for
+    // its copies; a picture's planes copied each to its own place, in this
+    // process's memory or in imported GPU memory.
     int (*import_memory)(void* decoder, void* handle, unsigned long long bytes, int dedicated,
+                         unsigned long long* address, void** memory) = nullptr;
+    int (*import_vulkan)(void* decoder, void* handle, unsigned long long bytes, unsigned memory_type,
+                         const unsigned char* device_uuid, const unsigned char* driver_uuid,
                          unsigned long long* address, void** memory) = nullptr;
     void (*unimport)(void* decoder, void* memory) = nullptr;
     int (*pin)(void* decoder, void* host, unsigned long long bytes) = nullptr;
     int (*unpin)(void* decoder, void* host) = nullptr;
     int (*download_planes)(void* decoder, int slot, void* const* planes, const long long* pitches) = nullptr;
     int (*copy_planes)(void* decoder, int slot, const unsigned long long* addresses, const long long* pitches) = nullptr;
+    // AMD's: the timeline semaphore its copies signal, and the copies that
+    // give the value it reaches once they are done instead of waiting; a
+    // slot's picture in place, as a texture (Windows' decoder only).
+    int (*timeline)(void* decoder, void** win32) = nullptr;
+    int (*copy_luma_async)(void* decoder, int slot, unsigned long long address, long long pitch,
+                           unsigned long long* value) = nullptr;
+    int (*copy_planes_async)(void* decoder, int slot, const unsigned long long* addresses, const long long* pitches,
+                             unsigned long long* value) = nullptr;
+    int (*slot_texture)(void* decoder, int slot, void** texture, unsigned* width, unsigned* height, int* x,
+                        int* y) = nullptr;
     // The software decoder's: the libraries it decodes with (their handles),
     // and why it cannot use one of them.
     int (*set_libraries)(void* avutil, void* avcodec, void* dav1d) = nullptr;
@@ -230,11 +265,12 @@ bool software_decode_off() {
 }
 
 std::filesystem::path library_path(std::string_view backend) {
-    const char* name = backend == "nvidia"           ? "nvdec_frames"
-                       : backend == "intel"          ? "vpl_frames"
-                       : backend == "amd"            ? "amf_frames"
-                       : backend == software_decoder ? "software_frames"
-                                                     : nullptr;
+    const char* name = backend == "nvidia"                   ? "nvdec_frames"
+                       : backend == "intel"                  ? "vpl_frames"
+                       : backend == "amd"                    ? "amf_frames"
+                       : backend == media_foundation_decoder ? "mf_frames"
+                       : backend == software_decoder         ? "software_frames"
+                                                             : nullptr;
     if (name == nullptr) {
         throw std::invalid_argument("there is no decoder " + std::string(backend));
     }
@@ -273,8 +309,7 @@ const DecoderLibrary& load_decoder(std::string_view backend) {
     }
     std::unique_ptr<DecoderLibrary> library;
     try {
-        library = std::make_unique<DecoderLibrary>(path, backend == "nvidia", backend == software_decoder,
-                                                   backend == "intel" || backend == "amd");
+        library = std::make_unique<DecoderLibrary>(path, backend);
     } catch (const platform::LibraryError& error) {
         throw GpuDecodeUnavailableError(std::string("the GPU frame decoder could not be loaded: ") + error.what());
     }
@@ -306,7 +341,10 @@ const DecoderLibrary& load_decoder(std::string_view backend) {
     return *loaded.emplace(std::string(backend), std::move(library)).first->second;
 }
 
-NativeParams native_params(const DecodePlan& plan, int device, int pool, const std::vector<unsigned char>& extradata) {
+// The plan as the decoder libraries take it; `handover` asks AMD's decoder
+// to keep its pictures on the GPU (NVIDIA's always does).
+NativeParams native_params(const DecodePlan& plan, int device, int pool, const std::vector<unsigned char>& extradata,
+                           bool handover = false) {
     const auto [out_w, out_h] = plan.output_size();
     return NativeParams{device,
                         find_codec(plan.codec)->number,
@@ -326,8 +364,8 @@ NativeParams native_params(const DecodePlan& plan, int device, int pool, const s
                         out_h,
                         scaler_number(plan.scaler),
                         plan.widen,
-                        0,   // cpu_scaling: Intel's and AMD's tests only
-                        0};  // handover: AMD's only (NVIDIA's pictures always stay on the GPU)
+                        0,  // cpu_scaling: Intel's and AMD's tests only
+                        handover ? 1 : 0};
 }
 
 // Closes a decoder on a thread of its own, waited for only so long: a close
@@ -874,6 +912,24 @@ bool decoder_available(std::string_view backend) {
     }
 }
 
+bool can_hand_over(const DecodePlan& plan, std::string_view backend) {
+    if (backend == "nvidia") {
+        return true;
+    }
+    return backend == "amd" && !plan.scaled() && plan.widen == 0;
+}
+
+bool hands_over_textures(std::string_view backend) {
+    if (backend != "amd") {
+        return false;
+    }
+    try {
+        return load_decoder(media_foundation_decoder).slot_texture != nullptr;
+    } catch (const GpuDecodeUnavailableError&) {
+        return false;
+    }
+}
+
 std::pair<std::vector<std::string>, std::string> software_codecs() {
     const DecoderLibrary* library = nullptr;
     try {
@@ -1038,8 +1094,19 @@ struct GpuFrameStream::State {
     // read for as long as it runs.
     std::vector<unsigned char> configuration;
     void* handle = nullptr;
+    // Whether the pictures are handed over on the GPU (handover()).
+    bool handover = false;
     std::unique_ptr<PacketReader> reader;
     std::atomic<bool> closing{false};
+
+    // Opens the decoder as `params` say with `opening`'s library, or returns
+    // nullptr and puts what the library said into `said`.
+    void* open(const DecoderLibrary& opening, const NativeParams& params, std::string& said) {
+        std::array<char, 1024> error{};
+        void* const opened = opening.open(&params, error.data(), static_cast<int>(error.size()));
+        said = opened == nullptr ? buffer_text(error.data(), error.size()) : std::string();
+        return opened;
+    }
 
     // What ended the feeding thread, when it failed.
     std::mutex feed_mutex;
@@ -1085,7 +1152,8 @@ struct GpuFrameStream::State {
 };
 
 GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, int device, int pool,
-                               std::string_view backend, const std::string& ffmpeg, const std::string& ffprobe)
+                               std::string_view backend, const std::string& ffmpeg, const std::string& ffprobe,
+                               bool handover)
     : state_(std::make_shared<State>(backend)) {
     State& state = *state_;
     state.file_name = platform::path_text(info.path.filename());
@@ -1095,11 +1163,36 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
     state.library = &load_decoder(backend);
     state.reader = std::make_unique<PacketReader>(ffmpeg, info.path, plan.codec);
     state.configuration = configuration(ffprobe, info.path, plan.codec);
-    const NativeParams params = native_params(plan, device, pool, state.configuration);
-    std::array<char, 1024> error{};
-    state.handle = state.library->open(&params, error.data(), static_cast<int>(error.size()));
+    state.handover = backend == "nvidia" || (handover && can_hand_over(plan, backend));
+    std::string said;
+    if (state.handover && backend == "amd") {
+        // Windows' own decoder first (native/mf_frames.cpp): the same decoder
+        // hardware as AMF's, faster and with less CPU. Where it cannot be used
+        // (not bundled, or no decoder for the codec on the GPU; HEVC's and
+        // AV1's come with Windows' video extensions), AMF's is.
+        try {
+            const DecoderLibrary& windows = load_decoder(media_foundation_decoder);
+            state.handle = state.open(windows, native_params(plan, device, pool, state.configuration, true), said);
+            if (state.handle != nullptr) {
+                state.library = &windows;
+            } else {
+                logger.info(state.file_name + ": decoded by AMF, not Windows' decoder (" + said + ")");
+            }
+        } catch (const GpuDecodeUnavailableError& error) {
+            logger.info(state.file_name + ": decoded by AMF (" + error.what() + ")");
+        }
+    }
+    if (state.handover && backend != "nvidia" && state.handle == nullptr) {
+        state.handle = state.open(*state.library, native_params(plan, device, pool, state.configuration, true), said);
+        if (state.handle == nullptr) {
+            logger.info(state.file_name + ": the GPU's pictures go through system memory (" + said + ")");
+            state.handover = false;
+        }
+    }
     if (state.handle == nullptr) {
-        const std::string said = buffer_text(error.data(), error.size());
+        state.handle = state.open(*state.library, native_params(plan, device, pool, state.configuration), said);
+    }
+    if (state.handle == nullptr) {
         throw GpuDecodeUnavailableError(said.empty() ? state.decoder + " could not start" : said);
     }
 }
@@ -1197,7 +1290,7 @@ void GpuFrameStream::copy_luma(int slot, std::uint64_t address, std::int64_t pit
     }
 }
 
-bool GpuFrameStream::copies_planes() const { return state_->library->copy_planes != nullptr; }
+bool GpuFrameStream::copies_planes() const { return state_->handover && state_->library->copy_planes != nullptr; }
 
 void GpuFrameStream::copy_planes(int slot, const std::array<std::uint64_t, 3>& addresses,
                                  const std::array<std::int64_t, 3>& pitches) {
@@ -1211,14 +1304,74 @@ void GpuFrameStream::copy_planes(int slot, const std::array<std::uint64_t, 3>& a
     }
 }
 
-std::optional<std::pair<std::uint64_t, void*>> GpuFrameStream::import_memory(void* handle, std::uint64_t size) {
+void* GpuFrameStream::timeline() {
     State& state = *state_;
-    if (state.library->import_memory == nullptr || state.handle == nullptr) {
+    if (!state.handover || state.library->timeline == nullptr || state.handle == nullptr) {
+        return nullptr;
+    }
+    void* handle = nullptr;
+    if (state.library->timeline(state.handle, &handle) != 0) {
+        return nullptr;
+    }
+    return handle;
+}
+
+std::uint64_t GpuFrameStream::copy_luma_async(int slot, std::uint64_t address, std::int64_t pitch) {
+    State& state = *state_;
+    unsigned long long value = 0;
+    if (state.library->copy_luma_async == nullptr ||
+        state.library->copy_luma_async(state.handle, slot, address, pitch, &value) != 0) {
+        const std::string said = state.library->copy_luma_async == nullptr ? std::string() : state.error_text();
+        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said);
+    }
+    return value;
+}
+
+std::uint64_t GpuFrameStream::copy_planes_async(int slot, const std::array<std::uint64_t, 3>& addresses,
+                                                const std::array<std::int64_t, 3>& pitches) {
+    State& state = *state_;
+    const std::array<unsigned long long, 3> places{addresses[0], addresses[1], addresses[2]};
+    const std::array<long long, 3> rows{pitches[0], pitches[1], pitches[2]};
+    unsigned long long value = 0;
+    if (state.library->copy_planes_async == nullptr ||
+        state.library->copy_planes_async(state.handle, slot, places.data(), rows.data(), &value) != 0) {
+        const std::string said = state.library->copy_planes_async == nullptr ? std::string() : state.error_text();
+        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said);
+    }
+    return value;
+}
+
+bool GpuFrameStream::gives_textures() const { return state_->handover && state_->library->slot_texture != nullptr; }
+
+GpuFrameStream::Texture GpuFrameStream::slot_texture(int slot) {
+    State& state = *state_;
+    Texture texture;
+    if (state.library->slot_texture == nullptr ||
+        state.library->slot_texture(state.handle, slot, &texture.handle, &texture.width, &texture.height, &texture.x,
+                                    &texture.y) != 0) {
+        const std::string said = state.library->slot_texture == nullptr ? std::string() : state.error_text();
+        throw GpuDecodeFailedError(said.empty() ? "the decoder's picture is not a texture" : said);
+    }
+    return texture;
+}
+
+std::optional<std::pair<std::uint64_t, void*>> GpuFrameStream::import_memory(void* handle, std::uint64_t size,
+                                                                             const SharedDevice* exporter) {
+    State& state = *state_;
+    if (!state.handover || state.handle == nullptr) {
         return std::nullopt;
     }
     unsigned long long address = 0;
     void* memory = nullptr;
-    if (state.library->import_memory(state.handle, handle, size, 1, &address, &memory) != 0) {
+    int result = -1;
+    if (state.library->import_memory != nullptr) {  // NVIDIA's
+        result = state.library->import_memory(state.handle, handle, size, 1, &address, &memory);
+    } else if (state.library->import_vulkan != nullptr && exporter != nullptr) {  // AMD's
+        result = state.library->import_vulkan(state.handle, handle, size, exporter->memory_type,
+                                              exporter->device_uuid.data(), exporter->driver_uuid.data(), &address,
+                                              &memory);
+    }
+    if (result != 0) {
         return std::nullopt;
     }
     return std::pair(static_cast<std::uint64_t>(address), memory);
@@ -1232,9 +1385,11 @@ void GpuFrameStream::unimport(void* memory) {
 
 const std::string& GpuFrameStream::backend() const { return state_->backend; }
 
+bool GpuFrameStream::handover() const { return state_->handover; }
+
 bool GpuFrameStream::pin(void* host, std::uint64_t size) {
     State& state = *state_;
-    return state.library->pin != nullptr && state.handle != nullptr &&
+    return state.handover && state.library->pin != nullptr && state.handle != nullptr &&
            state.library->pin(state.handle, host, size) == 0;
 }
 
@@ -1309,9 +1464,16 @@ void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const Vi
                        const std::optional<std::string>& duration_limit, long long total_frames,
                        const std::function<void(int, int)>& score,
                        const std::function<void(long long, long long, double)>& on_progress,
-                       const CancelToken& cancel) {
+                       const CancelToken& cancel, const SlotReleases& releases) {
+    SlotReleases release = releases;
+    if (!release.test) {
+        release.test = [&test](int slot) { test.release(slot); };
+    }
+    if (!release.reference) {
+        release.reference = [&reference](int slot) { reference.release(slot); };
+    }
     if (by_timestamp()) {
-        score_timed_pairs(test, reference, duration_limit, total_frames, score, on_progress, cancel);
+        score_timed_pairs(test, reference, duration_limit, total_frames, score, on_progress, cancel, release);
         return;
     }
     const std::optional<long long> limit = frames_within(duration_limit, frame_rate(distorted));
@@ -1325,12 +1487,12 @@ void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const Vi
         }
         const std::optional<GpuFrameStream::Picture> reference_picture = reference.next(cancel);
         if (!reference_picture) {
-            test.release(test_picture->slot);
+            release.test(test_picture->slot);
             break;
         }
         score(test_picture->slot, reference_picture->slot);
-        test.release(test_picture->slot);
-        reference.release(reference_picture->slot);
+        release.test(test_picture->slot);
+        release.reference(reference_picture->slot);
         ++count;
         const auto now = std::chrono::steady_clock::now();
         if (on_progress && now - reported >= std::chrono::milliseconds(250)) {
