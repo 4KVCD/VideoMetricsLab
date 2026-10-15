@@ -31,7 +31,8 @@ public:
     // not made per comparison. Throws std::runtime_error when there is none.
     static std::shared_ptr<NativeDevice> shared();
 
-    NativeDevice();
+    // A device on the GPU DXGI lists `adapter`th (the tests try each).
+    explicit NativeDevice(unsigned adapter = 0);
     ~NativeDevice();
     NativeDevice(const NativeDevice&) = delete;
     NativeDevice& operator=(const NativeDevice&) = delete;

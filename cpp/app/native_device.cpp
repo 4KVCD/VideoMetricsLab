@@ -61,10 +61,10 @@ std::shared_ptr<NativeDevice> NativeDevice::shared() {
     return device;
 }
 
-NativeDevice::NativeDevice() {
+NativeDevice::NativeDevice(unsigned adapter_index) {
     ComPtr<IDXGIFactory1> factory;
     ComPtr<IDXGIAdapter1> adapter;
-    if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))) || FAILED(factory->EnumAdapters1(0, &adapter))) {
+    if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))) || FAILED(factory->EnumAdapters1(adapter_index, &adapter))) {
         throw std::runtime_error("D3D11 device unavailable");
     }
     // Video support for the decoders, BGRA for the presenter's swapchain.

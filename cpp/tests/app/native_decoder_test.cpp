@@ -2,10 +2,13 @@
 // frames it gives are FFmpeg's own, counted from each video's first frame,
 // whether the GPU decodes the video or FFmpeg's software decoder does; and
 // the source scaled down to the test video's size is the source's picture.
-// It needs a Direct3D 11 GPU and the bundled FFmpeg libraries.
+// Each test runs on every GPU of the PC (NVIDIA's and Intel's on the
+// development PC). They need a Direct3D 11 GPU and the bundled FFmpeg
+// libraries.
 #include "native_decoder.h"
 
 #include <d3d11.h>
+#include <dxgi.h>
 #include <wrl/client.h>
 
 #include <QApplication>
@@ -113,6 +116,26 @@ std::vector<int> ffmpeg_luma(const test::Tools& found, const std::filesystem::pa
     return luma;
 }
 
+// The PC's GPUs, by DXGI's order: each's number and name. Windows' software
+// renderer is left out.
+std::vector<std::pair<unsigned, std::string>> gpus() {
+    std::vector<std::pair<unsigned, std::string>> found;
+    Microsoft::WRL::ComPtr<IDXGIFactory1> factory;
+    if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
+        return found;
+    }
+    Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
+    for (unsigned index = 0; SUCCEEDED(factory->EnumAdapters1(index, &adapter)); ++index) {
+        DXGI_ADAPTER_DESC1 description{};
+        adapter->GetDesc1(&description);
+        if ((description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) == 0) {
+            found.emplace_back(index, QString::fromWCharArray(description.Description).toStdString());
+        }
+        adapter.Reset();
+    }
+    return found;
+}
+
 class NativeDecoderTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -123,10 +146,15 @@ protected:
         if (const std::optional<std::string> problem = load_ffmpeg_libraries()) {
             GTEST_SKIP() << *problem;
         }
-        try {
-            device_ = NativeDevice::shared();
-        } catch (const std::exception& error) {
-            GTEST_SKIP() << error.what();
+        for (const auto& [index, name] : gpus()) {
+            try {
+                devices_.emplace_back(name, std::make_shared<NativeDevice>(index));
+            } catch (const std::exception& error) {
+                ADD_FAILURE() << name << ": " << error.what();
+            }
+        }
+        if (devices_.empty()) {
+            GTEST_SKIP() << "no Direct3D 11 GPU";
         }
     }
 
@@ -141,7 +169,7 @@ protected:
 
     test::Folder folder_;
     std::optional<test::Tools> found_;
-    std::shared_ptr<NativeDevice> device_;
+    std::vector<std::pair<std::string, std::shared_ptr<NativeDevice>>> devices_;
 };
 
 }  // namespace
@@ -157,20 +185,28 @@ TEST_F(NativeDecoderTest, TheFramesAreFfmpegsCountedFromTheFirst) {
         std::string pix_fmt;
         std::string decoder;
     };
-    for (const Case& item : {Case{"h264.mp4", "libx264", "yuv420p", "GPU: d3d11va h264"},
-                             Case{"hevc.mkv", "libx265", "yuv420p10le", "GPU: d3d11va hevc"},
-                             Case{"high10.mkv", "libx264", "yuv420p10le", "software: h264"}}) {
-        SCOPED_TRACE(item.name);
-        const FrameComparison comparison = clip(item.name, item.encoder, item.pix_fmt);
-        QString status;
-        const NativeFramePtr frame = decode_frame(device_, comparison, FrameSide::source, 30, status);
-        ASSERT_NE(frame, nullptr) << "frame 30 never came";
-        EXPECT_TRUE(status.contains(QString::fromStdString("source " + item.decoder))) << status.toStdString();
-        const std::vector<int> native = read_luma(*device_, *frame);
-        std::vector<int> wanted =
-            ffmpeg_luma(*found_, comparison.source_info.path, 30, frame->ten_bit, "", folder_ / "frame.raw");
-        wanted.resize(native.size());
-        EXPECT_EQ(native, wanted) << "not FFmpeg's frame 30";
+    const std::vector<Case> cases{Case{"h264.mp4", "libx264", "yuv420p", "GPU: d3d11va h264"},
+                                  Case{"hevc.mkv", "libx265", "yuv420p10le", "GPU: d3d11va hevc"},
+                                  Case{"high10.mkv", "libx264", "yuv420p10le", "software: h264"}};
+    std::vector<FrameComparison> clips;
+    for (const Case& item : cases) {
+        clips.push_back(clip(item.name, item.encoder, item.pix_fmt));
+    }
+    for (const auto& [gpu, device] : devices_) {
+        SCOPED_TRACE(gpu);
+        for (std::size_t index = 0; index < cases.size(); ++index) {
+            const Case& item = cases[index];
+            SCOPED_TRACE(item.name);
+            QString status;
+            const NativeFramePtr frame = decode_frame(device, clips[index], FrameSide::source, 30, status);
+            ASSERT_NE(frame, nullptr) << "frame 30 never came";
+            EXPECT_TRUE(status.contains(QString::fromStdString("source " + item.decoder))) << status.toStdString();
+            const std::vector<int> native = read_luma(*device, *frame);
+            std::vector<int> wanted =
+                ffmpeg_luma(*found_, clips[index].source_info.path, 30, frame->ten_bit, "", folder_ / "frame.raw");
+            wanted.resize(native.size());
+            EXPECT_EQ(native, wanted) << "not FFmpeg's frame 30";
+        }
     }
     // A video that starts 0.25 s (six frames) after its file does, behind
     // its soundtrack: frames are counted from its first frame, not the file's
@@ -185,18 +221,27 @@ TEST_F(NativeDecoderTest, TheFramesAreFfmpegsCountedFromTheFirst) {
     ASSERT_NEAR(delayed.source_info.start_offset, 0.25, 0.01);
     delayed.distorted_info = delayed.source_info;
     delayed.fps = delayed.source_info.fps;
-    QString status;
-    const NativeFramePtr frame = decode_frame(device_, delayed, FrameSide::source, 30, status);
-    ASSERT_NE(frame, nullptr);
-    const std::vector<int> native = read_luma(*device_, *frame);
-    std::vector<int> wanted = ffmpeg_luma(*found_, late, 30, frame->ten_bit, "", folder_ / "late.raw");
-    wanted.resize(native.size());
-    EXPECT_EQ(native, wanted) << "not the video's frame 30";
+    std::vector<int> wanted;
+    for (const auto& [gpu, device] : devices_) {
+        SCOPED_TRACE(gpu);
+        QString status;
+        const NativeFramePtr frame = decode_frame(device, delayed, FrameSide::source, 30, status);
+        ASSERT_NE(frame, nullptr);
+        const std::vector<int> native = read_luma(*device, *frame);
+        if (wanted.empty()) {
+            wanted = ffmpeg_luma(*found_, late, 30, frame->ten_bit, "", folder_ / "late.raw");
+            wanted.resize(native.size());
+        }
+        EXPECT_EQ(native, wanted) << "not the video's frame 30";
+    }
 }
 
 // Played scaled down (Reference playback), the source comes at the test
-// video's size, its picture scaled: within what two scalers' filters differ by
-// (40 dB), where another frame would be far off.
+// video's size, its picture scaled: within what two scalers' filters differ by,
+// where another frame would be far off. Each GPU's video processor has a
+// filter of its own: 41.9 dB from FFmpeg's bilinear scale on an RTX 5090,
+// 40.0 on Intel's Arrow Lake graphics, against 23 for another frame; a range
+// or colour converted on the way would cost far more.
 TEST_F(NativeDecoderTest, TheSourceScaledDownIsTheSourcesPicture) {
     FrameComparison pair = clip("source.mkv", "libx265", "yuv420p10le");
     FrameComparison smaller;
@@ -204,30 +249,33 @@ TEST_F(NativeDecoderTest, TheSourceScaledDownIsTheSourcesPicture) {
         test::make_clip(*found_, folder_ / "encode.mkv", "libx264", "yuv420p", 2.0, {}, "320x180"), found_->ffprobe);
     pair.distorted_info = smaller.source_info;
     const FrameComparison recipe = source_playback_comparison(pair, false);
-    QString status;
-    const NativeFramePtr frame = decode_frame(device_, recipe, FrameSide::source, 30, status);
-    ASSERT_NE(frame, nullptr);
-    EXPECT_EQ(frame->width, 320);
-    EXPECT_EQ(frame->height, 180);
-    EXPECT_TRUE(frame->prepared);
-    const std::vector<int> native = read_luma(*device_, *frame);
-    const auto psnr = [&native](const std::vector<int>& other) {
-        double squares = 0;
-        for (std::size_t index = 0; index < native.size(); ++index) {
-            const double difference = native[index] - other[index];
-            squares += difference * difference;
-        }
-        const double mse = squares / static_cast<double>(native.size());
-        return mse == 0 ? 100.0 : 10 * std::log10(1023.0 * 1023.0 / mse);
-    };
     const std::vector<int> same =
         ffmpeg_luma(*found_, pair.source_info.path, 30, true, "scale=320:180:flags=bilinear", folder_ / "a.raw");
     const std::vector<int> other =
         ffmpeg_luma(*found_, pair.source_info.path, 33, true, "scale=320:180:flags=bilinear", folder_ / "b.raw");
-    ASSERT_GE(same.size(), native.size());
-    ASSERT_GE(other.size(), native.size());
-    EXPECT_GT(psnr(same), 40.0);
-    EXPECT_GT(psnr(same), psnr(other) + 3) << "not frame 30";
+    for (const auto& [gpu, device] : devices_) {
+        SCOPED_TRACE(gpu);
+        QString status;
+        const NativeFramePtr frame = decode_frame(device, recipe, FrameSide::source, 30, status);
+        ASSERT_NE(frame, nullptr);
+        EXPECT_EQ(frame->width, 320);
+        EXPECT_EQ(frame->height, 180);
+        EXPECT_TRUE(frame->prepared);
+        const std::vector<int> native = read_luma(*device, *frame);
+        const auto psnr = [&native](const std::vector<int>& with) {
+            double squares = 0;
+            for (std::size_t index = 0; index < native.size(); ++index) {
+                const double difference = native[index] - with[index];
+                squares += difference * difference;
+            }
+            const double mse = squares / static_cast<double>(native.size());
+            return mse == 0 ? 100.0 : 10 * std::log10(1023.0 * 1023.0 / mse);
+        };
+        ASSERT_GE(same.size(), native.size());
+        ASSERT_GE(other.size(), native.size());
+        EXPECT_GT(psnr(same), 35.0);
+        EXPECT_GT(psnr(same), psnr(other) + 3) << "not frame 30";
+    }
 }
 
 }  // namespace vml::app
