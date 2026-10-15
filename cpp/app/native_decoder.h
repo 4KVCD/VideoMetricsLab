@@ -3,9 +3,10 @@
 // GStreamer): read with libavformat, decoded by Direct3D 11's video decoding
 // on the presenter's device where the GPU decodes the video, else by
 // FFmpeg's software decoder (dav1d for AV1, native_dav1d.h) and uploaded,
-// frames timed from the video's first frame. It decodes freely, at most
-// three frames ahead of what is taken; seeks are made on its thread, only
-// the latest one asked for.
+// frames timed from the video's first frame (a raw stream's, which have no
+// times, counted from its start). It decodes freely, at most three frames
+// ahead of what is taken; seeks are made on its thread, only the latest one
+// asked for.
 #pragma once
 
 #include <QString>

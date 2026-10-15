@@ -426,7 +426,8 @@ TEST_F(NativeDecoderTest, AV1InSoftwareIsDecodedByDav1d) {
 // and none decoded before it: each decoder forgets what it holds (a GPU's
 // and FFmpeg's software decoder decode frames ahead, and dav1d's threads
 // several at once). On each GPU's decoder, FFmpeg's software decoder, and
-// dav1d where it is beside FFmpeg's libraries.
+// dav1d where it is beside FFmpeg's libraries; and in a raw stream, whose
+// frames are counted (it is decoded again from its start).
 TEST_F(NativeDecoderTest, ASeekBackGivesTheFramesFromItOn) {
     struct Case {
         std::string name;
@@ -436,10 +437,18 @@ TEST_F(NativeDecoderTest, ASeekBackGivesTheFramesFromItOn) {
     };
     std::vector<Case> cases;
     const FrameComparison h264 = clip("seek.mkv", "libx264", "yuv420p");
+    test::run_ffmpeg(*found_, {"-i", platform::path_text(h264.source_info.path), "-c", "copy", "-f", "h264",
+                               platform::path_text(folder_ / "seek.264")});
+    FrameComparison raw;
+    raw.source_info = probe_video(folder_ / "seek.264", found_->ffprobe);
+    raw.distorted_info = raw.source_info;
+    raw.fps = raw.source_info.fps;
     for (const auto& [gpu, device] : devices_) {
         cases.push_back({"H.264 on " + gpu, h264, device});
+        cases.push_back({"raw H.264 on " + gpu, raw, device});
     }
     cases.push_back({"H.264 in software", h264, devices_.front().second, true});
+    cases.push_back({"raw H.264 in software", raw, devices_.front().second, true});
     if (!Dav1dVideo::unavailable()) {
         test::run_ffmpeg(*found_, {"-f", "lavfi", "-i", "testsrc2=s=640x360:r=24000/1001:d=2", "-c:v", "libsvtav1",
                                    "-preset", "12", "-pix_fmt", "yuv420p", platform::path_text(folder_ / "seek.webm")});
@@ -472,6 +481,87 @@ TEST_F(NativeDecoderTest, ASeekBackGivesTheFramesFromItOn) {
         QThread::msleep(200);  // time to decode what it may
         video.seek(static_cast<int>(std::llround(10 * 1000 / fps)));
         EXPECT_EQ(frames_after_seek(video, fps, 5), (std::vector<long long>{10, 11, 12, 13, 14}));
+    }
+}
+
+// A raw stream, with no timestamps (H.264, HEVC or VVC as x264, x265 and
+// VVenC write them: .264, .265 and .266 files), plays as the Python app's
+// GStreamer played it: its frames counted from its start, at the
+// comparison's frame rate. A frame after a seek (which decodes the stream
+// again from its start) is FFmpeg's frame of that number, luma and chroma;
+// played from the start, every frame comes, in order. Raw H.264 with
+// B-frames and 10-bit HEVC on each GPU's decoder, H.264 in software too, and
+// the film grain test's VVC stream (tests/fixtures/vvc_grain.266) in
+// software.
+TEST_F(NativeDecoderTest, ARawStreamsFramesAreCountedFromItsStart) {
+    struct Case {
+        std::string name;
+        std::filesystem::path path;
+        std::shared_ptr<NativeDevice> device;
+        bool software = false;
+        long long wanted = 30;  // the frame looked at after a seek
+        std::size_t frames = 48;
+    };
+    const std::filesystem::path h264 = folder_ / "raw.264";
+    test::run_ffmpeg(*found_, {"-f", "lavfi", "-i", "testsrc2=s=640x360:r=24000/1001:d=2", "-c:v", "libx264",
+                               "-preset", "veryfast", "-bf", "3", "-pix_fmt", "yuv420p", "-f", "h264",
+                               platform::path_text(h264)});
+    const std::filesystem::path hevc = folder_ / "raw.265";
+    test::run_ffmpeg(*found_, {"-f", "lavfi", "-i", "testsrc2=s=640x360:r=24000/1001:d=2", "-c:v", "libx265",
+                               "-preset", "ultrafast", "-x265-params", "bframes=4:log-level=error", "-pix_fmt",
+                               "yuv420p10le", "-f", "hevc", platform::path_text(hevc)});
+    const std::filesystem::path vvc =
+        std::filesystem::path(VML_REFERENCE_DIR).parent_path().parent_path().parent_path() / "tests" / "fixtures" /
+        "vvc_grain.266";
+    std::vector<Case> cases;
+    for (const auto& [gpu, device] : devices_) {
+        cases.push_back({"H.264 on " + gpu, h264, device});
+        cases.push_back({"HEVC on " + gpu, hevc, device});
+    }
+    cases.push_back({"H.264 in software", h264, devices_.front().second, true});
+    cases.push_back({"VVC in software", vvc, devices_.front().second, true, 10, 17});
+    for (const Case& item : cases) {
+        SCOPED_TRACE(item.name);
+        FrameComparison comparison;
+        comparison.source_info = probe_video(item.path, found_->ffprobe);
+        comparison.distorted_info = comparison.source_info;
+        comparison.fps = comparison.source_info.fps;
+        ASSERT_GT(comparison.fps, 0);
+        QString status;
+        const NativeFramePtr frame =
+            decode_frame(item.device, comparison, FrameSide::source, item.wanted, status, item.software);
+        ASSERT_NE(frame, nullptr) << "frame " << item.wanted << " never came";
+        const std::vector<int> native = read_picture(*item.device, *frame);
+        const std::vector<int> wanted =
+            ffmpeg_picture(*found_, item.path, item.wanted, frame->ten_bit, "", folder_ / "raw.yuv");
+        ASSERT_EQ(native.size(), wanted.size());
+        EXPECT_EQ(native, wanted) << "not FFmpeg's frame " << item.wanted << "; " << status.toStdString();
+
+        FfmpegNativeVideo video(item.device, comparison, FrameSide::source, {}, 0);
+        if (item.software) {
+            video.decode_in_software();
+        }
+        video.start();
+        std::vector<long long> numbers;
+        bool ended = false;
+        const QDeadlineTimer deadline(30'000);
+        while (!ended && !deadline.hasExpired()) {
+            const NativeUpdate update = video.poll();
+            EXPECT_FALSE(update.error) << update.error->toStdString();
+            ended = update.ended;
+            while (NativeFramePtr given = video.try_pull()) {
+                numbers.push_back(std::llround(static_cast<double>(given->time_ns) / 1e9 * comparison.fps));
+            }
+            QThread::msleep(2);
+        }
+        while (NativeFramePtr given = video.try_pull()) {
+            numbers.push_back(std::llround(static_cast<double>(given->time_ns) / 1e9 * comparison.fps));
+        }
+        std::vector<long long> all(item.frames);
+        std::iota(all.begin(), all.end(), 0LL);
+        EXPECT_TRUE(ended);
+        EXPECT_EQ(numbers, all) << "not every frame, in order";
+        EXPECT_EQ(video.first_frame_ms(), 0);
     }
 }
 

@@ -558,6 +558,17 @@ void FfmpegNativeVideo::run() {
     std::int64_t last_given_ns = -1;
     bool reported = false;
     bool at_end = false;
+    // A stream with no timestamps (a raw H.264, HEVC or VVC stream, as
+    // VVenC writes them): its frames are counted from its start instead, at
+    // the comparison's frame rate, as FFmpeg's command line counts them; this
+    // is the number of the next frame. Nothing says where a frame of such a
+    // stream is, so a seek decodes on to the frame, or from the stream's
+    // start again to one already passed.
+    std::optional<std::int64_t> counted;
+    const auto counted_time_ns = [&](std::int64_t number) {
+        return comparison_.fps > 0 ? std::llround(static_cast<double>(number) * 1e9 / comparison_.fps)
+                                   : number * decoding->frame_ns;
+    };
 
     // Makes the seek asked for, if any (once the first frame is known).
     const auto make_seek = [&]() {
@@ -573,19 +584,33 @@ void FfmpegNativeVideo::run() {
             frames_.clear();  // a flushing seek: nothing from before it is given
         }
         const std::int64_t target_ns = static_cast<std::int64_t>(*wanted) * 1'000'000;
-        const std::int64_t stamp =
-            av_rescale_q(*origin_ns + target_ns, AVRational{1, 1'000'000'000}, decoding->time_base);
-        const int result = av_seek_frame(decoding->format, decoding->stream, stamp, AVSEEK_FLAG_BACKWARD);
-        decoding->flush();
-        decoding->draining = false;
-        at_end = false;
+        bool sought = true;
+        if (!counted) {
+            const std::int64_t stamp =
+                av_rescale_q(*origin_ns + target_ns, AVRational{1, 1'000'000'000}, decoding->time_base);
+            sought = av_seek_frame(decoding->format, decoding->stream, stamp, AVSEEK_FLAG_BACKWARD) >= 0;
+            decoding->flush();
+            decoding->draining = false;
+            at_end = false;
+        } else if (target_ns - counted_time_ns(1) / 2 < counted_time_ns(*counted)) {
+            std::unique_ptr<Decoding> again = open_video(path, *device_, decoding->hardware, interrupt, why);
+            sought = again != nullptr;
+            if (again) {
+                decoding = std::move(again);
+                counted = 0;
+                at_end = false;
+            }
+        }
         // Accurate: the frames before it are decoded, not given, but the one
         // on screen at it is.
-        keep_from_ns = target_ns - decoding->frame_ns / 2;
+        keep_from_ns = target_ns - (counted ? counted_time_ns(1) : decoding->frame_ns) / 2;
         const std::lock_guard lock(mutex_);
         seeks_made_ = std::max(seeks_made_, asked);
-        if (result < 0) {
+        if (!sought) {
             error_ = QStringLiteral("FFmpeg could not seek to that frame.");
+        }
+        if (at_end) {
+            ended_ = true;  // sought past the end of a counted stream already decoded to it
         }
     };
 
@@ -798,12 +823,21 @@ void FfmpegNativeVideo::run() {
                 failure = QStringLiteral("Decoding failed: %1").arg(error_text(result));
                 break;
             }
-            const std::optional<std::int64_t> time = picture_time(*decoding, decoding->frame);
-            if (!time) {
+            std::optional<std::int64_t> time = picture_time(*decoding, decoding->frame);
+            if (!time && (!origin_ns || counted)) {
+                if (!counted) {
+                    counted = 0;
+                }
+                time = counted_time_ns((*counted)++);
+            } else if (!time) {
                 fail(QStringLiteral("Video frame has no usable presentation timestamp"));
                 return;
             }
-            if (!origin_ns) {
+            if (!origin_ns && counted) {
+                origin_ns = 0;
+                const std::lock_guard lock(mutex_);
+                first_frame_ms_ = 0;
+            } else if (!origin_ns) {
                 origin_ns = *time;
                 const AVFormatContext* format = decoding->format;
                 const std::int64_t file_start =
@@ -839,7 +873,13 @@ void FfmpegNativeVideo::run() {
         }
         decoding = std::move(software);
         reported = false;
-        if (origin_ns && last_given_ns >= 0) {
+        if (counted) {
+            // From the start again, counted, keeping the frames after the last given.
+            counted = 0;
+            if (last_given_ns >= 0) {
+                keep_from_ns = last_given_ns + counted_time_ns(1) / 2;
+            }
+        } else if (origin_ns && last_given_ns >= 0) {
             const std::int64_t next_ns = last_given_ns + decoding->frame_ns / 2;
             av_seek_frame(decoding->format, decoding->stream,
                           av_rescale_q(*origin_ns + next_ns, AVRational{1, 1'000'000'000}, decoding->time_base),
