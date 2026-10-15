@@ -43,6 +43,11 @@ void keep_error_tail(std::string& kept, std::string_view written);
 // line (cut mid-line only when one line is longer than that).
 std::string error_tail(const std::string& kept);
 
+// `text` with every line ending made "\n" ("\r\n", and a lone "\r"), as
+// Python reads a program's output in text mode: Windows programs end their
+// lines with "\r\n", which would otherwise stay inside the app's messages.
+std::string universal_newlines(std::string_view text);
+
 struct ProcessOptions {
     // The folder the program runs in; empty is ours.
     std::filesystem::path working_directory;
@@ -58,8 +63,8 @@ struct ProcessOptions {
 };
 
 // A program run to its end: its exit code, everything it wrote to standard
-// output and the end of its standard error, as the bytes it wrote (UTF-8,
-// for FFmpeg's tools).
+// output and the end of its standard error (its lines ended with "\n"), as
+// the bytes it wrote (UTF-8, for FFmpeg's tools).
 struct ProcessOutput {
     int exit_code = -1;
     std::string standard_output;
@@ -127,8 +132,9 @@ public:
     // process group is sent SIGCONT.
     void resume();
 
-    // The end of what the program wrote to standard error (error_tail),
-    // complete once it has ended (after wait()).
+    // The end of what the program wrote to standard error (error_tail), its
+    // lines ended with "\n" (universal_newlines), complete once it has ended
+    // (after wait()).
     std::string standard_error();
 
     int process_id() const;

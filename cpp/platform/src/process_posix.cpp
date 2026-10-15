@@ -331,7 +331,7 @@ void ChildProcess::resume() {
 std::string ChildProcess::standard_error() {
     std::unique_lock lock(state_->error_mutex);
     state_->error_ended_signal.wait_for(lock, std::chrono::seconds(5), [this] { return state_->error_ended; });
-    return error_tail(state_->error_text);
+    return universal_newlines(error_tail(state_->error_text));
 }
 
 int ChildProcess::process_id() const { return static_cast<int>(state_->id); }

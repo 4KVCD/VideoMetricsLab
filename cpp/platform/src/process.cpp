@@ -21,6 +21,19 @@ std::string error_tail(const std::string& kept) {
     return kept.substr(line_end + 1);
 }
 
+std::string universal_newlines(std::string_view text) {
+    std::string lines;
+    lines.reserve(text.size());
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if (text[i] != '\r') {
+            lines.push_back(text[i]);
+        } else if (i + 1 == text.size() || text[i + 1] != '\n') {
+            lines.push_back('\n');  // a lone "\r"; one before "\n" goes
+        }
+    }
+    return lines;
+}
+
 void keep_error_tail(std::string& kept, std::string_view written) {
     kept.append(written);
     if (kept.size() >= 2 * error_tail_bytes) {

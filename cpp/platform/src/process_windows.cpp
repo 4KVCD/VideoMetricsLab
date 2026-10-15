@@ -438,7 +438,7 @@ std::string ChildProcess::standard_error() {
     // Once the program has ended its error output ends with it, unless a
     // program it started still holds the pipe: then what came is enough.
     state_->error_ended_signal.wait_for(lock, std::chrono::seconds(5), [this] { return state_->error_ended; });
-    return error_tail(state_->error_text);
+    return universal_newlines(error_tail(state_->error_text));
 }
 
 int ChildProcess::process_id() const { return static_cast<int>(state_->id); }
