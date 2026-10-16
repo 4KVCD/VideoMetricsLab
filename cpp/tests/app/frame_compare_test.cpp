@@ -74,9 +74,10 @@ protected:
         }
         return sides;
     }
-    // The black bars of a pair, found.
+    // The black bars of a pair's two files, found.
     static void crops_found(FrameComparePanel& panel, const FrameComparisonEntry& pair, const DetectedCrops& crops) {
-        panel.on_auto_crop_ready(FrameComparePanel::pair_key(pair), crops);
+        panel.on_auto_crop_ready(FrameComparePanel::pair_key(pair), pair.comparison.source_info,
+                                 pair.comparison.distorted_info, crops);
     }
 
     // Lets the panel's events run until `done`, for at most 30 seconds.
@@ -341,6 +342,53 @@ TEST_F(FramePanelTest, TheBlackBarsFoundAgainstOneReferenceAreNotUsedWithAnother
 
     panel->set_runs({pair});
     EXPECT_EQ(crops(), std::pair(found.source, found.distorted));
+}
+
+// Each pair is cropped to the picture its two videos share, as a run crops
+// it, from each file's own black bars. A reference with 40-row bars against a
+// test video with 60-row bars shares the 240 rows between them; against a
+// test video with the reference's own bars it shares all 280 rows, though the
+// reference's bars were found for the first pair.
+TEST_F(FramePanelTest, EachPairIsCroppedToThePictureItsOwnTwoVideosShare) {
+    const std::optional<test::Tools> found = test::tools();
+    if (!found) {
+        GTEST_SKIP() << "no FFmpeg";
+    }
+    const test::Folder folder;
+    const auto clip = [&](const std::string& name, int picture_height) {
+        const std::string bars = std::to_string((360 - picture_height) / 2);
+        return probe_video(test::make_clip(*found, folder / name, "libx264", "yuv420p", 1.0,
+                                           {"-vf", "pad=640:360:0:" + bars + ":black"},
+                                           "640x" + std::to_string(picture_height)),
+                           found->ffprobe);
+    };
+    FrameComparison narrower;
+    narrower.source_info = clip("source.mkv", 280);
+    narrower.distorted_info = clip("narrower.mkv", 240);
+    narrower.fps = narrower.source_info.fps;
+    narrower.frame_count = 23;
+    narrower.auto_crop_pending = true;
+    FrameComparison same = narrower;
+    same.distorted_info = clip("same.mkv", 280);
+    const auto panel = make_panel(found->ffmpeg);
+    panel->audio_checkbox->setChecked(false);
+    panel->resize(800, 600);
+    panel->show();
+    panel->set_runs({{"row:narrower", "narrower", narrower, nullptr, "row:narrower"},
+                     {"row:same", "same", same, nullptr, "row:same"}});
+    const auto crops = [&panel] {
+        const FrameComparison& shown = panel->current_entry()->comparison;
+        return std::pair(shown.source_crop, shown.distorted_crop);
+    };
+    ASSERT_TRUE(wait_until([&panel] { return !panel->current_entry()->comparison.auto_crop_pending; }));
+    EXPECT_EQ(crops(), std::pair(std::optional(CropBox{640, 240, 0, 60}), std::optional(CropBox{640, 240, 0, 60})));
+
+    panel->cycle_distorted(1);
+    ASSERT_EQ(panel->video_combo->currentText().toStdString(), "same");
+    ASSERT_TRUE(wait_until([&panel] { return !panel->current_entry()->comparison.auto_crop_pending; }));
+    EXPECT_EQ(crops(), std::pair(std::optional(CropBox{640, 280, 0, 40}), std::optional(CropBox{640, 280, 0, 40})));
+    panel->cancel();
+    ASSERT_TRUE(wait_until([&panel] { return FramePanelTest::idle(*panel); }));
 }
 
 // A pair of real clips plays in the tab: the playback view takes the still

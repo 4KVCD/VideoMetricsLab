@@ -82,6 +82,17 @@ bool is_file(const std::filesystem::path& path) {
     return std::filesystem::is_regular_file(path, error);
 }
 
+// The boxes a run compares for a pair, from its two files' own black bars:
+// the picture both files show (common_picture), unless the pair is one file
+// against itself.
+DetectedCrops compared_crops(const VideoInfo& source, const VideoInfo& distorted, const DetectedCrops& files) {
+    if (distorted.path == source.path) {
+        return files;
+    }
+    const auto [source_crop, distorted_crop] = common_picture(source, distorted, files.source, files.distorted);
+    return {source_crop, distorted_crop};
+}
+
 }  // namespace
 
 double parse_timestamp(const QString& value) {
@@ -327,11 +338,6 @@ void CropDetectWorker::run() {
         } else {
             crops.source = known_source_ ? *known_source_ : detect(source_);
             crops.distorted = same_file ? crops.source : known_distorted_ ? *known_distorted_ : detect(distorted_);
-        }
-        if (!same_file) {
-            // The boxes a run would compare (common_picture).
-            std::tie(crops.source, crops.distorted) =
-                common_picture(source_, distorted_, crops.source, crops.distorted);
         }
         if (!cancel_.cancelled()) {
             emit ready(crops);
@@ -1471,7 +1477,7 @@ void FrameComparePanel::ensure_auto_crop(const FrameComparisonEntry* entry) {
     const CropDetectWorker::Known source_crop = known(key.source_file);
     const CropDetectWorker::Known distorted_crop = known(key.distorted_file);
     if (source_crop && distorted_crop) {
-        auto_crops_[key] = {*source_crop, *distorted_crop};
+        auto_crops_[key] = compared_crops(source, distorted, {*source_crop, *distorted_crop});
         for (FrameComparisonEntry& current : entries_) {
             current = apply_auto_crop(current);
         }
@@ -1479,8 +1485,9 @@ void FrameComparePanel::ensure_auto_crop(const FrameComparisonEntry* entry) {
         return;
     }
     auto* worker = new CropDetectWorker(ffmpeg_(), source, distorted, source_crop, distorted_crop, this);
-    connect(worker, &CropDetectWorker::ready, this,
-            [this, key](const DetectedCrops& crops) { on_auto_crop_ready(key, crops); });
+    connect(worker, &CropDetectWorker::ready, this, [this, key, source, distorted](const DetectedCrops& files) {
+        on_auto_crop_ready(key, source, distorted, files);
+    });
     connect(worker, &QThread::finished, this, [this, worker] {
         for (auto active = crop_workers_.begin(); active != crop_workers_.end(); ++active) {
             if (active->second == worker) {
@@ -1500,12 +1507,13 @@ FrameComparePanel::PairKey FrameComparePanel::pair_key(const FrameComparisonEntr
             crop_file_key(entry.comparison.distorted_info.path)};
 }
 
-void FrameComparePanel::on_auto_crop_ready(const PairKey& key, const DetectedCrops& crops) {
-    // Keeps the black bars found for a pair and its two files, and shows the
-    // pair cropped if it is still that pair.
-    auto_crops_[key] = crops;
-    auto_crop_files_[key.source_file] = crops.source;
-    auto_crop_files_[key.distorted_file] = crops.distorted;
+void FrameComparePanel::on_auto_crop_ready(const PairKey& key, const VideoInfo& source, const VideoInfo& distorted,
+                                           const DetectedCrops& files) {
+    // Keeps each file's own black bars and the pair's compared boxes, and
+    // shows the pair cropped if it is still that pair.
+    auto_crop_files_[key.source_file] = files.source;
+    auto_crop_files_[key.distorted_file] = files.distorted;
+    auto_crops_[key] = compared_crops(source, distorted, files);
     std::optional<FrameComparison> previous;
     for (FrameComparisonEntry& entry : entries_) {
         if (pair_key(entry) == key) {

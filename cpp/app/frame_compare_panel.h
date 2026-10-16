@@ -134,15 +134,16 @@ private:
     CancelToken cancel_;
 };
 
-// The black bars a pair's crops were set to detect, as a run would compare
-// them; nothing for a side where none could be found.
+// Black-bar boxes for a pair's two videos; nothing for a side where none
+// could be found.
 struct DetectedCrops {
     std::optional<CropBox> source;
     std::optional<CropBox> distorted;
 };
 
-// Detects a pair's black bars on a thread of its own: those not known yet
-// (`known_source`, `known_distorted`), both at once.
+// Detects the black bars of a pair's two files on a thread of its own, each
+// file's own bars: those not known yet (`known_source`, `known_distorted`),
+// both at once.
 class CropDetectWorker : public QThread {
     Q_OBJECT
 
@@ -287,7 +288,8 @@ private:
     void request_current_frames();
     FrameComparisonEntry apply_auto_crop(const FrameComparisonEntry& entry) const;
     void ensure_auto_crop(const FrameComparisonEntry* entry);
-    void on_auto_crop_ready(const PairKey& key, const DetectedCrops& crops);
+    void on_auto_crop_ready(const PairKey& key, const VideoInfo& source, const VideoInfo& distorted,
+                            const DetectedCrops& files);
     void on_frame_ready(int generation, int side, const QImage& image);
     void on_frame_failed(int generation, int side, const QString& error);
     void cancel_workers();
@@ -313,9 +315,9 @@ private:
     int generation_ = 0;
     std::set<FrameExtractWorker*> workers_;
     std::map<PairKey, CropDetectWorker*> crop_workers_;
-    // Black bars found, by pair and its files, and by file (path, size and
-    // time), so that another pair with the same file does not detect it
-    // again.
+    // Black bars found. By pair: the boxes compared, the picture both files
+    // show. By file (path, size and time): the file's own bars, so that
+    // another pair with the same file does not detect them again.
     std::map<PairKey, DetectedCrops> auto_crops_;
     std::map<std::string, std::optional<CropBox>> auto_crop_files_;
     bool window_filters_installed_ = false;

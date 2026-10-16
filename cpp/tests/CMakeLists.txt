@@ -158,6 +158,7 @@ if(TARGET vml_app)
         "NativeDecoderTest.*"
         "BitratePanelTest.StopEndsTheScanAndKeepsWhatWasRead"
         "FramePanelTest.APairThatCanPlayIsPlayedWithThePanelsControls"
+        "FramePanelTest.EachPairIsCroppedToThePictureItsOwnTwoVideosShare"
         "FramePanelTest.TheFramesShownAreFfmpegsFramesOfBothVideos"
         "PlaybackTest.AFailedDecoderResumesDownABoundedLadderWithoutReplaying"
         "PlaybackTest.ARealPairShowsTheSameFrameOfBothVideos"
