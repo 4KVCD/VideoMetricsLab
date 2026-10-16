@@ -65,6 +65,8 @@ port](docs/CPP_PORT.md) has the details and measurements.
   background that had fallen behind.
 - Fixed Video Compare keeping old black bars and still frames after the
   reference or the scaling changed.
+- Fixed Video Compare cropping a second test video with the first one's black
+  bars.
 - Fixed Video Compare keeping each finished test video's decoder until the
   window closed.
 - Fixed loading a saved run keeping the old reference's resolution tests, and
@@ -74,6 +76,9 @@ port](docs/CPP_PORT.md) has the details and measurements.
   after it was removed and added again.
 - Fixed the Settings tab's rows overlapping on high-DPI screens or in a small
   window; tabs now scroll instead (#6).
+- Fixed a failed graph export or settings save not being reported.
+- Fixed FFmpeg showing as not usable when its folder held a folder named
+  ffmpeg.exe.
 - Fixed texts that stayed in English in Video Compare, Metric Graphs, Bitrate
   Viewer, the run line and the CVVDP display editor.
 

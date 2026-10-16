@@ -61,7 +61,7 @@ GStreamer, which is no longer bundled.
 | --- | ---: | ---: |
 | Memory 40 s after you leave Video Compare | 7.6 GB | 0.1 GB |
 | GPU memory 40 s after you leave it | 1.2 GB | 0 GB |
-| Memory while it plays | 7.6 GB | 6.3 GB |
+| Memory while it plays | 7.6 GB | 5.6 GB |
 
 v2.0 kept Video Compare's decoders until the app closed. v2.1 lets them go
 30 s after you leave the tab, and loads playback again when the pointer
