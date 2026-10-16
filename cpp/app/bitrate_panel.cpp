@@ -215,7 +215,7 @@ BitratePanel::BitratePanel(std::function<std::string()> ffprobe, VideoColors* co
     progress->setRange(0, 100);
     progress->setValue(0);
     progress->setMaximumWidth(220);
-    // Shown only while files are read: left at 100% it looked as if
+    // Shown only while files are read: left at 100% it would look as if
     // something were still going on. Its room is kept, so that the plot
     // does not move when it comes and goes.
     QSizePolicy keep_room = progress->sizePolicy();
@@ -699,7 +699,8 @@ void BitratePanel::refresh_plot() {
         }
     }
     // In megabits once a line reaches 1000 kb/s, where the table also
-    // switches to Mb/s: a 4K film's busiest second put 250000 on the axis.
+    // switches to Mb/s: in kb/s, a 4K film's busiest second puts 250000 on
+    // the axis.
     const bool mega = std::ranges::any_of(plots, [](const auto& item) {
         const std::vector<float>& values = item.second->values;
         return !values.empty() && *std::ranges::max_element(values) >= 1000;

@@ -347,8 +347,8 @@ bool MainWindow::wait_for_gpu_checks(const std::vector<int>& checked) {
     // The GPU checks the run's plan reads (which metrics the GPU takes: Vship,
     // VMAF on the GPU, and VMAF v1's when a row has it on the GPU), waited
     // for off the window's thread. They start with the app, but take seconds,
-    // and a run asked for before they were done stood the window still until
-    // they were (2.3 s here; a slower PC takes longer).
+    // and waited for on it, a run asked for before they were done would hold
+    // the window still until they were.
     bool v1 = false;
     for (const int row : checked) {
         const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
@@ -720,8 +720,8 @@ QString MainWindow::run_summary(int running, int total) const {
     // start is replaced within a second.
     const int done = static_cast<int>(finished_jobs_.size());
     const int queued = std::max(0, total - done - running);
-    // Failures as they happen: a video that failed left the lines below and
-    // was counted as done until the run's end message said otherwise.
+    // Failures as they happen: otherwise a video that failed would leave the
+    // lines below and count as done until the run's end message said so.
     QStringList failures;
     if (run_failed_count_ > 0) {
         failures.append(app::tr("{count} failed", {{"count", run_failed_count_}}));
@@ -753,10 +753,9 @@ void MainWindow::pause_free_rates(int index, std::vector<TaskSnapshot>& tasks) {
     // which leaves pauses out (run_elapsed), over the last ten seconds once
     // there are two. Don't use the rate the tasks report: it is an average
     // from their start (FFmpeg's own fps, and Vship's passes') that counts
-    // pauses. After a 4-second pause, "19.5 fps, 0:00:09 remaining" became
-    // "9.6 fps, 0:00:16 remaining" and took most of the task to recover. A
-    // pass of a GPU task, or a retry that counts again from the start, is
-    // measured afresh.
+    // pauses: after a 4-second pause it reads about half the speed, and takes
+    // most of the task to recover. A pass of a GPU task, or a retry that
+    // counts again from the start, is measured afresh.
     const std::optional<double> now = run_elapsed();
     if (!now) {
         return;

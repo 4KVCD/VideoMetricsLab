@@ -64,7 +64,7 @@ int devices() {
     set_gpu_backend(settings.gpu_backend);
     set_vship_backend(settings.gpu_backend);
     // The GPU checks together rather than one after another: each starts a
-    // process of its own (Vship's took 1.8 s, VMAF's and VMAF v1's 0.5 s).
+    // process of its own (Vship's takes 1.8 s, VMAF's and VMAF v1's 0.5 s).
     std::future<std::pair<std::optional<VshipDevice>, std::string>> vship_check =
         std::async(std::launch::async, [] { return detect_vship_device(); });
     std::future<GpuVmafBackend> vmaf_check = std::async(std::launch::async, [] { return gpu_vmaf_backend(); });

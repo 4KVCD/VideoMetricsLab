@@ -303,8 +303,8 @@ void ChartWidget::invalidate(bool refit) {
 
 void ChartWidget::request_paint() {
     // Drawn again, at most once a frame of the screen: dragged by a mouse
-    // that reports a move every millisecond, the chart was drawn afresh 390
-    // times a second, 87% of a core, where the screen showed 120.
+    // that reports a move every millisecond, the chart would be drawn afresh
+    // 390 times a second (87% of a core) where the screen shows 120.
     if (paint_pace_->isActive()) {
         paint_due_ = true;  // drawn when this frame's time is up
         return;
@@ -366,8 +366,8 @@ void ChartWidget::paintEvent(QPaintEvent* /*event*/) {
 
 void ChartWidget::rebuild_cache() {
     // Drawn over the kept drawing when it is the size wanted: a new picture
-    // for every step of a zoom or a pan took 2.7 of the 4.3 ms a 1570x536
-    // chart took to draw (175% display scaling), most of it to get 10 MB of
+    // for every step of a zoom or a pan takes 2.7 of the 4.3 ms a 1570x536
+    // chart takes to draw (175% display scaling), most of it to get 10 MB of
     // memory from Windows; drawn over, 0.27 ms.
     cache_dark_ = theme::is_dark();
     const double ratio = devicePixelRatioF();
@@ -620,9 +620,9 @@ void ChartWidget::mouseMoveEvent(QMouseEvent* event) {
 void ChartWidget::report_hover(QPoint pos) {
     // Says the time and value at `pos`, then waits a frame of the screen
     // before saying the next. A mouse reports far more moves than a screen
-    // shows: each repainted the readout, 500 times a second while the
-    // pointer swept the chart, which kept a core busy, and the moves
-    // between two frames were never seen.
+    // shows: each would repaint the readout, 500 times a second while the
+    // pointer sweeps the chart, keeping a core busy, and the moves between
+    // two frames are never seen.
     emit hovered(time_at(pos.x()), value_at(pos.y()));
     hover_pace_->start(frame_ms());
 }

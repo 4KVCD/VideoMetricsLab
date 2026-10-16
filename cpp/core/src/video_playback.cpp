@@ -87,8 +87,8 @@ Size playback_dimensions(const FrameComparison& comparison, std::optional<Size> 
 }
 
 std::vector<PlaybackProcessing> playback_modes(const std::optional<std::string>& hwaccel) {
-    // The GPU's own decoder first; never FFmpeg's Vulkan decoder, which on an
-    // RTX 5090 corrupted 2-3% of HEVC frames (FFmpeg 9.0.1, driver 616.92).
+    // The GPU's own decoder first. Don't use FFmpeg's Vulkan decoder: on an
+    // RTX 5090 it corrupts 2-3% of HEVC frames (FFmpeg 9.0.1, driver 616.92).
     if (!hwaccel) {
         return {PlaybackProcessing::software, PlaybackProcessing::cpu};
     }

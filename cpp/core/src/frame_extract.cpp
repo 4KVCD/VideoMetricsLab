@@ -216,9 +216,9 @@ std::vector<std::string> build_frame_command(const std::string& ffmpeg, const Fr
             platform::path_text(error ? frame_input_path(comparison, side) : input), "-map",
             "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", frame_filter(comparison, side, colors),
             "-frames:v", "1", "-f", "image2pipe",
-            // Stored, not compressed: the same pixels, 25 MB for 4K instead
-            // of 2-8, written 85-340 ms sooner and read in 27 ms instead of
-            // 64-104 (the Python app's measurement).
+            // Stored, not compressed: the same pixels, 25 MB for 4K rather
+            // than 2-8, but written 85-340 ms sooner and read in 27 ms rather
+            // than 64-104.
             "-c:v", "png", "-compression_level", "0", "-pred", "none", "pipe:1"};
 }
 

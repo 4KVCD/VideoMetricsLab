@@ -28,10 +28,10 @@ namespace vml::app {
 namespace {
 
 // How long playback may run behind its soundtrack, catching up while the
-// sound plays on, before it stops the sound to wait for the decoders. On the
-// Python app's test PC the window's thread was held up 55-60 ms every 15 s,
-// which left the decoders waiting with full queues; stopping and seeking the
-// sound each time would make it break off.
+// sound plays on, before it stops the sound to wait for the decoders. The
+// window's thread can be held up now and then (55-60 ms every 15 s on one
+// PC), leaving the decoders waiting with full queues: stopping and seeking
+// the sound each time would make it break off.
 constexpr double catch_up_seconds = 0.2;
 // How long the soundtrack may take to be ready to play.
 constexpr double audio_preroll_seconds = 15.0;
@@ -66,8 +66,8 @@ PairedFrameWidget::PairedFrameWidget(VideoCompareView* view) : QWidget(view), vi
 void PairedFrameWidget::paintEvent(QPaintEvent* /*event*/) {
     // Painted dark even while native playback owns it: its presenter's window
     // covers all of it once it shows a frame, but until then (a pool just
-    // started) this is what shows, and unpainted it showed whatever the
-    // window last drew there -- the Videos tab.
+    // started) this is what shows. Unpainted, it would show whatever the
+    // window last drew there, such as the Videos tab.
     QPainter(this).fillRect(rect(), QColor("#171717"));
 }
 
@@ -295,9 +295,9 @@ void NativePool::sync(int selected) {
     // A test video decoded beside the one shown, chosen now, can be far
     // behind it: a decoder slower than playback (4K VVC on the CPU) stops
     // once it falls behind, the few frames it holds kept as ones still to
-    // come. Decoded on from there, it held playback up for as long as it had
-    // been away (47 frames in 15 s, after 30 s away); sought to the frame
-    // shown, it starts as a new decoder does.
+    // come. Decoded on from there, it would hold playback up for as long as
+    // it had been away; sought to the frame shown, it starts as a new
+    // decoder does.
     const std::string chosen = distorted_key(selected_);
     if (const auto entry = entries_.find(chosen); entry != entries_.end() && !entry->second->seeking()) {
         std::map<long long, NativeFramePtr>& queue = frames_[chosen];
@@ -319,10 +319,9 @@ void NativePool::launch_missing() {
         occupied += worker->isRunning() ? 1 : 0;
     }
     // Until a pair has been shown, only the two videos shown are started.
-    // Started with them, the others took the disk and the GPU from them: a
-    // 4K source and three test videos showed their first pair 132 ms after
-    // the tab opened, 107-122 ms with only the pair decoded, and 120-124 ms
-    // with the others started after it. They start once it is shown (poll).
+    // Started with them, the others take the disk and the GPU from them, and
+    // the first pair comes later (132 ms against 120-124 ms, for a 4K source
+    // and three test videos). They start once it is shown (poll).
     const bool pair_shown = pair_.has_value();
     for (const auto& [key, wanted] : desired_) {
         if (entries_.contains(key) || occupied >= view_.decoder_limit() || closed_) {

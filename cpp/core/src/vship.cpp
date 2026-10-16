@@ -44,8 +44,9 @@ const std::vector<std::string> auto_order{"cuda", "hip", "vulkan"};
 
 // The (build, GPU maker, metric) combinations a bundled build scores
 // wrongly, each then calculated on the CPU as on a PC without a usable GPU.
-// Empty since the bundled Vulkan build is Vship 5.1.2 (older ones scored
-// SSIMULACRA2 far too high on NVIDIA, Vship issue 18).
+// None of the bundled builds does; the list stays for one that does (Vship's
+// Vulkan builds before 5.1.2 scored SSIMULACRA2 far too high on NVIDIA,
+// Vship issue 18).
 struct WrongScore {
     const char* backend;
     GpuVendor vendor;

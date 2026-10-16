@@ -201,7 +201,6 @@ public:
 
     // Lists the lines in the order of `identities`, the Videos table's; lines
     // not among them (results added here) follow, in the order they came.
-    // They were listed in the order their runs finished.
     void set_order(std::vector<std::string> identities);
 
     // The metric to show when a run has it (Settings.graph_metric).

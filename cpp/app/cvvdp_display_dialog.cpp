@@ -24,10 +24,10 @@ namespace vml::app {
 namespace {
 
 // The largest display resolution offered: 8K. With "Scale the video to fill
-// the display", Vship works at the display's resolution. On a 4K video, an
-// 8K display took CVVDP alone (CUDA build) to 7.3 GB more VRAM, and a
-// 16384x16384 one to 15.9 GB more. No such display exists, and that is more
-// memory than most GPUs have.
+// the display", Vship works at the display's resolution, and its memory
+// grows with it: on a 4K video, an 8K display takes CVVDP alone (CUDA build)
+// 7.3 GB more VRAM, and a 16384x16384 one 15.9 GB more, more than most GPUs
+// have. No such display exists.
 constexpr int max_display_pixels = 8192;
 
 // A number box with these limits, steps and tooltip.
@@ -149,10 +149,9 @@ CvvdpDisplayDialog::CvvdpDisplayDialog(const CvvdpDisplay& display, QWidget* par
 }
 
 CvvdpDisplay CvvdpDisplayDialog::display() const {
-    // A box still holding what it was given was not changed. Not compared
-    // with the original rounded instead: that would have to round a half up,
-    // as the box does (the Python app rounded it to even, and 350.5 nits
-    // came back as 351).
+    // A box still holding what it was given was not changed. It is compared
+    // with what it was given, not with the original rounded: that would have
+    // to round a half up, as the box does.
     const auto value = [this](const QDoubleSpinBox* box, double before, double scale = 1.0) {
         return box->value() == given_.at(box) ? before : box->value() / scale;
     };

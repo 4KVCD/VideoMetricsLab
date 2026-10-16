@@ -9,8 +9,8 @@ std::optional<double> SoundtrackClock::poll(std::optional<double> reading, doubl
         reading_ms_.reset();
         return std::nullopt;
     }
-    // Carrying on from the moment a poll saw the clock step instead let it
-    // fall up to a frame behind, and then catch up by showing two frames at
+    // Don't carry on from the moment a poll saw the clock step: playback then
+    // falls up to a frame behind, and catches up by showing two frames at
     // once.
     const double position = *reading;
     reading_ms_ = position - offset_ms_;

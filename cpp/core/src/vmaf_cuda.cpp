@@ -121,8 +121,8 @@ std::uint64_t luma_address(const VmafPicture& picture) {
 //
 // This is faster than libvmaf's own handling of frames in system memory (a
 // pool of CPU pictures, each uploaded from pageable memory when it is read):
-// about 330 4K 10-bit pairs a second on an RTX 5090, against about 180, in
-// the Python app. libvmaf's page-locked pictures (HOST_PINNED) are no
+// about 330 4K 10-bit pairs a second on an RTX 5090, against about 180.
+// libvmaf's page-locked pictures (HOST_PINNED) are no
 // faster, because each fetch allocates, locks and zeroes a new one, which
 // takes 9 ms per 4K pair.
 //

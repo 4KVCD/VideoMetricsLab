@@ -79,8 +79,9 @@ class SettingsPanel;
 class VideoColors;
 
 // The test-video table's columns, by their stable physical index (the
-// Python app's COL_* numbers). VMAF v1 was added last, so every older column
-// keeps its index; it is shown after VMAF NEG.
+// Python app's COL_* numbers): a new column goes last, so that every other
+// keeps its index. The order they are shown in comes from metric_columns(),
+// which puts VMAF v1 after VMAF NEG.
 enum Column : int {
     col_check,
     col_path,

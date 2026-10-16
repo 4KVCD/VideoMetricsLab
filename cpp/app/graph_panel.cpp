@@ -280,8 +280,8 @@ MetricPage::MetricPage(const MetricDefinition& metric, QWidget* parent)
 
     // The readout, rewritten at each move of the pointer (ReadoutLabel). It
     // is monospaced, so that its columns line up; the hint shown until the
-    // first hover keeps the window's font, as the rest of the tab (in the
-    // readout's, it looked out of place). Its height is fixed and its width
+    // first hover keeps the window's font, as the rest of the tab does (in
+    // the readout's, it would look out of place). Its height is fixed and its width
     // capped (fit_hover_label).
     hover_label_ = new ReadoutLabel(placeholder_);
     readout_font_ = QFont(QStringLiteral("Consolas"));
@@ -476,11 +476,9 @@ void MetricPage::fit_hover_label() {
 }
 
 void MetricPage::fit_readout_margins() {
-    // The room around the readout's text, as the style sheet's 6 px of
-    // padding it once had laid it out: QLabel took that padding for a frame,
-    // so it indented the text by half an x where it starts and at the top,
-    // and made room for a whole x. In the label's font, the window's or the
-    // readout's.
+    // The room around the readout's text: a 6 px margin, the text indented
+    // by half an x where it starts and at the top, and room for a whole x.
+    // In the label's font, the window's or the readout's.
     const int x = hover_label_->fontMetrics().horizontalAdvance(QLatin1Char('x'));
     hover_label_->set_indent(x / 2, x - x / 2);
     hover_label_->setContentsMargins(6, 6, 6, 6);
@@ -1233,7 +1231,7 @@ bool GraphPanel::add_series(const Run& run) {
     // Adds or updates a line; whether anything changed. A line showing this
     // very result under this label is left alone: the window replaces a
     // result to change it, never edits it, and drawing every line again at
-    // each visit to the tab took 0.7 s with six two-hour videos.
+    // each visit to the tab would take 0.7 s with six two-hour videos.
     std::string identity = run.identity;
     if (identity.empty()) {
         // Without a row's identity, one line per test video.
@@ -1354,7 +1352,7 @@ void GraphPanel::remove_by_identities(const std::vector<std::string>& identities
     // remove_by_identity for each, or for one not found remove_by_path for
     // the path beside it (a line added by path). The table, the frame range
     // and the pages brought up to date once: one at a time, three hundred
-    // lines took 12 s.
+    // lines would take 12 s.
     std::map<std::string, int> by_identity;
     for (const auto& [id, entry] : entries_) {
         by_identity.emplace(entry.identity, id);
@@ -1488,7 +1486,7 @@ void GraphPanel::refresh_stats_table() {
         for (std::size_t i = 0; i < cells.size(); ++i) {
             stats_table_->setItem(row, detail_start + static_cast<int>(i), number_item(cells[i]));
         }
-        // A plain item, handled by cellClicked: a button in the cell was
+        // A plain item, handled by cellClicked: a button in the cell would be
         // drawn over the first column before the widths settled.
         auto* remove = new QTableWidgetItem(QStringLiteral("✕"));
         remove->setFont(symbol_font(stats_table_->font()));

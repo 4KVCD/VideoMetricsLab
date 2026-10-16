@@ -348,7 +348,7 @@ void ReadoutLabel::set_text(const QString& text) {
     text_ = text;
     right_to_left_ = text_.isRightToLeft();
     text_size_.reset();
-    // The text is not measured here: as QLabel measures it, a readout took
+    // The text is not measured here: as QLabel measures it, a readout takes
     // 0.13 ms, and painting it measures it again. It is laid out again only
     // when it has more lines, or a longer one, than the text it was last
     // sized for (sizeHint): a readout's lines keep their lengths as the

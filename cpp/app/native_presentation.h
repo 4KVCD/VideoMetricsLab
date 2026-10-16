@@ -6,9 +6,9 @@
 //
 // A thread waits, holding no lock, until the swapchain can take a frame, and
 // only then takes the device's lock to draw the frame that is due. The
-// decoders need the same lock for each frame, so it is never held while
-// waiting for the display: GStreamer's d3d11videosink did that, stalling the
-// decoders by up to 40 ms, so 120 fps video showed about 100 frames a second.
+// decoders need the same lock for each frame. Don't hold it while waiting
+// for the display: the decoders then stall (by up to 40 ms), and 120 fps
+// video shows about 100 frames a second.
 #pragma once
 
 #include <QString>

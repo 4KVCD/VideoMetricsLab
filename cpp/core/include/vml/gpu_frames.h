@@ -1,6 +1,7 @@
-// Decoding videos in the app for VMAF on the GPU, without FFmpeg decoding
-// them. A port of the parts of vmaf_app/core/gpu_frames.py that VMAF on the
-// GPU with Vulkan uses.
+// Decoding videos in the app, without FFmpeg decoding them, for the metrics
+// that take the decoded pictures: VMAF on the GPU (Vulkan, CUDA and VMAF
+// v1), Vship's, and PSNR, SSIM and XPSNR in the app (the Python app's
+// vmaf_app/core/gpu_frames.py).
 //
 // On NVIDIA's GPUs the pictures are decoded into GPU memory
 // (resources/native/nvdec_frames.dll); Intel's and AMD's decoders hand them

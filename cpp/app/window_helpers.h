@@ -1,5 +1,6 @@
-// Small helpers the window's two files share (main_window.cpp,
-// main_window_run.cpp): paths and text as the window shows them.
+// Small helpers the window and its panels share: paths and text as the
+// window shows them, and what the GPU checks found (vship_available,
+// gpu_scores).
 #pragma once
 
 #include <QString>

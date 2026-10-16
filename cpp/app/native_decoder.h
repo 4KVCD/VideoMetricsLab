@@ -1,12 +1,11 @@
-// One video of a comparison decoded for Video Compare's native playback (the
-// Python app's GstComparePipeline, on FFmpeg's libraries instead of
-// GStreamer): read with libavformat, decoded by Direct3D 11's video decoding
-// on the presenter's device where the GPU decodes the video, else by
-// FFmpeg's software decoder (dav1d for AV1, native_dav1d.h) and uploaded,
-// frames timed from the video's first frame (a raw stream's, which have no
-// times, counted from its start). It decodes freely, at most a frame ahead
-// of what is taken; seeks are made on its thread, only the latest one asked
-// for.
+// One video of a comparison decoded for Video Compare's native playback. It
+// is read with libavformat and decoded by Direct3D 11's video decoding on the
+// presenter's device where the GPU decodes the video, else by FFmpeg's
+// software decoder (dav1d for AV1, native_dav1d.h) and uploaded. Its frames
+// are timed from the video's first frame (a raw stream's, which have no
+// times, are counted from its start). It decodes freely, at most a frame
+// ahead of what is taken; seeks are made on its thread, only the latest one
+// asked for.
 #pragma once
 
 #include <QString>
@@ -51,7 +50,7 @@ struct NativeFrame {
     int width = 0;
     int height = 0;
     bool ten_bit = false;
-    // GStreamer's name for its YUV matrix (yuv_matrix_name), and its range.
+    // The name of its YUV matrix (yuv_matrix_name), and its range.
     std::string matrix = "bt709";
     bool full_range = false;
     // PQ video shown as it comes, in BT.2020 (on an HDR display): the

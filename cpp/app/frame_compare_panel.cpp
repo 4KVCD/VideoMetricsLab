@@ -963,8 +963,8 @@ void FrameComparePanel::show_video_position() {
 
 void FrameComparePanel::on_video_playing_changed(bool playing) {
     play_button->setText(playing ? app::tr("\xE2\x9D\x9A\xE2\x9D\x9A Pause") : app::tr("\xE2\x96\xB6 Play"));
-    // Said before the frame line is drawn: drawn first, it went on saying
-    // "Playing" once playback had stopped.
+    // Said before the frame line is drawn: drawn first, it would go on
+    // saying "Playing" once playback had stopped.
     video_status_ = playing ? QStringLiteral("Playing") : QStringLiteral("Paused");
     if (!playing && position_timer_->isActive()) {
         show_video_position();  // the frame it stopped on, now
@@ -989,7 +989,7 @@ void FrameComparePanel::on_video_status_changed(const QString& message) {
     }
     if (is_video_mode()) {
         update_color_status();
-        // Drawn only as the frame moved, the line kept the status from
+        // Drawn only as the frame moves, the line would keep the status from
         // before: "Playing" at the end, the last test video's decoder.
         update_frame_line();
     }
@@ -1555,8 +1555,8 @@ void FrameComparePanel::on_auto_crop_ready(const PairKey& key, const VideoInfo& 
         ++generation_;
         update_labels();
         if (is_video_mode()) {
-            // Loading the pair again would restart every decoder for nothing
-            // (0.7-1.3 s of buffering mid-playback, in the Python app).
+            // Loading the pair again would restart every decoder for nothing,
+            // buffering for a second or so mid-playback.
             if (previous && previous->auto_crop_pending &&
                 VideoCompareView::crops_change_nothing(*previous, current->comparison)) {
                 return;  // the pair playing already shows what the crops give

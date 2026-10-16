@@ -71,7 +71,7 @@ SelfTestReport self_test(const QApplication& app) {
 
 #ifdef VML_NATIVE_PLAYBACK
     // Native playback: FFmpeg's libraries, the GPU's decoders and the
-    // presenter (where the Python app checked GStreamer and its elements).
+    // presenter.
     if (const std::optional<std::string> problem = load_ffmpeg_libraries()) {
         report.warn("Native playback unavailable, videos play through ffmpeg.exe: " + *problem);
     } else {

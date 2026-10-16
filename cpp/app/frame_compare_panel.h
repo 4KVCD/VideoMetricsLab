@@ -1,12 +1,9 @@
 // The Video Compare tab (the Python app's vmaf_app/ui/frame_compare_panel.py):
 // the source and a test video frame by frame, with zoom, a seek bar, the
-// frame's scores and HDR display handling.
-//
-// Ported so far: the still frames, which FFmpeg extracts (frame_extract.h)
-// for every pair. Playback (the Python app's VideoCompareView) is step 6 of
-// the port: until then its controls are shown but cannot be used, and pairs
-// the Python app plays show as still frames, which it also shows for
-// resolution tests and pairs it cannot play.
+// frame's scores and HDR display handling. Still frames are extracted by
+// FFmpeg (frame_extract.h); pairs that can play are played by a
+// VideoCompareView (video_compare_view.h), and resolution tests and pairs
+// that cannot play show as still frames.
 #pragma once
 
 #include <QImage>
@@ -117,8 +114,8 @@ public:
     void cancel() { cancel_.cancel(); }
 
 signals:
-    // The frame, decoded here: by the window's thread a 4K frame held it
-    // for 64-104 ms. A null image if it could not be read.
+    // The frame, decoded here, off the window's thread, which a 4K frame
+    // would hold up for 64-104 ms. A null image if it could not be read.
     void frame_ready(int generation, int side, const QImage& image);
     void frame_failed(int generation, int side, const QString& error);
 

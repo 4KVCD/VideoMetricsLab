@@ -20,12 +20,11 @@ constexpr std::array<CpuFeature, 3> cpu_features{{
 }};
 
 // The most memory CpuScorer's pictures may take (unless two pairs alone take
-// more, at 8K). Measured by the Python app on 4K 10-bit video from NVIDIA's
-// decoder: PSNR + SSIM ran at 49 fps with 2 pairs, 93 with 3, 129 with 4,
-// 159 with 5, and 172 with 6 (this limit) or 8, where the decoders' feed
-// levels off. XPSNR's pairs take longer, and it keeps a pair from the
-// previous frames, so it gets more: 135 fps with 7 pairs, 154 with 8, 169
-// with 9 (its limit) and 171 with 10.
+// more, at 8K). On 4K 10-bit video from NVIDIA's decoder, PSNR + SSIM run
+// at 49 fps with 2 pairs, 93 with 3, 129 with 4, 159 with 5, and 172 with 6
+// (this limit) or 8, where the decoders' feed levels off. XPSNR's pairs take
+// longer, and it keeps a pair from the previous frames, so it gets more:
+// 135 fps with 7 pairs, 154 with 8, 169 with 9 (its limit) and 171 with 10.
 constexpr std::size_t picture_memory = std::size_t{200} << 20;
 constexpr std::size_t xpsnr_picture_memory = std::size_t{270} << 20;
 

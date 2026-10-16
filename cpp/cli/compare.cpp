@@ -314,7 +314,7 @@ PerceptualBackends perceptual_backends(const CompareArguments& arguments, const 
 
 // Starts the GPU checks a run of `metrics` needs, together and in the
 // background, rather than one after another as the videos are set up: each
-// starts a process of its own (Vship's took 1.8 s, VMAF's and VMAF v1's
+// starts a process of its own (Vship's takes 1.8 s, VMAF's and VMAF v1's
 // 0.5 s each). Their answers are kept, and a caller that asks while one
 // runs waits for it. The checks still running when the futures go are
 // waited for.
@@ -768,8 +768,8 @@ std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& 
 namespace {
 
 // Ctrl+C: outside the run, the command ends at once with exit code 130 and
-// nothing more, as the Python app's KeyboardInterrupt ends it -- an FFmpeg
-// check or ffprobe under way included, which ends with this process's job.
+// nothing more, as the Python app's KeyboardInterrupt ends it. An FFmpeg
+// check or ffprobe under way ends with it, as this process's job ends.
 // During the run (`running`), the run is cancelled and what finished is
 // reported. Set up first: the checks and probes before the run can take a
 // while (60 s for ffprobe on a slow share). The handler outlives the
@@ -802,7 +802,7 @@ std::filesystem::path apply_settings(const Settings& settings) {
 
 // Plans each test video's comparison with the reference: the metrics it can
 // be compared on, notes on what the reader should know, and the jobs that
-// calculate what is not saved -- its own, and one of CVVDP alone for each
+// calculate what is not saved: its own, and one of CVVDP alone for each
 // further display.
 class ComparisonPlanner {
 public:

@@ -45,8 +45,8 @@ const app_log::Logger logger("vml.perceptual_vship");
 
 // Vship handlers working at once per metric. One handler leaves the GPU idle
 // between its own kernels, and two keep it busy: at 4K 10-bit on an RTX
-// 5090 (Vship's CUDA build), SSIMULACRA2 went from 217 to 277 pairs a
-// second, Butteraugli from 82 to 95, in the Python app.
+// 5090 (Vship's CUDA build), SSIMULACRA2 scores 277 pairs a second rather
+// than 217, and Butteraugli 95 rather than 82.
 constexpr std::size_t lanes_per_metric = 2;
 // Frames in flight per video: one per lane being scored, one waiting and
 // one being filled, so that decoding, transfer and GPU work overlap. A 4K
@@ -54,7 +54,7 @@ constexpr std::size_t lanes_per_metric = 2;
 constexpr int ring_slots = static_cast<int>(lanes_per_metric) + 3;
 // The size of the pipe between FFmpeg and this process. Windows' default is
 // a few kilobytes, which holds a raw 4K stream near 55 fps however fast the
-// decoder is; with 64 MB, one 4K 10-bit HEVC stream went from 55 to 107 fps.
+// decoder is; with 64 MB, one 4K 10-bit HEVC stream comes at 107 fps.
 constexpr std::size_t frame_pipe_bytes = 64 * 1024 * 1024;
 constexpr int end_of_video = -1;
 constexpr std::string_view y4m_frame_marker = "FRAME\n";
@@ -2163,10 +2163,11 @@ private:
     // Whether the metrics share one pass, which decodes each video once for
     // all of them rather than once each (most of the time of a 4K VVC video,
     // which the CPU decodes): always when the settings say so (Settings >
-    // GPU metrics), and otherwise when the GPU has the memory for it now. A
-    // pass of all three took 5.1 GB of GPU memory at 3840x1608, against at
-    // most 3.3 GB one at a time (RTX 5090, CUDA build, the GPU decoding):
-    // about 0.83 GB a megapixel of the videos' pictures.
+    // GPU metrics), and otherwise when the GPU has the memory for it now:
+    // 0.9 GB a megapixel of the larger video's pictures, and 1 GB to spare.
+    // (A pass of all three took 5.1 GB at 3840x1608, 0.83 GB a megapixel,
+    // against at most 3.3 GB one at a time: an RTX 5090, Vship's CUDA build,
+    // the GPU decoding.)
     bool shared_pass() const {
         if (together_ || keys_.size() < 2) {
             return together_;

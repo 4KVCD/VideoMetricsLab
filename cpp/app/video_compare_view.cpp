@@ -342,7 +342,7 @@ void VideoCompareView::pace(bool settled) {
 
 int VideoCompareView::busy_tick_ms() const {
     // Half a frame's time while playing (4 ms at 120 fps), 10 ms otherwise:
-    // at 10 ms, a 120 fps video showed only 83 frames a second.
+    // at 10 ms throughout, a 120 fps video would show only 83 frames a second.
     const double fps = wanted_playing_ && !series_.empty() ? series_.front().fps : 0;
     return fps > 0 ? std::max(2, std::min(busy_tick_ms_default, static_cast<int>(500 / fps))) : busy_tick_ms_default;
 }
@@ -409,8 +409,8 @@ void VideoCompareView::follow_decode_size() {
         return;
     }
     if (decode_size_changes(wanted)) {
-        // The frame on screen stays until the new ones come (1.4-2 s on an
-        // RTX 5090); cleared, the view would be dark that long.
+        // The frame on screen stays until the new ones come, which can take
+        // a second or two at 4K; cleared, the view would be dark that long.
         stop_decoder(true);
         stop_audio();
         start_ffmpeg(wanted_playing_, true);
@@ -516,8 +516,8 @@ bool VideoCompareView::load(const FrameComparison& comparison, int position_ms, 
     }
     // The pairs playing, each as it is or with black bars found since that
     // change nothing: then they play as they are. Loaded afresh instead,
-    // every decoder would start again (seconds at 4K), and the first switch
-    // to another test video after a pair's bars were found took that long.
+    // every decoder would start again (seconds at 4K), and so would the
+    // first switch to another test video after a pair's bars were found.
     const auto plays_as_is = [this, &played] {
         if (series_.size() != played.size()) {
             return false;
@@ -844,7 +844,7 @@ void VideoCompareView::sync_pool() {
         }
         worker->second->cancel();
         // One that has finished (at the end of a short clip, or failed) goes
-        // now: kept, it held its queued frames until the window closed.
+        // now: kept, it would hold its queued frames until the window closed.
         retire(worker->second);
         history_.erase(worker->first);
         details_.erase(worker->first);
@@ -865,8 +865,8 @@ void VideoCompareView::launch_missing() {
         occupied += worker->isRunning() ? 1 : 0;
     }
     // The pair on screen first: the test videos beside it start once it has
-    // shown a frame. Started with it, two of them slowed its first frame at
-    // the tab's first opening from 1.1-1.3 s to 1.5-1.6 s.
+    // shown a frame. Started with it, they slow its first frame (two 4K ones
+    // took the tab's first opening from 1.1-1.3 s to 1.5-1.6 s).
     const std::string shown_test = "d:" + std::to_string(selected_);
     bool launched = false;
     for (const auto& [key, wanted] : desired_) {
@@ -1141,9 +1141,9 @@ void VideoCompareView::native_tick() {
 NativeOutput::Placement VideoCompareView::native_placement(const NativeFrame& frame,
                                                                  const FrameComparison& comparison,
                                                                  FrameSide side) const {
-    // The frame as the Python app's GStreamer gave it to its presenter: its
-    // crop stretched to the comparison's size (`size`), or boxed in black
-    // keeping its own shape while black bars are still to be detected.
+    // Where the presenter draws the frame: its crop stretched to the
+    // comparison's size (`size`), or boxed in black keeping its own shape
+    // while black bars are still to be detected.
     const Size size = comparison_dimensions(comparison);
     // A frame already cropped and scaled (the source scaled down) is drawn whole.
     const std::optional<CropBox> crop =

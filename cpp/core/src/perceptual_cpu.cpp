@@ -59,7 +59,7 @@ constexpr double memory_share = 0.6;
 constexpr std::chrono::milliseconds progress_interval{250};
 
 // The memory one tool takes at its peak, in bytes per pixel of the pair it
-// scores, with a margin. On a 3840x2160 pair, SSIMULACRA2 took 1.19 GB (143
+// scores, with a margin. On a 3840x2160 pair, SSIMULACRA2 takes 1.19 GB (143
 // bytes per pixel) and Butteraugli 1.85 GB (223 bytes per pixel).
 long long tool_bytes_per_pixel(const std::string& metric) { return metric == "ssimulacra2" ? 160 : 250; }
 
@@ -622,10 +622,10 @@ private:
     // lets it run again at half that.
     void regulate() {
         // This thread does very little, but must do it on time. At normal
-        // priority, with every core busy, it woke late and FFmpeg wrote far
+        // priority, with every core busy, it wakes late and FFmpeg writes far
         // past the limit (a median of 70-125 pictures against 52, with 22
-        // busy processes on 24 cores, in the Python app). A higher priority
-        // lets it run ahead of the load.
+        // busy processes on 24 cores). A higher priority lets it run ahead of
+        // the load.
         platform::raise_thread_priority();
         while (true) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));

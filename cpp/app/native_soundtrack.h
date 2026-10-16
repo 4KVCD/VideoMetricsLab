@@ -1,9 +1,8 @@
 // The soundtrack Video Compare's native playback is timed by (the Python
 // app's SingleSoundtrack): the source video's, across switches between test
 // videos, played by the app itself (FfmpegSoundtrack: FFmpeg's libraries
-// decode it and WASAPI plays it, where the Python app had GStreamer's
-// playbin3). Its clock, the samples the sound device has played, times the
-// frames.
+// decode it and WASAPI plays it). Its clock, the samples the sound device
+// has played, times the frames.
 #pragma once
 
 #include <QString>

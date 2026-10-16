@@ -1,8 +1,7 @@
 // What Video Compare's native playback runs on (Windows): the bundled FFmpeg
 // libraries, loaded once, and the one Direct3D 11 device the decoders decode
-// on and the presenter draws with (the Python app's d3d11_device(), which
-// GStreamer made). Both decoding and drawing take the device's lock, never
-// held while waiting for the display.
+// on and the presenter draws with. Both decoding and drawing take the
+// device's lock, never held while waiting for the display.
 #pragma once
 
 #include <d3d11.h>
@@ -26,9 +25,9 @@ std::optional<std::string> load_ffmpeg_libraries();
 
 class NativeDevice {
 public:
-    // The session's device on the first GPU (adapter 0, as the Python app's
-    // GStreamer took; VML_GPU_VENDOR's first, platform::first_gpu_adapter),
-    // made the first time and again once lost (a GPU reset). Making one
+    // The session's device on the first GPU (adapter 0, or VML_GPU_VENDOR's
+    // first: platform::first_gpu_adapter), made the first time and again once
+    // lost (a GPU reset). Making one
     // takes about 0.14 s while the driver loads, so it is not made per
     // comparison. Throws std::runtime_error when there is none.
     static std::shared_ptr<NativeDevice> shared();

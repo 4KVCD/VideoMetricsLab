@@ -125,9 +125,9 @@ void start_session_log() {
 // starts it when it makes the window, to ask which display a GPU is on
 // (QWindowsWindow::forcedScreenForGLWindow), though the window is drawn
 // without the GPU; starting it loads the display driver and checks its
-// signature, 63 of the 120 ms the window's thread was busy as the window
-// first showed, on this PC. Kept until the window has shown, so that the
-// driver is still loaded for Qt.
+// signature, about half of the window thread's work as the window first
+// shows (63 of 120 ms). Kept until the window has shown, so that the driver
+// is still loaded for Qt.
 class Direct3DWarmup {
 public:
     Direct3DWarmup()

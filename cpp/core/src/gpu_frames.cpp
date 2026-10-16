@@ -117,9 +117,8 @@ constexpr long long no_pts = std::numeric_limits<long long>::min();
 constexpr std::size_t packet_pipe_bytes = 8 * 1024 * 1024;
 constexpr std::size_t listing_pipe_bytes = 1024 * 1024;
 // How long a decoder library may take to close a decoder. It normally takes
-// milliseconds, but AMD's has been seen never to return (on a Radeon 780M,
-// closing a decoder stopped part-way while Vulkan was in use in the same
-// process).
+// milliseconds, but AMD's can fail to return: on a Radeon 780M, closing a
+// decoder while Vulkan is in use in the same process can stop part-way.
 constexpr std::chrono::seconds close_timeout(10);
 // How long closing a stream waits for its feeding thread to stop.
 constexpr std::chrono::seconds feeder_timeout(30);

@@ -557,9 +557,9 @@ void MainWindow::build_ui() {
     root->addWidget(tabs_, 1);
 #ifdef VML_NATIVE_PLAYBACK
     // The pointer on Video Compare's tab starts making what its playback
-    // first needs (FrameComparePanel::prepare_playback), 130 ms here, during
-    // the moment before the click: opened then, its first frames showed
-    // after 133 ms instead of 309 ms.
+    // first needs (FrameComparePanel::prepare_playback, about 130 ms) in the
+    // moment before the click: its first frames then show about 130 ms after
+    // it opens rather than about 300 ms.
     tabs_->tabBar()->setMouseTracking(true);
     tabs_->tabBar()->installEventFilter(this);
 #endif
@@ -1741,9 +1741,9 @@ void MainWindow::fit_columns(std::initializer_list<int> columns) {
 void MainWindow::fit_pending_columns() {
     const std::set<int> columns = std::exchange(columns_to_fit_, {});
     // Fitted as if no column were sorted: once one is, Qt makes room for the
-    // sort arrow in every heading, so a column fitted after sorting came out
-    // wider than the same column before (Video bitrate 84 -> 112 px), and
-    // File name narrower.
+    // sort arrow in every heading, so a column fitted after sorting would
+    // come out wider (Video bitrate 112 px rather than 84), and File name
+    // narrower.
     QHeaderView* header = distorted_table_->horizontalHeader();
     const bool sorted_shown = header->isSortIndicatorShown();
     header->setSortIndicatorShown(false);
@@ -2526,8 +2526,8 @@ QString MainWindow::backend_note(const RowData& row_data, const std::string& key
 
 std::optional<double> MainWindow::score_of(CompletedRun& run, int column) {
     // A metric column's score: CVVDP's one for the whole video, the others'
-    // mean of their frames. Worked out once a run: each time, a two-hour
-    // video's took 0.6 ms a metric, at each of the refreshes of its row.
+    // mean of their frames. Worked out once a run, not at each refresh of
+    // its row: for a two-hour video that takes 0.6 ms a metric each time.
     if (const auto known = run.scores.find(column); known != run.scores.end()) {
         return known->second;
     }

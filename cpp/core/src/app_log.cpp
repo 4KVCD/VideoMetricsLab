@@ -68,9 +68,9 @@ void update_threshold(const State& log) {
 }
 
 // The calling thread's name, in plain characters, with nothing to destroy
-// when the thread ends: MinGW's emulated thread-local storage corrupted the
-// heap as threads holding a std::string here ended (6 runs in 20 of a test
-// whose lanes end at once).
+// when the thread ends. Don't keep a std::string in thread-local storage:
+// MinGW's emulated thread-local storage corrupts the heap as threads holding
+// one end (6 runs in 20 of a test whose lanes end at once).
 constexpr std::size_t name_room = 64;
 thread_local std::array<char, name_room> thread_name{};
 std::atomic<int> unnamed_threads{0};

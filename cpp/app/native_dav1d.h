@@ -1,10 +1,8 @@
-// AV1 decoded in software for Video Compare's native playback, by dav1d, as
-// the Python app's GStreamer decodes it (dav1ddec) on a GPU without an AV1
-// decoder: FFmpeg's own AV1 decoder only drives a GPU's, and the app's
-// FFmpeg has no dav1d wrapper. dav1d.dll is loaded by its path
-// (dav1d_library_path(): a packaged build has the Python app's), through
-// the structures native/dav1d/dav1d_api.h mirrors, as the GPU metrics'
-// software decoder loads it.
+// AV1 decoded in software for Video Compare's native playback, by dav1d:
+// FFmpeg's own AV1 decoder only drives a GPU's, and the app's FFmpeg has no
+// dav1d wrapper. dav1d.dll is loaded by its path (dav1d_library_path()),
+// through the structures native/dav1d/dav1d_api.h mirrors, as the GPU
+// metrics' software decoder loads it.
 #pragma once
 
 #include <QString>

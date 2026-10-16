@@ -47,8 +47,7 @@ const GrainLibrary& grain_library() {
             functions.pack = library.function<decltype(functions.pack)>("vmaf_grain_pack");
             functions.destroy = library.function<decltype(functions.destroy)>("vmaf_grain_destroy");
         } catch (const platform::LibraryError& error) {
-            // A library from before vmaf_grain_apply_planes: the Python app's
-            // older builds.
+            // A library without these functions: an older build.
             functions.problem = QStringLiteral("d3d11_film_grain.dll could not be used: %1")
                                     .arg(QString::fromUtf8(error.what()));
             functions.library.reset();

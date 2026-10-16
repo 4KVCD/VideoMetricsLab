@@ -33,8 +33,8 @@ void MainWindow::on_tab_changed(int index) {
     // Ctrl+Tab and Ctrl+Shift+Tab reach Video Compare from the tabs beside
     // it without the pointer crossing its tab, so those tabs prepare its
     // playback as the pointer over its tab does (released again if it is not
-    // opened within 30 s): its first pair then came 122-131 ms after it
-    // opened instead of 277-293 ms.
+    // opened within FrameComparePanel's release_after_ms): its first pair
+    // then comes about 125 ms after it opens rather than about 285 ms.
     if (index == tab_graph || index == tab_bitrate) {
         frame_compare_panel_->prepare_playback();
     }

@@ -208,16 +208,15 @@ private:
     DXGI_FORMAT format_ = DXGI_FORMAT_UNKNOWN;
 };
 
-// Scales pictures down with Direct3D 11's video processor, cropped first,
-// keeping their format and colours, as GStreamer's converter scaled the
-// source down to the test video's size.
+// Scales the source's pictures down to the test video's size with Direct3D
+// 11's video processor, cropped first, keeping their format and colours.
 class Downscaler {
 public:
     // Pictures `crop` of an `input_width` x `input_height` texture, to
     // `output` in `format`; throws std::runtime_error when the GPU cannot.
     // Its colour space is left as it is, the same in and out, so that only
-    // the size changes: told HDR10's on both sides, NVIDIA's processor
-    // (driver 616.92) wrote no picture at all.
+    // the size changes. Don't tell it HDR10's on both sides: NVIDIA's
+    // processor (driver 616.92) then writes no picture at all.
     Downscaler(ID3D11Device* device, ID3D11DeviceContext* context, int input_width, int input_height, RECT crop,
                Size output, DXGI_FORMAT format)
         : crop_(crop), output_(output) {
@@ -371,7 +370,7 @@ FfmpegNativeVideo::FfmpegNativeVideo(std::shared_ptr<NativeDevice> device, Frame
         }
     }
     // Opened at the video's first frame, which says where frames are counted
-    // from; then sought, as GStreamer prerolled and then sought.
+    // from, and then sought.
     if (position_ms > 0) {
         wanted_ms_ = position_ms;
         seeks_asked_ = 1;
@@ -515,8 +514,8 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::p
         return nullptr;
     }
     if (!hardware && codec->id == AV_CODEC_ID_AV1) {
-        // FFmpeg's AV1 decoder only drives a GPU's: dav1d decodes it, as
-        // GStreamer's dav1ddec did.
+        // FFmpeg's own AV1 decoder only drives a GPU's: in software, dav1d
+        // decodes it.
         try {
             decoding->dav1d = std::make_unique<Dav1dVideo>(*stream->codecpar);
         } catch (const std::exception& problem) {
