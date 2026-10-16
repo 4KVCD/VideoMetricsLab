@@ -133,7 +133,9 @@ public:
     Direct3DWarmup()
         : thread_([this] {
               using Create = IDirect3D9*(WINAPI*)(UINT);
-              HMODULE library = LoadLibraryW(L"d3d9.dll");
+              // From System32, where Qt loads it (QSystemLibrary): one beside the
+              // app would be another library and warm nothing.
+              HMODULE library = LoadLibraryExW(L"d3d9.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
               const auto create =
                   library != nullptr ? reinterpret_cast<Create>(GetProcAddress(library, "Direct3DCreate9")) : nullptr;
               if (create != nullptr) {
