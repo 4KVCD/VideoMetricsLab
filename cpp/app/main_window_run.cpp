@@ -319,11 +319,14 @@ bool MainWindow::wait_for_gpu_checks(const std::vector<int>& checked) {
         return false;
     }
     if (gpu_check_watcher_ == nullptr) {
+        // Meanwhile Run waits, and Cancel drops the run asked for.
+        status_before_gpu_checks_ = status_label_->text();
         show_status(app::tr("Checking the GPU before the run\xE2\x80\xA6"));
+        run_button_->setEnabled(false);
+        cancel_button_->setEnabled(true);
         gpu_check_watcher_ = new QFutureWatcher<void>(this);
         connect(gpu_check_watcher_, &QFutureWatcher<void>::finished, this, [this] {
-            gpu_check_watcher_->deleteLater();
-            gpu_check_watcher_ = nullptr;
+            stop_waiting_for_gpu_checks();
             on_run_clicked();
         });
         gpu_check_watcher_->setFuture(QtConcurrent::run([v1] {
@@ -335,6 +338,20 @@ bool MainWindow::wait_for_gpu_checks(const std::vector<int>& checked) {
         }));
     }
     return true;
+}
+
+void MainWindow::stop_waiting_for_gpu_checks() {
+    // The run asked for waits no more: started now, cancelled or the window
+    // closing. Run is usable again, and the status line says what it said
+    // before, unless something has said more since (a run says its own).
+    gpu_check_watcher_->disconnect(this);
+    gpu_check_watcher_->deleteLater();
+    gpu_check_watcher_ = nullptr;
+    run_button_->setEnabled(true);
+    cancel_button_->setEnabled(false);
+    if (status_label_->text() == app::tr("Checking the GPU before the run\xE2\x80\xA6")) {
+        show_status(status_before_gpu_checks_);
+    }
 }
 
 bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<RowData>>& job_rows) {
@@ -467,6 +484,10 @@ void MainWindow::on_parallel_jobs_changed(bool /*on*/) {
 }
 
 void MainWindow::on_cancel_clicked() {
+    if (gpu_check_watcher_ != nullptr) {
+        stop_waiting_for_gpu_checks();  // nothing started yet: the run is not
+        return;
+    }
     if (worker_ == nullptr) {
         return;
     }

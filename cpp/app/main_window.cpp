@@ -313,14 +313,15 @@ MainWindow::MainWindow() {
     connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, [this] { theme_changed(); });
     use_crop_store();  // black bars found are kept beside the saved scores
     check_ffmpeg(true);  // the start's check: both tools present, ffmpeg new enough
-    restore_open_videos();
-    on_table_selection_changed();
     // The rows say which metrics can be calculated here (CVVDP needs a GPU
     // Vship can use) without waiting for the GPU check that starts with the
-    // app (window_helpers.h), and are brought up to date when it finishes.
+    // app (window_helpers.h), and are brought up to date when it finishes:
+    // asked for before the first row, so that none misses it.
     on_vship_probe_finished([this] {
         QMetaObject::invokeMethod(this, [this] { refresh_metric_cells(); }, Qt::QueuedConnection);
     });
+    restore_open_videos();
+    on_table_selection_changed();
 }
 
 MainWindow::~MainWindow() {
@@ -426,6 +427,9 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     // itself once it has.
     if (!closing_) {
         closing_ = true;
+        if (gpu_check_watcher_ != nullptr) {
+            stop_waiting_for_gpu_checks();  // a run asked for is not started now
+        }
         frame_compare_panel_->cancel();
         bitrate_panel_->cancel();
         for (ProbeWorker* worker : probe_workers_) {

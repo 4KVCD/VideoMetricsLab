@@ -388,7 +388,10 @@ std::optional<GpuVendor> vendor_from(const std::string& text) {
 
 // The probe for `choice`, in a process of its own (a crash there would end
 // the run: Vship 5.1.1's Vulkan build crashed as it closed, on a PC whose
-// only GPU is Intel's).
+// only GPU is Intel's). Any failure is an answer, no GPU, as VMAF's and
+// VMAF v1's probes take one: one that escaped would leave the probe unasked,
+// and a run that waits for it (MainWindow::wait_for_gpu_checks) asking
+// again for good.
 std::pair<std::optional<VshipDevice>, std::string> probe_isolated(const std::string& choice) {
     try {
         const nlohmann::json result = run_isolated("vship-probe", "Vship's GPU probe", {{"backend", choice}}, {},
@@ -396,6 +399,8 @@ std::pair<std::optional<VshipDevice>, std::string> probe_isolated(const std::str
         return {vship_device_from(result.at("device")), result.at("reason").get<std::string>()};
     } catch (const IsolatedCrashError& error) {
         return {std::nullopt, error.what()};
+    } catch (const std::exception& error) {
+        return {std::nullopt, std::string("the GPU probe failed: ") + error.what()};
     }
 }
 

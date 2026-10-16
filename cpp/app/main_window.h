@@ -392,6 +392,7 @@ private:
     // Starts waiting for the GPU checks the run needs, unless they are done:
     // true while they are not, the run then starting by itself.
     bool wait_for_gpu_checks(const std::vector<int>& checked);
+    void stop_waiting_for_gpu_checks();
     void refresh_metric_cells();
     void set_run_ui_active(bool active);
     int parallel_jobs() const;
@@ -542,8 +543,10 @@ private:
     BitratePanel* bitrate_panel_ = nullptr;
     // The newer release offered, while its message is open.
     QPointer<QMessageBox> update_box_;
-    // The GPU checks a run is waiting for (wait_for_gpu_checks), while it is.
+    // The GPU checks a run is waiting for (wait_for_gpu_checks), while it is,
+    // and what the status line said before.
     QFutureWatcher<void>* gpu_check_watcher_ = nullptr;
+    QString status_before_gpu_checks_;
     // The Settings tab, and the latest check of FFmpeg, which it shows.
     SettingsPanel* settings_panel_ = nullptr;
     ToolsStatus tools_status_;
