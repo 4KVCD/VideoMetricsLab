@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from vmaf_app.core.crop_detect import common_picture
 from vmaf_app.core.display_hdr import DisplayHdrInfo, query_display_hdr
 from vmaf_app.core.frame_extract import (
     FrameComparison,
@@ -39,7 +40,7 @@ from vmaf_app.core.frame_extract import (
     hdr_kind,
 )
 from vmaf_app.core.geometry import untimed_pair_problem
-from vmaf_app.core.models import FrameScores
+from vmaf_app.core.models import FrameScores, VideoInfo
 from vmaf_app.core.time_format import format_hms
 from vmaf_app.core.video_playback import DEFAULT_COMPARE_DECODED_VIDEOS
 from vmaf_app.i18n import N_, tr, tr_message
@@ -94,6 +95,15 @@ def parse_timestamp(value: str) -> float:
     if len(numbers) == 2:
         return numbers[0] * 60 + numbers[1]
     return numbers[0] * 3600 + numbers[1] * 60 + numbers[2]
+
+
+def _compared_crops(source: VideoInfo, distorted: VideoInfo, source_crop, distorted_crop) -> tuple[object, object]:
+    """The boxes a run compares for a pair, from its two files' own black
+    bars: the picture both files show (common_picture), unless the pair is
+    one file against itself."""
+    if distorted.path == source.path:
+        return source_crop, distorted_crop
+    return common_picture(source, distorted, source_crop, distorted_crop)
 
 
 #: Shown whenever there is no pair to look at. Deliberately does not ask for
@@ -206,8 +216,10 @@ class FrameComparePanel(QWidget):
         self._syncing_video_position = False
         self._generation = 0
         self._workers: set[FrameExtractWorker] = set()
-        # Black bar detection under way and its findings, by pair and its two
-        # files (_pair_key), and by file.
+        # Black bar detection under way and its findings. By pair and its two
+        # files (_pair_key): the boxes compared, the picture both files show.
+        # By file: the file's own bars, so that another pair with the same
+        # file does not detect them again.
         self._crop_workers: dict[tuple, CropDetectWorker] = {}
         self._auto_crops: dict[tuple, tuple[object, object]] = {}
         self._auto_crop_files: dict[tuple, object] = {}
@@ -1195,7 +1207,7 @@ class FrameComparePanel(QWidget):
         source_crop = self._auto_crop_files.get(source_key, _MISSING)
         distorted_crop = self._auto_crop_files.get(distorted_key, _MISSING)
         if source_crop is not _MISSING and distorted_crop is not _MISSING:
-            self._auto_crops[key] = (source_crop, distorted_crop)
+            self._auto_crops[key] = _compared_crops(source, distorted, source_crop, distorted_crop)
             self._entries = [self._apply_auto_crop(item) for item in self._entries]
             self._update_labels()
             return
@@ -1204,8 +1216,8 @@ class FrameComparePanel(QWidget):
             source_crop=source_crop, distorted_crop=distorted_crop,
         )
         worker.ready.connect(
-            lambda source_crop, distorted_crop, key=key, worker=worker:
-                self._on_auto_crop_ready(key, worker, source_crop, distorted_crop)
+            lambda source_crop, distorted_crop, key=key, source=source, distorted=distorted:
+                self._on_auto_crop_ready(key, source, distorted, source_crop, distorted_crop)
         )
         worker.finished.connect(lambda worker=worker: self._on_crop_worker_finished(worker))
         self._crop_workers[key] = worker
@@ -1229,13 +1241,13 @@ class FrameComparePanel(QWidget):
         return (entry.identity, self._crop_file_key(entry.comparison.source_info.path),
                 self._crop_file_key(entry.comparison.distorted_info.path))
 
-    def _on_auto_crop_ready(self, key, worker, source_crop, distorted_crop) -> None:
-        """Keeps the black bars found for a pair and its two files (key), and
-        shows the comparison cropped if it is still that pair."""
-        self._auto_crops[key] = (source_crop, distorted_crop)
+    def _on_auto_crop_ready(self, key, source: VideoInfo, distorted: VideoInfo, source_crop, distorted_crop) -> None:
+        """Keeps each file's own black bars and the pair's compared boxes
+        (key), and shows the comparison cropped if it is still that pair."""
         _identity, source_key, distorted_key = key
         self._auto_crop_files[source_key] = source_crop
         self._auto_crop_files[distorted_key] = distorted_crop
+        self._auto_crops[key] = _compared_crops(source, distorted, source_crop, distorted_crop)
         previous = None
         for index, entry in enumerate(self._entries):
             if self._pair_key(entry) == key:

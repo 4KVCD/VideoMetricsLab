@@ -230,7 +230,8 @@ def test_preview_crop_cache_reuses_source_across_test_switches(qapp, tmp_path, m
             loads.clear()
 
             source_crop, distorted_crop = (CropBox(*crop) for crop in crops)
-            panel._on_auto_crop_ready(panel._pair_key(entry), None, source_crop, distorted_crop)
+            panel._on_auto_crop_ready(panel._pair_key(entry), entry.comparison.source_info,
+                                      entry.comparison.distorted_info, source_crop, distorted_crop)
 
             assert len(loads) == reloads
             shown = panel.current_entry.comparison
@@ -269,7 +270,8 @@ def test_a_frame_kept_is_not_shown_once_what_it_is_made_from_changes(qapp, subte
     with subtests.test("black bars found"):
         entry = replace(pair, comparison=replace(pair.comparison, auto_crop_pending=True))
         panel = panel_with_frames_kept(entry)
-        panel._on_auto_crop_ready(panel._pair_key(entry), None, CropBox(1920, 816, 0, 132), CropBox(1280, 544, 0, 88))
+        panel._on_auto_crop_ready(panel._pair_key(entry), entry.comparison.source_info, entry.comparison.distorted_info,
+                                  CropBox(1920, 816, 0, 132), CropBox(1280, 544, 0, 88))
         assert not panel.current_entry.comparison.auto_crop_pending
         assert kept(panel) == set()
         assert panel._current_image() is None, "the uncropped frame stands for the cropped one"
@@ -301,7 +303,7 @@ def test_the_black_bars_found_against_one_reference_are_not_used_with_another(qa
     panel = FrameComparePanel()
     panel.set_runs([pair])
     found = (CropBox(1920, 816, 0, 132), CropBox(1280, 544, 0, 88))
-    panel._on_auto_crop_ready(panel._pair_key(pair), None, *found)
+    panel._on_auto_crop_ready(panel._pair_key(pair), pair.comparison.source_info, pair.comparison.distorted_info, *found)
     shown = panel.current_entry.comparison
     assert (shown.source_crop, shown.distorted_crop) == found
 
