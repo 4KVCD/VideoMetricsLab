@@ -116,9 +116,13 @@ $commandLine = Join-Path $buildFolder 'cli/Release/vml-cli.exe'
 if (-not (Test-Path $window)) {
     throw 'CMake built no window: it did not find Qt. Name its folder with -QtPath'
 }
-$qtFolder = Select-String -Path (Join-Path $buildFolder 'CMakeCache.txt') -Pattern '^Qt6_DIR:PATH=(.*)$' |
+# Qt6_DIR is <Qt>/lib/cmake/Qt6: cached as a PATH by find_package, or with no
+# type (UNINITIALIZED) when the folder was configured with -DQt6_DIR=.
+$qtFolder = Select-String -Path (Join-Path $buildFolder 'CMakeCache.txt') -Pattern '^Qt6_DIR:[A-Z]+=(.+)$' |
     ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1
-# Qt6_DIR is <Qt>/lib/cmake/Qt6.
+if (-not $qtFolder) {
+    throw "The build folder's CMakeCache.txt does not say where Qt is (Qt6_DIR): name its folder with -QtPath"
+}
 $windeployqt = Join-Path (Split-Path (Split-Path (Split-Path $qtFolder))) 'bin/windeployqt.exe'
 
 # 3. The folder: the programs, Qt, the runtime and the app's files.
