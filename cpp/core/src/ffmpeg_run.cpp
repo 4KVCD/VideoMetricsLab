@@ -1267,6 +1267,116 @@ std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const 
     }
 }
 
+// XPSNR scored by an FFmpeg of its own, on a thread beside the app's
+// scoring of PSNR and SSIM, with the run's Cancel and Pause passed on to it
+// for as long as it runs. Its token is its own, so that it can be stopped
+// alone when the app's scoring fails. (With only a Cancel passed on, and
+// only once that scoring had ended, it went on scoring through a Pause; the
+// Python app hands it the run's own process handle.) Stopped and waited for
+// when it goes.
+class XpsnrBeside {
+public:
+    XpsnrBeside(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
+                const VmafOptions& options, const std::optional<CropBox>& source_crop,
+                const std::optional<CropBox>& distorted_crop, double fps, long long total_frames,
+                const HardwareDecoding& decoding, ProgressCallback on_progress, const CancelToken& cancel)
+        : cancel_(cancel) {
+        VmafOptions xpsnr_options = options;
+        xpsnr_options.extra_features.clear();  // only XPSNR: PSNR and SSIM would be scored there again
+        run_ = std::thread([this, &environment, &source, &distorted, xpsnr_options, &source_crop, &distorted_crop, fps,
+                            total_frames, &decoding, on_progress] {
+            try {
+                ParsedScores found = execute_run(environment, source, distorted, xpsnr_options, source_crop,
+                                                 distorted_crop, "", fps, total_frames, decoding, on_progress, nullptr,
+                                                 stop_);
+                const std::lock_guard lock(mutex_);
+                scores_ = std::move(found);
+            } catch (...) {
+                const std::lock_guard lock(mutex_);
+                error_ = std::current_exception();
+            }
+            const std::lock_guard lock(mutex_);
+            done_ = true;
+            ended_.notify_all();
+        });
+        relay_ = std::thread([this] { relay(); });
+    }
+    ~XpsnrBeside() {
+        stop();
+        join();
+    }
+    XpsnrBeside(const XpsnrBeside&) = delete;
+    XpsnrBeside& operator=(const XpsnrBeside&) = delete;
+
+    void stop() { stop_.cancel(); }
+    // Waits for its run to end.
+    void join() {
+        if (relay_.joinable()) {
+            relay_.join();
+        }
+        if (run_.joinable()) {
+            run_.join();
+        }
+    }
+    // Its scores, once joined; throws what its run threw.
+    std::optional<ParsedScores> result() {
+        if (error_) {
+            std::rethrow_exception(error_);
+        }
+        return std::move(scores_);
+    }
+
+private:
+    // Passes the run's Cancel and Pause on until the run ends.
+    void relay() {
+        std::unique_lock lock(mutex_);
+        while (!ended_.wait_for(lock, std::chrono::milliseconds(50), [this] { return done_; })) {
+            lock.unlock();
+            if (cancel_.cancelled()) {
+                stop_.cancel();
+            }
+            if (cancel_.paused() && !stop_.paused()) {
+                stop_.pause();
+            } else if (!cancel_.paused() && stop_.paused()) {
+                stop_.resume();
+            }
+            lock.lock();
+        }
+    }
+
+    const CancelToken& cancel_;
+    CancelToken stop_;
+    std::mutex mutex_;
+    std::condition_variable ended_;
+    bool done_ = false;
+    std::optional<ParsedScores> scores_;
+    std::exception_ptr error_;
+    std::thread run_;
+    std::thread relay_;
+};
+
+// XPSNR's scores (`xpsnr`, from its own FFmpeg) taken into `frames`, for the
+// frames PSNR and SSIM were scored for: NaN for a frame it has none for.
+void merge_xpsnr(ParsedScores& frames, const ParsedScores& xpsnr) {
+    std::map<int, float> by_frame;
+    const std::vector<float>& values = xpsnr.metrics.at("xpsnr");
+    for (std::size_t i = 0; i < xpsnr.frame.size(); ++i) {
+        by_frame[xpsnr.frame[i]] = values[i];
+    }
+    std::vector<float>& column = frames.metrics["xpsnr"];
+    column.clear();
+    for (const int frame : frames.frame) {
+        const auto found = by_frame.find(frame);
+        column.push_back(found == by_frame.end() ? std::numeric_limits<float>::quiet_NaN() : found->second);
+    }
+    frames.order.clear();
+    for (const char* key : column_keys) {
+        if (frames.has(key)) {
+            frames.order.emplace_back(key);
+        }
+    }
+}
+
 // PSNR, SSIM and XPSNR with the bundled libvmaf's CPU extractors (the Python
 // app's _run_cpu_metrics), in a process of its own where a program to run it
 // is set (score_plan_apart), on the frames that would reach FFmpeg's
@@ -1288,64 +1398,11 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
     const std::vector<std::string> keys = plan_keys(plan);
     const bool beside = options.compute_xpsnr && std::find(keys.begin(), keys.end(), "xpsnr") == keys.end();
     SlowerProgress progress(on_progress, beside ? 2 : 1);
-    // XPSNR's FFmpeg, on a thread of its own, stopped with the run.
-    CancelToken stop;
-    std::optional<ParsedScores> xpsnr;
-    std::exception_ptr xpsnr_error;
-    std::mutex xpsnr_mutex;
-    std::condition_variable xpsnr_ended;
-    bool xpsnr_done = !beside;
-    std::thread xpsnr_thread;
-    std::thread relay;
+    std::optional<XpsnrBeside> xpsnr;
     if (beside) {
-        VmafOptions xpsnr_options = options;
-        xpsnr_options.extra_features.clear();  // only XPSNR: PSNR and SSIM would be scored there again
-        xpsnr_thread = std::thread([&, xpsnr_options] {
-            try {
-                ParsedScores found =
-                    execute_run(environment, source, distorted, xpsnr_options, source_crop, distorted_crop, "", fps,
-                                total_frames, decoding, progress.part(1), nullptr, stop);
-                const std::lock_guard lock(xpsnr_mutex);
-                xpsnr = std::move(found);
-            } catch (...) {
-                const std::lock_guard lock(xpsnr_mutex);
-                xpsnr_error = std::current_exception();
-            }
-            const std::lock_guard lock(xpsnr_mutex);
-            xpsnr_done = true;
-            xpsnr_ended.notify_all();
-        });
-        // The run's Cancel and Pause passed on to XPSNR's FFmpeg for as long
-        // as it runs. Its token is its own, so that it can be stopped alone
-        // when the app's scoring fails; with only a Cancel passed on, and only
-        // once that scoring had ended, it went on scoring through a Pause
-        // (the Python app hands it the run's own process handle).
-        relay = std::thread([&] {
-            std::unique_lock lock(xpsnr_mutex);
-            while (!xpsnr_ended.wait_for(lock, std::chrono::milliseconds(50), [&] { return xpsnr_done; })) {
-                lock.unlock();
-                if (cancel.cancelled()) {
-                    stop.cancel();
-                }
-                if (cancel.paused() && !stop.paused()) {
-                    stop.pause();
-                } else if (!cancel.paused() && stop.paused()) {
-                    stop.resume();
-                }
-                lock.lock();
-            }
-        });
+        xpsnr.emplace(environment, source, distorted, options, source_crop, distorted_crop, fps, total_frames,
+                      decoding, progress.part(1), cancel);
     }
-    // Waits for XPSNR's run.
-    const auto wait_for_xpsnr = [&] {
-        if (relay.joinable()) {
-            relay.join();
-        }
-        if (xpsnr_thread.joinable()) {
-            xpsnr_thread.join();
-        }
-    };
-
     VmafOptions scored = options;
     if (beside) {
         scored.compute_xpsnr = false;
@@ -1361,12 +1418,10 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
                      : score_plan(environment, source, distorted, scored, source_crop, distorted_crop, plan, fps,
                                   total_frames, decoding, progress.part(0), on_status, cancel);
     } catch (const Cancelled&) {
-        stop.cancel();
-        wait_for_xpsnr();
+        xpsnr.reset();  // stopped and waited for
         throw;
     } catch (const std::exception& error) {
-        stop.cancel();
-        wait_for_xpsnr();
+        xpsnr.reset();
         logger.error(metric_names(plan) + " in the app failed; FFmpeg calculates them: " + error.what());
         if (on_status) {
             on_status(
@@ -1374,28 +1429,13 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
         }
         return std::nullopt;
     }
-    wait_for_xpsnr();
-    cancel.throw_if_cancelled();
-    if (xpsnr_error) {
-        std::rethrow_exception(xpsnr_error);
-    }
     if (xpsnr) {
-        std::map<int, float> by_frame;
-        const std::vector<float>& values = xpsnr->metrics.at("xpsnr");
-        for (std::size_t i = 0; i < xpsnr->frame.size(); ++i) {
-            by_frame[xpsnr->frame[i]] = values[i];
-        }
-        std::vector<float>& column = frames->metrics["xpsnr"];
-        column.clear();
-        for (const int frame : frames->frame) {
-            const auto found = by_frame.find(frame);
-            column.push_back(found == by_frame.end() ? std::numeric_limits<float>::quiet_NaN() : found->second);
-        }
-        frames->order.clear();
-        for (const char* key : column_keys) {
-            if (frames->has(key)) {
-                frames->order.emplace_back(key);
-            }
+        xpsnr->join();
+    }
+    cancel.throw_if_cancelled();
+    if (xpsnr) {
+        if (const std::optional<ParsedScores> found = xpsnr->result()) {
+            merge_xpsnr(*frames, *found);
         }
     }
     return frames;

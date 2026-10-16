@@ -331,147 +331,68 @@ std::optional<std::vector<std::size_t>> match_positionals(const std::vector<cons
     return std::nullopt;
 }
 
-// Reads `strings` with `parser`, as argparse's parse_known_args does, and
-// returns the strings that are none of its. Throws ArgumentError, and
-// Printed (from a help or version action).
-std::vector<std::string> parse_known(const Parser& parser, const std::vector<std::string>& strings) {
-    OptionStrings options;
-    std::vector<const Action*> positionals;
+// Reads command-line strings with a Parser, as argparse's parse_known_args
+// reads them: its _parse_known_args, whose consume_optional and
+// consume_positionals are the methods of the same names.
+class ArgumentReader {
+public:
+    ArgumentReader(const Parser& parser, const std::vector<std::string>& strings);
+
+    // The strings that are none of the parser's. Throws ArgumentError, and
+    // Printed (from a help or version action).
+    std::vector<std::string> read();
+
+private:
+    void take_action(const Action& action, const std::vector<std::string>& values);
+    std::size_t consume_optional(std::size_t start);
+    std::size_t consume_positionals(std::size_t start);
+    void check_required() const;
+
+    const Parser& parser_;
+    const std::vector<std::string>& strings_;
+    OptionStrings options_;
+    std::vector<const Action*> positionals_;  // those not taken yet
+    // Each string as an option (O), an argument (A), or the "--" (-) after
+    // which every string is an argument; and how each option is read.
+    std::string pattern_;
+    std::map<std::size_t, std::vector<OptionTuple>> option_at_;
+    std::set<const Action*> seen_;
+    std::vector<std::string> extras_;
+};
+
+ArgumentReader::ArgumentReader(const Parser& parser, const std::vector<std::string>& strings)
+    : parser_(parser), strings_(strings) {
     for (const Action& action : parser.actions) {
         for (const std::string& option : action.option_strings) {
-            options.emplace_back(option, &action);
+            options_.emplace_back(option, &action);
         }
         if (action.option_strings.empty()) {
-            positionals.push_back(&action);
+            positionals_.push_back(&action);
         }
     }
-
-    // Each string as an option (O), an argument (A), or the "--" (-) after
-    // which every string is an argument.
-    std::string pattern;
-    std::map<std::size_t, std::vector<OptionTuple>> option_at;
     for (std::size_t i = 0; i < strings.size(); ++i) {
         if (strings[i] == "--") {
-            pattern += '-';
-            pattern.append(strings.size() - i - 1, 'A');
+            pattern_ += '-';
+            pattern_.append(strings.size() - i - 1, 'A');
             break;
         }
-        if (std::optional<std::vector<OptionTuple>> tuples = parse_optional(options, strings[i])) {
-            option_at[i] = std::move(*tuples);
-            pattern += 'O';
+        if (std::optional<std::vector<OptionTuple>> tuples = parse_optional(options_, strings[i])) {
+            option_at_[i] = std::move(*tuples);
+            pattern_ += 'O';
         } else {
-            pattern += 'A';
+            pattern_ += 'A';
         }
     }
+}
 
-    std::set<const Action*> seen;
-    std::vector<std::string> extras;
-    const auto take_action = [&](const Action& action, const std::vector<std::string>& values) {
-        seen.insert(&action);
-        action.take(values);
-        // Not with an option already given that excludes it.
-        for (const auto& [a, b] : parser.exclusive) {
-            const Action* other = &action == parser.option(a)   ? parser.option(b)
-                                  : &action == parser.option(b) ? parser.option(a)
-                                                                : nullptr;
-            if (other != nullptr && seen.contains(other)) {
-                throw ArgumentError{"argument " + action.name() + ": not allowed with argument " + other->name()};
-            }
-        }
-    };
-
-    const auto consume_optional = [&](std::size_t start) -> std::size_t {
-        const std::vector<OptionTuple>& tuples = option_at.at(start);
-        if (tuples.size() > 1) {
-            std::string matches;
-            for (const OptionTuple& tuple : tuples) {
-                matches += (matches.empty() ? "" : ", ") + tuple.option_string;
-            }
-            throw ArgumentError{"ambiguous option: " + strings[start] + " could match " + matches};
-        }
-        OptionTuple tuple = tuples.front();
-        std::vector<std::pair<const Action*, std::vector<std::string>>> taken;
-        std::size_t stop = start + 1;
-        while (true) {
-            if (tuple.action == nullptr) {
-                extras.push_back(strings[start]);
-                return start + 1;
-            }
-            const Action& action = *tuple.action;
-            if (!tuple.explicit_argument) {
-                // The option's value is the next string, if it is an argument.
-                std::vector<std::string> values;
-                if (action.nargs == Nargs::one) {
-                    if (start + 1 >= pattern.size() || pattern[start + 1] != 'A') {
-                        throw ArgumentError{"argument " + action.name() + ": expected one argument"};
-                    }
-                    values.push_back(strings[start + 1]);
-                }
-                stop = start + 1 + values.size();
-                taken.emplace_back(&action, std::move(values));
-                break;
-            }
-            const std::string argument = *tuple.explicit_argument;
-            if (action.nargs == Nargs::one) {
-                taken.emplace_back(&action, std::vector<std::string>{argument});
-                break;
-            }
-            // A flag with more after it: -qv is -q -v.
-            if (tuple.option_string[1] == '-' || argument.empty() || (tuple.separator && !tuple.separator->empty()) ||
-                argument[0] == '-') {
-                throw ArgumentError{"argument " + action.name() + ": ignored explicit argument " + python_string_repr(argument)};
-            }
-            taken.emplace_back(&action, std::vector<std::string>{});
-            const std::string next = std::string("-") + argument[0];
-            if (const Action* other = exact_option(options, next)) {
-                const std::string rest = argument.substr(1);
-                tuple = {other, next, std::nullopt, std::nullopt};
-                if (!rest.empty()) {
-                    tuple.separator = rest[0] == '=' ? "=" : "";
-                    tuple.explicit_argument = rest[0] == '=' ? rest.substr(1) : rest;
-                }
-            } else {
-                extras.push_back("-" + argument);
-                break;
-            }
-        }
-        for (const auto& [action, values] : taken) {
-            take_action(*action, values);
-        }
-        return stop;
-    };
-
-    const auto consume_positionals = [&](std::size_t start) -> std::size_t {
-        // As many positionals as can match, from the first.
-        std::vector<std::size_t> counts;
-        for (std::size_t matched = positionals.size(); matched > 0; --matched) {
-            const std::vector<const Action*> some(positionals.begin(), positionals.begin() + matched);
-            if (std::optional<std::vector<std::size_t>> found = match_positionals(some, 0, pattern, start)) {
-                counts = std::move(*found);
-                break;
-            }
-        }
-        for (std::size_t i = 0; i < counts.size(); ++i) {
-            std::vector<std::string> values(strings.begin() + start, strings.begin() + start + counts[i]);
-            // The "--" is not a value.
-            const std::size_t dash = pattern.find('-', start);
-            if (positionals[i]->nargs == Nargs::command ? pattern[start] == '-' : dash < start + counts[i]) {
-                values.erase(std::find(values.begin(), values.end(), "--"));
-            }
-            start += counts[i];
-            take_action(*positionals[i], values);
-        }
-        positionals.erase(positionals.begin(), positionals.begin() + counts.size());
-        return start;
-    };
-
+std::vector<std::string> ArgumentReader::read() {
     // Positionals and options in turn, to the last option.
     std::size_t start = 0;
-    if (!option_at.empty()) {
-        const std::size_t last_option = option_at.rbegin()->first;
+    if (!option_at_.empty()) {
+        const std::size_t last_option = option_at_.rbegin()->first;
         while (start <= last_option) {
             std::size_t next_option = start;
-            while (next_option <= last_option && !option_at.contains(next_option)) {
+            while (next_option <= last_option && !option_at_.contains(next_option)) {
                 ++next_option;
             }
             if (start != next_option) {
@@ -482,26 +403,140 @@ std::vector<std::string> parse_known(const Parser& parser, const std::vector<std
                     continue;
                 }
             }
-            if (!option_at.contains(start)) {
-                extras.insert(extras.end(), strings.begin() + start, strings.begin() + next_option);
+            if (!option_at_.contains(start)) {
+                extras_.insert(extras_.end(), strings_.begin() + start, strings_.begin() + next_option);
                 start = next_option;
             }
             start = consume_optional(start);
         }
     }
     const std::size_t stop = consume_positionals(start);
-    extras.insert(extras.end(), strings.begin() + stop, strings.end());
+    extras_.insert(extras_.end(), strings_.begin() + stop, strings_.end());
+    check_required();
+    return std::move(extras_);
+}
 
+// Takes `values` for `action`; not with an option already given that
+// excludes it.
+void ArgumentReader::take_action(const Action& action, const std::vector<std::string>& values) {
+    seen_.insert(&action);
+    action.take(values);
+    for (const auto& [a, b] : parser_.exclusive) {
+        const Action* other = &action == parser_.option(a)   ? parser_.option(b)
+                              : &action == parser_.option(b) ? parser_.option(a)
+                                                             : nullptr;
+        if (other != nullptr && seen_.contains(other)) {
+            throw ArgumentError{"argument " + action.name() + ": not allowed with argument " + other->name()};
+        }
+    }
+}
+
+// Takes the option at `start`, its value, and the flags run together with
+// it (-qv); returns where the next string to read is.
+std::size_t ArgumentReader::consume_optional(std::size_t start) {
+    const std::vector<OptionTuple>& tuples = option_at_.at(start);
+    if (tuples.size() > 1) {
+        std::string matches;
+        for (const OptionTuple& tuple : tuples) {
+            matches += (matches.empty() ? "" : ", ") + tuple.option_string;
+        }
+        throw ArgumentError{"ambiguous option: " + strings_[start] + " could match " + matches};
+    }
+    OptionTuple tuple = tuples.front();
+    std::vector<std::pair<const Action*, std::vector<std::string>>> taken;
+    std::size_t stop = start + 1;
+    while (true) {
+        if (tuple.action == nullptr) {
+            extras_.push_back(strings_[start]);
+            return start + 1;
+        }
+        const Action& action = *tuple.action;
+        if (!tuple.explicit_argument) {
+            // The option's value is the next string, if it is an argument.
+            std::vector<std::string> values;
+            if (action.nargs == Nargs::one) {
+                if (start + 1 >= pattern_.size() || pattern_[start + 1] != 'A') {
+                    throw ArgumentError{"argument " + action.name() + ": expected one argument"};
+                }
+                values.push_back(strings_[start + 1]);
+            }
+            stop = start + 1 + values.size();
+            taken.emplace_back(&action, std::move(values));
+            break;
+        }
+        const std::string argument = *tuple.explicit_argument;
+        if (action.nargs == Nargs::one) {
+            taken.emplace_back(&action, std::vector<std::string>{argument});
+            break;
+        }
+        // A flag with more after it: -qv is -q -v.
+        if (tuple.option_string[1] == '-' || argument.empty() || (tuple.separator && !tuple.separator->empty()) ||
+            argument[0] == '-') {
+            throw ArgumentError{"argument " + action.name() + ": ignored explicit argument " + python_string_repr(argument)};
+        }
+        taken.emplace_back(&action, std::vector<std::string>{});
+        const std::string next = std::string("-") + argument[0];
+        if (const Action* other = exact_option(options_, next)) {
+            const std::string rest = argument.substr(1);
+            tuple = {other, next, std::nullopt, std::nullopt};
+            if (!rest.empty()) {
+                tuple.separator = rest[0] == '=' ? "=" : "";
+                tuple.explicit_argument = rest[0] == '=' ? rest.substr(1) : rest;
+            }
+        } else {
+            extras_.push_back("-" + argument);
+            break;
+        }
+    }
+    for (const auto& [action, values] : taken) {
+        take_action(*action, values);
+    }
+    return stop;
+}
+
+// Takes as many of the positionals left as can match the strings from
+// `start`, from the first; returns where the next string to read is.
+std::size_t ArgumentReader::consume_positionals(std::size_t start) {
+    std::vector<std::size_t> counts;
+    for (std::size_t matched = positionals_.size(); matched > 0; --matched) {
+        const std::vector<const Action*> some(positionals_.begin(), positionals_.begin() + matched);
+        if (std::optional<std::vector<std::size_t>> found = match_positionals(some, 0, pattern_, start)) {
+            counts = std::move(*found);
+            break;
+        }
+    }
+    for (std::size_t i = 0; i < counts.size(); ++i) {
+        std::vector<std::string> values(strings_.begin() + start, strings_.begin() + start + counts[i]);
+        // The "--" is not a value.
+        const std::size_t dash = pattern_.find('-', start);
+        if (positionals_[i]->nargs == Nargs::command ? pattern_[start] == '-' : dash < start + counts[i]) {
+            values.erase(std::find(values.begin(), values.end(), "--"));
+        }
+        start += counts[i];
+        take_action(*positionals_[i], values);
+    }
+    positionals_.erase(positionals_.begin(), positionals_.begin() + counts.size());
+    return start;
+}
+
+// Throws for the required arguments not given, naming them all.
+void ArgumentReader::check_required() const {
     std::string missing;
-    for (const Action& action : parser.actions) {
-        if (action.required && !seen.contains(&action)) {
+    for (const Action& action : parser_.actions) {
+        if (action.required && !seen_.contains(&action)) {
             missing += (missing.empty() ? "" : ", ") + action.name();
         }
     }
     if (!missing.empty()) {
         throw ArgumentError{"the following arguments are required: " + missing};
     }
-    return extras;
+}
+
+// Reads `strings` with `parser`, as argparse's parse_known_args does, and
+// returns the strings that are none of its. Throws ArgumentError, and
+// Printed (from a help or version action).
+std::vector<std::string> parse_known(const Parser& parser, const std::vector<std::string>& strings) {
+    return ArgumentReader(parser, strings).read();
 }
 
 // ---------------------------------------------------------------- the values
