@@ -5,7 +5,11 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <optional>
+#include <string>
+#include <system_error>
+#include <vector>
 
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
@@ -323,13 +327,16 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
     return probe_video(path, ffprobe, CancelToken());
 }
 
-VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe, const CancelToken& cancel) {
-    const std::vector<std::string> command{ffprobe, "-v", "error", "-print_format", "json", "-show_format",
-                                           "-show_streams", text(path)};
+namespace {
+
+// ffprobe's output for `command` (ffprobe reading `path`), within `limit`.
+// Throws ProbeError, with why, when it cannot be had, and Cancelled.
+std::string run_ffprobe(const std::vector<std::string>& command, const std::filesystem::path& path,
+                        std::chrono::seconds limit, const CancelToken& cancel) {
+    const std::string& ffprobe = command.front();
     platform::ProcessOutput output;
     try {
-        output = platform::run_program(command, std::chrono::seconds(60), {},
-                                       [&cancel] { return cancel.cancelled(); });
+        output = platform::run_program(command, limit, {}, [&cancel] { return cancel.cancelled(); });
     } catch (const platform::ProcessError& error) {
         if (!platform::find_on_path(ffprobe) && !std::filesystem::exists(platform::path_from_text(ffprobe))) {
             throw ProbeError(
@@ -353,7 +360,42 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
         throw ProbeError("ffprobe failed for " + text(path) + ":\n" +
                          (start == std::string::npos ? std::string() : error.substr(start)));
     }
-    return video_info_from_probe(path, output.standard_output);
+    return output.standard_output;
+}
+
+}  // namespace
+
+VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe, const CancelToken& cancel) {
+    const std::vector<std::string> command{ffprobe, "-v", "error", "-print_format", "json", "-show_format",
+                                           "-show_streams", text(path)};
+    return video_info_from_probe(path, run_ffprobe(command, path, std::chrono::seconds(60), cancel));
+}
+
+VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprobe, const CancelToken& cancel) {
+    // ffprobe's parser splits the stream into its frames without decoding
+    // them (3.4 s for a 4K VVC film of 151,919 frames, 800 MB), but reads the
+    // whole file, so it has as long as a slow disk needs. (The csv format
+    // adds a comma after some streams' count: "480,".)
+    const std::vector<std::string> command{
+        ffprobe,         "-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries",
+        "stream=nb_read_packets", "-of", "default=noprint_wrappers=1:nokey=1", text(info.path)};
+    const std::optional<long long> frames =
+        python_int(python_strip(run_ffprobe(command, info.path, std::chrono::hours(1), cancel)));
+    if (!frames || *frames <= 0) {
+        throw ProbeError("ffprobe found no frames in " + text(info.path));
+    }
+    info.timed_raw = true;
+    info.fps = fps;
+    info.nominal_fps = fps;
+    info.average_fps = fps;
+    info.nb_frames = *frames;
+    info.duration = static_cast<double>(*frames) / fps;
+    // A raw stream's file is its video and nothing else.
+    std::error_code unknown;
+    const std::uintmax_t bytes = std::filesystem::file_size(info.path, unknown);
+    info.bit_rate = unknown ? 0 : std::llround(static_cast<double>(bytes) * 8 / info.duration);
+    info.bit_rate_whole_file = false;
+    return info;
 }
 
 }  // namespace vml

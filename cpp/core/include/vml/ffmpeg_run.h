@@ -123,10 +123,18 @@ std::string build_filtergraph(const VideoInfo& source, const VideoInfo& distorte
                               const HardwareDecoding& decoding, const std::string& log_name, const std::string& model,
                               const std::optional<std::string>& xpsnr_log_name, unsigned cores);
 
+// FFmpeg's options before each video's -i (VideoInfo::input_options): a
+// raw stream's frame rate.
+struct InputOptions {
+    std::vector<std::string> distorted;
+    std::vector<std::string> source;
+};
+
 // FFmpeg's command for a filter graph, the test video first.
 std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const std::filesystem::path& distorted,
                                               const std::filesystem::path& source, const std::string& filtergraph,
-                                              const HardwareDecoding& decoding, double duration_limit);
+                                              const HardwareDecoding& decoding, double duration_limit,
+                                              const InputOptions& inputs = {});
 
 // The filter graph of a resolution test (VmafOptions::resample_test), which
 // has a single input: the source is decoded once and split into an
@@ -139,10 +147,12 @@ std::string build_resample_filtergraph(const VideoInfo& source, const VmafOption
                                        const std::string& model, const std::optional<std::string>& xpsnr_log_name,
                                        unsigned cores);
 
-// FFmpeg's command for a resolution test's filter graph.
+// FFmpeg's command for a resolution test's filter graph; `source_options`
+// go before the source's -i.
 std::vector<std::string> build_resample_command(const std::string& ffmpeg, const std::filesystem::path& source,
                                                 const std::string& filtergraph,
-                                                const std::optional<std::string>& hwaccel, double duration_limit);
+                                                const std::optional<std::string>& hwaccel, double duration_limit,
+                                                const std::vector<std::string>& source_options = {});
 
 // For VMAF on the GPU, the filter graph of each video's own FFmpeg (the test
 // video's, then the source's): its chain as build_filtergraph's, giving its
@@ -159,7 +169,7 @@ std::pair<std::string, std::string> build_stream_graphs(const VideoInfo& source,
 std::vector<std::vector<std::string>> build_stream_commands(
     const std::string& ffmpeg, const std::filesystem::path& distorted, const std::filesystem::path& source,
     const std::pair<std::string, std::string>& graphs, const HardwareDecoding& decoding,
-    const std::pair<std::vector<std::string>, std::vector<std::string>>& outputs);
+    const std::pair<std::vector<std::string>, std::vector<std::string>>& outputs, const InputOptions& inputs = {});
 
 // The per-frame scores in libvmaf's JSON log, and XPSNR's from the xpsnr
 // filter's stats file when there is one, timed at `fps`.

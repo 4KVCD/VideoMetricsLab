@@ -46,6 +46,7 @@ Json values_of(const Arguments& parsed) {
         {"duration", either(a.duration)},
         {"frames", either(a.frames)},
         {"colour", either(a.colour)},
+        {"fps", either(a.fps)},
         {"cvvdp_displays", a.cvvdp_displays.empty() ? Json(nullptr) : Json(a.cvvdp_displays)},
         {"subsample", a.subsample},
         {"threads", either(a.threads)},
@@ -88,9 +89,11 @@ TEST(CommandLine, ReadsArgumentsAsThePythonApp) {
                 EXPECT_EQ(top_help(), with_version(expected["stdout"]));
             } else {
                 Json values = expected["values"];
-                if (values.is_object() && values.contains("duration")) {
-                    const std::optional<double> duration = test::reference_number(values["duration"]);
-                    values["duration"] = duration ? Json(*duration) : Json(nullptr);
+                for (const char* number : {"duration", "fps"}) {
+                    if (values.is_object() && values.contains(number)) {
+                        const std::optional<double> value = test::reference_number(values[number]);
+                        values[number] = value ? Json(*value) : Json(nullptr);
+                    }
                 }
                 EXPECT_EQ(values_of(parsed), values);
             }

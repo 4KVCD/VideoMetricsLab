@@ -44,7 +44,8 @@ std::optional<std::string> timeline_problem(const VideoInfo& source, const Video
     return std::nullopt;
 }
 
-// How the Python app names a raw stream's codec in its message.
+}  // namespace
+
 std::string codec_label(const std::string& codec) {
     if (codec == "h264") {
         return "H.264";
@@ -60,8 +61,6 @@ std::string codec_label(const std::string& codec) {
     }
     return ascii_upper(codec);
 }
-
-}  // namespace
 
 Size content_size(const VideoInfo& info, const std::optional<CropBox>& crop) {
     return crop ? Size{crop->w, crop->h} : Size{info.width, info.height};
@@ -124,13 +123,15 @@ std::optional<std::string> untimed_pair_problem(const VideoInfo& source, const V
 
 std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, double duration_limit) {
     std::optional<std::string> problem = timeline_problem(source, distorted, duration_limit);
-    const VideoInfo* raw = source.is_raw_stream() ? &source : distorted.is_raw_stream() ? &distorted : nullptr;
+    const auto untimed = [](const VideoInfo& info) { return info.is_raw_stream() && !info.timed_raw; };
+    const VideoInfo* raw = untimed(source) ? &source : untimed(distorted) ? &distorted : nullptr;
     if (!problem || raw == nullptr) {
         return problem;
     }
-    // A raw stream's frame rate and length are FFmpeg's guesses, so the
-    // message says how to give it a real frame rate. It names mkvmerge, not
-    // FFmpeg: FFmpeg cannot copy a raw stream with B-frames into Matroska.
+    // An untimed raw stream's frame rate and length are FFmpeg's guesses, so
+    // the message says how to give it a real frame rate. It names mkvmerge,
+    // not FFmpeg: FFmpeg cannot copy a raw stream with B-frames into Matroska.
+    // (The command line's --fps times one: its problems are real ones.)
     return platform::path_text(raw->path.filename()) + " is a raw " + codec_label(raw->codec_name) +
            " stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate "
            "first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's "

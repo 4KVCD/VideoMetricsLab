@@ -823,6 +823,11 @@ DecodePlan plan_decode(const VideoInfo& info, const std::optional<CropBox>& crop
         throw GpuDecodeUnavailableError((info.codec_name.empty() ? "this codec" : info.codec_name) +
                                         " is decoded by FFmpeg");
     }
+    if (info.is_raw_stream()) {
+        // Decoding here needs each packet's timestamp, and a raw stream's
+        // packets have none: the pass would start only to fail.
+        throw GpuDecodeUnavailableError("a raw stream is decoded by FFmpeg");
+    }
     const int depth = depth_of(ascii_lower(info.pix_fmt));
     if (depth == 0) {
         throw GpuDecodeUnavailableError((info.pix_fmt.empty() ? "this pixel format" : info.pix_fmt) +

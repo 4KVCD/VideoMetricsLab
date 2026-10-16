@@ -152,6 +152,9 @@ More examples:
 # HDR10 in files with no colour tags (y4m), the first 33 frames, CVVDP on an HDR display
 .\VideoMetricsLab-cli.exe compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33 --cvvdp-display "30-inch 4K HDR monitor, dim room"
 
+# A raw VVC stream straight from an encoder (no container), at 23.976 frames a second
+.\VideoMetricsLab-cli.exe compare reference.y4m encode.266 --fps 24000/1001
+
 # A 1080p encode against a 4K reference, compared at 4K
 .\VideoMetricsLab-cli.exe compare reference_4k.mkv encode_1080p.mkv --scale-to reference
 
@@ -173,6 +176,7 @@ $run.videos[0].metrics.vmaf.score
 | `--duration SECONDS` | Compare only the start of each video. |
 | `--frames N` | Compare only the first N frames of each video, such as a short encode of a longer reference. |
 | `--colour pq-bt2020\|hlg-bt2020\|bt709` | The colours of a video with no colour tags (y4m, say); a tagged video keeps its own. Left out, such a video is taken as SDR, which changes CVVDP, SSIMULACRA2 and Butteraugli. These scores are not saved. |
+| `--fps RATE` | The frame rate of a raw video stream (below), such as `24000/1001`, `23.976` or `60`. Required when the reference or a test video is one. These scores are not saved. |
 | `--cvvdp-display PRESET` | The display CVVDP models, by preset name. Repeat it for a CVVDP score on each display. Left out: the app's default display. |
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
 | `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only). |
@@ -194,12 +198,37 @@ Progress is written to the error stream and results to the output stream, so
 `--json -` can be piped. The exit code is 0 when every video got every metric
 asked for that it can have (one it cannot, such as CVVDP with `--subsample`,
 is left out with a note, as in the app), 1 when a video failed or lost a
-metric, 2 for a wrong command, when FFmpeg cannot be used or when there is no
-test video, and 130 after Ctrl+C. Ctrl+C stops the run as
-**Cancel** does; scores that had finished are saved.
+metric, 2 for a wrong command (a raw stream without `--fps` among them), when
+FFmpeg cannot be used or when there is no test video, and 130 after Ctrl+C.
+Ctrl+C stops the run as **Cancel** does; scores that had finished are saved.
 
 Unlike the app, the command line does not ask before a long SSIMULACRA2 or
 Butteraugli run on the CPU. Text is English whatever the app's language.
+
+### Raw video streams
+
+An encoder's output with no container (`.264`, `.265`, `.hevc`, `.266`,
+`.obu`, `.m2v`, `.m4v`, `.mjpeg`...) has no timestamps and records no frame
+rate, so the command line needs `--fps` for it. Its frames are counted when
+the run starts (the file is read once, not decoded) and timed at that rate,
+and FFmpeg decodes it. A raw stream scores exactly as the same stream in a
+container: checked for H.264, HEVC, VVC, AV1 (OBU), EVC, MPEG-1, MPEG-2,
+MPEG-4 Part 2, H.263, H.261, MJPEG and Dirac. FFmpeg also reads raw AVS2,
+AVS3, CAVS, VC-1 and APV streams; these are not checked (FFmpeg's AVS2
+decoder gave the one tried fewer frames than it holds, in a container too,
+so it was refused as cut short).
+
+A container can say what a raw stream may not: its colours and where its
+chroma samples sit, which an encoder may leave out and which change
+SSIMULACRA2, Butteraugli and CVVDP (`--colour` gives the colours; a note
+after the results says when they were guessed), and the shape of its pixels
+(H.263 and H.261 record their own). Black bars are found from bytes partway
+through an H.264, HEVC, VVC, MPEG-1, MPEG-2, MJPEG or Dirac stream. Any other
+stream, or one that cannot be decoded from there (its only keyframe its
+first, or an H.264 or VVC stream with its parameter sets only at its start),
+is read from the start up to the last part sampled, which takes a while for
+a long stream (`--black-bars none` skips it). The app's window does not take
+raw streams.
 
 ## Saved results and caches
 

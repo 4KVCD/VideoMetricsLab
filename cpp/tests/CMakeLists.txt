@@ -26,6 +26,7 @@ add_executable(vml_tests
     unit/perceptual_cpu_test.cpp
     unit/process_test.cpp
     unit/python_json_test.cpp
+    unit/raw_stream_test.cpp
     unit/run_file_test.cpp
     unit/run_line_test.cpp
     unit/settings_test.cpp
@@ -101,7 +102,8 @@ set(cpu_integration
     "PerceptualCpu.PairedByTimestampAFrameDroppedFromTheTestVideoPairsTheRestByTime"
     "PerceptualCpu.ThePicturesAreEachVideosFrameNCutAtTheLimit"
     "Process.AProgramRunningTooLongIsEnded"
-    "Process.TerminateEndsARunningProgram")
+    "Process.TerminateEndsARunningProgram"
+    "RawStream.ScoresAsTheSameStreamInAContainer")
 list(JOIN gpu_integration ":" gpu_integration)
 list(JOIN cpu_integration ":" cpu_integration)
 gtest_discover_tests(vml_tests TEST_FILTER "-${gpu_suites}:${cpu_integration}"

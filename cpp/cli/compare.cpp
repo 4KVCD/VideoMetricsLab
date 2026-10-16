@@ -234,6 +234,28 @@ VideoInfo with_assumed_colour(VideoInfo info, const std::optional<std::string>& 
     return info;
 }
 
+// Why a raw stream cannot be compared without --fps: it records no frame
+// rate, and FFmpeg would read it at 25 frames a second. `which` names it.
+std::string frame_rate_needed(const VideoInfo& info, const std::string& which) {
+    return which + " is a raw " + codec_label(info.codec_name) +
+           " stream, which records no frame rate: give its frame rate with --fps, such as --fps 24000/1001.";
+}
+
+// `info`, a raw stream timed at --fps's rate (ffprobe.h's timed_raw_stream),
+// or any other video as it is; nothing for a raw stream when the command
+// gives no --fps. Throws ProbeError when a raw stream's frames cannot be
+// counted.
+std::optional<VideoInfo> timed_by_arguments(VideoInfo info, const CompareArguments& arguments,
+                                            const std::string& ffprobe) {
+    if (!info.is_raw_stream()) {
+        return info;
+    }
+    if (!arguments.fps) {
+        return std::nullopt;
+    }
+    return timed_raw_stream(std::move(info), *arguments.fps, ffprobe);
+}
+
 // ------------------------------------------------------------------- options
 
 // Where the command says `key` is calculated: its own option, else --cpu;
@@ -832,12 +854,21 @@ public:
 
     std::vector<TestVideo> videos;
     std::vector<VmafJob> jobs;
+    // Why the command is wrong, once a test video turns out to be a raw
+    // stream and it gives no --fps.
+    std::optional<std::string> frame_rate_missing;
 
 private:
     void leave_out_cvvdp_if_unable(TestVideo& video) const;
     void add_colour_notes(TestVideo& video) const;
     std::optional<std::string> queue_jobs(TestVideo& video);
     void queue_other_displays(TestVideo& video);
+    // Whether `video`'s scores may be read from the saved scores. The saved
+    // scores know a video by its file, not by the frame rate --fps gave a
+    // raw stream, so a pair with one neither reads nor saves them.
+    bool reads_saved(const TestVideo& video) const {
+        return use_saved_ && !source_.timed_raw && !video.info->timed_raw;
+    }
 
     const CompareArguments& arguments_;
     const Settings& settings_;
@@ -854,12 +885,23 @@ private:
 std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& path, const std::string& ffprobe) {
     TestVideo& video = videos.emplace_back();
     video.path = path;
-    video.save_scores = !arguments_.colour;
     try {
-        video.info = with_assumed_colour(probe_video(path, ffprobe), arguments_.colour);
+        VideoInfo info = probe_video(path, ffprobe);
+        std::optional<VideoInfo> timed = timed_by_arguments(info, arguments_, ffprobe);
+        if (!timed) {
+            video.error = "it is a raw stream with no frame rate";
+            frame_rate_missing = frame_rate_needed(info, platform::path_text(path.filename()));
+            return std::nullopt;
+        }
+        video.info = with_assumed_colour(std::move(*timed), arguments_.colour);
     } catch (const ProbeError& error) {
         video.error = std::string("it could not be read: ") + error.what();
         return std::nullopt;
+    }
+    video.save_scores = !arguments_.colour && !source_.timed_raw && !video.info->timed_raw;
+    if (arguments_.fps && !source_.is_raw_stream() && !video.info->is_raw_stream()) {
+        video.notes.emplace_back("--fps is not used: it is for raw streams, and neither this video nor the "
+                                 "reference is one");
     }
     video.metrics = asked_;
     leave_out_cvvdp_if_unable(video);
@@ -941,7 +983,7 @@ std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video) {
     }
     const std::size_t queued = jobs.size();
     if (std::optional<std::string> missing = queue(video, source_, std::move(options), backends_,
-                                                   displays_.front().second, use_saved_, cache_folder_, jobs)) {
+                                                   displays_.front().second, reads_saved(video), cache_folder_, jobs)) {
         return missing;
     }
     if (jobs.size() > queued) {
@@ -965,7 +1007,8 @@ void ComparisonPlanner::queue_other_displays(TestVideo& video) {
         other.save_scores = video.save_scores;
         other.options = row_options(arguments_, settings_, other.metrics, *video.info);
         const std::size_t before = jobs.size();
-        queue(other, source_, other.options, backends_, displays_[display].second, use_saved_, cache_folder_, jobs);
+        queue(other, source_, other.options, backends_, displays_[display].second, reads_saved(other), cache_folder_,
+              jobs);
         if (jobs.size() > before) {
             job_videos_.emplace_back(videos.size() - 1, video.other_displays.size() - 1);
         }
@@ -1080,8 +1123,14 @@ int compare(const CompareArguments& arguments) {
 
     VideoInfo source;
     try {
-        source = with_assumed_colour(probe_video(python_path(arguments.reference), tools.ffprobe.path),
-                                     arguments.colour);
+        const std::filesystem::path reference = python_path(arguments.reference);
+        const VideoInfo read = probe_video(reference, tools.ffprobe.path);
+        std::optional<VideoInfo> timed = timed_by_arguments(read, arguments, tools.ffprobe.path);
+        if (!timed) {
+            print_error(frame_rate_needed(read, "The reference, " + platform::path_text(reference.filename()) + ","));
+            return exit_usage;
+        }
+        source = with_assumed_colour(std::move(*timed), arguments.colour);
     } catch (const ProbeError& error) {
         print_error(std::string("The reference could not be read: ") + error.what());
         return exit_usage;
@@ -1090,6 +1139,10 @@ int compare(const CompareArguments& arguments) {
     for (const std::filesystem::path& path : expand_tests(arguments.tests, python_path(arguments.reference))) {
         if (const std::optional<std::string> missing = planner.plan(path, tools.ffprobe.path)) {
             print_error("The C++ command line cannot do this yet: " + *missing + ".");
+            return exit_usage;
+        }
+        if (planner.frame_rate_missing) {
+            print_error(*planner.frame_rate_missing);
             return exit_usage;
         }
     }

@@ -24,7 +24,8 @@ nlohmann::json video_json(const VideoInfo& info) {
             {"color_primaries", info.color_primaries},
             {"chroma_location", info.chroma_location},
             {"format_name", info.format_name},
-            {"start_offset", info.start_offset}};
+            {"start_offset", info.start_offset},
+            {"timed_raw", info.timed_raw}};
 }
 
 VideoInfo video_from(const nlohmann::json& text) {
@@ -49,6 +50,7 @@ VideoInfo video_from(const nlohmann::json& text) {
     text.at("chroma_location").get_to(info.chroma_location);
     text.at("format_name").get_to(info.format_name);
     text.at("start_offset").get_to(info.start_offset);
+    text.at("timed_raw").get_to(info.timed_raw);
     return info;
 }
 

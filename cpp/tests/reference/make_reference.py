@@ -38,6 +38,7 @@ files only change when the code that makes them does.
 """
 from __future__ import annotations
 
+import argparse
 import contextlib
 import json
 import math
@@ -960,7 +961,71 @@ ARGUMENT_CASES = [
     ["compare", "ref.mkv", "a.mkv", "--scaler", "it's"],
     ["compare", "ref.mkv", "a.mkv", "--scaler", "tab\there\x01"],
     ["compare", "réf.mkv", "ä.mkv", "--cvvdp-display", "écran"],
+    ["compare", "ref.mkv", "a.266", "--fps", "24000/1001"],
+    ["compare", "ref.mkv", "a.266", "--fps", "23.976"],
+    ["compare", "ref.mkv", "a.266", "--fps=60"],
+    ["compare", "ref.mkv", "a.266", "--fps", " 30000/1001 "],
+    ["compare", "ref.mkv", "a.266", "--fps", "1e2"],
+    ["compare", "ref.mkv", "a.266", "--fps", "0120/5"],
+    ["compare", "ref.mkv", "a.266", "--fps", "0"],
+    ["compare", "ref.mkv", "a.266", "--fps", "0/5"],
+    ["compare", "ref.mkv", "a.266", "--fps", "-24"],
+    ["compare", "ref.mkv", "a.266", "--fps", "inf"],
+    ["compare", "ref.mkv", "a.266", "--fps", "nan"],
+    ["compare", "ref.mkv", "a.266", "--fps", "24/0"],
+    ["compare", "ref.mkv", "a.266", "--fps", "-24/1"],
+    ["compare", "ref.mkv", "a.266", "--fps", "30000 / 1001"],
+    ["compare", "ref.mkv", "a.266", "--fps", "24000/1001/1"],
+    ["compare", "ref.mkv", "a.266", "--fps", "9007199254740992/1"],
+    ["compare", "ref.mkv", "a.266", "--fps", "x"],
+    ["compare", "ref.mkv", "a.266", "--fps"],
 ]
+
+
+def _frame_rate():
+    """--fps's type: a fraction of whole numbers below 2^53 ("24000/1001", as
+    many as a double holds exactly) or a number ("23.976"), above 0 and
+    finite. Its function is named parse, as the Python app's own number types
+    are, so that argparse says "invalid parse value"."""
+    def parse(text: str) -> float:
+        """Reads `text` as a frame rate."""
+        fraction = re.fullmatch(r"([0-9]+)/([0-9]+)", text.strip())
+        if fraction:
+            numerator, denominator = int(fraction[1]), int(fraction[2])
+            if denominator == 0 or numerator >= 2**53 or denominator >= 2**53:
+                raise ValueError(text)
+            value = numerator / denominator
+        else:
+            value = float(text)
+        if not value > 0 or not math.isfinite(value):
+            raise argparse.ArgumentTypeError("must be above 0")
+        return value
+    return parse
+
+
+#: The C++ app's own --fps, which the Python app never had, and its example.
+FPS_HELP = ("the frame rate of a raw video stream (a .264, .265, .266 or .obu file, with no container), which "
+            "records none, such as 24000/1001, 23.976 or 60: required for one. These scores are neither read from "
+            "nor saved to the saved scores")
+FPS_EXAMPLE = ("  VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001\n"
+               "      a raw VVC stream from an encoder, at 23.976 frames a second\n")
+
+
+def _add_cpp_options(parser: argparse.ArgumentParser) -> None:
+    """Adds the C++ app's own options to the Python app's parser where the
+    C++ app has them, after --colour, and their example to the examples, so
+    that the help and the errors are what the C++ app's must be."""
+    commands = next(action for action in parser._actions if isinstance(action, argparse._SubParsersAction))
+    compare = commands.choices["compare"]
+    fps = compare.add_argument("--fps", type=_frame_rate(), metavar="RATE", help=FPS_HELP)
+    for actions in (compare._actions, compare._optionals._group_actions):
+        actions.remove(fps)
+        after = next(index for index, action in enumerate(actions) if "--colour" in action.option_strings)
+        actions.insert(after + 1, fps)
+    anchor = "      HDR10 video in files with no colour tags, the first 33 frames\n"
+    for owner in (parser, compare):
+        assert owner.epilog.count(anchor) == 1
+        owner.epilog = owner.epilog.replace(anchor, anchor + FPS_EXAMPLE)
 
 
 def _plain(value):
@@ -994,6 +1059,7 @@ def argument_cases() -> list[dict]:
     try:
         for argv in ARGUMENT_CASES:
             parser = build_parser()
+            _add_cpp_options(parser)
             out, err = io.StringIO(), io.StringIO()
             values = None
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):

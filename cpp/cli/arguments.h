@@ -28,6 +28,7 @@ struct CompareArguments {
     std::optional<double> duration;
     std::optional<long long> frames;
     std::optional<std::string> colour;
+    std::optional<double> fps;  // a raw stream's frame rate
     std::vector<std::string> cvvdp_displays;
     int subsample = 1;
     std::optional<int> threads;

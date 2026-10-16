@@ -5,6 +5,7 @@
 #include <cmath>
 #include <functional>
 #include <map>
+#include <regex>
 #include <set>
 
 #include "vml/metrics.h"
@@ -27,8 +28,9 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--scaler {bicubic,bilinear,lanczos,spline}]
                                    [--duration SECONDS | --frames N]
                                    [--colour {pq-bt2020,hlg-bt2020,bt709}]
-                                   [--cvvdp-display PRESET] [--subsample N]
-                                   [--threads N] [--vmaf-on {gpu,cpu}]
+                                   [--fps RATE] [--cvvdp-display PRESET]
+                                   [--subsample N] [--threads N]
+                                   [--vmaf-on {gpu,cpu}]
                                    [--ssimulacra2-on {gpu,cpu}]
                                    [--butteraugli-on {gpu,cpu}] [--cpu]
                                    [--no-gpu-decode] [--parallel N]
@@ -52,6 +54,8 @@ const char* const examples = R"(examples:
       only JSON on the output, for a script to read
   VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33
       HDR10 video in files with no colour tags, the first 33 frames
+  VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001
+      a raw VVC stream from an encoder, at 23.976 frames a second
   VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display "30-inch 4K HDR monitor, dim room"
       CVVDP on a display other than the app's default (repeat it for several)
   VideoMetricsLab-cli devices
@@ -104,6 +108,11 @@ options:
                         as SDR, which changes CVVDP, SSIMULACRA2 and
                         Butteraugli. These scores are neither read from nor
                         saved to the saved scores
+  --fps RATE            the frame rate of a raw video stream (a .264, .265,
+                        .266 or .obu file, with no container), which records
+                        none, such as 24000/1001, 23.976 or 60: required for
+                        one. These scores are neither read from nor saved to
+                        the saved scores
   --cvvdp-display PRESET
                         the display CVVDP models, by preset name (default: the
                         app's). Repeat it for a CVVDP score on each display;
@@ -606,6 +615,33 @@ long long positive_int(const std::string& text) {
     return *value;
 }
 
+// A frame rate (--fps): a fraction of whole numbers below 2^53, as many as a
+// double holds exactly ("24000/1001"), or a number ("23.976"), above 0. The
+// reference's make_reference.py reads it by the same rule.
+double frame_rate(const std::string& text) {
+    static const std::regex fraction("([0-9]+)/([0-9]+)");
+    const std::string stripped(python_strip(text));
+    std::optional<double> value;
+    std::smatch parts;
+    if (std::regex_match(stripped, parts, fraction)) {
+        constexpr long long exact = 1LL << 53;
+        const std::optional<long long> numerator = python_int(parts[1].str());
+        const std::optional<long long> denominator = python_int(parts[2].str());
+        if (numerator && denominator && *denominator != 0 && *numerator < exact && *denominator < exact) {
+            value = static_cast<double>(*numerator) / static_cast<double>(*denominator);
+        }
+    } else {
+        value = python_float(text);
+    }
+    if (!value) {
+        throw ArgumentError{"invalid parse value: " + python_string_repr(text)};
+    }
+    if (!(*value > 0) || !std::isfinite(*value)) {
+        throw ArgumentError{"must be above 0"};
+    }
+    return *value;
+}
+
 std::string choice(const std::string& value, const std::vector<std::string>& choices) {
     if (std::find(choices.begin(), choices.end(), value) == choices.end()) {
         std::string listed;
@@ -669,6 +705,7 @@ Parser compare_parser(CompareArguments& parsed) {
                [&parsed](const std::string& value) {
                    parsed.colour = choice(value, {"pq-bt2020", "hlg-bt2020", "bt709"});
                }),
+        option({"--fps"}, [&parsed](const std::string& value) { parsed.fps = frame_rate(value); }),
         option({"--cvvdp-display"}, [&parsed](const std::string& value) { parsed.cvvdp_displays.push_back(value); }),
         option({"--subsample"},
                [&parsed](const std::string& value) { parsed.subsample = static_cast<int>(positive_int(value)); }),

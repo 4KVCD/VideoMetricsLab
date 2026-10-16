@@ -874,10 +874,14 @@ std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const Vide
                                            const std::optional<CropBox>& source_crop,
                                            const std::optional<CropBox>& distorted_crop, int step,
                                            const std::filesystem::path& folder) {
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-                                     "-i", input_path(distorted.path), "-i", input_path(source.path),
-                                     "-filter_complex",
-                                     image_filtergraph(source, distorted, options, source_crop, distorted_crop, step)};
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-y"};
+    for (const VideoInfo* video : {&distorted, &source}) {
+        const std::vector<std::string> input = video->input_options();
+        command.insert(command.end(), input.begin(), input.end());
+        command.insert(command.end(), {"-i", input_path(video->path)});
+    }
+    command.insert(command.end(), {"-filter_complex", image_filtergraph(source, distorted, options, source_crop,
+                                                                        distorted_crop, step)});
     std::vector<std::string> output_args;
     if (options.duration_limit > 0) {
         output_args = duration_args(format_fixed(options.duration_limit, 3));

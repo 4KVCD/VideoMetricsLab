@@ -743,7 +743,7 @@ ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& sou
         const std::string graph = build_filtergraph(source, distorted, options, source_crop, distorted_crop, plan,
                                                     "vmaf_log.json", run_model, xpsnr_log_name, environment.cores);
         return build_ffmpeg_command(environment.ffmpeg, distorted.path, source.path, graph, plan,
-                                    options.duration_limit);
+                                    options.duration_limit, {distorted.input_options(), source.input_options()});
     };
     return execute_run(build_command, options, model, fps, total_frames, decoding, "vmaf_run_", on_progress, on_status,
                        cancel);
@@ -849,7 +849,7 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
             const std::vector<std::vector<std::string>> commands = build_stream_commands(
                 environment.ffmpeg, distorted.path, source.path,
                 build_stream_graphs(source, distorted, options, source_crop, distorted_crop, decode), decode,
-                attempt.output_args(limit));
+                attempt.output_args(limit), {distorted.input_options(), source.input_options()});
             for (const std::vector<std::string>& command : commands) {
                 logger.info("FFmpeg: " + python_list2cmdline(command));
             }
@@ -1579,16 +1579,18 @@ std::string build_filtergraph(const VideoInfo& source, const VideoInfo& distorte
 
 std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const std::filesystem::path& distorted,
                                               const std::filesystem::path& source, const std::string& filtergraph,
-                                              const HardwareDecoding& decoding, double duration_limit) {
+                                              const HardwareDecoding& decoding, double duration_limit,
+                                              const InputOptions& inputs) {
     const bool several_graphs = filtergraph.find(graph_separator) != std::string::npos;
     const auto decode = [several_graphs](const std::optional<std::string>& hwaccel) {
         return several_graphs ? split_hwaccel_args(hwaccel) : hwaccel_args(hwaccel);
     };
     std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-y"};
-    for (const auto& [hwaccel, path] :
-         {std::pair{decoding.distorted, distorted}, std::pair{decoding.source, source}}) {
+    for (const auto& [hwaccel, path, own] : {std::tuple{decoding.distorted, distorted, &inputs.distorted},
+                                             std::tuple{decoding.source, source, &inputs.source}}) {
         const std::vector<std::string> options = decode(hwaccel);
         command.insert(command.end(), options.begin(), options.end());
+        command.insert(command.end(), own->begin(), own->end());
         command.insert(command.end(), {"-i", input_path(path)});
     }
     const std::vector<std::string> outputs = output_args(filtergraph, duration_limit);
@@ -1636,10 +1638,12 @@ std::string build_resample_filtergraph(const VideoInfo& source, const VmafOption
 
 std::vector<std::string> build_resample_command(const std::string& ffmpeg, const std::filesystem::path& source,
                                                 const std::string& filtergraph,
-                                                const std::optional<std::string>& hwaccel, double duration_limit) {
+                                                const std::optional<std::string>& hwaccel, double duration_limit,
+                                                const std::vector<std::string>& source_options) {
     std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-y"};
     const std::vector<std::string> decode = hwaccel_args(hwaccel);
     command.insert(command.end(), decode.begin(), decode.end());
+    command.insert(command.end(), source_options.begin(), source_options.end());
     command.insert(command.end(), {"-i", input_path(source)});
     const std::vector<std::string> outputs = output_args(filtergraph, duration_limit);
     command.insert(command.end(), outputs.begin(), outputs.end());
@@ -1703,18 +1707,20 @@ std::pair<std::string, std::string> build_stream_graphs(const VideoInfo& source,
 std::vector<std::vector<std::string>> build_stream_commands(
     const std::string& ffmpeg, const std::filesystem::path& distorted, const std::filesystem::path& source,
     const std::pair<std::string, std::string>& graphs, const HardwareDecoding& decoding,
-    const std::pair<std::vector<std::string>, std::vector<std::string>>& outputs) {
+    const std::pair<std::vector<std::string>, std::vector<std::string>>& outputs, const InputOptions& inputs) {
     const auto command = [&ffmpeg](const std::filesystem::path& path, const std::optional<std::string>& hwaccel,
-                                   const std::string& graph, const std::vector<std::string>& output) {
+                                   const std::vector<std::string>& input, const std::string& graph,
+                                   const std::vector<std::string>& output) {
         std::vector<std::string> made{ffmpeg, "-nostdin", "-hide_banner", "-y"};
         const std::vector<std::string> decode = hwaccel_args(hwaccel);
         made.insert(made.end(), decode.begin(), decode.end());
+        made.insert(made.end(), input.begin(), input.end());
         made.insert(made.end(), {"-i", input_path(path), "-lavfi", graph, "-progress", "pipe:1", "-nostats"});
         made.insert(made.end(), output.begin(), output.end());
         return made;
     };
-    return {command(distorted, decoding.distorted, graphs.first, outputs.first),
-            command(source, decoding.source, graphs.second, outputs.second)};
+    return {command(distorted, decoding.distorted, inputs.distorted, graphs.first, outputs.first),
+            command(source, decoding.source, inputs.source, graphs.second, outputs.second)};
 }
 
 namespace {
@@ -1925,7 +1931,8 @@ ComparisonResult run_resample_test(const RunEnvironment& environment, const Vide
         const std::string graph = build_resample_filtergraph(source, options, source_crop, plan.source,
                                                              "vmaf_log.json", run_model, xpsnr_log_name,
                                                              environment.cores);
-        return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, options.duration_limit);
+        return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, options.duration_limit,
+                                      source.input_options());
     };
     const ParsedScores scores = execute_run(build_command, options, model, source.fps, total_frames, decoding,
                                             "vmaf_resample_", on_progress, on_status, cancel);

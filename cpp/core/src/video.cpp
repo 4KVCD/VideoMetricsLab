@@ -5,6 +5,7 @@
 #include <cmath>
 #include <string_view>
 
+#include "vml/number_format.h"
 #include "vml/platform/system.h"
 
 namespace vml {
@@ -53,11 +54,21 @@ long long VideoInfo::estimated_frame_count() const {
 }
 
 bool VideoInfo::is_raw_stream() const {
-    // FFmpeg's demuxers of bare elementary streams, which carry no timestamps.
-    constexpr std::array<std::string_view, 15> raw_stream_formats{
-        "h264", "hevc", "vvc",       "evc",  "av1",       "obu",  "mpegvideo", "m4v",
-        "h263", "vc1",  "dirac",     "cavsvideo", "avs2", "avs3", "mjpeg"};
+    // FFmpeg's demuxers of bare elementary streams, which carry no timestamps
+    // (a .mjpeg file is read as jpeg_pipe, a run of JPEG pictures).
+    constexpr std::array<std::string_view, 18> raw_stream_formats{
+        "h264", "hevc", "vvc",   "evc",       "av1",  "obu",  "mpegvideo", "m4v", "h263",
+        "h261", "vc1",  "dirac", "cavsvideo", "avs2", "avs3", "mjpeg",     "jpeg_pipe", "apv"};
     return std::find(raw_stream_formats.begin(), raw_stream_formats.end(), format_name) != raw_stream_formats.end();
+}
+
+std::vector<std::string> VideoInfo::input_options() const {
+    if (!timed_raw) {
+        return {};
+    }
+    // The rate as a double's shortest exact text: FFmpeg turns it back into
+    // the fraction it came from (24000/1001 for 23.976023976023978).
+    return {"-framerate", python_repr(fps)};
 }
 
 bool VideoInfo::is_variable_frame_rate() const {

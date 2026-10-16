@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace vml {
 
@@ -79,12 +80,20 @@ struct VideoInfo {
     // How long after the file's start the video's first frame comes, in
     // seconds.
     double start_offset = 0.0;
+    // A raw stream timed by the command line's --fps (ffprobe.h's
+    // timed_raw_stream): its frame rate is the one given, and its frame
+    // count, length and bitrate come from its counted frames.
+    bool timed_raw = false;
 
     // The frame count ffprobe reports, or else duration times fps.
     long long estimated_frame_count() const;
     // A bare elementary stream (a .hevc or .264 file), not a container: it
     // has no timestamps, so its frame rate cannot be known.
     bool is_raw_stream() const;
+    // FFmpeg's options before the video's -i: a timed raw stream's frame
+    // rate (-framerate), so that FFmpeg's times for its frames are right.
+    // Nothing for any other video.
+    std::vector<std::string> input_options() const;
     // Whether the nominal and the average frame rate differ by more than
     // rounding.
     bool is_variable_frame_rate() const;

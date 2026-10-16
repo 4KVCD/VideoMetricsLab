@@ -57,4 +57,7 @@ std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo
 // stream's frames by that guessed rate, so it would show the wrong frame.
 std::optional<std::string> untimed_pair_problem(const VideoInfo& source, const VideoInfo& distorted);
 
+// A raw stream's codec as messages name it: "H.264", "HEVC", "MPEG-2"...
+std::string codec_label(const std::string& codec);
+
 }  // namespace vml

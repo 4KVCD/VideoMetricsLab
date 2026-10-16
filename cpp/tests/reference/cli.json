@@ -3,7 +3,7 @@
   {
    "argv": [],
    "exit": 2,
-   "stdout": "usage: VideoMetricsLab-cli [-h] [--version] COMMAND ...\n\n{version}: video quality metrics from the command line.\n\npositional arguments:\n  COMMAND\n    compare   calculate metrics for test videos against a reference\n    devices   show FFmpeg and which GPU each metric would use\n\noptions:\n  -h, --help  show this help message and exit\n  --version   show program's version number and exit\n\nexamples:\n  VideoMetricsLab-cli compare reference.mkv encode.mkv\n      the app's default metrics for one encode\n  VideoMetricsLab-cli compare reference.mkv encodes\\*.mkv -m vmaf,ssimulacra2\n      two metrics for every .mkv in a folder, with a summary side by side\n  VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv -m all --csv results\n      every metric, and each video's per-frame scores in results\\a.csv, b.csv\n  VideoMetricsLab-cli compare reference.mkv encode.mkv --duration 30 --cpu\n      the first 30 seconds only, everything calculated on the CPU\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q\n      only JSON on the output, for a script to read\n  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33\n      HDR10 video in files with no colour tags, the first 33 frames\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display \"30-inch 4K HDR monitor, dim room\"\n      CVVDP on a display other than the app's default (repeat it for several)\n  VideoMetricsLab-cli devices\n      what would calculate each metric on this PC\n\nVideoMetricsLab-cli compare --help lists every option.\n",
+   "stdout": "usage: VideoMetricsLab-cli [-h] [--version] COMMAND ...\n\n{version}: video quality metrics from the command line.\n\npositional arguments:\n  COMMAND\n    compare   calculate metrics for test videos against a reference\n    devices   show FFmpeg and which GPU each metric would use\n\noptions:\n  -h, --help  show this help message and exit\n  --version   show program's version number and exit\n\nexamples:\n  VideoMetricsLab-cli compare reference.mkv encode.mkv\n      the app's default metrics for one encode\n  VideoMetricsLab-cli compare reference.mkv encodes\\*.mkv -m vmaf,ssimulacra2\n      two metrics for every .mkv in a folder, with a summary side by side\n  VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv -m all --csv results\n      every metric, and each video's per-frame scores in results\\a.csv, b.csv\n  VideoMetricsLab-cli compare reference.mkv encode.mkv --duration 30 --cpu\n      the first 30 seconds only, everything calculated on the CPU\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q\n      only JSON on the output, for a script to read\n  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33\n      HDR10 video in files with no colour tags, the first 33 frames\n  VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001\n      a raw VVC stream from an encoder, at 23.976 frames a second\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display \"30-inch 4K HDR monitor, dim room\"\n      CVVDP on a display other than the app's default (repeat it for several)\n  VideoMetricsLab-cli devices\n      what would calculate each metric on this PC\n\nVideoMetricsLab-cli compare --help lists every option.\n",
    "stderr": "",
    "values": null
   },
@@ -12,7 +12,7 @@
     "-h"
    ],
    "exit": 0,
-   "stdout": "usage: VideoMetricsLab-cli [-h] [--version] COMMAND ...\n\n{version}: video quality metrics from the command line.\n\npositional arguments:\n  COMMAND\n    compare   calculate metrics for test videos against a reference\n    devices   show FFmpeg and which GPU each metric would use\n\noptions:\n  -h, --help  show this help message and exit\n  --version   show program's version number and exit\n\nexamples:\n  VideoMetricsLab-cli compare reference.mkv encode.mkv\n      the app's default metrics for one encode\n  VideoMetricsLab-cli compare reference.mkv encodes\\*.mkv -m vmaf,ssimulacra2\n      two metrics for every .mkv in a folder, with a summary side by side\n  VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv -m all --csv results\n      every metric, and each video's per-frame scores in results\\a.csv, b.csv\n  VideoMetricsLab-cli compare reference.mkv encode.mkv --duration 30 --cpu\n      the first 30 seconds only, everything calculated on the CPU\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q\n      only JSON on the output, for a script to read\n  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33\n      HDR10 video in files with no colour tags, the first 33 frames\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display \"30-inch 4K HDR monitor, dim room\"\n      CVVDP on a display other than the app's default (repeat it for several)\n  VideoMetricsLab-cli devices\n      what would calculate each metric on this PC\n\nVideoMetricsLab-cli compare --help lists every option.\n",
+   "stdout": "usage: VideoMetricsLab-cli [-h] [--version] COMMAND ...\n\n{version}: video quality metrics from the command line.\n\npositional arguments:\n  COMMAND\n    compare   calculate metrics for test videos against a reference\n    devices   show FFmpeg and which GPU each metric would use\n\noptions:\n  -h, --help  show this help message and exit\n  --version   show program's version number and exit\n\nexamples:\n  VideoMetricsLab-cli compare reference.mkv encode.mkv\n      the app's default metrics for one encode\n  VideoMetricsLab-cli compare reference.mkv encodes\\*.mkv -m vmaf,ssimulacra2\n      two metrics for every .mkv in a folder, with a summary side by side\n  VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv -m all --csv results\n      every metric, and each video's per-frame scores in results\\a.csv, b.csv\n  VideoMetricsLab-cli compare reference.mkv encode.mkv --duration 30 --cpu\n      the first 30 seconds only, everything calculated on the CPU\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q\n      only JSON on the output, for a script to read\n  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33\n      HDR10 video in files with no colour tags, the first 33 frames\n  VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001\n      a raw VVC stream from an encoder, at 23.976 frames a second\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display \"30-inch 4K HDR monitor, dim room\"\n      CVVDP on a display other than the app's default (repeat it for several)\n  VideoMetricsLab-cli devices\n      what would calculate each metric on this PC\n\nVideoMetricsLab-cli compare --help lists every option.\n",
    "stderr": "",
    "values": null
   },
@@ -21,7 +21,7 @@
     "--help"
    ],
    "exit": 0,
-   "stdout": "usage: VideoMetricsLab-cli [-h] [--version] COMMAND ...\n\n{version}: video quality metrics from the command line.\n\npositional arguments:\n  COMMAND\n    compare   calculate metrics for test videos against a reference\n    devices   show FFmpeg and which GPU each metric would use\n\noptions:\n  -h, --help  show this help message and exit\n  --version   show program's version number and exit\n\nexamples:\n  VideoMetricsLab-cli compare reference.mkv encode.mkv\n      the app's default metrics for one encode\n  VideoMetricsLab-cli compare reference.mkv encodes\\*.mkv -m vmaf,ssimulacra2\n      two metrics for every .mkv in a folder, with a summary side by side\n  VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv -m all --csv results\n      every metric, and each video's per-frame scores in results\\a.csv, b.csv\n  VideoMetricsLab-cli compare reference.mkv encode.mkv --duration 30 --cpu\n      the first 30 seconds only, everything calculated on the CPU\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q\n      only JSON on the output, for a script to read\n  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33\n      HDR10 video in files with no colour tags, the first 33 frames\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display \"30-inch 4K HDR monitor, dim room\"\n      CVVDP on a display other than the app's default (repeat it for several)\n  VideoMetricsLab-cli devices\n      what would calculate each metric on this PC\n\nVideoMetricsLab-cli compare --help lists every option.\n",
+   "stdout": "usage: VideoMetricsLab-cli [-h] [--version] COMMAND ...\n\n{version}: video quality metrics from the command line.\n\npositional arguments:\n  COMMAND\n    compare   calculate metrics for test videos against a reference\n    devices   show FFmpeg and which GPU each metric would use\n\noptions:\n  -h, --help  show this help message and exit\n  --version   show program's version number and exit\n\nexamples:\n  VideoMetricsLab-cli compare reference.mkv encode.mkv\n      the app's default metrics for one encode\n  VideoMetricsLab-cli compare reference.mkv encodes\\*.mkv -m vmaf,ssimulacra2\n      two metrics for every .mkv in a folder, with a summary side by side\n  VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv -m all --csv results\n      every metric, and each video's per-frame scores in results\\a.csv, b.csv\n  VideoMetricsLab-cli compare reference.mkv encode.mkv --duration 30 --cpu\n      the first 30 seconds only, everything calculated on the CPU\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q\n      only JSON on the output, for a script to read\n  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33\n      HDR10 video in files with no colour tags, the first 33 frames\n  VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001\n      a raw VVC stream from an encoder, at 23.976 frames a second\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display \"30-inch 4K HDR monitor, dim room\"\n      CVVDP on a display other than the app's default (repeat it for several)\n  VideoMetricsLab-cli devices\n      what would calculate each metric on this PC\n\nVideoMetricsLab-cli compare --help lists every option.\n",
    "stderr": "",
    "values": null
   },
@@ -108,7 +108,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: the following arguments are required: REFERENCE, TEST\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: the following arguments are required: REFERENCE, TEST\n",
    "values": null
   },
   {
@@ -117,7 +117,7 @@
     "-h"
    ],
    "exit": 0,
-   "stdout": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\n\nCalculates metrics for each TEST video against REFERENCE. Options left out take the app's saved settings; scores already saved by the app or an earlier run are not calculated again.\n\npositional arguments:\n  REFERENCE\n  TEST                  a test video, or a pattern such as encodes\\*.mkv (the\n                        reference is left out of what a pattern finds)\n\noptions:\n  -h, --help            show this help message and exit\n  -m, --metrics LIST    comma-separated: vmaf, vmaf_neg, vmaf_v1, psnr, ssim,\n                        xpsnr, ssimulacra2, butteraugli, cvvdp; or all\n                        (default: the app's)\n  --model MODEL         VMAF v0.6.1's model: auto (4K model for a 4K\n                        comparison), standard, 4k, or a model .json file\n                        (default: auto)\n  --black-bars {auto,none}\n                        auto: detect and cut black bars; none: compare the\n                        whole pictures (default: auto)\n  --scale-to {test,reference}\n                        which video's size the other is scaled to when they\n                        differ (default: test)\n  --scaler {bicubic,bilinear,lanczos,spline}\n                        scaling algorithm (default: bicubic)\n  --duration SECONDS    compare only the first SECONDS of each video\n  --frames N            compare only the first N frames of each video (a short\n                        encode of a longer reference, say)\n  --colour, --color {pq-bt2020,hlg-bt2020,bt709}\n                        the colours of a video with no colour tags (y4m, say):\n                        pq-bt2020 (HDR10), hlg-bt2020 or bt709 (SDR). A tagged\n                        video keeps its own. Without it such a video is taken\n                        as SDR, which changes CVVDP, SSIMULACRA2 and\n                        Butteraugli. These scores are neither read from nor\n                        saved to the saved scores\n  --cvvdp-display PRESET\n                        the display CVVDP models, by preset name (default: the\n                        app's). Repeat it for a CVVDP score on each display;\n                        each extra one decodes the videos again. Presets:\n                        '30-inch 4K monitor, office', '24-inch 1080p monitor,\n                        office', '30-inch 4K HDR monitor, dim room', '30-inch\n                        4K HDR monitor, dark room', '65-inch 4K HDR TV, 1000\n                        nits, living room', '65-inch 4K HDR TV, 2000 nits,\n                        living room', '65-inch 4K HDR TV, 4000 nits, living\n                        room', '6-inch phone', or one saved in the app\n  --subsample N         score every N-th frame (default: 1, every frame; CVVDP\n                        needs every frame)\n  --threads N           libvmaf threads (default: automatic)\n  --vmaf-on {gpu,cpu}   where VMAF v0.6.1, VMAF NEG and VMAF v1 is calculated\n                        (default: the app's)\n  --ssimulacra2-on {gpu,cpu}\n                        where SSIMULACRA2 is calculated (default: the app's)\n  --butteraugli-on {gpu,cpu}\n                        where Butteraugli is calculated (default: the app's)\n  --cpu                 calculate on the CPU every metric that can be (CVVDP\n                        is GPU only); the same as --vmaf-on cpu\n                        --ssimulacra2-on cpu --butteraugli-on cpu\n  --no-gpu-decode       decode the videos on the CPU\n  --parallel N          videos calculated at once on the CPU, 1-2 (default:\n                        the app's)\n  --recalculate         calculate every metric again instead of using saved\n                        scores\n  --csv FOLDER          write each video's per-frame scores to FOLDER as\n                        <video>.csv\n  --json FILE           also write the results as JSON to FILE; - prints the\n                        JSON instead of the tables\n  -q, --quiet           no progress, only the results\n  -v, --verbose         the app's log as well\n\nexamples:\n  VideoMetricsLab-cli compare reference.mkv encode.mkv\n      the app's default metrics for one encode\n  VideoMetricsLab-cli compare reference.mkv encodes\\*.mkv -m vmaf,ssimulacra2\n      two metrics for every .mkv in a folder, with a summary side by side\n  VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv -m all --csv results\n      every metric, and each video's per-frame scores in results\\a.csv, b.csv\n  VideoMetricsLab-cli compare reference.mkv encode.mkv --duration 30 --cpu\n      the first 30 seconds only, everything calculated on the CPU\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q\n      only JSON on the output, for a script to read\n  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33\n      HDR10 video in files with no colour tags, the first 33 frames\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display \"30-inch 4K HDR monitor, dim room\"\n      CVVDP on a display other than the app's default (repeat it for several)\n  VideoMetricsLab-cli devices\n      what would calculate each metric on this PC\n",
+   "stdout": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\n\nCalculates metrics for each TEST video against REFERENCE. Options left out take the app's saved settings; scores already saved by the app or an earlier run are not calculated again.\n\npositional arguments:\n  REFERENCE\n  TEST                  a test video, or a pattern such as encodes\\*.mkv (the\n                        reference is left out of what a pattern finds)\n\noptions:\n  -h, --help            show this help message and exit\n  -m, --metrics LIST    comma-separated: vmaf, vmaf_neg, vmaf_v1, psnr, ssim,\n                        xpsnr, ssimulacra2, butteraugli, cvvdp; or all\n                        (default: the app's)\n  --model MODEL         VMAF v0.6.1's model: auto (4K model for a 4K\n                        comparison), standard, 4k, or a model .json file\n                        (default: auto)\n  --black-bars {auto,none}\n                        auto: detect and cut black bars; none: compare the\n                        whole pictures (default: auto)\n  --scale-to {test,reference}\n                        which video's size the other is scaled to when they\n                        differ (default: test)\n  --scaler {bicubic,bilinear,lanczos,spline}\n                        scaling algorithm (default: bicubic)\n  --duration SECONDS    compare only the first SECONDS of each video\n  --frames N            compare only the first N frames of each video (a short\n                        encode of a longer reference, say)\n  --colour, --color {pq-bt2020,hlg-bt2020,bt709}\n                        the colours of a video with no colour tags (y4m, say):\n                        pq-bt2020 (HDR10), hlg-bt2020 or bt709 (SDR). A tagged\n                        video keeps its own. Without it such a video is taken\n                        as SDR, which changes CVVDP, SSIMULACRA2 and\n                        Butteraugli. These scores are neither read from nor\n                        saved to the saved scores\n  --fps RATE            the frame rate of a raw video stream (a .264, .265,\n                        .266 or .obu file, with no container), which records\n                        none, such as 24000/1001, 23.976 or 60: required for\n                        one. These scores are neither read from nor saved to\n                        the saved scores\n  --cvvdp-display PRESET\n                        the display CVVDP models, by preset name (default: the\n                        app's). Repeat it for a CVVDP score on each display;\n                        each extra one decodes the videos again. Presets:\n                        '30-inch 4K monitor, office', '24-inch 1080p monitor,\n                        office', '30-inch 4K HDR monitor, dim room', '30-inch\n                        4K HDR monitor, dark room', '65-inch 4K HDR TV, 1000\n                        nits, living room', '65-inch 4K HDR TV, 2000 nits,\n                        living room', '65-inch 4K HDR TV, 4000 nits, living\n                        room', '6-inch phone', or one saved in the app\n  --subsample N         score every N-th frame (default: 1, every frame; CVVDP\n                        needs every frame)\n  --threads N           libvmaf threads (default: automatic)\n  --vmaf-on {gpu,cpu}   where VMAF v0.6.1, VMAF NEG and VMAF v1 is calculated\n                        (default: the app's)\n  --ssimulacra2-on {gpu,cpu}\n                        where SSIMULACRA2 is calculated (default: the app's)\n  --butteraugli-on {gpu,cpu}\n                        where Butteraugli is calculated (default: the app's)\n  --cpu                 calculate on the CPU every metric that can be (CVVDP\n                        is GPU only); the same as --vmaf-on cpu\n                        --ssimulacra2-on cpu --butteraugli-on cpu\n  --no-gpu-decode       decode the videos on the CPU\n  --parallel N          videos calculated at once on the CPU, 1-2 (default:\n                        the app's)\n  --recalculate         calculate every metric again instead of using saved\n                        scores\n  --csv FOLDER          write each video's per-frame scores to FOLDER as\n                        <video>.csv\n  --json FILE           also write the results as JSON to FILE; - prints the\n                        JSON instead of the tables\n  -q, --quiet           no progress, only the results\n  -v, --verbose         the app's log as well\n\nexamples:\n  VideoMetricsLab-cli compare reference.mkv encode.mkv\n      the app's default metrics for one encode\n  VideoMetricsLab-cli compare reference.mkv encodes\\*.mkv -m vmaf,ssimulacra2\n      two metrics for every .mkv in a folder, with a summary side by side\n  VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv -m all --csv results\n      every metric, and each video's per-frame scores in results\\a.csv, b.csv\n  VideoMetricsLab-cli compare reference.mkv encode.mkv --duration 30 --cpu\n      the first 30 seconds only, everything calculated on the CPU\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q\n      only JSON on the output, for a script to read\n  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33\n      HDR10 video in files with no colour tags, the first 33 frames\n  VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001\n      a raw VVC stream from an encoder, at 23.976 frames a second\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display \"30-inch 4K HDR monitor, dim room\"\n      CVVDP on a display other than the app's default (repeat it for several)\n  VideoMetricsLab-cli devices\n      what would calculate each metric on this PC\n",
    "stderr": "",
    "values": null
   },
@@ -128,7 +128,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: the following arguments are required: TEST\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: the following arguments are required: TEST\n",
    "values": null
   },
   {
@@ -154,6 +154,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -200,6 +201,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -283,6 +285,7 @@
     "duration": "0x1.9000000000000p+3",
     "frames": null,
     "colour": "pq-bt2020",
+    "fps": null,
     "cvvdp_displays": [
      "6-inch phone",
      "30-inch 4K monitor, office"
@@ -337,6 +340,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -363,7 +367,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument -m/--metrics: unknown metric foo, bar; choose from: all, vmaf, vmaf_neg, vmaf_v1, psnr, ssim, xpsnr, ssimulacra2, butteraugli, cvvdp\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument -m/--metrics: unknown metric foo, bar; choose from: all, vmaf, vmaf_neg, vmaf_v1, psnr, ssim, xpsnr, ssimulacra2, butteraugli, cvvdp\n",
    "values": null
   },
   {
@@ -376,7 +380,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument -m/--metrics: unknown metric ,; choose from: all, vmaf, vmaf_neg, vmaf_v1, psnr, ssim, xpsnr, ssimulacra2, butteraugli, cvvdp\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument -m/--metrics: unknown metric ,; choose from: all, vmaf, vmaf_neg, vmaf_v1, psnr, ssim, xpsnr, ssimulacra2, butteraugli, cvvdp\n",
    "values": null
   },
   {
@@ -406,6 +410,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -448,6 +453,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -490,6 +496,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -533,6 +540,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -559,7 +567,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: ambiguous option: --s could match --scale-to, --scaler, --subsample, --ssimulacra2-on\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: ambiguous option: --s could match --scale-to, --scaler, --subsample, --ssimulacra2-on\n",
    "values": null
   },
   {
@@ -572,7 +580,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: ambiguous option: --colo could match --colour, --color\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: ambiguous option: --colo could match --colour, --color\n",
    "values": null
   },
   {
@@ -600,6 +608,7 @@
     "duration": null,
     "frames": null,
     "colour": "bt709",
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -626,7 +635,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --colour/--color: invalid choice: 'rec2020' (choose from pq-bt2020, hlg-bt2020, bt709)\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --colour/--color: invalid choice: 'rec2020' (choose from pq-bt2020, hlg-bt2020, bt709)\n",
    "values": null
   },
   {
@@ -639,7 +648,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --vmaf-on: invalid choice: 'GPU' (choose from gpu, cpu)\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --vmaf-on: invalid choice: 'GPU' (choose from gpu, cpu)\n",
    "values": null
   },
   {
@@ -667,6 +676,7 @@
     "duration": null,
     "frames": 33,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -692,7 +702,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: must be above 0\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: must be above 0\n",
    "values": null
   },
   {
@@ -705,7 +715,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: must be above 0\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: must be above 0\n",
    "values": null
   },
   {
@@ -718,7 +728,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: invalid parse value: 'x'\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: invalid parse value: 'x'\n",
    "values": null
   },
   {
@@ -746,6 +756,7 @@
     "duration": null,
     "frames": 1000,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -789,6 +800,7 @@
     "duration": null,
     "frames": 6,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -815,7 +827,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --duration: must be above 0\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --duration: must be above 0\n",
    "values": null
   },
   {
@@ -828,7 +840,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --duration: must be above 0\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --duration: must be above 0\n",
    "values": null
   },
   {
@@ -856,6 +868,7 @@
     "duration": "0x1.0624dd2f1a9fcp-10",
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -884,7 +897,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: not allowed with argument --duration\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: not allowed with argument --duration\n",
    "values": null
   },
   {
@@ -899,7 +912,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --duration: not allowed with argument --frames\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --duration: not allowed with argument --frames\n",
    "values": null
   },
   {
@@ -914,7 +927,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: invalid parse value: 'x'\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: invalid parse value: 'x'\n",
    "values": null
   },
   {
@@ -926,7 +939,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: expected one argument\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: expected one argument\n",
    "values": null
   },
   {
@@ -939,7 +952,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: expected one argument\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: expected one argument\n",
    "values": null
   },
   {
@@ -951,7 +964,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument -m/--metrics: expected one argument\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument -m/--metrics: expected one argument\n",
    "values": null
   },
   {
@@ -964,7 +977,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --subsample: must be above 0\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --subsample: must be above 0\n",
    "values": null
   },
   {
@@ -992,6 +1005,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": 4,
@@ -1018,7 +1032,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --parallel: invalid choice: '3' (choose from 1, 2)\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --parallel: invalid choice: '3' (choose from 1, 2)\n",
    "values": null
   },
   {
@@ -1046,6 +1060,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1072,7 +1087,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --parallel: invalid int value: 'two'\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --parallel: invalid int value: 'two'\n",
    "values": null
   },
   {
@@ -1099,6 +1114,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1141,6 +1157,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1184,6 +1201,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1221,7 +1239,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument -q/--quiet: ignored explicit argument 'v'\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument -q/--quiet: ignored explicit argument 'v'\n",
    "values": null
   },
   {
@@ -1233,7 +1251,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --cpu: ignored explicit argument 'yes'\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --cpu: ignored explicit argument 'yes'\n",
    "values": null
   },
   {
@@ -1260,6 +1278,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1329,6 +1348,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1372,6 +1392,7 @@
     "duration": null,
     "frames": 5,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1426,6 +1447,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1468,6 +1490,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1512,6 +1535,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1551,6 +1575,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1592,6 +1617,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1631,6 +1657,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1672,6 +1699,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1698,7 +1726,7 @@
     "x"
    ],
    "exit": 0,
-   "stdout": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\n\nCalculates metrics for each TEST video against REFERENCE. Options left out take the app's saved settings; scores already saved by the app or an earlier run are not calculated again.\n\npositional arguments:\n  REFERENCE\n  TEST                  a test video, or a pattern such as encodes\\*.mkv (the\n                        reference is left out of what a pattern finds)\n\noptions:\n  -h, --help            show this help message and exit\n  -m, --metrics LIST    comma-separated: vmaf, vmaf_neg, vmaf_v1, psnr, ssim,\n                        xpsnr, ssimulacra2, butteraugli, cvvdp; or all\n                        (default: the app's)\n  --model MODEL         VMAF v0.6.1's model: auto (4K model for a 4K\n                        comparison), standard, 4k, or a model .json file\n                        (default: auto)\n  --black-bars {auto,none}\n                        auto: detect and cut black bars; none: compare the\n                        whole pictures (default: auto)\n  --scale-to {test,reference}\n                        which video's size the other is scaled to when they\n                        differ (default: test)\n  --scaler {bicubic,bilinear,lanczos,spline}\n                        scaling algorithm (default: bicubic)\n  --duration SECONDS    compare only the first SECONDS of each video\n  --frames N            compare only the first N frames of each video (a short\n                        encode of a longer reference, say)\n  --colour, --color {pq-bt2020,hlg-bt2020,bt709}\n                        the colours of a video with no colour tags (y4m, say):\n                        pq-bt2020 (HDR10), hlg-bt2020 or bt709 (SDR). A tagged\n                        video keeps its own. Without it such a video is taken\n                        as SDR, which changes CVVDP, SSIMULACRA2 and\n                        Butteraugli. These scores are neither read from nor\n                        saved to the saved scores\n  --cvvdp-display PRESET\n                        the display CVVDP models, by preset name (default: the\n                        app's). Repeat it for a CVVDP score on each display;\n                        each extra one decodes the videos again. Presets:\n                        '30-inch 4K monitor, office', '24-inch 1080p monitor,\n                        office', '30-inch 4K HDR monitor, dim room', '30-inch\n                        4K HDR monitor, dark room', '65-inch 4K HDR TV, 1000\n                        nits, living room', '65-inch 4K HDR TV, 2000 nits,\n                        living room', '65-inch 4K HDR TV, 4000 nits, living\n                        room', '6-inch phone', or one saved in the app\n  --subsample N         score every N-th frame (default: 1, every frame; CVVDP\n                        needs every frame)\n  --threads N           libvmaf threads (default: automatic)\n  --vmaf-on {gpu,cpu}   where VMAF v0.6.1, VMAF NEG and VMAF v1 is calculated\n                        (default: the app's)\n  --ssimulacra2-on {gpu,cpu}\n                        where SSIMULACRA2 is calculated (default: the app's)\n  --butteraugli-on {gpu,cpu}\n                        where Butteraugli is calculated (default: the app's)\n  --cpu                 calculate on the CPU every metric that can be (CVVDP\n                        is GPU only); the same as --vmaf-on cpu\n                        --ssimulacra2-on cpu --butteraugli-on cpu\n  --no-gpu-decode       decode the videos on the CPU\n  --parallel N          videos calculated at once on the CPU, 1-2 (default:\n                        the app's)\n  --recalculate         calculate every metric again instead of using saved\n                        scores\n  --csv FOLDER          write each video's per-frame scores to FOLDER as\n                        <video>.csv\n  --json FILE           also write the results as JSON to FILE; - prints the\n                        JSON instead of the tables\n  -q, --quiet           no progress, only the results\n  -v, --verbose         the app's log as well\n\nexamples:\n  VideoMetricsLab-cli compare reference.mkv encode.mkv\n      the app's default metrics for one encode\n  VideoMetricsLab-cli compare reference.mkv encodes\\*.mkv -m vmaf,ssimulacra2\n      two metrics for every .mkv in a folder, with a summary side by side\n  VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv -m all --csv results\n      every metric, and each video's per-frame scores in results\\a.csv, b.csv\n  VideoMetricsLab-cli compare reference.mkv encode.mkv --duration 30 --cpu\n      the first 30 seconds only, everything calculated on the CPU\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q\n      only JSON on the output, for a script to read\n  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33\n      HDR10 video in files with no colour tags, the first 33 frames\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display \"30-inch 4K HDR monitor, dim room\"\n      CVVDP on a display other than the app's default (repeat it for several)\n  VideoMetricsLab-cli devices\n      what would calculate each metric on this PC\n",
+   "stdout": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\n\nCalculates metrics for each TEST video against REFERENCE. Options left out take the app's saved settings; scores already saved by the app or an earlier run are not calculated again.\n\npositional arguments:\n  REFERENCE\n  TEST                  a test video, or a pattern such as encodes\\*.mkv (the\n                        reference is left out of what a pattern finds)\n\noptions:\n  -h, --help            show this help message and exit\n  -m, --metrics LIST    comma-separated: vmaf, vmaf_neg, vmaf_v1, psnr, ssim,\n                        xpsnr, ssimulacra2, butteraugli, cvvdp; or all\n                        (default: the app's)\n  --model MODEL         VMAF v0.6.1's model: auto (4K model for a 4K\n                        comparison), standard, 4k, or a model .json file\n                        (default: auto)\n  --black-bars {auto,none}\n                        auto: detect and cut black bars; none: compare the\n                        whole pictures (default: auto)\n  --scale-to {test,reference}\n                        which video's size the other is scaled to when they\n                        differ (default: test)\n  --scaler {bicubic,bilinear,lanczos,spline}\n                        scaling algorithm (default: bicubic)\n  --duration SECONDS    compare only the first SECONDS of each video\n  --frames N            compare only the first N frames of each video (a short\n                        encode of a longer reference, say)\n  --colour, --color {pq-bt2020,hlg-bt2020,bt709}\n                        the colours of a video with no colour tags (y4m, say):\n                        pq-bt2020 (HDR10), hlg-bt2020 or bt709 (SDR). A tagged\n                        video keeps its own. Without it such a video is taken\n                        as SDR, which changes CVVDP, SSIMULACRA2 and\n                        Butteraugli. These scores are neither read from nor\n                        saved to the saved scores\n  --fps RATE            the frame rate of a raw video stream (a .264, .265,\n                        .266 or .obu file, with no container), which records\n                        none, such as 24000/1001, 23.976 or 60: required for\n                        one. These scores are neither read from nor saved to\n                        the saved scores\n  --cvvdp-display PRESET\n                        the display CVVDP models, by preset name (default: the\n                        app's). Repeat it for a CVVDP score on each display;\n                        each extra one decodes the videos again. Presets:\n                        '30-inch 4K monitor, office', '24-inch 1080p monitor,\n                        office', '30-inch 4K HDR monitor, dim room', '30-inch\n                        4K HDR monitor, dark room', '65-inch 4K HDR TV, 1000\n                        nits, living room', '65-inch 4K HDR TV, 2000 nits,\n                        living room', '65-inch 4K HDR TV, 4000 nits, living\n                        room', '6-inch phone', or one saved in the app\n  --subsample N         score every N-th frame (default: 1, every frame; CVVDP\n                        needs every frame)\n  --threads N           libvmaf threads (default: automatic)\n  --vmaf-on {gpu,cpu}   where VMAF v0.6.1, VMAF NEG and VMAF v1 is calculated\n                        (default: the app's)\n  --ssimulacra2-on {gpu,cpu}\n                        where SSIMULACRA2 is calculated (default: the app's)\n  --butteraugli-on {gpu,cpu}\n                        where Butteraugli is calculated (default: the app's)\n  --cpu                 calculate on the CPU every metric that can be (CVVDP\n                        is GPU only); the same as --vmaf-on cpu\n                        --ssimulacra2-on cpu --butteraugli-on cpu\n  --no-gpu-decode       decode the videos on the CPU\n  --parallel N          videos calculated at once on the CPU, 1-2 (default:\n                        the app's)\n  --recalculate         calculate every metric again instead of using saved\n                        scores\n  --csv FOLDER          write each video's per-frame scores to FOLDER as\n                        <video>.csv\n  --json FILE           also write the results as JSON to FILE; - prints the\n                        JSON instead of the tables\n  -q, --quiet           no progress, only the results\n  -v, --verbose         the app's log as well\n\nexamples:\n  VideoMetricsLab-cli compare reference.mkv encode.mkv\n      the app's default metrics for one encode\n  VideoMetricsLab-cli compare reference.mkv encodes\\*.mkv -m vmaf,ssimulacra2\n      two metrics for every .mkv in a folder, with a summary side by side\n  VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv -m all --csv results\n      every metric, and each video's per-frame scores in results\\a.csv, b.csv\n  VideoMetricsLab-cli compare reference.mkv encode.mkv --duration 30 --cpu\n      the first 30 seconds only, everything calculated on the CPU\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q\n      only JSON on the output, for a script to read\n  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33\n      HDR10 video in files with no colour tags, the first 33 frames\n  VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001\n      a raw VVC stream from an encoder, at 23.976 frames a second\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display \"30-inch 4K HDR monitor, dim room\"\n      CVVDP on a display other than the app's default (repeat it for several)\n  VideoMetricsLab-cli devices\n      what would calculate each metric on this PC\n",
    "stderr": "",
    "values": null
   },
@@ -1713,7 +1741,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: invalid parse value: 'x'\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --frames: invalid parse value: 'x'\n",
    "values": null
   },
   {
@@ -1724,7 +1752,7 @@
     "--he"
    ],
    "exit": 0,
-   "stdout": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\n\nCalculates metrics for each TEST video against REFERENCE. Options left out take the app's saved settings; scores already saved by the app or an earlier run are not calculated again.\n\npositional arguments:\n  REFERENCE\n  TEST                  a test video, or a pattern such as encodes\\*.mkv (the\n                        reference is left out of what a pattern finds)\n\noptions:\n  -h, --help            show this help message and exit\n  -m, --metrics LIST    comma-separated: vmaf, vmaf_neg, vmaf_v1, psnr, ssim,\n                        xpsnr, ssimulacra2, butteraugli, cvvdp; or all\n                        (default: the app's)\n  --model MODEL         VMAF v0.6.1's model: auto (4K model for a 4K\n                        comparison), standard, 4k, or a model .json file\n                        (default: auto)\n  --black-bars {auto,none}\n                        auto: detect and cut black bars; none: compare the\n                        whole pictures (default: auto)\n  --scale-to {test,reference}\n                        which video's size the other is scaled to when they\n                        differ (default: test)\n  --scaler {bicubic,bilinear,lanczos,spline}\n                        scaling algorithm (default: bicubic)\n  --duration SECONDS    compare only the first SECONDS of each video\n  --frames N            compare only the first N frames of each video (a short\n                        encode of a longer reference, say)\n  --colour, --color {pq-bt2020,hlg-bt2020,bt709}\n                        the colours of a video with no colour tags (y4m, say):\n                        pq-bt2020 (HDR10), hlg-bt2020 or bt709 (SDR). A tagged\n                        video keeps its own. Without it such a video is taken\n                        as SDR, which changes CVVDP, SSIMULACRA2 and\n                        Butteraugli. These scores are neither read from nor\n                        saved to the saved scores\n  --cvvdp-display PRESET\n                        the display CVVDP models, by preset name (default: the\n                        app's). Repeat it for a CVVDP score on each display;\n                        each extra one decodes the videos again. Presets:\n                        '30-inch 4K monitor, office', '24-inch 1080p monitor,\n                        office', '30-inch 4K HDR monitor, dim room', '30-inch\n                        4K HDR monitor, dark room', '65-inch 4K HDR TV, 1000\n                        nits, living room', '65-inch 4K HDR TV, 2000 nits,\n                        living room', '65-inch 4K HDR TV, 4000 nits, living\n                        room', '6-inch phone', or one saved in the app\n  --subsample N         score every N-th frame (default: 1, every frame; CVVDP\n                        needs every frame)\n  --threads N           libvmaf threads (default: automatic)\n  --vmaf-on {gpu,cpu}   where VMAF v0.6.1, VMAF NEG and VMAF v1 is calculated\n                        (default: the app's)\n  --ssimulacra2-on {gpu,cpu}\n                        where SSIMULACRA2 is calculated (default: the app's)\n  --butteraugli-on {gpu,cpu}\n                        where Butteraugli is calculated (default: the app's)\n  --cpu                 calculate on the CPU every metric that can be (CVVDP\n                        is GPU only); the same as --vmaf-on cpu\n                        --ssimulacra2-on cpu --butteraugli-on cpu\n  --no-gpu-decode       decode the videos on the CPU\n  --parallel N          videos calculated at once on the CPU, 1-2 (default:\n                        the app's)\n  --recalculate         calculate every metric again instead of using saved\n                        scores\n  --csv FOLDER          write each video's per-frame scores to FOLDER as\n                        <video>.csv\n  --json FILE           also write the results as JSON to FILE; - prints the\n                        JSON instead of the tables\n  -q, --quiet           no progress, only the results\n  -v, --verbose         the app's log as well\n\nexamples:\n  VideoMetricsLab-cli compare reference.mkv encode.mkv\n      the app's default metrics for one encode\n  VideoMetricsLab-cli compare reference.mkv encodes\\*.mkv -m vmaf,ssimulacra2\n      two metrics for every .mkv in a folder, with a summary side by side\n  VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv -m all --csv results\n      every metric, and each video's per-frame scores in results\\a.csv, b.csv\n  VideoMetricsLab-cli compare reference.mkv encode.mkv --duration 30 --cpu\n      the first 30 seconds only, everything calculated on the CPU\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q\n      only JSON on the output, for a script to read\n  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33\n      HDR10 video in files with no colour tags, the first 33 frames\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display \"30-inch 4K HDR monitor, dim room\"\n      CVVDP on a display other than the app's default (repeat it for several)\n  VideoMetricsLab-cli devices\n      what would calculate each metric on this PC\n",
+   "stdout": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\n\nCalculates metrics for each TEST video against REFERENCE. Options left out take the app's saved settings; scores already saved by the app or an earlier run are not calculated again.\n\npositional arguments:\n  REFERENCE\n  TEST                  a test video, or a pattern such as encodes\\*.mkv (the\n                        reference is left out of what a pattern finds)\n\noptions:\n  -h, --help            show this help message and exit\n  -m, --metrics LIST    comma-separated: vmaf, vmaf_neg, vmaf_v1, psnr, ssim,\n                        xpsnr, ssimulacra2, butteraugli, cvvdp; or all\n                        (default: the app's)\n  --model MODEL         VMAF v0.6.1's model: auto (4K model for a 4K\n                        comparison), standard, 4k, or a model .json file\n                        (default: auto)\n  --black-bars {auto,none}\n                        auto: detect and cut black bars; none: compare the\n                        whole pictures (default: auto)\n  --scale-to {test,reference}\n                        which video's size the other is scaled to when they\n                        differ (default: test)\n  --scaler {bicubic,bilinear,lanczos,spline}\n                        scaling algorithm (default: bicubic)\n  --duration SECONDS    compare only the first SECONDS of each video\n  --frames N            compare only the first N frames of each video (a short\n                        encode of a longer reference, say)\n  --colour, --color {pq-bt2020,hlg-bt2020,bt709}\n                        the colours of a video with no colour tags (y4m, say):\n                        pq-bt2020 (HDR10), hlg-bt2020 or bt709 (SDR). A tagged\n                        video keeps its own. Without it such a video is taken\n                        as SDR, which changes CVVDP, SSIMULACRA2 and\n                        Butteraugli. These scores are neither read from nor\n                        saved to the saved scores\n  --fps RATE            the frame rate of a raw video stream (a .264, .265,\n                        .266 or .obu file, with no container), which records\n                        none, such as 24000/1001, 23.976 or 60: required for\n                        one. These scores are neither read from nor saved to\n                        the saved scores\n  --cvvdp-display PRESET\n                        the display CVVDP models, by preset name (default: the\n                        app's). Repeat it for a CVVDP score on each display;\n                        each extra one decodes the videos again. Presets:\n                        '30-inch 4K monitor, office', '24-inch 1080p monitor,\n                        office', '30-inch 4K HDR monitor, dim room', '30-inch\n                        4K HDR monitor, dark room', '65-inch 4K HDR TV, 1000\n                        nits, living room', '65-inch 4K HDR TV, 2000 nits,\n                        living room', '65-inch 4K HDR TV, 4000 nits, living\n                        room', '6-inch phone', or one saved in the app\n  --subsample N         score every N-th frame (default: 1, every frame; CVVDP\n                        needs every frame)\n  --threads N           libvmaf threads (default: automatic)\n  --vmaf-on {gpu,cpu}   where VMAF v0.6.1, VMAF NEG and VMAF v1 is calculated\n                        (default: the app's)\n  --ssimulacra2-on {gpu,cpu}\n                        where SSIMULACRA2 is calculated (default: the app's)\n  --butteraugli-on {gpu,cpu}\n                        where Butteraugli is calculated (default: the app's)\n  --cpu                 calculate on the CPU every metric that can be (CVVDP\n                        is GPU only); the same as --vmaf-on cpu\n                        --ssimulacra2-on cpu --butteraugli-on cpu\n  --no-gpu-decode       decode the videos on the CPU\n  --parallel N          videos calculated at once on the CPU, 1-2 (default:\n                        the app's)\n  --recalculate         calculate every metric again instead of using saved\n                        scores\n  --csv FOLDER          write each video's per-frame scores to FOLDER as\n                        <video>.csv\n  --json FILE           also write the results as JSON to FILE; - prints the\n                        JSON instead of the tables\n  -q, --quiet           no progress, only the results\n  -v, --verbose         the app's log as well\n\nexamples:\n  VideoMetricsLab-cli compare reference.mkv encode.mkv\n      the app's default metrics for one encode\n  VideoMetricsLab-cli compare reference.mkv encodes\\*.mkv -m vmaf,ssimulacra2\n      two metrics for every .mkv in a folder, with a summary side by side\n  VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv -m all --csv results\n      every metric, and each video's per-frame scores in results\\a.csv, b.csv\n  VideoMetricsLab-cli compare reference.mkv encode.mkv --duration 30 --cpu\n      the first 30 seconds only, everything calculated on the CPU\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q\n      only JSON on the output, for a script to read\n  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33\n      HDR10 video in files with no colour tags, the first 33 frames\n  VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001\n      a raw VVC stream from an encoder, at 23.976 frames a second\n  VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display \"30-inch 4K HDR monitor, dim room\"\n      CVVDP on a display other than the app's default (repeat it for several)\n  VideoMetricsLab-cli devices\n      what would calculate each metric on this PC\n",
    "stderr": "",
    "values": null
   },
@@ -1753,6 +1781,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": null,
     "subsample": 1,
     "threads": null,
@@ -1779,7 +1808,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --cvvdp-display: expected one argument\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --cvvdp-display: expected one argument\n",
    "values": null
   },
   {
@@ -1807,6 +1836,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": [
      "-6-inch phone"
     ],
@@ -1835,7 +1865,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --scaler: invalid choice: \"it's\" (choose from bicubic, bilinear, lanczos, spline)\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --scaler: invalid choice: \"it's\" (choose from bicubic, bilinear, lanczos, spline)\n",
    "values": null
   },
   {
@@ -1848,7 +1878,7 @@
    ],
    "exit": 2,
    "stdout": "",
-   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--cvvdp-display PRESET] [--subsample N]\n                                   [--threads N] [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --scaler: invalid choice: 'tab\\there\\x01' (choose from bicubic, bilinear, lanczos, spline)\n",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --scaler: invalid choice: 'tab\\there\\x01' (choose from bicubic, bilinear, lanczos, spline)\n",
    "values": null
   },
   {
@@ -1876,6 +1906,7 @@
     "duration": null,
     "frames": null,
     "colour": null,
+    "fps": null,
     "cvvdp_displays": [
      "\u00e9cran"
     ],
@@ -1893,6 +1924,412 @@
     "quiet": false,
     "verbose": false
    }
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "24000/1001"
+   ],
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "values": {
+    "command": "compare",
+    "reference": "ref.mkv",
+    "tests": [
+     "a.266"
+    ],
+    "metrics": null,
+    "model": "auto",
+    "black_bars": "auto",
+    "scale_to": "test",
+    "scaler": "bicubic",
+    "duration": null,
+    "frames": null,
+    "colour": null,
+    "fps": "0x1.7f9dcb5112287p+4",
+    "cvvdp_displays": null,
+    "subsample": 1,
+    "threads": null,
+    "vmaf_on": null,
+    "ssimulacra2_on": null,
+    "butteraugli_on": null,
+    "cpu": false,
+    "no_gpu_decode": false,
+    "parallel": null,
+    "recalculate": false,
+    "csv": null,
+    "json_path": null,
+    "quiet": false,
+    "verbose": false
+   }
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "23.976"
+   ],
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "values": {
+    "command": "compare",
+    "reference": "ref.mkv",
+    "tests": [
+     "a.266"
+    ],
+    "metrics": null,
+    "model": "auto",
+    "black_bars": "auto",
+    "scale_to": "test",
+    "scaler": "bicubic",
+    "duration": null,
+    "frames": null,
+    "colour": null,
+    "fps": "0x1.7f9db22d0e560p+4",
+    "cvvdp_displays": null,
+    "subsample": 1,
+    "threads": null,
+    "vmaf_on": null,
+    "ssimulacra2_on": null,
+    "butteraugli_on": null,
+    "cpu": false,
+    "no_gpu_decode": false,
+    "parallel": null,
+    "recalculate": false,
+    "csv": null,
+    "json_path": null,
+    "quiet": false,
+    "verbose": false
+   }
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps=60"
+   ],
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "values": {
+    "command": "compare",
+    "reference": "ref.mkv",
+    "tests": [
+     "a.266"
+    ],
+    "metrics": null,
+    "model": "auto",
+    "black_bars": "auto",
+    "scale_to": "test",
+    "scaler": "bicubic",
+    "duration": null,
+    "frames": null,
+    "colour": null,
+    "fps": "0x1.e000000000000p+5",
+    "cvvdp_displays": null,
+    "subsample": 1,
+    "threads": null,
+    "vmaf_on": null,
+    "ssimulacra2_on": null,
+    "butteraugli_on": null,
+    "cpu": false,
+    "no_gpu_decode": false,
+    "parallel": null,
+    "recalculate": false,
+    "csv": null,
+    "json_path": null,
+    "quiet": false,
+    "verbose": false
+   }
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    " 30000/1001 "
+   ],
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "values": {
+    "command": "compare",
+    "reference": "ref.mkv",
+    "tests": [
+     "a.266"
+    ],
+    "metrics": null,
+    "model": "auto",
+    "black_bars": "auto",
+    "scale_to": "test",
+    "scaler": "bicubic",
+    "duration": null,
+    "frames": null,
+    "colour": null,
+    "fps": "0x1.df853e2556b28p+4",
+    "cvvdp_displays": null,
+    "subsample": 1,
+    "threads": null,
+    "vmaf_on": null,
+    "ssimulacra2_on": null,
+    "butteraugli_on": null,
+    "cpu": false,
+    "no_gpu_decode": false,
+    "parallel": null,
+    "recalculate": false,
+    "csv": null,
+    "json_path": null,
+    "quiet": false,
+    "verbose": false
+   }
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "1e2"
+   ],
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "values": {
+    "command": "compare",
+    "reference": "ref.mkv",
+    "tests": [
+     "a.266"
+    ],
+    "metrics": null,
+    "model": "auto",
+    "black_bars": "auto",
+    "scale_to": "test",
+    "scaler": "bicubic",
+    "duration": null,
+    "frames": null,
+    "colour": null,
+    "fps": "0x1.9000000000000p+6",
+    "cvvdp_displays": null,
+    "subsample": 1,
+    "threads": null,
+    "vmaf_on": null,
+    "ssimulacra2_on": null,
+    "butteraugli_on": null,
+    "cpu": false,
+    "no_gpu_decode": false,
+    "parallel": null,
+    "recalculate": false,
+    "csv": null,
+    "json_path": null,
+    "quiet": false,
+    "verbose": false
+   }
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "0120/5"
+   ],
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "values": {
+    "command": "compare",
+    "reference": "ref.mkv",
+    "tests": [
+     "a.266"
+    ],
+    "metrics": null,
+    "model": "auto",
+    "black_bars": "auto",
+    "scale_to": "test",
+    "scaler": "bicubic",
+    "duration": null,
+    "frames": null,
+    "colour": null,
+    "fps": "0x1.8000000000000p+4",
+    "cvvdp_displays": null,
+    "subsample": 1,
+    "threads": null,
+    "vmaf_on": null,
+    "ssimulacra2_on": null,
+    "butteraugli_on": null,
+    "cpu": false,
+    "no_gpu_decode": false,
+    "parallel": null,
+    "recalculate": false,
+    "csv": null,
+    "json_path": null,
+    "quiet": false,
+    "verbose": false
+   }
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "0"
+   ],
+   "exit": 2,
+   "stdout": "",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --fps: must be above 0\n",
+   "values": null
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "0/5"
+   ],
+   "exit": 2,
+   "stdout": "",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --fps: must be above 0\n",
+   "values": null
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "-24"
+   ],
+   "exit": 2,
+   "stdout": "",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --fps: must be above 0\n",
+   "values": null
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "inf"
+   ],
+   "exit": 2,
+   "stdout": "",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --fps: must be above 0\n",
+   "values": null
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "nan"
+   ],
+   "exit": 2,
+   "stdout": "",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --fps: must be above 0\n",
+   "values": null
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "24/0"
+   ],
+   "exit": 2,
+   "stdout": "",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --fps: invalid parse value: '24/0'\n",
+   "values": null
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "-24/1"
+   ],
+   "exit": 2,
+   "stdout": "",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --fps: invalid parse value: '-24/1'\n",
+   "values": null
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "30000 / 1001"
+   ],
+   "exit": 2,
+   "stdout": "",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --fps: invalid parse value: '30000 / 1001'\n",
+   "values": null
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "24000/1001/1"
+   ],
+   "exit": 2,
+   "stdout": "",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --fps: invalid parse value: '24000/1001/1'\n",
+   "values": null
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "9007199254740992/1"
+   ],
+   "exit": 2,
+   "stdout": "",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --fps: invalid parse value: '9007199254740992/1'\n",
+   "values": null
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps",
+    "x"
+   ],
+   "exit": 2,
+   "stdout": "",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --fps: invalid parse value: 'x'\n",
+   "values": null
+  },
+  {
+   "argv": [
+    "compare",
+    "ref.mkv",
+    "a.266",
+    "--fps"
+   ],
+   "exit": 2,
+   "stdout": "",
+   "stderr": "usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]\n                                   [--black-bars {auto,none}]\n                                   [--scale-to {test,reference}]\n                                   [--scaler {bicubic,bilinear,lanczos,spline}]\n                                   [--duration SECONDS | --frames N]\n                                   [--colour {pq-bt2020,hlg-bt2020,bt709}]\n                                   [--fps RATE] [--cvvdp-display PRESET]\n                                   [--subsample N] [--threads N]\n                                   [--vmaf-on {gpu,cpu}]\n                                   [--ssimulacra2-on {gpu,cpu}]\n                                   [--butteraugli-on {gpu,cpu}] [--cpu]\n                                   [--no-gpu-decode] [--parallel N]\n                                   [--recalculate] [--csv FOLDER]\n                                   [--json FILE] [-q] [-v]\n                                   REFERENCE TEST [TEST ...]\nVideoMetricsLab-cli compare: error: argument --fps: expected one argument\n",
+   "values": null
   }
  ],
  "patterns": {

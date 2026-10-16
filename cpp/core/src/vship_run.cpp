@@ -1380,6 +1380,8 @@ private:
                                              "-nostdin"};
             const std::vector<std::string> decode = hwaccel_args(accel);
             command.insert(command.end(), decode.begin(), decode.end());
+            const std::vector<std::string> input = video.info.input_options();
+            command.insert(command.end(), input.begin(), input.end());
             command.insert(command.end(), {"-i", input_path(video.info.path), "-map",
                                            "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", chain});
             if (cut) {
