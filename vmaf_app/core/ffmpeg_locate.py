@@ -80,7 +80,7 @@ def find_binary(name: str) -> str:
     override = _configured_dir()
     if override:
         candidate = Path(override) / exe
-        if candidate.exists():
+        if candidate.is_file():
             return str(candidate)
 
     on_path = shutil.which(name)
@@ -89,7 +89,7 @@ def find_binary(name: str) -> str:
 
     for d in _candidate_dirs():
         candidate = d / exe
-        if candidate.exists():
+        if candidate.is_file():
             return str(candidate)
 
     # Last resort: the bare name, in case it is on the PATH by the time it runs.

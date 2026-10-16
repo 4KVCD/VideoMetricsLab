@@ -1354,7 +1354,7 @@ class MainWindow(QMainWindow):
             return False
 
         directory = Path(chosen).parent
-        if not (directory / ffprobe_exe).exists():
+        if not (directory / ffprobe_exe).is_file():
             QMessageBox.information(
                 self, tr("ffprobe needed too"),
                 tr("{ffprobe_exe} wasn't found next to {ffmpeg_exe}.\n\nThe app needs both. Please select {ffprobe_exe} "
