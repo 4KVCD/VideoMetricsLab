@@ -454,59 +454,9 @@ int NativePool::poll() {
             target = anchor_frame_ + static_cast<long long>((view_.clock() - anchor_) * fps_);
         }
     }
-    // The newest frame both videos shown have, which limits the queues'
-    // floor below.
-    long long reach = std::numeric_limits<long long>::max();
-    for (const std::string& key : {source_key_, distorted_key(selected_)}) {
-        const auto queue = frames_.find(key);
-        reach = std::min(reach, queue == frames_.end() || queue->second.empty() ? frame_ : queue->second.rbegin()->first);
-    }
+    const long long reach = shown_reach();
     for (const auto& [key, player] : entries_) {
-        const NativeUpdate update = player->poll();
-        if (update.error) {
-            throw std::runtime_error(update.error->toStdString());
-        }
-        if (key == source_key_) {
-            // The soundtrack's clock counts from the source's first frame
-            // too, known from its first frame, before the sound starts.
-            if (const std::optional<int> first_ms = player->first_frame_ms();
-                first_ms && *first_ms != audio_->offset_ms() && !audio_running_) {
-                audio_->set_offset(*first_ms, position_);
-            }
-        }
-        if (update.status) {
-            status_details_[key] = *update.status;
-        }
-        if (update.ended) {
-            eos_.insert(key);
-        }
-        std::map<long long, NativeFramePtr>& queue = frames_[key];
-        // Keep two frames before the one shown (while playing, before the one
-        // about to be shown), for instant S and arrow-key swaps; the pair
-        // shown holds its own. While playing, the floor counts from the
-        // target: counted from the frame shown, the queue would still be full
-        // of past frames when the clock moved two frames on, and one frame in
-        // five would be skipped at 120 fps. The floor also stops at how far
-        // both videos shown have come: counted from this queue alone, a video
-        // decoded ahead of the other would drop frames the other has yet to
-        // reach, so the pair waited for would never come.
-        const long long newest = queue.empty() ? frame_ : queue.rbegin()->first;
-        const long long floor = std::min({std::max(frame_, target), newest, reach}) - 2;
-        std::erase_if(queue, [floor](const auto& item) { return item.first < floor; });
-        // Two previous frames, the current one and two upcoming ones: a limit
-        // on the GPU surfaces held, while a step back or forward stays
-        // instant. Nothing is taken while the decoder's seek is still to be
-        // made: until then it can still give frames from before the seek.
-        while (queue.size() < pool_kept_frames && !player->seeking()) {
-            NativeFramePtr sample = player->try_pull();
-            if (!sample) {
-                break;
-            }
-            const long long number = round_even(static_cast<double>(sample->time_ns) / 1e9 * fps_);
-            if (number >= frame_) {
-                queue[number] = std::move(sample);
-            }
-        }
+        take_frames(key, *player, target, reach);
     }
     // The work above can take time with a newly selected decoder, so the
     // soundtrack's clock is read again before the pair is chosen.
@@ -521,6 +471,78 @@ int NativePool::poll() {
     clock_ms_ = clock_ms;
     clock_at_ = polled_at;
     const bool matched = shown_ = choose_pair(target);
+    keep_up(matched, target);
+    check_ended();
+    return position_;
+}
+
+// The newest frame both videos shown have, which limits the queues' floor
+// (take_frames).
+long long NativePool::shown_reach() const {
+    long long reach = std::numeric_limits<long long>::max();
+    for (const std::string& key : {source_key_, distorted_key(selected_)}) {
+        const auto queue = frames_.find(key);
+        reach = std::min(reach, queue == frames_.end() || queue->second.empty() ? frame_ : queue->second.rbegin()->first);
+    }
+    return reach;
+}
+
+// Takes `player`'s news (an error, its status, its end) and its frames, as
+// far as its queue (`key`'s) keeps them, while the frame due is `target`
+// and both videos shown have come to `reach`.
+void NativePool::take_frames(const std::string& key, NativeVideo& player, long long target, long long reach) {
+    const NativeUpdate update = player.poll();
+    if (update.error) {
+        throw std::runtime_error(update.error->toStdString());
+    }
+    if (key == source_key_) {
+        // The soundtrack's clock counts from the source's first frame
+        // too, known from its first frame, before the sound starts.
+        if (const std::optional<int> first_ms = player.first_frame_ms();
+            first_ms && *first_ms != audio_->offset_ms() && !audio_running_) {
+            audio_->set_offset(*first_ms, position_);
+        }
+    }
+    if (update.status) {
+        status_details_[key] = *update.status;
+    }
+    if (update.ended) {
+        eos_.insert(key);
+    }
+    std::map<long long, NativeFramePtr>& queue = frames_[key];
+    // Keep two frames before the one shown (while playing, before the one
+    // about to be shown), for instant S and arrow-key swaps; the pair
+    // shown holds its own. While playing, the floor counts from the
+    // target: counted from the frame shown, the queue would still be full
+    // of past frames when the clock moved two frames on, and one frame in
+    // five would be skipped at 120 fps. The floor also stops at how far
+    // both videos shown have come: counted from this queue alone, a video
+    // decoded ahead of the other would drop frames the other has yet to
+    // reach, so the pair waited for would never come.
+    const long long newest = queue.empty() ? frame_ : queue.rbegin()->first;
+    const long long floor = std::min({std::max(frame_, target), newest, reach}) - 2;
+    std::erase_if(queue, [floor](const auto& item) { return item.first < floor; });
+    // Two previous frames, the current one and two upcoming ones: a limit
+    // on the GPU surfaces held, while a step back or forward stays
+    // instant. Nothing is taken while the decoder's seek is still to be
+    // made: until then it can still give frames from before the seek.
+    while (queue.size() < pool_kept_frames && !player.seeking()) {
+        NativeFramePtr sample = player.try_pull();
+        if (!sample) {
+            break;
+        }
+        const long long number = round_even(static_cast<double>(sample->time_ns) / 1e9 * fps_);
+        if (number >= frame_) {
+            queue[number] = std::move(sample);
+        }
+    }
+}
+
+// Plays on, or buffers: when the pair due is not there (`matched`), or
+// playback fell behind its soundtrack and could not catch up, the sound
+// stops and is sought again; once the pair is there and the sound ready,
+// both go on.
+void NativePool::keep_up(bool matched, long long target) {
     // Falling behind is judged by the soundtrack clock's own reading, not the
     // value carried on between its steps, which picks the frame.
     const std::optional<double> reading = audio_running_ ? audio_->reading_ms() : std::nullopt;
@@ -557,6 +579,10 @@ int NativePool::poll() {
             audio_running_ = true;
         }
     }
+}
+
+// Whether a video shown has ended at the frame shown: playback ends there.
+void NativePool::check_ended() {
     for (const std::string& key : {source_key_, distorted_key(selected_)}) {
         const std::map<long long, NativeFramePtr>& queue = frames_[key];
         if (eos_.contains(key) && (queue.empty() || queue.rbegin()->first <= frame_)) {
@@ -564,7 +590,6 @@ int NativePool::poll() {
             audio_->set_playing(false);
         }
     }
-    return position_;
 }
 
 std::optional<int> NativePool::next_tick_ms() const {

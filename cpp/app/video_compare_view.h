@@ -219,6 +219,14 @@ private:
     void retire(PlaybackDecoder* worker);
     long long target_frame() const;
     void tick();
+    // tick's steps.
+    long long paired_target(long long target, const std::string& source, const std::string& distorted) const;
+    void take_due_frames(long long target, long long paired, const std::string& source,
+                         const std::string& distorted);
+    std::optional<long long> newest_common_frame(const std::string& source, const std::string& distorted);
+    void wait_for_pair(long long target, const std::string& source, const std::string& distorted);
+    void show_pair(long long frame, long long target, const std::string& source,
+                   const std::string& distorted);
     void pool_status();
     void check_end();
     void start_audio(long long frame);

@@ -353,6 +353,25 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     qRegisterMetaType<DetectedCrops>();
     auto* root = new QVBoxLayout(this);
 
+    add_video_row(root);
+    add_colour_row(root);
+    add_view(root);
+    add_seek_rows(root);
+    add_labels(root);
+    make_timers();
+
+    // This panel's own widgets' keys, rather than the whole application's:
+    // a filter on the application would keep every window closed alive.
+    installEventFilter(this);
+    for (QWidget* child : findChildren<QWidget*>()) {
+        child->installEventFilter(this);
+    }
+    update_enabled_state();
+}
+
+// The test video's row: the previous and next buttons, the list, and the
+// zoom.
+void FrameComparePanel::add_video_row(QVBoxLayout* root) {
     auto* top = new QHBoxLayout;
     previous_video_button = new QPushButton(QString::fromUtf8("\xE2\x86\x90"));  // ←
     previous_video_button->setToolTip(app::tr("Previous test video (Left arrow)"));
@@ -384,7 +403,11 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     top->addWidget(new QLabel(app::tr("Zoom:")));
     top->addWidget(zoom_combo);
     root->addLayout(top);
+}
 
+// The colours' row: the HDR preview's mode and the reference's playback
+// size, the colour status, and Advanced info.
+void FrameComparePanel::add_colour_row(QVBoxLayout* root) {
     auto* color_row = new QHBoxLayout;
     color_mode_combo = new QComboBox;
     color_mode_combo->addItem(app::tr("Display-aware (recommended)"), "display_aware");
@@ -429,7 +452,10 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     advanced_info_button->setToolTip(app::tr("Playback details will appear here when a video is loaded."));
     color_row->addWidget(advanced_info_button);
     root->addLayout(color_row);
+}
 
+// What is shown, and the frames (or the playback) under it.
+void FrameComparePanel::add_view(QVBoxLayout* root) {
     showing_label = new QLabel(app::tr("No videos loaded"));
     QFont font = showing_label->font();
     font.setBold(true);
@@ -442,7 +468,10 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     content_stack_ = new QStackedWidget;
     content_stack_->addWidget(viewer);
     root->addWidget(content_stack_, 1);
+}
 
+// Play, the audio, the frame and timestamp steps, and the timeline.
+void FrameComparePanel::add_seek_rows(QVBoxLayout* root) {
     auto* seek = new QHBoxLayout;
     play_button = new QPushButton(app::tr("\xE2\x96\xB6 Play"));
     play_button->setFont(symbol_font(play_button->font()));
@@ -485,7 +514,10 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     timeline->setRange(0, 0);
     connect(timeline, &QSlider::valueChanged, this, [this](int value) { set_frame(value); });
     root->addWidget(timeline);
+}
 
+// The frame's details, and the keys' guide.
+void FrameComparePanel::add_labels(QVBoxLayout* root) {
     // Elided, so that the text's width is not the page's (see
     // QuietTabWidget).
     detail_label = new ElidedLabel;
@@ -498,7 +530,9 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     theme::style(guide_label, "color: {muted};");
     guide_label->setWordWrap(true);
     root->addWidget(guide_label);
+}
 
+void FrameComparePanel::make_timers() {
     seek_timer_ = new QTimer(this);
     seek_timer_->setSingleShot(true);
     seek_timer_->setInterval(120);
@@ -513,42 +547,36 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     position_timer_->setSingleShot(true);
     position_timer_->setInterval(100);
     connect(position_timer_, &QTimer::timeout, this, [this] { show_video_position(); });
-    // Off screen for a while, the tab lets go of everything it holds: for a
-    // 4K source and three 4K test videos (the source and the VVC one decoded
-    // in software), 5.9 GB of RAM and 1.6 GB of GPU memory. Shown again, it
-    // plays from the same frame (showEvent).
+    // Off screen for a while, the tab lets go of everything it holds
+    // (release_held). Shown again, it plays from the same frame (showEvent).
     release_timer_ = new QTimer(this);
     release_timer_->setSingleShot(true);
-    connect(release_timer_, &QTimer::timeout, this, [this] {
-        if (release_stage_ == ReleaseStage::everything) {
-            if (video_view != nullptr) {
-                video_view->clear();
-            }
-            // The still frames too, the one shown with them (33 MB for a 4K
-            // frame): shown again, the tab extracts it again. A message shown
-            // instead (nothing to compare, say) stays.
-            cache_.clear();
-            if (!viewer->image().isNull()) {
-                viewer->set_message(QString());
-            }
-            release_stage_ = ReleaseStage::device;
-        }
-#ifdef VML_NATIVE_PLAYBACK
-        // The device goes once the decoders and the presenter still ending
-        // have let go of it.
-        if (!NativePool::unload()) {
-            release_timer_->start(retry_unload_ms);
-        }
-#endif
-    });
+    connect(release_timer_, &QTimer::timeout, this, [this] { release_held(); });
+}
 
-    // This panel's own widgets' keys, rather than the whole application's:
-    // a filter on the application would keep every window closed alive.
-    installEventFilter(this);
-    for (QWidget* child : findChildren<QWidget*>()) {
-        child->installEventFilter(this);
+// Lets go of what the tab holds while off screen: the playback and the
+// still frames first, then the GPU's device, tried again until it can go.
+void FrameComparePanel::release_held() {
+    if (release_stage_ == ReleaseStage::everything) {
+        if (video_view != nullptr) {
+            video_view->clear();
+        }
+        // The still frames too, the one shown with them (33 MB for a 4K
+        // frame): shown again, the tab extracts it again. A message shown
+        // instead (nothing to compare, say) stays.
+        cache_.clear();
+        if (!viewer->image().isNull()) {
+            viewer->set_message(QString());
+        }
+        release_stage_ = ReleaseStage::device;
     }
-    update_enabled_state();
+#ifdef VML_NATIVE_PLAYBACK
+    // The device goes once the decoders and the presenter still ending
+    // have let go of it.
+    if (!NativePool::unload()) {
+        release_timer_->start(retry_unload_ms);
+    }
+#endif
 }
 
 FrameComparePanel::~FrameComparePanel() {

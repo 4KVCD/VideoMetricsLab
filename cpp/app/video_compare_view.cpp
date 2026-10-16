@@ -957,62 +957,10 @@ void VideoCompareView::tick() {
     const long long target = target_frame();
     const std::string source = source_key();
     const std::string distorted = "d:" + std::to_string(selected_);
-    // A faster video's frames are not dropped while the other is still
-    // decoding them: its queue holds it at three frames ahead.
-    long long paired_target = target;
-    for (const std::string& key : {source, distorted}) {
-        std::optional<long long> available;
-        if (const auto worker = pool_.find(key); worker != pool_.end()) {
-            available = worker->second->latest_frame_number();
-        }
-        if (!available) {
-            // Nothing queued: the newest frame already taken, else the clock's.
-            const auto history = history_.find(key);
-            available = history == history_.end() || history->second.empty() ? clock_frame_
-                                                                              : history->second.rbegin()->first;
-        }
-        paired_target = std::min(paired_target, *available);
-    }
-    for (auto& [key, worker] : pool_) {
-        std::map<long long, FramePixels>& history = history_[key];
-        const long long due = key == source || key == distorted ? paired_target : target;
-        for (PlaybackFrame& frame : worker->drain_through(due)) {
-            history[frame.number] = std::move(frame.pixels);
-        }
-        // Three past frames, with the worker's three ahead, bound the memory
-        // used, whatever the video's length or the number of files.
-        while (history.size() > 3) {
-            FramePixels pixels = std::move(history.begin()->second);
-            history.erase(history.begin());
-            if (!source_surface_->shows(pixels) && !distorted_surface_->shows(pixels)) {
-                worker->recycle(std::move(pixels));
-            }
-        }
-    }
-    const std::map<long long, FramePixels>& source_frames = history_[source];
-    const std::map<long long, FramePixels>& distorted_frames = history_[distorted];
-    std::optional<long long> common;
-    for (const auto& [number, pixels] : source_frames) {
-        if (distorted_frames.contains(number)) {
-            common = number;  // the newest, the map being in order
-        }
-    }
+    take_due_frames(target, paired_target(target, source, distorted), source, distorted);
+    const std::optional<long long> common = newest_common_frame(source, distorted);
     if (!common) {
-        buffering_ = true;
-        if (wanted_playing_ && target - std::max(0LL, presented_) > 2) {
-            // Starting (a seek, another test video) is not falling behind:
-            // the soundtrack starts with the first frame.
-            if (presented_ >= 0 && clock_started_) {
-                fell_behind();
-            } else {
-                stop_audio();
-            }
-        }
-        const auto failure = failures_.contains(source) ? failures_.find(source) : failures_.find(distorted);
-        status(failure != failures_.end()
-                   ? QStringLiteral("Selected video failed: %1").arg(failure->second)
-                   : QStringLiteral("Buffering selected comparison; adjacent videos are preparing in the background"));
-        pace(failure != failures_.end());
+        wait_for_pair(target, source, distorted);
         return;
     }
     const long long frame = *common;
@@ -1026,6 +974,92 @@ void VideoCompareView::tick() {
         pace(!wanted_playing_ && frame >= target);
         return;
     }
+    show_pair(frame, target, source, distorted);
+}
+
+// A faster video's frames are not dropped while the other is still
+// decoding them: its queue holds it at three frames ahead.
+long long VideoCompareView::paired_target(long long target, const std::string& source,
+                                          const std::string& distorted) const {
+    long long paired = target;
+    for (const std::string& key : {source, distorted}) {
+        std::optional<long long> available;
+        if (const auto worker = pool_.find(key); worker != pool_.end()) {
+            available = worker->second->latest_frame_number();
+        }
+        if (!available) {
+            // Nothing queued: the newest frame already taken, else the clock's.
+            const auto history = history_.find(key);
+            available = history == history_.end() || history->second.empty() ? clock_frame_
+                                                                              : history->second.rbegin()->first;
+        }
+        paired = std::min(paired, *available);
+    }
+    return paired;
+}
+
+// Takes each worker's frames due (the pair shown, as far as `paired`), each
+// keeping its newest few.
+void VideoCompareView::take_due_frames(long long target, long long paired, const std::string& source,
+                                       const std::string& distorted) {
+    for (auto& [key, worker] : pool_) {
+        std::map<long long, FramePixels>& history = history_[key];
+        const long long due = key == source || key == distorted ? paired : target;
+        for (PlaybackFrame& frame : worker->drain_through(due)) {
+            history[frame.number] = std::move(frame.pixels);
+        }
+        // Three past frames, with the worker's three ahead, bound the memory
+        // used, whatever the video's length or the number of files.
+        while (history.size() > 3) {
+            FramePixels pixels = std::move(history.begin()->second);
+            history.erase(history.begin());
+            if (!source_surface_->shows(pixels) && !distorted_surface_->shows(pixels)) {
+                worker->recycle(std::move(pixels));
+            }
+        }
+    }
+}
+
+// The newest frame both videos shown have, if they have one.
+std::optional<long long> VideoCompareView::newest_common_frame(const std::string& source,
+                                                               const std::string& distorted) {
+    const std::map<long long, FramePixels>& source_frames = history_[source];
+    const std::map<long long, FramePixels>& distorted_frames = history_[distorted];
+    std::optional<long long> newest;
+    for (const auto& [number, pixels] : source_frames) {
+        if (distorted_frames.contains(number)) {
+            newest = number;  // the newest, the map being in order
+        }
+    }
+    return newest;
+}
+
+// No pair to show: buffering, the sound stopped where playback fell
+// behind, and the status says why.
+void VideoCompareView::wait_for_pair(long long target, const std::string& source, const std::string& distorted) {
+    buffering_ = true;
+    if (wanted_playing_ && target - std::max(0LL, presented_) > 2) {
+        // Starting (a seek, another test video) is not falling behind:
+        // the soundtrack starts with the first frame.
+        if (presented_ >= 0 && clock_started_) {
+            fell_behind();
+        } else {
+            stop_audio();
+        }
+    }
+    const auto failure = failures_.contains(source) ? failures_.find(source) : failures_.find(distorted);
+    status(failure != failures_.end()
+               ? QStringLiteral("Selected video failed: %1").arg(failure->second)
+               : QStringLiteral("Buffering selected comparison; adjacent videos are preparing in the background"));
+    pace(failure != failures_.end());
+}
+
+// Shows pair `frame` (`target` due), the clock and the sound started or
+// caught up with it.
+void VideoCompareView::show_pair(long long frame, long long target, const std::string& source,
+                                 const std::string& distorted) {
+    const std::map<long long, FramePixels>& source_frames = history_[source];
+    const std::map<long long, FramePixels>& distorted_frames = history_[distorted];
     presented_ = frame;
     const double fps = series_.front().fps;
     if (wanted_playing_ && target - frame > 2) {

@@ -130,6 +130,11 @@ private:
     friend class NativePoolTest;
 
     void launch_missing();
+    // poll's steps.
+    long long shown_reach() const;
+    void take_frames(const std::string& key, NativeVideo& player, long long target, long long reach);
+    void keep_up(bool matched, long long target);
+    void check_ended();
     bool choose_pair(long long target);
     void present(bool source);
     // Stops a decoder (counted against the limit while stopping), or the

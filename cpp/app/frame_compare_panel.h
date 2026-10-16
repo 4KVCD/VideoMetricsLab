@@ -43,6 +43,7 @@ class QSlider;
 class QSpinBox;
 class QStackedWidget;
 class QTimer;
+class QVBoxLayout;
 
 namespace vml::app {
 
@@ -265,6 +266,15 @@ private:
     };
     static PairKey pair_key(const FrameComparisonEntry& entry);
 
+    // The constructor's parts: the panel's rows, top to bottom, added to
+    // `root`, and its timers.
+    void add_video_row(QVBoxLayout* root);
+    void add_colour_row(QVBoxLayout* root);
+    void add_view(QVBoxLayout* root);
+    void add_seek_rows(QVBoxLayout* root);
+    void add_labels(QVBoxLayout* root);
+    void make_timers();
+    void release_held();
     void on_video_selected(int index);
     void on_zoom_chosen(int index);
     void on_zoom_typed();
