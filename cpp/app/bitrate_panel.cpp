@@ -132,6 +132,16 @@ BitratePanel::BitratePanel(std::function<std::string()> ffprobe, VideoColors* co
     setAcceptDrops(true);
 
     auto* root = new QVBoxLayout(this);
+    add_file_controls(root);
+    add_table(root);
+    add_plot_controls(root);
+    add_chart(root);
+    add_status_row(root);
+    update_buttons();
+}
+
+// Add files, Remove selected and Calculate bitrate.
+void BitratePanel::add_file_controls(QVBoxLayout* root) {
     auto* file_controls = new QHBoxLayout;
     add_button = new QPushButton(app::tr("Add files\xE2\x80\xA6"));
     connect(add_button, &QPushButton::clicked, this, [this] { on_add_files(); });
@@ -145,7 +155,10 @@ BitratePanel::BitratePanel(std::function<std::string()> ffprobe, VideoColors* co
     file_controls->addWidget(analyze_button);
     file_controls->addStretch(1);
     root->addLayout(file_controls);
+}
 
+// The files' table.
+void BitratePanel::add_table(QVBoxLayout* root) {
     table = new QTableWidget(0, 9);
     auto* swatches = new ColorSwatchDelegate(table);
     connect(swatches, &ColorSwatchDelegate::clicked, this, [this](int row) { choose_video_color(row); });
@@ -168,7 +181,10 @@ BitratePanel::BitratePanel(std::function<std::string()> ffprobe, VideoColors* co
     table->setMaximumHeight(230);
     connect(table, &QTableWidget::itemChanged, this, [this](QTableWidgetItem* item) { on_table_item_changed(item); });
     root->addWidget(table);
+}
 
+// The plot's view, its start, Reset zoom and Export PNG.
+void BitratePanel::add_plot_controls(QVBoxLayout* root) {
     auto* plot_controls = new QHBoxLayout;
     plot_controls->addWidget(new QLabel(app::tr("Plot view:")));
     auto* views = new QButtonGroup(this);
@@ -194,7 +210,10 @@ BitratePanel::BitratePanel(std::function<std::string()> ffprobe, VideoColors* co
     plot_controls->addWidget(reset_zoom_button);
     plot_controls->addWidget(export_button);
     root->addLayout(plot_controls);
+}
 
+// The chart, and its readout under it.
+void BitratePanel::add_chart(QVBoxLayout* root) {
     chart = new ChartWidget(app::tr("Video bitrate (kb/s)"));
     connect(reset_zoom_button, &QPushButton::clicked, chart, &ChartWidget::reset_view);
     connect(chart, &ChartWidget::hovered, this, [this](double time, double /*value*/) { on_hovered(time); });
@@ -203,11 +222,14 @@ BitratePanel::BitratePanel(std::function<std::string()> ffprobe, VideoColors* co
 
     // The readout, rewritten at each move of the pointer (ReadoutLabel),
     // with room for every line's value (refresh_plot): sized to the hint,
-    // the graph shrank as the pointer came over it and grew back as it left,
-    // drawn afresh each time.
+    // the graph would shrink as the pointer came over it and grow back as
+    // it left, drawn afresh each time.
     hover_label = new ReadoutLabel(app::tr(hover_hint));
     root->addWidget(hover_label);
+}
 
+// What the views show, and the files' reading in progress.
+void BitratePanel::add_status_row(QVBoxLayout* root) {
     auto* status_row = new QHBoxLayout;
     status_label = new QLabel(
         app::tr("Frame view shows encoded video-frame size; second and GOP views show video-only bitrate."));
@@ -225,7 +247,6 @@ BitratePanel::BitratePanel(std::function<std::string()> ffprobe, VideoColors* co
     status_row->addWidget(status_label, 1);
     status_row->addWidget(progress);
     root->addLayout(status_row);
-    update_buttons();
 }
 
 BitratePanel::~BitratePanel() {

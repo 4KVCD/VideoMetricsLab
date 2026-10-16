@@ -36,6 +36,7 @@ class QPushButton;
 class QRadioButton;
 class QTableWidget;
 class QTableWidgetItem;
+class QVBoxLayout;
 
 namespace vml::app {
 
@@ -138,6 +139,14 @@ protected:
     void dropEvent(QDropEvent* event) override;
 
 private:
+    // The constructor's parts: the panel's rows, top to bottom, added to
+    // `root`.
+    void add_file_controls(QVBoxLayout* root);
+    void add_table(QVBoxLayout* root);
+    void add_plot_controls(QVBoxLayout* root);
+    void add_chart(QVBoxLayout* root);
+    void add_status_row(QVBoxLayout* root);
+
     friend class BitratePanelTest;  // the panel's tests (tests/app)
 
     BitrateEntry* entry_for(const QString& path_text);

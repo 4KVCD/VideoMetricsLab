@@ -53,13 +53,8 @@ bool packaged() {
     return std::filesystem::is_directory(platform::executable_path().parent_path() / "resources" / "models", error);
 }
 
-}  // namespace
-
-SelfTestReport self_test(const QApplication& app) {
-    SelfTestReport report(std::string("VideoMetricsLab ") + VML_APP_VERSION + " self-test (C++, Qt " + qVersion() + ")");
-    report.note(std::string("packaged build: ") + (packaged() ? "yes" : "no, running from the build folder"));
-    const Settings settings = Settings::load();
-
+// FFmpeg and ffprobe, where the settings say or on the PATH.
+void check_ffmpeg(SelfTestReport& report, const Settings& settings) {
     const ToolsStatus tools = check_tools(settings);
     if (tools.ok()) {
         report.ok("ffmpeg " + format_version(tools.ffmpeg.version) + " and ffprobe");
@@ -68,7 +63,10 @@ SelfTestReport self_test(const QApplication& app) {
             report.fail(problem);
         }
     }
+}
 
+// Video Compare's native playback.
+void check_native_playback(SelfTestReport& report) {
 #ifdef VML_NATIVE_PLAYBACK
     // Native playback: FFmpeg's libraries, the GPU's decoders and the
     // presenter.
@@ -107,7 +105,9 @@ SelfTestReport self_test(const QApplication& app) {
 #else
     report.warn("Native playback is not built on this system; videos play through ffmpeg.exe");
 #endif
+}
 
+void check_qt(SelfTestReport& report, const QApplication& app) {
     // Which Qt platform plugin, style and image formats loaded: the packaged
     // build ships a trimmed Qt, and if a piece were missing Qt would quietly
     // fall back to a plain style or refuse an image format.
@@ -125,7 +125,10 @@ SelfTestReport self_test(const QApplication& app) {
     } else {
         report.warn("no TLS backend in Qt's plugins: the update check cannot ask GitHub");
     }
+}
 
+// The GPU metrics' own decoders: each GPU maker's, and the software one.
+void check_frame_decoders(SelfTestReport& report) {
     for (const auto& [backend, maker, library] :
          {std::tuple("nvidia", "NVIDIA", "nvdec_frames"), std::tuple("intel", "Intel", "vpl_frames"),
           std::tuple("amd", "AMD", "amf_frames")}) {
@@ -147,7 +150,10 @@ SelfTestReport self_test(const QApplication& app) {
         report.warn("software frame decoder absent (" + software + ": " + why +
                     "); FFmpeg's pipes carry the videos it decodes in software");
     }
+}
 
+// libjxl's tools for SSIMULACRA2 and Butteraugli on the CPU.
+void check_cpu_tools(SelfTestReport& report) {
     for (const char* metric : {"ssimulacra2", "butteraugli"}) {
         if (const std::optional<std::filesystem::path> tool = find_metric_executable(metric)) {
             report.ok(std::string(metric) + " (" + platform::path_text(*tool) + ")");
@@ -155,7 +161,9 @@ SelfTestReport self_test(const QApplication& app) {
             report.warn(std::string(metric) + " tool absent");
         }
     }
+}
 
+void check_isolation(SelfTestReport& report) {
     // The GPU libraries run in processes of their own (isolated.h): each is
     // this program started again.
     try {
@@ -166,7 +174,11 @@ SelfTestReport self_test(const QApplication& app) {
     } catch (const std::exception& error) {
         report.fail(std::string("no process for the GPU libraries could be started: ") + error.what());
     }
+}
 
+// Vship's metrics, VMAF and VMAF v1 on the GPU, with the GPU backend the
+// settings choose.
+void check_gpu_metrics(SelfTestReport& report, const Settings& settings) {
     set_vship_backend(settings.gpu_backend);
     const auto [vship_device, vship_reason] = detect_vship_device();
     if (vship_device) {
@@ -189,6 +201,22 @@ SelfTestReport self_test(const QApplication& app) {
     } else {
         report.warn("VMAF v1 with the GPU unavailable; FFmpeg's libvmaf is used (" + v1.text + ")");
     }
+}
+
+}  // namespace
+
+SelfTestReport self_test(const QApplication& app) {
+    SelfTestReport report(std::string("VideoMetricsLab ") + VML_APP_VERSION + " self-test (C++, Qt " + qVersion() + ")");
+    report.note(std::string("packaged build: ") + (packaged() ? "yes" : "no, running from the build folder"));
+    const Settings settings = Settings::load();
+
+    check_ffmpeg(report, settings);
+    check_native_playback(report);
+    check_qt(report, app);
+    check_frame_decoders(report);
+    check_cpu_tools(report);
+    check_isolation(report);
+    check_gpu_metrics(report, settings);
     return report;
 }
 

@@ -1476,84 +1476,100 @@ void MainWindow::set_row_metrics(int row) {
         if (item == nullptr) {
             continue;
         }
-        const bool enabled = row_metric_enabled(row_data, metric.column);
         const std::optional<double> score = run != nullptr ? score_of(*run, metric.column) : std::nullopt;
         if (score) {
-            // Measured: the score replaces the tick box. Taking the check
-            // state's value away is what removes the box: Qt draws one for
-            // any item that has the role set at all.
-            item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-            item->setData(Qt::CheckStateRole, QVariant());
-            const MetricDefinition& definition = metric_definition(metric.key);
-            const FrameMetricResult* frame_metric = run->result.metric_results.frame(metric.key);
-            QString text = qt_text(definition.format_value(*score));
-            const bool other_scale = frame_metric != nullptr && row_data.metric_backends.contains(metric.key) &&
-                                     !backend_matches(row_data, metric.key, frame_metric->provenance);
-            if (other_scale) {
-                // Visible without hovering: a score from the other
-                // implementation is on a different scale from the rest.
-                text += " (" + QString::fromStdString(frame_metric->provenance.compute_backend).toUpper() + ")";
-            }
-            item->setText(text);
-            // Compared with the others' unless on another scale.
-            item->setData(score_role, other_scale ? QVariant() : QVariant(*score));
-            item->setToolTip(definition.kind == MetricKind::sequence
-                                 ? cvvdp_note(row_data)
-                                 : app::tr("Mean of calculated frame scores.") +
-                                       identical_frames_note(*run, metric.column) +
-                                       backend_note(row_data, metric.key, frame_metric));
-            QFont font;
-            font.setBold(true);
-            item->setFont(font);
-            theme::foreground(item, std::nullopt);
-            continue;
-        }
-        if (const std::optional<QString> unavailable = metric_unavailable_reason(row_data, metric.key)) {
-            // No tick box: there is nothing to choose. The row's own selection
-            // is left alone for when it applies again.
-            item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-            item->setData(Qt::CheckStateRole, QVariant());
-            item->setText("n/a");
-            item->setToolTip(*unavailable);
-            item->setForeground(theme::color("faint"));
-            item->setData(score_role, QVariant());
-            item->setFont(QFont());
-            continue;
-        }
-        item->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-        item->setCheckState(enabled ? Qt::Checked : Qt::Unchecked);
-        const bool failed = enabled && (row_data.analysis_status == RowState::failed ||
-                                         row_data.analysis_status == RowState::partly_failed);
-        item->setText(failed ? app::tr("Failed") : QString());
-        QString tooltip;
-        if (failed) {
-            QString reason = row_data.metric_failures.contains(metric.key) ? row_data.metric_failures.at(metric.key)
-                                                                           : QString();
-            if (reason.isEmpty() && row_data.analysis_status == RowState::failed) {
-                reason = row_data.status_detail.section("\n\n", 0, 0);  // the whole video failed: its reason
-            }
-            tooltip = (reason.isEmpty()
-                           ? app::tr("This metric failed on the last run.")
-                           : app::tr("Failed on the last run: {reason}", {{"reason", tr_message(reason)}})) +
-                      app::tr("\n\nLeft ticked, it is calculated again on the next run; untick to skip it.\nThe full "
-                              "details are in the log (Settings > Storage > Log files).");
+            show_score_cell(*item, row_data, *run, metric, *score);
+        } else if (const std::optional<QString> unavailable = metric_unavailable_reason(row_data, metric.key)) {
+            show_unavailable_cell(*item, *unavailable);
         } else {
-            tooltip = enabled ? app::tr("Ticked: calculated on the next run. Untick to skip it.")
-                              : app::tr("Not selected. Tick to calculate this metric.");
+            show_tick_cell(*item, row_data, metric, row_metric_enabled(row_data, metric.column));
         }
-        if (std::string_view(metric.key) == "cvvdp") {
-            tooltip += cvvdp_elsewhere_note(row_data);
-        }
-        item->setToolTip(tooltip);
-        theme::foreground(item, failed ? std::optional(theme::color("failed")) : std::nullopt);
-        item->setData(score_role, QVariant());
-        item->setFont(QFont());
     }
     syncing_table_ = false;
     schedule_best_worst();
     refresh_row_state(row);
     set_row_black_bars(row);
     set_row_scaling(row);
+}
+
+// A measured metric's cell: its score (with the other implementation's
+// name when it is on another scale), and no tick box.
+void MainWindow::show_score_cell(QTableWidgetItem& item, const RowData& row_data, CompletedRun& run,
+                                 const MetricColumn& metric, double score) {
+    // Measured: the score replaces the tick box. Taking the check
+    // state's value away is what removes the box: Qt draws one for
+    // any item that has the role set at all.
+    item.setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    item.setData(Qt::CheckStateRole, QVariant());
+    const MetricDefinition& definition = metric_definition(metric.key);
+    const FrameMetricResult* frame_metric = run.result.metric_results.frame(metric.key);
+    QString text = qt_text(definition.format_value(score));
+    const bool other_scale = frame_metric != nullptr && row_data.metric_backends.contains(metric.key) &&
+                             !backend_matches(row_data, metric.key, frame_metric->provenance);
+    if (other_scale) {
+        // Visible without hovering: a score from the other
+        // implementation is on a different scale from the rest.
+        text += " (" + QString::fromStdString(frame_metric->provenance.compute_backend).toUpper() + ")";
+    }
+    item.setText(text);
+    // Compared with the others' unless on another scale.
+    item.setData(score_role, other_scale ? QVariant() : QVariant(score));
+    item.setToolTip(definition.kind == MetricKind::sequence
+                        ? cvvdp_note(row_data)
+                        : app::tr("Mean of calculated frame scores.") +
+                              identical_frames_note(run, metric.column) +
+                              backend_note(row_data, metric.key, frame_metric));
+    QFont font;
+    font.setBold(true);
+    item.setFont(font);
+    theme::foreground(&item, std::nullopt);
+}
+
+// The cell of a metric the row cannot have (`reason`): "n/a", and no tick box.
+void MainWindow::show_unavailable_cell(QTableWidgetItem& item, const QString& reason) {
+    // No tick box: there is nothing to choose. The row's own selection
+    // is left alone for when it applies again.
+    item.setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    item.setData(Qt::CheckStateRole, QVariant());
+    item.setText("n/a");
+    item.setToolTip(reason);
+    item.setForeground(theme::color("faint"));
+    item.setData(score_role, QVariant());
+    item.setFont(QFont());
+}
+
+// A metric's tick box, ticked when `enabled`, with "Failed" when it failed
+// on the last run, and why.
+void MainWindow::show_tick_cell(QTableWidgetItem& item, const RowData& row_data, const MetricColumn& metric,
+                                bool enabled) {
+    item.setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    item.setCheckState(enabled ? Qt::Checked : Qt::Unchecked);
+    const bool failed = enabled && (row_data.analysis_status == RowState::failed ||
+                                     row_data.analysis_status == RowState::partly_failed);
+    item.setText(failed ? app::tr("Failed") : QString());
+    QString tooltip;
+    if (failed) {
+        QString reason = row_data.metric_failures.contains(metric.key) ? row_data.metric_failures.at(metric.key)
+                                                                       : QString();
+        if (reason.isEmpty() && row_data.analysis_status == RowState::failed) {
+            reason = row_data.status_detail.section("\n\n", 0, 0);  // the whole video failed: its reason
+        }
+        tooltip = (reason.isEmpty()
+                       ? app::tr("This metric failed on the last run.")
+                       : app::tr("Failed on the last run: {reason}", {{"reason", tr_message(reason)}})) +
+                  app::tr("\n\nLeft ticked, it is calculated again on the next run; untick to skip it.\nThe full "
+                          "details are in the log (Settings > Storage > Log files).");
+    } else {
+        tooltip = enabled ? app::tr("Ticked: calculated on the next run. Untick to skip it.")
+                          : app::tr("Not selected. Tick to calculate this metric.");
+    }
+    if (std::string_view(metric.key) == "cvvdp") {
+        tooltip += cvvdp_elsewhere_note(row_data);
+    }
+    item.setToolTip(tooltip);
+    theme::foreground(&item, failed ? std::optional(theme::color("failed")) : std::nullopt);
+    item.setData(score_role, QVariant());
+    item.setFont(QFont());
 }
 
 RowState MainWindow::row_state(const RowData& row_data) const {

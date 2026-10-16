@@ -2,6 +2,7 @@
 
 #include <deque>
 #include <exception>
+#include <string_view>
 #include <utility>
 
 #include "vml/platform/process.h"
@@ -32,6 +33,35 @@ QString way_of(PlaybackProcessing processing) {
     }
     return {};
 }
+
+// The last lines a process wrote to its error output, kept as its reader
+// thread hands them over.
+class LineTail {
+public:
+    explicit LineTail(std::size_t most) : most_(most) {}
+
+    void add(std::string_view line) {
+        const std::lock_guard lock(mutex_);
+        lines_.emplace_back(line);
+        if (lines_.size() > most_) {
+            lines_.pop_front();
+        }
+    }
+    // The lines, each ended by a newline.
+    std::string text() const {
+        const std::lock_guard lock(mutex_);
+        std::string said;
+        for (const std::string& line : lines_) {
+            said += line + "\n";
+        }
+        return said;
+    }
+
+private:
+    const std::size_t most_;
+    mutable std::mutex mutex_;
+    std::deque<std::string> lines_;
+};
 
 }  // namespace
 
@@ -144,86 +174,15 @@ void StreamDecodeWorker::run() {
     const std::optional<std::string>& accel = side_ == FrameSide::source ? plan.source : plan.distorted;
     std::vector<QString> errors;
     long long next_frame = start_frame_;
-    const auto cancelled = [this] {
-        const std::lock_guard lock(mutex_);
-        return cancelled_;
-    };
     for (const PlaybackProcessing processing : playback_modes(accel)) {
         if (cancelled()) {
             return;
         }
-        // The end of FFmpeg's error output, its last 30 lines.
-        struct Tail {
-            std::mutex mutex;
-            std::deque<std::string> lines;
-        };
-        const auto tail = std::make_shared<Tail>();
-        platform::ProcessOptions options;
-        options.output_pipe_bytes = frame_pipe_bytes;
-        options.on_error_line = [tail](std::string_view line) {
-            const std::lock_guard lock(tail->mutex);
-            tail->lines.emplace_back(line);
-            if (tail->lines.size() > 30) {
-                tail->lines.pop_front();
-            }
-        };
-        bool first = true;
-        QString attempt_error;
-        std::optional<int> exit_code;
-        try {
-            platform::ChildProcess process = platform::ChildProcess::start(
-                build_playback_command(ffmpeg_, comparison_, side_, next_frame, colors_, plan, maximum_, processing),
-                options);
-            const CancelToken::Attached attached = cancel_.attach(process);
-            while (!cancelled()) {
-                // The large pipe holds a whole frame: a read or two each.
-                FramePixels pixels = buffer();
-                std::size_t read = 0;
-                while (read < frame_bytes_) {
-                    const std::size_t got = process.read(pixels->data() + read, frame_bytes_ - read);
-                    if (got == 0) {
-                        break;
-                    }
-                    read += got;
-                }
-                if (read != frame_bytes_) {
-                    if (read > 0) {
-                        attempt_error = QStringLiteral("Decoder returned a truncated frame.");
-                    }
-                    break;
-                }
-                if (first) {
-                    first = false;
-                    QString detail = way_of(processing);
-                    if (!errors.empty()) {
-                        detail += QString::fromUtf8(" \xC2\xB7 retry: ") + errors.back().split('\n').front().left(180);
-                    }
-                    emit ready(detail);
-                }
-                if (!put(next_frame, std::move(pixels))) {
-                    return;
-                }
-                ++next_frame;
-            }
-            if (cancelled()) {
-                return;
-            }
-            exit_code = process.wait();
-        } catch (const std::exception& failure) {
-            attempt_error = QString::fromUtf8(failure.what());
-        }
-        if (cancelled()) {
+        const std::optional<Attempt> attempt = try_decoding(processing, plan, next_frame, errors);
+        if (!attempt) {
             return;
         }
-        std::string said;
-        {
-            const std::lock_guard lock(tail->mutex);
-            for (const std::string& line : tail->lines) {
-                said += line + "\n";
-            }
-        }
-        const QString detail = QString::fromStdString(std::string(python_strip(replace_invalid_utf8(said))));
-        if (!first && attempt_error.isEmpty() && exit_code == 0) {
+        if (attempt->gave_frames && attempt->error.isEmpty() && attempt->exit_code == 0) {
             const std::lock_guard lock(mutex_);
             ended_ = true;
             return;
@@ -231,9 +190,11 @@ void StreamDecodeWorker::run() {
         // The frames queued are kept, and the next way starts at the first
         // frame not decoded: after a device lost mid-video too, without
         // replaying frames or retrying for ever.
+        const QString detail =
+            QString::fromStdString(std::string(python_strip(replace_invalid_utf8(attempt->error_output))));
         errors.push_back(!detail.isEmpty()          ? detail
-                         : !attempt_error.isEmpty() ? attempt_error
-                                                    : QStringLiteral("Decoder produced no frames."));
+                         : !attempt->error.isEmpty() ? attempt->error
+                                                     : QStringLiteral("Decoder produced no frames."));
         const std::lock_guard lock(mutex_);
         attempt_errors_ = errors;
     }
@@ -243,6 +204,86 @@ void StreamDecodeWorker::run() {
         error_ = error;
     }
     emit failed(error.right(1500));
+}
+
+bool StreamDecodeWorker::cancelled() const {
+    const std::lock_guard lock(mutex_);
+    return cancelled_;
+}
+
+// Decodes with FFmpeg the way `processing` says (`plan` its decoders), from
+// `next_frame` on, which it moves on with the frames queued. `errors` are
+// the ways tried before. Nothing when the worker is to stop: cancelled, or
+// its frames no longer wanted.
+std::optional<StreamDecodeWorker::Attempt> StreamDecodeWorker::try_decoding(PlaybackProcessing processing,
+                                                                            const HardwareDecoding& plan,
+                                                                            long long& next_frame,
+                                                                            const std::vector<QString>& errors) {
+    // The end of FFmpeg's error output, its last 30 lines.
+    const auto tail = std::make_shared<LineTail>(30);
+    platform::ProcessOptions options;
+    options.output_pipe_bytes = frame_pipe_bytes;
+    options.on_error_line = [tail](std::string_view line) { tail->add(line); };
+    Attempt attempt;
+    try {
+        platform::ChildProcess process = platform::ChildProcess::start(
+            build_playback_command(ffmpeg_, comparison_, side_, next_frame, colors_, plan, maximum_, processing),
+            options);
+        const CancelToken::Attached attached = cancel_.attach(process);
+        if (!read_frames(process, processing, next_frame, errors, attempt)) {
+            return std::nullopt;
+        }
+        if (cancelled()) {
+            return std::nullopt;
+        }
+        attempt.exit_code = process.wait();
+    } catch (const std::exception& failure) {
+        attempt.error = QString::fromUtf8(failure.what());
+    }
+    if (cancelled()) {
+        return std::nullopt;
+    }
+    attempt.error_output = tail->text();
+    return attempt;
+}
+
+// Reads `process`'s frames into the queue until it ends or the worker is
+// cancelled, saying the way of decoding once the first comes (with the
+// error of the way before, if any). False when the queue no longer wants
+// them.
+bool StreamDecodeWorker::read_frames(platform::ChildProcess& process, PlaybackProcessing processing,
+                                     long long& next_frame, const std::vector<QString>& errors, Attempt& attempt) {
+    while (!cancelled()) {
+        // The large pipe holds a whole frame: a read or two each.
+        FramePixels pixels = buffer();
+        std::size_t read = 0;
+        while (read < frame_bytes_) {
+            const std::size_t got = process.read(pixels->data() + read, frame_bytes_ - read);
+            if (got == 0) {
+                break;
+            }
+            read += got;
+        }
+        if (read != frame_bytes_) {
+            if (read > 0) {
+                attempt.error = QStringLiteral("Decoder returned a truncated frame.");
+            }
+            return true;
+        }
+        if (!attempt.gave_frames) {
+            attempt.gave_frames = true;
+            QString detail = way_of(processing);
+            if (!errors.empty()) {
+                detail += QString::fromUtf8(" \xC2\xB7 retry: ") + errors.back().split('\n').front().left(180);
+            }
+            emit ready(detail);
+        }
+        if (!put(next_frame, std::move(pixels))) {
+            return false;
+        }
+        ++next_frame;
+    }
+    return true;
 }
 
 }  // namespace vml::app

@@ -23,6 +23,10 @@
 #include "vml/hardware_decoding.h"
 #include "vml/video_playback.h"
 
+namespace vml::platform {
+class ChildProcess;
+}
+
 namespace vml::app {
 
 // A frame's pixels: 8-bit RGBA, row after row.
@@ -89,8 +93,22 @@ protected:
     void run() override;
 
 private:
+    // One way of decoding tried: whether it gave a frame, why it failed if
+    // it did, FFmpeg's exit code, and the end of its error output.
+    struct Attempt {
+        bool gave_frames = false;
+        QString error;
+        std::optional<int> exit_code;
+        std::string error_output;
+    };
+
     FramePixels buffer();
     bool put(long long frame, FramePixels pixels);
+    bool cancelled() const;
+    std::optional<Attempt> try_decoding(PlaybackProcessing processing, const HardwareDecoding& plan,
+                                        long long& next_frame, const std::vector<QString>& errors);
+    bool read_frames(platform::ChildProcess& process, PlaybackProcessing processing, long long& next_frame,
+                     const std::vector<QString>& errors, Attempt& attempt);
 
     std::string ffmpeg_;
     FrameComparison comparison_;

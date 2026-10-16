@@ -275,6 +275,12 @@ private:
     // ----------------------------------------------------- the test videos
     int add_table_row(const std::filesystem::path& path);
     void set_row_metrics(int row);
+    // set_row_metrics's three kinds of metric cell.
+    void show_score_cell(QTableWidgetItem& item, const RowData& row_data, CompletedRun& run,
+                         const MetricColumn& metric, double score);
+    void show_unavailable_cell(QTableWidgetItem& item, const QString& reason);
+    void show_tick_cell(QTableWidgetItem& item, const RowData& row_data, const MetricColumn& metric,
+                        bool enabled);
     // A row's detail for its scores: how many frames were scored, and which
     // metrics ("{count} scored frames; metrics: VMAF, PSNR").
     QString scores_detail(const ComparisonResult& result) const;
