@@ -8,6 +8,7 @@
 #include <atomic>
 #include <string>
 
+#include "frame_compare_panel.h"
 #include "graph_panel.h"
 #include "i18n.h"
 #include "settings_panel.h"
@@ -28,6 +29,14 @@ void MainWindow::on_tab_changed(int index) {
         sync_frame_compare();
     } else if (index == tab_settings) {
         settings_panel_->refresh_status();
+    }
+    // Ctrl+Tab and Ctrl+Shift+Tab reach Video Compare from the tabs beside
+    // it without the pointer crossing its tab, so those tabs prepare its
+    // playback as the pointer over its tab does (released again if it is not
+    // opened within 30 s): its first pair then came 122-131 ms after it
+    // opened instead of 277-293 ms.
+    if (index == tab_graph || index == tab_bitrate) {
+        frame_compare_panel_->prepare_playback();
     }
 }
 

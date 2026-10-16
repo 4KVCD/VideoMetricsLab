@@ -318,8 +318,17 @@ void NativePool::launch_missing() {
     for (QThread* worker : view_.retired_) {
         occupied += worker->isRunning() ? 1 : 0;
     }
+    // Until a pair has been shown, only the two videos shown are started.
+    // Started with them, the others took the disk and the GPU from them: a
+    // 4K source and three test videos showed their first pair 132 ms after
+    // the tab opened, 107-122 ms with only the pair decoded, and 120-124 ms
+    // with the others started after it. They start once it is shown (poll).
+    const bool pair_shown = pair_.has_value();
     for (const auto& [key, wanted] : desired_) {
         if (entries_.contains(key) || occupied >= view_.decoder_limit() || closed_) {
+            continue;
+        }
+        if (!pair_shown && key != source_key_ && key != distorted_key(selected_)) {
             continue;
         }
         NativeVideo* player = parts_.make_video(wanted.first, wanted.second, colors_,
