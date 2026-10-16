@@ -66,12 +66,6 @@ SharedDevice& shared_device() {
 
 }  // namespace
 
-std::shared_ptr<NativeDevice> NativeDevice::existing() {
-    SharedDevice& shared = shared_device();
-    const std::lock_guard lock(shared.mutex);
-    return shared.device;
-}
-
 void NativeDevice::release_shared() {
     std::shared_ptr<NativeDevice> going;
     {

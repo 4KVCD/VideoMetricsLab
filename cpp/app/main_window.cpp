@@ -575,9 +575,9 @@ void MainWindow::build_ui() {
     root->addWidget(tabs_, 1);
 #ifdef VML_NATIVE_PLAYBACK
     // The pointer on Video Compare's tab starts making what its playback
-    // first needs (NativePool::load), 130 ms here, during the moment before
-    // the click: opened then, its first frames showed after 133 ms instead
-    // of 309 ms.
+    // first needs (FrameComparePanel::prepare_playback), 130 ms here, during
+    // the moment before the click: opened then, its first frames showed
+    // after 133 ms instead of 309 ms.
     tabs_->tabBar()->setMouseTracking(true);
     tabs_->tabBar()->installEventFilter(this);
 #endif
@@ -1170,7 +1170,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     if (type == QEvent::MouseMove && watched == tabs_->tabBar() && !NativePool::loaded()) {
         const auto* move = static_cast<QMouseEvent*>(event);
         if (tabs_->tabBar()->tabAt(move->position().toPoint()) == tab_frame_compare) {
-            (void)NativePool::load();  // once: the same loading while it runs
+            frame_compare_panel_->prepare_playback();
         }
     }
 #endif

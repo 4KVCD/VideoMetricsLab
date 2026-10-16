@@ -163,24 +163,18 @@ QFuture<void> NativePool::load() {
     return *loading;
 }
 
-void NativePool::trim() {
-    // Direct3D frees what was let go of only when the device is next used:
-    // its state cleared and its work flushed, it frees it now.
-    if (const std::shared_ptr<NativeDevice> device = NativeDevice::existing()) {
-        const std::lock_guard lock(device->lock());
-        device->context()->ClearState();
-        device->context()->Flush();
-    }
-}
-
-void NativePool::unload() {
+bool NativePool::unload() {
     {
         Loading& state = native_loading();
         const std::lock_guard lock(state.mutex);
+        if (state.future && !state.future->isFinished()) {
+            return false;
+        }
         state.future.reset();
         native_loaded() = false;
     }
     NativeDevice::release_shared();
+    return true;
 }
 
 bool NativePool::loaded() {

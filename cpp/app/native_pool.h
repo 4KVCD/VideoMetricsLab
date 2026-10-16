@@ -92,15 +92,12 @@ public:
     // native playback.
     static QFuture<void> load();
     static bool loaded();
-    // Frees what Direct3D still keeps of decoders and presenters gone: after
-    // 4K playback, 181 of the 330 MB of GPU memory left, and 190 MB of RAM.
-    // For when none is left.
-    static void trim();
     // Lets go of the GPU's device: it goes once the decoders and the
     // presenter still ending have, with the rest of the GPU memory and the
     // RAM the display driver held for it (about 300 MB after 4K playback);
-    // the next start makes it again (load).
-    static void unload();
+    // the next start makes it again (load). False, and nothing let go of,
+    // while a load is under way.
+    static bool unload();
 
     // Selects a test video: keeps the decoders still needed, stops the
     // others and starts the missing ones.

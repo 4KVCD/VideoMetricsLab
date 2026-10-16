@@ -193,6 +193,10 @@ public:
     void cycle_distorted(int direction);
     // How many test videos playback keeps decoding (the Settings tab).
     void set_decoded_videos(int count);
+    // The pointer is over this tab: what playback first needs is made now,
+    // so that it is mostly ready by the click, and let go of again if the tab
+    // is not shown within release_after_ms.
+    void prepare_playback();
     // The threads still running: frame extraction and black-bar detection.
     std::vector<QThread*> live_workers() const;
     // Stops what is pending or running, as the window closes.
@@ -325,10 +329,15 @@ private:
     QTimer* seek_timer_ = nullptr;
     QTimer* display_timer_ = nullptr;
     QTimer* position_timer_ = nullptr;
-    // Off screen, what playback holds is let go of in stages (hideEvent).
+    // Off screen for a while, everything the tab holds is let go of
+    // (hideEvent); the GPU's device again later if it was being made for a
+    // start meanwhile.
     QTimer* release_timer_ = nullptr;
-    enum class ReleaseStage { decoders, trim, device };
-    ReleaseStage release_stage_ = ReleaseStage::decoders;
+    enum class ReleaseStage { everything, device };
+    ReleaseStage release_stage_ = ReleaseStage::everything;
+    // Shown and not hidden since (showEvent, hideEvent): a minimized window
+    // hides it too, though isVisible() stays true.
+    bool on_screen_ = false;
     // Playback moving the seek widgets, which must not seek it back.
     bool syncing_video_position_ = false;
     // Playback's status as the view said it, in English.

@@ -32,8 +32,6 @@ public:
     // takes about 0.14 s while the driver loads, so it is not made per
     // comparison. Throws std::runtime_error when there is none.
     static std::shared_ptr<NativeDevice> shared();
-    // The session's device if one has been made, without making one.
-    static std::shared_ptr<NativeDevice> existing();
     // Lets go of the session's device: it goes once nothing else holds it,
     // and shared() makes another.
     static void release_shared();
