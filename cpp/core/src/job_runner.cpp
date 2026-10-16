@@ -745,13 +745,7 @@ std::optional<PerceptualTaskOutput> JobRun::perceptual_so_far() const {
     combined.source_crop = parts.front()->source_crop;
     combined.distorted_crop = parts.front()->distorted_crop;
     for (const PerceptualTaskOutput* part : parts) {
-        for (const std::string& key : part->metrics.keys()) {
-            if (const FrameMetricResult* frame = part->metrics.frame(key)) {
-                combined.metrics.add(*frame);
-            } else {
-                combined.metrics.add(*part->metrics.sequence(key));
-            }
-        }
+        combined.metrics.add_all(part->metrics);
         for (const auto& [key, reason] : part->failures) {
             set_failure(combined.failures, key, reason);
         }
@@ -786,13 +780,7 @@ std::optional<ComparisonResult> JobRun::merged() const {
         result = *job_.cached_result;
     }
     if (ffmpeg != nullptr && gpu != nullptr) {
-        for (const std::string& key : gpu->metric_results.keys()) {
-            if (const FrameMetricResult* frame = gpu->metric_results.frame(key)) {
-                result->metric_results.add(*frame);
-            } else {
-                result->metric_results.add(*gpu->metric_results.sequence(key));
-            }
-        }
+        result->metric_results.add_all(gpu->metric_results);
         // Each VMAF's model comes from the task that calculated it: VMAF with
         // a custom model file is FFmpeg's.
         if (gpu->has_metric("vmaf")) {
@@ -819,13 +807,7 @@ std::optional<ComparisonResult> JobRun::merged() const {
             result->scale_algorithm = options_.scale_algorithm;
             result->compared_frame_count = perceptual->compared_frame_count;
         }
-        for (const std::string& key : perceptual->metrics.keys()) {
-            if (const FrameMetricResult* frame = perceptual->metrics.frame(key)) {
-                result->metric_results.add(*frame);
-            } else {
-                result->metric_results.add(*perceptual->metrics.sequence(key));
-            }
-        }
+        result->metric_results.add_all(perceptual->metrics);
     }
     if (result && cached) {
         // Saved metrics fill in only what this run did not calculate: a new
@@ -836,11 +818,7 @@ std::optional<ComparisonResult> JobRun::merged() const {
             if (result->has_metric(key)) {
                 continue;
             }
-            if (const FrameMetricResult* frame = job_.cached_metrics.frame(key)) {
-                result->metric_results.add(*frame);
-            } else {
-                result->metric_results.add(*job_.cached_metrics.sequence(key));
-            }
+            result->metric_results.copy_from(job_.cached_metrics, key);
             carried_vmaf = carried_vmaf || key == "vmaf";
             carried_v1 = carried_v1 || key == "vmaf_v1";
         }

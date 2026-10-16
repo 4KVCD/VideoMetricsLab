@@ -40,6 +40,9 @@ const std::string_view* model_file(std::string_view model_id) {
 
 bool is_uhd(int width, int height) { return width >= uhd_width_threshold || height >= uhd_height_threshold; }
 
+// What a model= value that names a file starts with.
+constexpr std::string_view model_file_prefix = "path=";
+
 }  // namespace
 
 std::filesystem::path resource_folder() {
@@ -86,16 +89,25 @@ std::string model_for_resolution(int width, int height) {
     return std::string(is_uhd(width, height) ? uhd_model : default_model);
 }
 
+std::string model_option_for_file(std::string_view file) { return std::string(model_file_prefix) + std::string(file); }
+
+std::optional<std::string_view> model_file_of(std::string_view model) {
+    if (!model.starts_with(model_file_prefix)) {
+        return std::nullopt;
+    }
+    return model.substr(model_file_prefix.size());
+}
+
 std::string resolve_model(const VmafOptions& options, int width, int height) {
     if (options.model_choice == custom_model_choice) {
         if (options.custom_model_path.empty()) {
             throw std::invalid_argument("No custom model file selected.");
         }
-        return "path=" + options.custom_model_path;
+        return model_option_for_file(options.custom_model_path);
     }
     if (is_builtin_model_choice(options.model_choice)) {
         const std::string_view id = std::string_view(options.model_choice).substr(builtin_prefix.size());
-        return "path=" + platform::path_text(builtin_model_path(id));
+        return model_option_for_file(platform::path_text(builtin_model_path(id)));
     }
     if (options.model_choice == auto_model_choice) {
         return model_for_resolution(width, height);
@@ -117,7 +129,8 @@ std::string resolve_v1_model(const VmafOptions& options, int width, int height) 
     if (!is_builtin_model_choice(choice)) {
         throw std::invalid_argument("Not a VMAF v1 model: " + choice);
     }
-    return "path=" + platform::path_text(builtin_model_path(std::string_view(choice).substr(builtin_prefix.size())));
+    return model_option_for_file(
+        platform::path_text(builtin_model_path(std::string_view(choice).substr(builtin_prefix.size()))));
 }
 
 }  // namespace vml

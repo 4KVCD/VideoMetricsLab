@@ -130,14 +130,15 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
     // are told apart by the model.
     if (result.model_choice && !result.model_choice->empty()) {
         options.model_choice = *result.model_choice;
-        if (options.model_choice == custom_model_choice && result.model.starts_with("path=")) {
-            options.custom_model_path = result.model.substr(std::string_view("path=").size());
+        if (const std::optional<std::string_view> file = model_file_of(result.model);
+            options.model_choice == custom_model_choice && file) {
+            options.custom_model_path = *file;
         }
     } else if (result.model.starts_with("version=")) {
         options.model_choice = result.model;
-    } else if (result.model.starts_with("path=")) {
+    } else if (const std::optional<std::string_view> file = model_file_of(result.model)) {
         options.model_choice = std::string(custom_model_choice);
-        options.custom_model_path = result.model.substr(std::string_view("path=").size());
+        options.custom_model_path = *file;
     }
     if (!options.model_choice.empty() && is_builtin_model_choice(options.model_choice)) {
         // A VMAF v1 model as the VMAF model, from before VMAF v1 had its own

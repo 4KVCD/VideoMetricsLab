@@ -22,6 +22,7 @@
 #include "formatting.h"
 #include "i18n.h"
 #include "theme.h"
+#include "window_helpers.h"
 #include "vml/model_select.h"
 
 // The panel's text is app::tr's: inside a Q_OBJECT class, tr() is Qt's.
@@ -302,7 +303,7 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
     if (!gpu_vendors.empty()) {
         QStringList names;
         for (const GpuVendor vendor : gpu_vendors) {
-            names.append(vendor == GpuVendor::nvidia ? "NVIDIA" : vendor == GpuVendor::intel ? "INTEL" : "AMD");
+            names.append(qt_text(vendor_label(vendor)));
         }
         form->addRow(QString(), new QLabel(app::tr("Detected GPU(s): {names}", {{"names", names.join(", ")}})));
     }

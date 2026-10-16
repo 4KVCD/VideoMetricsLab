@@ -230,17 +230,7 @@ public:
                                              (static_cast<std::uint32_t>(properties[9]) << 8) |
                                              (static_cast<std::uint32_t>(properties[10]) << 16) |
                                              (static_cast<std::uint32_t>(properties[11]) << 24);
-                switch (vendor) {
-                case 0x10DE:
-                    return GpuVendor::nvidia;
-                case 0x1002:
-                case 0x1022:
-                    return GpuVendor::amd;
-                case 0x8086:
-                    return GpuVendor::intel;
-                default:
-                    return GpuVendor::none;
-                }
+                return vendor_of_pci_id(vendor);
             }
         }
         return std::nullopt;

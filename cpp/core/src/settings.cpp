@@ -164,6 +164,31 @@ std::optional<std::filesystem::path> Settings::ffmpeg_dir_path() const {
     return platform::path_from_text(ffmpeg_dir.substr(start, end - start + 1));
 }
 
+namespace {
+
+// Where a metric's default_compute_<key> setting is kept, or nullptr for a
+// key with none.
+bool Settings::* default_compute_field(std::string_view key) {
+    const auto found = fields().find("default_compute_" + std::string(key));
+    if (found == fields().end()) {
+        return nullptr;
+    }
+    const auto* flag = std::get_if<bool Settings::*>(&found->second);
+    return flag != nullptr ? *flag : nullptr;
+}
+
+}  // namespace
+
+bool* Settings::default_compute(std::string_view key) {
+    bool Settings::* const field = default_compute_field(key);
+    return field != nullptr ? &(this->*field) : nullptr;
+}
+
+const bool* Settings::default_compute(std::string_view key) const {
+    bool Settings::* const field = default_compute_field(key);
+    return field != nullptr ? &(this->*field) : nullptr;
+}
+
 std::optional<std::filesystem::path> Settings::cache_dir_path() const {
     const std::size_t start = cache_dir.find_first_not_of(" \t\r\n");
     if (start == std::string::npos) {

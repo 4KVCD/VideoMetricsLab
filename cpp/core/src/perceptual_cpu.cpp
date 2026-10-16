@@ -31,6 +31,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/stats.h"
+#include "vml/score_identity.h"
 #include "vml/temp_files.h"
 
 namespace vml {
@@ -53,11 +54,6 @@ constexpr std::chrono::seconds tool_timeout{120};
 
 // The share of the free memory the tools may fill between them.
 constexpr double memory_share = 0.6;
-
-// How the pictures' colours are read: as Vship reads the video's (colour.h),
-// recorded with the scores, as the Python app records it (metric_cache's
-// CPU_COLOR_TAGS).
-constexpr std::string_view cpu_color_tags = "vship-5.1.1/2";
 
 // How often the progress is reported at most, after the first pair: small
 // pictures are scored many times a second.
@@ -1121,7 +1117,7 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
         std::map<std::string, std::string> parameters{
             {"intermediate", nlohmann::json("png/rgb48le").dump()},
             {"coverage_step", std::to_string(step)},
-            {"color_tags", nlohmann::json(cpu_color_tags).dump()},
+            {"color_tags", nlohmann::json(score_identity::cpu_colour_tags).dump()},
         };
         if (key == "butteraugli") {
             parameters["butteraugli_norm"] = nlohmann::json("3-norm").dump();
@@ -1130,7 +1126,7 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
         }
         results.add(FrameMetricResult{key, frames, times, std::move(values),
                                       MetricProvenance{key, implementation_version(executables[position]), "cpu",
-                                                       key + "-libjxl-cpu-v1", std::move(parameters)}});
+                                                       score_identity::libjxl_cpu(key), std::move(parameters)}});
     }
     return PerceptualTaskOutput{std::move(results), source_crop, distorted_crop, total * step, {}};
 }

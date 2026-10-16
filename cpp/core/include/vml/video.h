@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace vml {
 
@@ -15,6 +16,13 @@ enum class CropMode { automatic, none };
 // The GPU maker whose decoder to use: automatic picks one found on this PC,
 // and none decodes in software.
 enum class GpuVendor { automatic, nvidia, intel, amd, none };
+
+// The maker of a GPU with this PCI vendor ID: none for a maker not known.
+GpuVendor vendor_of_pci_id(unsigned id);
+
+// The maker's name as the logs and the window write it: "NVIDIA", "INTEL" or
+// "AMD" (empty for automatic and none).
+std::string_view vendor_label(GpuVendor vendor);
 
 // Which video is scaled when the two sizes differ.
 enum class ScaleDirection {

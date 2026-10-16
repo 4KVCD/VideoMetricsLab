@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <string_view>
 
+#include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
@@ -137,7 +138,6 @@ std::vector<std::string> build_playback_command(const std::string& ffmpeg, const
         // SDR is never overwritten.
         const bool assumed_hdr = colors.mode == PreviewColorMode::hdr_to_sdr && info.color_transfer.empty();
         if (hdr_kind(info) || assumed_hdr) {
-            static const std::set<std::string, std::less<>> unknown{"", "unknown", "unspecified", "reserved"};
             struct Param {
                 const char* name;
                 const std::string& value;
@@ -149,7 +149,7 @@ std::vector<std::string> build_playback_command(const std::string& ffmpeg, const
                                        {"range", info.color_range, "limited"}};
             std::vector<std::string> params;
             for (const Param& param : described) {
-                if (unknown.contains(ascii_lower(param.value))) {
+                if (is_untagged_tag(param.value)) {
                     params.push_back(std::string(param.name) + "=" + param.fallback);
                 }
             }

@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace vml {
@@ -103,6 +104,10 @@ struct Settings {
     std::optional<std::filesystem::path> cache_dir_path() const;
     // The libvmaf features these defaults ask for: PSNR and SSIM.
     std::vector<std::string> default_extra_features() const;
+    // Whether new videos have a metric ("vmaf", "psnr", ...) ticked: its
+    // default_compute_<key> setting, or nullptr for a key with none.
+    bool* default_compute(std::string_view key);
+    const bool* default_compute(std::string_view key) const;
 };
 
 }  // namespace vml

@@ -7,14 +7,11 @@
 
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
+#include "vml/score_identity.h"
 
 namespace vml {
 
 namespace {
-
-// The id of the XPSNR filter's scores as they are weighted now
-// (metric_results.XPSNR_COMPATIBILITY_ID).
-constexpr const char* xpsnr_compatibility_id = "ffmpeg-xpsnr-v2";
 
 // A custom VMAF model file's identity, as the Python app files a request
 // under it: its resolved path, size and modification time, or the path
@@ -97,10 +94,10 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
                 // frames fill it are part of what the score means.
                 spec.parameters = cvvdp.parameters();
                 spec.coverage = FrameCoverage{"full", 1};
-                spec.implementation_compatibility_id = "cvvdp-vship-gpu-v1";
+                spec.implementation_compatibility_id = std::string(score_identity::cvvdp);
             } else {
                 spec.coverage = FrameCoverage{subsampled ? "sampled" : "full", options.n_subsample};
-                spec.implementation_compatibility_id = key + "-auto-or-libjxl-cpu-v1";
+                spec.implementation_compatibility_id = score_identity::gpu_or_cpu(key);
             }
             request.metrics.push_back(std::move(spec));
             continue;
@@ -125,7 +122,8 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
         } else if (key == "vmaf_neg") {
             spec.parameters = {{"model", "version=vmaf_v0.6.1neg"}};
         }
-        spec.implementation_compatibility_id = key == "xpsnr" ? xpsnr_compatibility_id : "ffmpeg-libvmaf-v1";
+        spec.implementation_compatibility_id =
+            std::string(key == "xpsnr" ? score_identity::xpsnr : score_identity::libvmaf);
         request.metrics.push_back(std::move(spec));
     }
     return request;

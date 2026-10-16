@@ -5,7 +5,36 @@
 #include <cmath>
 #include <string_view>
 
+#include "vml/platform/system.h"
+
 namespace vml {
+
+GpuVendor vendor_of_pci_id(unsigned id) {
+    if (id == platform::nvidia_pci_vendor) {
+        return GpuVendor::nvidia;
+    }
+    if (id == platform::intel_pci_vendor) {
+        return GpuVendor::intel;
+    }
+    if (std::find(std::begin(platform::amd_pci_vendors), std::end(platform::amd_pci_vendors), id) !=
+        std::end(platform::amd_pci_vendors)) {
+        return GpuVendor::amd;
+    }
+    return GpuVendor::none;
+}
+
+std::string_view vendor_label(GpuVendor vendor) {
+    switch (vendor) {
+    case GpuVendor::nvidia:
+        return "NVIDIA";
+    case GpuVendor::intel:
+        return "INTEL";
+    case GpuVendor::amd:
+        return "AMD";
+    default:
+        return "";
+    }
+}
 
 std::string CropBox::as_filter() const {
     return "crop=" + std::to_string(w) + ":" + std::to_string(h) + ":" + std::to_string(x) + ":" + std::to_string(y);

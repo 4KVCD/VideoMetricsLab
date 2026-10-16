@@ -5,6 +5,7 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -33,6 +34,12 @@ std::string builtin_choice(std::string_view model_id);
 
 // The model "Auto" picks for frames compared at this size.
 std::string model_for_resolution(int width, int height);
+
+// The model= value that names a model file: "path=<file>". (One that names
+// a version of a model libvmaf has built in is "version=<name>".)
+std::string model_option_for_file(std::string_view file);
+// The file a model= value names, or nothing for a value that names none.
+std::optional<std::string_view> model_file_of(std::string_view model);
 
 // The FFmpeg model= value for the options' model choice, at the size the
 // two videos are compared at. Throws std::invalid_argument for a custom

@@ -892,11 +892,7 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
             if (result.has_metric(key) || contains(requested, key)) {
                 continue;
             }
-            if (const FrameMetricResult* frame = before.frame(key)) {
-                run->result.metric_results.add(*frame);
-            } else if (const SequenceMetricResult* sequence = before.sequence(key)) {
-                run->result.metric_results.add(*sequence);
-            }
+            run->result.metric_results.copy_from(before, key);
         }
     }
     row_data.completed_run = run;

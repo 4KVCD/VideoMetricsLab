@@ -120,8 +120,14 @@ void raise_thread_priority();
 // was done: not Windows, or Windows refused.
 bool keep_system_awake(bool awake);
 
+// The PCI vendor IDs of the GPU makers the app knows. AMD's GPUs report
+// either of its two.
+inline constexpr unsigned nvidia_pci_vendor = 0x10DE;
+inline constexpr unsigned intel_pci_vendor = 0x8086;
+inline constexpr unsigned amd_pci_vendors[] = {0x1002, 0x1022};
+
 // The PCI vendor IDs of the hardware GPUs DirectX lists (Windows only; empty
-// elsewhere): 0x10DE NVIDIA, 0x1002 and 0x1022 AMD, 0x8086 Intel. With
+// elsewhere). With
 // VML_GPU_VENDOR set to nvidia, intel or amd, only that maker's, as on a PC
 // with no other: for testing one maker's route on a PC that has several
 // (CUDA_VISIBLE_DEVICES and VK_LOADER_DRIVERS_DISABLE hide the others from

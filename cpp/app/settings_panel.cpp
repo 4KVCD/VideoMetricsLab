@@ -61,22 +61,6 @@ const std::vector<std::pair<std::string, QString>> default_metric_boxes{
     {"cvvdp", "CVVDP"},
 };
 
-// Settings' default_compute_<key>.
-bool& default_compute(Settings& settings, const std::string& key) {
-    static const std::map<std::string, bool Settings::*> fields{
-        {"vmaf", &Settings::default_compute_vmaf},
-        {"vmaf_v1", &Settings::default_compute_vmaf_v1},
-        {"vmaf_neg", &Settings::default_compute_vmaf_neg},
-        {"psnr", &Settings::default_compute_psnr},
-        {"ssim", &Settings::default_compute_ssim},
-        {"xpsnr", &Settings::default_compute_xpsnr},
-        {"ssimulacra2", &Settings::default_compute_ssimulacra2},
-        {"butteraugli", &Settings::default_compute_butteraugli},
-        {"cvvdp", &Settings::default_compute_cvvdp},
-    };
-    return settings.*fields.at(key);
-}
-
 QString text_of(const std::filesystem::path& path) { return QString::fromStdString(platform::path_text(path)); }
 
 QString text_of(const std::string& text) { return QString::fromStdString(text); }
@@ -222,7 +206,7 @@ QGroupBox* SettingsPanel::build_defaults_box() {
     metrics_row->addWidget(new QLabel(app::tr("Default metrics:")));
     for (const auto& [key, label] : default_metric_boxes) {
         auto* box = new QCheckBox(label);
-        box->setChecked(default_compute(settings_, key));
+        box->setChecked(*settings_.default_compute(key));
         connect(box, &QCheckBox::toggled, this, [this] { on_edited(); });
         default_metrics[key] = box;
         metrics_row->addWidget(box);
@@ -557,7 +541,7 @@ void SettingsPanel::read_controls() {
     settings_.use_cache = use_cache->isChecked();
     settings_.default_gpu_decode = default_gpu->isChecked();
     for (const auto& [key, box] : default_metrics) {
-        default_compute(settings_, key) = box->isChecked();
+        *settings_.default_compute(key) = box->isChecked();
     }
     const std::string chosen = cvvdp_default->currentData().toString().toStdString();
     settings_.cvvdp_default_preset = chosen == default_preset_name() ? std::string() : chosen;

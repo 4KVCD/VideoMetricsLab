@@ -53,8 +53,8 @@ bool uses_vmaf_model(const VmafOptions& options) {
 
 // The VMAF v1 model file a run uses, once the run has resolved it.
 std::optional<std::filesystem::path> v1_model_file(const VmafOptions& options) {
-    if (options.compute_vmaf_v1 && options.model_v1.starts_with("path=")) {
-        return platform::path_from_text(options.model_v1.substr(5));
+    if (const std::optional<std::string_view> file = model_file_of(options.model_v1); options.compute_vmaf_v1 && file) {
+        return platform::path_from_text(*file);
     }
     return std::nullopt;
 }
@@ -75,7 +75,7 @@ std::vector<std::string> libvmaf_options(const VmafOptions& options, const std::
             models.push_back(model_value + "\\\\:name=vmaf");
         }
         if (v1_file) {
-            models.push_back("path=" + platform::path_text(v1_file->filename()) + "\\\\:name=vmaf_v1");
+            models.push_back(model_option_for_file(platform::path_text(v1_file->filename())) + "\\\\:name=vmaf_v1");
         }
         if (options.compute_vmaf_neg) {
             models.emplace_back("version=vmaf_v0.6.1neg\\\\:name=vmaf_neg");
@@ -265,12 +265,13 @@ private:
 // When a model= value names a custom file, copies it next to the log and
 // names it by its bare file name (see libvmaf_options).
 std::string model_for_run_folder(const std::string& model, const std::filesystem::path& folder) {
-    if (!model.starts_with("path=")) {
+    const std::optional<std::string_view> named = model_file_of(model);
+    if (!named) {
         return model;
     }
-    const std::filesystem::path file = platform::path_from_text(model.substr(5));
+    const std::filesystem::path file = platform::path_from_text(*named);
     std::filesystem::copy_file(file, folder / file.filename(), std::filesystem::copy_options::overwrite_existing);
-    return "path=" + platform::path_text(file.filename());
+    return model_option_for_file(platform::path_text(file.filename()));
 }
 
 // The decode plans to try in turn until one runs: the test video, the

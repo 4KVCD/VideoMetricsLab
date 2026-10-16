@@ -65,6 +65,11 @@ public:
     // Adds a metric's result, or replaces the one with its key.
     void add(FrameMetricResult result);
     void add(SequenceMetricResult result);
+    // Adds `other`'s result for `key`, a frame or a whole-video one, if it
+    // has one.
+    void copy_from(const MetricResultSet& other, const std::string& key);
+    // Adds every result `other` has, in its order.
+    void add_all(const MetricResultSet& other);
 
     bool has(const std::string& key) const;
     const FrameMetricResult* frame(const std::string& key) const;

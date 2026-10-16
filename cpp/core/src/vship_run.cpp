@@ -34,6 +34,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/run_json.h"
+#include "vml/score_identity.h"
 #include "vml/temp_files.h"
 
 namespace vml {
@@ -1835,14 +1836,14 @@ private:
                           .dump()},
             {"coverage_step", std::to_string(step_)},
             {"butteraugli_norm", nlohmann::json("3-norm").dump()},
-            {"color_tags", nlohmann::json(vship_color_tags).dump()},
+            {"color_tags", nlohmann::json(score_identity::vship_colour_tags).dump()},
         };
         MetricResultSet found;
         for (const std::string& key : frame_keys_) {
             if (failure_of(failures, key) != nullptr) {
                 continue;
             }
-            MetricProvenance provenance{"Vship/" + key, "Vship " + device.version, "gpu", key + "-vship-gpu-v1",
+            MetricProvenance provenance{"Vship/" + key, "Vship " + device.version, "gpu", score_identity::vship_gpu(key),
                                         parameters};
             found.add(FrameMetricResult{key, frame_numbers, times, scores_.at(key)->values(frames),
                                         std::move(provenance)});
@@ -1863,13 +1864,13 @@ private:
         result.provenance = {"Vship/cvvdp",
                              "Vship " + device.version,
                              "gpu",
-                             "cvvdp-vship-gpu-v1",
+                             std::string(score_identity::cvvdp),
                              {{"gpu_backend", nlohmann::json(device.backend).dump()},
                               {"gpu_name", nlohmann::json(device.name).dump()},
                               {"display", cvvdp_->display.identity().dump()},
                               {"resize_to_display", nlohmann::json(cvvdp_->resize_to_display).dump()},
                               {"timeline", nlohmann::json("JOD of each second of video").dump()},
-                              {"color_tags", nlohmann::json(vship_color_tags).dump()}}};
+                              {"color_tags", nlohmann::json(score_identity::vship_colour_tags).dump()}}};
         for (const CvvdpWindow& window : windows) {
             result.frame.push_back(static_cast<int>(window.first));
             result.time.push_back(static_cast<double>(static_cast<int>(window.first)) /
@@ -1878,11 +1879,6 @@ private:
         }
         return result;
     }
-
-    // How the videos' colour tags were read, as the GPU scores record it (the
-    // Python app's metric_cache.VSHIP_COLOR_TAGS): as Vship 5.1.1's FFVship
-    // reads them.
-    static constexpr const char* vship_color_tags = "ffvship-5.1.1";
 
     const PerceptualRequest& request_;
     const PassPlan& plan_;
@@ -2370,13 +2366,7 @@ private:
                 }
                 continue;
             }
-            for (const std::string& key : output.metrics.keys()) {
-                if (const FrameMetricResult* frame = output.metrics.frame(key)) {
-                    metrics_.add(*frame);
-                } else {
-                    metrics_.add(*output.metrics.sequence(key));
-                }
-            }
+            metrics_.add_all(output.metrics);
             for (const auto& [key, reason] : output.failures) {
                 set_failure(failures_, key, reason);
             }

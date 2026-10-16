@@ -4,6 +4,7 @@
 #include <cmath>
 #include <set>
 
+#include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/hardware_decoding.h"
 #include "vml/number_format.h"
@@ -33,10 +34,8 @@ std::vector<std::string> tone_map_filters(const VideoInfo& info, const PreviewCo
         // A remux can keep the PQ or HLG tag and lose the primaries, the
         // matrix or the range, and zscale refuses an unspecified conversion:
         // BT.2020's HDR defaults stand in for only what is missing.
-        static const std::set<std::string, std::less<>> missing{"", "unknown", "unspecified", "reserved"};
-        const std::string primaries =
-            missing.contains(ascii_lower(info.color_primaries)) ? "bt2020" : info.color_primaries;
-        const std::string matrix = missing.contains(ascii_lower(info.color_space)) ? "bt2020nc" : info.color_space;
+        const std::string primaries = is_untagged_tag(info.color_primaries) ? "bt2020" : info.color_primaries;
+        const std::string matrix = is_untagged_tag(info.color_space) ? "bt2020nc" : info.color_space;
         static const std::set<std::string, std::less<>> ranges{"tv", "pc", "limited", "full"};
         const std::string range = ranges.contains(info.color_range) ? info.color_range : "tv";
         options = {"pin=" + primaries, "tin=" + info.color_transfer, "min=" + matrix, "rin=" + range};

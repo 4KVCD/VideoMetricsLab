@@ -167,21 +167,15 @@ DecodingCapabilities DecodingCapabilities::remembered(const std::string& ffmpeg)
 }
 
 std::vector<GpuVendor> detected_gpu_vendors() {
-    const std::vector<unsigned> ids = platform::gpu_vendor_ids();
-    const auto has = [&ids](std::initializer_list<unsigned> wanted) {
-        return std::any_of(ids.begin(), ids.end(), [&wanted](unsigned id) {
-            return std::find(wanted.begin(), wanted.end(), id) != wanted.end();
-        });
-    };
+    std::vector<GpuVendor> present;
+    for (const unsigned id : platform::gpu_vendor_ids()) {
+        present.push_back(vendor_of_pci_id(id));
+    }
     std::vector<GpuVendor> vendors;
-    if (has({0x10DE})) {
-        vendors.push_back(GpuVendor::nvidia);
-    }
-    if (has({0x8086})) {
-        vendors.push_back(GpuVendor::intel);
-    }
-    if (has({0x1002, 0x1022})) {
-        vendors.push_back(GpuVendor::amd);
+    for (const GpuVendor vendor : {GpuVendor::nvidia, GpuVendor::intel, GpuVendor::amd}) {
+        if (std::find(present.begin(), present.end(), vendor) != present.end()) {
+            vendors.push_back(vendor);
+        }
     }
     return vendors;
 }

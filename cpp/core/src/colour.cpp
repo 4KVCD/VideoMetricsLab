@@ -39,10 +39,6 @@ const std::map<std::string, int, std::less<>> primaries_codes{
     {"bt709", 1}, {"bt470m", 4}, {"bt470bg", 5}, {"smpte170m", 6}, {"smpte240m", 7}, {"bt2020", 9}, {"smpte432", 12},
 };
 
-bool untagged(std::string_view name) {
-    return name.empty() || name == "unknown" || name == "unspecified" || name == "reserved";
-}
-
 // The transfers whose light is relative to the display's white (SDR). The
 // others (PQ, ST 428 and HLG) are HDR.
 const std::set<int> sdr_transfers{1, 4, 5, 6, 7, 8, 13};
@@ -115,6 +111,11 @@ std::uint32_t python_round(double value) { return static_cast<std::uint32_t>(std
 
 }  // namespace
 
+bool is_untagged_tag(std::string_view value) {
+    const std::string name = ascii_lower(value);
+    return name.empty() || name == "unknown" || name == "unspecified" || name == "reserved";
+}
+
 UnsupportedColourError::UnsupportedColourError(std::string kind, std::string value)
     : std::invalid_argument("unsupported " + kind + ": " + value), kind_(std::move(kind)), value_(std::move(value)) {}
 
@@ -125,7 +126,7 @@ VideoColour video_colour(const VideoInfo& info, bool rgb, bool full_range_untagg
     const std::string matrix_name = ascii_lower(info.color_space);
     if (rgb) {
         colour.matrix = 0;
-    } else if (untagged(matrix_name)) {
+    } else if (is_untagged_tag(matrix_name)) {
         // The video's own height, not the size it is compared at: otherwise
         // an untagged 1080p source scaled to a 640x360 encode would be read
         // as BT.470BG.
@@ -138,7 +139,7 @@ VideoColour video_colour(const VideoInfo& info, bool rgb, bool full_range_untagg
     const bool bt2020_family = colour.matrix == 9 || colour.matrix == 10 || colour.matrix == 14;
 
     const std::string transfer_name = ascii_lower(info.color_transfer);
-    if (untagged(transfer_name)) {
+    if (is_untagged_tag(transfer_name)) {
         colour.transfer = colour.matrix == 0 ? 13 : colour.matrix == 5 ? 5 : bt2020_family ? 16 : 1;
     } else if (const auto found = transfers.find(transfer_name); found != transfers.end()) {
         colour.transfer = found->second;
@@ -147,7 +148,7 @@ VideoColour video_colour(const VideoInfo& info, bool rgb, bool full_range_untagg
     }
 
     const std::string primaries_name = ascii_lower(info.color_primaries);
-    if (untagged(primaries_name)) {
+    if (is_untagged_tag(primaries_name)) {
         colour.primaries = colour.matrix == 5 ? 5 : bt2020_family ? 9 : 1;
     } else if (const auto found = primaries_codes.find(primaries_name); found != primaries_codes.end()) {
         colour.primaries = found->second;

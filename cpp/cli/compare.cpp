@@ -17,6 +17,7 @@
 #include "report.h"
 #include "vml/app_log.h"
 #include "vml/cancel.h"
+#include "vml/colour.h"
 #include "vml/crop_detect.h"
 #include "vml/cvvdp.h"
 #include "vml/ffmpeg_run.h"
@@ -191,22 +192,15 @@ std::string resolved(const std::filesystem::path& path) { return comparable(reso
 
 // ------------------------------------------------------------------- colours
 
-// Colour tag values that say nothing (the Python app's colour.UNTAGGED).
-bool untagged(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return value.empty() || value == "unknown" || value == "unspecified" || value == "reserved";
-}
-
 // Whether the video says its transfer or its primaries.
 bool has_colour_tags(const VideoInfo& info) {
-    return !untagged(info.color_transfer) || !untagged(info.color_primaries);
+    return !is_untagged_tag(info.color_transfer) || !is_untagged_tag(info.color_primaries);
 }
 
 // The note for a video read without colour tags: what the app took its
 // colours to be (colour.h's video_colour's guess).
 std::string guessed_colour_note(const VideoInfo& info, const std::string& which) {
-    const std::string guess = !untagged(info.color_space) ? "from its colour matrix, " + info.color_space
+    const std::string guess = !is_untagged_tag(info.color_space) ? "from its colour matrix, " + info.color_space
                               : info.height > 650         ? "BT.709 SDR, as it is over 650 lines"
                                                           : "BT.601 SDR, as it is 650 lines or fewer";
     return which + " has no colour tags, so its colours were guessed (" + guess +
@@ -234,7 +228,7 @@ VideoInfo with_assumed_colour(VideoInfo info, const std::optional<std::string>& 
     const Colours& colours = assumed.at(*colour);
     info.color_transfer = colours.transfer;
     info.color_primaries = colours.primaries;
-    if (untagged(info.color_space)) {
+    if (is_untagged_tag(info.color_space)) {
         info.color_space = colours.matrix;
     }
     return info;

@@ -12,6 +12,7 @@
 #include <variant>
 
 #include "vml/app_log.h"
+#include "vml/colour.h"
 #include "vml/geometry.h"
 #include "vml/model_select.h"
 #include "vml/npz.h"
@@ -19,6 +20,7 @@
 #include "vml/python_json.h"
 #include "vml/python_text.h"
 #include "vml/result_json.h"
+#include "vml/score_identity.h"
 #include "vml/sha256.h"
 
 namespace vml {
@@ -27,13 +29,6 @@ namespace {
 
 // The folder of this format's comparisons under the cache's base.
 constexpr const char* format_folder = "v2";
-
-// The colour-tag mappings a Vship GPU score and a CPU SSIMULACRA2 or
-// Butteraugli score record they were made with (the Python app's
-// VSHIP_COLOR_TAGS and CPU_COLOR_TAGS). A score without its mapping is known
-// to be wrong in some cases (stale_vship_score).
-constexpr const char* vship_color_tags = "ffvship-5.1.1";
-constexpr const char* cpu_color_tags = "vship-5.1.1/2";
 
 // The id of a score saved before scores recorded their provenance.
 constexpr const char* unversioned_compatibility = "unversioned";
@@ -49,7 +44,6 @@ const std::regex& old_vship_rgb() {
         "gbrp(?:(?:9|10|12|14|16)(?:le|be)?)?|rgb24|bgr24|rgba|bgra|argb|abgr|rgb0|bgr0|rgb48(?:le|be)|rgba64(?:le|be)");
     return pattern;
 }
-constexpr std::array<std::string_view, 4> untagged{"", "unknown", "unspecified", "reserved"};
 
 using LoadedMetric = std::variant<FrameMetricResult, SequenceMetricResult>;
 
@@ -124,7 +118,7 @@ const MetricProvenance& provenance_of(const LoadedMetric& metric) {
 bool stale_cpu_score(const MetricProvenance& provenance) {
     return provenance.compute_backend == "cpu" &&
            (provenance.implementation == "ssimulacra2" || provenance.implementation == "butteraugli") &&
-           parameter(provenance, "color_tags") != nlohmann::json(cpu_color_tags);
+           parameter(provenance, "color_tags") != nlohmann::json(score_identity::cpu_colour_tags);
 }
 
 // Whether a saved score is known to be wrong and must be calculated again:
@@ -135,18 +129,18 @@ bool stale_vship_score(const MetricProvenance& provenance, const std::vector<Col
         return true;
     }
     if (provenance.compute_backend != "gpu" || !provenance.implementation.starts_with("Vship/") ||
-        parameter(provenance, "color_tags") == nlohmann::json(vship_color_tags)) {
+        parameter(provenance, "color_tags") == nlohmann::json(score_identity::vship_colour_tags)) {
         return false;
     }
     return std::any_of(infos.begin(), infos.end(), [](const ColourTags& info) {
         const std::string transfer = ascii_lower(python_strip(info.color_transfer));
         return std::regex_match(ascii_lower(python_strip(info.pix_fmt)), old_vship_rgb()) &&
-               std::find(untagged.begin(), untagged.end(), transfer) != untagged.end();
+               is_untagged_tag(transfer);
     });
 }
 
 bool is_auto_perceptual(const MetricRequestSpec& spec) {
-    return spec.backend_id == "perceptual" && spec.implementation_compatibility_id.ends_with("-auto-or-libjxl-cpu-v1");
+    return spec.backend_id == "perceptual" && spec.implementation_compatibility_id.ends_with(score_identity::gpu_or_cpu_suffix);
 }
 
 // Whether a saved perceptual score's compatibility id answers a request
@@ -154,7 +148,7 @@ bool is_auto_perceptual(const MetricRequestSpec& spec) {
 // library's version in the id too ("ssimulacra2-vship-5.1.1-gpu-v1").
 bool auto_perceptual_compatible(const MetricRequestSpec& spec, const std::string& value) {
     const std::string& key = spec.key;
-    return value == key + "-vship-gpu-v1" || value == key + "-libjxl-cpu-v1" ||
+    return value == score_identity::vship_gpu(key) || value == score_identity::libjxl_cpu(key) ||
            (value.starts_with(key + "-vship-") && value.ends_with("-gpu-v1")) ||
            (value.starts_with(key + "-libjxl-") && value.ends_with("-cpu-v1"));
 }
@@ -165,7 +159,7 @@ bool compatible(const MetricRequestSpec& spec, const MetricProvenance& provenanc
         return auto_perceptual_compatible(spec, compatibility);
     }
     if (compatibility == unversioned_compatibility) {
-        return spec.implementation_compatibility_id == "ffmpeg-libvmaf-v1";
+        return spec.implementation_compatibility_id == score_identity::libvmaf;
     }
     return compatibility == spec.implementation_compatibility_id;
 }
@@ -903,11 +897,7 @@ MetricResultSet reusable(const ComparisonResult& result, const std::vector<Metri
                          const std::vector<ColourTags>& infos) {
     MetricResultSet kept;
     for (const std::string& key : reusable_keys(result, specs, backends, gpu_can_score, infos)) {
-        if (const SequenceMetricResult* sequence = result.metric_results.sequence(key)) {
-            kept.add(*sequence);
-        } else {
-            kept.add(*result.metric_results.frame(key));
-        }
+        kept.copy_from(result.metric_results, key);
     }
     return kept;
 }

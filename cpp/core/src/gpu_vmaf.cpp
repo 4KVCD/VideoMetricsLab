@@ -45,7 +45,6 @@ constexpr std::size_t read_ahead = 3;
 // How much each named pipe holds: a 4K frame at 16 bits is 25 MB.
 constexpr std::size_t pipe_bytes = 64 * 1024 * 1024;
 
-constexpr unsigned nvidia = 0x10DE;  // its PCI vendor ID
 
 
 // A queue of frame buffers between two threads. nullptr in it says that no
@@ -172,7 +171,7 @@ GpuVmafBackend probe_backends(const std::string& preference) {
         try {
             if (backend == "cuda") {
                 const std::vector<unsigned> vendors = platform::gpu_vendor_ids();
-                if (std::find(vendors.begin(), vendors.end(), nvidia) == vendors.end()) {
+                if (std::find(vendors.begin(), vendors.end(), platform::nvidia_pci_vendor) == vendors.end()) {
                     add_reason("no NVIDIA GPU");
                     continue;
                 }

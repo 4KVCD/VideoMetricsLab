@@ -97,11 +97,11 @@ void log_tools(const ToolsStatus& status, const std::vector<GpuVendor>& gpus) {
             main_logger.warning("FFmpeg: " + problem);
         }
     }
-    std::string vendors;
+    std::vector<std::string_view> names;
     for (const GpuVendor vendor : gpus) {
-        const char* name = vendor == GpuVendor::nvidia ? "NVIDIA" : vendor == GpuVendor::intel ? "INTEL" : "AMD";
-        vendors += (vendors.empty() ? "" : ", ") + std::string(name);
+        names.push_back(vendor_label(vendor));
     }
+    const std::string vendors = join(names, ", ");
     main_logger.info("GPUs: " + (vendors.empty() ? std::string("none detected") : vendors));
 }
 
@@ -123,23 +123,6 @@ const MetricColumn* metric_column_of(int column) {
         }
     }
     return nullptr;
-}
-
-// Settings' default_compute_<key> for each metric.
-bool Settings::* default_compute_field(std::string_view key) {
-    static const std::map<std::string_view, bool Settings::*> fields{
-        {"psnr", &Settings::default_compute_psnr},
-        {"ssim", &Settings::default_compute_ssim},
-        {"xpsnr", &Settings::default_compute_xpsnr},
-        {"vmaf", &Settings::default_compute_vmaf},
-        {"vmaf_neg", &Settings::default_compute_vmaf_neg},
-        {"vmaf_v1", &Settings::default_compute_vmaf_v1},
-        {"ssimulacra2", &Settings::default_compute_ssimulacra2},
-        {"butteraugli", &Settings::default_compute_butteraugli},
-        {"cvvdp", &Settings::default_compute_cvvdp},
-    };
-    const auto found = fields.find(key);
-    return found == fields.end() ? nullptr : found->second;
 }
 
 // A menu of check boxes that stays open while boxes are ticked, so several
@@ -891,7 +874,7 @@ VmafOptions MainWindow::options_from_settings() const {
 std::set<std::string> MainWindow::extra_metrics_from_settings() const {
     std::set<std::string> keys;
     for (const char* key : {"ssimulacra2", "butteraugli", "cvvdp"}) {
-        if (settings_.*default_compute_field(key)) {
+        if (*settings_.default_compute(key)) {
             keys.insert(key);
         }
     }
@@ -2393,7 +2376,7 @@ void MainWindow::apply_metric_selection(const std::vector<int>& rows, int column
         }
         // Saved as the default too, the same setting as Settings > Default
         // metrics.
-        settings_.*default_compute_field(key) = checked;
+        *settings_.default_compute(key) = checked;
         settings_panel_->show_default_metric(key, checked);
         save_settings();
     }

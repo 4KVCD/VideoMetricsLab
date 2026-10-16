@@ -260,13 +260,13 @@ std::optional<std::vector<unsigned>> named_vendor_ids() {
     std::transform(maker->begin(), maker->end(), maker->begin(),
                    [](unsigned char letter) { return static_cast<char>(std::tolower(letter)); });
     if (*maker == "nvidia") {
-        return std::vector<unsigned>{0x10DE};
+        return std::vector<unsigned>{nvidia_pci_vendor};
     }
     if (*maker == "intel") {
-        return std::vector<unsigned>{0x8086};
+        return std::vector<unsigned>{intel_pci_vendor};
     }
     if (*maker == "amd") {
-        return std::vector<unsigned>{0x1002, 0x1022};
+        return std::vector<unsigned>(std::begin(amd_pci_vendors), std::end(amd_pci_vendors));
     }
     return std::vector<unsigned>{};  // a maker not known here: none of the GPUs
 }

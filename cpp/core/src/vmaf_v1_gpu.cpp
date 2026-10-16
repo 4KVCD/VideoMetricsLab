@@ -1094,9 +1094,7 @@ MultiScorer::MultiScorer(int width, int height, int bit_depth, const GpuModels& 
         }
     }
     if (v1_model) {
-        const std::string_view file = std::string_view(*v1_model).starts_with("path=")
-                                          ? std::string_view(*v1_model).substr(5)
-                                          : std::string_view(*v1_model);
+        const std::string_view file = model_file_of(*v1_model).value_or(*v1_model);
         v1_ = std::make_unique<V1Scorer>(width, height, bit_depth, platform::path_from_text(file), n_subsample,
                                          vulkan ? device : std::nullopt, std::nullopt, "vmaf_v1", shared, true, true,
                                          pictures);
@@ -1348,8 +1346,7 @@ V1Probe v1_available() {
 bool v1_on_gpu(const std::string& model, std::optional<std::pair<int, int>> size) {
     Options speed = Options::object();
     if (!model.empty()) {
-        const std::string_view file =
-            std::string_view(model).starts_with("path=") ? std::string_view(model).substr(5) : std::string_view(model);
+        const std::string_view file = model_file_of(model).value_or(model);
         try {
             speed = model_options(platform::path_from_text(file)).at(v1_speed);
         } catch (const VmafV1Error&) {

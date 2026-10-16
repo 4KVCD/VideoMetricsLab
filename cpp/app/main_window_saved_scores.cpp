@@ -151,11 +151,7 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
             if (run->result.has_metric(key)) {
                 continue;
             }
-            if (const FrameMetricResult* frame = shown.frame(key)) {
-                run->result.metric_results.add(*frame);
-            } else if (const SequenceMetricResult* sequence = shown.sequence(key)) {
-                run->result.metric_results.add(*sequence);
-            }
+            run->result.metric_results.copy_from(shown, key);
         }
     }
     row_data.completed_run = std::move(run);
@@ -279,11 +275,7 @@ void MainWindow::drop_metric_results(int row, const std::vector<std::string>& ke
         if (dropped(key)) {
             continue;
         }
-        if (const FrameMetricResult* frame = run->result.metric_results.frame(key)) {
-            kept.add(*frame);
-        } else if (const SequenceMetricResult* sequence = run->result.metric_results.sequence(key)) {
-            kept.add(*sequence);
-        }
+        kept.copy_from(run->result.metric_results, key);
     }
     row_data.analysis_status.reset();
     if (kept.empty()) {

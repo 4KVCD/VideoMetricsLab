@@ -3,15 +3,12 @@
 #include <algorithm>
 
 #include "vml/metrics.h"
+#include "vml/score_identity.h"
 #include "vml/stats.h"
 
 namespace vml {
 
 namespace {
-
-// The identity saved XPSNR scores are reused by: v2 since October 2026,
-// weighted by the source's activity.
-constexpr const char* xpsnr_compatibility_id = "ffmpeg-xpsnr-v2";
 
 void remember_key(std::vector<std::string>& keys, const std::string& key) {
     if (std::find(keys.begin(), keys.end(), key) == keys.end()) {
@@ -25,7 +22,7 @@ MetricProvenance current_ffmpeg_provenance(const std::string& key, const std::st
                                            std::map<std::string, std::string> parameters) {
     const bool xpsnr = key == "xpsnr";
     return MetricProvenance{xpsnr ? "ffmpeg/xpsnr" : "ffmpeg/libvmaf", "ffmpeg " + version, "cpu",
-                            xpsnr ? xpsnr_compatibility_id : "ffmpeg-libvmaf-v1", std::move(parameters)};
+                            std::string(xpsnr ? score_identity::xpsnr : score_identity::libvmaf), std::move(parameters)};
 }
 
 std::optional<double> FrameMetricResult::aggregate() const {
@@ -47,6 +44,20 @@ void MetricResultSet::add(SequenceMetricResult result) {
     frames_.erase(result.key);
     const std::string key = result.key;
     sequences_.insert_or_assign(key, std::move(result));
+}
+
+void MetricResultSet::copy_from(const MetricResultSet& other, const std::string& key) {
+    if (const FrameMetricResult* frame = other.frame(key)) {
+        add(*frame);
+    } else if (const SequenceMetricResult* sequence = other.sequence(key)) {
+        add(*sequence);
+    }
+}
+
+void MetricResultSet::add_all(const MetricResultSet& other) {
+    for (const std::string& key : other.keys()) {
+        copy_from(other, key);
+    }
 }
 
 bool MetricResultSet::has(const std::string& key) const { return frames_.contains(key) || sequences_.contains(key); }

@@ -34,6 +34,11 @@ private:
     std::string value_;
 };
 
+// Whether a colour tag's value says nothing about the colours: empty,
+// "unknown", "unspecified" or "reserved", in any case (Python's
+// colour.UNTAGGED).
+bool is_untagged_tag(std::string_view value);
+
 // A video's colours as H.273 numbers, and whether it is full range.
 struct VideoColour {
     int matrix = 1;  // 0 for RGB
