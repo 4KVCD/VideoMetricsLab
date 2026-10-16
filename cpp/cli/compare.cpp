@@ -765,17 +765,17 @@ std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& 
     return found;
 }
 
-int compare(const CompareArguments& arguments) {
-    // Ctrl+C: outside the run, the command ends at once with exit code 130
-    // and nothing more, as the Python app's KeyboardInterrupt ends it -- an
-    // FFmpeg check or ffprobe under way included, which ends with this
-    // process's job. During the run, the run is cancelled and what finished
-    // is reported. Set up first: the checks and probes before the run can
-    // take a while (60 s for ffprobe on a slow share). The handler outlives
-    // this function, so it shares what it uses.
-    CancelToken cancel;
-    const auto progress = std::make_shared<Progress>(arguments.quiet);
-    const auto running = std::make_shared<std::atomic<bool>>(false);
+namespace {
+
+// Ctrl+C: outside the run, the command ends at once with exit code 130 and
+// nothing more, as the Python app's KeyboardInterrupt ends it -- an FFmpeg
+// check or ffprobe under way included, which ends with this process's job.
+// During the run (`running`), the run is cancelled and what finished is
+// reported. Set up first: the checks and probes before the run can take a
+// while (60 s for ffprobe on a slow share). The handler outlives the
+// command, so it shares what it uses.
+void cancel_on_interrupt(CancelToken cancel, const std::shared_ptr<Progress>& progress,
+                         const std::shared_ptr<std::atomic<bool>>& running) {
     platform::on_interrupt([cancel, progress, running]() mutable {
         if (!*running) {
             platform::end_process_now(exit_cancelled);
@@ -784,7 +784,12 @@ int compare(const CompareArguments& arguments) {
         app_log::write(app_log::Level::info, "vml.job_runner", "Run: cancel requested");
         cancel.cancel();
     });
-    const Settings settings = Settings::load();
+}
+
+// Sets up what the run reads from `settings` where it is kept: the GPU
+// backend, and where the black bars found are stored. Returns the saved
+// scores' folder.
+std::filesystem::path apply_settings(const Settings& settings) {
     set_gpu_backend(settings.gpu_backend);
     set_vship_backend(settings.gpu_backend);
     const std::filesystem::path cache_folder = settings.cache_dir_path().value_or(default_cache_dir());
@@ -792,6 +797,265 @@ int compare(const CompareArguments& arguments) {
         std::filesystem::create_directories(cache_folder);
         return cache_folder / black_bars_file;
     });
+    return cache_folder;
+}
+
+// Plans each test video's comparison with the reference: the metrics it can
+// be compared on, notes on what the reader should know, and the jobs that
+// calculate what is not saved -- its own, and one of CVVDP alone for each
+// further display.
+class ComparisonPlanner {
+public:
+    ComparisonPlanner(const CompareArguments& arguments, const Settings& settings, const VideoInfo& source,
+                      const std::vector<CvvdpDisplayChoice>& displays, std::vector<std::string> asked,
+                      std::filesystem::path cache_folder)
+        : arguments_(arguments),
+          settings_(settings),
+          source_(source),
+          displays_(displays),
+          asked_(std::move(asked)),
+          backends_(perceptual_backends(arguments, settings)),
+          // The saved scores know a video by its file, not by the colours it
+          // was read with, so --colour scores are neither read nor saved.
+          use_saved_(!arguments.recalculate && settings.use_cache && !arguments.colour),
+          cache_folder_(std::move(cache_folder)) {}
+
+    // Plans the comparison of the video at `path` (read with `ffprobe`), kept
+    // in `videos` with why it is not compared, if it is not. Returns what the
+    // command line cannot do yet of it, or nothing.
+    std::optional<std::string> plan(const std::filesystem::path& path, const std::string& ffprobe);
+    // Each job's video, once every video is planned (the lists no longer grow).
+    std::vector<TestVideo*> job_targets();
+
+    std::vector<TestVideo> videos;
+    std::vector<VmafJob> jobs;
+
+private:
+    void leave_out_cvvdp_if_unable(TestVideo& video) const;
+    void add_colour_notes(TestVideo& video) const;
+    std::optional<std::string> queue_jobs(TestVideo& video);
+    void queue_other_displays(TestVideo& video);
+
+    const CompareArguments& arguments_;
+    const Settings& settings_;
+    const VideoInfo& source_;
+    const std::vector<CvvdpDisplayChoice>& displays_;
+    const std::vector<std::string> asked_;
+    const PerceptualBackends backends_;
+    const bool use_saved_;
+    const std::filesystem::path cache_folder_;
+    // Each job's video: its index, and for CVVDP on a further display, which.
+    std::vector<std::pair<std::size_t, std::optional<std::size_t>>> job_videos_;
+};
+
+std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& path, const std::string& ffprobe) {
+    TestVideo& video = videos.emplace_back();
+    video.path = path;
+    video.save_scores = !arguments_.colour;
+    try {
+        video.info = with_assumed_colour(probe_video(path, ffprobe), arguments_.colour);
+    } catch (const ProbeError& error) {
+        video.error = std::string("it could not be read: ") + error.what();
+        return std::nullopt;
+    }
+    video.metrics = asked_;
+    leave_out_cvvdp_if_unable(video);
+    if (video.metrics.empty()) {
+        video.error = "none of the metrics asked for can be calculated for it";
+        return std::nullopt;
+    }
+    add_colour_notes(video);
+    if (const std::optional<std::string> note = sdr_display_note(arguments_, source_, video, displays_.front())) {
+        video.notes.push_back(*note);
+    }
+    try {
+        return queue_jobs(video);
+    } catch (const std::exception& error) {
+        video.error = error.what();
+        if (video.error.starts_with("Durations do not match")) {
+            video.error += " Here: --frames N or --duration SECONDS.";
+        }
+        return std::nullopt;
+    }
+}
+
+std::vector<TestVideo*> ComparisonPlanner::job_targets() {
+    std::vector<TestVideo*> targets;
+    for (const auto& [index, display] : job_videos_) {
+        TestVideo& video = videos[index];
+        targets.push_back(display ? &video.other_displays[*display] : &video);
+    }
+    return targets;
+}
+
+// CVVDP left out of `video`'s metrics, with a note why, where it cannot be
+// calculated: with --subsample above 1, or with no GPU Vship can use.
+void ComparisonPlanner::leave_out_cvvdp_if_unable(TestVideo& video) const {
+    if (std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") == video.metrics.end()) {
+        return;
+    }
+    const char* reason = arguments_.subsample > 1
+                             ? "CVVDP needs every frame: it is not calculated with --subsample above 1"
+                         : !detect_vship_device().first
+                             ? "CVVDP is calculated on the GPU only, and no GPU that Vship can use was found"
+                             : nullptr;
+    if (reason != nullptr) {
+        std::erase(video.metrics, "cvvdp");
+        video.notes.emplace_back(reason);
+    }
+}
+
+// What the reader should know about how the colours were read, where a
+// perceptual metric depends on them: a video's guessed.
+void ComparisonPlanner::add_colour_notes(TestVideo& video) const {
+    if (arguments_.colour ||
+        std::none_of(video.metrics.begin(), video.metrics.end(), [](const std::string& key) {
+            return is_perceptual_metric(key);
+        })) {
+        return;
+    }
+    for (const auto& [info, which] : {std::pair<const VideoInfo*, const char*>(&source_, "the reference"),
+                                      std::pair<const VideoInfo*, const char*>(&*video.info, "the test video")}) {
+        if (!has_colour_tags(*info)) {
+            video.notes.push_back(guessed_colour_note(*info, which));
+        }
+    }
+}
+
+// Queues the jobs that compare `video`, checked against the reference
+// first: its own, unless everything is saved, and CVVDP on each further
+// display. Returns what the command line cannot do yet of its own job, or
+// nothing; throws when the two videos cannot be compared as asked.
+std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video) {
+    video.options = row_options(arguments_, settings_, video.metrics, *video.info);
+    validate_video_pair(source_, *video.info, video.options);
+    const auto [width, height] = analysis_dimensions(source_, *video.info, video.options);
+    VmafOptions options = video.options;
+    options.model = video.options.compute_vmaf ? resolve_model(video.options, width, height) : "";
+    const bool cvvdp = std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") != video.metrics.end();
+    if (cvvdp) {
+        video.display = displays_.front().first;
+    }
+    const std::size_t queued = jobs.size();
+    if (std::optional<std::string> missing = queue(video, source_, std::move(options), backends_,
+                                                   displays_.front().second, use_saved_, cache_folder_, jobs)) {
+        return missing;
+    }
+    if (jobs.size() > queued) {
+        job_videos_.emplace_back(videos.size() - 1, std::nullopt);
+    }
+    if (cvvdp) {
+        queue_other_displays(video);
+    }
+    return std::nullopt;
+}
+
+// CVVDP on each further display: a comparison of its own, of CVVDP alone.
+void ComparisonPlanner::queue_other_displays(TestVideo& video) {
+    for (std::size_t display = 1; display < displays_.size(); ++display) {
+        TestVideo& other = video.other_displays.emplace_back();
+        other.path = video.path;
+        other.info = video.info;
+        other.metrics = {"cvvdp"};
+        other.display = displays_[display].first;
+        other.for_display_only = true;
+        other.save_scores = video.save_scores;
+        other.options = row_options(arguments_, settings_, other.metrics, *video.info);
+        const std::size_t before = jobs.size();
+        queue(other, source_, other.options, backends_, displays_[display].second, use_saved_, cache_folder_, jobs);
+        if (jobs.size() > before) {
+            job_videos_.emplace_back(videos.size() - 1, video.other_displays.size() - 1);
+        }
+    }
+}
+
+// What the planning found for each video: why it is not compared, its
+// notes, or that every score is saved.
+void report_plans(const std::vector<TestVideo>& videos, Progress& progress) {
+    for (const TestVideo& video : videos) {
+        if (!video.error.empty()) {
+            progress.message(video.name() + ": not compared: " + video.error);
+        }
+        for (const std::string& note : video.notes) {
+            progress.message(video.name() + ": " + note);
+        }
+        if (video.from_cache) {
+            progress.message(video.name() + ": every score is saved; nothing to calculate");
+        }
+    }
+}
+
+// What the jobs run with. Which decoders this FFmpeg and these GPUs have is
+// only asked when a video may be decoded on the GPU.
+RunEnvironment run_environment(const ToolsStatus& tools, const std::vector<VmafJob>& jobs) {
+    const bool gpu_decode = std::any_of(jobs.begin(), jobs.end(), [](const VmafJob& job) { return job.options.gpu_decode; });
+    return RunEnvironment{tools.ffmpeg.path, format_version(tools.ffmpeg.version), tools.ffprobe.path,
+                          gpu_decode ? DecodingCapabilities::detect(tools.ffmpeg.path) : DecodingCapabilities{},
+                          platform::logical_cores()};
+}
+
+// Writes `document` to `path`, its folder made first, as the Python app
+// writes it. Why it could not be written, as the Python app's OSError says
+// it (the path alone left a user guessing), or nothing.
+std::optional<std::string> write_json_file(const std::filesystem::path& path, const nlohmann::ordered_json& document) {
+    if (path.has_parent_path()) {
+        std::error_code error;
+        std::filesystem::create_directories(path.parent_path(), error);
+        if (error) {
+            return python_os_error(error, path.parent_path());
+        }
+    }
+    errno = 0;
+    std::ofstream file(path, std::ios::binary);
+    const int opened = errno;
+    file << text_file(python_json_dumps(document) + "\n");
+    file.close();
+    if (!file) {
+        const int code = opened != 0 ? opened : (errno != 0 ? errno : EIO);
+        return python_os_error(std::error_code(code, std::generic_category()), path);
+    }
+    return std::nullopt;
+}
+
+// Gives the results: printed as tables, or as JSON alone for "--json -",
+// which is for a program to read; and written to the CSV files and the JSON
+// file asked for (the tables are printed as well then). False when a file
+// could not be written.
+bool write_results(const CompareArguments& arguments, const VideoInfo& source, const std::vector<TestVideo>& videos,
+                   bool cancelled, Progress& progress) {
+    const std::vector<Summaries> summaries = summarize(videos);
+    const nlohmann::ordered_json document = results_document(source, videos, summaries, cancelled);
+    bool written = true;
+    if (arguments.csv) {
+        written = write_csvs(videos, python_path(*arguments.csv),
+                             [&progress](const std::string& text) { progress.message(text); });
+    }
+    const std::optional<std::filesystem::path> json_file =
+        arguments.json_path ? std::optional(python_path(*arguments.json_path)) : std::nullopt;
+    if (json_file && platform::path_text(*json_file) == "-") {
+        platform::write_text(platform::Stream::output, python_json_dumps(document) + "\n");
+        return written;
+    }
+    platform::write_text(platform::Stream::output, results_table(source, videos, summaries, cancelled) + "\n");
+    if (json_file) {
+        if (const std::optional<std::string> failure = write_json_file(*json_file, document)) {
+            print_error("The JSON file could not be written: " + *failure);
+            return false;
+        }
+        progress.message("Results as JSON in " + platform::path_text(*json_file));
+    }
+    return written;
+}
+
+}  // namespace
+
+int compare(const CompareArguments& arguments) {
+    CancelToken cancel;
+    const auto progress = std::make_shared<Progress>(arguments.quiet);
+    const auto running = std::make_shared<std::atomic<bool>>(false);
+    cancel_on_interrupt(cancel, progress, running);
+    const Settings settings = Settings::load();
+    const std::filesystem::path cache_folder = apply_settings(settings);
     const ToolsStatus tools = check_tools(settings);
     if (!tools.ok()) {
         print_error(ffmpeg_problem(tools));
@@ -819,125 +1083,21 @@ int compare(const CompareArguments& arguments) {
         print_error(std::string("The reference could not be read: ") + error.what());
         return exit_usage;
     }
-
-    const PerceptualBackends backends = perceptual_backends(arguments, settings);
-    // The saved scores know a video by its file, not by the colours it was
-    // read with, so --colour scores are neither read nor saved.
-    const bool use_saved = !arguments.recalculate && settings.use_cache && !arguments.colour;
-    std::vector<TestVideo> videos;
-    std::vector<VmafJob> jobs;
-    // Each job's video: its index, and for CVVDP on a further display, which.
-    std::vector<std::pair<std::size_t, std::optional<std::size_t>>> job_videos;
+    ComparisonPlanner planner(arguments, settings, source, displays, asked, cache_folder);
     for (const std::filesystem::path& path : expand_tests(arguments.tests, python_path(arguments.reference))) {
-        TestVideo& video = videos.emplace_back();
-        video.path = path;
-        video.save_scores = !arguments.colour;
-        try {
-            video.info = with_assumed_colour(probe_video(path, tools.ffprobe.path), arguments.colour);
-        } catch (const ProbeError& error) {
-            video.error = std::string("it could not be read: ") + error.what();
-            continue;
-        }
-        video.metrics = asked;
-        if (std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") != video.metrics.end()) {
-            const char* reason =
-                arguments.subsample > 1 ? "CVVDP needs every frame: it is not calculated with --subsample above 1"
-                : !detect_vship_device().first
-                    ? "CVVDP is calculated on the GPU only, and no GPU that Vship can use was found"
-                    : nullptr;
-            if (reason != nullptr) {
-                std::erase(video.metrics, "cvvdp");
-                video.notes.emplace_back(reason);
-            }
-        }
-        if (video.metrics.empty()) {
-            video.error = "none of the metrics asked for can be calculated for it";
-            continue;
-        }
-        // What the reader should know about how the colours were read: a
-        // video's guessed.
-        if (!arguments.colour &&
-            std::any_of(video.metrics.begin(), video.metrics.end(), [](const std::string& key) {
-                return is_perceptual_metric(key);
-            })) {
-            for (const auto& [info, which] : {std::pair<const VideoInfo*, const char*>(&source, "the reference"),
-                                              std::pair<const VideoInfo*, const char*>(&*video.info, "the test video")}) {
-                if (!has_colour_tags(*info)) {
-                    video.notes.push_back(guessed_colour_note(*info, which));
-                }
-            }
-        }
-        if (const std::optional<std::string> note = sdr_display_note(arguments, source, video, displays.front())) {
-            video.notes.push_back(*note);
-        }
-        try {
-            video.options = row_options(arguments, settings, video.metrics, *video.info);
-            validate_video_pair(source, *video.info, video.options);
-            const auto [width, height] = analysis_dimensions(source, *video.info, video.options);
-            VmafOptions options = video.options;
-            options.model = video.options.compute_vmaf ? resolve_model(video.options, width, height) : "";
-            const bool cvvdp = std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") != video.metrics.end();
-            if (cvvdp) {
-                video.display = displays.front().first;
-            }
-            const std::size_t queued = jobs.size();
-            if (const std::optional<std::string> missing = queue(video, source, std::move(options), backends,
-                                                                 displays.front().second, use_saved, cache_folder, jobs)) {
-                print_error("The C++ command line cannot do this yet: " + *missing + ".");
-                return exit_usage;
-            }
-            if (jobs.size() > queued) {
-                job_videos.emplace_back(videos.size() - 1, std::nullopt);
-            }
-            // CVVDP on each further display: a comparison of its own, of
-            // CVVDP alone.
-            for (std::size_t display = 1; cvvdp && display < displays.size(); ++display) {
-                TestVideo& other = video.other_displays.emplace_back();
-                other.path = video.path;
-                other.info = video.info;
-                other.metrics = {"cvvdp"};
-                other.display = displays[display].first;
-                other.for_display_only = true;
-                other.save_scores = video.save_scores;
-                other.options = row_options(arguments, settings, other.metrics, *video.info);
-                const std::size_t before = jobs.size();
-                queue(other, source, other.options, backends, displays[display].second, use_saved, cache_folder, jobs);
-                if (jobs.size() > before) {
-                    job_videos.emplace_back(videos.size() - 1, video.other_displays.size() - 1);
-                }
-            }
-        } catch (const std::exception& error) {
-            video.error = error.what();
-            if (video.error.starts_with("Durations do not match")) {
-                video.error += " Here: --frames N or --duration SECONDS.";
-            }
+        if (const std::optional<std::string> missing = planner.plan(path, tools.ffprobe.path)) {
+            print_error("The C++ command line cannot do this yet: " + *missing + ".");
+            return exit_usage;
         }
     }
-    if (videos.empty()) {
+    if (planner.videos.empty()) {
         print_error("No test videos: the patterns find only the reference.");
         return exit_usage;
     }
-    for (const TestVideo& video : videos) {
-        if (!video.error.empty()) {
-            progress->message(video.name() + ": not compared: " + video.error);
-        }
-        for (const std::string& note : video.notes) {
-            progress->message(video.name() + ": " + note);
-        }
-        if (video.from_cache) {
-            progress->message(video.name() + ": every score is saved; nothing to calculate");
-        }
-    }
-
-    // Each job's video, now that the lists no longer grow.
-    std::vector<TestVideo*> job_targets;
-    for (const auto& [index, display] : job_videos) {
-        TestVideo& video = videos[index];
-        job_targets.push_back(display ? &video.other_displays[*display] : &video);
-    }
+    report_plans(planner.videos, *progress);
 
     bool cancelled = false;
-    if (!jobs.empty()) {
+    if (!planner.jobs.empty()) {
         const Clock::time_point started = Clock::now();
         *running = true;
         // What runs ended outright (End task, a crash) left in the temporary
@@ -949,16 +1109,9 @@ int compare(const CompareArguments& arguments) {
                 remove_leftovers(folder);
             }
         });
-        // Which decoders this FFmpeg and these GPUs have is only asked when a
-        // video may be decoded on the GPU.
-        const bool gpu_decode =
-            std::any_of(jobs.begin(), jobs.end(), [](const VmafJob& job) { return job.options.gpu_decode; });
-        const RunEnvironment environment{tools.ffmpeg.path, format_version(tools.ffmpeg.version), tools.ffprobe.path,
-                                         gpu_decode ? DecodingCapabilities::detect(tools.ffmpeg.path)
-                                                    : DecodingCapabilities{},
-                                         platform::logical_cores()};
-        run(environment, job_targets, jobs, arguments.parallel.value_or(settings.parallel_jobs),
-            settings.gpu_metrics_together, cache_folder, *progress, cancel);
+        run(run_environment(tools, planner.jobs), planner.job_targets(), planner.jobs,
+            arguments.parallel.value_or(settings.parallel_jobs), settings.gpu_metrics_together, cache_folder,
+            *progress, cancel);
         progress->done();
         cancelled = cancel.cancelled();
         *running = false;
@@ -966,55 +1119,11 @@ int compare(const CompareArguments& arguments) {
         progress->message(std::string(cancelled ? "Cancelled" : "Finished") + " after " + format_hms(seconds));
     }
 
-    const std::vector<Summaries> summaries = summarize(videos);
-    const nlohmann::ordered_json document = results_document(source, videos, summaries, cancelled);
-    bool written = true;
-    if (arguments.csv) {
-        written = write_csvs(videos, python_path(*arguments.csv),
-                             [&progress](const std::string& text) { progress->message(text); });
-    }
-    // "--json -" is for a program to read, so it prints the JSON alone.
-    // "--json FILE" writes the file, and the tables are printed as well.
-    const std::optional<std::filesystem::path> json_file =
-        arguments.json_path ? std::optional(python_path(*arguments.json_path)) : std::nullopt;
-    if (json_file && platform::path_text(*json_file) == "-") {
-        platform::write_text(platform::Stream::output, python_json_dumps(document) + "\n");
-    } else {
-        platform::write_text(platform::Stream::output, results_table(source, videos, summaries, cancelled) + "\n");
-        if (json_file) {
-            // Why it could not be written, as the Python app's OSError says
-            // it: the path alone left a user guessing.
-            std::string failure;
-            if (json_file->has_parent_path()) {
-                std::error_code error;
-                std::filesystem::create_directories(json_file->parent_path(), error);
-                if (error) {
-                    failure = python_os_error(error, json_file->parent_path());
-                }
-            }
-            if (failure.empty()) {
-                errno = 0;
-                std::ofstream file(*json_file, std::ios::binary);
-                const int opened = errno;
-                file << text_file(python_json_dumps(document) + "\n");
-                file.close();
-                if (!file) {
-                    const int code = opened != 0 ? opened : (errno != 0 ? errno : EIO);
-                    failure = python_os_error(std::error_code(code, std::generic_category()), *json_file);
-                }
-            }
-            if (!failure.empty()) {
-                print_error("The JSON file could not be written: " + failure);
-                written = false;
-            } else {
-                progress->message("Results as JSON in " + platform::path_text(*json_file));
-            }
-        }
-    }
+    const bool written = write_results(arguments, source, planner.videos, cancelled, *progress);
     if (cancelled) {
         return exit_cancelled;
     }
-    const bool every_ok = std::all_of(videos.begin(), videos.end(),
+    const bool every_ok = std::all_of(planner.videos.begin(), planner.videos.end(),
                                       [](const TestVideo& video) { return video_status(video, false) == "ok"; });
     return every_ok && written ? exit_ok : exit_failed;
 }
