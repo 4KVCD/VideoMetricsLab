@@ -628,7 +628,10 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
     // The saved scores the run keeps, by the window's rule.
     MetricResultSet kept;
     if (saved) {
-        kept = reusable(*saved, video.request.metrics, chosen, [](const std::string& key) { return gpu_can_score(key); },
+        // A metric set to the GPU keeps a CPU score only without a GPU Vship
+        // can use; the probe runs only if a score needs that answer.
+        kept = reusable(*saved, video.request.metrics, chosen,
+                        [](const std::string&) { return detect_vship_device().first.has_value(); },
                         colour_tags(source, *video.info));
     }
     if (std::all_of(video.metrics.begin(), video.metrics.end(), [&kept](const std::string& key) { return kept.has(key); })) {

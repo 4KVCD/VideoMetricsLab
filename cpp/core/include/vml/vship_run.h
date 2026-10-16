@@ -90,9 +90,9 @@ PerceptualRoutes app_perceptual_routes();
 // run (the Python app's apply_vship_cpu_fallback): on the GPU through
 // Vship, each in a pass of its own, or with `together` in one pass; or on
 // the CPU. A metric moves from the GPU to the CPU where the GPU cannot
-// calculate it: without a GPU Vship can use, on a GPU whose Vship build
-// scores it wrongly, and after it failed on the GPU, unless the comparison
-// is longer than long_cpu_run_seconds, which nobody agreed to on the CPU.
+// calculate it: without a GPU Vship can use, and after it failed on the
+// GPU, unless the comparison is longer than long_cpu_run_seconds, which
+// nobody agreed to on the CPU.
 // CVVDP runs on the GPU only, and fails with its own reason. A metric that
 // fails while others finish is in the output's failures. `hooks.on_cpu`
 // gets the metrics the CPU is about to calculate, just before it starts;

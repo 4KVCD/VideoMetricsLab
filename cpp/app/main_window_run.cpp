@@ -423,20 +423,18 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
         if (!gpu_missing && any_on_gpu) {
             gpu_missing = !vship_available();
         }
-        // Set to the GPU but calculated on the CPU: no GPU Vship can use, or
-        // a build that scores it wrongly (vship.h's gpu_can_score).
+        // Calculated on the CPU: set to it, or set to the GPU where Vship can
+        // use none.
         std::vector<std::string> cpu_keys;
         QStringList cpu_metrics;
         for (const std::string& key : pending) {
-            if (backend(key) != "cpu" && !gpu_missing.value_or(false) && gpu_scores(key)) {
+            if (backend(key) != "cpu" && !gpu_missing.value_or(false)) {
                 continue;
             }
             cpu_keys.push_back(key);
             QString label = qt_text(metric_definition(key).label);
             if (backend(key) != "cpu") {
-                label += gpu_missing.value_or(false)
-                             ? app::tr(" (set to GPU, but no supported GPU was found)")
-                             : app::tr(" (set to GPU, but Vship's Vulkan build does not score it correctly yet)");
+                label += app::tr(" (set to GPU, but no supported GPU was found)");
             }
             cpu_metrics.append(label);
         }

@@ -43,8 +43,8 @@
    Vship GPU path and the libjxl CPU fallback, with Settings > GPU metrics >
    GPU backend on Auto and on Vulkan. After updating Vship, compare each
    build's SSIMULACRA2, Butteraugli and CVVDP against the CUDA build and
-   libjxl, on an NVIDIA and an Intel GPU, before changing `scored_wrongly`
-   in `cpp/core/src/vship.cpp`. Check saved-result round-trip,
+   libjxl, on an NVIDIA and an Intel GPU: a build that scores one wrongly is
+   not bundled. Check saved-result round-trip,
    backend-specific cache reuse, still comparison and independent bitrate
    analysis. On an NVIDIA GPU, compare a long run (30 minutes of 4K) with
    Performance > VMAF compute set to GPU and to CPU: every metric but VMAF

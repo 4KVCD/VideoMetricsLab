@@ -5,6 +5,7 @@
 
 #include <QColor>
 #include <QImage>
+#include <QStringList>
 #include <QTimer>
 
 #include <gtest/gtest.h>
@@ -85,7 +86,11 @@ TEST_F(ChartTest, DrawsItsAxesAsThePythonApp) {
         for (const nlohmann::json& label : item.at("time_labels")) {
             labels.append(QString::fromStdString(label.get<std::string>()));
         }
-        EXPECT_EQ(chart.time_tick_labels(), labels);
+        QStringList drawn;
+        for (const auto& [px, label] : chart.time_ticks()) {
+            drawn.append(label);
+        }
+        EXPECT_EQ(drawn, labels);
         std::vector<std::pair<int, QString>> ticks;
         for (const nlohmann::json& tick : item.at("value_ticks")) {
             ticks.emplace_back(tick[0].get<int>(), QString::fromStdString(tick[1].get<std::string>()));

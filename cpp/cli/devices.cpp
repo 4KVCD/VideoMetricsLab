@@ -30,10 +30,7 @@ std::vector<std::string> device_lines(const DeviceFindings& found) {
                                   backend_label(found.vship->backend) + ")";
         lines.push_back("CVVDP: " + vship);
         for (const std::string key : {"ssimulacra2", "butteraugli"}) {
-            lines.push_back(std::string(metric_definition(key).label) + ": " +
-                            (scores_correctly(*found.vship, key)
-                                 ? vship
-                                 : "CPU (libjxl): this Vship build scores it wrongly on this GPU"));
+            lines.push_back(std::string(metric_definition(key).label) + ": " + vship);
         }
     } else {
         lines.push_back("CVVDP: not available (" + found.no_vship + ")");

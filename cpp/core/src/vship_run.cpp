@@ -76,7 +76,7 @@ public:
 class PinnedBuffer {
 public:
     PinnedBuffer(const VshipLibrary& library, std::size_t bytes, int gpu_id)
-        : library_(library), bytes_(bytes), gpu_id_(gpu_id) {
+        : library_(library), gpu_id_(gpu_id) {
         const int error = library_.pinned_malloc(&address_, bytes, gpu_id);
         if (error != 0 || address_ == nullptr) {
             address_ = nullptr;
@@ -92,7 +92,6 @@ public:
     PinnedBuffer& operator=(const PinnedBuffer&) = delete;
 
     std::uint8_t* data() const { return static_cast<std::uint8_t*>(address_); }
-    std::size_t size() const { return bytes_; }
 
     // The frame's three planes, in the order Vship reads them.
     std::array<const std::uint8_t*, 3> planes(const VshipImageFormat& format,
@@ -108,7 +107,6 @@ public:
 private:
     const VshipLibrary& library_;
     void* address_ = nullptr;
-    std::size_t bytes_;
     int gpu_id_;
 };
 
@@ -2401,10 +2399,6 @@ public:
         if (!device) {
             return without_gpu(reason);
         }
-        move_wrongly_scored(*device);
-        if (gpu_.empty()) {
-            return on_cpu(cpu_, {}, std::nullopt);
-        }
         const CropPair crops = routes_.find_crops(request_, hooks_.on_status, cancel_);
         PerceptualTaskOutput gpu_output;
         try {
@@ -2484,21 +2478,6 @@ private:
             hooks_.on_status({"Vship GPU unavailable (" + reason + "); using CPU reference metrics\xE2\x80\xA6"});
         }
         return on_cpu(retryable_, failures, std::nullopt);
-    }
-
-    // Moves to the CPU each metric this build of Vship scores wrongly on
-    // `device`, planned like a CPU choice.
-    void move_wrongly_scored(const VshipDevice& device) {
-        std::vector<std::string> wrong;
-        std::copy_if(gpu_.begin(), gpu_.end(), std::back_inserter(wrong),
-                     [&device](const std::string& key) { return !scores_correctly(device, key); });
-        if (wrong.empty()) {
-            return;
-        }
-        logger.info(metric_labels(wrong, " and ") + " on the CPU: Vship's " + backend_label(device.backend) +
-                    " build scores it wrongly on " + device.name);
-        gpu_ = without(gpu_, wrong);
-        cpu_.insert(cpu_.end(), wrong.begin(), wrong.end());
     }
 
     // Whether the comparison is too long to move to the CPU unasked.

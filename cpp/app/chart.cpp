@@ -261,14 +261,14 @@ int ChartWidget::pixel_for_time(double t) const {
     return rect.left() + static_cast<int>(std::nearbyint((t - x0) / std::max(1e-9, x1 - x0) * rect.width()));
 }
 
-QStringList ChartWidget::time_tick_labels() const {
+std::vector<std::pair<int, QString>> ChartWidget::time_ticks() const {
     const auto [x0, x1] = x_range();
     const double step = nice_time_step(x1 - x0);
-    QStringList labels;
+    std::vector<std::pair<int, QString>> ticks;
     for (double tick = std::ceil(x0 / step) * step; tick <= x1; tick += step) {
-        labels.append(time_text(tick));
+        ticks.emplace_back(pixel_for_time(tick), time_text(tick));
     }
-    return labels;
+    return ticks;
 }
 
 std::vector<std::pair<int, QString>> ChartWidget::value_ticks(std::optional<QRect> rect) const {
@@ -416,17 +416,13 @@ bool ChartWidget::cache_matches_display() const {
 
 void ChartWidget::draw_axes(QPainter& painter, const QRect& rect, bool dark) const {
     // The grid, the axes' labels and the value axis's title.
-    const auto [x0, x1] = x_range();
     const QFontMetrics metrics(painter.font());
     const theme::ChartColours colours = theme::chart_colours(dark);
 
     painter.setPen(QPen(colours.grid, 1));
-    const double step = nice_time_step(x1 - x0);
-    std::vector<std::pair<int, double>> time_ticks;
-    for (double tick = std::ceil(x0 / step) * step; tick <= x1; tick += step) {
-        const int px = pixel_for_time(tick);
+    const std::vector<std::pair<int, QString>> times = time_ticks();
+    for (const auto& [px, label] : times) {
         painter.drawLine(px, rect.top(), px, rect.bottom());
-        time_ticks.emplace_back(px, tick);
     }
     const std::vector<std::pair<int, QString>> ticks = value_ticks(rect);
     for (const auto& [py, label] : ticks) {
@@ -434,8 +430,7 @@ void ChartWidget::draw_axes(QPainter& painter, const QRect& rect, bool dark) con
     }
 
     painter.setPen(QPen(colours.text, 1));
-    for (const auto& [px, time] : time_ticks) {
-        const QString label = time_text(time);
+    for (const auto& [px, label] : times) {
         // Centred on its tick, but kept inside the widget: a tick at the
         // right end lost half its label ("0:00:0").
         const int label_width = metrics.horizontalAdvance(label);

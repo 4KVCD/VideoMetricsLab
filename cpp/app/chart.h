@@ -12,7 +12,6 @@
 #include <QPoint>
 #include <QRect>
 #include <QString>
-#include <QStringList>
 #include <QWidget>
 
 #include <map>
@@ -85,9 +84,9 @@ public:
     double time_at(int px) const;
     double value_at(int py) const;
     int pixel_for_time(double t) const;
-    // The time axis's labels for the view, in order, and the value axis's
-    // grid lines as (pixel row, label), lowest value first: the ones drawn.
-    QStringList time_tick_labels() const;
+    // The grid lines drawn: the time axis's as (pixel column, label), in
+    // order, and the value axis's as (pixel row, label), lowest value first.
+    std::vector<std::pair<int, QString>> time_ticks() const;
     std::vector<std::pair<int, QString>> value_ticks(std::optional<QRect> rect = std::nullopt) const;
     double seconds_per_pixel() const;
 

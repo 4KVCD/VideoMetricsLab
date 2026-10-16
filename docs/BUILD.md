@@ -128,14 +128,14 @@ previous build's output undeletable. The package therefore goes to
   cannot read it (`reads_410` in `cpp/core/src/vship.cpp`). Settings > GPU
   metrics > GPU backend picks one; Auto, the default, uses CUDA on NVIDIA,
   HIP on AMD and Vulkan on other GPUs, and a build that cannot run hands
-  over to the next. A metric a build is measured to score wrongly on a GPU
-  maker's GPUs is calculated on the CPU there (`scored_wrongly` in
-  `vship.cpp`, empty now); re-measure every build when updating Vship. Where
-  no build can use the GPU, the input format is unsupported, or GPU
-  processing fails, SSIMULACRA2 and Butteraugli fall back to the bundled
-  CPU tools. A video the GPU's own decoder decodes is decoded by the frame
-  decoders above in Vship's process, FFmpeg only copying its compressed
-  stream out of the container; FFmpeg decodes the others.
+  over to the next. Re-measure every build when updating Vship
+  (docs/RELEASING.md, step 6): a build that scores a metric wrongly is not
+  bundled. Where no build can use the GPU, the input format is
+  unsupported, or GPU processing fails, SSIMULACRA2 and Butteraugli fall
+  back to the bundled CPU tools. A video the GPU's own decoder decodes is
+  decoded by the frame decoders above in Vship's process, FFmpeg only
+  copying its compressed stream out of the container; FFmpeg decodes the
+  others.
 - **libvmaf with CUDA** (`resources/tools/libvmaf/libvmaf.dll`): VMAF and
   VMAF NEG on NVIDIA GPUs, the libvmaf that turns every GPU scorer's
   features into its score, and the app's PSNR, SSIM and XPSNR on the CPU:

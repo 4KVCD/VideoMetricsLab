@@ -2486,7 +2486,7 @@ std::vector<std::string> MainWindow::reusable_metric_keys(const RowData& row_dat
                          analysis_request(row_data.options, requested_metrics(row_data), row_data.metric_backends,
                                           row_data.cvvdp)
                              .metrics,
-                         row_data.metric_backends, [](const std::string& key) { return gpu_scores(key); }, infos);
+                         row_data.metric_backends, [](const std::string&) { return vship_available(); }, infos);
 }
 
 MetricResultSet MainWindow::reusable_results(const RowData& row_data) const {
@@ -2521,7 +2521,7 @@ bool MainWindow::backend_matches(const RowData& row_data, const std::string& key
     // made_as_chosen); a metric without a GPU or CPU choice always is.
     const auto choice = row_data.metric_backends.find(key);
     return made_as_chosen(key, choice == row_data.metric_backends.end() ? std::nullopt : std::optional(choice->second),
-                          provenance.compute_backend, [](const std::string& metric) { return gpu_scores(metric); });
+                          provenance.compute_backend, [](const std::string&) { return vship_available(); });
 }
 
 QString MainWindow::backend_note(const RowData& row_data, const std::string& key, const FrameMetricResult* metric) {

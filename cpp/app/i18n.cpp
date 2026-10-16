@@ -261,9 +261,9 @@ QString formatted(const QString& text, const Values& values) { return *format_fi
 // --------------------------------------------------------------- core messages
 // The shapes of the engine's statuses and errors that the window shows, as
 // templates. "{name}" matches any text, which is itself translated when it
-// is a message too. Kept in step with the Python app's MESSAGE_TEMPLATES,
-// whose translations the catalogs hold, GStreamer's included, though this
-// app never says those: the translation tests hold the two lists equal.
+// is a message too. Each is one of the Python app's MESSAGE_TEMPLATES, and
+// the translation tests check this app's translation of each against the
+// Python app's.
 const char* const templates[] = {
     // --- a video's steps on the run line ("distorted" shown as "test video")
     "Detecting black bars in source and test video…",
@@ -355,7 +355,6 @@ const char* const templates[] = {
     "ffmpeg finished but no metric log was produced.",
     "No results for requested metrics: {metrics}",
     "Select at least one metric to calculate.",
-    "Crop detection cancelled",
     "Crop detection timed out",
     "Could not run crop detection: {error}",
     "Crop detection failed for {path}: {detail}",
@@ -370,16 +369,13 @@ const char* const templates[] = {
     "ffprobe was not found. Make sure ffmpeg is installed and on PATH, or set a custom ffmpeg folder in Settings.",
     "Could not start ffprobe for {path}: {error}",
     "ffprobe timed out while reading {path}",
-    "Probe of {path} was cancelled",
     "ffprobe failed for {path}:",
     "Could not parse ffprobe output for {path}",
     "No video stream found in {path}",
     "Video file is missing: {path}",
     "Could not start ffprobe: {error}",
-    "Bitrate analysis was cancelled.",
     "ffprobe returned no packets for the first video stream.",
     "This video has no usable frame rate.",
-    "Frame extraction was cancelled.",
     "No frame was returned at frame {frame}; it may be beyond the end of the video.",
     "Every display value must be a finite number.",
     "The display resolution must be at least 16 x 16.",
@@ -403,12 +399,6 @@ const char* const templates[] = {
     "Playing",
     "Paused",
     "Playback ended",
-    "Opening with GStreamer/D3D11…",
-    "Opening with FFmpeg tone-map fallback… ({reason})",
-    "Opening with FFmpeg tone-map fallback…",
-    "GStreamer could not start native playback: {error}",
-    "GStreamer playback failed; trying FFmpeg fallback: {error}",
-    "Could not decode comparison with ffmpeg: {error}",
     "Video {number} could not play: {error}",
     "Selected video failed: {error}",
     "Buffering selected comparison; adjacent videos are preparing in the background",
@@ -419,9 +409,6 @@ const char* const templates[] = {
     "SDR preview (native playback unavailable)",
     "Video playback is unavailable for synthetic resolution tests; their processed frames are displayed "
     "automatically.",
-    "Could not create the GStreamer pipeline.",
-    "GStreamer could not open the comparison.",
-    "GStreamer could not seek to that frame.",
     "Could not open the {side} video file for decoding.",
     "D3D11 device unavailable",
     "Native frame lock currently requires matching frame rates",
@@ -431,14 +418,12 @@ const char* const templates[] = {
     "Frame-locked GPU pair",
     "source soundtrack",
     "audio unavailable",
-    "Vulkan GPU decode + GPU tone mapping/RGB",
     "hardware decode + GPU tone mapping/RGB (host transfer)",
     "software decode + GPU tone mapping/RGB",
     "CPU fallback (GPU processing unavailable)",
     "retry: {error}",
     "Decoder returned a truncated frame.",
     "Decoder produced no frames.",
-    "ffmpeg returned no video frame.",
 };
 
 // Without a closing "...", "…" or full stop: the run line shows some

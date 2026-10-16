@@ -42,18 +42,6 @@ const std::map<std::string, std::string, std::less<>> build_folders{
 // reference on each GPU, and Vulkan for a GPU neither of the others can use.
 const std::vector<std::string> auto_order{"cuda", "hip", "vulkan"};
 
-// The (build, GPU maker, metric) combinations a bundled build scores
-// wrongly, each then calculated on the CPU as on a PC without a usable GPU.
-// None of the bundled builds does; the list stays for one that does (Vship's
-// Vulkan builds before 5.1.2 scored SSIMULACRA2 far too high on NVIDIA,
-// Vship issue 18).
-struct WrongScore {
-    const char* backend;
-    GpuVendor vendor;
-    const char* metric;
-};
-const std::vector<WrongScore> scored_wrongly{};
-
 // The largest frame, in pixels, a (build, GPU maker, metric) combination is
 // given, with the GPUs it covers for the reason shown. Vship 5.1.2's Vulkan
 // CVVDP hangs Intel's GPU above 1080p (a Core Ultra 9 285K: Windows reset
@@ -474,13 +462,6 @@ std::string backend_label(const std::string& backend) {
     return found != labels.end() ? found->second : backend;
 }
 
-bool scores_correctly(const VshipDevice& device, const std::string& key) {
-    return std::none_of(scored_wrongly.begin(), scored_wrongly.end(), [&](const WrongScore& wrong) {
-        return device.backend == wrong.backend && key == wrong.metric &&
-               (!device.vendor || *device.vendor == wrong.vendor);
-    });
-}
-
 std::optional<std::string> size_refusal(const VshipDevice& device, const std::string& key, std::pair<int, int> size,
                                         std::optional<std::pair<int, int>> computed) {
     const auto limit = std::find_if(gpu_pixel_limits.begin(), gpu_pixel_limits.end(), [&](const PixelLimit& entry) {
@@ -655,19 +636,6 @@ void forget_failed_vship_probe() {
         std::chrono::steady_clock::now() - state.probed_at >= failed_probe_retry) {
         state.probed.reset();
     }
-}
-
-bool gpu_can_score(const std::string& key) {
-    const auto [device, reason] = detect_vship_device();
-    return device && scores_correctly(*device, key);
-}
-
-std::optional<bool> known_gpu_can_score(const std::string& key) {
-    const std::optional<std::pair<std::optional<VshipDevice>, std::string>> known = known_vship_device();
-    if (!known) {
-        return std::nullopt;
-    }
-    return known->first && scores_correctly(*known->first, key);
 }
 
 // ------------------------------------------------------------- frame layouts

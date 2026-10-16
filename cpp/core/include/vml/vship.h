@@ -228,11 +228,6 @@ void set_vship_backend(const std::string& backend);
 // The name shown for a build: "Vulkan", "CUDA" or "HIP".
 std::string backend_label(const std::string& backend);
 
-// Whether `device`'s Vship build scores `key` correctly on its GPU. The
-// Python app keeps a list of the (build, maker, metric) a bundled build
-// scores wrongly; it is empty since Vship 5.1.2.
-bool scores_correctly(const VshipDevice& device, const std::string& key);
-
 // Why `device` does not calculate `key` on frames of `size`, or nothing if
 // it does: Vship 5.1.2's Vulkan CVVDP hangs Intel's GPU above 1920x1080.
 // `computed` is the size the metric is calculated at, where that differs
@@ -277,14 +272,6 @@ void on_vship_probe_finished(std::function<void()> callback);
 // updated or restarted, a GPU briefly unavailable), and without this every
 // GPU metric of a long run would go to the CPU.
 void forget_failed_vship_probe();
-
-// Whether SSIMULACRA2 or Butteraugli set to the GPU is calculated on the
-// GPU here: when Vship can use a GPU, and its build scores the metric
-// correctly.
-bool gpu_can_score(const std::string& key);
-// gpu_can_score from what the last probe to finish found
-// (known_vship_device): nothing before the first has finished.
-std::optional<bool> known_gpu_can_score(const std::string& key);
 
 // The planar layout FFmpeg sends a video's frames in (`pixel_format`), and
 // how Vship reads it. `family` is 1 for RGB, whose planes are all full size

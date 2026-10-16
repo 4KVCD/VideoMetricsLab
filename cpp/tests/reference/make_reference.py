@@ -984,9 +984,8 @@ def argument_cases() -> list[dict]:
     import contextlib
     import io
 
-    from vmaf_app.cli import build_parser
-
     from vmaf_app import APP_NAME, __version__
+    from vmaf_app.cli import build_parser
 
     version = f"{APP_NAME} {__version__}"
     saved = {name: os.environ.get(name) for name in ("COLUMNS", "NO_COLOR")}
@@ -1853,10 +1852,9 @@ def devices_cases() -> list[dict]:
     import io
     from types import SimpleNamespace
 
+    from vmaf_app import cli
     from vmaf_app.core import ffmpeg_locate, libvmaf, perceptual_vship, vmaf_gpu, vmaf_runner, vmaf_v1_gpu
     from vmaf_app.core.models import GpuVendor
-
-    from vmaf_app import cli
 
     real_settings = cli.Settings
 
@@ -2674,10 +2672,12 @@ def i18n_cases() -> dict:
     Windows' language names, each language's plural forms, str.format over
     the format specs the catalogs use, and in I18N_LANGUAGES the texts with
     fields, the counted texts, and the engine's messages (one of each
-    template, and the ways the window meets them: trimmed, with "..." for
-    "…", one inside another, several lines)."""
-    from scripts.i18n_catalog import TRANSLATIONS_DIR, keys
+    template the C++ window has, and the ways the window meets them:
+    trimmed, with "..." for "…", one inside another, several lines)."""
     from vmaf_app import i18n
+
+    from scripts.i18n_catalog import TRANSLATIONS_DIR, keys
+    from scripts.i18n_catalog import templates as window_templates
 
     i18n.TRANSLATIONS_DIR = TRANSLATIONS_DIR  # this repository's catalogs, not the checkout's
 
@@ -2685,7 +2685,11 @@ def i18n_cases() -> dict:
     counts = [*range(230), 1000, 1001, 1002, 1011, 1012, 1021, 1100, 1111, 10**6, 10**6 + 1, 2**31 + 1]
     fielded = sorted(key for key in strings if "{" in key)
     counted = sorted(plurals)
-    templates = list(i18n.MESSAGE_TEMPLATES)
+    # The Python app's templates the C++ window has, in the Python app's order:
+    # its playback's GStreamer messages, for one, the C++ app never says.
+    shapes = set(window_templates())
+    assert shapes <= set(i18n.MESSAGE_TEMPLATES), shapes - set(i18n.MESSAGE_TEMPLATES)
+    templates = [template for template in i18n.MESSAGE_TEMPLATES if template in shapes]
     plain = next(template for template in templates if "{" not in template)
     messages = [_i18n_message(template) for template in templates]
     messages += [i18n._bare(message) for message in messages if i18n._bare(message) != message]

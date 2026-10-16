@@ -1,6 +1,5 @@
 // Small helpers the window and its panels share: paths and text as the
-// window shows them, and what the GPU checks found (vship_available,
-// gpu_scores).
+// window shows them, and what the GPU check found (vship_available).
 #pragma once
 
 #include <QString>
@@ -53,9 +52,9 @@ inline bool same_file(const std::filesystem::path& a, const std::filesystem::pat
     return same_path(resolved(a), resolved(b));
 }
 
-// Whether a GPU Vship can use is here (CVVDP runs on it), and whether it
-// scores `key` correctly (vship.h's gpu_can_score), as the last GPU check to
-// finish found. The window never waits for a check: one starts with the app
+// Whether a GPU Vship can use is here (SSIMULACRA2 and Butteraugli set to the
+// GPU, and CVVDP, run on it), as the last GPU check to finish found. The
+// window never waits for a check: one starts with the app
 // and takes seconds, and a run checks again after a failed one. Until the
 // first has finished, a GPU is taken to be there, and the rows are brought up
 // to date when it finishes (MainWindow::refresh_metric_cells); a run waits
@@ -64,7 +63,5 @@ inline bool vship_available() {
     const auto known = known_vship_device();
     return !known || known->first.has_value();
 }
-
-inline bool gpu_scores(const std::string& key) { return known_gpu_can_score(key).value_or(true); }
 
 }  // namespace vml::app
