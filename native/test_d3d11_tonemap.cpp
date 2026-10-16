@@ -18,8 +18,8 @@ static bool draw(ID3D11Texture2D* frame, int width, int height, const float* to_
     D3D11_TEXTURE2D_DESC desc;
     ID3D11Texture2D* drawn=present_source(&presenter,frame,subresource,desc);
     if (!drawn) return false;
-    PresenterViews* views=present_views(&presenter,drawn,desc);
-    if (!views) return false;
+    PresenterViews views;
+    if (FAILED(present_views(&presenter,drawn,desc,views))) return false;
     D3D11_TEXTURE2D_DESC td={}; td.Width=width; td.Height=height; td.MipLevels=1; td.ArraySize=1;
     td.Format=DXGI_FORMAT_R32G32B32A32_FLOAT; td.SampleDesc.Count=1; td.Usage=D3D11_USAGE_DEFAULT;
     td.BindFlags=D3D11_BIND_RENDER_TARGET;
@@ -41,6 +41,25 @@ static bool draw(ID3D11Texture2D* frame, int width, int height, const float* to_
     context->Unmap(readback.Get(),0);
     return true;
 }
+
+// Sets `*destroyed` when the object it is given to (SetPrivateDataInterface)
+// is destroyed.
+struct DestroyWatch : IUnknown {
+    explicit DestroyWatch(bool* destroyed):destroyed(destroyed) {}
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id, void** out) override {
+        if (id!=__uuidof(IUnknown)) { *out=nullptr; return E_NOINTERFACE; }
+        *out=this; AddRef(); return S_OK;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++refs; }
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG left=--refs;
+        if (!left) { *destroyed=true; delete this; }
+        return left;
+    }
+    bool* destroyed;
+    ULONG refs=1;
+};
+static const GUID kDestroyWatch={0x6f1c2a7e,0x3b54,0x4d0a,{0x9c,0x21,0x5e,0x8a,0x40,0x17,0xd2,0x6b}};
 
 static ComPtr<ID3D11Texture2D> rgba16(const std::vector<unsigned short>& pixels, int width) {
     D3D11_TEXTURE2D_DESC desc={}; desc.Width=width; desc.Height=1; desc.MipLevels=1; desc.ArraySize=1;
@@ -210,6 +229,20 @@ int main() {
             return 18;
         std::cout<<"presenter shaders compiled once: "<<(vs1==vs2 && ps1==ps2 ? "yes" : "no")<<std::endl;
         if (vs1!=vs2 || ps1!=ps2) return 19;
+    }
+    {   // A frame's texture drawn and let go is destroyed: the presenter
+        // keeps nothing of it, which would keep its GPU memory.
+        bool destroyed=false;
+        auto frame=rgba16(colours,width);
+        if (!frame) return 20;
+        auto* watch=new DestroyWatch(&destroyed);
+        frame->SetPrivateDataInterface(kDestroyWatch,watch);
+        watch->Release();
+        if (!draw(frame.Get(),width,1,nullptr,nullptr,out)) return 21;
+        frame.Reset();
+        context->Flush();
+        std::cout<<"a texture drawn and let go is destroyed: "<<(destroyed ? "yes" : "no")<<std::endl;
+        if (!destroyed) return 22;
     }
     return 0;
 }

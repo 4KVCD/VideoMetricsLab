@@ -124,8 +124,8 @@ void NativePresentation::present(NativeFramePtr frame, const Placement& placemen
     {
         const std::lock_guard lock(mutex_);
         due_.push_back({std::move(frame), placement, shading});
-        // At most two wait; past that the oldest is dropped.
-        while (due_.size() > 2) {
+        // At most presenter_waiting_frames wait; past that the oldest is dropped.
+        while (due_.size() > presenter_waiting_frames) {
             due_.pop_front();
         }
     }

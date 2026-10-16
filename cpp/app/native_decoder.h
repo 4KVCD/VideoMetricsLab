@@ -4,9 +4,9 @@
 // on the presenter's device where the GPU decodes the video, else by
 // FFmpeg's software decoder (dav1d for AV1, native_dav1d.h) and uploaded,
 // frames timed from the video's first frame (a raw stream's, which have no
-// times, counted from its start). It decodes freely, at most three frames
-// ahead of what is taken; seeks are made on its thread, only the latest one
-// asked for.
+// times, counted from its start). It decodes freely, at most a frame ahead
+// of what is taken; seeks are made on its thread, only the latest one asked
+// for.
 #pragma once
 
 #include <QString>
@@ -14,6 +14,7 @@
 
 #include <array>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -29,6 +30,14 @@ struct ID3D11Texture2D;
 namespace vml::app {
 
 class NativeDevice;
+
+// The decoded frames of one video each holder keeps at most, which size the
+// GPU decoders' surface pools (native_decoder.cpp): ready in the decoder to
+// be taken; kept by the playback pool (two frames before the one shown, that
+// one and two after it); waiting for the presenter to draw them.
+constexpr std::size_t decoder_ready_frames = 1;
+constexpr std::size_t pool_kept_frames = 5;
+constexpr std::size_t presenter_waiting_frames = 2;
 
 // A decoded frame on the GPU: a slice of a decoder's texture array, or the
 // upload of a picture decoded in software, in NV12 or P010. It stays valid
@@ -114,8 +123,8 @@ protected:
     void run() override;
 
 private:
-    // Waits while three frames wait to be taken; false once cancelled or a
-    // seek is asked for that can be made (once the first frame is known).
+    // Waits while a frame waits to be taken; false once cancelled or a seek
+    // is asked for that can be made (once the first frame is known).
     bool wait_for_room();
     bool cancelled() const;
     // FFmpeg's reading asks it whether to stop: once cancelled (a file on a

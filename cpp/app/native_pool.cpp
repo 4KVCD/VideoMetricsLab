@@ -497,7 +497,7 @@ int NativePool::poll() {
         // on the GPU surfaces held, while a step back or forward stays
         // instant. Nothing is taken while the decoder's seek is still to be
         // made: until then it can still give frames from before the seek.
-        while (queue.size() < 5 && !player->seeking()) {
+        while (queue.size() < pool_kept_frames && !player->seeking()) {
             NativeFramePtr sample = player->try_pull();
             if (!sample) {
                 break;

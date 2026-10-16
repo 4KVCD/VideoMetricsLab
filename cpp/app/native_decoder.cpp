@@ -29,12 +29,11 @@ namespace {
 
 const app_log::Logger logger("vml.gstreamer_playback");
 
-// Frames decoded and not yet taken: GStreamer's appsink held three.
-constexpr std::size_t queued_frames = 3;
-// Decoder surfaces beyond the ones the decoder itself refers to: the frames
-// queued here and in the pool (five per video), the pair shown and the
-// presenter's two waiting.
-constexpr int held_surfaces = 12;
+// The most frames of one video held outside its decoder: those ready to be
+// taken, the playback pool's, and the presenter's, those waiting and the one
+// being drawn, which after a seek are no longer among the pool's. While a
+// video plays, the pool's and the ready frame are all that is held.
+constexpr int held_frames = static_cast<int>(decoder_ready_frames + pool_kept_frames + presenter_waiting_frames + 1);
 
 QString error_text(int code) {
     std::array<char, AV_ERROR_MAX_STRING_SIZE> text{};
@@ -45,7 +44,8 @@ QString error_text(int code) {
 // The most pictures an HEVC stream's decoder keeps at once (its decoded
 // picture buffer, MaxDpbSize), from its level and picture size as H.265's
 // Annex A.4.2 limits them; 16, the most the standard allows, where the
-// level is not one it lists.
+// level is not one it lists or allows no picture that large (the level is
+// then wrong, and limits nothing).
 int hevc_buffered_pictures(const AVCodecContext& context) {
     // The level's largest picture in luma samples (Table A.8), by
     // general_level_idc (30 times the level).
@@ -55,11 +55,11 @@ int hevc_buffered_pictures(const AVCodecContext& context) {
         {180, 35651584}, {183, 35651584}, {186, 35651584},
     };
     const auto level = max_luma_samples.find(context.level);
-    if (level == max_luma_samples.end()) {
+    const long long picture = static_cast<long long>(context.coded_width) * context.coded_height;
+    if (level == max_luma_samples.end() || picture > level->second) {
         return 16;
     }
     const long long most = level->second;
-    const long long picture = static_cast<long long>(context.coded_width) * context.coded_height;
     const int buffers = context.profile == AV_PROFILE_HEVC_SCC ? 7 : 6;  // maxDpbPicBuf
     if (picture <= most / 4) {
         return std::min(4 * buffers, 16);
@@ -73,31 +73,56 @@ int hevc_buffered_pictures(const AVCodecContext& context) {
     return buffers;
 }
 
-// The surfaces FFmpeg's Direct3D 11 decoding is asked for beyond its own.
-// FFmpeg makes one to decode into and, for references, 16 for H.264 and
-// HEVC and 8 for AV1 and VP9, the most each standard allows (dxva2.c,
-// ff_dxva2_common_frame_params). The frames held outside the decoder need
-// held_surfaces more. An HEVC stream's level limits how many pictures it
-// keeps (a 4K one at level 5.1, 6), so the references it cannot use serve
-// those frames, and fewer are asked for: 2, not 12, for that 4K stream,
-// 190 MB less of the GPU's memory. H.264 keeps its 12: FFmpeg's decoder can
-// hold back more frames than the level allows when a stream does not say
-// how far its frames are reordered.
-int extra_surfaces(const AVCodecContext& context) {
-    if (context.codec_id == AV_CODEC_ID_HEVC) {
-        const int unused_references = 16 - hevc_buffered_pictures(context);
-        return std::max(0, held_surfaces - unused_references);
+// The surfaces an HEVC or AV1 decoder uses at most: the pictures it refers
+// to and the one being decoded, which FFmpeg makes before it lets go of the
+// pictures no longer referred to. An HEVC stream's level limits the pictures
+// it keeps, the one being decoded among them (a 4K one at level 5.1, 6); AV1
+// refers to 8. Nothing for other codecs: FFmpeg's H.264 decoder can hold
+// back more frames than the level allows when a stream does not say how far
+// its frames are reordered, and its VP9 decoder keeps earlier frames beside
+// the ones referred to.
+std::optional<int> decoder_surfaces(const AVCodecContext& context) {
+    switch (context.codec_id) {
+    case AV_CODEC_ID_HEVC:
+        return 1 + hevc_buffered_pictures(context);
+    case AV_CODEC_ID_AV1:
+        return 1 + 8;
+    default:
+        return std::nullopt;
     }
-    return held_surfaces;
+}
+
+// Gives `context` a pool of `surfaces` Direct3D 11 surfaces, set up as
+// FFmpeg sets up its own. Where it cannot, FFmpeg makes its own, larger.
+void make_pool(AVCodecContext* context, int surfaces) {
+    AVBufferRef* frames = nullptr;
+    if (avcodec_get_hw_frames_parameters(context, context->hw_device_ctx, AV_PIX_FMT_D3D11, &frames) < 0) {
+        return;
+    }
+    reinterpret_cast<AVHWFramesContext*>(frames->data)->initial_pool_size = surfaces;
+    if (av_hwframe_ctx_init(frames) < 0) {
+        av_buffer_unref(&frames);
+        return;
+    }
+    av_buffer_unref(&context->hw_frames_ctx);
+    context->hw_frames_ctx = frames;
 }
 
 // FFmpeg's choice of pictures: Direct3D 11's, or none (the decoder then
 // fails, and the video is decoded in software). The stream is known by now
-// (its level and size), and FFmpeg makes its surfaces after this returns.
+// (its level and size), and FFmpeg makes its surfaces after this returns:
+// as many as the decoder uses and held_frames more. FFmpeg's own pool,
+// which other codecs get, has four work surfaces, of which decoding needs
+// one, and one for each picture a stream can refer to, 16 for H.264 and
+// HEVC and 8 for AV1 and VP9 (decode.c, ff_decode_get_hw_frames_ctx;
+// dxva2.c, ff_dxva2_common_frame_params), and held_frames more
+// (extra_hw_frames).
 AVPixelFormat direct3d_format(AVCodecContext* context, const AVPixelFormat* formats) {
     for (const AVPixelFormat* format = formats; *format != AV_PIX_FMT_NONE; ++format) {
         if (*format == AV_PIX_FMT_D3D11) {
-            context->extra_hw_frames = extra_surfaces(*context);
+            if (const std::optional<int> used = decoder_surfaces(*context)) {
+                make_pool(context, *used + held_frames);
+            }
             return *format;
         }
     }
@@ -118,7 +143,10 @@ bool decodes_on_gpu(const AVCodec* codec) {
     }
 }
 
-// Textures for pictures decoded in software, reused once let go.
+// Textures for frames (a picture decoded in software, its film grain drawn,
+// a picture scaled down), each reused once let go. All those made are kept
+// until the size or format asked for changes: they number at most the
+// frames held at once (held_frames).
 class UploadTextures : public std::enable_shared_from_this<UploadTextures> {
 public:
     UploadTextures(ComPtr<ID3D11Device> device, UINT bind = D3D11_BIND_SHADER_RESOURCE)
@@ -166,7 +194,7 @@ private:
         ComPtr<ID3D11Texture2D> owned;
         owned.Attach(texture);
         const std::lock_guard lock(mutex_);
-        if (width == width_ && height == height_ && format == format_ && spare_.size() < 4) {
+        if (width == width_ && height == height_ && format == format_) {
             spare_.push_back(std::move(owned));
         }
     }
@@ -410,7 +438,7 @@ bool FfmpegNativeVideo::wait_for_room() {
     // A seek is made once the first frame says where the video starts:
     // until then the first frames are decoded as usual.
     const auto seek_due = [this] { return wanted_ms_.has_value() && first_frame_ms_.has_value(); };
-    changed_.wait(lock, [&] { return cancelled_ || seek_due() || frames_.size() < queued_frames; });
+    changed_.wait(lock, [&] { return cancelled_ || seek_due() || frames_.size() < decoder_ready_frames; });
     return !cancelled_ && !seek_due();
 }
 
@@ -520,7 +548,7 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::p
     if (hardware) {
         decoding->codec->hw_device_ctx = av_buffer_ref(device.hardware());
         decoding->codec->get_format = direct3d_format;
-        decoding->codec->extra_hw_frames = held_surfaces;
+        decoding->codec->extra_hw_frames = held_frames;
     } else {
         decoding->codec->thread_count = 0;  // as many as the CPU has
     }
@@ -969,9 +997,6 @@ void FfmpegNativeVideo::run() {
             const std::lock_guard lock(mutex_);
             status_ = details.join(QString::fromUtf8(" \xC2\xB7 "));
         }
-        if (!wait_for_room()) {
-            return true;  // cancelled, or a seek asked for: this frame is not wanted
-        }
         deliver(std::move(made));
         return true;
     };
@@ -1011,6 +1036,11 @@ void FfmpegNativeVideo::run() {
             failure = QStringLiteral("Decoding failed: %1").arg(error_text(result));
         }
         while (failure.isEmpty()) {
+            // A frame is taken only when there is room for it: one waiting
+            // here would keep a surface the decoder's pool has none for.
+            if (!wait_for_room()) {
+                break;  // cancelled, or a seek asked for: the frames still in the decoder are not wanted
+            }
             result = decoding->receive(decoding->frame);
             if (result == AVERROR(EAGAIN)) {
                 break;
