@@ -1677,6 +1677,90 @@ std::vector<std::vector<std::string>> build_stream_commands(
             command(source, decoding.source, graphs.second, outputs.second)};
 }
 
+namespace {
+
+// The crops of a run: none, or (CropMode::automatic) the black bars found in
+// both videos, decoded the way the run will (`decoding`), as the picture
+// both show.
+std::pair<std::optional<CropBox>, std::optional<CropBox>> run_crops(const RunEnvironment& environment,
+                                                                    const VideoInfo& source, const VideoInfo& distorted,
+                                                                    const VmafOptions& options,
+                                                                    const HardwareDecoding& decoding,
+                                                                    const StatusCallback& on_status,
+                                                                    const CancelToken& cancel) {
+    if (options.crop_mode != CropMode::automatic) {
+        return {};
+    }
+    // Said, or the run line would keep the step before: a long video's
+    // detection takes a while.
+    if (on_status) {
+        on_status({"Detecting black bars in source and distorted..."});
+    }
+    const auto [source_box, distorted_box] =
+        detect_pair(environment.ffmpeg, source, distorted, cancel, decoding.source, decoding.distorted);
+    return common_picture(source, distorted, source_box, distorted_box);
+}
+
+// The VMAF models the GPU scores (`model` VMAF's, at `depth` bits and
+// `width` x `height`). VMAF is scored on the GPU only when VMAF, NEG and
+// VMAF v1 are all the run scores: the command line puts them in a run of
+// their own, apart from FFmpeg's other metrics. None when one is calculated
+// on the CPU: FFmpeg's libvmaf calculates them all together.
+GpuModels models_on_gpu(const VmafOptions& options, const std::string& model, int depth, int width, int height) {
+    const std::vector<std::string> requested = options.requested_metrics();
+    if (!std::all_of(requested.begin(), requested.end(), [](const std::string& key) {
+            return key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1";
+        })) {
+        return {};
+    }
+    GpuModels gpu = scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, model, options.vmaf_on_gpu, depth,
+                                  std::pair(width, height), options.compute_vmaf_v1, options.model_v1);
+    if (gpu.size() != requested.size()) {
+        gpu.clear();
+    }
+    return gpu;
+}
+
+// Where a run's `key` scores come from: FFmpeg (`ffmpeg_version`), with
+// `model` VMAF's model; or the bundled libvmaf, where it calculated them, on
+// the CPU (`cpu_keys`) or the GPU (`gpu_keys`, with `gpu_backend`).
+MetricProvenance run_provenance(const std::string& key, const std::string& model, const VmafOptions& options,
+                                const std::string& ffmpeg_version, const std::set<std::string, std::less<>>& cpu_keys,
+                                const std::set<std::string, std::less<>>& gpu_keys, const std::string& gpu_backend) {
+    // Each parameter's JSON text, as every provenance keeps them
+    // (results.h): the saved scores write them out as JSON.
+    std::map<std::string, std::string> parameters;
+    if (key == "vmaf_neg") {
+        parameters["model"] = nlohmann::json("version=vmaf_v0.6.1neg").dump();
+    } else if (key == "vmaf") {
+        parameters["model"] = nlohmann::json(model).dump();
+    } else if (key == "vmaf_v1") {
+        parameters["model"] = nlohmann::json(options.model_v1).dump();
+    }
+    MetricProvenance provenance = current_ffmpeg_provenance(key, ffmpeg_version, std::move(parameters));
+    if (cpu_keys.contains(key)) {
+        // FFmpeg's libvmaf's scores and request, calculated by the
+        // bundled build's own extractors.
+        provenance.implementation = "libvmaf";
+        provenance.implementation_version = cpu_library_build();
+    }
+    if (gpu_keys.contains(key)) {
+        // The same request as FFmpeg's libvmaf (the scores agree to
+        // within 4e-5), made on the GPU by the bundled build: by its
+        // CUDA code or the Vulkan port of it, and VMAF v1 with Vulkan on
+        // every GPU.
+        const std::string backend = key == "vmaf_v1" ? "vulkan" : gpu_backend;
+        provenance.implementation = "libvmaf/" + backend;
+        provenance.compute_backend = "gpu";
+        provenance.implementation_version = key == "vmaf_v1"        ? v1_library_build()
+                                            : backend == "vulkan" ? vulkan_library_build()
+                                                                  : cuda_library_build();
+    }
+    return provenance;
+}
+
+}  // namespace
+
 ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                           VmafOptions options, const ProgressCallback& on_progress, const StatusCallback& on_status,
                           const CancelToken& cancel,
@@ -1688,18 +1772,7 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
     if (options.gpu_decode) {
         decoding = plan_hardware_decoding(environment.decoding, options.gpu_vendor, source, distorted);
     }
-    std::optional<CropBox> source_crop;
-    std::optional<CropBox> distorted_crop;
-    if (options.crop_mode == CropMode::automatic) {
-        // Said, or the run line would keep the step before: a long video's
-        // detection takes a while.
-        if (on_status) {
-            on_status({"Detecting black bars in source and distorted..."});
-        }
-        const auto [source_box, distorted_box] =
-            detect_pair(environment.ffmpeg, source, distorted, cancel, decoding.source, decoding.distorted);
-        std::tie(source_crop, distorted_crop) = common_picture(source, distorted, source_box, distorted_box);
-    }
+    const auto [source_crop, distorted_crop] = run_crops(environment, source, distorted, options, decoding, on_status, cancel);
     // After cropping: removing a letterbox is what makes a letterboxed source
     // and a cropped encode the same shape.
     validate_display_geometry(source, distorted, source_crop, distorted_crop);
@@ -1708,21 +1781,8 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
     const std::string model = resolve_run_models(options, width, height);
     const long long total_frames = estimate_total_frames(distorted, options, &source);
 
-    // VMAF is scored on the GPU only when VMAF, NEG and VMAF v1 are all the
-    // run scores: the command line puts them in a run of their own, apart
-    // from FFmpeg's other metrics.
-    const std::vector<std::string> requested = options.requested_metrics();
     const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
-    GpuModels gpu;
-    if (std::all_of(requested.begin(), requested.end(), [](const std::string& key) {
-            return key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1";
-        })) {
-        gpu = scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, model, options.vmaf_on_gpu, depth,
-                            std::pair(width, height), options.compute_vmaf_v1, options.model_v1);
-        if (gpu.size() != requested.size()) {
-            gpu.clear();  // one is calculated on the CPU: FFmpeg's libvmaf calculates them all together
-        }
-    }
+    const GpuModels gpu = models_on_gpu(options, model, depth, width, height);
     std::optional<ParsedScores> scores;
     std::set<std::string, std::less<>> gpu_keys;
     std::string gpu_backend = "cuda";
@@ -1789,37 +1849,9 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
         result.model_choice_v1 = options.model_choice_v1;
     }
     for (const std::string& key : scores->order) {
-        // Each parameter's JSON text, as every provenance keeps them
-        // (results.h): the saved scores write them out as JSON.
-        std::map<std::string, std::string> parameters;
-        if (key == "vmaf_neg") {
-            parameters["model"] = nlohmann::json("version=vmaf_v0.6.1neg").dump();
-        } else if (key == "vmaf") {
-            parameters["model"] = nlohmann::json(model).dump();
-        } else if (key == "vmaf_v1") {
-            parameters["model"] = nlohmann::json(options.model_v1).dump();
-        }
-        MetricProvenance provenance = current_ffmpeg_provenance(key, environment.ffmpeg_version, std::move(parameters));
-        if (cpu_keys.contains(key)) {
-            // FFmpeg's libvmaf's scores and request, calculated by the
-            // bundled build's own extractors.
-            provenance.implementation = "libvmaf";
-            provenance.implementation_version = cpu_library_build();
-        }
-        if (gpu_keys.contains(key)) {
-            // The same request as FFmpeg's libvmaf (the scores agree to
-            // within 4e-5), made on the GPU by the bundled build: by its
-            // CUDA code or the Vulkan port of it, and VMAF v1 with Vulkan on
-            // every GPU.
-            const std::string backend = key == "vmaf_v1" ? "vulkan" : gpu_backend;
-            provenance.implementation = "libvmaf/" + backend;
-            provenance.compute_backend = "gpu";
-            provenance.implementation_version = key == "vmaf_v1"        ? v1_library_build()
-                                                : backend == "vulkan" ? vulkan_library_build()
-                                                                      : cuda_library_build();
-        }
-        result.metric_results.add(
-            FrameMetricResult{key, scores->frame, scores->time, scores->metrics.at(key), std::move(provenance)});
+        result.metric_results.add(FrameMetricResult{
+            key, scores->frame, scores->time, scores->metrics.at(key),
+            run_provenance(key, model, options, environment.ffmpeg_version, cpu_keys, gpu_keys, gpu_backend)});
     }
     return result;
 }
