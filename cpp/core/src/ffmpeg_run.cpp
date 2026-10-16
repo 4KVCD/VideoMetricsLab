@@ -11,7 +11,6 @@
 #include <limits>
 #include <map>
 #include <mutex>
-#include <random>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -235,32 +234,9 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
 }
 
 // A folder of its own for one run's logs, deleted with it.
-class RunFolder {
-public:
-    explicit RunFolder(const std::string& prefix) {
-        std::random_device random;
-        for (int attempt = 0; attempt < 100; ++attempt) {
-            std::filesystem::path candidate =
-                std::filesystem::temp_directory_path() / (temp_prefix(prefix) + std::to_string(random()));
-            std::error_code error;
-            if (std::filesystem::create_directory(candidate, error)) {
-                path_ = candidate;
-                return;
-            }
-        }
-        throw VmafRunError("A folder for the run's logs could not be made.");
-    }
-    ~RunFolder() {
-        std::error_code ignored;
-        std::filesystem::remove_all(path_, ignored);
-    }
-    RunFolder(const RunFolder&) = delete;
-    RunFolder& operator=(const RunFolder&) = delete;
-    const std::filesystem::path& path() const { return path_; }
-
-private:
-    std::filesystem::path path_;
-};
+TempFolder run_folder(std::string_view prefix) {
+    return TempFolder::make<VmafRunError>(prefix, "A folder for the run's logs could not be made.");
+}
 
 // When a model= value names a custom file, copies it next to the log and
 // names it by its bare file name (see libvmaf_options).
@@ -676,7 +652,7 @@ ParsedScores execute_run(const CommandBuilder& build_command, const VmafOptions&
     if (options.requested_metrics().empty()) {
         throw VmafRunError("Select at least one metric to calculate.");
     }
-    const RunFolder folder(folder_prefix);
+    const TempFolder folder = run_folder(folder_prefix);
     const std::filesystem::path log_path = folder.path() / "vmaf_log.json";
     const std::optional<std::filesystem::path> xpsnr_log_path =
         options.compute_xpsnr ? std::optional(folder.path() / "xpsnr_log.txt") : std::nullopt;
@@ -847,7 +823,7 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
     if (options.requested_metrics().empty()) {
         throw VmafRunError("Select at least one metric to calculate.");
     }
-    const RunFolder folder(plan.backend == "cpu" ? "vmaf_cpu_run_" : "vmaf_gpu_run_");
+    const TempFolder folder = run_folder(plan.backend == "cpu" ? "vmaf_cpu_run_" : "vmaf_gpu_run_");
     const double limit = gpu_duration_limit(options, fps);
     const std::vector<HardwareDecoding> ladder = fallback_ladder(decoding);
     std::optional<PairScores> scored;

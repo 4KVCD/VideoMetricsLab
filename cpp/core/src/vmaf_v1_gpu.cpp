@@ -11,7 +11,6 @@
 #include <initializer_list>
 #include <limits>
 #include <mutex>
-#include <random>
 #include <set>
 
 #include "vml/app_log.h"
@@ -332,17 +331,10 @@ void score_probe_pictures(const Libvmaf& library, VmafContext* context) {
 // The names of the features a context has scores for. libvmaf has no call
 // that lists them, so they are read from its JSON output.
 std::vector<std::string> output_names(const Libvmaf& library, VmafContext* context) {
-    std::random_device random;
-    const std::filesystem::path file =
-        std::filesystem::temp_directory_path() / (temp_prefix("vml-vmaf-v1-") + std::to_string(random()) + ".json");
-    std::ofstream(file, std::ios::binary).close();  // made first, so that its short name can be found
-    struct Removed {
-        std::filesystem::path path;
-        ~Removed() {
-            std::error_code ignored;
-            std::filesystem::remove(path, ignored);
-        }
-    } removed{file};
+    // Made first, so that its short name can be found (libvmaf_path).
+    const TempFile listing = TempFile::make<LibvmafError>(std::filesystem::temp_directory_path(), "vml-vmaf-v1-",
+                                                          ".json", "A file for libvmaf's feature list could not be made.");
+    const std::filesystem::path& file = listing.path();
     check_libvmaf(library.write_output(context, libvmaf_path(file).c_str(), VMAF_OUTPUT_FORMAT_JSON),
                   "Listing features");
     std::ifstream written(file, std::ios::binary);

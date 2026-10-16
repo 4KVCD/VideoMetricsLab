@@ -7,7 +7,6 @@
 #include <deque>
 #include <fstream>
 #include <mutex>
-#include <random>
 #include <thread>
 #include <utility>
 
@@ -54,17 +53,11 @@ constexpr std::string_view crash_report_name = "crash.txt";
 class ChildFolder {
 public:
     ChildFolder() {
-        std::random_device random;
-        for (int attempt = 0; attempt < 100; ++attempt) {
-            std::filesystem::path candidate =
-                std::filesystem::temp_directory_path() / (temp_prefix("vml-isolated-") + std::to_string(random()));
-            std::error_code error;
-            if (std::filesystem::create_directory(candidate, error)) {
-                path_ = candidate;
-                return;
-            }
+        std::optional<std::filesystem::path> made = make_temp_folder("vml-isolated-");
+        if (!made) {
+            throw std::runtime_error("A folder for a process of its own could not be made.");
         }
-        throw std::runtime_error("A folder for a process of its own could not be made.");
+        path_ = std::move(*made);
     }
     // A program the child started can still have a file here open for a
     // moment after the child has ended: FFmpeg, ended with it by a Cancel.

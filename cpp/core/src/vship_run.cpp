@@ -15,7 +15,6 @@
 #include <mutex>
 #include <numeric>
 #include <optional>
-#include <random>
 #include <system_error>
 #include <thread>
 
@@ -387,35 +386,6 @@ std::vector<std::string> with_timestamps(std::vector<std::string> command, const
     return command;
 }
 
-// A new, empty file in `folder` for one FFmpeg's timestamps, deleted with
-// this.
-class TimestampsFile {
-public:
-    explicit TimestampsFile(const std::filesystem::path& folder) {
-        std::random_device random;
-        for (int attempt = 0; attempt < 100; ++attempt) {
-            const std::filesystem::path candidate =
-                folder / (temp_prefix("vml-vship-pts-") + std::to_string(random()) + ".txt");
-            std::error_code error;
-            if (!std::filesystem::exists(candidate, error) && std::ofstream(candidate, std::ios::binary)) {
-                path_ = candidate;
-                return;
-            }
-        }
-        throw VshipUnavailableError("A file for FFmpeg's timestamps could not be made.");
-    }
-    ~TimestampsFile() {
-        std::error_code ignored;
-        std::filesystem::remove(path_, ignored);
-    }
-    TimestampsFile(const TimestampsFile&) = delete;
-    TimestampsFile& operator=(const TimestampsFile&) = delete;
-    const std::filesystem::path& path() const { return path_; }
-
-private:
-    std::filesystem::path path_;
-};
-
 // One video decoded by FFmpeg, feeding a ring (the Python app's
 // _FrameStream): a thread reads FFmpeg's frames into free slots. If hardware
 // decoding fails before giving a frame, the same pictures are decoded in
@@ -497,7 +467,9 @@ private:
         if (!timestamps_) {
             return decode_with(command, nullptr);
         }
-        const TimestampsFile stamps_file(scratch_folder_);
+        // A new, empty file for this FFmpeg's timestamps, deleted with it.
+        const TempFile stamps_file = TempFile::make<VshipUnavailableError>(
+            scratch_folder_, "vml-vship-pts-", ".txt", "A file for FFmpeg's timestamps could not be made.");
         return decode_with(with_timestamps(command, stamps_file.path()), &stamps_file.path());
     }
 

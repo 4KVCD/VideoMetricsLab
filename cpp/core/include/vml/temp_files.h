@@ -14,6 +14,7 @@
 
 #include <array>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -42,5 +43,59 @@ std::string temp_prefix(std::string_view name);
 // week. Leaves everything else, and anything it cannot remove (a file still
 // open). Returns how many it removed.
 int remove_leftovers(const std::filesystem::path& folder);
+
+// A new folder in the system's temporary folder, named temp_prefix(prefix)
+// and a random number; nothing if none could be made in 100 tries.
+std::optional<std::filesystem::path> make_temp_folder(std::string_view prefix);
+
+// A new, empty file in `folder`, named temp_prefix(prefix), a random number
+// and `suffix`; nothing if none could be made in 100 tries.
+std::optional<std::filesystem::path> make_temp_file(const std::filesystem::path& folder, std::string_view prefix,
+                                                    std::string_view suffix);
+
+// A temporary folder that is deleted, with everything in it, when this is.
+class TempFolder {
+public:
+    // Makes the folder (make_temp_folder), or throws Error(failure).
+    template <typename Error>
+    static TempFolder make(std::string_view prefix, const std::string& failure) {
+        std::optional<std::filesystem::path> made = make_temp_folder(prefix);
+        if (!made) {
+            throw Error(failure);
+        }
+        return TempFolder(std::move(*made));
+    }
+    ~TempFolder();
+    TempFolder(const TempFolder&) = delete;
+    TempFolder& operator=(const TempFolder&) = delete;
+    const std::filesystem::path& path() const { return path_; }
+
+private:
+    explicit TempFolder(std::filesystem::path path) : path_(std::move(path)) {}
+    std::filesystem::path path_;
+};
+
+// A temporary file that is deleted when this is.
+class TempFile {
+public:
+    // Makes the file (make_temp_file), or throws Error(failure).
+    template <typename Error>
+    static TempFile make(const std::filesystem::path& folder, std::string_view prefix, std::string_view suffix,
+                         const std::string& failure) {
+        std::optional<std::filesystem::path> made = make_temp_file(folder, prefix, suffix);
+        if (!made) {
+            throw Error(failure);
+        }
+        return TempFile(std::move(*made));
+    }
+    ~TempFile();
+    TempFile(const TempFile&) = delete;
+    TempFile& operator=(const TempFile&) = delete;
+    const std::filesystem::path& path() const { return path_; }
+
+private:
+    explicit TempFile(std::filesystem::path path) : path_(std::move(path)) {}
+    std::filesystem::path path_;
+};
 
 }  // namespace vml

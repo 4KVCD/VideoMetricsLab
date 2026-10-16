@@ -14,7 +14,6 @@
 #include <functional>
 #include <map>
 #include <mutex>
-#include <random>
 #include <set>
 #include <stdexcept>
 #include <thread>
@@ -369,34 +368,6 @@ std::string pairs_by_time(const GraphPlan& plan) {
 }
 
 // ------------------------------------------------------------ the tools
-
-// A folder of its own for a task's pictures, deleted with everything in it.
-class PictureFolder {
-public:
-    PictureFolder() {
-        std::random_device random;
-        for (int attempt = 0; attempt < 100; ++attempt) {
-            std::filesystem::path candidate = std::filesystem::temp_directory_path() /
-                                              (temp_prefix("videometricslab-perceptual-") + std::to_string(random()));
-            std::error_code error;
-            if (std::filesystem::create_directory(candidate, error)) {
-                path_ = candidate;
-                return;
-            }
-        }
-        throw PerceptualRunError("A folder for the frame pictures could not be made.");
-    }
-    ~PictureFolder() {
-        std::error_code ignored;
-        std::filesystem::remove_all(path_, ignored);
-    }
-    PictureFolder(const PictureFolder&) = delete;
-    PictureFolder& operator=(const PictureFolder&) = delete;
-    const std::filesystem::path& path() const { return path_; }
-
-private:
-    std::filesystem::path path_;
-};
 
 // Deletes a file when it goes, if it is there.
 class Deleted {
@@ -1022,7 +993,9 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
     };
 
     {
-        const PictureFolder folder;
+        // A folder of its own for the task's pictures, deleted with them.
+        const TempFolder folder = TempFolder::make<PerceptualRunError>("videometricslab-perceptual-",
+                                                                       "A folder for the frame pictures could not be made.");
         // Room for every worker's next pair while FFmpeg wakes up.
         PngPairs pairs(png_pairs_command(request.environment.ffmpeg, source, distorted, options, source_crop,
                                          distorted_crop, step, folder.path()),

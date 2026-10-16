@@ -3,6 +3,8 @@
 #include <charconv>
 #include <chrono>
 #include <climits>
+#include <fstream>
+#include <random>
 #include <system_error>
 
 #include "vml/platform/system.h"
@@ -13,6 +15,10 @@ namespace {
 
 // How long a name without a process id is kept untouched before it goes.
 constexpr std::chrono::hours kept_without_owner{7 * 24};
+
+// How many random names are tried before making a temporary file or folder
+// is given up.
+constexpr int name_attempts = 100;
 
 // What a temporary file or folder's name says of its owner.
 enum class Owner { none, unknown, process };
@@ -79,6 +85,43 @@ int remove_leftovers(const std::filesystem::path& folder) {
         }
     }
     return removed;
+}
+
+std::optional<std::filesystem::path> make_temp_folder(std::string_view prefix) {
+    std::random_device random;
+    for (int attempt = 0; attempt < name_attempts; ++attempt) {
+        const std::filesystem::path candidate =
+            std::filesystem::temp_directory_path() / (temp_prefix(prefix) + std::to_string(random()));
+        std::error_code error;
+        if (std::filesystem::create_directory(candidate, error)) {
+            return candidate;
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::filesystem::path> make_temp_file(const std::filesystem::path& folder, std::string_view prefix,
+                                                    std::string_view suffix) {
+    std::random_device random;
+    for (int attempt = 0; attempt < name_attempts; ++attempt) {
+        const std::filesystem::path candidate =
+            folder / platform::path_from_text(temp_prefix(prefix) + std::to_string(random()) + std::string(suffix));
+        std::error_code error;
+        if (!std::filesystem::exists(candidate, error) && std::ofstream(candidate, std::ios::binary)) {
+            return candidate;
+        }
+    }
+    return std::nullopt;
+}
+
+TempFolder::~TempFolder() {
+    std::error_code ignored;
+    std::filesystem::remove_all(path_, ignored);
+}
+
+TempFile::~TempFile() {
+    std::error_code ignored;
+    std::filesystem::remove(path_, ignored);
 }
 
 }  // namespace vml
