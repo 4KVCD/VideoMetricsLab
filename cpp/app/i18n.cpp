@@ -262,7 +262,8 @@ QString formatted(const QString& text, const Values& values) { return *format_fi
 // The shapes of the engine's statuses and errors that the window shows, as
 // templates. "{name}" matches any text, which is itself translated when it
 // is a message too. Kept in step with the Python app's MESSAGE_TEMPLATES,
-// whose translations the catalogs hold.
+// whose translations the catalogs hold, GStreamer's included, though this
+// app never says those: the translation tests hold the two lists equal.
 const char* const templates[] = {
     // --- a video's steps on the run line ("distorted" shown as "test video")
     "Detecting black bars in source and test video…",

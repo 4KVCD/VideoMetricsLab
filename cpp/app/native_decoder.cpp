@@ -27,7 +27,7 @@ namespace vml::app {
 
 namespace {
 
-const app_log::Logger logger("vml.gstreamer_playback");
+const app_log::Logger logger("vml.native_playback");
 
 // The most frames of one video held outside its decoder: those ready to be
 // taken, the playback pool's, and the presenter's, those waiting and the one
