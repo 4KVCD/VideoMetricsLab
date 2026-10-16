@@ -1150,9 +1150,11 @@ int clear_all(const std::filesystem::path& base) {
         return 0;
     }
     int count = 0;
-    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(root, error)) {
+    // increment(error), not a range-for: its ++ throws if reading fails.
+    for (std::filesystem::directory_iterator entry(root, error);
+         !error && entry != std::filesystem::directory_iterator(); entry.increment(error)) {
         std::error_code ignored;
-        if (std::filesystem::is_regular_file(entry.path() / "context.json", ignored)) {
+        if (std::filesystem::is_regular_file(entry->path() / "context.json", ignored)) {
             ++count;
         }
     }

@@ -48,6 +48,7 @@ std::optional<std::map<std::string, NpyArray>> read_npz(const std::filesystem::p
 
 // The bytes of an .npz file of `arrays`, in their order, as
 // np.savez_compressed writes one: a zip archive of deflated .npy files.
+// Throws std::runtime_error if miniz cannot build the archive.
 std::string npz_bytes(const std::vector<std::pair<std::string, NpyArray>>& arrays);
 
 }  // namespace vml

@@ -279,12 +279,14 @@ std::vector<std::filesystem::path> log_files(const std::optional<std::filesystem
     const std::filesystem::path folder = directory.value_or(log_dir());
     std::vector<std::filesystem::path> files;
     std::error_code error;
-    for (const auto& entry : std::filesystem::directory_iterator(folder, error)) {
-        const std::string name = platform::path_text(entry.path().filename());
+    // increment(error), not a range-for: its ++ throws if reading fails.
+    for (std::filesystem::directory_iterator entry(folder, error);
+         !error && entry != std::filesystem::directory_iterator(); entry.increment(error)) {
+        const std::string name = platform::path_text(entry->path().filename());
         std::error_code size_error;
-        if (name.find(".log") != std::string::npos && entry.is_regular_file(size_error) &&
-            entry.file_size(size_error) > 0 && !size_error) {
-            files.push_back(entry.path());
+        if (name.find(".log") != std::string::npos && entry->is_regular_file(size_error) &&
+            entry->file_size(size_error) > 0 && !size_error) {
+            files.push_back(entry->path());
         }
     }
     std::sort(files.begin(), files.end());

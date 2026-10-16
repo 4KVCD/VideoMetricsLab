@@ -1666,8 +1666,8 @@ void GraphPanel::on_add_saved_run() {
 void GraphPanel::on_export_png() {
     const QString suggested = QString::fromStdString(std::string(current_metric().key)) + "_comparison.png";
     const QString path = dialogs.save_file(app::tr("Export graph"), suggested, app::tr("PNG image (*.png)"));
-    if (!path.isEmpty()) {
-        render_export_image().save(path);
+    if (!path.isEmpty() && !render_export_image().save(path)) {
+        dialogs.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
     }
 }
 

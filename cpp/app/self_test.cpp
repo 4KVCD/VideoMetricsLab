@@ -209,10 +209,11 @@ int run_self_test(const QApplication& app, bool quiet) {
     std::filesystem::create_directories(destination->parent_path(), error);
     std::ofstream file(*destination, std::ios::binary);
     file << report.text();
+    // Closed before checking: what is still buffered is written at close.
+    file.close();
     if (!file) {
         destination.reset();
     }
-    file.close();
     if (!quiet) {
         QMessageBox box;
         box.setWindowTitle(QStringLiteral("Self-test"));

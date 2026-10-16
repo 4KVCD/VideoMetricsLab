@@ -2341,7 +2341,7 @@ void MainWindow::on_metric_visibility_toggled(const std::string& key, bool shown
             settings_.hidden_metrics.emplace_back(item.key);
         }
     }
-    settings_.save();
+    save_settings();
     apply_metric_visibility();
     if (menu != nullptr) {
         int visible = 0;

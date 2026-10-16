@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <stdexcept>
 
 #include "vml/platform/system.h"
 
@@ -435,7 +436,7 @@ std::optional<std::map<std::string, NpyArray>> read_npz(const std::filesystem::p
 std::string npz_bytes(const std::vector<std::pair<std::string, NpyArray>>& arrays) {
     mz_zip_archive zip{};
     if (!mz_zip_writer_init_heap(&zip, 0, 0)) {
-        return {};
+        throw std::runtime_error("Could not pack the scores into a .npz archive");
     }
     bool good = true;
     for (const auto& [name, array] : arrays) {
@@ -451,6 +452,9 @@ std::string npz_bytes(const std::vector<std::pair<std::string, NpyArray>>& array
     std::string bytes = good ? std::string(static_cast<const char*>(archive), size) : std::string();
     mz_zip_writer_end(&zip);
     mz_free(archive);
+    if (!good) {
+        throw std::runtime_error("Could not pack the scores into a .npz archive");
+    }
     return bytes;
 }
 

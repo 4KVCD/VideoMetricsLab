@@ -248,6 +248,14 @@ TEST_F(GraphPanelTest, TheExportedPngIsTheGraphWithItsKeyedTable) {
         }
     }
     EXPECT_TRUE(keyed) << "no square of the line's colour in the image";
+
+    // A file that cannot be written says so.
+    const QString unwritable = QString::fromStdString(platform::path_text(folder / "no such folder" / "graph.png"));
+    panel.dialogs.save_file = [&unwritable](const QString&, const QString&, const QString&) { return unwritable; };
+    QString alerted;
+    panel.dialogs.alert = [&alerted](const QString& title, const QString&) { alerted = title; };
+    export_png(panel);
+    EXPECT_EQ(alerted.toStdString(), "Export failed");
 }
 
 TEST_F(GraphPanelTest, ALineWithNoScoresForTheMetricShowsDashesAndExports) {
