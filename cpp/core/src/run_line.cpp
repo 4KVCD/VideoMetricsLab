@@ -89,95 +89,98 @@ std::string filled(std::string_view english, const WordingValues& values) {
     return out;
 }
 
-// Splits a video's metrics into the units they are calculated in, in the
-// order they run. A unit is one pass of one or more metrics, in one place.
-// Each metric appears in one unit only: the last one it is in, for example
-// its retry. When the CPU takes over the metrics of a task in the GPU's
-// queue (after a GPU failure), they are shown as CPU metrics, with the
-// CPU's figures.
-std::vector<MetricUnit> metric_units(const std::vector<TaskSnapshot>& tasks) {
-    std::vector<MetricUnit> units;
-    for (const TaskSnapshot& task : tasks) {
-        // Adds the units for a task's finished metrics: done or failed.
-        const auto finished = [&units, &task](const std::vector<std::string>& keys, const std::string& place) {
-            std::vector<std::string> kept;
-            std::vector<std::string> failed;
-            for (const std::string& key : keys) {
-                (contains(task.done_keys, key) ? kept : failed).push_back(key);
-            }
-            if (!kept.empty()) {
-                units.push_back({place, kept, "done", &task});
-            }
-            if (!failed.empty()) {
-                units.push_back({place, failed, "failed", &task});
-            }
-        };
-        // Adds the unit for metrics still being calculated.
-        const auto under_way = [&units, &task](const std::vector<std::string>& keys, const std::string& place) {
-            units.push_back({place, keys, task.state, &task, task.current, task.total, 1, task.fps});
-        };
-        const bool ended = task.state == "done" || task.state == "failed";
-        if (task.lane == "cpu" || !task.cpu_keys.empty()) {
-            // One pass of the task's metrics on the CPU, after any passes on
-            // the GPU.
-            if (!task.cpu_keys.empty()) {
-                for (const std::vector<std::string>& group : task.passes) {
-                    std::vector<std::string> on_gpu;
-                    for (const std::string& key : group) {
-                        if (!contains(task.cpu_keys, key)) {
-                            on_gpu.push_back(key);
-                        }
-                    }
-                    finished(on_gpu, "GPU");
+// Adds the units for `task`'s finished metrics among `keys`, calculated in
+// `place`: those done, and those that failed.
+void add_finished(std::vector<MetricUnit>& units, const TaskSnapshot& task, const std::vector<std::string>& keys,
+                  const std::string& place) {
+    std::vector<std::string> kept;
+    std::vector<std::string> failed;
+    for (const std::string& key : keys) {
+        (contains(task.done_keys, key) ? kept : failed).push_back(key);
+    }
+    if (!kept.empty()) {
+        units.push_back({place, kept, "done", &task});
+    }
+    if (!failed.empty()) {
+        units.push_back({place, failed, "failed", &task});
+    }
+}
+
+// Adds the unit for `task`'s metrics `keys`, still being calculated in
+// `place`.
+void add_under_way(std::vector<MetricUnit>& units, const TaskSnapshot& task, const std::vector<std::string>& keys,
+                   const std::string& place) {
+    units.push_back({place, keys, task.state, &task, task.current, task.total, 1, task.fps});
+}
+
+// Adds the units of a task on the CPU, or one the CPU took over: its passes
+// on the GPU before (finished), then one pass of its metrics on the CPU.
+void add_cpu_units(std::vector<MetricUnit>& units, const TaskSnapshot& task) {
+    const bool ended = task.state == "done" || task.state == "failed";
+    if (!task.cpu_keys.empty()) {
+        for (const std::vector<std::string>& group : task.passes) {
+            std::vector<std::string> on_gpu;
+            for (const std::string& key : group) {
+                if (!contains(task.cpu_keys, key)) {
+                    on_gpu.push_back(key);
                 }
             }
-            const std::vector<std::string>& keys = task.cpu_keys.empty() ? task.metric_keys : task.cpu_keys;
-            if (ended) {
-                finished(keys, "CPU");
-            } else {
-                under_way(keys, "CPU");
-            }
-            continue;
-        }
-        std::vector<std::vector<std::string>> passes;
-        for (const std::vector<std::string>& group : task.passes) {
-            if (!group.empty()) {
-                passes.push_back(group);
-            }
-        }
-        if (passes.empty()) {
-            passes.push_back(task.metric_keys);
-        }
-        if (ended) {
-            for (const std::vector<std::string>& group : passes) {
-                finished(group, "GPU");
-            }
-            continue;
-        }
-        if (task.state != "running" || !task.phase) {
-            under_way(passes.front(), "GPU");
-            for (std::size_t position = 1; position < passes.size(); ++position) {
-                units.push_back({"GPU", passes[position], "queued", &task});
-            }
-            continue;
-        }
-        const auto [number, count, start] = *task.phase;
-        for (std::size_t position = 1; position <= passes.size(); ++position) {
-            const auto at = static_cast<long long>(position);
-            if (at < number) {
-                finished(passes[position - 1], "GPU");
-            } else if (at == number) {
-                // All of the task's passes share one progress count (Vship's
-                // task). This pass counts from `start`, out of `left` passes
-                // of the same length.
-                const long long left = std::max(1LL, count - number + 1);
-                units.push_back({"GPU", passes[position - 1], "running", &task, (task.current - start) * left,
-                                 task.total - start, left, task.fps});
-            } else {
-                units.push_back({"GPU", passes[position - 1], "queued", &task});
-            }
+            add_finished(units, task, on_gpu, "GPU");
         }
     }
+    const std::vector<std::string>& keys = task.cpu_keys.empty() ? task.metric_keys : task.cpu_keys;
+    if (ended) {
+        add_finished(units, task, keys, "CPU");
+    } else {
+        add_under_way(units, task, keys, "CPU");
+    }
+}
+
+// Adds the units of a task on the GPU: its passes, finished, under way or
+// queued.
+void add_gpu_units(std::vector<MetricUnit>& units, const TaskSnapshot& task) {
+    std::vector<std::vector<std::string>> passes;
+    for (const std::vector<std::string>& group : task.passes) {
+        if (!group.empty()) {
+            passes.push_back(group);
+        }
+    }
+    if (passes.empty()) {
+        passes.push_back(task.metric_keys);
+    }
+    if (task.state == "done" || task.state == "failed") {
+        for (const std::vector<std::string>& group : passes) {
+            add_finished(units, task, group, "GPU");
+        }
+        return;
+    }
+    if (task.state != "running" || !task.phase) {
+        add_under_way(units, task, passes.front(), "GPU");
+        for (std::size_t position = 1; position < passes.size(); ++position) {
+            units.push_back({"GPU", passes[position], "queued", &task});
+        }
+        return;
+    }
+    const auto [number, count, start] = *task.phase;
+    for (std::size_t position = 1; position <= passes.size(); ++position) {
+        const auto at = static_cast<long long>(position);
+        if (at < number) {
+            add_finished(units, task, passes[position - 1], "GPU");
+        } else if (at == number) {
+            // All of the task's passes share one progress count (Vship's
+            // task). This pass counts from `start`, out of `left` passes of
+            // the same length.
+            const long long left = std::max(1LL, count - number + 1);
+            units.push_back({"GPU", passes[position - 1], "running", &task, (task.current - start) * left,
+                             task.total - start, left, task.fps});
+        } else {
+            units.push_back({"GPU", passes[position - 1], "queued", &task});
+        }
+    }
+}
+
+// `units` with each metric in the last unit it is in only, in their order.
+std::vector<MetricUnit> last_unit_of_each_metric(const std::vector<MetricUnit>& units) {
     std::vector<MetricUnit> kept;
     std::set<std::string> seen;
     for (auto unit = units.rbegin(); unit != units.rend(); ++unit) {
@@ -194,6 +197,24 @@ std::vector<MetricUnit> metric_units(const std::vector<TaskSnapshot>& tasks) {
     }
     std::reverse(kept.begin(), kept.end());
     return kept;
+}
+
+// Splits a video's metrics into the units they are calculated in, in the
+// order they run. A unit is one pass of one or more metrics, in one place.
+// Each metric appears in one unit only: the last one it is in, for example
+// its retry. When the CPU takes over the metrics of a task in the GPU's
+// queue (after a GPU failure), they are shown as CPU metrics, with the
+// CPU's figures.
+std::vector<MetricUnit> metric_units(const std::vector<TaskSnapshot>& tasks) {
+    std::vector<MetricUnit> units;
+    for (const TaskSnapshot& task : tasks) {
+        if (task.lane == "cpu" || !task.cpu_keys.empty()) {
+            add_cpu_units(units, task);
+        } else {
+            add_gpu_units(units, task);
+        }
+    }
+    return last_unit_of_each_metric(units);
 }
 
 // The unit's progress as a percentage, rounded down, so that 99.96% does
@@ -332,24 +353,35 @@ std::string numbers_text(std::vector<int> numbers) {
     return text;
 }
 
-MetricLine metric_line(const std::vector<TaskSnapshot>& tasks, bool paused, const Wording& wording) {
-    const auto& say = wording.text;
-    const std::vector<MetricUnit> units = metric_units(tasks);
-    std::map<std::string, std::vector<std::string>> order;  // each place's metrics, numbered in this order
-    for (const MetricUnit& unit : units) {
-        std::vector<std::string>& keys = order[unit.place];
-        for (const std::string& key : unit.keys) {
-            if (!contains(keys, key)) {
-                keys.push_back(key);
+namespace {
+
+// Each place's metrics ("CPU", "GPU"), numbered in the order their units
+// come, and the start of a unit's text with them.
+class MetricNumbering {
+public:
+    MetricNumbering(const std::vector<MetricUnit>& units, const Wording& wording) : wording_(wording) {
+        for (const MetricUnit& unit : units) {
+            std::vector<std::string>& keys = order_[unit.place];
+            for (const std::string& key : unit.keys) {
+                if (!contains(keys, key)) {
+                    keys.push_back(key);
+                }
             }
         }
     }
-    const auto number_of = [&order](const std::string& place, const std::string& key) {
-        const std::vector<std::string>& keys = order[place];
-        return static_cast<int>(std::find(keys.begin(), keys.end(), key) - keys.begin()) + 1;
-    };
+
+    // `place`'s metrics, in their numbers' order.
+    const std::vector<std::string>& keys(const std::string& place) const {
+        static const std::vector<std::string> none;
+        const auto found = order_.find(place);
+        return found == order_.end() ? none : found->second;
+    }
+    int number_of(const std::string& place, const std::string& key) const {
+        const std::vector<std::string>& in_place = keys(place);
+        return static_cast<int>(std::find(in_place.begin(), in_place.end(), key) - in_place.begin()) + 1;
+    }
     // The start of a unit's text, such as "GPU metrics 1 of 2: VMAF NEG".
-    const auto head = [&](const MetricUnit& unit) {
+    std::string head(const MetricUnit& unit) const {
         std::vector<int> numbers;
         for (const std::string& key : unit.keys) {
             numbers.push_back(number_of(unit.place, key));
@@ -357,63 +389,81 @@ MetricLine metric_line(const std::vector<TaskSnapshot>& tasks, bool paused, cons
         std::sort(numbers.begin(), numbers.end());
         std::vector<std::string> labelled;
         for (const int number : numbers) {
-            labelled.push_back(order[unit.place][static_cast<std::size_t>(number) - 1]);
+            labelled.push_back(keys(unit.place)[static_cast<std::size_t>(number) - 1]);
         }
-        return say("{kind} {numbers} of {count}: {labels}",
-                   {{"kind", say(place_name(unit.place), {})},
-                    {"numbers", numbers_text(numbers)},
-                    {"count", static_cast<long long>(order[unit.place].size())},
-                    {"labels", metric_labels(labelled)}});
-    };
-    // The metrics of this video whose task holds the GPU's turn while `unit`
-    // waits for it. That task may be running on the CPU after a GPU
-    // failure; it keeps the GPU's turn until it finishes.
-    const auto holder = [&units](const MetricUnit& unit) {
-        for (const MetricUnit& other : units) {
-            if (other.task != unit.task && (other.state == "running" || other.state == "starting") &&
-                other.task->lane == "gpu") {
-                return metric_labels(other.keys);
+        return wording_.text("{kind} {numbers} of {count}: {labels}",
+                             {{"kind", wording_.text(place_name(unit.place), {})},
+                              {"numbers", numbers_text(numbers)},
+                              {"count", static_cast<long long>(keys(unit.place).size())},
+                              {"labels", metric_labels(labelled)}});
+    }
+
+private:
+    std::map<std::string, std::vector<std::string>> order_;
+    const Wording& wording_;
+};
+
+// The units of `place` the line shows: those under way; else the first that
+// waits; else the first queued; else those that failed.
+std::vector<const MetricUnit*> shown_units(const std::vector<MetricUnit>& units, const std::string& place) {
+    const auto in_place = [&units, &place](const std::function<bool(const MetricUnit&)>& wanted) {
+        std::vector<const MetricUnit*> found;
+        for (const MetricUnit& unit : units) {
+            if (unit.place == place && wanted(unit)) {
+                found.push_back(&unit);
             }
         }
-        return std::string();
+        return found;
     };
-    MetricLine line;
+    std::vector<const MetricUnit*> shown =
+        in_place([](const MetricUnit& unit) { return unit.state == "running" || unit.state == "starting"; });
+    if (shown.empty()) {
+        shown = in_place([](const MetricUnit& unit) { return unit.state == "waiting"; });
+        shown.resize(std::min<std::size_t>(shown.size(), 1));
+    }
+    if (shown.empty()) {
+        shown = in_place([](const MetricUnit& unit) { return unit.state == "queued"; });
+        shown.resize(std::min<std::size_t>(shown.size(), 1));
+    }
+    if (shown.empty()) {
+        shown = in_place([](const MetricUnit& unit) { return unit.state == "failed"; });
+    }
+    return shown;
+}
+
+// The metrics of this video whose task holds the GPU's turn while `unit`
+// waits for it. That task may be running on the CPU after a GPU failure; it
+// keeps the GPU's turn until it finishes.
+std::string turn_holder(const std::vector<MetricUnit>& units, const MetricUnit& unit) {
+    for (const MetricUnit& other : units) {
+        if (other.task != unit.task && (other.state == "running" || other.state == "starting") &&
+            other.task->lane == "gpu") {
+            return metric_labels(other.keys);
+        }
+    }
+    return std::string();
+}
+
+// The line's parts: the units each place shows, or that its metrics are
+// done.
+std::vector<std::string> line_parts(const std::vector<MetricUnit>& units, const MetricNumbering& numbering,
+                                    bool paused, const Wording& wording) {
+    const auto& say = wording.text;
+    std::vector<std::string> parts;
     std::vector<std::pair<std::string, std::string>> heads;  // each part's head, and the step it starts on
     for (const std::string place : {"CPU", "GPU"}) {
-        if (order[place].empty()) {
+        if (numbering.keys(place).empty()) {
             continue;
         }
-        const auto in_place = [&units, &place](const std::function<bool(const MetricUnit&)>& wanted) {
-            std::vector<const MetricUnit*> found;
-            for (const MetricUnit& unit : units) {
-                if (unit.place == place && wanted(unit)) {
-                    found.push_back(&unit);
-                }
-            }
-            return found;
-        };
-        // The units under way; else the first that waits; else the first
-        // queued; else those that failed.
-        std::vector<const MetricUnit*> shown =
-            in_place([](const MetricUnit& unit) { return unit.state == "running" || unit.state == "starting"; });
+        const std::vector<const MetricUnit*> shown = shown_units(units, place);
         if (shown.empty()) {
-            shown = in_place([](const MetricUnit& unit) { return unit.state == "waiting"; });
-            shown.resize(std::min<std::size_t>(shown.size(), 1));
-        }
-        if (shown.empty()) {
-            shown = in_place([](const MetricUnit& unit) { return unit.state == "queued"; });
-            shown.resize(std::min<std::size_t>(shown.size(), 1));
-        }
-        if (shown.empty()) {
-            shown = in_place([](const MetricUnit& unit) { return unit.state == "failed"; });
-        }
-        if (shown.empty()) {
-            line.parts.push_back(say("{kind} done", {{"kind", say(place_name(place), {})}}));
+            parts.push_back(say("{kind} done", {{"kind", say(place_name(place), {})}}));
             heads.emplace_back();
         }
         for (const MetricUnit* unit : shown) {
-            line.parts.push_back(unit_text(head(*unit), *unit, paused, holder(*unit), wording));
-            heads.emplace_back(head(*unit), unit->state == "starting" ? step_text(unit->task->step, wording) : "");
+            parts.push_back(unit_text(numbering.head(*unit), *unit, paused, turn_holder(units, *unit), wording));
+            heads.emplace_back(numbering.head(*unit),
+                               unit->state == "starting" ? step_text(unit->task->step, wording) : "");
         }
     }
     // Every part starting on the same step (the CPU's and the GPU's metrics
@@ -422,27 +472,42 @@ MetricLine metric_line(const std::vector<TaskSnapshot>& tasks, bool paused, cons
     const bool one_step = std::all_of(heads.begin(), heads.end(), [&heads](const auto& part) {
         return !part.second.empty() && part.second == heads.front().second;
     });
-    if (line.parts.size() > 1 && one_step) {
-        line.parts = {heads.front().second};
+    if (parts.size() > 1 && one_step) {
+        parts = {heads.front().second};
         for (const auto& [part_head, step] : heads) {
-            line.parts.push_back(part_head);
+            parts.push_back(part_head);
         }
     }
+    return parts;
+}
+
+// The line's tooltip: each metric's line, with its progress.
+std::string line_tooltip(const std::vector<MetricUnit>& units, const MetricNumbering& numbering, bool paused,
+                         const Wording& wording) {
+    const auto& say = wording.text;
+    std::string tooltip;
     for (const std::string place : {"CPU", "GPU"}) {
-        for (const std::string& key : order[place]) {
+        for (const std::string& key : numbering.keys(place)) {
             const MetricUnit& unit = *std::find_if(units.begin(), units.end(), [&place, &key](const MetricUnit& unit) {
                 return unit.place == place && contains(unit.keys, key);
             });
             const std::string metric = say("{kind} {numbers} of {count}: {labels}",
                                            {{"kind", say(place_name(place), {})},
-                                            {"numbers", static_cast<long long>(number_of(place, key))},
-                                            {"count", static_cast<long long>(order[place].size())},
+                                            {"numbers", static_cast<long long>(numbering.number_of(place, key))},
+                                            {"count", static_cast<long long>(numbering.keys(place).size())},
                                             {"labels", std::string(metric_definition(key).label)}});
-            line.tooltip += (line.tooltip.empty() ? "" : "\n") + unit_tooltip(metric, unit, paused, wording);
+            tooltip += (tooltip.empty() ? "" : "\n") + unit_tooltip(metric, unit, paused, wording);
         }
     }
-    // Each task decodes the videos itself. A finished task no longer
-    // decodes, so it is left out unless every task has finished.
+    return tooltip;
+}
+
+// Each decoding task's plan, by its name on the line (MetricLine::plans).
+// Each task decodes the videos itself. A finished task no longer decodes,
+// so it is left out unless every task has finished.
+std::vector<std::pair<std::string, HardwareDecoding>> decoding_plans(const std::vector<TaskSnapshot>& tasks,
+                                                                     const MetricNumbering& numbering,
+                                                                     const Wording& wording) {
     std::vector<const TaskSnapshot*> decoding;
     for (const TaskSnapshot& task : tasks) {
         if (task.decode && task.state != "done" && task.state != "failed") {
@@ -456,32 +521,42 @@ MetricLine metric_line(const std::vector<TaskSnapshot>& tasks, bool paused, cons
             }
         }
     }
+    std::vector<std::pair<std::string, HardwareDecoding>> plans;
     for (const TaskSnapshot* task : decoding) {
         const std::string place = place_of(*task);
-        std::string name = say(place_name(place), {});
+        std::string name = wording.text(place_name(place), {});
         const bool differs = std::any_of(decoding.begin(), decoding.end(), [&](const TaskSnapshot* other) {
             return other != task && place_of(*other) == place && other->decode != task->decode;
         });
         if (differs) {
             std::vector<int> numbers;
             for (const std::string& key : task->cpu_keys.empty() ? task->metric_keys : task->cpu_keys) {
-                if (contains(order[place], key)) {
-                    numbers.push_back(number_of(place, key));
+                if (contains(numbering.keys(place), key)) {
+                    numbers.push_back(numbering.number_of(place, key));
                 }
             }
             name += " " + numbers_text(numbers);
         }
         // A name already there keeps its place and takes the later plan, as
         // a dict's key does.
-        const auto existing = std::find_if(line.plans.begin(), line.plans.end(),
-                                           [&name](const auto& plan) { return plan.first == name; });
-        if (existing != line.plans.end()) {
+        const auto existing =
+            std::find_if(plans.begin(), plans.end(), [&name](const auto& plan) { return plan.first == name; });
+        if (existing != plans.end()) {
             existing->second = *task->decode;
         } else {
-            line.plans.emplace_back(name, *task->decode);
+            plans.emplace_back(name, *task->decode);
         }
     }
-    return line;
+    return plans;
+}
+
+}  // namespace
+
+MetricLine metric_line(const std::vector<TaskSnapshot>& tasks, bool paused, const Wording& wording) {
+    const std::vector<MetricUnit> units = metric_units(tasks);
+    const MetricNumbering numbering(units, wording);
+    return MetricLine{line_parts(units, numbering, paused, wording), line_tooltip(units, numbering, paused, wording),
+                      decoding_plans(tasks, numbering, wording)};
 }
 
 std::string decoder_text(const std::vector<std::pair<std::string, HardwareDecoding>>& plans, bool source_only,
