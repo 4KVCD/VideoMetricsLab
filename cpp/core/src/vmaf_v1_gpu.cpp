@@ -1201,6 +1201,7 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
             throw GpuDecodeUnavailableError("the " + library + " decoder library is not bundled");
         }
     }
+    require_same_range(source, distorted);
     // Each video's plan, the test video's first: whole frames, at the size
     // and depth compared at.
     std::vector<DecodePlan> plans;

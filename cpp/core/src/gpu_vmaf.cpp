@@ -837,6 +837,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
             throw GpuDecodeUnavailableError("no decoder library for " + gpu);
         }
     }
+    require_same_range(source, distorted);
     // Each video's plan, the test video's first: its luma alone, at the size
     // and depth compared at, 10-bit samples in the low bits as FFmpeg's
     // yuv420p10le has them.

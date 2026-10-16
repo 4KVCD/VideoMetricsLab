@@ -373,6 +373,12 @@ private:
     std::shared_ptr<State> state_;  // shared with the feeding thread, which may outlive a close that gives up on it
 };
 
+// Throws GpuDecodeUnavailableError when one video is full range and the
+// other limited (VideoInfo::full_range): the app's decoders give samples as
+// they are, and FFmpeg brings the test video's to the source's range
+// (ffmpeg_run.cpp's video_chains).
+void require_same_range(const VideoInfo& source, const VideoInfo& distorted);
+
 // Readies `plan` for frames compared at `bit_depth` bits: an 8-bit video is
 // widened as FFmpeg converts it, full-range luma with its top bits repeated
 // in the bottom ones. Throws GpuDecodeUnavailableError for a video deeper

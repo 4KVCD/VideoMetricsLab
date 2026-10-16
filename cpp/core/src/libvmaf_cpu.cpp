@@ -308,6 +308,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              const std::function<void(long long, long long, double)>& on_progress,
                              const CancelToken& cancel) {
     const auto& [source_backend, test_backend] = decoders;
+    require_same_range(source, distorted);
     // Each video's plan, the test video's first: its luma alone, at the size
     // and depth compared at, 10-bit samples in the low bits as FFmpeg's
     // yuv420p10le has them.

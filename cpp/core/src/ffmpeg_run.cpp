@@ -181,8 +181,9 @@ std::vector<std::string> output_args(const std::string& filtergraph, double dura
 // Each video's filters before the two are paired: downloaded from its GPU
 // decoder if need be (in a run of several graphs, a decoder that downloads
 // its pictures itself does it once for all of them), cropped, converted to
-// the analysis format (the deeper video's), scaled to the compared size,
-// and its frames numbered.
+// the analysis format (the deeper video's) and, for a test video of the
+// other range, to the source's range (VideoInfo::full_range), scaled to the
+// compared size, and its frames numbered.
 struct VideoChains {
     std::vector<std::string> test;    // the test video's (input 0)
     std::vector<std::string> source;  // the source's
@@ -209,6 +210,11 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
         chains.test.push_back(distorted_crop->as_filter());
     }
     chains.test.push_back("format=" + analysis_format);
+    if (distorted.full_range() != source.full_range()) {
+        // As they are, a full-range video's samples would all be off from a
+        // limited one's: black is 0 in one and 16 in the other.
+        chains.test.push_back(std::string("scale=out_range=") + (source.full_range() ? "pc" : "tv"));
+    }
     if (upscale_distorted) {
         chains.test.push_back("scale=" + std::to_string(source_w) + ":" + std::to_string(source_h) +
                               ":flags=" + options.scale_algorithm);
@@ -1014,7 +1020,8 @@ bool decoded_in_app(const VideoInfo& source, const VideoInfo& distorted, const s
                     const HardwareDecoding& decoding) {
     const std::optional<std::pair<std::string, std::string>> decoders = decoders_here(decoding);
     if (!decoders || !decodes_codec(ascii_lower(source.codec_name), decoders->first) ||
-        !decodes_codec(ascii_lower(distorted.codec_name), decoders->second)) {
+        !decodes_codec(ascii_lower(distorted.codec_name), decoders->second) ||
+        source.full_range() != distorted.full_range()) {  // as require_same_range
         return false;
     }
     try {
@@ -1560,7 +1567,16 @@ std::string build_filtergraph(const VideoInfo& source, const VideoInfo& distorte
     // FFmpeg runs on a thread of its own (44 fps at 4K, against 31 chained).
     const bool split = options.compute_xpsnr && xpsnr_log_name &&
                        (uses_vmaf_model(options) || !options.extra_features.empty());
-    const VideoChains chains = video_chains(source, distorted, options, source_crop, distorted_crop, decoding, split);
+    VideoChains chains = video_chains(source, distorted, options, source_crop, distorted_crop, decoding, split);
+    // Both videos' frames with the same colour tags: where they differ,
+    // FFmpeg 9 converts one video's colours to the other's before a filter
+    // that takes both (for an untagged test video and a BT.2020 source,
+    // PSNR 43.7 rather than 52.1), and libvmaf and xpsnr compare samples
+    // as they are. The ranges are the same by now (video_chains).
+    const std::string same_tags =
+        std::string("setparams=colorspace=unknown:range=") + (source.full_range() ? "pc" : "tv");
+    chains.test.push_back(same_tags);
+    chains.source.push_back(same_tags);
     const std::string stream = std::string(video_stream);
     if (split) {
         // The graphs decode nothing themselves: FFmpeg gives every graph

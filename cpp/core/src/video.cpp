@@ -7,6 +7,7 @@
 
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
+#include "vml/python_text.h"
 
 namespace vml {
 
@@ -60,6 +61,15 @@ bool VideoInfo::is_raw_stream() const {
         "h264", "hevc", "vvc",   "evc",       "av1",  "obu",  "mpegvideo", "m4v", "h263",
         "h261", "vc1",  "dirac", "cavsvideo", "avs2", "avs3", "mjpeg",     "jpeg_pipe", "apv"};
     return std::find(raw_stream_formats.begin(), raw_stream_formats.end(), format_name) != raw_stream_formats.end();
+}
+
+bool VideoInfo::full_range() const {
+    const std::string range = ascii_lower(color_range);
+    if (range == "pc" || range == "jpeg" || range == "full") {
+        return true;
+    }
+    const bool untagged = range.empty() || range == "unknown" || range == "unspecified";
+    return untagged && ascii_lower(pix_fmt).starts_with("yuvj");
 }
 
 std::vector<std::string> VideoInfo::input_options() const {

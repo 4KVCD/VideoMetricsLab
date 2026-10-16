@@ -90,6 +90,10 @@ struct VideoInfo {
     // A bare elementary stream (a .hevc or .264 file), not a container: it
     // has no timestamps, so its frame rate cannot be known.
     bool is_raw_stream() const;
+    // Whether its samples use the full range (0-255 at 8 bits) rather than
+    // the limited one (16-235 for luma): tagged so, or untagged in a "yuvj"
+    // pixel format.
+    bool full_range() const;
     // FFmpeg's options before the video's -i: a timed raw stream's frame
     // rate (-framerate), so that FFmpeg's times for its frames are right.
     // Nothing for any other video.

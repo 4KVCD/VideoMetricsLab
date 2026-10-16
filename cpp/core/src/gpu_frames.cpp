@@ -1431,12 +1431,15 @@ void GpuFrameStream::close() {
     state.handle = nullptr;
 }
 
+void require_same_range(const VideoInfo& source, const VideoInfo& distorted) {
+    if (source.full_range() != distorted.full_range()) {
+        throw GpuDecodeUnavailableError("one video is full range and the other limited, which FFmpeg converts");
+    }
+}
+
 void widen_to(DecodePlan& plan, const VideoInfo& info, int bit_depth) {
     if (plan.bit_depth < bit_depth) {
-        const std::string range = ascii_lower(info.color_range);
-        const bool full = range == "pc" || range == "jpeg" || range == "full" ||
-                          (range.empty() && ascii_lower(info.pix_fmt).starts_with("yuvj"));
-        plan.widen = full ? widen_repeat : widen_shift;
+        plan.widen = info.full_range() ? widen_repeat : widen_shift;
     }
     if (plan.bit_depth > bit_depth) {
         throw GpuDecodeUnavailableError("the videos are compared at " + std::to_string(bit_depth) +
