@@ -22,6 +22,7 @@
 #include "vml/number_format.h"
 #include "vml/platform/pipe.h"
 #include "vml/platform/system.h"
+#include "vml/threads.h"
 #include "vml/python_text.h"
 #include "vml/vmaf_cuda.h"
 #include "vml/vmaf_v1_gpu.h"
@@ -49,29 +50,7 @@ constexpr std::size_t pipe_bytes = 64 * 1024 * 1024;
 
 // A queue of frame buffers between two threads. nullptr in it says that no
 // more will come.
-class BufferQueue {
-public:
-    void put(std::vector<std::uint8_t>* buffer) {
-        {
-            const std::lock_guard lock(mutex_);
-            items_.push_back(buffer);
-        }
-        ready_.notify_one();
-    }
-
-    std::vector<std::uint8_t>* get() {
-        std::unique_lock lock(mutex_);
-        ready_.wait(lock, [this] { return !items_.empty(); });
-        std::vector<std::uint8_t>* buffer = items_.front();
-        items_.pop_front();
-        return buffer;
-    }
-
-private:
-    std::mutex mutex_;
-    std::condition_variable ready_;
-    std::deque<std::vector<std::uint8_t>*> items_;
-};
+using BufferQueue = Channel<std::vector<std::uint8_t>*>;
 
 // Fills `size` bytes at `into` from the pipe. False at the stream's end
 // before the first byte; throws LibvmafError when it ends inside them.
@@ -89,17 +68,6 @@ bool read_exactly(platform::InboundPipe& pipe, std::uint8_t* into, std::size_t s
         filled += got;
     }
     return true;
-}
-
-// An exception's message.
-std::string message_of(const std::exception_ptr& error) {
-    try {
-        std::rethrow_exception(error);
-    } catch (const std::exception& caught) {
-        return caught.what();
-    } catch (...) {
-        return "an unknown error";
-    }
 }
 
 struct Probe {
@@ -282,6 +250,20 @@ GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::str
 
 std::timed_mutex& gpu_pass() {
     static std::timed_mutex pass;
+    return pass;
+}
+
+std::unique_lock<std::timed_mutex> take_gpu_turn(const std::function<void()>& on_wait, const CancelToken& cancel) {
+    std::unique_lock pass(gpu_pass(), std::defer_lock);
+    if (pass.try_lock()) {
+        return pass;
+    }
+    if (on_wait) {
+        on_wait();
+    }
+    while (!pass.try_lock_for(std::chrono::milliseconds(100))) {
+        cancel.throw_if_cancelled();
+    }
     return pass;
 }
 

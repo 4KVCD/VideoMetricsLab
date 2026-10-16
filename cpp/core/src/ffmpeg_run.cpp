@@ -1241,15 +1241,13 @@ std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const 
     }
     logger.info("VMAF on the GPU (" + models +
                 "): " + (plan.backend == "vulkan" ? vulkan_library_build() : cuda_library_build()));
-    std::unique_lock pass(gpu_pass(), std::defer_lock);
-    if (!pass.try_lock()) {
-        if (on_status) {
-            on_status({std::string(gpu_wait_message), StatusKind::gpu_wait});
-        }
-        while (!pass.try_lock_for(std::chrono::milliseconds(100))) {
-            cancel.throw_if_cancelled();
-        }
-    }
+    const std::unique_lock pass = take_gpu_turn(
+        [&on_status] {
+            if (on_status) {
+                on_status({std::string(gpu_wait_message), StatusKind::gpu_wait});
+            }
+        },
+        cancel);
     try {
         if (!isolation_program()) {
             return score_plan(environment, source, distorted, options, source_crop, distorted_crop, plan, fps,

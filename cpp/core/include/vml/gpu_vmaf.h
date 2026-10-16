@@ -101,6 +101,11 @@ struct GpuPlan {
 // gpu.GPU_PASS), so that no video's GPU metrics run beside another's.
 std::timed_mutex& gpu_pass();
 
+// Takes the GPU's turn (gpu_pass), waiting while another pass has it:
+// `on_wait` is called first if it must wait, and a Cancel ends the wait
+// (Cancelled is thrown).
+std::unique_lock<std::timed_mutex> take_gpu_turn(const std::function<void()>& on_wait, const CancelToken& cancel);
+
 // FFmpeg's output options for VMAF on the GPU, the test video's FFmpeg's and
 // the source's: the video's frames ([vmaf_dist] or [vmaf_ref]) as they come,
 // cut at `duration_limit` seconds (0: none), as YUV4MPEG into the pipe at
