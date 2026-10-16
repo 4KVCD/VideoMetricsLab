@@ -187,11 +187,14 @@ foreach ($notice in @('ffnvcodec/LICENSE.nv-codec-headers.txt', 'onevpl/LICENSE.
     Copy-Item (Join-Path $projectDirectory "native/$notice") (Join-Path $native 'licenses')
 }
 
-# The project's terms, the notices of what it bundles, and the licence of
-# Qt's libraries (the LGPL 3, with the GPL 3 it adds to).
+# The project's terms, the notices of what it bundles, the licence of Qt's
+# libraries (the LGPL 3, with the GPL 3 it adds to), and the MIT notices of
+# nlohmann/json and miniz, which are compiled into both programs.
 Copy-Item (Join-Path $projectDirectory 'LICENSE') (Join-Path $output 'LICENSE.txt')
 Copy-Item (Join-Path $projectDirectory 'docs/THIRD_PARTY.md') (Join-Path $output 'THIRD_PARTY.md')
 Copy-Item (Join-Path $cppDirectory 'packaging/licenses') (Join-Path $output 'licenses') -Recurse
+Copy-Item (Join-Path $cppDirectory 'third_party/nlohmann/LICENSE.MIT') (Join-Path $output 'licenses/LICENSE.nlohmann-json.txt')
+Copy-Item (Join-Path $cppDirectory 'third_party/miniz/LICENSE') (Join-Path $output 'licenses/LICENSE.miniz.txt')
 
 # Microsoft's C++ runtime, beside the programs (Windows looks there first,
 # for the libraries in resources\ too): whichever of its DLLs anything in
