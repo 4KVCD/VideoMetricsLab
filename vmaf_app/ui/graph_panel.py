@@ -1613,7 +1613,8 @@ class GraphPanel(QWidget):
         path, _ = QFileDialog.getSaveFileName(self, tr("Export graph"), f"{self._current_metric().key}_comparison.png", tr("PNG image (*.png)"))
         if not path:
             return
-        self.render_export_image().save(path)
+        if not self.render_export_image().save(path):
+            QMessageBox.warning(self, tr("Export failed"), tr("Could not write {path}", path=path))
 
     def _on_export_csv(self) -> None:
         """Writes each line's scores as CSV, off the window's thread."""

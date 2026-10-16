@@ -1017,7 +1017,8 @@ class MainWindow(QMainWindow):
                 QDesktopServices.openUrl(QUrl(release.page_url))
             elif box.clickedButton() is skip:
                 self._settings.skipped_update_version = release.version
-                self._settings.save()
+                if error := self._settings.save():
+                    self.status_label.setText(tr_message(error))
 
         box.finished.connect(answered)
         self._update_box = box
@@ -3079,7 +3080,8 @@ class MainWindow(QMainWindow):
                 return
             self._hidden_metrics.add(key)
         self._settings.hidden_metrics = [item.key for item in _METRIC_COLUMNS if item.key in self._hidden_metrics]
-        self._settings.save()
+        if error := self._settings.save():
+            self.status_label.setText(tr_message(error))
         self._apply_metric_visibility()
         if menu is not None:
             visible = [a for a in menu.actions() if a.isChecked()]
