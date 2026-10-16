@@ -488,11 +488,12 @@ void MetricPage::fit_hover_label() {
 void MetricPage::fit_readout_margins() {
     // The room around the readout's text, as the style sheet's 6 px of
     // padding it once had laid it out: QLabel took that padding for a frame,
-    // so it indented the text by half an x at the left and top, and made
-    // room for a whole x. In the label's font, the window's or the readout's.
+    // so it indented the text by half an x where it starts and at the top,
+    // and made room for a whole x. In the label's font, the window's or the
+    // readout's.
     const int x = hover_label_->fontMetrics().horizontalAdvance(QLatin1Char('x'));
-    hover_label_->set_indent(x / 2);
-    hover_label_->setContentsMargins(6, 6, 6 + x - x / 2, 6);
+    hover_label_->set_indent(x / 2, x - x / 2);
+    hover_label_->setContentsMargins(6, 6, 6, 6);
 }
 
 std::vector<QString> MetricPage::visible_labels() const {

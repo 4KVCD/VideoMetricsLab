@@ -158,8 +158,10 @@ public:
 
     void set_text(const QString& text);
     const QString& text() const { return text_; }
-    // How far the text is set in from the left and top, inside the margins.
-    void set_indent(int indent);
+    // How far the text is set in, inside the margins, from the top and the
+    // side it starts on (the right for right-to-left text), and the room
+    // kept after it, on the side it ends on.
+    void set_indent(int indent, int trailing = 0);
     // Never less tall than `lines` lines of text, so that a text of fewer
     // lines (a hint, before the pointer comes) does not resize what is
     // around it.
@@ -185,6 +187,7 @@ private:
     mutable std::optional<QSize> text_size_;
     mutable std::pair<int, qsizetype> sized_for_{0, 0};
     int indent_ = 0;
+    int trailing_ = 0;
     int reserved_lines_ = 0;
 };
 

@@ -360,8 +360,9 @@ void ReadoutLabel::set_text(const QString& text) {
     update(contentsRect());  // the text's room; its indent moves to the right for right-to-left text
 }
 
-void ReadoutLabel::set_indent(int indent) {
+void ReadoutLabel::set_indent(int indent, int trailing) {
     indent_ = indent;
+    trailing_ = trailing;
     remeasure();
 }
 
@@ -374,8 +375,8 @@ void ReadoutLabel::reserve_lines(int lines) {
 
 QSize ReadoutLabel::sizeHint() const {
     // As QLabel sizes plain text that does not wrap (QLabelPrivate::
-    // sizeForWidth): the text, the indent at the left and top, the margins.
-    // Measured only here, when the layout asks.
+    // sizeForWidth): the text, the indent and the room after the text, the
+    // margins. Measured only here, when the layout asks.
     if (!text_size_) {
         text_size_ = measure(text_);
         sized_for_ = text_extent(text_);
@@ -389,7 +390,7 @@ QSize ReadoutLabel::sizeHint() const {
         height = std::max(height, measure(lines.join('\n')).height());
     }
     const QMargins margins = contentsMargins();
-    return QSize(text_size_->width() + indent_ + margins.left() + margins.right(),
+    return QSize(text_size_->width() + indent_ + trailing_ + margins.left() + margins.right(),
                  height + indent_ + margins.top() + margins.bottom())
         .expandedTo(minimumSize());
 }
@@ -413,10 +414,10 @@ void ReadoutLabel::changeEvent(QEvent* event) {
 }
 
 QSize ReadoutLabel::measure(const QString& text) const {
-    // As QLabel measures it: laid out within 2000 pixels, less the indent
-    // and margins.
+    // As QLabel measures it: laid out within 2000 pixels, less the indent,
+    // the room after the text and the margins.
     const QMargins margins = contentsMargins();
-    const int width = 2000 - (indent_ + margins.left() + margins.right());
+    const int width = 2000 - (indent_ + trailing_ + margins.left() + margins.right());
     return fontMetrics().boundingRect(0, 0, width, 2000, alignment(), text).size();
 }
 
@@ -428,12 +429,15 @@ int ReadoutLabel::alignment() const {
 
 QRect ReadoutLabel::text_rect() const {
     // The room for the text: the contents, less the indent on the side the
-    // text starts and at the top (QLabelPrivate::documentRect).
+    // text starts and at the top (QLabelPrivate::documentRect), and the room
+    // kept on the side it ends.
     QRect rect = contentsRect();
     if (right_to_left_) {
         rect.setRight(rect.right() - indent_);
+        rect.setLeft(rect.left() + trailing_);
     } else {
         rect.setLeft(rect.left() + indent_);
+        rect.setRight(rect.right() - trailing_);
     }
     rect.setTop(rect.top() + indent_);
     return rect;
