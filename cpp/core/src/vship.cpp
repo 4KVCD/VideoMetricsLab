@@ -167,14 +167,15 @@ struct VkInstanceCreateInfo {
 class VulkanLoader {
 public:
     VulkanLoader() {
-        try {
 #ifdef _WIN32
-            library_.emplace(platform::DynamicLibrary::system("vulkan-1.dll"));
+        const std::string loader = "vulkan-1.dll";
 #else
-            library_.emplace(platform::DynamicLibrary::system("libvulkan.so.1"));
+        const std::string loader = "libvulkan.so.1";
 #endif
+        try {
+            library_.emplace(platform::DynamicLibrary::system(loader));
         } catch (const platform::LibraryError&) {
-            problem_ = "no Vulkan driver is installed (vulkan-1.dll was not found)";
+            problem_ = "no Vulkan driver is installed (" + loader + " was not found)";
             return;
         }
         create_ = library_->function<int (*)(const VkInstanceCreateInfo*, const void*, void**)>("vkCreateInstance");

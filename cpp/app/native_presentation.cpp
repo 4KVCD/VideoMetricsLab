@@ -57,7 +57,7 @@ const PresenterApi& presenter_api() {
         if (!(bind(loaded.create, "vmaf_present_create") && bind(loaded.follow, "vmaf_present_follow") &&
               bind(loaded.wait, "vmaf_present_wait") && bind(loaded.texture, "vmaf_present_texture") &&
               bind(loaded.destroy, "vmaf_present_destroy"))) {
-            loaded.problem = QStringLiteral("the native video presenter is not built (d3d11_tonemap.dll)");
+            loaded.problem = QStringLiteral("the native video presenter is out of date (d3d11_tonemap.dll)");
         }
         bind(loaded.prepare, "vmaf_present_prepare");  // an older build compiles them for its first presenter
         return loaded;

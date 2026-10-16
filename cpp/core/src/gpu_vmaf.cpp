@@ -471,6 +471,8 @@ Rational StreamReader::wait_time_base() {
     State& s = *state_;
     std::unique_lock lock(s.listing_mutex);
     s.listing_signal.wait(lock, [&s] { return s.time_base.has_value() || s.listing_ended; });
+    // A listing that ended without its time base listed no frame either
+    // (FFmpeg's framecrc writes its header first): nothing is timed by it.
     return s.time_base.value_or(Rational{1, 1000});
 }
 
