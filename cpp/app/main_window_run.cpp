@@ -112,32 +112,10 @@ void MainWindow::on_run_clicked() {
     if (worker_ != nullptr && worker_->isRunning()) {
         return;
     }
-    if (source_probe_worker_ != nullptr && source_probe_worker_->isRunning()) {
-        dialogs_.inform(app::tr("Still reading reference"), app::tr("Wait for the reference video to finish loading."));
-        return;
-    }
-    if (!source_info_) {
-        QMessageBox::warning(this, app::tr("No reference"), app::tr("Please select a reference video."));
-        return;
-    }
     const std::vector<int> checked = checked_rows();
-    if (checked.empty()) {
-        QMessageBox::warning(this, app::tr("No test videos"),
-                             app::tr("Check at least one test video to calculate metrics."));
+    if (!ready_to_run(checked)) {
         return;
     }
-    if (std::any_of(checked.begin(), checked.end(), [this](int row) {
-            return requested_metrics(*rows_[static_cast<std::size_t>(row)]).empty();
-        })) {
-        QMessageBox::warning(this, app::tr("No metrics selected"),
-                             app::tr("Select at least one metric for every checked video, or uncheck videos you do "
-                                     "not want to calculate."));
-        return;
-    }
-    if (wait_for_gpu_checks(checked)) {
-        return;  // clicked again once they are done
-    }
-
     // A ticked row that already has a score (say it was ticked before more
     // files were added) is not calculated again: rows with every requested
     // metric are skipped.
@@ -151,73 +129,131 @@ void MainWindow::on_run_clicked() {
         }
     }
     if (to_run.empty()) {
-        show_status(ntr("The {count} checked video already has all requested metrics -- nothing to run.",
-                        "All {count} checked videos already have all requested metrics -- nothing to run.",
-                        already_scored));
-        // Their scores are what was asked for: on the graph.
-        std::vector<std::shared_ptr<CompletedRun>> done;
-        for (const int row : checked) {
-            if (const std::shared_ptr<CompletedRun>& run = rows_[static_cast<std::size_t>(row)]->completed_run) {
-                done.push_back(run);
-            }
-        }
-        if (!done.empty()) {
-            open_or_update_graph(done);
-        }
+        show_already_scored(checked, already_scored);
         return;
     }
-
-    std::vector<VmafJob> jobs;
     std::vector<std::shared_ptr<RowData>> job_rows;
+    std::optional<std::vector<VmafJob>> jobs = plan_jobs(to_run, job_rows);
+    if (!jobs || jobs->empty() || !confirm_long_cpu_perceptual(job_rows)) {
+        return;
+    }
+    begin_run(checked, std::move(job_rows), already_scored);
+    start_run_worker(std::move(*jobs));
+}
+
+// Whether a run of the `checked` rows can start: the reference read, a row
+// checked, a metric chosen for each, and the GPU checks the run needs done
+// (else they are waited for, and the run starts by itself once they are).
+// Says why not, where it cannot.
+bool MainWindow::ready_to_run(const std::vector<int>& checked) {
+    if (source_probe_worker_ != nullptr && source_probe_worker_->isRunning()) {
+        dialogs_.inform(app::tr("Still reading reference"), app::tr("Wait for the reference video to finish loading."));
+        return false;
+    }
+    if (!source_info_) {
+        QMessageBox::warning(this, app::tr("No reference"), app::tr("Please select a reference video."));
+        return false;
+    }
+    if (checked.empty()) {
+        QMessageBox::warning(this, app::tr("No test videos"),
+                             app::tr("Check at least one test video to calculate metrics."));
+        return false;
+    }
+    if (std::any_of(checked.begin(), checked.end(), [this](int row) {
+            return requested_metrics(*rows_[static_cast<std::size_t>(row)]).empty();
+        })) {
+        QMessageBox::warning(this, app::tr("No metrics selected"),
+                             app::tr("Select at least one metric for every checked video, or uncheck videos you do "
+                                     "not want to calculate."));
+        return false;
+    }
+    return !wait_for_gpu_checks(checked);
+}
+
+// Nothing to run: each of the `checked` rows (`count` of them) has every
+// metric asked for. Their scores are what was asked for: on the graph.
+void MainWindow::show_already_scored(const std::vector<int>& checked, long long count) {
+    show_status(ntr("The {count} checked video already has all requested metrics -- nothing to run.",
+                    "All {count} checked videos already have all requested metrics -- nothing to run.", count));
+    std::vector<std::shared_ptr<CompletedRun>> done;
+    for (const int row : checked) {
+        if (const std::shared_ptr<CompletedRun>& run = rows_[static_cast<std::size_t>(row)]->completed_run) {
+            done.push_back(run);
+        }
+    }
+    if (!done.empty()) {
+        open_or_update_graph(done);
+    }
+}
+
+// The jobs for `rows`, and each job's row in `job_rows`. Nothing when the
+// run is not to start: a video is still being read, or the user does not
+// want to go on without the rows that cannot be compared.
+std::optional<std::vector<VmafJob>> MainWindow::plan_jobs(const std::vector<int>& rows,
+                                                          std::vector<std::shared_ptr<RowData>>& job_rows) {
+    std::vector<VmafJob> jobs;
     std::vector<std::pair<std::shared_ptr<RowData>, QString>> skipped;  // cannot be compared, and why
-    for (const int row : to_run) {
+    for (const int row : rows) {
         const std::shared_ptr<RowData>& row_data = rows_[static_cast<std::size_t>(row)];
         if (!row_data->video_info) {
             if (std::any_of(probe_workers_.begin(), probe_workers_.end(),
                             [](ProbeWorker* worker) { return worker->isRunning(); })) {
                 dialogs_.inform(app::tr("Still reading videos"),
                                 app::tr("Wait for every checked test video to finish loading before running."));
-                return;
+                return std::nullopt;
             }
             skipped.emplace_back(row_data, N_("It could not be read. Remove it or add the file again to retry."));
             continue;
         }
-        const VideoInfo& info = *row_data->video_info;
-        const std::vector<std::string> metric_keys = requested_metrics(*row_data);
-        const PerceptualBackends backends(row_data->metric_backends.begin(), row_data->metric_backends.end());
-        VmafOptions options = row_data->options;
-        MetricResultSet kept = reusable_results(*row_data);
-        std::vector<MetricTask> tasks;
-        try {
-            if (!options.resample_test) {
-                validate_video_pair(*source_info_, info, options);
-            }
-            // Sized by what the run will compare, not by the test video's own
-            // resolution, because one side is scaled to the other before
-            // libvmaf sees it. The run works this out again after auto crop,
-            // which cannot be known here.
-            const auto [width, height] = options.resample_test
-                                             ? resample_analysis_dimensions(*source_info_, std::nullopt)
-                                             : analysis_dimensions(*source_info_, info, options);
-            options.model = options.compute_vmaf ? resolve_model(options, width, height) : "";
-            tasks = plan_tasks(*source_info_, info, options, metric_keys, backends, kept);
-        } catch (const std::exception& error) {
-            skipped.emplace_back(row_data, QString::fromStdString(error.what()));
+        std::variant<VmafJob, QString> job = job_for(*row_data);
+        if (const QString* why = std::get_if<QString>(&job)) {
+            skipped.emplace_back(row_data, *why);
             continue;
         }
-        jobs.push_back(VmafJob{*source_info_, info, std::move(options), row_data->path, metric_keys, std::move(tasks),
-                               backends, row_data->cvvdp,
-                               row_data->completed_run ? std::optional(row_data->completed_run->result) : std::nullopt,
-                               std::move(kept), platform::path_text(row_data->path.stem())});
+        jobs.push_back(std::move(std::get<VmafJob>(job)));
         job_rows.push_back(row_data);
     }
     if (!skipped.empty() && !confirm_skipping(skipped, !jobs.empty())) {
-        return;
+        return std::nullopt;
     }
-    if (jobs.empty() || !confirm_long_cpu_perceptual(job_rows)) {
-        return;
-    }
+    return jobs;
+}
 
+// The job that calculates what `row_data` asks for and has not got (its
+// video read); or why the two videos cannot be compared as asked.
+std::variant<VmafJob, QString> MainWindow::job_for(const RowData& row_data) const {
+    const VideoInfo& info = *row_data.video_info;
+    const std::vector<std::string> metric_keys = requested_metrics(row_data);
+    const PerceptualBackends backends(row_data.metric_backends.begin(), row_data.metric_backends.end());
+    VmafOptions options = row_data.options;
+    MetricResultSet kept = reusable_results(row_data);
+    std::vector<MetricTask> tasks;
+    try {
+        if (!options.resample_test) {
+            validate_video_pair(*source_info_, info, options);
+        }
+        // Sized by what the run will compare, not by the test video's own
+        // resolution, because one side is scaled to the other before
+        // libvmaf sees it. The run works this out again after auto crop,
+        // which cannot be known here.
+        const auto [width, height] = options.resample_test
+                                         ? resample_analysis_dimensions(*source_info_, std::nullopt)
+                                         : analysis_dimensions(*source_info_, info, options);
+        options.model = options.compute_vmaf ? resolve_model(options, width, height) : "";
+        tasks = plan_tasks(*source_info_, info, options, metric_keys, backends, kept);
+    } catch (const std::exception& error) {
+        return QString::fromStdString(error.what());
+    }
+    return VmafJob{*source_info_, info, std::move(options), row_data.path, metric_keys, std::move(tasks),
+                   backends, row_data.cvvdp,
+                   row_data.completed_run ? std::optional(row_data.completed_run->result) : std::nullopt,
+                   std::move(kept), platform::path_text(row_data.path.stem())};
+}
+
+// The run's state, made anew for the `checked` rows, of which `job_rows`
+// are run and `already_scored` are skipped; the window set for a run.
+void MainWindow::begin_run(const std::vector<int>& checked, std::vector<std::shared_ptr<RowData>> job_rows,
+                           long long already_scored) {
     job_rows_ = std::move(job_rows);
     checked_rows_for_run_.clear();
     for (const int row : checked) {
@@ -255,7 +291,10 @@ void MainWindow::on_run_clicked() {
     update_run_status();  // the counts, the skipped included, before any video starts
     pause_button_->setChecked(false);
     pause_button_->setText(app::tr("Pause"));
+}
 
+// Runs `jobs` on a RunWorker of their own, its signals wired to the window.
+void MainWindow::start_run_worker(std::vector<VmafJob> jobs) {
     use_crop_store();  // black bars found are kept for the next run, beside the saved scores
     auto* worker = new RunWorker(std::move(jobs), parallel_jobs(), settings_.gpu_metrics_together, settings_, this);
     worker_ = worker;
@@ -828,19 +867,8 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
     if (!row) {
         return std::nullopt;  // the row was removed during the run: nothing to show the result in
     }
-    // Saved under the videos and settings the video started with, never the
-    // reference chosen by the time it ends; and under the row's real file,
-    // whose size and time notice a file replaced. Off the window's thread: a
-    // long video's scores take seconds to write.
     const QString label = text_of(row_data.path.stem());
-    const AnalysisRequest request =
-        analysis_request(job_options_[job], requested_metrics(row_data), row_data.metric_backends, job_cvvdp_[job]);
-    file_writes_->submit(QStringLiteral("cache %1").arg(label),
-                         [base = cache_folder(), identity = row_data.identity_path(), result,
-                          label = label.toStdString(), request] {
-                             store_result(base, result.source, identity, request.recipe, result, label,
-                                          request.metrics);
-                         });
+    save_job_result(job, row_data, result, label);
     // The packets' bitrate goes well with the scores, and costs much less
     // than they did: both files go to the Bitrate tab, which reads a file
     // once however many runs finish with it. A resolution test has no
@@ -870,6 +898,51 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
     const std::shared_ptr<CompletedRun> previous = row_data.completed_run;
     // The video's own result so far, before this piece: its line is updated.
     const bool continuing = previous && previous->partial;
+    const std::shared_ptr<CompletedRun> run = make_completed_run(row_data, result, label, final);
+    row_data.completed_run = run;
+    if (final) {
+        row_data.analysis_status.reset();  // a result so far leaves the video in progress
+    }
+    if (!row_data.options.resample_test) {
+        set_row_info(*row, result.distorted_info);  // its Scaling cell, with the crops the run used
+    }
+    if (final) {
+        row_data.status_detail = scores_detail(run->result);
+    }
+    set_row_metrics(*row);
+    // Straight onto the graph: a finished video is a line, and waiting for a
+    // button to see it serves nobody.
+    graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label,
+                           run->graph_identity, !continuing});
+    sync_frame_compare();
+    return row;
+}
+
+// Saves `result`, job `job`'s on `row_data`, in the saved scores.
+// Saved under the videos and settings the video started with, never the
+// reference chosen by the time it ends; and under the row's real file,
+// whose size and time notice a file replaced. Off the window's thread: a
+// long video's scores take seconds to write.
+void MainWindow::save_job_result(std::size_t job, const RowData& row_data, const ComparisonResult& result,
+                                 const QString& label) {
+    const AnalysisRequest request =
+        analysis_request(job_options_[job], requested_metrics(row_data), row_data.metric_backends, job_cvvdp_[job]);
+    file_writes_->submit(QStringLiteral("cache %1").arg(label),
+                         [base = cache_folder(), identity = row_data.identity_path(), result,
+                          label = label.toStdString(), request] {
+                             store_result(base, result.source, identity, request.recipe, result, label,
+                                          request.metrics);
+                         });
+}
+
+// The row's new run: `result` (`final`, or so far), labelled `label`, in
+// place of the row's run before, whose line leaves the graph unless this
+// continues it.
+std::shared_ptr<CompletedRun> MainWindow::make_completed_run(const RowData& row_data, const ComparisonResult& result,
+                                                             const QString& label, bool final) {
+    const std::shared_ptr<CompletedRun> previous = row_data.completed_run;
+    // The video's own result so far, before this piece: its line is updated.
+    const bool continuing = previous && previous->partial;
     if (previous && !continuing && !graph_panel_->remove_by_identity(previous->graph_identity)) {
         graph_panel_->remove_by_path(row_data.path);
     }
@@ -895,23 +968,7 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
             run->result.metric_results.copy_from(before, key);
         }
     }
-    row_data.completed_run = run;
-    if (final) {
-        row_data.analysis_status.reset();  // a result so far leaves the video in progress
-    }
-    if (!row_data.options.resample_test) {
-        set_row_info(*row, result.distorted_info);  // its Scaling cell, with the crops the run used
-    }
-    if (final) {
-        row_data.status_detail = scores_detail(run->result);
-    }
-    set_row_metrics(*row);
-    // Straight onto the graph: a finished video is a line, and waiting for a
-    // button to see it serves nobody.
-    graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label,
-                           run->graph_identity, !continuing});
-    sync_frame_compare();
-    return row;
+    return run;
 }
 
 QString MainWindow::scores_detail(const ComparisonResult& result) const {

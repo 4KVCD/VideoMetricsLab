@@ -33,6 +33,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "dialogs.h"
@@ -50,6 +51,7 @@
 
 class QCheckBox;
 class QGroupBox;
+class QHBoxLayout;
 class QLabel;
 class QLineEdit;
 class QMenu;
@@ -57,6 +59,7 @@ class QMessageBox;
 class QPushButton;
 class QTableWidgetItem;
 class QTimer;
+class QVBoxLayout;
 
 namespace vml::app {
 
@@ -208,6 +211,11 @@ private:
     // ------------------------------------------------------------ the window
     void build_ui();
     QWidget* build_files_panel();
+    // build_files_panel's parts.
+    void add_reference_row(QVBoxLayout* layout);
+    QHBoxLayout* build_table_heading();
+    void build_test_table();
+    std::vector<QWidget*> add_file_buttons(QVBoxLayout* layout);
     QWidget* build_run_panel();
     void theme_changed();
     void apply_theme_colours();
@@ -387,6 +395,15 @@ private:
 
     std::vector<int> checked_rows() const;
     void on_run_clicked();
+    // on_run_clicked's parts.
+    bool ready_to_run(const std::vector<int>& checked);
+    void show_already_scored(const std::vector<int>& checked, long long count);
+    std::optional<std::vector<VmafJob>> plan_jobs(const std::vector<int>& rows,
+                                                  std::vector<std::shared_ptr<RowData>>& job_rows);
+    std::variant<VmafJob, QString> job_for(const RowData& row_data) const;
+    void begin_run(const std::vector<int>& checked, std::vector<std::shared_ptr<RowData>> job_rows,
+                   long long already_scored);
+    void start_run_worker(std::vector<VmafJob> jobs);
     bool confirm_skipping(const std::vector<std::pair<std::shared_ptr<RowData>, QString>>& skipped, bool others);
     bool confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<RowData>>& job_rows);
     // Starts waiting for the GPU checks the run needs, unless they are done:
@@ -416,6 +433,11 @@ private:
     std::optional<int> row_index_of(const RowData* row_data) const;
     void on_result_updated(int index, const ComparisonResult& result);
     std::optional<int> on_job_finished(int index, const ComparisonResult& result, bool final = true);
+    // on_job_finished's parts.
+    void save_job_result(std::size_t job, const RowData& row_data, const ComparisonResult& result,
+                         const QString& label);
+    std::shared_ptr<CompletedRun> make_completed_run(const RowData& row_data, const ComparisonResult& result,
+                                                     const QString& label, bool final);
     void on_job_partially_failed(int index, const ComparisonResult& result, const QString& message,
                                  const QString& stderr_tail, const MetricFailures& failures);
     void on_job_failed(int index, const QString& message, const QString& stderr_tail);

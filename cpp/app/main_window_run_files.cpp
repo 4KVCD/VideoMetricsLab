@@ -50,6 +50,53 @@ std::optional<CvvdpSettings> cvvdp_display_of(const SequenceMetricResult& cvvdp)
     }
 }
 
+// A saved run's options, taken by its row (`options`) from its `result`.
+// The metric columns follow the row's options: they are set from the
+// scores the run holds, or its PSNR, SSIM and XPSNR would show N/A.
+void take_run_options(VmafOptions& options, const ComparisonResult& result) {
+    const FrameScores frames = frame_scores_from_results(result.metric_results);
+    const auto has = [&frames](const char* key) { return frames.metrics.contains(key); };
+    options.extra_features.clear();
+    if (has("psnr")) {
+        options.extra_features.emplace_back("name=psnr");
+    }
+    if (has("ssim")) {
+        options.extra_features.emplace_back("name=float_ssim");
+    }
+    options.compute_xpsnr = has("xpsnr");
+    options.compute_vmaf = has("vmaf");
+    options.compute_vmaf_neg = has("vmaf_neg");
+    options.compute_vmaf_v1 = has("vmaf_v1");
+    if (result.model_choice_v1 && !result.model_choice_v1->empty()) {
+        options.model_choice_v1 = *result.model_choice_v1;
+    }
+    options.model = result.model;
+    // The model chosen too: without it, a later lookup or calculation would
+    // put the row back to Auto. An older file has none, and its two forms
+    // are told apart by the model.
+    if (result.model_choice && !result.model_choice->empty()) {
+        options.model_choice = *result.model_choice;
+        if (const std::optional<std::string_view> file = model_file_of(result.model);
+            options.model_choice == custom_model_choice && file) {
+            options.custom_model_path = *file;
+        }
+    } else if (result.model.starts_with("version=")) {
+        options.model_choice = result.model;
+    } else if (const std::optional<std::string_view> file = model_file_of(result.model)) {
+        options.model_choice = std::string(custom_model_choice);
+        options.custom_model_path = *file;
+    }
+    if (!options.model_choice.empty() && is_builtin_model_choice(options.model_choice)) {
+        // A VMAF v1 model as the VMAF model, from before VMAF v1 had its own
+        // column: it is VMAF v1's choice now, and VMAF v0.6.1 is on Auto.
+        options.model_choice_v1 = options.model_choice;
+        options.model_choice = std::string(auto_model_choice);
+    }
+    options.scale_direction = result.scale_direction;
+    options.scale_algorithm = result.scale_algorithm;
+    options.resample_test = result.resample_target;
+}
+
 }  // namespace
 
 void MainWindow::on_load_saved_run() {
@@ -105,50 +152,7 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
     row_data.video_info = result.distorted_info;
     row_data.completed_run = run;
     row_data.analysis_status.reset();
-    // The metric columns follow the row's options: they are set from the
-    // scores the run holds, or its PSNR, SSIM and XPSNR would show N/A.
-    VmafOptions& options = row_data.options;
-    const FrameScores frames = frame_scores_from_results(result.metric_results);
-    const auto has = [&frames](const char* key) { return frames.metrics.contains(key); };
-    options.extra_features.clear();
-    if (has("psnr")) {
-        options.extra_features.emplace_back("name=psnr");
-    }
-    if (has("ssim")) {
-        options.extra_features.emplace_back("name=float_ssim");
-    }
-    options.compute_xpsnr = has("xpsnr");
-    options.compute_vmaf = has("vmaf");
-    options.compute_vmaf_neg = has("vmaf_neg");
-    options.compute_vmaf_v1 = has("vmaf_v1");
-    if (result.model_choice_v1 && !result.model_choice_v1->empty()) {
-        options.model_choice_v1 = *result.model_choice_v1;
-    }
-    options.model = result.model;
-    // The model chosen too: without it, a later lookup or calculation would
-    // put the row back to Auto. An older file has none, and its two forms
-    // are told apart by the model.
-    if (result.model_choice && !result.model_choice->empty()) {
-        options.model_choice = *result.model_choice;
-        if (const std::optional<std::string_view> file = model_file_of(result.model);
-            options.model_choice == custom_model_choice && file) {
-            options.custom_model_path = *file;
-        }
-    } else if (result.model.starts_with("version=")) {
-        options.model_choice = result.model;
-    } else if (const std::optional<std::string_view> file = model_file_of(result.model)) {
-        options.model_choice = std::string(custom_model_choice);
-        options.custom_model_path = *file;
-    }
-    if (!options.model_choice.empty() && is_builtin_model_choice(options.model_choice)) {
-        // A VMAF v1 model as the VMAF model, from before VMAF v1 had its own
-        // column: it is VMAF v1's choice now, and VMAF v0.6.1 is on Auto.
-        options.model_choice_v1 = options.model_choice;
-        options.model_choice = std::string(auto_model_choice);
-    }
-    options.scale_direction = result.scale_direction;
-    options.scale_algorithm = result.scale_algorithm;
-    options.resample_test = result.resample_target;
+    take_run_options(row_data.options, result);
     // A CVVDP score means something only with the display it was made for:
     // the row takes that display, so that the score and the row agree.
     if (const SequenceMetricResult* cvvdp = result.metric_results.sequence("cvvdp")) {

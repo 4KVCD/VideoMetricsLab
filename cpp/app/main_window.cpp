@@ -629,7 +629,28 @@ QWidget* MainWindow::build_files_panel() {
     files_box_ = new QGroupBox(app::tr("Videos"));
     auto* files_layout = new QVBoxLayout(files_box_);
 
-    files_layout->addWidget(new QLabel(app::tr("Reference video:")));
+    add_reference_row(files_layout);
+    // One block, heading row and table, with no spacing between them.
+    auto* table_block = new QVBoxLayout;
+    table_block->setSpacing(0);
+    table_block->addLayout(build_table_heading());
+    build_test_table();
+    table_block->addWidget(distorted_table_, 1);
+    files_layout->addLayout(table_block, 1);
+    const std::vector<QWidget*> file_buttons = add_file_buttons(files_layout);
+
+    // Frozen during a run one control at a time. Don't disable the whole box:
+    // a disabled QGroupBox disables its children, the table's scroll bar
+    // among them, so a long queue could not be scrolled while it runs.
+    file_action_widgets_ = {source_browse_button_};
+    file_action_widgets_.insert(file_action_widgets_.end(), file_buttons.begin(), file_buttons.end());
+    file_action_widgets_.push_back(metrics_button_);
+    return files_box_;
+}
+
+// The reference's row: its path, Browse..., and what it is.
+void MainWindow::add_reference_row(QVBoxLayout* layout) {
+    layout->addWidget(new QLabel(app::tr("Reference video:")));
     auto* source_row = new QHBoxLayout;
     // A path can be pasted or typed in (Enter, or leaving the box, reads it),
     // and a file dropped on it from a file manager.
@@ -641,11 +662,15 @@ QWidget* MainWindow::build_files_panel() {
     connect(source_browse_button_, &QPushButton::clicked, this, [this] { on_browse_source(); });
     source_row->addWidget(source_edit_, 1);
     source_row->addWidget(source_browse_button_);
-    files_layout->addLayout(source_row);
+    layout->addLayout(source_row);
     source_info_label_ = new QLabel(app::tr("No reference selected."));
     theme::style(source_info_label_, "color: {muted};");
-    files_layout->addWidget(source_info_label_);
+    layout->addWidget(source_info_label_);
+}
 
+// The row above the test videos' table: what to do with it, and the
+// metric picker.
+QHBoxLayout* MainWindow::build_table_heading() {
     // The metric picker belongs to the table: it sits on the table's
     // top-right corner, in the row that introduces the table.
     metrics_button_ = new QPushButton(app::tr("Add/remove metrics"));
@@ -666,10 +691,12 @@ QWidget* MainWindow::build_files_panel() {
     table_hint->setWordWrap(true);
     table_heading->addWidget(table_hint, 1, Qt::AlignBottom);
     table_heading->addWidget(metrics_button_, 0, Qt::AlignBottom);
-    // One block, heading row and table, with no spacing between them.
-    auto* table_block = new QVBoxLayout;
-    table_block->setSpacing(0);
-    table_block->addLayout(table_heading);
+    return table_heading;
+}
+
+// The test videos' table (distorted_table_), its metric columns' header
+// with their tick boxes, and how it behaves.
+void MainWindow::build_test_table() {
     std::vector<int> other_columns{col_check, col_info, col_black_bars, col_scaling, col_bitrate};
     for (const MetricColumn& item : metric_columns()) {
         other_columns.push_back(item.column);
@@ -705,6 +732,7 @@ QWidget* MainWindow::build_files_panel() {
     connect(metric_header_, &QWidget::customContextMenuRequested, this,
             [this](const QPoint& position) { show_metrics_menu(metric_header_->mapToGlobal(position)); });
     apply_metric_visibility();
+
     distorted_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     distorted_table_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     distorted_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -725,6 +753,7 @@ QWidget* MainWindow::build_files_panel() {
     connect(distorted_table_, &FillColumnTable::rowsMoved, this,
             [this](const QList<int>& rows, int target) { on_rows_dragged(rows, target); });
     connect(metric_header_, &QHeaderView::sectionClicked, this, [this](int column) { on_header_clicked(column); });
+
     // Every column can be resized by dragging, File name included, which
     // also fills whatever space is left over (FillColumnTable).
     QHeaderView* header = distorted_table_->horizontalHeader();
@@ -751,9 +780,11 @@ QWidget* MainWindow::build_files_panel() {
     for (const auto& [column, width] : starting_widths) {
         distorted_table_->setColumnWidth(column, std::max(width, header->sectionSizeHint(column)));
     }
-    table_block->addWidget(distorted_table_, 1);
-    files_layout->addLayout(table_block, 1);
+}
 
+// The buttons under the table, and Highlight best/worst. Returns the
+// buttons a run freezes.
+std::vector<QWidget*> MainWindow::add_file_buttons(QVBoxLayout* layout) {
     auto* buttons = new QHBoxLayout;
     auto* add_button = new QPushButton(app::tr("Add files..."));
     connect(add_button, &QPushButton::clicked, this, [this] { on_add_distorted(); });
@@ -775,19 +806,13 @@ QWidget* MainWindow::build_files_panel() {
     highlight_check_->setChecked(settings_.highlight_best_worst);
     connect(highlight_check_, &QCheckBox::toggled, this, [this](bool on) { on_highlight_toggled(on); });
     buttons->addWidget(highlight_check_);
-    files_layout->addLayout(buttons);
+    layout->addLayout(buttons);
     best_worst_timer_ = new QTimer(this);
     best_worst_timer_->setSingleShot(true);
     best_worst_timer_->setInterval(0);
     connect(best_worst_timer_, &QTimer::timeout, this, [this] { apply_best_worst(); });
     connect(distorted_table_->model(), &QAbstractItemModel::rowsRemoved, this, [this] { schedule_best_worst(); });
-
-    // Frozen during a run one control at a time. Don't disable the whole box:
-    // a disabled QGroupBox disables its children, the table's scroll bar
-    // among them, so a long queue could not be scrolled while it runs.
-    file_action_widgets_ = {source_browse_button_, add_button, add_resample_button, remove_button,
-                            remove_all_button_, metrics_button_};
-    return files_box_;
+    return {add_button, add_resample_button, remove_button, remove_all_button_};
 }
 
 QWidget* MainWindow::build_run_panel() {
