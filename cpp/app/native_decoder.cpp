@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <utility>
 #include <vector>
 
@@ -41,11 +42,62 @@ QString error_text(int code) {
     return QString::fromUtf8(text.data());
 }
 
+// The most pictures an HEVC stream's decoder keeps at once (its decoded
+// picture buffer, MaxDpbSize), from its level and picture size as H.265's
+// Annex A.4.2 limits them; 16, the most the standard allows, where the
+// level is not one it lists.
+int hevc_buffered_pictures(const AVCodecContext& context) {
+    // The level's largest picture in luma samples (Table A.8), by
+    // general_level_idc (30 times the level).
+    static const std::map<int, long long> max_luma_samples{
+        {30, 36864},     {60, 122880},    {63, 245760},    {90, 552960},    {93, 983040},
+        {120, 2228224},  {123, 2228224},  {150, 8912896},  {153, 8912896},  {156, 8912896},
+        {180, 35651584}, {183, 35651584}, {186, 35651584},
+    };
+    const auto level = max_luma_samples.find(context.level);
+    if (level == max_luma_samples.end()) {
+        return 16;
+    }
+    const long long most = level->second;
+    const long long picture = static_cast<long long>(context.coded_width) * context.coded_height;
+    const int buffers = context.profile == AV_PROFILE_HEVC_SCC ? 7 : 6;  // maxDpbPicBuf
+    if (picture <= most / 4) {
+        return std::min(4 * buffers, 16);
+    }
+    if (picture <= most / 2) {
+        return std::min(2 * buffers, 16);
+    }
+    if (picture <= 3 * most / 4) {
+        return std::min(4 * buffers / 3, 16);
+    }
+    return buffers;
+}
+
+// The surfaces FFmpeg's Direct3D 11 decoding is asked for beyond its own.
+// FFmpeg makes one to decode into and, for references, 16 for H.264 and
+// HEVC and 8 for AV1 and VP9, the most each standard allows (dxva2.c,
+// ff_dxva2_common_frame_params). The frames held outside the decoder need
+// held_surfaces more. An HEVC stream's level limits how many pictures it
+// keeps (a 4K one at level 5.1, 6), so the references it cannot use serve
+// those frames, and fewer are asked for: 2, not 12, for that 4K stream,
+// 190 MB less of the GPU's memory. H.264 keeps its 12: FFmpeg's decoder can
+// hold back more frames than the level allows when a stream does not say
+// how far its frames are reordered.
+int extra_surfaces(const AVCodecContext& context) {
+    if (context.codec_id == AV_CODEC_ID_HEVC) {
+        const int unused_references = 16 - hevc_buffered_pictures(context);
+        return std::max(0, held_surfaces - unused_references);
+    }
+    return held_surfaces;
+}
+
 // FFmpeg's choice of pictures: Direct3D 11's, or none (the decoder then
-// fails, and the video is decoded in software).
-AVPixelFormat direct3d_format(AVCodecContext* /*context*/, const AVPixelFormat* formats) {
+// fails, and the video is decoded in software). The stream is known by now
+// (its level and size), and FFmpeg makes its surfaces after this returns.
+AVPixelFormat direct3d_format(AVCodecContext* context, const AVPixelFormat* formats) {
     for (const AVPixelFormat* format = formats; *format != AV_PIX_FMT_NONE; ++format) {
         if (*format == AV_PIX_FMT_D3D11) {
+            context->extra_hw_frames = extra_surfaces(*context);
             return *format;
         }
     }
