@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "vml/number_format.h"
+#include "vml/python_text.h"
 
 namespace vml {
 
@@ -123,6 +124,15 @@ const MetricDefinition& metric_definition(std::string_view key) {
         return *metric;
     }
     throw std::out_of_range("unknown metric: " + std::string(key));
+}
+
+std::string metric_labels(const std::vector<std::string>& keys, std::string_view separator) {
+    std::vector<std::string_view> labels;
+    labels.reserve(keys.size());
+    for (const std::string& key : keys) {
+        labels.push_back(metric_definition(key).label);
+    }
+    return join(labels, separator);
 }
 
 }  // namespace vml

@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <chrono>
 #include <map>
 #include <mutex>
@@ -11,16 +10,11 @@
 
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
+#include "vml/python_text.h"
 
 namespace vml {
 
 namespace {
-
-std::string lowered(std::string text) {
-    std::transform(text.begin(), text.end(), text.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return text;
-}
 
 // For each -hwaccel, the codecs it reliably decodes through FFmpeg's
 // generic hardware decoding.
@@ -60,7 +54,7 @@ bool decodes(const DecodingCapabilities& capabilities, const std::optional<std::
 // found, for "auto"), or nothing for software decoding.
 std::optional<std::string> pick_hwaccel(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                         const std::string& codec_name) {
-    const std::string codec = lowered(codec_name);
+    const std::string codec = ascii_lower(codec_name);
     if (vendor == GpuVendor::none) {
         return std::nullopt;
     }
@@ -80,7 +74,7 @@ std::optional<std::string> pick_hwaccel(const DecodingCapabilities& capabilities
 }  // namespace
 
 int bit_depth(const std::string& pix_fmt) {
-    const std::string name = lowered(pix_fmt);
+    const std::string name = ascii_lower(pix_fmt);
     if (name.empty()) {
         return 8;
     }
@@ -142,7 +136,7 @@ DecodingCapabilities DecodingCapabilities::detect(const std::string& ffmpeg) {
             std::string line = output.standard_output.substr(start, end - start);
             line.erase(0, line.find_first_not_of(" \t\r"));
             line.erase(line.find_last_not_of(" \t\r") + 1);
-            if (lowered(line).starts_with("hardware acceleration methods")) {
+            if (ascii_lower(line).starts_with("hardware acceleration methods")) {
                 listing = true;
             } else if (listing && !line.empty()) {
                 capabilities.hwaccels.insert(line);
@@ -199,7 +193,7 @@ bool downloads_from_gpu(const std::string& pix_fmt, int width, int height) {
     if ((width & 1) != 0 || (height & 1) != 0) {
         return false;
     }
-    const std::string name = lowered(pix_fmt);
+    const std::string name = ascii_lower(pix_fmt);
     if (name.empty()) {
         return true;  // unknown: left to try
     }
@@ -218,7 +212,7 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
     // Intel's and AMD's GPUs do not decode H.264 deeper than 8 bits (FFmpeg
     // then decodes it in software and the download fails); NVIDIA's RTX 50
     // series does.
-    if (hwaccel != "cuda" && lowered(codec) == "h264" && !pix_fmt.empty() && bit_depth(pix_fmt) > 8) {
+    if (hwaccel != "cuda" && ascii_lower(codec) == "h264" && !pix_fmt.empty() && bit_depth(pix_fmt) > 8) {
         return std::nullopt;
     }
     return hwaccel;

@@ -246,16 +246,11 @@ MainWindow::MainWindow() {
     // come from them, so they must be applied before the tool check or any
     // row is added.
     settings_ = Settings::load();
-    const auto upper = [](std::string text) {
-        std::transform(text.begin(), text.end(), text.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-        return text;
-    };
     logger.info(std::string("Settings: parallel CPU metrics ") + (settings_.parallel_jobs > 1 ? "on" : "off") +
                 ", GPU decode " + (settings_.default_gpu_decode ? "on" : "off") + ", VMAF v0.6.1 and NEG on " +
                 (settings_.default_vmaf_on_gpu ? "GPU" : "CPU") + ", SSIMULACRA2 on " +
-                upper(settings_.default_ssimulacra2_backend) + ", Butteraugli on " +
-                upper(settings_.default_butteraugli_backend) + ", GPU metrics " +
+                ascii_upper(settings_.default_ssimulacra2_backend) + ", Butteraugli on " +
+                ascii_upper(settings_.default_butteraugli_backend) + ", GPU metrics " +
                 (settings_.gpu_metrics_together ? "always in one pass" : "in one pass when the GPU has the memory") + " on the " +
                 settings_.gpu_backend + " backend, saved results " + (settings_.use_cache ? "reused" : "not reused") +
                 " (" + (settings_.cache_dir.empty() ? std::string("default folder") : settings_.cache_dir) + ")");

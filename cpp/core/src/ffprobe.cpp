@@ -133,9 +133,7 @@ const Json* tag(const Json& stream, std::string_view name) {
         return nullptr;
     }
     for (auto item = tags->begin(); item != tags->end(); ++item) {
-        std::string key = item.key();
-        std::transform(key.begin(), key.end(), key.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+        const std::string key = ascii_upper(item.key());
         if (key == name) {
             return &item.value();
         }

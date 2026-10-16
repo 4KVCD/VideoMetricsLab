@@ -21,7 +21,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstdio>
 #include <limits>
 #include <set>
 #include <tuple>
@@ -79,15 +78,6 @@ int mean_column_end() { return 1 + static_cast<int>(metrics().size()); }
 bool is_mean_column(int column) { return column >= first_mean_column() && column < mean_column_end(); }
 
 bool worst_is_high(const MetricDefinition& metric) { return metric.direction == MetricDirection::lower_is_better; }
-
-QString text_of_std(const std::string& text) { return QString::fromStdString(text); }
-
-// A value as Python's format(value, "g") writes it.
-QString g_text(double value) {
-    std::array<char, 32> text{};
-    std::snprintf(text.data(), text.size(), "%g", value);
-    return QString::fromLatin1(text.data());
-}
 
 // How long a text is as Python counts it: in characters, not UTF-16 units.
 int length_of(const QString& text) { return static_cast<int>(text.toUcs4().size()); }
@@ -225,16 +215,16 @@ std::vector<QString> summary(const ScoreStats& stats, const MetricDefinition& me
     for (const double value : {stats.mean, stats.median, stats.stdev, stats.minimum, stats.maximum,
                                stats.worst_10_percent, stats.worst_5_percent, stats.worst_1_percent,
                                stats.worst_0_1_percent}) {
-        cells.push_back(text_of_std(metric.format_value(value)));
+        cells.push_back(qt_text(metric.format_value(value)));
     }
     return cells;
 }
 
 QString threshold_label(const Threshold& threshold) {
-    return QString(QChar::fromLatin1(threshold.comparison)) + " " + g_text(threshold.value);
+    return QString(QChar::fromLatin1(threshold.comparison)) + " " + qt_text(format_general(threshold.value));
 }
 
-QString percentage_text(double percentage) { return text_of_std(format_fixed(percentage, 1)) + "%"; }
+QString percentage_text(double percentage) { return qt_text(format_fixed(percentage, 1)) + "%"; }
 
 // A line's statistics as the table and the exported image show them: the
 // summary, then the share of its frames in each of the metric's score
@@ -245,7 +235,7 @@ std::vector<QString> statistics_cells(const ScoreStats& stats, const MetricDefin
     std::vector<QString> cells = summary(stats, metric);
     if (stats.count == 0) {
         return std::vector<QString>(cells.size() + metric.thresholds.size(),
-                                    text_of_std(metric.format_value(std::nullopt)));
+                                    qt_text(metric.format_value(std::nullopt)));
     }
     for (const ThresholdCount& count : stats.thresholds) {
         cells.push_back(percentage_text(count.percentage));
@@ -510,7 +500,7 @@ QString MetricPage::readout_prefix(const QString& label, int frame, double time)
     // The fields before a value, aligned across the lines: the series' name
     // padded to the longest, so that the columns after it do not zig-zag.
     const QString series = pad_right("[" + label + "]", series_width_);
-    const QString time_text = text_of_std(format_hms(time, 2));
+    const QString time_text = qt_text(format_hms(time, 2));
     if (metric_->kind == MetricKind::sequence) {
         return app::tr("{series}  second from frame {frame:>6}   t={time}   ",
                        {{"series", series}, {"frame", frame}, {"time", time_text}});
@@ -541,7 +531,7 @@ std::vector<const MetricDefinition*> MetricPage::extra_columns() const {
 
 void MetricPage::refresh_readout_layout() {
     const auto field_width = [](const MetricDefinition& metric) {
-        return length_of(qt_text(metric.label) + "=" + text_of_std(metric.format_value(widest_sample)));
+        return length_of(qt_text(metric.label) + "=" + qt_text(metric.format_value(widest_sample)));
     };
     series_width_ = 0;
     for (const QString& label : visible_labels()) {
@@ -561,7 +551,7 @@ QString MetricPage::readout_row(const QString& prefix, std::optional<double> val
     // by the value, so that the columns line up. A line without a column's
     // value leaves it blank rather than shifting the rest along.
     const QString label = qt_text(metric_->label);
-    const QString main = value ? label + "=" + text_of_std(metric_->format_value(*value)) : "no " + label;
+    const QString main = value ? label + "=" + qt_text(metric_->format_value(*value)) : "no " + label;
     if (columns_.empty()) {
         return prefix + main;
     }
@@ -570,7 +560,7 @@ QString MetricPage::readout_row(const QString& prefix, std::optional<double> val
         const auto found = others.find(std::string(metric->key));
         const QString text = found == others.end() || !found->second
                                  ? QString()
-                                 : qt_text(metric->label) + "=" + text_of_std(metric->format_value(*found->second));
+                                 : qt_text(metric->label) + "=" + qt_text(metric->format_value(*found->second));
         fields.append(pad_right(text, width));
     }
     return trimmed_right(prefix + pad_right(main, main_width_) + "  |  " + fields.join(QStringLiteral("  ")));
@@ -715,7 +705,7 @@ void MetricPage::on_hover(double x, double y, const std::map<int, SeriesEntry>& 
             shown.emplace_back(&entry->second, &curve);
         }
     }
-    const QString time_line = app::tr("Time: {time}", {{"time", text_of_std(format_hms(x, 2))}});
+    const QString time_line = app::tr("Time: {time}", {{"time", qt_text(format_hms(x, 2))}});
     if (shown.empty()) {
         chart_->set_cursor_time(x);
         set_hover_text(time_line);
@@ -765,7 +755,7 @@ void MetricPage::on_hover(double x, double y, const std::map<int, SeriesEntry>& 
         const double delta = found[0].second - found[1].second;
         if (!std::isnan(delta)) {
             lines.append(QStringLiteral("Δ (%1 − %2) = %3")
-                             .arg(found[0].first, found[1].first, text_of_std(metric_->format_delta(delta))));
+                             .arg(found[0].first, found[1].first, qt_text(metric_->format_delta(delta))));
         }
     }
     const auto& [entry, curve, index] = picks.front();
@@ -828,7 +818,7 @@ bool MetricPage::show_frame(int frame, const std::map<int, SeriesEntry>& entries
         const double delta = found[0].second - found[1].second;
         if (!std::isnan(delta)) {
             lines.append(QStringLiteral("Δ (%1 − %2) = %3")
-                             .arg(found[0].first, found[1].first, text_of_std(metric_->format_delta(delta))));
+                             .arg(found[0].first, found[1].first, qt_text(metric_->format_delta(delta))));
         }
     }
     if (cursor_time) {
@@ -1467,7 +1457,7 @@ void GraphPanel::refresh_stats_table() {
             const std::string key(spec.key);
             const auto mean = entry.means.find(key);
             QTableWidgetItem* item = number_item(
-                text_of_std(spec.format_value(mean == entry.means.end() ? std::nullopt : mean->second)));
+                qt_text(spec.format_value(mean == entry.means.end() ? std::nullopt : mean->second)));
             if (const auto identical = entry.identical.find(key); identical != entry.identical.end()) {
                 item->setToolTip(app::tr("{identical} frames identical to the reference are included in the XPSNR "
                                          "sequence average: zero distortion, with their frames included in the count.",
@@ -1550,7 +1540,7 @@ GraphPanel::export_table() {
         std::vector<QString> cells = statistics_cells(curve->stats, metric);
         if (per_video) {
             const auto overall = entry->means.find(std::string(metric.key));
-            cells[0] = text_of_std(metric.format_value(overall == entry->means.end() ? std::nullopt : overall->second));
+            cells[0] = qt_text(metric.format_value(overall == entry->means.end() ? std::nullopt : overall->second));
         }
         rows.emplace_back(entry->label, entry->color, std::move(cells));
     }

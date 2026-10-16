@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cmath>
 #include <fstream>
 #include <random>
@@ -18,6 +17,7 @@
 #include "vml/npz.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
+#include "vml/python_text.h"
 #include "vml/result_json.h"
 #include "vml/sha256.h"
 
@@ -63,15 +63,6 @@ std::string hash_of(const std::string& source_identity, const std::string& disto
                     const nlohmann::json& recipe_identity) {
     return sha256_hex(python_json_compact(
         {{"source", source_identity}, {"distorted", distorted_identity}, {"recipe", recipe_identity}}));
-}
-
-// `text` folded and trimmed, as Python's .strip().casefold() leaves ASCII.
-std::string folded(std::string text) {
-    const auto space = [](unsigned char c) { return std::isspace(c) != 0; };
-    text.erase(text.begin(), std::find_if_not(text.begin(), text.end(), space));
-    text.erase(std::find_if_not(text.rbegin(), text.rend(), space).base(), text.end());
-    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return text;
 }
 
 // A provenance parameter's value: the JSON its text holds.
@@ -148,8 +139,8 @@ bool stale_vship_score(const MetricProvenance& provenance, const std::vector<Col
         return false;
     }
     return std::any_of(infos.begin(), infos.end(), [](const ColourTags& info) {
-        const std::string transfer = folded(info.color_transfer);
-        return std::regex_match(folded(info.pix_fmt), old_vship_rgb()) &&
+        const std::string transfer = ascii_lower(python_strip(info.color_transfer));
+        return std::regex_match(ascii_lower(python_strip(info.pix_fmt)), old_vship_rgb()) &&
                std::find(untagged.begin(), untagged.end(), transfer) != untagged.end();
     });
 }

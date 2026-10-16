@@ -38,14 +38,6 @@ bool contains(const std::vector<std::string>& keys, const std::string& key) {
     return std::find(keys.begin(), keys.end(), key) != keys.end();
 }
 
-std::string labels_of(const std::vector<std::string>& keys) {
-    std::string labels;
-    for (const std::string& key : keys) {
-        labels += (labels.empty() ? "" : ", ") + std::string(metric_definition(key).label);
-    }
-    return labels;
-}
-
 // How each place is named on the line.
 std::string_view place_name(std::string_view place) { return place == "CPU" ? N_("CPU metrics") : N_("GPU metrics"); }
 
@@ -371,7 +363,7 @@ MetricLine metric_line(const std::vector<TaskSnapshot>& tasks, bool paused, cons
                    {{"kind", say(place_name(unit.place), {})},
                     {"numbers", numbers_text(numbers)},
                     {"count", static_cast<long long>(order[unit.place].size())},
-                    {"labels", labels_of(labelled)}});
+                    {"labels", metric_labels(labelled)}});
     };
     // The metrics of this video whose task holds the GPU's turn while `unit`
     // waits for it. That task may be running on the CPU after a GPU
@@ -380,7 +372,7 @@ MetricLine metric_line(const std::vector<TaskSnapshot>& tasks, bool paused, cons
         for (const MetricUnit& other : units) {
             if (other.task != unit.task && (other.state == "running" || other.state == "starting") &&
                 other.task->lane == "gpu") {
-                return labels_of(other.keys);
+                return metric_labels(other.keys);
             }
         }
         return std::string();

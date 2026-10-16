@@ -472,23 +472,6 @@ std::optional<std::string> gpu_not_yet(const std::vector<MetricTask>& tasks) {
 
 // ------------------------------------------------------------------ progress
 
-// How many characters UTF-8 text has (Python's len() of the string).
-std::size_t length_of(std::string_view text) {
-    return static_cast<std::size_t>(std::count_if(
-        text.begin(), text.end(), [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; }));
-}
-
-// The first `count` characters of UTF-8 text.
-std::string first_characters(const std::string& text, std::size_t count) {
-    std::size_t seen = 0;
-    for (std::size_t at = 0; at < text.size(); ++at) {
-        if ((static_cast<unsigned char>(text[at]) & 0xC0) != 0x80 && seen++ == count) {
-            return text.substr(0, at);
-        }
-    }
-    return text;
-}
-
 // The run's progress on stderr, nothing with --quiet: lines that stay, and
 // a line for each video, redrawn in place on a terminal and elsewhere
 // repeated every ten seconds.
@@ -521,7 +504,7 @@ public:
     void done() {
         const std::lock_guard lock(mutex_);
         if (redraw_ && !shown_.empty() && !quiet_) {
-            platform::write_text(platform::Stream::error, "\r" + std::string(length_of(shown_), ' ') + "\r");
+            platform::write_text(platform::Stream::error, "\r" + std::string(python_length(shown_), ' ') + "\r");
         }
         shown_.clear();
     }
@@ -537,7 +520,7 @@ private:
             }
             return;
         }
-        const std::string wipe = "\r" + std::string(length_of(shown_), ' ') + "\r";
+        const std::string wipe = "\r" + std::string(python_length(shown_), ' ') + "\r";
         if (keep) {
             platform::write_text(platform::Stream::error, wipe + text + "\n" + shown_);
         } else {

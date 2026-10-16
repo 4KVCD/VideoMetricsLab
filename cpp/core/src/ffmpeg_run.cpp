@@ -47,14 +47,6 @@ namespace {
 // a -filter_complex of its own, ending in [graph0], [graph1].
 constexpr char graph_separator = '\n';
 
-std::string joined(const std::vector<std::string>& parts, const std::string& separator) {
-    std::string text;
-    for (std::size_t i = 0; i < parts.size(); ++i) {
-        text += (i == 0 ? "" : separator) + parts[i];
-    }
-    return text;
-}
-
 bool uses_vmaf_model(const VmafOptions& options) {
     return options.compute_vmaf || options.compute_vmaf_neg || options.compute_vmaf_v1;
 }
@@ -88,7 +80,7 @@ std::vector<std::string> libvmaf_options(const VmafOptions& options, const std::
         if (options.compute_vmaf_neg) {
             models.emplace_back("version=vmaf_v0.6.1neg\\\\:name=vmaf_neg");
         }
-        model_value = joined(models, "|");
+        model_value = join(models, "|");
     }
     std::vector<std::string> made{"log_path=" + log_name, "log_fmt=json",
                                   uses_vmaf_model(options) ? "model=" + model_value : "model=''"};
@@ -99,7 +91,7 @@ std::vector<std::string> libvmaf_options(const VmafOptions& options, const std::
         made.push_back("n_subsample=" + std::to_string(options.n_subsample));
     }
     if (!options.extra_features.empty()) {
-        made.push_back("feature=" + joined(options.extra_features, "|"));
+        made.push_back("feature=" + join(options.extra_features, "|"));
     }
     for (const std::string& option : framesync_opts()) {
         made.push_back(option);
@@ -113,7 +105,7 @@ std::vector<std::string> libvmaf_options(const VmafOptions& options, const std::
 std::string xpsnr_filter(const std::string& source_label, const std::string& test_label,
                          const std::string& xpsnr_log_name) {
     return "[" + source_label + "][" + test_label + "]xpsnr=stats_file=" + xpsnr_log_name + ":" +
-           joined(framesync_opts(), ":");
+           join(framesync_opts(), ":");
 }
 
 // The end of the filter graph: XPSNR and libvmaf.
@@ -138,8 +130,8 @@ std::string libvmaf_stage(const VmafOptions& options, const std::string& log_nam
         ref_label = "xref";
     }
     chains.push_back("[" + main_label + "][" + ref_label + "]libvmaf=" +
-                     joined(libvmaf_options(options, log_name, model, cores), ":"));
-    return joined(chains, ";");
+                     join(libvmaf_options(options, log_name, model, cores), ":"));
+    return join(chains, ";");
 }
 
 // The hardware decoders that hand frames over in system memory themselves
@@ -422,7 +414,7 @@ std::string last_lines(const std::string& text, std::size_t count) {
         lines.push_back(line);
     }
     const std::size_t first = lines.size() > count ? lines.size() - count : 0;
-    return joined(std::vector<std::string>(lines.begin() + static_cast<std::ptrdiff_t>(first), lines.end()), "\n");
+    return join(std::vector<std::string>(lines.begin() + static_cast<std::ptrdiff_t>(first), lines.end()), "\n");
 }
 
 const app_log::Logger logger("vml.vmaf_runner");
@@ -757,7 +749,7 @@ ParsedScores execute_run(const CommandBuilder& build_command, const VmafOptions&
     }
     if (scores.frame.empty() || !missing.empty()) {
         throw VmafRunError("No results for requested metrics: " +
-                           joined(missing.empty() ? options.requested_metrics() : missing, ", "));
+                           join(missing.empty() ? options.requested_metrics() : missing, ", "));
     }
     return scores;
 }
@@ -816,7 +808,7 @@ ParsedScores gpu_scores(const PairScores& scored, double fps, const VmafOptions&
         }
     }
     if (!missing.empty()) {
-        throw VmafRunError("No results for requested metrics: " + joined(missing, ", "));
+        throw VmafRunError("No results for requested metrics: " + join(missing, ", "));
     }
     return scores;
 }
@@ -1559,14 +1551,14 @@ std::string build_filtergraph(const VideoInfo& source, const VideoInfo& distorte
         // The graphs decode nothing themselves: FFmpeg gives every graph
         // that reads an input the same decoded frames.
         const auto both = [&](const std::string& suffix) {
-            return "[0:" + stream + "]" + joined(chains.test, ",") + "[main_" + suffix + "];[1:" + stream + "]" +
-                   joined(chains.source, ",") + "[ref_" + suffix + "]";
+            return "[0:" + stream + "]" + join(chains.test, ",") + "[main_" + suffix + "];[1:" + stream + "]" +
+                   join(chains.source, ",") + "[ref_" + suffix + "]";
         };
-        return both("v") + ";[main_v][ref_v]libvmaf=" + joined(libvmaf_options(options, log_name, model, cores), ":") +
+        return both("v") + ";[main_v][ref_v]libvmaf=" + join(libvmaf_options(options, log_name, model, cores), ":") +
                "[graph0]" + graph_separator + both("x") + ";" + xpsnr_filter("ref_x", "main_x", *xpsnr_log_name) +
                "[graph1]";
     }
-    return "[0:" + stream + "]" + joined(chains.test, ",") + "[main];[1:" + stream + "]" + joined(chains.source, ",") +
+    return "[0:" + stream + "]" + join(chains.test, ",") + "[main];[1:" + stream + "]" + join(chains.source, ",") +
            "[ref];" + libvmaf_stage(options, log_name, model, xpsnr_log_name, cores);
 }
 
@@ -1616,9 +1608,9 @@ std::string build_resample_filtergraph(const VideoInfo& source, const VmafOption
         base.push_back(source_crop->as_filter());  // before the conversion, as build_filtergraph's
     }
     base.push_back("format=" + analysis_format);
-    const std::string numbering = joined(pairing_filters(frame_rate(source)), ",");
+    const std::string numbering = join(pairing_filters(frame_rate(source)), ",");
     const std::string scale_flags = ":flags=" + options.scale_algorithm;
-    return joined({"[0:" + std::string(video_stream) + "]" + joined(base, ",") + "[base]",
+    return join({"[0:" + std::string(video_stream) + "]" + join(base, ",") + "[base]",
                    "[base]split=2[ref_src][dist_src]", "[ref_src]" + numbering + "[ref]",
                    "[dist_src]scale=" + std::to_string(down_w) + ":" + std::to_string(down_h) + scale_flags +
                        ",scale=" + std::to_string(original_w) + ":" + std::to_string(original_h) + scale_flags + "," +
@@ -1687,10 +1679,10 @@ std::pair<std::string, std::string> build_stream_graphs(const VideoInfo& source,
     if (by_timestamp()) {
         // A copy of the frames, which costs nothing, for FFmpeg to list their
         // timestamps (timed_gpu_output_args).
-        return {input + joined(chains.test, ",") + ",split=2[vmaf_dist][vmaf_dist_ts]",
-                input + joined(chains.source, ",") + ",split=2[vmaf_ref][vmaf_ref_ts]"};
+        return {input + join(chains.test, ",") + ",split=2[vmaf_dist][vmaf_dist_ts]",
+                input + join(chains.source, ",") + ",split=2[vmaf_ref][vmaf_ref_ts]"};
     }
-    return {input + joined(chains.test, ",") + "[vmaf_dist]", input + joined(chains.source, ",") + "[vmaf_ref]"};
+    return {input + join(chains.test, ",") + "[vmaf_dist]", input + join(chains.source, ",") + "[vmaf_ref]"};
 }
 
 std::vector<std::vector<std::string>> build_stream_commands(

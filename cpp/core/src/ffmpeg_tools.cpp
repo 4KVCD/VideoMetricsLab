@@ -8,6 +8,7 @@
 
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
+#include "vml/python_text.h"
 
 namespace vml {
 
@@ -72,14 +73,6 @@ std::vector<std::filesystem::path> candidate_folders() {
 bool is_file(const std::filesystem::path& path) {
     std::error_code error;
     return std::filesystem::is_regular_file(path, error);
-}
-
-std::string strip(std::string text) {
-    const std::size_t start = text.find_first_not_of(" \t\r\n");
-    if (start == std::string::npos) {
-        return {};
-    }
-    return text.substr(start, text.find_last_not_of(" \t\r\n") - start + 1);
 }
 
 }  // namespace
@@ -167,8 +160,8 @@ ToolStatus check_tool(std::string_view name, const Settings& settings) {
         return status;
     }
     if (output.exit_code != 0) {
-        std::string said = strip(output.standard_error.empty() ? output.standard_output : output.standard_error);
-        said = said.substr(0, 300);
+        const std::string said(
+            python_strip(output.standard_error.empty() ? output.standard_output : output.standard_error).substr(0, 300));
         status.error = said.empty() ? "exited with code " + platform::exit_code_text(output.exit_code) : said;
         return status;
     }

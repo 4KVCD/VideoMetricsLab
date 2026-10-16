@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
-#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -98,15 +97,6 @@ private:
 };
 
 std::string label_of(const std::string& key) { return std::string(metric_definition(key).label); }
-
-// The metrics' labels joined with `separator`.
-std::string labels_of(const std::vector<std::string>& keys, const std::string& separator) {
-    std::string labels;
-    for (const std::string& key : keys) {
-        labels += (labels.empty() ? "" : separator) + label_of(key);
-    }
-    return labels;
-}
 
 // Thrown only when pairing by timestamp: a subsampled pass whose source
 // frames do not line up with the test video's (VshipPass::check_lined_up),
@@ -1015,18 +1005,6 @@ private:
     ScoreArray& scores_;
 };
 
-// Python's format(value, "g"): six significant digits, in exponent form for
-// very large and very small numbers.
-std::string format_g(double value) {
-    if (std::isnan(value)) {
-        return "nan";
-    }
-    std::array<char, 32> text{};
-    const auto [end, error] =
-        std::to_chars(text.data(), text.data() + text.size(), value, std::chars_format::general, 6);
-    return error == std::errc() ? std::string(text.data(), end) : python_repr(value);
-}
-
 // CVVDP's one handler, fed every frame pair in order (the Python app's
 // _CvvdpLane). CVVDP judges each frame together with the ones before it, so
 // its pairs cannot be dealt in turn to two handlers. Its score is reset at
@@ -1096,7 +1074,7 @@ private:
             // rate is part of the score, and must not be quietly replaced by
             // a guess.
             throw VshipUnavailableError("CVVDP needs the video's frame rate, and none was found (it was read as " +
-                                        format_g(fps_) + " fps).");
+                                        format_general(fps_) + " fps).");
         }
         // The display as JSON text, which Vship reads itself when it starts
         // with "{". Not a file: Vship opens one with a narrow-character path,
@@ -1300,11 +1278,11 @@ public:
             close();  // made again with every source frame (score_vship_pass)
             throw;
         } catch (const VshipUnavailableError& error) {
-            logger.error("Vship pass (" + labels_of(plan_.keys, ", ") + ") failed: " + error.what());
+            logger.error("Vship pass (" + metric_labels(plan_.keys, ", ") + ") failed: " + error.what());
             close();
             throw;
         } catch (const std::exception& error) {
-            logger.error("Vship pass (" + labels_of(plan_.keys, ", ") + ") failed: " + error.what());
+            logger.error("Vship pass (" + metric_labels(plan_.keys, ", ") + ") failed: " + error.what());
             close();
             throw VshipUnavailableError(std::string("Vship GPU calculation failed: ") + error.what());
         }
@@ -1343,7 +1321,7 @@ private:
         if (on_status_) {
             const std::lock_guard lock(decode_mutex_);
             on_status_(decoding_status("Vship GPU (" + plan_.device.name + "): calculating " +
-                                           labels_of(plan_.keys, ", "),
+                                           metric_labels(plan_.keys, ", "),
                                        decode_, StatusKind::step, "\xE2\x80\xA6"));
         }
         for (const std::unique_ptr<FrameRing>& stream : streams_) {
@@ -1819,7 +1797,7 @@ private:
         output.failures = failures;
         const double elapsed =
             std::max(std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count(), 1e-6);
-        logger.info("Vship pass (" + labels_of(plan_.keys, ", ") + ") on " + plan_.device.name + ": " +
+        logger.info("Vship pass (" + metric_labels(plan_.keys, ", ") + ") on " + plan_.device.name + ": " +
                     std::to_string(frames) + " frame pairs in " + format_fixed(elapsed, 1) + " s, " +
                     format_fixed(static_cast<double>(frames) / elapsed, 1) + " pairs/s");
         for (const auto& [key, error] : errors) {
@@ -2129,7 +2107,7 @@ PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const Pass
                 }
             });
     } catch (const IsolatedCrashError& error) {
-        logger.error("Vship pass (" + labels_of(plan.keys, ", ") + ") failed: " + error.what());
+        logger.error("Vship pass (" + metric_labels(plan.keys, ", ") + ") failed: " + error.what());
         throw VshipUnavailableError("Vship GPU calculation failed: " + std::string(error.what()));
     } catch (const Cancelled&) {
         throw;
@@ -2290,7 +2268,7 @@ private:
         const auto needed = static_cast<unsigned long long>((gb_per_megapixel * megapixels + headroom_gb) * 1e9);
         const std::optional<unsigned long long> available = platform::gpu_memory_available(device_.name);
         const bool fits = available && *available >= needed;
-        logger.info("Vship: " + labels_of(keys_, ", ") + (fits ? " in one pass" : " one at a time") + ": " +
+        logger.info("Vship: " + metric_labels(keys_, ", ") + (fits ? " in one pass" : " one at a time") + ": " +
                     (available ? format_fixed(static_cast<double>(*available) / 1e9, 1) + " GB of GPU memory free"
                                : std::string("the GPU's free memory is not known")) +
                     ", one pass needs about " + format_fixed(static_cast<double>(needed) / 1e9, 1) + " GB");
@@ -2328,7 +2306,7 @@ private:
     // Scores each metric that failed in a shared pass in a pass of its own,
     // numbered after the `passes_before` passes.
     void retry_alone(const std::vector<std::string>& shared, int passes_before) {
-        const std::string labels = labels_of(shared, " and ");
+        const std::string labels = metric_labels(shared, " and ");
         logger.warning(labels + " failed in the GPU pass shared with the other metrics; calculating " +
                        (shared.size() == 1 ? "it in a pass of its own" : "them in a pass of their own"));
         if (hooks_.on_status) {
@@ -2356,7 +2334,7 @@ private:
             const std::vector<std::string>& group = passes[offset];
             if (hooks_.on_status && count > 1) {
                 hooks_.on_status({"GPU metric " + std::to_string(number + 1) + "/" + std::to_string(count) + ": " +
-                                      labels_of(group, " + "),
+                                      metric_labels(group, " + "),
                                   StatusKind::gpu_pass});
             }
             if (hooks_.on_pass) {
@@ -2385,7 +2363,7 @@ private:
                     throw Cancelled();
                 }
                 logger.error("GPU metric " + std::to_string(number + 1) + "/" + std::to_string(count) + " (" +
-                             labels_of(group, " + ") + ") failed: " + error.what());
+                             metric_labels(group, " + ") + ") failed: " + error.what());
                 errors_.push_back(std::current_exception());
                 for (const std::string& key : group) {
                     set_failure(failures_, key, error.what());
@@ -2610,7 +2588,7 @@ private:
         if (wrong.empty()) {
             return;
         }
-        logger.info(labels_of(wrong, " and ") + " on the CPU: Vship's " + backend_label(device.backend) +
+        logger.info(metric_labels(wrong, " and ") + " on the CPU: Vship's " + backend_label(device.backend) +
                     " build scores it wrongly on " + device.name);
         gpu_ = without(gpu_, wrong);
         cpu_.insert(cpu_.end(), wrong.begin(), wrong.end());
@@ -2633,7 +2611,7 @@ private:
         if (!gpu_retry.empty() && too_long_for_cpu()) {
             // CVVDP's own failure goes into the same message, because the
             // advice about the CPU does not apply to a GPU-only metric.
-            std::string message = not_retried(error.what(), labels_of(gpu_retry, " and "));
+            std::string message = not_retried(error.what(), metric_labels(gpu_retry, " and "));
             std::vector<std::string> said;
             for (const auto& [key, reason] : failures) {
                 if (std::find(said.begin(), said.end(), reason) == said.end()) {
@@ -2690,7 +2668,7 @@ private:
         announce_cpu(cpu_keys);
         if (hooks_.on_status) {
             hooks_.on_status({gpu_failed.empty() ? std::string("Calculating selected perceptual metric(s) on CPU\xE2\x80\xA6")
-                                                 : labels_of(gpu_failed, " and ") +
+                                                 : metric_labels(gpu_failed, " and ") +
                                                        " failed on the GPU; calculating it on the CPU\xE2\x80\xA6"});
         }
         // A CPU failure's message, with the GPU failure first if there was one.

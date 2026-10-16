@@ -21,6 +21,7 @@
 #include "vml/metrics.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
+#include "vml/python_text.h"
 #include "vml/result_json.h"
 #include "vml/time_format.h"
 
@@ -351,11 +352,8 @@ JobRun::JobRun(Scheduler& scheduler, std::size_t index, const VmafJob& job)
 }
 
 std::string JobRun::task_name(std::size_t task) const {
-    std::string labels;
-    for (const std::string& key : job_.tasks[task].metric_keys) {
-        labels += (labels.empty() ? "" : ", ") + std::string(metric_definition(key).label);
-    }
-    return std::string(pool_of(task) == gpu_pool ? "GPU" : "CPU") + " metrics (" + labels + ")";
+    return std::string(pool_of(task) == gpu_pool ? "GPU" : "CPU") + " metrics (" +
+           metric_labels(job_.tasks[task].metric_keys) + ")";
 }
 
 std::string JobRun::describe() const {
@@ -368,9 +366,7 @@ std::string JobRun::describe() const {
     }
     std::string kept;
     if (job_.cached_result) {  // saved scores are kept only with their saved result, as merged() keeps them
-        for (const std::string& key : job_.cached_metrics.keys()) {
-            kept += (kept.empty() ? "" : ", ") + std::string(metric_definition(key).label);
-        }
+        kept = metric_labels(job_.cached_metrics.keys());
     }
     const VmafOptions& options = job_.options;
     std::string settings = std::string("black bars ") + (options.crop_mode == CropMode::automatic ? "auto" : "none") +
@@ -380,10 +376,7 @@ std::string JobRun::describe() const {
                            options.model_choice_v1 + ", frame subsample " + std::to_string(options.n_subsample) +
                            ", GPU decode " + (options.gpu_decode ? "on" : "off");
     for (const auto& [key, backend] : job_.perceptual_backends) {
-        std::string place = backend;
-        std::transform(place.begin(), place.end(), place.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-        settings += ", " + std::string(metric_definition(key).label) + " on " + place;
+        settings += ", " + std::string(metric_definition(key).label) + " on " + ascii_upper(backend);
     }
     settings += ", CVVDP display " + job_.cvvdp.display.describe();
     std::string text = name() + ":\n  test   " + platform::path_text(job_.distorted_info.path) + " (" +
@@ -635,10 +628,7 @@ void JobRun::finish() {
         }
         return;
     }
-    std::string metrics;
-    for (const std::string& key : result->metric_results.keys()) {
-        metrics += (metrics.empty() ? "" : ", ") + std::string(metric_definition(key).label);
-    }
+    const std::string metrics = metric_labels(result->metric_results.keys());
     if (failed.empty() && metric_failures.empty()) {
         logger.info(name() + " finished: " + metrics);
         if (events.job_finished) {
@@ -651,12 +641,10 @@ void JobRun::finish() {
     PerceptualFailures failures;  // each metric once, its last reason (the Python app's dict)
     for (const std::size_t task : failed) {
         const auto [why, tail] = failure_of(tasks_[task].error);
-        std::string labels;
         for (const std::string& key : job_.tasks[task].metric_keys) {
-            labels += (labels.empty() ? "" : ", ") + std::string(metric_definition(key).label);
             set_failure(failures, key, why);
         }
-        message += (message.empty() ? "" : "\n") + labels + " failed: " + why;
+        message += (message.empty() ? "" : "\n") + metric_labels(job_.tasks[task].metric_keys) + " failed: " + why;
         if (stderr_tail.empty()) {
             stderr_tail = tail;
         }

@@ -32,6 +32,7 @@
 #include "vml/platform/system.h"
 #include "vml/time_format.h"
 #include "widgets.h"
+#include "window_helpers.h"
 
 namespace vml::app {
 
@@ -43,16 +44,14 @@ const char* const hover_hint =
     N_("Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.");
 const char* const calculate_tooltip = N_("Calculate bitrate for videos with the Use checkbox checked.");
 
-QString text_of(const std::string& text) { return QString::fromStdString(text); }
-
 // A file's key in the list: its full path, in one case.
 QString path_key(const std::filesystem::path& path) {
     std::error_code error;
     const std::filesystem::path resolved = std::filesystem::weakly_canonical(path, error);
-    return text_of(platform::path_text(error ? path : resolved)).toCaseFolded();
+    return qt_text(platform::path_text(error ? path : resolved)).toCaseFolded();
 }
 
-QString file_name(const std::filesystem::path& path) { return text_of(platform::path_text(path.filename())); }
+QString file_name(const std::filesystem::path& path) { return qt_text(platform::path_text(path.filename())); }
 
 // A bitrate as shown: in kb/s, or Mb/s from 1000 kb/s.
 QString rate_text(double kbps) {
@@ -97,7 +96,7 @@ void BitrateWorker::run() {
         if (cancel_.cancelled()) {
             return;
         }
-        const QString name = text_of(platform::path_text(path));
+        const QString name = qt_text(platform::path_text(path));
         emit file_started(name);
         try {
             const VideoInfo info = known ? *known : probe_video(path, ffprobe_, cancel_);
@@ -595,7 +594,7 @@ void BitratePanel::set_table_row(int row, const BitrateEntry& entry) {
     use->setToolTip(app::tr("Click the color square to change this video's color in both graphs."));
     QStringList values{file_name(entry.path),
                        entry.info ? media_info_string(*entry.info) : QString(),
-                       entry.data ? text_of(format_hms(entry.data->duration(), 2)) : QString(),
+                       entry.data ? qt_text(format_hms(entry.data->duration(), 2)) : QString(),
                        entry.data ? python_format("{count:,}", {{"count", entry.data->frame_count()}}) : QString(),
                        QString(),
                        QString(),
@@ -609,7 +608,7 @@ void BitratePanel::set_table_row(int row, const BitrateEntry& entry) {
     for (int column = col_file; column <= col_status; ++column) {
         cell(row, column)->setText(values[column - col_file]);
     }
-    cell(row, col_file)->setToolTip(text_of(platform::path_text(entry.path)));
+    cell(row, col_file)->setToolTip(qt_text(platform::path_text(entry.path)));
     // Why the file failed, on its own row: kept with the file, so that a row
     // that moves up as another is removed shows its own.
     cell(row, col_status)->setToolTip(entry.state == BitrateState::failed ? entry.error : QString());
@@ -746,7 +745,7 @@ void BitratePanel::refresh_plot() {
 void BitratePanel::on_hovered(double time) {
     // Each line's value at the time under the pointer.
     chart->set_cursor_time(time);
-    QStringList lines{app::tr("Time: {time}", {{"time", text_of(format_hms(time, 3))}})};
+    QStringList lines{app::tr("Time: {time}", {{"time", qt_text(format_hms(time, 3))}})};
     for (const auto& [name, plot] : current_plots_) {
         const std::vector<double>& times = plot->times;
         if (times.empty()) {

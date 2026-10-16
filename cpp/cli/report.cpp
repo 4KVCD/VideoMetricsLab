@@ -18,32 +18,14 @@ namespace {
 
 using Json = nlohmann::ordered_json;
 
-// How many characters UTF-8 text shows (Python's len() of the string, by
-// which it pads columns).
-std::size_t length_of(const std::string& text) {
-    return static_cast<std::size_t>(std::count_if(
-        text.begin(), text.end(), [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; }));
-}
-
 std::string left_justified(const std::string& text, std::size_t width) {
-    const std::size_t length = length_of(text);
+    const std::size_t length = python_length(text);
     return length >= width ? text : text + std::string(width - length, ' ');
 }
 
 std::string right_justified(const std::string& text, std::size_t width) {
-    const std::size_t length = length_of(text);
+    const std::size_t length = python_length(text);
     return length >= width ? text : std::string(width - length, ' ') + text;
-}
-
-std::string without_trailing_spaces(std::string text) {
-    text.erase(text.find_last_not_of(" \t\r\n") + 1);
-    return text;
-}
-
-std::string upper(std::string text) {
-    std::transform(text.begin(), text.end(), text.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-    return text;
 }
 
 std::string name_of(const std::filesystem::path& path) { return platform::path_text(path.filename()); }
@@ -144,7 +126,7 @@ void add_table(std::vector<std::string>& lines, const std::vector<std::vector<st
     std::vector<std::size_t> widths(rows.front().size(), 0);
     for (const auto& row : rows) {
         for (std::size_t column = 0; column < row.size(); ++column) {
-            widths[column] = std::max(widths[column], length_of(row[column]));
+            widths[column] = std::max(widths[column], python_length(row[column]));
         }
     }
     for (const auto& row : rows) {
@@ -156,7 +138,7 @@ void add_table(std::vector<std::string>& lines, const std::vector<std::vector<st
         if (last_column_free) {
             line += "  " + row.back();
         }
-        lines.push_back(without_trailing_spaces(line));
+        lines.emplace_back(python_rstrip(line));
     }
 }
 
@@ -177,7 +159,7 @@ void add_other_display_rows(const TestVideo& video, std::vector<std::vector<std:
         }
         rows.push_back({std::string(definition.label) + " (" + other.display + ")",
                         definition.format_value(value_of(summary->at("score"))), "", "", "", "",
-                        upper(summary->at("computed_on").get<std::string>())});
+                        ascii_upper(summary->at("computed_on").get<std::string>())});
     }
 }
 
@@ -299,7 +281,7 @@ std::string results_table(const VideoInfo& source, const std::vector<TestVideo>&
         const std::string status = video_status(video, cancelled);
         std::string head = video.name() + (video.info ? " (" + media_text(*video.info) + ")" : "");
         if (status != "ok") {
-            head += " -- " + upper(status);
+            head += " -- " + ascii_upper(status);
         } else if (video.from_cache) {
             head += " -- saved scores";
         }
@@ -329,7 +311,7 @@ std::string results_table(const VideoInfo& source, const std::vector<TestVideo>&
             const auto show = [&definition, &summary](const char* field) {
                 return definition.format_value(value_of(summary.at(field)));
             };
-            const std::string on = upper(summary.at("computed_on").get<std::string>());
+            const std::string on = ascii_upper(summary.at("computed_on").get<std::string>());
             if (!summary.contains("frames")) {  // one score for the video
                 // With several displays, each CVVDP row names its own.
                 const std::string label = video.other_displays.empty()

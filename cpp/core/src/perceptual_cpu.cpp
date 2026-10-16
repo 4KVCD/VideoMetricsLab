@@ -70,32 +70,6 @@ long long tool_bytes_per_pixel(const std::string& metric) { return metric == "ss
 
 std::filesystem::path libjxl_folder() { return resource_folder() / "tools" / "libjxl"; }
 
-// Whether `c` is a byte of the first character of a UTF-8 sequence (or of an
-// ASCII one), so that text can be cut by characters, as Python cuts it.
-bool starts_character(char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; }
-
-// The first `count` characters of UTF-8 text (Python's text[:count]).
-std::string first_characters(std::string_view text, std::size_t count) {
-    std::size_t seen = 0;
-    for (std::size_t at = 0; at < text.size(); ++at) {
-        if (starts_character(text[at]) && seen++ == count) {
-            return std::string(text.substr(0, at));
-        }
-    }
-    return std::string(text);
-}
-
-// The last `count` characters of UTF-8 text (Python's text[-count:]).
-std::string last_characters(std::string_view text, std::size_t count) {
-    std::size_t seen = 0;
-    for (std::size_t at = text.size(); at > 0; --at) {
-        if (starts_character(text[at - 1]) && ++seen == count) {
-            return std::string(text.substr(at - 1));
-        }
-    }
-    return std::string(text);
-}
-
 // A program's output as Python reads it in text mode: its line endings
 // (CR LF, or a lone CR) as LF, and bytes that are not UTF-8 replaced.
 std::string as_text(std::string_view output) {
@@ -200,14 +174,6 @@ std::vector<std::string> crop_filter(const std::optional<CropBox>& crop, const V
     return {crop->as_filter()};
 }
 
-std::string joined(const std::vector<std::string>& filters, std::string_view separator = ",") {
-    std::string text;
-    for (const std::string& filter : filters) {
-        text += (text.empty() ? "" : std::string(separator)) + filter;
-    }
-    return text;
-}
-
 // The filters that crop a video's black bars, and scale it to `target`
 // when it is scaled. It is scaled in its own pixel format, as Vship's
 // pictures are, and converted to RGB only after its colour tags are set
@@ -304,7 +270,7 @@ std::optional<std::string> frame_tags(const VideoInfo& info) {
         }
         options.push_back(option + "=" + name);
     }
-    return "setparams=" + joined(options, ":");
+    return "setparams=" + join(options, ":");
 }
 
 // What image_filtergraph's chains need of the two videos.
@@ -356,7 +322,7 @@ std::string pairs_by_time(const GraphPlan& plan) {
             for (std::string& filter : to_rgb(info)) {
                 filters.push_back(std::move(filter));
             }
-            return "[" + input + "]" + joined(filters) + "[" + output + "]";
+            return "[" + input + "]" + join(filters, ",") + "[" + output + "]";
         };
         return chain("0:" + std::string(video_stream), "distorted", plan.distorted_crop, plan.distorted,
                      plan.distorted_target) +
@@ -392,17 +358,17 @@ std::string pairs_by_time(const GraphPlan& plan) {
         distorted_end.push_back(std::move(filter));
     }
     const std::string stream = std::string(video_stream);
-    return joined({
-        "[0:" + stream + "]" + joined(test_chain),
+    return join({
+        "[0:" + stream + "]" + join(test_chain, ","),
         // The clock has a scale filter of its own, because it is made in the
         // source's format, while the test frames reach the split (and the
         // test's pictures) as they are decoded.
         "[test_times]crop=2:2:0:0,scale,format=" + source_format + "," + clock_size +
             ",lut=c0=0:c1=0:c2=0:c3=0[clock]",
-        "[1:" + stream + "]" + joined(source_chain) + "[source_frames]",
-        "[clock][source_frames]blend=all_mode=or:" + joined(framesync_opts(), ":") + "," + *restore + "," +
-            joined(reference_end) + "[reference]",
-        "[test_frames]" + joined(distorted_end) + "[distorted]",
+        "[1:" + stream + "]" + join(source_chain, ",") + "[source_frames]",
+        "[clock][source_frames]blend=all_mode=or:" + join(framesync_opts(), ":") + "," + *restore + "," +
+            join(reference_end, ",") + "[reference]",
+        "[test_frames]" + join(distorted_end, ",") + "[distorted]",
     }, ";");
 }
 
@@ -513,11 +479,7 @@ double run_metric(const std::filesystem::path& executable, const std::string& me
             test.parent_path() / platform::path_from_text(platform::path_text(test.stem()) + "-distortion.pfm");
         if (!hdr) {
             // As Python's {:g} writes it: "203".
-            std::string nits = python_repr(butteraugli_intensity_nits);
-            if (nits.ends_with(".0")) {
-                nits.resize(nits.size() - 2);
-            }
-            command.insert(command.end(), {"--intensity_target", nits});
+            command.insert(command.end(), {"--intensity_target", format_general(butteraugli_intensity_nits)});
         }
         command.insert(command.end(), {"--rawdistmap", platform::path_text(*distortion_map)});
     }
@@ -934,7 +896,7 @@ std::string image_filtergraph(const VideoInfo& source, const VideoInfo& distorte
         for (std::string& filter : to_rgb(info)) {
             filters.push_back(std::move(filter));
         }
-        return "[" + input + "]" + joined(filters) + "[" + output + "]";
+        return "[" + input + "]" + join(filters, ",") + "[" + output + "]";
     };
     return chain("0:" + std::string(video_stream), "distorted", distorted_crop, distorted, plan.distorted_target) +
            ";" + chain("1:" + std::string(video_stream), "reference", source_crop, source, plan.source_target);
@@ -1028,11 +990,7 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
         compared_dimensions(source, distorted, options.scale_direction, source_crop, distorted_crop);
     const int workers = scoring_workers(static_cast<long long>(width) * height, keys, request.concurrent_cpu_tasks,
                                         platform::logical_cores(), platform::available_memory());
-    std::string names;
-    for (const std::string& key : keys) {
-        names += (names.empty() ? "" : " and ") + key;
-    }
-    logger.info(names + " on the CPU: " + std::to_string(workers) + " frame pair" + (workers == 1 ? "" : "s") +
+    logger.info(join(keys, " and ") + " on the CPU: " + std::to_string(workers) + " frame pair" + (workers == 1 ? "" : "s") +
                 " at a time");
 
     Scores scores;

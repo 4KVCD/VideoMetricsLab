@@ -506,27 +506,11 @@ std::vector<std::string> parse_known(const Parser& parser, const std::vector<std
 
 // ---------------------------------------------------------------- the values
 
-std::string lowered(std::string text) {
-    std::transform(text.begin(), text.end(), text.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return text;
-}
-
-// Python's str.strip(): without the whitespace at both ends.
-std::string stripped(const std::string& text) {
-    const char* const space = " \t\n\r\f\v";
-    const std::size_t start = text.find_first_not_of(space);
-    if (start == std::string::npos) {
-        return {};
-    }
-    return text.substr(start, text.find_last_not_of(space) - start + 1);
-}
-
 // The metric keys named in a --metrics value ("all" is every metric), in
 // the registry's order.
 std::vector<std::string> metric_list(const std::string& text) {
     std::vector<std::string> keys;
-    if (lowered(stripped(text)) == "all") {
+    if (ascii_lower(python_strip(text)) == "all") {
         for (const MetricDefinition& metric : metrics()) {
             keys.emplace_back(metric.key);
         }
@@ -539,7 +523,7 @@ std::vector<std::string> metric_list(const std::string& text) {
         if (end == std::string::npos) {
             end = text.size();
         }
-        const std::string part = lowered(stripped(text.substr(start, end - start)));
+        const std::string part = ascii_lower(python_strip(text.substr(start, end - start)));
         if (!part.empty() && std::find(named.begin(), named.end(), part) == named.end()) {
             named.push_back(part);
             if (find_metric(part) == nullptr) {

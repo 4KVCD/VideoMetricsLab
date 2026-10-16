@@ -1,5 +1,6 @@
 #include "vml/python_text.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cstdlib>
@@ -214,15 +215,48 @@ std::string ascii_lower(std::string_view text) {
     return out;
 }
 
+std::string ascii_upper(std::string_view text) {
+    std::string out(text);
+    for (char& c : out) {
+        if (c >= 'a' && c <= 'z') {
+            c = static_cast<char>(c - 'a' + 'A');
+        }
+    }
+    return out;
+}
+
+namespace {
+
+// The whitespace Python's str.strip() takes off ASCII text.
+bool is_python_space(char c) { return c == ' ' || (c >= '\t' && c <= '\r') || (c >= '\x1c' && c <= '\x1f'); }
+
+// Whether `c` starts a UTF-8 character: any byte but a continuation byte.
+bool starts_character(char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; }
+
+}  // namespace
+
 std::string_view python_strip(std::string_view text) {
-    const auto is_space = [](char c) { return c == ' ' || (c >= '\t' && c <= '\r') || (c >= '\x1c' && c <= '\x1f'); };
-    while (!text.empty() && is_space(text.front())) {
+    while (!text.empty() && is_python_space(text.front())) {
         text.remove_prefix(1);
     }
-    while (!text.empty() && is_space(text.back())) {
+    return python_rstrip(text);
+}
+
+std::string_view python_rstrip(std::string_view text) {
+    while (!text.empty() && is_python_space(text.back())) {
         text.remove_suffix(1);
     }
     return text;
+}
+
+std::string first_characters(std::string_view text, std::size_t count) {
+    std::size_t seen = 0;
+    for (std::size_t at = 0; at < text.size(); ++at) {
+        if (starts_character(text[at]) && seen++ == count) {
+            return std::string(text.substr(0, at));
+        }
+    }
+    return std::string(text);
 }
 
 std::string last_characters(std::string_view text, std::size_t count) {
@@ -230,7 +264,7 @@ std::string last_characters(std::string_view text, std::size_t count) {
     for (std::size_t kept = 0; start > 0 && kept < count; ++kept) {
         do {
             --start;
-        } while (start > 0 && (static_cast<unsigned char>(text[start]) & 0xC0) == 0x80);
+        } while (start > 0 && !starts_character(text[start]));
     }
     return std::string(text.substr(start));
 }
@@ -355,12 +389,7 @@ std::string python_list2cmdline(const std::vector<std::string>& arguments) {
 }
 
 std::size_t python_length(std::string_view text) {
-    // Each character's first byte: any byte but a continuation byte.
-    std::size_t count = 0;
-    for (const char c : text) {
-        count += (static_cast<unsigned char>(c) & 0xC0) != 0x80 ? 1 : 0;
-    }
-    return count;
+    return static_cast<std::size_t>(std::count_if(text.begin(), text.end(), starts_character));
 }
 
 }  // namespace vml

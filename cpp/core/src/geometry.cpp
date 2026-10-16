@@ -58,10 +58,7 @@ std::string codec_label(const std::string& codec) {
     if (codec == "mjpeg") {
         return "MJPEG";
     }
-    std::string upper = codec;
-    std::transform(upper.begin(), upper.end(), upper.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-    return upper;
+    return ascii_upper(codec);
 }
 
 }  // namespace

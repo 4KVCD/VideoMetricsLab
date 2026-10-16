@@ -33,6 +33,7 @@
 #include "native_pool.h"
 #endif
 #include "widgets.h"
+#include "window_helpers.h"
 #include "vml/crop_detect.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
@@ -62,8 +63,6 @@ constexpr int release_after_ms = 30'000;
 // The device being made for a start meanwhile: how long until it is let go
 // of after all, unless the tab is shown.
 constexpr int retry_unload_ms = 2'000;
-
-QString text_of(const std::string& text) { return QString::fromStdString(text); }
 
 // A file's identity for remembering its black bars: its path, size and time.
 std::string crop_file_key(const std::filesystem::path& path) {
@@ -392,7 +391,7 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     color_mode_combo->addItem(app::tr("HDR \xE2\x86\x92 SDR (100 nit; assume PQ if untagged)"), "hdr_to_sdr");
     color_mode_combo->addItem(app::tr("Unmanaged (diagnostic)"), "unmanaged");
     color_mode_combo->setCurrentIndex(
-        std::max(0, color_mode_combo->findData(text_of(std::string(preview_color_mode_value(color_mode_))))));
+        std::max(0, color_mode_combo->findData(qt_text(std::string(preview_color_mode_value(color_mode_))))));
     color_mode_combo->setToolTip(app::tr("Display-aware detects PQ/HLG tags and uses the Windows monitor's "
                                          "SDR-white setting. The fixed mode can recover an untagged PQ file."));
     connect(color_mode_combo, &QComboBox::currentIndexChanged, this, [this](int index) { on_color_mode_changed(index); });
@@ -896,7 +895,7 @@ void FrameComparePanel::on_play_clicked() {
     }
     VideoCompareView& view = ensure_video_view();
     if (const auto [available, reason] = VideoCompareView::can_play(entry->comparison); !available) {
-        on_video_status_changed(text_of(reason));
+        on_video_status_changed(qt_text(reason));
         return;
     }
     view.set_playing(!view.playback_requested());
@@ -1070,7 +1069,7 @@ void FrameComparePanel::on_color_mode_changed(int index) {
     ++generation_;
     cancel_workers();
     update_labels();
-    emit color_mode_changed(text_of(std::string(preview_color_mode_value(mode))));
+    emit color_mode_changed(qt_text(std::string(preview_color_mode_value(mode))));
     show_or_request();
 }
 
@@ -1115,7 +1114,7 @@ void FrameComparePanel::sync_seek_widgets() {
     const double seconds =
         entry != nullptr && entry->comparison.fps > 0 ? static_cast<double>(frame_) / entry->comparison.fps : 0;
     const QSignalBlocker blocker(timestamp_edit);
-    timestamp_edit->setText(text_of(format_hms(seconds, 3)));
+    timestamp_edit->setText(qt_text(format_hms(seconds, 3)));
 }
 
 void FrameComparePanel::update_enabled_state() {
@@ -1147,7 +1146,7 @@ void FrameComparePanel::update_labels() {
         showing_source_ ? app::tr("SOURCE")
                         : app::tr("{side} {number} of {count}",
                                   {{"side", app::tr("TEST")}, {"number", current_index_ + 1}, {"count", entries_.size()}});
-    const QString name = showing_source_ ? text_of(platform::path_text(comparison.source_info.path.filename()))
+    const QString name = showing_source_ ? qt_text(platform::path_text(comparison.source_info.path.filename()))
                                          : entry->label;
     showing_label->setText(side + QString::fromUtf8(" \xE2\x80\x94 ") + name);
     update_frame_line();
@@ -1161,7 +1160,7 @@ void FrameComparePanel::update_frame_line() {
     }
     const FrameComparison& comparison = entry->comparison;
     const double seconds = comparison.fps > 0 ? static_cast<double>(frame_) / comparison.fps : 0;
-    QStringList parts{app::tr("Frame {frame:,}", {{"frame", frame_}}), text_of(format_hms(seconds, 3)),
+    QStringList parts{app::tr("Frame {frame:,}", {{"frame", frame_}}), qt_text(format_hms(seconds, 3)),
                       score_text(*entry)};
     if (is_video_mode()) {
         parts.append(concise_playback_status());
@@ -1199,7 +1198,7 @@ QString FrameComparePanel::score_text(const FrameComparisonEntry& entry) const {
         if (std::isnan(value)) {
             continue;
         }
-        values.append(text_of(std::string(metric.label) + " " + metric.format_value(value) +
+        values.append(qt_text(std::string(metric.label) + " " + metric.format_value(value) +
                               std::string(metric.value_suffix)));
     }
     if (!values.isEmpty()) {
@@ -1247,12 +1246,12 @@ void FrameComparePanel::update_color_status() {
     if (color_mode_ == PreviewColorMode::unmanaged) {
         color_status_label->setText(app::tr("{prefix}{kind} input \xC2\xB7 tone mapping off",
                                             {{"prefix", prefix},
-                                             {"kind", kind ? text_of(*kind) : app::tr("SDR / untagged")}}));
+                                             {"kind", kind ? qt_text(*kind) : app::tr("SDR / untagged")}}));
         return;
     }
     const PreviewColorSettings settings = color_settings();
     if (color_mode_ == PreviewColorMode::hdr_to_sdr) {
-        QString source = kind ? text_of(*kind) : app::tr("Untagged input (assuming HDR10 / PQ)");
+        QString source = kind ? qt_text(*kind) : app::tr("Untagged input (assuming HDR10 / PQ)");
         if (video) {
             static const std::set<std::string, std::less<>> untagged{"", "unknown", "unspecified"};
             if (!kind && !untagged.contains(info.color_transfer)) {
@@ -1285,27 +1284,27 @@ void FrameComparePanel::update_color_status() {
         if (video) {
             if (ffmpeg_playback) {
                 color_status_label->setText(app::tr("{prefix}{kind} \xC2\xB7 SDR preview (native HDR unavailable)",
-                                                    {{"prefix", prefix}, {"kind", text_of(*kind)}}));
+                                                    {{"prefix", prefix}, {"kind", qt_text(*kind)}}));
                 return;
             }
             color_status_label->setText(app::tr(
                 "{prefix}{kind} \xC2\xB7 Windows HDR on \xC2\xB7 native 10-bit D3D11 presentation \xC2\xB7 tone "
                 "mapping off",
-                {{"prefix", prefix}, {"kind", text_of(*kind)}}));
+                {{"prefix", prefix}, {"kind", qt_text(*kind)}}));
             return;
         }
         color_status_label->setText(app::tr(
             "{prefix}{kind} \xC2\xB7 display-aware HDR \xE2\x86\x92 SDR \xC2\xB7 Windows HDR on \xC2\xB7 SDR white "
             "{target_nits:g} nit",
-            {{"prefix", prefix}, {"kind", text_of(*kind)}, {"target_nits", settings.target_nits()}}));
+            {{"prefix", prefix}, {"kind", qt_text(*kind)}, {"target_nits", settings.target_nits()}}));
     } else if (display_hdr_.hdr_enabled == false) {
         color_status_label->setText(
             app::tr("{prefix}{kind} \xC2\xB7 HDR \xE2\x86\x92 {target} \xC2\xB7 Windows HDR off",
-                    {{"prefix", prefix}, {"kind", text_of(*kind)}, {"target", target}}));
+                    {{"prefix", prefix}, {"kind", qt_text(*kind)}, {"target", target}}));
     } else {
         color_status_label->setText(
             app::tr("{prefix}{kind} \xC2\xB7 HDR \xE2\x86\x92 {target} \xC2\xB7 display HDR state unavailable",
-                    {{"prefix", prefix}, {"kind", text_of(*kind)}, {"target", target}}));
+                    {{"prefix", prefix}, {"kind", qt_text(*kind)}, {"target", target}}));
     }
 }
 
@@ -1357,7 +1356,7 @@ void FrameComparePanel::show_or_request() {
         if (const std::optional<std::string> problem =
                 untimed_pair_problem(entry->comparison.source_info, entry->comparison.distorted_info)) {
             // Not frames placed by a guessed frame rate: what runs say instead.
-            viewer->set_message(tr_message(text_of(*problem)));
+            viewer->set_message(tr_message(qt_text(*problem)));
             return;
         }
     }

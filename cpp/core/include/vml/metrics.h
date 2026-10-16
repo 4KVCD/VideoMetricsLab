@@ -80,4 +80,7 @@ const MetricDefinition* find_metric(std::string_view key);
 // The metric with this key. Throws std::out_of_range for an unknown key.
 const MetricDefinition& metric_definition(std::string_view key);
 
+// The metrics' labels with `separator` between them: "VMAF v0.6.1, PSNR".
+std::string metric_labels(const std::vector<std::string>& keys, std::string_view separator = ", ");
+
 }  // namespace vml

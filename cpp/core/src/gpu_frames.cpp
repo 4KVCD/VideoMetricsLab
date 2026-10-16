@@ -399,25 +399,6 @@ bool close_decoder(const DecoderLibrary& library, void* handle) {
 
 // ------------------------------------------------------------- the packets
 
-std::string_view python_rstrip(std::string_view text) {
-    const std::string_view stripped = python_strip(text);
-    if (stripped.empty()) {
-        return {};
-    }
-    return text.substr(0, static_cast<std::size_t>(stripped.data() - text.data()) + stripped.size());
-}
-
-// The last `count` characters of UTF-8 `text`, as Python's text[-count:].
-std::string last_characters(const std::string& text, std::size_t count) {
-    std::size_t start = text.size();
-    for (std::size_t seen = 0; start > 0 && seen < count; ++seen) {
-        do {
-            --start;
-        } while (start > 0 && (static_cast<unsigned char>(text[start]) & 0xC0) == 0x80);
-    }
-    return text.substr(start);
-}
-
 // A whole number in base 16 as Python's int(text, 16) reads FFmpeg's flags
 // ("0x4"): its "0x" is optional.
 std::optional<long long> hex_int(std::string_view text) {

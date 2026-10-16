@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <initializer_list>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -31,15 +32,47 @@ std::string replace_invalid_utf8(std::string_view text);
 // variable's value.
 std::string ascii_lower(std::string_view text);
 
+// ASCII text in upper case, as Python's upper() makes codec names and
+// headings. Bytes past ASCII are kept as they are, so UTF-8 stays intact.
+std::string ascii_upper(std::string_view text);
+
 // `text` without the whitespace around it, as Python's str.strip() takes it
 // off: the ASCII whitespace, which for str.strip() includes the separators
 // 0x1C to 0x1F (float() and int() do not take those off). Python also takes
 // Unicode's other spaces off; nothing here needs that.
 std::string_view python_strip(std::string_view text);
 
+// `text` without the whitespace at its end, as Python's str.rstrip() takes
+// it off (the same whitespace as python_strip).
+std::string_view python_rstrip(std::string_view text);
+
+// The first `count` characters of UTF-8 text, as Python's text[:count].
+std::string first_characters(std::string_view text, std::size_t count);
+
 // The last `count` characters of UTF-8 text, as Python's text[-count:]
 // keeps the end of a program's error output for a message.
 std::string last_characters(std::string_view text, std::size_t count);
+
+// `parts` with `separator` between them, as Python's separator.join(parts).
+// `parts` is any range of strings or string views.
+template <typename Parts>
+std::string join(const Parts& parts, std::string_view separator) {
+    std::string joined;
+    bool first = true;
+    for (const auto& part : parts) {
+        if (!first) {
+            joined += separator;
+        }
+        joined += part;
+        first = false;
+    }
+    return joined;
+}
+
+// The same for a list written in place: join({"a", "b"}, ",").
+inline std::string join(std::initializer_list<std::string_view> parts, std::string_view separator) {
+    return join<std::initializer_list<std::string_view>>(parts, separator);
+}
 
 // Python's repr() of a string, as messages quote names and values: in
 // single quotes, or double quotes for text with a single quote and no

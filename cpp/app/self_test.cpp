@@ -20,6 +20,7 @@
 #include "vml/model_select.h"
 #include "vml/perceptual_cpu.h"
 #include "vml/platform/system.h"
+#include "vml/python_text.h"
 #include "vml/settings.h"
 #include "vml/vmaf_v1_gpu.h"
 #include "vml/vship.h"
@@ -52,14 +53,6 @@ bool packaged() {
     return std::filesystem::is_directory(platform::executable_path().parent_path() / "resources" / "models", error);
 }
 
-std::string join(const std::vector<std::string>& items, const char* separator = ", ") {
-    std::string joined;
-    for (const std::string& item : items) {
-        joined += (joined.empty() ? "" : separator) + item;
-    }
-    return joined;
-}
-
 }  // namespace
 
 SelfTestReport self_test(const QApplication& app) {
@@ -88,7 +81,7 @@ SelfTestReport self_test(const QApplication& app) {
             if (decoders.empty()) {
                 report.warn("no Direct3D 11 GPU decoders; video decodes in software");
             } else {
-                report.ok("GPU decoders on this machine (Direct3D 11): " + join(decoders));
+                report.ok("GPU decoders on this machine (Direct3D 11): " + join(decoders, ", "));
             }
         } catch (const std::exception& error) {
             report.warn(std::string("no Direct3D 11 device, videos play through ffmpeg.exe: ") + error.what());
@@ -124,7 +117,7 @@ SelfTestReport self_test(const QApplication& app) {
     }
     std::sort(formats.begin(), formats.end());
     report.ok(std::string("Qt ") + qVersion() + " on '" + QGuiApplication::platformName().toStdString() +
-              "', style '" + app.style()->name().toStdString() + "', images: " + join(formats));
+              "', style '" + app.style()->name().toStdString() + "', images: " + join(formats, ", "));
     // The update check asks GitHub over HTTPS, through a TLS plugin of Qt's
     // (tls/): without one it fails without a word but a line in the log.
     if (const QString backend = QSslSocket::activeBackend(); !backend.isEmpty() && QSslSocket::supportsSsl()) {
@@ -149,7 +142,7 @@ SelfTestReport self_test(const QApplication& app) {
     const std::string software = platform::shared_library_name("software_frames");
     const auto [codecs, why] = software_codecs();
     if (!codecs.empty()) {
-        report.ok("software frame decoder (" + software + "): " + join(codecs));
+        report.ok("software frame decoder (" + software + "): " + join(codecs, ", "));
     } else {
         report.warn("software frame decoder absent (" + software + ": " + why +
                     "); FFmpeg's pipes carry the videos it decodes in software");

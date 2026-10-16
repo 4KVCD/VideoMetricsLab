@@ -17,10 +17,11 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <cstdio>
 #include <limits>
 
 #include "theme.h"
+#include "window_helpers.h"
+#include "vml/number_format.h"
 #include "vml/time_format.h"
 
 namespace vml::app {
@@ -36,13 +37,6 @@ constexpr int margin_bottom = 38;
 // Tick spacings that read naturally on a time axis, in seconds.
 constexpr std::array<double, 15> time_steps{1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400};
 constexpr double target_ticks = 8;
-
-// A value as Python's format(value, "g") writes it.
-QString g_text(double value) {
-    std::array<char, 32> text{};
-    std::snprintf(text.data(), text.size(), "%g", value);
-    return QString::fromLatin1(text.data());
-}
 
 QString time_text(double seconds) { return QString::fromStdString(format_hms(seconds)); }
 
@@ -286,7 +280,7 @@ std::vector<std::pair<int, QString>> ChartWidget::value_ticks(std::optional<QRec
         const double fraction = height_fraction((value - y0) / std::max(1e-9, y1 - y0));
         // "+ 0.0" turns the -0.0 that ceil() gives for a range starting just
         // below zero (Butteraugli's room) into 0, not "-0".
-        ticks.emplace_back(plot.bottom() - static_cast<int>(fraction * plot.height()), g_text(value + 0.0));
+        ticks.emplace_back(plot.bottom() - static_cast<int>(fraction * plot.height()), qt_text(format_general(value + 0.0)));
     }
     return ticks;
 }
