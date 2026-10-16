@@ -1,5 +1,6 @@
 #include "vml/colour.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -208,46 +209,166 @@ std::string png_colour_chunks(const VideoColour& colour) {
     return png_chunk("cICP", code);
 }
 
-void describe_png(const std::filesystem::path& path, const VideoColour& colour) {
+namespace {
+
+// The chunk that fills the room left where a picture's colour chunks were
+// replaced in place: ancillary and private (its first two letters lower
+// case), so that readers skip it. libjxl's tools score a 4K pair with it
+// exactly as they score the pair written again whole (SSIMULACRA2, and
+// Butteraugli's score, 3-norm and distortion map).
+constexpr std::string_view padding_chunk_kind = "vmPd";
+
+std::size_t big_endian_at(std::string_view bytes, std::size_t at) {
+    std::size_t value = 0;
+    for (std::size_t i = 0; i < 4; ++i) {
+        value = (value << 8) | static_cast<unsigned char>(bytes[at + i]);
+    }
+    return value;
+}
+
+std::runtime_error unreadable(const std::filesystem::path& path) {
+    return std::runtime_error("The picture " + platform::path_text(path) + " could not be read.");
+}
+
+std::runtime_error unwritable(const std::filesystem::path& path) {
+    return std::runtime_error("The picture " + platform::path_text(path) + " could not be written.");
+}
+
+// A picture's chunks before its first IDAT, where its colour chunks are
+// (PNG's rule): the header, the others less the colour chunks, in order,
+// and the bytes from the end of the signature to the first IDAT.
+struct PngHead {
+    std::string header;
+    std::string kept;
+    std::size_t room = 0;
+};
+
+// The chunks before the picture's data, read one by one; nothing when
+// there is no IDAT where the chunks say it is.
+std::optional<PngHead> read_png_head(std::istream& file) {
+    PngHead head;
+    std::string start(8, '\0');
+    if (!file.read(start.data(), 8)) {
+        return std::nullopt;
+    }
+    std::size_t position = 8;
+    while (position < (1 << 20)) {  // FFmpeg's take some 150 bytes; a large ICC profile some kilobytes
+        std::string chunk(8, '\0');
+        if (!file.read(chunk.data(), 8)) {
+            return std::nullopt;
+        }
+        const std::string kind = chunk.substr(4, 4);  // a copy: chunk grows below
+        if (kind == "IDAT") {
+            head.room = position - 8;
+            return head.header.empty() ? std::nullopt : std::optional(std::move(head));
+        }
+        const std::size_t length = big_endian_at(chunk, 0);
+        if (length > (1 << 20)) {
+            return std::nullopt;
+        }
+        chunk.resize(12 + length);
+        if (!file.read(chunk.data() + 8, static_cast<std::streamsize>(length + 4))) {
+            return std::nullopt;
+        }
+        if (kind == "IHDR") {
+            head.header = chunk;
+        } else if (!colour_chunk_kinds.contains(kind)) {
+            head.kept += chunk;
+        }
+        position += chunk.size();
+    }
+    return std::nullopt;
+}
+
+// Whether the picture's last 4 KB from its first IDAT (at `data_start`) on
+// hold a colour chunk's name: a colour chunk after the picture's data,
+// which PNG forbids and FFmpeg does not write, but which is removed all the
+// same where there is one. The name inside the compressed data only costs
+// the picture a whole rewrite.
+bool colour_chunk_near_end(std::istream& file, std::streamoff data_start) {
+    file.clear();
+    file.seekg(0, std::ios::end);
+    const std::streamoff size = file.tellg();
+    const std::streamoff from = std::max(data_start, size - 4096);
+    std::string bytes(static_cast<std::size_t>(std::max<std::streamoff>(0, size - from)), '\0');
+    file.seekg(from);
+    if (!file.read(bytes.data(), static_cast<std::streamsize>(bytes.size()))) {
+        return true;
+    }
+    return std::any_of(colour_chunk_kinds.begin(), colour_chunk_kinds.end(),
+                       [&bytes](std::string_view kind) { return bytes.find(kind) != std::string::npos; });
+}
+
+// The picture written again whole, its colour chunks replaced, in one write
+// (as the Python app writes it).
+void rewrite_png(const std::filesystem::path& path, const VideoColour& colour) {
     const std::optional<std::string> read = platform::read_file(path);
     if (!read) {
-        throw std::runtime_error("The picture " + platform::path_text(path) + " could not be read.");
+        throw unreadable(path);
     }
     const std::string_view data = *read;
-    const auto byte = [&data](std::size_t at) {
-        return static_cast<std::size_t>(static_cast<unsigned char>(data[at]));
-    };
+    std::string written;
+    written.reserve(data.size() + 256);
+    written += data.substr(0, 8);
+    std::size_t position = 8;
+    while (position + 8 <= data.size()) {
+        const std::size_t length = big_endian_at(data, position);
+        const std::string_view kind = data.substr(position + 4, 4);
+        const std::string_view whole = data.substr(position, 12 + length);
+        if (kind == "IHDR") {
+            written += whole;
+            written += png_colour_chunks(colour);
+        } else if (!colour_chunk_kinds.contains(kind)) {
+            written += whole;
+        }
+        position += 12 + length;
+    }
     std::filesystem::path temporary = path;
     temporary += ".colour";
     {
-        // The signature, then each chunk as it is, less the colour chunks,
-        // with this picture's after the header; written as they are found,
-        // as a 4K picture is some 20 MB.
-        std::ofstream written(temporary, std::ios::binary | std::ios::trunc);
-        const auto write = [&written](std::string_view bytes) {
-            written.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-        };
-        write(data.substr(0, 8));
-        std::size_t position = 8;
-        while (position + 8 <= data.size()) {
-            const std::size_t length =
-                (byte(position) << 24) | (byte(position + 1) << 16) | (byte(position + 2) << 8) | byte(position + 3);
-            const std::string_view kind = data.substr(position + 4, 4);
-            const std::string_view whole = data.substr(position, 12 + length);
-            if (kind == "IHDR") {
-                write(whole);
-                write(png_colour_chunks(colour));
-            } else if (!colour_chunk_kinds.contains(kind)) {
-                write(whole);
-            }
-            position += 12 + length;
-        }
-        written.close();
-        if (written.fail()) {
-            throw std::runtime_error("The picture " + platform::path_text(path) + " could not be written.");
+        std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
+        file.write(written.data(), static_cast<std::streamsize>(written.size()));
+        file.close();
+        if (file.fail()) {
+            throw unwritable(path);
         }
     }
     std::filesystem::rename(temporary, path);
+}
+
+}  // namespace
+
+void describe_png(const std::filesystem::path& path, const VideoColour& colour) {
+    // In place where they fit: the chunks before the picture's data are read,
+    // and written again with this picture's colour chunks for FFmpeg's, the
+    // room left filled with a padding chunk. The 20 MB of a 4K picture stay
+    // where they are; written again whole, they made the CPU's SSIMULACRA2
+    // and Butteraugli read and write 80 MB more a pair. FFmpeg 9's colour
+    // chunks take 132 bytes, these at most 60.
+    {
+        std::fstream file(path, std::ios::in | std::ios::out | std::ios::binary);
+        if (!file) {
+            throw unreadable(path);
+        }
+        std::optional<PngHead> head = read_png_head(file);
+        if (head && !colour_chunk_near_end(file, static_cast<std::streamoff>(8 + head->room))) {
+            std::string chunks = head->header + png_colour_chunks(colour) + head->kept;
+            if (chunks.size() == head->room || chunks.size() + 12 <= head->room) {
+                if (chunks.size() < head->room) {
+                    chunks += png_chunk(padding_chunk_kind, std::string(head->room - chunks.size() - 12, '\0'));
+                }
+                file.clear();
+                file.seekp(8);
+                file.write(chunks.data(), static_cast<std::streamsize>(chunks.size()));
+                file.flush();
+                if (file.fail()) {
+                    throw unwritable(path);
+                }
+                return;
+            }
+        }
+    }
+    rewrite_png(path, colour);
 }
 
 }  // namespace vml

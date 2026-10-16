@@ -203,21 +203,67 @@ TEST(PerceptualCpu, TakesButteraugli3NormAsNumpy) {
     }
 }
 
+// A PNG's chunks, whole, in order.
+std::vector<std::string> png_chunks(const std::string& png) {
+    std::vector<std::string> chunks;
+    std::size_t position = 8;
+    while (position + 12 <= png.size()) {
+        std::size_t length = 0;
+        for (std::size_t i = 0; i < 4; ++i) {
+            length = (length << 8) | static_cast<unsigned char>(png[position + i]);
+        }
+        chunks.push_back(png.substr(position, 12 + length));
+        position += 12 + length;
+    }
+    return chunks;
+}
+
 // The chunks that tell libjxl's tools how to read a picture's values, and
-// FFmpeg's pictures with them in place of their own.
+// FFmpeg's pictures with them in place of their own, as the Python app
+// writes them. A picture as FFmpeg writes one, its colour chunks before its
+// data, is described in place: the same picture but for a padding chunk
+// ("vmPd") where FFmpeg's chunks took more room, and as long as before.
 TEST(PerceptualCpu, DescribesThePicturesColoursAsThePythonApp) {
     for (const Json& expected : reference()["chunks"]) {
         const VideoColour colour{1, expected["transfer"].get<int>(), expected["primaries"].get<int>(), false};
         EXPECT_EQ(hex_of(png_colour_chunks(colour)), expected["chunks"].get<std::string>()) << expected.dump();
     }
     const test::Folder folder;
+    const std::filesystem::path picture = folder / "picture.png";
+    int in_place = 0;
     for (const Json& expected : reference()["pictures"]) {
         SCOPED_TRACE(expected["name"].get<std::string>());
-        const std::filesystem::path picture = folder / "picture.png";
-        write_file(picture, bytes_from_hex(expected["bytes"].get<std::string>()));
-        describe_png(picture, VideoColour{1, expected["transfer"].get<int>(), expected["primaries"].get<int>(), false});
+        const VideoColour colour{1, expected["transfer"].get<int>(), expected["primaries"].get<int>(), false};
+        const std::string written = bytes_from_hex(expected["bytes"].get<std::string>());
+        write_file(picture, written);
+        describe_png(picture, colour);
         EXPECT_EQ(hex_of(read_file(picture)), expected["described"].get<std::string>());
+
+        // The same picture less any colour chunk after its data, which
+        // FFmpeg does not write: the Python app's picture, padded.
+        std::string as_ffmpeg = written.substr(0, std::min<std::size_t>(written.size(), 8));
+        bool data_seen = false;
+        for (const std::string& chunk : png_chunks(written)) {
+            const std::string kind = chunk.substr(4, 4);
+            data_seen = data_seen || kind == "IDAT";
+            if (!(data_seen && (kind == "cICP" || kind == "gAMA" || kind == "cHRM"))) {
+                as_ffmpeg += chunk;
+            }
+        }
+        write_file(picture, as_ffmpeg);
+        describe_png(picture, colour);
+        const std::string described = read_file(picture);
+        std::string unpadded = described.substr(0, std::min<std::size_t>(described.size(), 8));
+        for (const std::string& chunk : png_chunks(described)) {
+            if (chunk.substr(4, 4) == "vmPd") {
+                ++in_place;
+            } else {
+                unpadded += chunk;
+            }
+        }
+        EXPECT_EQ(hex_of(unpadded), expected["described"].get<std::string>());
     }
+    EXPECT_EQ(in_place, 1);  // FFmpeg's chunks replaced; the others have none, or no picture
 }
 
 // ---------------------------------------------------------------- with FFmpeg
