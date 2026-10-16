@@ -696,13 +696,17 @@ def _probe_isolated(stopped: list | None = None) -> tuple[VshipDevice | None, st
     Intel's). A crash now ends only that process, and the GPU metrics are
     calculated on the CPU. If given, `stopped` gets True appended when the
     app ended the probe (because it is closing) rather than the probe
-    failing."""
+    failing. Any other failure (the process not started, say) is the same
+    answer, no GPU, as VMAF's and VMAF v1's probes take one: raised, it
+    would reach whoever asked first, the window adding a video."""
     try:
         return run_isolated(_probe_in_own_process, _backend, what="Vship's GPU probe")
     except IsolatedCrashError as error:
         if error.stopped and stopped is not None:
             stopped.append(True)
         return None, str(error)
+    except Exception as error:  # any failure is the answer "no GPU"
+        return None, f"the GPU probe failed: {error}"
 
 
 def _probe_in_own_process(choice: str) -> tuple[VshipDevice | None, str]:
