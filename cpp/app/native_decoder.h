@@ -123,6 +123,9 @@ protected:
     void run() override;
 
 private:
+    // One playing of the video on its thread (native_decoder.cpp).
+    class Session;
+
     // Waits while a frame waits to be taken; false once cancelled or a seek
     // is asked for that can be made (once the first frame is known).
     bool wait_for_room();

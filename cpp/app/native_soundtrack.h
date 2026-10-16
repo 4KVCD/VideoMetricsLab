@@ -65,6 +65,9 @@ public:
     void set_enabled(bool enabled) override;
 
 private:
+    // The soundtrack played on the thread (native_soundtrack.cpp).
+    class Player;
+
     void run();
     // Whether the thread is to stop (FFmpeg's reading asks it too).
     bool stopping() const;

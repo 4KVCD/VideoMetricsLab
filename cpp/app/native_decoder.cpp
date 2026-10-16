@@ -634,506 +634,624 @@ bool write_planes(const AVFrame* frame, std::uint8_t* luma, std::uint8_t* chroma
     return false;
 }
 
-}  // namespace
+// Frees an AVFrame it owns.
+struct FrameFree {
+    void operator()(AVFrame* frame) const { av_frame_free(&frame); }
+};
+using OwnedFrame = std::unique_ptr<AVFrame, FrameFree>;
 
-void FfmpegNativeVideo::run() {
-    const std::filesystem::path path = frame_input_path(comparison_, side_);
-    const AVIOInterruptCB interrupt{&FfmpegNativeVideo::interrupted, this};
-    QString why;
-    // Direct3D 11's video decoding where the GPU decodes the video, else
-    // software (FFmpeg's decoders, dav1d for AV1); the GPU's, if it fails,
-    // gives way to software at the frame after the last given.
-    std::unique_ptr<Decoding> decoding;
-    if (gpu_decoding_) {
-        decoding = open_video(path, *device_, true, interrupt, why);
+// Whether pictures in `format` are uploaded as they are: 4:2:0, as NV12 or
+// P010 hold them.
+bool is_420(AVPixelFormat format) {
+    return format == AV_PIX_FMT_NV12 || format == AV_PIX_FMT_P010LE || format == AV_PIX_FMT_YUV420P ||
+           format == AV_PIX_FMT_YUVJ420P || format == AV_PIX_FMT_YUV420P10LE;
+}
+
+// `frame` converted to P010 (`ten_bit`) or NV12 with `converter`, made or
+// remade for it; nothing when it cannot be.
+OwnedFrame converted_to_420(SwsContext*& converter, const AVFrame* frame, bool ten_bit) {
+    const AVPixelFormat target = ten_bit ? AV_PIX_FMT_P010LE : AV_PIX_FMT_NV12;
+    converter = sws_getCachedContext(converter, frame->width, frame->height, static_cast<AVPixelFormat>(frame->format),
+                                     frame->width, frame->height, target, SWS_BICUBIC, nullptr, nullptr, nullptr);
+    OwnedFrame converted(av_frame_alloc());
+    if (converter == nullptr || converted == nullptr) {
+        return nullptr;
     }
-    if (!decoding) {
-        decoding = open_video(path, *device_, false, interrupt, why);
-        if (!decoding) {
-            if (!cancelled()) {
-                fail(why);
+    converted->format = target;
+    converted->width = frame->width;
+    converted->height = frame->height;
+    if (av_frame_get_buffer(converted.get(), 0) < 0 ||
+        sws_scale(converter, frame->data, frame->linesize, 0, frame->height, converted->data, converted->linesize) <=
+            0) {
+        return nullptr;
+    }
+    return converted;
+}
+
+// A film grain message as FFmpeg gives it (H.274's), as the grain library
+// takes it.
+FilmGrainMessage grain_message(const AVFilmGrainH274Params& h274) {
+    FilmGrainMessage message;
+    message.model_id = h274.model_id;
+    message.log2_scale_factor = h274.log2_scale_factor;
+    for (std::size_t c = 0; c < 3; ++c) {
+        if (h274.component_model_present[c] == 0) {
+            continue;
+        }
+        for (int i = 0; i < h274.num_intensity_intervals[c]; ++i) {
+            FilmGrainInterval interval{h274.intensity_interval_lower_bound[c][i],
+                                       h274.intensity_interval_upper_bound[c][i], {}};
+            for (int v = 0; v < h274.num_model_values[c]; ++v) {
+                interval.values.push_back(h274.comp_model_value[c][i][v]);
             }
-            return;
+            message.components[c].push_back(std::move(interval));
         }
     }
-    const QString side_name = side_ == FrameSide::source ? QStringLiteral("source") : QStringLiteral("distorted");
-    const bool hdr10 = shaded_ == NativeShading::none && hdr_kind(frame_video_info(comparison_, side_)) == "HDR10 / PQ";
-    std::optional<std::int64_t> origin_ns;  // the first frame's time on the stream's timeline
-    std::int64_t keep_from_ns = std::numeric_limits<std::int64_t>::min();
-    std::int64_t last_given_ns = -1;
-    bool reported = false;
-    bool at_end = false;
+    return message;
+}
+
+// Makes sure `texture` is a `width` x `height` texture in `format`, for
+// `usage` and `bind` (with `cpu_access`), making it again if not; false
+// when it cannot be made.
+bool ensure_texture(ID3D11Device* device, ComPtr<ID3D11Texture2D>& texture, UINT width, UINT height,
+                    DXGI_FORMAT format, D3D11_USAGE usage, UINT bind, UINT cpu_access = 0) {
+    if (texture) {
+        D3D11_TEXTURE2D_DESC existing{};
+        texture->GetDesc(&existing);
+        if (existing.Width == width && existing.Height == height && existing.Format == format) {
+            return true;
+        }
+    }
+    D3D11_TEXTURE2D_DESC description{};
+    description.Width = width;
+    description.Height = height;
+    description.MipLevels = 1;
+    description.ArraySize = 1;
+    description.Format = format;
+    description.SampleDesc.Count = 1;
+    description.Usage = usage;
+    description.BindFlags = bind;
+    description.CPUAccessFlags = cpu_access;
+    texture.Reset();
+    return SUCCEEDED(device->CreateTexture2D(&description, nullptr, &texture));
+}
+
+}  // namespace
+
+// One playing of the video, on its decoder's thread: the opening, the
+// frames' timeline, seeks, film grain, the frames given, and the switch to
+// software decoding when the GPU's decoder fails.
+class FfmpegNativeVideo::Session {
+public:
+    explicit Session(FfmpegNativeVideo& video)
+        : video_(video),
+          path_(frame_input_path(video.comparison_, video.side_)),
+          interrupt_{&FfmpegNativeVideo::interrupted, &video},
+          side_name_(video.side_ == FrameSide::source ? QStringLiteral("source") : QStringLiteral("distorted")),
+          hdr10_(video.shaded_ == NativeShading::none &&
+                 hdr_kind(frame_video_info(video.comparison_, video.side_)) == "HDR10 / PQ") {}
+
+    // Decodes until cancelled, or until decoding fails (fail() says why).
+    void run();
+
+private:
+    bool open();
+    void make_seek();
+    std::int64_t counted_time_ns(std::int64_t number) const;
+    bool take_frames(QString& failure);
+    std::optional<std::int64_t> frame_time();
+    bool grain_left_to_ffmpeg();
+    bool decode_on_in_software();
+    bool give(const AVFrame* frame, std::int64_t time_ns);
+    std::shared_ptr<ID3D11Texture2D> grained(const AVFrame* frame, const AVFilmGrainParams& given);
+    bool upload(const AVFrame* frame, NativeFrame& made);
+    void scale_down(const AVFrame* frame, NativeFrame& made);
+    void report(const NativeFrame& made);
+
+    FfmpegNativeVideo& video_;
+    const std::filesystem::path path_;
+    const AVIOInterruptCB interrupt_;
+    // Why the video could not be opened, if it could not.
+    QString why_;
+    // Direct3D 11's video decoding where the GPU decodes the video, else
+    // software (FFmpeg's decoders, dav1d for AV1).
+    std::unique_ptr<Decoding> decoding_;
+    const QString side_name_;
+    // PQ video shown as it comes (NativeFrame::hdr10).
+    const bool hdr10_;
+
+    // The first frame's time on the stream's timeline.
+    std::optional<std::int64_t> origin_ns_;
+    // Frames before this time (from the first frame) are decoded, not given.
+    std::int64_t keep_from_ns_ = std::numeric_limits<std::int64_t>::min();
+    std::int64_t last_given_ns_ = -1;
+    bool at_end_ = false;
     // A stream with no timestamps (a raw H.264, HEVC or VVC stream, as
     // VVenC writes them): its frames are counted from its start instead, at
     // the comparison's frame rate, as FFmpeg's command line counts them; this
     // is the number of the next frame. Nothing says where a frame of such a
     // stream is, so a seek decodes on to the frame, or from the stream's
     // start again to one already passed.
-    std::optional<std::int64_t> counted;
-    const auto counted_time_ns = [&](std::int64_t number) {
-        return comparison_.fps > 0 ? std::llround(static_cast<double>(number) * 1e9 / comparison_.fps)
-                                   : number * decoding->frame_ns;
-    };
+    std::optional<std::int64_t> counted_;
 
-    // Whether FFmpeg draws the video's grain: AV1's (AFGS1), which the
-    // grain library does not draw.
-    bool grain_by_ffmpeg = false;
-
-    // Makes the seek asked for, if any (once the first frame is known).
-    const auto make_seek = [&]() {
-        std::optional<int> wanted;
-        int asked = 0;
-        {
-            const std::lock_guard lock(mutex_);
-            if (!wanted_ms_ || !origin_ns) {
-                return;
-            }
-            wanted = std::exchange(wanted_ms_, std::nullopt);
-            asked = seeks_asked_;
-            frames_.clear();  // a flushing seek: nothing from before it is given
-        }
-        const std::int64_t target_ns = static_cast<std::int64_t>(*wanted) * 1'000'000;
-        bool sought = true;
-        if (!counted) {
-            const std::int64_t stamp =
-                av_rescale_q(*origin_ns + target_ns, AVRational{1, 1'000'000'000}, decoding->time_base);
-            sought = av_seek_frame(decoding->format, decoding->stream, stamp, AVSEEK_FLAG_BACKWARD) >= 0;
-            decoding->flush();
-            decoding->draining = false;
-            at_end = false;
-        } else if (target_ns - counted_time_ns(1) / 2 < counted_time_ns(*counted)) {
-            std::unique_ptr<Decoding> again =
-                open_video(path, *device_, decoding->hardware, interrupt, why, !grain_by_ffmpeg);
-            sought = again != nullptr;
-            if (again) {
-                decoding = std::move(again);
-                counted = 0;
-                at_end = false;
-            }
-        }
-        // Accurate: the frames before it are decoded, not given, but the one
-        // on screen at it is.
-        keep_from_ns = target_ns - (counted ? counted_time_ns(1) : decoding->frame_ns) / 2;
-        const std::lock_guard lock(mutex_);
-        seeks_made_ = std::max(seeks_made_, asked);
-        if (!sought) {
-            error_ = QStringLiteral("FFmpeg could not seek to that frame.");
-        }
-        if (at_end) {
-            ended_ = true;  // sought past the end of a counted stream already decoded to it
-        }
-    };
-
+    // Whether FFmpeg draws the video's grain: AV1's (AFGS1), which the grain
+    // library does not draw.
+    bool grain_by_ffmpeg_ = false;
     // What the status line says about the film grain: drawn, or turned off
     // by an error (then not tried again for this video).
-    std::optional<QString> grain_note;
-    std::optional<QString> reported_grain_note;
-    bool grain_off = false;
+    std::optional<QString> grain_note_;
+    bool grain_off_ = false;
+    // The status line given, and the grain note it had.
+    bool reported_ = false;
+    std::optional<QString> reported_grain_note_;
+};
 
-    // `frame`'s film grain (`given`, its message as FFmpeg gave it) drawn on
-    // its planes, uploaded, and packed into the texture it is shown from;
-    // nothing when it cannot be drawn so (it is then shown without it): only
-    // H.274's frequency model, on planar 4:2:0, 4:2:2, 4:4:4 or 4:0:0 video
-    // of 8 to 12 bits, as the Python app draws it.
-    const auto grained = [&](const AVFrame* frame,
-                             const AVFilmGrainParams& given) -> std::shared_ptr<ID3D11Texture2D> {
-        const AVPixFmtDescriptor* layout = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(frame->format));
-        if (given.type != AV_FILM_GRAIN_PARAMS_H274 || layout == nullptr ||
-            (layout->flags & (AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_RGB | AV_PIX_FMT_FLAG_ALPHA |
-                              AV_PIX_FMT_FLAG_BE | AV_PIX_FMT_FLAG_HWACCEL)) != AV_PIX_FMT_FLAG_PLANAR ||
-            (layout->nb_components != 1 && layout->nb_components != 3) || layout->comp[0].depth < 8 ||
-            layout->comp[0].depth > 12 || layout->log2_chroma_w > 1 || layout->log2_chroma_h > 1) {
-            return nullptr;
-        }
-        const int depth = layout->comp[0].depth;
-        const int count = layout->nb_components;
-        const std::pair<int, int> chroma_shift =
-            count == 3 ? std::pair<int, int>(layout->log2_chroma_w, layout->log2_chroma_h) : std::pair(0, 0);
-        const AVFilmGrainH274Params& h274 = given.codec.h274;
-        FilmGrainMessage message;
-        message.model_id = h274.model_id;
-        message.log2_scale_factor = h274.log2_scale_factor;
-        for (std::size_t c = 0; c < 3; ++c) {
-            if (h274.component_model_present[c] == 0) {
-                continue;
-            }
-            for (int i = 0; i < h274.num_intensity_intervals[c]; ++i) {
-                FilmGrainInterval interval{h274.intensity_interval_lower_bound[c][i],
-                                           h274.intensity_interval_upper_bound[c][i], {}};
-                for (int v = 0; v < h274.num_model_values[c]; ++v) {
-                    interval.values.push_back(h274.comp_model_value[c][i][v]);
-                }
-                message.components[c].push_back(std::move(interval));
-            }
-        }
-        const std::vector<std::pair<int, int>> sizes =
-            grain_plane_sizes(frame->width, frame->height, chroma_shift, count);
-        // The seed is the frame's picture order count, which can be negative.
-        const std::optional<GrainParams> params =
-            grain_params(message, static_cast<int>(given.seed), depth, sizes, chroma_shift);
-        if (!params) {
-            return nullptr;
-        }
-        const DXGI_FORMAT plane_format = depth > 8 ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R8_UNORM;
-        ID3D11Device* gpu = device_->device();
-        for (std::size_t c = 0; c < static_cast<std::size_t>(count); ++c) {
-            D3D11_TEXTURE2D_DESC existing{};
-            if (decoding->grain_planes[c]) {
-                decoding->grain_planes[c]->GetDesc(&existing);
-            }
-            if (!decoding->grain_planes[c] || existing.Width != static_cast<UINT>(sizes[c].first) ||
-                existing.Height != static_cast<UINT>(sizes[c].second) || existing.Format != plane_format) {
-                D3D11_TEXTURE2D_DESC description{};
-                description.Width = static_cast<UINT>(sizes[c].first);
-                description.Height = static_cast<UINT>(sizes[c].second);
-                description.MipLevels = 1;
-                description.ArraySize = 1;
-                description.Format = plane_format;
-                description.SampleDesc.Count = 1;
-                description.Usage = D3D11_USAGE_DEFAULT;
-                description.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-                decoding->grain_planes[c].Reset();
-                if (FAILED(gpu->CreateTexture2D(&description, nullptr, &decoding->grain_planes[c]))) {
-                    return nullptr;
-                }
-            }
-        }
-        if (!decoding->grain_targets) {
-            decoding->grain_targets = std::make_shared<UploadTextures>(
-                gpu, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET);
-        }
-        std::shared_ptr<ID3D11Texture2D> target = decoding->grain_targets->take(
-            (frame->width + 1) & ~1, (frame->height + 1) & ~1, depth > 8 ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12);
-        if (!target) {
-            return nullptr;
-        }
-        std::optional<QString> failed;
-        {
-            const std::lock_guard lock(device_->lock());
-            for (std::size_t c = 0; c < static_cast<std::size_t>(count); ++c) {
-                device_->context()->UpdateSubresource(decoding->grain_planes[c].Get(), 0, nullptr, frame->data[c],
-                                                      static_cast<UINT>(frame->linesize[c]), 0);
-            }
-            ID3D11Texture2D* const planes[3] = {decoding->grain_planes[0].Get(), decoding->grain_planes[1].Get(),
-                                                decoding->grain_planes[2].Get()};
-            failed = decoding->grain->draw(planes, count, *params, chroma_shift, target.get());
-        }
-        if (failed) {
-            logger.warning("Film grain could not be drawn, and is left off: " + failed->toStdString());
-            grain_off = true;
-            grain_note = QStringLiteral("film grain off (error)");
-            return nullptr;
-        }
-        grain_note = QStringLiteral("film grain synthesized");
-        return target;
-    };
+void FfmpegNativeVideo::run() { Session(*this).run(); }
 
-    // Gives `frame`: its texture held for as long as the frame is.
-    const auto give = [&](const AVFrame* frame, std::int64_t time_ns) -> bool {
-        auto made = std::make_shared<NativeFrame>();
-        made->time_ns = time_ns;
-        made->width = frame->width;
-        made->height = frame->height;
-        const char* space = av_color_space_name(frame->colorspace);
-        made->matrix = std::string(yuv_matrix_name(space != nullptr ? space : "", frame->height));
-        made->full_range = frame->color_range == AVCOL_RANGE_JPEG;
-        made->hdr10 = hdr10;
-        if (frame->format == AV_PIX_FMT_D3D11) {
-            const auto* frames = reinterpret_cast<const AVHWFramesContext*>(frame->hw_frames_ctx->data);
-            made->ten_bit = frames->sw_format == AV_PIX_FMT_P010LE;
-            made->texture = reinterpret_cast<ID3D11Texture2D*>(frame->data[0]);
-            made->subresource = static_cast<unsigned>(reinterpret_cast<std::intptr_t>(frame->data[1]));
-            AVFrame* kept = av_frame_clone(frame);
-            if (kept == nullptr) {
-                return false;
-            }
-            made->keep = std::shared_ptr<AVFrame>(kept, [](AVFrame* held) { av_frame_free(&held); });
-        } else {
-            const AVPixFmtDescriptor* description = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(frame->format));
-            if (description == nullptr) {
-                return false;
-            }
-            made->ten_bit = description->comp[0].depth > 8;
-            const AVFrameSideData* grain = decoding->grain && !grain_off
-                                               ? av_frame_get_side_data(frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS)
-                                               : nullptr;
-            if (grain != nullptr) {
-                if (std::shared_ptr<ID3D11Texture2D> texture =
-                        grained(frame, *reinterpret_cast<const AVFilmGrainParams*>(grain->data))) {
-                    made->texture = texture.get();
-                    made->keep = std::move(texture);
-                }
-            }
-        }
-        if (made->texture == nullptr) {
-            const DXGI_FORMAT format = made->ten_bit ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
-            // NV12 and P010 textures have even sizes; the picture is drawn
-            // from its own size.
-            const int width = (frame->width + 1) & ~1;
-            const int height = (frame->height + 1) & ~1;
-            // Pictures not already 4:2:0 are converted, as GStreamer's
-            // converter gave NV12 or P010.
-            const AVFrame* picture = frame;
-            AVFrame* converted = nullptr;
-            const auto source_format = static_cast<AVPixelFormat>(frame->format);
-            const bool direct = source_format == AV_PIX_FMT_NV12 || source_format == AV_PIX_FMT_P010LE ||
-                                source_format == AV_PIX_FMT_YUV420P || source_format == AV_PIX_FMT_YUVJ420P ||
-                                source_format == AV_PIX_FMT_YUV420P10LE;
-            if (!direct) {
-                const AVPixelFormat target = made->ten_bit ? AV_PIX_FMT_P010LE : AV_PIX_FMT_NV12;
-                decoding->converter =
-                    sws_getCachedContext(decoding->converter, frame->width, frame->height, source_format, frame->width,
-                                         frame->height, target, SWS_BICUBIC, nullptr, nullptr, nullptr);
-                converted = av_frame_alloc();
-                if (decoding->converter == nullptr || converted == nullptr) {
-                    av_frame_free(&converted);
-                    return false;
-                }
-                converted->format = target;
-                converted->width = frame->width;
-                converted->height = frame->height;
-                if (av_frame_get_buffer(converted, 0) < 0 ||
-                    sws_scale(decoding->converter, frame->data, frame->linesize, 0, frame->height, converted->data,
-                              converted->linesize) <= 0) {
-                    av_frame_free(&converted);
-                    return false;
-                }
-                picture = converted;
-            }
-            if (!decoding->uploads) {
-                decoding->uploads = std::make_shared<UploadTextures>(device_->device());
-            }
-            D3D11_TEXTURE2D_DESC staged{};
-            if (decoding->staging) {
-                decoding->staging->GetDesc(&staged);
-            }
-            if (!decoding->staging || staged.Width != static_cast<UINT>(width) ||
-                staged.Height != static_cast<UINT>(height) || staged.Format != format) {
-                D3D11_TEXTURE2D_DESC description_staging{};
-                description_staging.Width = static_cast<UINT>(width);
-                description_staging.Height = static_cast<UINT>(height);
-                description_staging.MipLevels = 1;
-                description_staging.ArraySize = 1;
-                description_staging.Format = format;
-                description_staging.SampleDesc.Count = 1;
-                description_staging.Usage = D3D11_USAGE_STAGING;
-                description_staging.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-                decoding->staging.Reset();
-                if (FAILED(device_->device()->CreateTexture2D(&description_staging, nullptr, &decoding->staging))) {
-                    av_frame_free(&converted);
-                    return false;
-                }
-            }
-            std::shared_ptr<ID3D11Texture2D> texture = decoding->uploads->take(width, height, format);
-            bool written = false;
-            if (texture) {
-                const std::lock_guard lock(device_->lock());
-                D3D11_MAPPED_SUBRESOURCE mapped{};
-                if (SUCCEEDED(device_->context()->Map(decoding->staging.Get(), 0, D3D11_MAP_WRITE, 0, &mapped))) {
-                    auto* luma = static_cast<std::uint8_t*>(mapped.pData);
-                    // The second plane follows the first, at the same pitch.
-                    written = write_planes(picture, luma,
-                                           luma + static_cast<std::size_t>(mapped.RowPitch) * static_cast<std::size_t>(height),
-                                           mapped.RowPitch);
-                    device_->context()->Unmap(decoding->staging.Get(), 0);
-                    if (written) {
-                        device_->context()->CopyResource(texture.get(), decoding->staging.Get());
-                    }
-                }
-            }
-            av_frame_free(&converted);
-            if (!written) {
-                return false;
-            }
-            made->texture = texture.get();
-            made->keep = std::move(texture);
-        }
-        if (scale_to_ && !decoding->downscale_failed) {
-            const std::lock_guard lock(device_->lock());
-            try {
-                if (!decoding->downscaler) {
-                    D3D11_TEXTURE2D_DESC description{};
-                    made->texture->GetDesc(&description);
-                    const std::optional<CropBox>& crop = comparison_.source_crop;
-                    const RECT area = crop ? RECT{crop->x, crop->y, crop->x + crop->w, crop->y + crop->h}
-                                           : RECT{0, 0, frame->width, frame->height};
-                    decoding->downscaler = std::make_unique<Downscaler>(
-                        device_->device(), device_->context(), static_cast<int>(description.Width),
-                        static_cast<int>(description.Height), area, *scale_to_, description.Format);
-                }
-                if (std::shared_ptr<ID3D11Texture2D> scaled = decoding->downscaler->scale(made->texture, made->subresource)) {
-                    made->texture = scaled.get();
-                    made->subresource = 0;
-                    made->width = scale_to_->first;
-                    made->height = scale_to_->second;
-                    made->prepared = true;
-                    made->keep = std::move(scaled);
-                }
-            } catch (const std::exception&) {
-                // Shown at its own size, as when played natively.
-                decoding->downscale_failed = true;
-            }
-        }
-        if (!reported || grain_note != reported_grain_note) {
-            reported = true;
-            reported_grain_note = grain_note;
-            QStringList details{QString::fromUtf8("%1\xC3\x97%2 %3")
-                                    .arg(made->width)
-                                    .arg(made->height)
-                                    .arg(made->ten_bit ? QStringLiteral("P010_10LE") : QStringLiteral("NV12")),
-                                QStringLiteral("memory:D3D11Memory"),
-                                decoding->hardware ? QStringLiteral("%1 GPU: d3d11va %2")
-                                                         .arg(side_name, QString::fromStdString(decoding->codec_name))
-                                                   : QStringLiteral("%1 software: %2")
-                                                         .arg(side_name, QString::fromStdString(decoding->codec_name))};
-            if (grain_note) {
-                details.append(*grain_note);
-            }
-            if (shaded_ == NativeShading::sdr) {
-                details.append(QString::fromUtf8("GPU HDR\xE2\x86\x92SDR \xC2\xB7 fixed Reinhard 1000\xE2\x86\x92" "100 nit"));
-            } else if (shaded_ == NativeShading::hdr) {
-                details.append(QString::fromUtf8("GPU colours \xE2\x86\x92 PQ BT.2020, HDR kept"));
-            }
-            const std::lock_guard lock(mutex_);
-            status_ = details.join(QString::fromUtf8(" \xC2\xB7 "));
-        }
-        deliver(std::move(made));
-        return true;
-    };
-
-    while (!cancelled()) {
+void FfmpegNativeVideo::Session::run() {
+    if (!open()) {
+        return;
+    }
+    while (!video_.cancelled()) {
         make_seek();
-        if (at_end) {
-            std::unique_lock lock(mutex_);
-            changed_.wait(lock, [this] { return cancelled_ || wanted_ms_.has_value(); });
+        if (at_end_) {
+            std::unique_lock lock(video_.mutex_);
+            video_.changed_.wait(lock, [this] { return video_.cancelled_ || video_.wanted_ms_.has_value(); });
             continue;
         }
-        if (!wait_for_room()) {
+        if (!video_.wait_for_room()) {
             continue;
         }
         int result = 0;
-        if (!decoding->draining) {
-            result = av_read_frame(decoding->format, decoding->packet);
+        if (!decoding_->draining) {
+            result = av_read_frame(decoding_->format, decoding_->packet);
             if (result == AVERROR_EOF) {
-                decoding->draining = true;
-                result = decoding->send(nullptr);
+                decoding_->draining = true;
+                result = decoding_->send(nullptr);
             } else if (result < 0) {
-                if (!cancelled()) {
-                    fail(QStringLiteral("Could not read the video: %1").arg(error_text(result)));
+                if (!video_.cancelled()) {
+                    video_.fail(QStringLiteral("Could not read the video: %1").arg(error_text(result)));
                 }
                 return;
-            } else if (decoding->packet->stream_index != decoding->stream) {
-                av_packet_unref(decoding->packet);
+            } else if (decoding_->packet->stream_index != decoding_->stream) {
+                av_packet_unref(decoding_->packet);
                 continue;
             } else {
-                result = decoding->send(decoding->packet);
-                av_packet_unref(decoding->packet);
+                result = decoding_->send(decoding_->packet);
+                av_packet_unref(decoding_->packet);
             }
         }
         // Why this way of decoding failed, if it did.
         QString failure;
         if (result < 0 && result != AVERROR(EAGAIN) && result != AVERROR_EOF) {
             failure = QStringLiteral("Decoding failed: %1").arg(error_text(result));
-        }
-        while (failure.isEmpty()) {
-            // A frame is taken only when there is room for it: one waiting
-            // here would keep a surface the decoder's pool has none for.
-            if (!wait_for_room()) {
-                break;  // cancelled, or a seek asked for: the frames still in the decoder are not wanted
-            }
-            result = decoding->receive(decoding->frame);
-            if (result == AVERROR(EAGAIN)) {
-                break;
-            }
-            if (result == AVERROR_EOF) {
-                at_end = true;
-                const std::lock_guard lock(mutex_);
-                ended_ = true;
-                break;
-            }
-            if (result < 0) {
-                failure = QStringLiteral("Decoding failed: %1").arg(error_text(result));
-                break;
-            }
-            std::optional<std::int64_t> time = picture_time(*decoding, decoding->frame);
-            if (!time && (!origin_ns || counted)) {
-                if (!counted) {
-                    counted = 0;
-                }
-                time = counted_time_ns((*counted)++);
-            } else if (!time) {
-                fail(QStringLiteral("Video frame has no usable presentation timestamp"));
-                return;
-            }
-            if (!origin_ns && counted) {
-                origin_ns = 0;
-                const std::lock_guard lock(mutex_);
-                first_frame_ms_ = 0;
-            } else if (!origin_ns) {
-                origin_ns = *time;
-                const AVFormatContext* format = decoding->format;
-                const std::int64_t file_start =
-                    format->start_time == AV_NOPTS_VALUE ? 0 : av_rescale(format->start_time, 1'000'000'000, AV_TIME_BASE);
-                const std::lock_guard lock(mutex_);
-                first_frame_ms_ = static_cast<int>(std::llround(static_cast<double>(*origin_ns - file_start) / 1e6));
-            }
-            if (decoding->grain) {
-                const AVFrameSideData* grain = av_frame_get_side_data(decoding->frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS);
-                if (grain != nullptr &&
-                    reinterpret_cast<const AVFilmGrainParams*>(grain->data)->type == AV_FILM_GRAIN_PARAMS_AV1) {
-                    // AV1's grain in a VVC video (AFGS1): FFmpeg draws it, so
-                    // the video is decoded again from this frame with
-                    // FFmpeg drawing it, as below.
-                    logger.info("The video's film grain is AV1's (AFGS1): FFmpeg draws it");
-                    grain_by_ffmpeg = true;
-                    decoding->unref_frame();
-                    break;
-                }
-            }
-            if (*time - *origin_ns >= keep_from_ns) {
-                if (!give(decoding->frame, *time - *origin_ns)) {
-                    failure = QStringLiteral("A decoded picture could not be shown");
-                } else {
-                    last_given_ns = *time - *origin_ns;
-                }
-            }
-            decoding->unref_frame();
+        } else if (!take_frames(failure)) {
+            return;
         }
         // Whether FFmpeg is to draw the grain the grain library was to draw.
-        const bool regrain = grain_by_ffmpeg && decoding->grain;
+        const bool regrain = grain_by_ffmpeg_ && decoding_->grain;
         if (failure.isEmpty() && !regrain) {
             continue;
         }
-        if (!decoding->hardware && !regrain) {
-            fail(failure);
+        if (!decoding_->hardware && !regrain) {
+            video_.fail(failure);
             return;
         }
-        // The GPU's decoder failed (a profile it does not take, a device
-        // lost), or FFmpeg is to draw the grain: FFmpeg's software decoder
-        // goes on from the frame after the last given, or from the start.
-        std::unique_ptr<Decoding> software = open_video(path, *device_, false, interrupt, why, !grain_by_ffmpeg);
-        if (!software) {
-            if (!cancelled()) {
-                fail(why);
-            }
+        if (!decode_on_in_software()) {
             return;
-        }
-        decoding = std::move(software);
-        reported = false;
-        if (counted) {
-            // From the start again, counted, keeping the frames after the last given.
-            counted = 0;
-            if (last_given_ns >= 0) {
-                keep_from_ns = last_given_ns + counted_time_ns(1) / 2;
-            }
-        } else if (origin_ns && last_given_ns >= 0) {
-            const std::int64_t next_ns = last_given_ns + decoding->frame_ns / 2;
-            av_seek_frame(decoding->format, decoding->stream,
-                          av_rescale_q(*origin_ns + next_ns, AVRational{1, 1'000'000'000}, decoding->time_base),
-                          AVSEEK_FLAG_BACKWARD);
-            keep_from_ns = next_ns;
         }
     }
+}
+
+// Opens the video: with the GPU's decoder where it decodes it, else in
+// software. False when neither can (fail() then says why).
+bool FfmpegNativeVideo::Session::open() {
+    if (video_.gpu_decoding_) {
+        decoding_ = open_video(path_, *video_.device_, true, interrupt_, why_);
+    }
+    if (!decoding_) {
+        decoding_ = open_video(path_, *video_.device_, false, interrupt_, why_);
+    }
+    if (!decoding_ && !video_.cancelled()) {
+        video_.fail(why_);
+    }
+    return decoding_ != nullptr;
+}
+
+// Makes the seek asked for, if any (once the first frame is known).
+void FfmpegNativeVideo::Session::make_seek() {
+    std::optional<int> wanted;
+    int asked = 0;
+    {
+        const std::lock_guard lock(video_.mutex_);
+        if (!video_.wanted_ms_ || !origin_ns_) {
+            return;
+        }
+        wanted = std::exchange(video_.wanted_ms_, std::nullopt);
+        asked = video_.seeks_asked_;
+        video_.frames_.clear();  // a flushing seek: nothing from before it is given
+    }
+    const std::int64_t target_ns = static_cast<std::int64_t>(*wanted) * 1'000'000;
+    bool sought = true;
+    if (!counted_) {
+        const std::int64_t stamp =
+            av_rescale_q(*origin_ns_ + target_ns, AVRational{1, 1'000'000'000}, decoding_->time_base);
+        sought = av_seek_frame(decoding_->format, decoding_->stream, stamp, AVSEEK_FLAG_BACKWARD) >= 0;
+        decoding_->flush();
+        decoding_->draining = false;
+        at_end_ = false;
+    } else if (target_ns - counted_time_ns(1) / 2 < counted_time_ns(*counted_)) {
+        std::unique_ptr<Decoding> again =
+            open_video(path_, *video_.device_, decoding_->hardware, interrupt_, why_, !grain_by_ffmpeg_);
+        sought = again != nullptr;
+        if (again) {
+            decoding_ = std::move(again);
+            counted_ = 0;
+            at_end_ = false;
+        }
+    }
+    // Accurate: the frames before it are decoded, not given, but the one on
+    // screen at it is.
+    keep_from_ns_ = target_ns - (counted_ ? counted_time_ns(1) : decoding_->frame_ns) / 2;
+    const std::lock_guard lock(video_.mutex_);
+    video_.seeks_made_ = std::max(video_.seeks_made_, asked);
+    if (!sought) {
+        video_.error_ = QStringLiteral("FFmpeg could not seek to that frame.");
+    }
+    if (at_end_) {
+        video_.ended_ = true;  // sought past the end of a counted stream already decoded to it
+    }
+}
+
+// The time of a counted stream's frame `number` (ns).
+std::int64_t FfmpegNativeVideo::Session::counted_time_ns(std::int64_t number) const {
+    return video_.comparison_.fps > 0 ? std::llround(static_cast<double>(number) * 1e9 / video_.comparison_.fps)
+                                      : number * decoding_->frame_ns;
+}
+
+// Takes the frames the decoder has made, as there is room for them, and
+// gives those from keep_from_ns_ on. `failure` says why, when the decoder
+// failed or a frame could not be given; false when a frame has no usable
+// time (fail() then says so).
+bool FfmpegNativeVideo::Session::take_frames(QString& failure) {
+    while (true) {
+        // A frame is taken only when there is room for it: one waiting here
+        // would keep a surface the decoder's pool has none for.
+        if (!video_.wait_for_room()) {
+            return true;  // cancelled, or a seek asked for: the frames still in the decoder are not wanted
+        }
+        const int result = decoding_->receive(decoding_->frame);
+        if (result == AVERROR(EAGAIN)) {
+            return true;
+        }
+        if (result == AVERROR_EOF) {
+            at_end_ = true;
+            const std::lock_guard lock(video_.mutex_);
+            video_.ended_ = true;
+            return true;
+        }
+        if (result < 0) {
+            failure = QStringLiteral("Decoding failed: %1").arg(error_text(result));
+            return true;
+        }
+        const std::optional<std::int64_t> time = frame_time();
+        if (!time) {
+            video_.fail(QStringLiteral("Video frame has no usable presentation timestamp"));
+            return false;
+        }
+        if (grain_left_to_ffmpeg()) {
+            decoding_->unref_frame();
+            return true;
+        }
+        if (*time - *origin_ns_ >= keep_from_ns_) {
+            if (!give(decoding_->frame, *time - *origin_ns_)) {
+                failure = QStringLiteral("A decoded picture could not be shown");
+            } else {
+                last_given_ns_ = *time - *origin_ns_;
+            }
+        }
+        decoding_->unref_frame();
+        if (!failure.isEmpty()) {
+            return true;
+        }
+    }
+}
+
+// The time of the frame just received, on the stream's timeline (ns):
+// counted where the stream has none. The first frame's says where the video
+// starts. Nothing when a frame has no time though the first had one.
+std::optional<std::int64_t> FfmpegNativeVideo::Session::frame_time() {
+    std::optional<std::int64_t> time = picture_time(*decoding_, decoding_->frame);
+    if (!time && (!origin_ns_ || counted_)) {
+        if (!counted_) {
+            counted_ = 0;
+        }
+        time = counted_time_ns((*counted_)++);
+    } else if (!time) {
+        return std::nullopt;
+    }
+    if (!origin_ns_ && counted_) {
+        origin_ns_ = 0;
+        const std::lock_guard lock(video_.mutex_);
+        video_.first_frame_ms_ = 0;
+    } else if (!origin_ns_) {
+        origin_ns_ = *time;
+        const AVFormatContext* format = decoding_->format;
+        const std::int64_t file_start =
+            format->start_time == AV_NOPTS_VALUE ? 0 : av_rescale(format->start_time, 1'000'000'000, AV_TIME_BASE);
+        const std::lock_guard lock(video_.mutex_);
+        video_.first_frame_ms_ = static_cast<int>(std::llround(static_cast<double>(*origin_ns_ - file_start) / 1e6));
+    }
+    return time;
+}
+
+// Whether the frame just received has AV1's film grain (AFGS1) in a VVC
+// video: FFmpeg draws it, not the grain library, so the video is to be
+// decoded again from this frame with FFmpeg drawing it.
+bool FfmpegNativeVideo::Session::grain_left_to_ffmpeg() {
+    if (!decoding_->grain) {
+        return false;
+    }
+    const AVFrameSideData* grain = av_frame_get_side_data(decoding_->frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS);
+    if (grain == nullptr || reinterpret_cast<const AVFilmGrainParams*>(grain->data)->type != AV_FILM_GRAIN_PARAMS_AV1) {
+        return false;
+    }
+    logger.info("The video's film grain is AV1's (AFGS1): FFmpeg draws it");
+    grain_by_ffmpeg_ = true;
+    return true;
+}
+
+// The GPU's decoder failed (a profile it does not take, a device lost), or
+// FFmpeg is to draw the grain: FFmpeg's software decoder goes on from the
+// frame after the last given, or from the start. False when it cannot (fail()
+// then says why).
+bool FfmpegNativeVideo::Session::decode_on_in_software() {
+    std::unique_ptr<Decoding> software = open_video(path_, *video_.device_, false, interrupt_, why_, !grain_by_ffmpeg_);
+    if (!software) {
+        if (!video_.cancelled()) {
+            video_.fail(why_);
+        }
+        return false;
+    }
+    decoding_ = std::move(software);
+    reported_ = false;
+    if (counted_) {
+        // From the start again, counted, keeping the frames after the last given.
+        counted_ = 0;
+        if (last_given_ns_ >= 0) {
+            keep_from_ns_ = last_given_ns_ + counted_time_ns(1) / 2;
+        }
+    } else if (origin_ns_ && last_given_ns_ >= 0) {
+        const std::int64_t next_ns = last_given_ns_ + decoding_->frame_ns / 2;
+        av_seek_frame(decoding_->format, decoding_->stream,
+                      av_rescale_q(*origin_ns_ + next_ns, AVRational{1, 1'000'000'000}, decoding_->time_base),
+                      AVSEEK_FLAG_BACKWARD);
+        keep_from_ns_ = next_ns;
+    }
+    return true;
+}
+
+// Gives `frame`, at `time_ns` from the first frame: its texture held for as
+// long as the frame is. False when it cannot be shown.
+bool FfmpegNativeVideo::Session::give(const AVFrame* frame, std::int64_t time_ns) {
+    auto made = std::make_shared<NativeFrame>();
+    made->time_ns = time_ns;
+    made->width = frame->width;
+    made->height = frame->height;
+    const char* space = av_color_space_name(frame->colorspace);
+    made->matrix = std::string(yuv_matrix_name(space != nullptr ? space : "", frame->height));
+    made->full_range = frame->color_range == AVCOL_RANGE_JPEG;
+    made->hdr10 = hdr10_;
+    if (frame->format == AV_PIX_FMT_D3D11) {
+        // A slice of the decoder's texture array, held with the frame.
+        const auto* frames = reinterpret_cast<const AVHWFramesContext*>(frame->hw_frames_ctx->data);
+        made->ten_bit = frames->sw_format == AV_PIX_FMT_P010LE;
+        made->texture = reinterpret_cast<ID3D11Texture2D*>(frame->data[0]);
+        made->subresource = static_cast<unsigned>(reinterpret_cast<std::intptr_t>(frame->data[1]));
+        AVFrame* kept = av_frame_clone(frame);
+        if (kept == nullptr) {
+            return false;
+        }
+        made->keep = std::shared_ptr<AVFrame>(kept, [](AVFrame* held) { av_frame_free(&held); });
+    } else {
+        const AVPixFmtDescriptor* description = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(frame->format));
+        if (description == nullptr) {
+            return false;
+        }
+        made->ten_bit = description->comp[0].depth > 8;
+        const AVFrameSideData* grain =
+            decoding_->grain && !grain_off_ ? av_frame_get_side_data(frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS) : nullptr;
+        if (grain != nullptr) {
+            if (std::shared_ptr<ID3D11Texture2D> texture =
+                    grained(frame, *reinterpret_cast<const AVFilmGrainParams*>(grain->data))) {
+                made->texture = texture.get();
+                made->keep = std::move(texture);
+            }
+        }
+        if (made->texture == nullptr && !upload(frame, *made)) {
+            return false;
+        }
+    }
+    if (video_.scale_to_ && !decoding_->downscale_failed) {
+        scale_down(frame, *made);
+    }
+    report(*made);
+    video_.deliver(std::move(made));
+    return true;
+}
+
+// `frame`'s film grain (`given`, its message as FFmpeg gave it) drawn on its
+// planes, uploaded, and packed into the texture it is shown from; nothing
+// when it cannot be drawn so (it is then shown without it): only H.274's
+// frequency model, on planar 4:2:0, 4:2:2, 4:4:4 or 4:0:0 video of 8 to 12
+// bits, as the Python app draws it.
+std::shared_ptr<ID3D11Texture2D> FfmpegNativeVideo::Session::grained(const AVFrame* frame,
+                                                                     const AVFilmGrainParams& given) {
+    const AVPixFmtDescriptor* layout = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(frame->format));
+    if (given.type != AV_FILM_GRAIN_PARAMS_H274 || layout == nullptr ||
+        (layout->flags & (AV_PIX_FMT_FLAG_PLANAR | AV_PIX_FMT_FLAG_RGB | AV_PIX_FMT_FLAG_ALPHA | AV_PIX_FMT_FLAG_BE |
+                          AV_PIX_FMT_FLAG_HWACCEL)) != AV_PIX_FMT_FLAG_PLANAR ||
+        (layout->nb_components != 1 && layout->nb_components != 3) || layout->comp[0].depth < 8 ||
+        layout->comp[0].depth > 12 || layout->log2_chroma_w > 1 || layout->log2_chroma_h > 1) {
+        return nullptr;
+    }
+    const int depth = layout->comp[0].depth;
+    const int count = layout->nb_components;
+    const std::pair<int, int> chroma_shift =
+        count == 3 ? std::pair<int, int>(layout->log2_chroma_w, layout->log2_chroma_h) : std::pair(0, 0);
+    const std::vector<std::pair<int, int>> sizes = grain_plane_sizes(frame->width, frame->height, chroma_shift, count);
+    // The seed is the frame's picture order count, which can be negative.
+    const std::optional<GrainParams> params =
+        grain_params(grain_message(given.codec.h274), static_cast<int>(given.seed), depth, sizes, chroma_shift);
+    if (!params) {
+        return nullptr;
+    }
+    ID3D11Device* gpu = video_.device_->device();
+    for (std::size_t c = 0; c < static_cast<std::size_t>(count); ++c) {
+        if (!ensure_texture(gpu, decoding_->grain_planes[c], static_cast<UINT>(sizes[c].first),
+                            static_cast<UINT>(sizes[c].second), depth > 8 ? DXGI_FORMAT_R16_UNORM : DXGI_FORMAT_R8_UNORM,
+                            D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE)) {
+            return nullptr;
+        }
+    }
+    if (!decoding_->grain_targets) {
+        decoding_->grain_targets =
+            std::make_shared<UploadTextures>(gpu, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET);
+    }
+    std::shared_ptr<ID3D11Texture2D> target = decoding_->grain_targets->take(
+        (frame->width + 1) & ~1, (frame->height + 1) & ~1, depth > 8 ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12);
+    if (!target) {
+        return nullptr;
+    }
+    std::optional<QString> failed;
+    {
+        const std::lock_guard lock(video_.device_->lock());
+        for (std::size_t c = 0; c < static_cast<std::size_t>(count); ++c) {
+            video_.device_->context()->UpdateSubresource(decoding_->grain_planes[c].Get(), 0, nullptr, frame->data[c],
+                                                         static_cast<UINT>(frame->linesize[c]), 0);
+        }
+        ID3D11Texture2D* const planes[3] = {decoding_->grain_planes[0].Get(), decoding_->grain_planes[1].Get(),
+                                            decoding_->grain_planes[2].Get()};
+        failed = decoding_->grain->draw(planes, count, *params, chroma_shift, target.get());
+    }
+    if (failed) {
+        logger.warning("Film grain could not be drawn, and is left off: " + failed->toStdString());
+        grain_off_ = true;
+        grain_note_ = QStringLiteral("film grain off (error)");
+        return nullptr;
+    }
+    grain_note_ = QStringLiteral("film grain synthesized");
+    return target;
+}
+
+// `frame`, decoded in software, uploaded into a texture of its own, NV12 or
+// P010, which `made` then holds: converted first when it is not 4:2:0.
+// False when it cannot be.
+bool FfmpegNativeVideo::Session::upload(const AVFrame* frame, NativeFrame& made) {
+    const DXGI_FORMAT format = made.ten_bit ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
+    // NV12 and P010 textures have even sizes; the picture is drawn from its
+    // own size.
+    const int width = (frame->width + 1) & ~1;
+    const int height = (frame->height + 1) & ~1;
+    OwnedFrame converted;
+    const AVFrame* picture = frame;
+    if (!is_420(static_cast<AVPixelFormat>(frame->format))) {
+        converted = converted_to_420(decoding_->converter, frame, made.ten_bit);
+        if (!converted) {
+            return false;
+        }
+        picture = converted.get();
+    }
+    ID3D11Device* gpu = video_.device_->device();
+    if (!decoding_->uploads) {
+        decoding_->uploads = std::make_shared<UploadTextures>(gpu);
+    }
+    if (!ensure_texture(gpu, decoding_->staging, static_cast<UINT>(width), static_cast<UINT>(height), format,
+                        D3D11_USAGE_STAGING, 0, D3D11_CPU_ACCESS_WRITE)) {
+        return false;
+    }
+    std::shared_ptr<ID3D11Texture2D> texture = decoding_->uploads->take(width, height, format);
+    if (!texture) {
+        return false;
+    }
+    {
+        const std::lock_guard lock(video_.device_->lock());
+        ID3D11DeviceContext* context = video_.device_->context();
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(context->Map(decoding_->staging.Get(), 0, D3D11_MAP_WRITE, 0, &mapped))) {
+            return false;
+        }
+        auto* luma = static_cast<std::uint8_t*>(mapped.pData);
+        // The second plane follows the first, at the same pitch.
+        const bool written = write_planes(
+            picture, luma, luma + static_cast<std::size_t>(mapped.RowPitch) * static_cast<std::size_t>(height),
+            mapped.RowPitch);
+        context->Unmap(decoding_->staging.Get(), 0);
+        if (!written) {
+            return false;
+        }
+        context->CopyResource(texture.get(), decoding_->staging.Get());
+    }
+    made.texture = texture.get();
+    made.keep = std::move(texture);
+    return true;
+}
+
+// The source, `made` from `frame`, scaled down to the test video's size
+// (cropped first), when it can be; else it is shown at its own size.
+void FfmpegNativeVideo::Session::scale_down(const AVFrame* frame, NativeFrame& made) {
+    const std::lock_guard lock(video_.device_->lock());
+    try {
+        if (!decoding_->downscaler) {
+            D3D11_TEXTURE2D_DESC description{};
+            made.texture->GetDesc(&description);
+            const std::optional<CropBox>& crop = video_.comparison_.source_crop;
+            const RECT area = crop ? RECT{crop->x, crop->y, crop->x + crop->w, crop->y + crop->h}
+                                   : RECT{0, 0, frame->width, frame->height};
+            decoding_->downscaler = std::make_unique<Downscaler>(
+                video_.device_->device(), video_.device_->context(), static_cast<int>(description.Width),
+                static_cast<int>(description.Height), area, *video_.scale_to_, description.Format);
+        }
+        if (std::shared_ptr<ID3D11Texture2D> scaled = decoding_->downscaler->scale(made.texture, made.subresource)) {
+            made.texture = scaled.get();
+            made.subresource = 0;
+            made.width = video_.scale_to_->first;
+            made.height = video_.scale_to_->second;
+            made.prepared = true;
+            made.keep = std::move(scaled);
+        }
+    } catch (const std::exception&) {
+        decoding_->downscale_failed = true;
+    }
+}
+
+// The status line for frames like `made`, given when it changes: the first
+// frame of each way of decoding, and the film grain drawn or turned off.
+void FfmpegNativeVideo::Session::report(const NativeFrame& made) {
+    if (reported_ && grain_note_ == reported_grain_note_) {
+        return;
+    }
+    reported_ = true;
+    reported_grain_note_ = grain_note_;
+    const QString decoder = QString::fromStdString(decoding_->codec_name);
+    QStringList details{
+        QString::fromUtf8("%1\xC3\x97%2 %3")
+            .arg(made.width)
+            .arg(made.height)
+            .arg(made.ten_bit ? QStringLiteral("P010_10LE") : QStringLiteral("NV12")),
+        QStringLiteral("memory:D3D11Memory"),
+        decoding_->hardware ? QStringLiteral("%1 GPU: d3d11va %2").arg(side_name_, decoder)
+                            : QStringLiteral("%1 software: %2").arg(side_name_, decoder)};
+    if (grain_note_) {
+        details.append(*grain_note_);
+    }
+    if (video_.shaded_ == NativeShading::sdr) {
+        details.append(QString::fromUtf8("GPU HDR\xE2\x86\x92SDR \xC2\xB7 fixed Reinhard 1000\xE2\x86\x92" "100 nit"));
+    } else if (video_.shaded_ == NativeShading::hdr) {
+        details.append(QString::fromUtf8("GPU colours \xE2\x86\x92 PQ BT.2020, HDR kept"));
+    }
+    const std::lock_guard lock(video_.mutex_);
+    video_.status_ = details.join(QString::fromUtf8(" \xC2\xB7 "));
 }
 
 }  // namespace vml::app

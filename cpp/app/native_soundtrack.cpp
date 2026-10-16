@@ -165,312 +165,396 @@ bool FfmpegSoundtrack::stopping() const {
 
 int FfmpegSoundtrack::interrupted(void* self) { return static_cast<FfmpegSoundtrack*>(self)->stopping() ? 1 : 0; }
 
+// The soundtrack played, on its thread: the file read and decoded, the sound
+// device fed, seeks made, and the device's clock read.
+class FfmpegSoundtrack::Player {
+public:
+    explicit Player(FfmpegSoundtrack& soundtrack) : soundtrack_(soundtrack) {}
+    Player(const Player&) = delete;
+    Player& operator=(const Player&) = delete;
+
+    // Opens the soundtrack and the sound device; false when either cannot
+    // be (fail() then says why).
+    bool open() { return open_file() && open_device(); }
+    // Plays until stopped, or until the device or the file fails.
+    void play();
+
+private:
+    bool open_file();
+    bool open_device();
+    void fail(const QString& why);
+    std::size_t queued_frames() const { return (queue_.size() - queue_start_) / frame_bytes_; }
+    double queued_sound_ms() const { return static_cast<double>(queued_frames()) * 1000.0 / rate_; }
+    void make_seek(double position_ms);
+    bool fill_queue();
+    bool decode_some();
+    void take_sound();
+    bool feed_device(bool enabled);
+    void read_clock();
+
+    FfmpegSoundtrack& soundtrack_;
+    Reader reader_;
+
+    // The sound device: Windows' default, shared, in its own format.
+    ComPtr<IMMDeviceEnumerator> devices_;
+    ComPtr<IMMDevice> device_;
+    ComPtr<IAudioClient> client_;
+    int channels_ = 0;
+    int rate_ = 0;
+    std::size_t frame_bytes_ = 0;
+    EventHandle ready_event_;
+    UINT32 buffer_frames_ = 0;
+    ComPtr<IAudioRenderClient> render_;
+    ComPtr<IAudioClock> clock_;
+    UINT64 frequency_ = 0;
+
+    // The sound decoded, in the device's format, not yet given to it.
+    std::vector<std::uint8_t> queue_;
+    std::size_t queue_start_ = 0;  // bytes already given
+    // Where the first sample after the last seek is on the file's timeline
+    // (ms); where the next sample decoded is; and the samples before the
+    // seek's target, which are left out.
+    double base_ms_ = 0;
+    std::optional<double> next_ms_;
+    double target_ms_ = 0;
+    bool started_ = false;
+    bool ready_ = false;
+    std::vector<std::uint8_t> converted_;
+};
+
 void FfmpegSoundtrack::run() {
     const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    // It cannot play: its clock goes too, so that the frames follow the
-    // wall clock rather than a clock that stopped.
-    const auto fail = [this](const QString& why) {
-        const std::lock_guard lock(mutex_);
-        failed_ = why;
-        ready_ = false;
-        clock_ms_.reset();
-    };
-    // Everything below is freed before COM goes.
-    [&] {
-        Reader reader;
-        reader.format = avformat_alloc_context();
-        if (reader.format == nullptr) {
-            fail(QStringLiteral("Out of memory"));
-            return;
+    {
+        // Freed before COM goes.
+        Player player(*this);
+        if (player.open()) {
+            player.play();
         }
-        reader.format->interrupt_callback = AVIOInterruptCB{&FfmpegSoundtrack::interrupted, this};
-        const std::string name = platform::path_text(path_);
-        int result = avformat_open_input(&reader.format, name.c_str(), nullptr, nullptr);
-        if (result >= 0) {
-            result = avformat_find_stream_info(reader.format, nullptr);
-        }
-        if (result < 0) {
-            if (!stopping()) {
-                fail(QStringLiteral("Could not open the soundtrack: %1").arg(error_text(result)));
-            }
-            return;
-        }
-        const AVCodec* decoder = nullptr;
-        reader.stream = av_find_best_stream(reader.format, AVMEDIA_TYPE_AUDIO, -1, -1, &decoder, 0);
-        if (reader.stream < 0 || decoder == nullptr) {
-            fail(QStringLiteral("The source has no soundtrack the app plays"));
-            return;
-        }
-        for (unsigned index = 0; index < reader.format->nb_streams; ++index) {
-            if (static_cast<int>(index) != reader.stream) {
-                reader.format->streams[index]->discard = AVDISCARD_ALL;
-            }
-        }
-        const AVStream* stream = reader.format->streams[reader.stream];
-        reader.time_base = stream->time_base;
-        reader.file_start_ms =
-            reader.format->start_time == AV_NOPTS_VALUE ? 0 : static_cast<double>(reader.format->start_time) / 1000;
-        reader.codec = avcodec_alloc_context3(decoder);
-        reader.packet = av_packet_alloc();
-        reader.frame = av_frame_alloc();
-        if (reader.codec == nullptr || reader.packet == nullptr || reader.frame == nullptr ||
-            avcodec_parameters_to_context(reader.codec, stream->codecpar) < 0) {
-            fail(QStringLiteral("Out of memory"));
-            return;
-        }
-        reader.codec->pkt_timebase = stream->time_base;
-        result = avcodec_open2(reader.codec, decoder, nullptr);
-        if (result < 0) {
-            fail(QStringLiteral("Could not decode the soundtrack: %1").arg(error_text(result)));
-            return;
-        }
-
-        // The sound device: Windows' default, shared, in its own format.
-        ComPtr<IMMDeviceEnumerator> devices;
-        ComPtr<IMMDevice> device;
-        ComPtr<IAudioClient> client;
-        WAVEFORMATEX* mix = nullptr;
-        if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&devices))) ||
-            FAILED(devices->GetDefaultAudioEndpoint(eRender, eConsole, &device)) ||
-            FAILED(device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, &client)) ||
-            FAILED(client->GetMixFormat(&mix))) {
-            fail(QStringLiteral("No sound device"));
-            return;
-        }
-        const int channels = mix->nChannels;
-        const int rate = static_cast<int>(mix->nSamplesPerSec);
-        bool floats = mix->wFormatTag == WAVE_FORMAT_IEEE_FLOAT;
-        if (mix->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
-            floats = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(mix)->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
-        }
-        const bool shorts = !floats && mix->wBitsPerSample == 16;
-        EventHandle ready_event;
-        HRESULT made = floats || shorts ? client->Initialize(AUDCLNT_SHAREMODE_SHARED,
-                                                             AUDCLNT_STREAMFLAGS_EVENTCALLBACK |
-                                                                 AUDCLNT_STREAMFLAGS_NOPERSIST,
-                                                             buffer_hns, 0, mix, nullptr)
-                                        : E_FAIL;
-        CoTaskMemFree(mix);
-        UINT32 buffer_frames = 0;
-        ComPtr<IAudioRenderClient> render;
-        ComPtr<IAudioClock> clock;
-        UINT64 frequency = 0;
-        if (FAILED(made) || ready_event.handle == nullptr || FAILED(client->SetEventHandle(ready_event.handle)) ||
-            FAILED(client->GetBufferSize(&buffer_frames)) || FAILED(client->GetService(IID_PPV_ARGS(&render))) ||
-            FAILED(client->GetService(IID_PPV_ARGS(&clock))) || FAILED(clock->GetFrequency(&frequency)) ||
-            frequency == 0) {
-            fail(QStringLiteral("The sound device cannot play"));
-            return;
-        }
-        const AVSampleFormat sample_format = floats ? AV_SAMPLE_FMT_FLT : AV_SAMPLE_FMT_S16;
-        const std::size_t frame_bytes = static_cast<std::size_t>(channels) * (floats ? 4 : 2);
-        AVChannelLayout out_layout{};
-        av_channel_layout_default(&out_layout, channels);
-        AVChannelLayout in_layout{};
-        if (reader.codec->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC) {
-            av_channel_layout_default(&in_layout, reader.codec->ch_layout.nb_channels);
-        } else {
-            av_channel_layout_copy(&in_layout, &reader.codec->ch_layout);
-        }
-        result = swr_alloc_set_opts2(&reader.resampler, &out_layout, sample_format, rate, &in_layout,
-                                     reader.codec->sample_fmt, reader.codec->sample_rate, 0, nullptr);
-        av_channel_layout_uninit(&in_layout);
-        av_channel_layout_uninit(&out_layout);
-        if (result < 0 || swr_init(reader.resampler) < 0) {
-            fail(QStringLiteral("The soundtrack cannot be converted for the sound device"));
-            return;
-        }
-
-        // The sound decoded, in the device's format, not yet given to it.
-        std::vector<std::uint8_t> queue;
-        std::size_t queue_start = 0;  // bytes already given
-        const auto queued_frames = [&] { return (queue.size() - queue_start) / frame_bytes; };
-        // Where the first sample after the last seek is on the file's
-        // timeline (ms); where the next sample decoded is; and the samples
-        // before the seek's target, which are left out.
-        double base_ms = 0;
-        std::optional<double> next_ms;
-        double target_ms = 0;
-        bool started = false;
-        bool ready = false;
-        std::vector<std::uint8_t> converted;
-
-        // Decodes some sound into the queue; at the soundtrack's end, marks it.
-        const auto decode_some = [&]() -> bool {
-            if (!reader.draining) {
-                result = av_read_frame(reader.format, reader.packet);
-                if (result == AVERROR_EOF) {
-                    reader.draining = true;
-                    avcodec_send_packet(reader.codec, nullptr);
-                } else if (result < 0) {
-                    if (!stopping()) {
-                        fail(QStringLiteral("Could not read the soundtrack: %1").arg(error_text(result)));
-                    }
-                    return false;
-                } else {
-                    if (reader.packet->stream_index == reader.stream) {
-                        avcodec_send_packet(reader.codec, reader.packet);
-                    }
-                    av_packet_unref(reader.packet);
-                }
-            }
-            while (true) {
-                result = avcodec_receive_frame(reader.codec, reader.frame);
-                if (result == AVERROR(EAGAIN)) {
-                    return true;
-                }
-                if (result < 0) {  // the end (or a broken stream: the sound ends there)
-                    reader.ended = true;
-                    return true;
-                }
-                std::int64_t stamp = reader.frame->best_effort_timestamp;
-                if (stamp == AV_NOPTS_VALUE) {
-                    stamp = reader.frame->pts;
-                }
-                if (!next_ms && stamp != AV_NOPTS_VALUE) {
-                    next_ms = av_q2d(reader.time_base) * static_cast<double>(stamp) * 1000 - reader.file_start_ms;
-                    if (*next_ms > target_ms) {
-                        // The sound starts after the target: silence first.
-                        const auto gap =
-                            static_cast<std::size_t>(std::llround((*next_ms - target_ms) * rate / 1000)) * frame_bytes;
-                        queue.insert(queue.end(), gap, 0);
-                    }
-                }
-                if (!next_ms) {
-                    next_ms = target_ms;
-                }
-                const int most = swr_get_out_samples(reader.resampler, reader.frame->nb_samples);
-                converted.resize(static_cast<std::size_t>(std::max(most, 0)) * frame_bytes);
-                std::uint8_t* out = converted.data();
-                const int made_frames =
-                    swr_convert(reader.resampler, &out, most, reader.frame->extended_data, reader.frame->nb_samples);
-                av_frame_unref(reader.frame);
-                if (made_frames <= 0) {
-                    continue;
-                }
-                // Left out up to the target.
-                std::size_t skip = 0;
-                if (*next_ms < target_ms) {
-                    skip = std::min(static_cast<std::size_t>(made_frames),
-                                    static_cast<std::size_t>(std::llround((target_ms - *next_ms) * rate / 1000)));
-                }
-                queue.insert(queue.end(), converted.begin() + static_cast<std::ptrdiff_t>(skip * frame_bytes),
-                             converted.begin() + static_cast<std::ptrdiff_t>(made_frames) * static_cast<std::ptrdiff_t>(frame_bytes));
-                *next_ms += made_frames * 1000.0 / rate;
-            }
-        };
-
-        while (!stopping()) {
-            std::optional<double> seek;
-            bool want_playing = false;
-            bool enabled = true;
-            {
-                const std::lock_guard lock(mutex_);
-                seek = std::exchange(wanted_ms_, std::nullopt);
-                want_playing = want_playing_ && !failed_;
-                enabled = enabled_;
-            }
-            if (seek) {
-                if (started) {
-                    client->Stop();
-                    started = false;
-                }
-                client->Reset();
-                queue.clear();
-                queue_start = 0;
-                reader.draining = false;
-                reader.ended = false;
-                avcodec_flush_buffers(reader.codec);
-                swr_close(reader.resampler);
-                swr_init(reader.resampler);
-                target_ms = *seek;
-                base_ms = *seek;
-                next_ms.reset();
-                ready = false;
-                const auto stamp = static_cast<std::int64_t>((*seek + reader.file_start_ms) / 1000 / av_q2d(reader.time_base));
-                av_seek_frame(reader.format, reader.stream, stamp, AVSEEK_FLAG_BACKWARD);
-            }
-            while (!reader.ended && queued_frames() * 1000.0 / rate < queued_ms) {
-                if (!decode_some()) {
-                    return;
-                }
-                if (stopping()) {
-                    return;
-                }
-                const std::lock_guard lock(mutex_);
-                if (wanted_ms_) {
-                    break;  // another seek: made first
-                }
-            }
-            if (!ready && (reader.ended || queued_frames() * 1000.0 / rate >= ready_ms)) {
-                ready = true;
-                const std::lock_guard lock(mutex_);
-                if (!wanted_ms_) {
-                    ready_ = true;
-                    clock_ms_ = base_ms;
-                }
-            }
-            if (want_playing && ready && !started) {
-                if (FAILED(client->Start())) {
-                    fail(QStringLiteral("The sound device cannot play"));
-                    return;
-                }
-                started = true;
-            } else if (!want_playing && started) {
-                client->Stop();
-                started = false;
-            }
-            if (!started) {
-                std::unique_lock lock(mutex_);
-                changed_.wait_for(lock, std::chrono::milliseconds(10));
-                continue;
-            }
-            WaitForSingleObject(ready_event.handle, 20);
-            UINT32 padding = 0;
-            if (FAILED(client->GetCurrentPadding(&padding))) {
-                fail(QStringLiteral("The sound device went"));
-                return;
-            }
-            const UINT32 room = buffer_frames - padding;
-            // Sound as far as decoded; past the soundtrack's end, silence, so
-            // that its clock goes on timing the frames.
-            const auto given = static_cast<UINT32>(
-                std::min<std::size_t>(room, reader.ended ? room : queued_frames()));
-            if (given > 0) {
-                BYTE* data = nullptr;
-                if (FAILED(render->GetBuffer(given, &data))) {
-                    fail(QStringLiteral("The sound device went"));
-                    return;
-                }
-                const std::size_t from_queue = std::min<std::size_t>(given, queued_frames());
-                if (enabled) {
-                    std::memcpy(data, queue.data() + queue_start, from_queue * frame_bytes);
-                    std::memset(data + from_queue * frame_bytes, 0, (given - from_queue) * frame_bytes);
-                } else {  // muted: silence, the clock still running
-                    std::memset(data, 0, static_cast<std::size_t>(given) * frame_bytes);
-                }
-                render->ReleaseBuffer(given, 0);
-                queue_start += from_queue * frame_bytes;
-                if (queue_start > queue.size() / 2) {
-                    queue.erase(queue.begin(), queue.begin() + static_cast<std::ptrdiff_t>(queue_start));
-                    queue_start = 0;
-                }
-            }
-            UINT64 position = 0;
-            UINT64 counter = 0;
-            if (SUCCEEDED(clock->GetPosition(&position, &counter))) {
-                const std::lock_guard lock(mutex_);
-                if (!wanted_ms_) {
-                    clock_ms_ = base_ms + static_cast<double>(position) * 1000 / static_cast<double>(frequency);
-                }
-            }
-        }
-        if (started) {
-            client->Stop();
-        }
-    }();
+    }
     if (SUCCEEDED(com)) {
         CoUninitialize();
+    }
+}
+
+// It cannot play: its clock goes too, so that the frames follow the wall
+// clock rather than a clock that stopped.
+void FfmpegSoundtrack::Player::fail(const QString& why) {
+    const std::lock_guard lock(soundtrack_.mutex_);
+    soundtrack_.failed_ = why;
+    soundtrack_.ready_ = false;
+    soundtrack_.clock_ms_.reset();
+}
+
+bool FfmpegSoundtrack::Player::open_file() {
+    reader_.format = avformat_alloc_context();
+    if (reader_.format == nullptr) {
+        fail(QStringLiteral("Out of memory"));
+        return false;
+    }
+    reader_.format->interrupt_callback = AVIOInterruptCB{&FfmpegSoundtrack::interrupted, &soundtrack_};
+    const std::string name = platform::path_text(soundtrack_.path_);
+    int result = avformat_open_input(&reader_.format, name.c_str(), nullptr, nullptr);
+    if (result >= 0) {
+        result = avformat_find_stream_info(reader_.format, nullptr);
+    }
+    if (result < 0) {
+        if (!soundtrack_.stopping()) {
+            fail(QStringLiteral("Could not open the soundtrack: %1").arg(error_text(result)));
+        }
+        return false;
+    }
+    const AVCodec* decoder = nullptr;
+    reader_.stream = av_find_best_stream(reader_.format, AVMEDIA_TYPE_AUDIO, -1, -1, &decoder, 0);
+    if (reader_.stream < 0 || decoder == nullptr) {
+        fail(QStringLiteral("The source has no soundtrack the app plays"));
+        return false;
+    }
+    for (unsigned index = 0; index < reader_.format->nb_streams; ++index) {
+        if (static_cast<int>(index) != reader_.stream) {
+            reader_.format->streams[index]->discard = AVDISCARD_ALL;
+        }
+    }
+    const AVStream* stream = reader_.format->streams[reader_.stream];
+    reader_.time_base = stream->time_base;
+    reader_.file_start_ms =
+        reader_.format->start_time == AV_NOPTS_VALUE ? 0 : static_cast<double>(reader_.format->start_time) / 1000;
+    reader_.codec = avcodec_alloc_context3(decoder);
+    reader_.packet = av_packet_alloc();
+    reader_.frame = av_frame_alloc();
+    if (reader_.codec == nullptr || reader_.packet == nullptr || reader_.frame == nullptr ||
+        avcodec_parameters_to_context(reader_.codec, stream->codecpar) < 0) {
+        fail(QStringLiteral("Out of memory"));
+        return false;
+    }
+    reader_.codec->pkt_timebase = stream->time_base;
+    result = avcodec_open2(reader_.codec, decoder, nullptr);
+    if (result < 0) {
+        fail(QStringLiteral("Could not decode the soundtrack: %1").arg(error_text(result)));
+        return false;
+    }
+    return true;
+}
+
+// The sound device, and the resampler that turns the soundtrack into its
+// format.
+bool FfmpegSoundtrack::Player::open_device() {
+    WAVEFORMATEX* mix = nullptr;
+    if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&devices_))) ||
+        FAILED(devices_->GetDefaultAudioEndpoint(eRender, eConsole, &device_)) ||
+        FAILED(device_->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, &client_)) ||
+        FAILED(client_->GetMixFormat(&mix))) {
+        fail(QStringLiteral("No sound device"));
+        return false;
+    }
+    channels_ = mix->nChannels;
+    rate_ = static_cast<int>(mix->nSamplesPerSec);
+    bool floats = mix->wFormatTag == WAVE_FORMAT_IEEE_FLOAT;
+    if (mix->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
+        floats = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(mix)->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+    }
+    const bool shorts = !floats && mix->wBitsPerSample == 16;
+    const HRESULT made =
+        floats || shorts ? client_->Initialize(AUDCLNT_SHAREMODE_SHARED,
+                                               AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_NOPERSIST,
+                                               buffer_hns, 0, mix, nullptr)
+                         : E_FAIL;
+    CoTaskMemFree(mix);
+    if (FAILED(made) || ready_event_.handle == nullptr || FAILED(client_->SetEventHandle(ready_event_.handle)) ||
+        FAILED(client_->GetBufferSize(&buffer_frames_)) || FAILED(client_->GetService(IID_PPV_ARGS(&render_))) ||
+        FAILED(client_->GetService(IID_PPV_ARGS(&clock_))) || FAILED(clock_->GetFrequency(&frequency_)) ||
+        frequency_ == 0) {
+        fail(QStringLiteral("The sound device cannot play"));
+        return false;
+    }
+    const AVSampleFormat sample_format = floats ? AV_SAMPLE_FMT_FLT : AV_SAMPLE_FMT_S16;
+    frame_bytes_ = static_cast<std::size_t>(channels_) * (floats ? 4 : 2);
+    AVChannelLayout out_layout{};
+    av_channel_layout_default(&out_layout, channels_);
+    AVChannelLayout in_layout{};
+    if (reader_.codec->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC) {
+        av_channel_layout_default(&in_layout, reader_.codec->ch_layout.nb_channels);
+    } else {
+        av_channel_layout_copy(&in_layout, &reader_.codec->ch_layout);
+    }
+    const int result = swr_alloc_set_opts2(&reader_.resampler, &out_layout, sample_format, rate_, &in_layout,
+                                           reader_.codec->sample_fmt, reader_.codec->sample_rate, 0, nullptr);
+    av_channel_layout_uninit(&in_layout);
+    av_channel_layout_uninit(&out_layout);
+    if (result < 0 || swr_init(reader_.resampler) < 0) {
+        fail(QStringLiteral("The soundtrack cannot be converted for the sound device"));
+        return false;
+    }
+    return true;
+}
+
+void FfmpegSoundtrack::Player::play() {
+    while (!soundtrack_.stopping()) {
+        std::optional<double> seek;
+        bool want_playing = false;
+        bool enabled = true;
+        {
+            const std::lock_guard lock(soundtrack_.mutex_);
+            seek = std::exchange(soundtrack_.wanted_ms_, std::nullopt);
+            want_playing = soundtrack_.want_playing_ && !soundtrack_.failed_;
+            enabled = soundtrack_.enabled_;
+        }
+        if (seek) {
+            make_seek(*seek);
+        }
+        if (!fill_queue()) {
+            return;
+        }
+        if (!ready_ && (reader_.ended || queued_sound_ms() >= ready_ms)) {
+            ready_ = true;
+            const std::lock_guard lock(soundtrack_.mutex_);
+            if (!soundtrack_.wanted_ms_) {
+                soundtrack_.ready_ = true;
+                soundtrack_.clock_ms_ = base_ms_;
+            }
+        }
+        if (want_playing && ready_ && !started_) {
+            if (FAILED(client_->Start())) {
+                fail(QStringLiteral("The sound device cannot play"));
+                return;
+            }
+            started_ = true;
+        } else if (!want_playing && started_) {
+            client_->Stop();
+            started_ = false;
+        }
+        if (!started_) {
+            std::unique_lock lock(soundtrack_.mutex_);
+            soundtrack_.changed_.wait_for(lock, std::chrono::milliseconds(10));
+            continue;
+        }
+        WaitForSingleObject(ready_event_.handle, 20);
+        if (!feed_device(enabled)) {
+            return;
+        }
+        read_clock();
+    }
+    if (started_) {
+        client_->Stop();
+    }
+}
+
+// Seeks to `position_ms` on the file's timeline: the device and the queue
+// emptied, the decoder started again from the key frame before it.
+void FfmpegSoundtrack::Player::make_seek(double position_ms) {
+    if (started_) {
+        client_->Stop();
+        started_ = false;
+    }
+    client_->Reset();
+    queue_.clear();
+    queue_start_ = 0;
+    reader_.draining = false;
+    reader_.ended = false;
+    avcodec_flush_buffers(reader_.codec);
+    swr_close(reader_.resampler);
+    swr_init(reader_.resampler);
+    target_ms_ = position_ms;
+    base_ms_ = position_ms;
+    next_ms_.reset();
+    ready_ = false;
+    const auto stamp = static_cast<std::int64_t>((position_ms + reader_.file_start_ms) / 1000 / av_q2d(reader_.time_base));
+    av_seek_frame(reader_.format, reader_.stream, stamp, AVSEEK_FLAG_BACKWARD);
+}
+
+// Decodes until queued_ms of sound is queued, the soundtrack ends or another
+// seek is asked for. False when playing is to end (stopped, or the file
+// could not be read).
+bool FfmpegSoundtrack::Player::fill_queue() {
+    while (!reader_.ended && queued_sound_ms() < queued_ms) {
+        if (!decode_some() || soundtrack_.stopping()) {
+            return false;
+        }
+        const std::lock_guard lock(soundtrack_.mutex_);
+        if (soundtrack_.wanted_ms_) {
+            break;  // another seek: made first
+        }
+    }
+    return true;
+}
+
+// Decodes some sound into the queue; at the soundtrack's end, marks it.
+// False when the file could not be read (fail() then says why).
+bool FfmpegSoundtrack::Player::decode_some() {
+    if (!reader_.draining) {
+        const int result = av_read_frame(reader_.format, reader_.packet);
+        if (result == AVERROR_EOF) {
+            reader_.draining = true;
+            avcodec_send_packet(reader_.codec, nullptr);
+        } else if (result < 0) {
+            if (!soundtrack_.stopping()) {
+                fail(QStringLiteral("Could not read the soundtrack: %1").arg(error_text(result)));
+            }
+            return false;
+        } else {
+            if (reader_.packet->stream_index == reader_.stream) {
+                avcodec_send_packet(reader_.codec, reader_.packet);
+            }
+            av_packet_unref(reader_.packet);
+        }
+    }
+    while (true) {
+        const int result = avcodec_receive_frame(reader_.codec, reader_.frame);
+        if (result == AVERROR(EAGAIN)) {
+            return true;
+        }
+        if (result < 0) {  // the end (or a broken stream: the sound ends there)
+            reader_.ended = true;
+            return true;
+        }
+        take_sound();
+    }
+}
+
+// Queues the sound decoded into reader_.frame, converted to the device's
+// format, from the seek's target on: silence first where the sound starts
+// after it.
+void FfmpegSoundtrack::Player::take_sound() {
+    std::int64_t stamp = reader_.frame->best_effort_timestamp;
+    if (stamp == AV_NOPTS_VALUE) {
+        stamp = reader_.frame->pts;
+    }
+    if (!next_ms_ && stamp != AV_NOPTS_VALUE) {
+        next_ms_ = av_q2d(reader_.time_base) * static_cast<double>(stamp) * 1000 - reader_.file_start_ms;
+        if (*next_ms_ > target_ms_) {
+            const auto gap =
+                static_cast<std::size_t>(std::llround((*next_ms_ - target_ms_) * rate_ / 1000)) * frame_bytes_;
+            queue_.insert(queue_.end(), gap, 0);
+        }
+    }
+    if (!next_ms_) {
+        next_ms_ = target_ms_;
+    }
+    const int most = swr_get_out_samples(reader_.resampler, reader_.frame->nb_samples);
+    converted_.resize(static_cast<std::size_t>(std::max(most, 0)) * frame_bytes_);
+    std::uint8_t* out = converted_.data();
+    const int made_frames =
+        swr_convert(reader_.resampler, &out, most, reader_.frame->extended_data, reader_.frame->nb_samples);
+    av_frame_unref(reader_.frame);
+    if (made_frames <= 0) {
+        return;
+    }
+    // Left out up to the target.
+    std::size_t skip = 0;
+    if (*next_ms_ < target_ms_) {
+        skip = std::min(static_cast<std::size_t>(made_frames),
+                        static_cast<std::size_t>(std::llround((target_ms_ - *next_ms_) * rate_ / 1000)));
+    }
+    queue_.insert(queue_.end(), converted_.begin() + static_cast<std::ptrdiff_t>(skip * frame_bytes_),
+                  converted_.begin() + static_cast<std::ptrdiff_t>(made_frames) * static_cast<std::ptrdiff_t>(frame_bytes_));
+    *next_ms_ += made_frames * 1000.0 / rate_;
+}
+
+// Gives the device as much sound as it has room for: as far as decoded,
+// then, past the soundtrack's end, silence, so that its clock goes on timing
+// the frames; silence too while muted (not `enabled`). False when the device
+// went (fail() then says so).
+bool FfmpegSoundtrack::Player::feed_device(bool enabled) {
+    UINT32 padding = 0;
+    if (FAILED(client_->GetCurrentPadding(&padding))) {
+        fail(QStringLiteral("The sound device went"));
+        return false;
+    }
+    const UINT32 room = buffer_frames_ - padding;
+    const auto given = static_cast<UINT32>(std::min<std::size_t>(room, reader_.ended ? room : queued_frames()));
+    if (given == 0) {
+        return true;
+    }
+    BYTE* data = nullptr;
+    if (FAILED(render_->GetBuffer(given, &data))) {
+        fail(QStringLiteral("The sound device went"));
+        return false;
+    }
+    const std::size_t from_queue = std::min<std::size_t>(given, queued_frames());
+    if (enabled) {
+        std::memcpy(data, queue_.data() + queue_start_, from_queue * frame_bytes_);
+        std::memset(data + from_queue * frame_bytes_, 0, (given - from_queue) * frame_bytes_);
+    } else {
+        std::memset(data, 0, static_cast<std::size_t>(given) * frame_bytes_);
+    }
+    render_->ReleaseBuffer(given, 0);
+    queue_start_ += from_queue * frame_bytes_;
+    if (queue_start_ > queue_.size() / 2) {
+        queue_.erase(queue_.begin(), queue_.begin() + static_cast<std::ptrdiff_t>(queue_start_));
+        queue_start_ = 0;
+    }
+    return true;
+}
+
+// The clock: where the device has played to, on the file's timeline (ms),
+// unless a seek waits.
+void FfmpegSoundtrack::Player::read_clock() {
+    UINT64 position = 0;
+    UINT64 counter = 0;
+    if (SUCCEEDED(clock_->GetPosition(&position, &counter))) {
+        const std::lock_guard lock(soundtrack_.mutex_);
+        if (!soundtrack_.wanted_ms_) {
+            soundtrack_.clock_ms_ = base_ms_ + static_cast<double>(position) * 1000 / static_cast<double>(frequency_);
+        }
     }
 }
 
