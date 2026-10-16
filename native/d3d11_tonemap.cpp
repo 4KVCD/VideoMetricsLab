@@ -109,7 +109,6 @@ float4 ps(Vertex v) : SV_Target {
 constexpr int kConstants = 36;
 
 struct PresenterViews {
-    ComPtr<ID3D11Texture2D> texture;
     ComPtr<ID3D11ShaderResourceView> rgb, luma, chroma;
 };
 
@@ -126,9 +125,6 @@ struct Presenter {
     ComPtr<ID3D11Buffer> constants;
     UINT width=0, height=0;
     int asked=DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;  // the colour space last asked for, given or not
-    // The frames' views, kept: the decoders' pools hand the same textures round.
-    PresenterViews views[16];
-    int next=0;
     // Frames a shader cannot read, copied (present_source).
     ComPtr<ID3D11Texture2D> copy;
 };
@@ -255,24 +251,22 @@ extern "C" __declspec(dllexport) int vmaf_present_wait(void* opaque, unsigned ti
     return WaitForSingleObjectEx(p->waitable,timeout_ms,TRUE)==WAIT_OBJECT_0?0:1;
 }
 
-static PresenterViews* present_views(Presenter* p, ID3D11Texture2D* texture, const D3D11_TEXTURE2D_DESC& desc) {
-    for (auto& v : p->views) if (v.texture.Get()==texture) return &v;
-    PresenterViews& v=p->views[p->next]; p->next=(p->next+1)%16;
-    v=PresenterViews{}; v.texture=texture;
+// The views the shader reads `texture` through, made for each frame drawn
+// (2.5 us on an RTX 5090). Kept, they would keep their textures alive, and
+// with them the GPU memory of every texture the decoders have let go.
+static HRESULT present_views(Presenter* p, ID3D11Texture2D* texture, const D3D11_TEXTURE2D_DESC& desc,
+                             PresenterViews& v) {
     D3D11_SHADER_RESOURCE_VIEW_DESC d={}; d.ViewDimension=D3D11_SRV_DIMENSION_TEXTURE2D; d.Texture2D.MipLevels=1;
-    HRESULT hr=S_OK;
     if (desc.Format==DXGI_FORMAT_NV12 || desc.Format==DXGI_FORMAT_P010) {
         bool deep=desc.Format==DXGI_FORMAT_P010;
         d.Format=deep?DXGI_FORMAT_R16_UNORM:DXGI_FORMAT_R8_UNORM;
-        hr=p->device->CreateShaderResourceView(texture,&d,&v.luma);
+        HRESULT hr=p->device->CreateShaderResourceView(texture,&d,&v.luma);
+        if (FAILED(hr)) return hr;
         d.Format=deep?DXGI_FORMAT_R16G16_UNORM:DXGI_FORMAT_R8G8_UNORM;
-        if (SUCCEEDED(hr)) hr=p->device->CreateShaderResourceView(texture,&d,&v.chroma);
-    } else {
-        d.Format=desc.Format;
-        hr=p->device->CreateShaderResourceView(texture,&d,&v.rgb);
+        return p->device->CreateShaderResourceView(texture,&d,&v.chroma);
     }
-    if (FAILED(hr)) { v=PresenterViews{}; return nullptr; }
-    return &v;
+    d.Format=desc.Format;
+    return p->device->CreateShaderResourceView(texture,&d,&v.rgb);
 }
 
 // The texture a shader reads `frame`'s `subresource` from, and its
@@ -323,7 +317,7 @@ static void present_constants(float* k, const D3D11_TEXTURE2D_DESC& desc, const 
 // Records the frame's draw into `rtv`, in `viewport`, the rest cleared to
 // `clear`, and runs it on the immediate context. With the device lock held.
 static HRESULT present_draw(Presenter* p, ID3D11RenderTargetView* rtv, const D3D11_VIEWPORT& viewport,
-                            PresenterViews* views, const float* constants, const float* clear) {
+                            const PresenterViews& views, const float* constants, const float* clear) {
     auto c=p->deferred.Get();
     D3D11_MAPPED_SUBRESOURCE mapped;
     HRESULT hr=c->Map(p->constants.Get(),0,D3D11_MAP_WRITE_DISCARD,0,&mapped);
@@ -337,7 +331,7 @@ static HRESULT present_draw(Presenter* p, ID3D11RenderTargetView* rtv, const D3D
     c->IASetInputLayout(nullptr);
     c->VSSetShader(p->vs.Get(),nullptr,0); c->PSSetShader(p->ps.Get(),nullptr,0);
     c->VSSetConstantBuffers(0,1,p->constants.GetAddressOf()); c->PSSetConstantBuffers(0,1,p->constants.GetAddressOf());
-    ID3D11ShaderResourceView* srvs[3]={views->rgb.Get(),views->luma.Get(),views->chroma.Get()};
+    ID3D11ShaderResourceView* srvs[3]={views.rgb.Get(),views.luma.Get(),views.chroma.Get()};
     c->PSSetShaderResources(0,3,srvs);
     c->PSSetSamplers(0,1,p->sampler.GetAddressOf());
     c->Draw(4,0);
@@ -384,8 +378,9 @@ extern "C" __declspec(dllexport) int vmaf_present_texture(void* opaque, ID3D11Re
     D3D11_TEXTURE2D_DESC desc;
     ID3D11Texture2D* drawn=present_source(p,texture.Get(),subresource,desc);
     if (!drawn) return E_OUTOFMEMORY;
-    PresenterViews* views=present_views(p,drawn,desc);
-    if (!views) return E_FAIL;
+    PresenterViews views;
+    hr=present_views(p,drawn,desc,views);
+    if (FAILED(hr)) return hr;
     float s[4]={0,0,float(desc.Width),float(desc.Height)};
     if (source) for (int i=0;i<4;i++) s[i]=float(source[i]);
     float t[4];
@@ -408,7 +403,6 @@ extern "C" __declspec(dllexport) void vmaf_present_destroy(void* opaque) {
     auto p=static_cast<Presenter*>(opaque);
     if (!p) return;
     if (p->waitable) CloseHandle(p->waitable);
-    for (auto& v : p->views) v=PresenterViews{};
     p->copy.Reset(); p->target.Reset(); p->swapchain.Reset();
     p->immediate->Flush();
     delete p;
