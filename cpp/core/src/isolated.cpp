@@ -100,6 +100,146 @@ std::string describe_exit_code(int exit_code) {
     return hex;
 }
 
+namespace {
+
+// Writes `request`, for the child running `what`, into `folder`; returns
+// its file.
+std::filesystem::path write_request(const std::filesystem::path& folder, const nlohmann::json& request,
+                                    std::string_view what) {
+    const std::filesystem::path request_file = folder / "request.json";
+    std::ofstream file(request_file, std::ios::binary);
+    file << request.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+    if (!file) {
+        throw std::runtime_error("The request of " + std::string(what) + " could not be written.");
+    }
+    return request_file;
+}
+
+// The parent's side of a child's run: a thread reads the child's messages as
+// they come, and this one hands them on and watches for Cancel, which the
+// child cannot see.
+class ChildConversation {
+public:
+    ChildConversation(platform::ChildProcess& child, const std::function<void(const nlohmann::json&)>& on_message,
+                      const CancelToken& cancel)
+        : child_(child), on_message_(on_message), cancel_(cancel), reader_([this] { read(); }) {}
+    ~ChildConversation() {
+        if (reader_.joinable()) {
+            reader_.join();
+        }
+    }
+    ChildConversation(const ChildConversation&) = delete;
+    ChildConversation& operator=(const ChildConversation&) = delete;
+
+    // Hands on the child's messages until its output ends. Throws what
+    // on_message throws, the child ended first.
+    void run();
+
+    // Its result, or its error, once it said either.
+    std::optional<nlohmann::json> result;
+    std::optional<std::string> failure;
+    // Whether Cancel ended it, and whether it was ended for not ending by
+    // itself once it had answered.
+    bool stopped = false;
+    bool ended_after_answer = false;
+
+private:
+    void read();
+    void take(const std::string& text);
+    void end_if_answered_long_ago();
+
+    platform::ChildProcess& child_;
+    const std::function<void(const nlohmann::json&)>& on_message_;
+    const CancelToken& cancel_;
+    std::mutex mutex_;
+    std::condition_variable arrived_;
+    std::deque<std::string> messages_;
+    bool ended_ = false;
+    std::optional<std::chrono::steady_clock::time_point> answered_;  // when its result or error came
+    std::thread reader_;  // last: it starts once the rest is set up
+};
+
+void ChildConversation::run() {
+    try {
+        std::unique_lock lock(mutex_);
+        while (true) {
+            arrived_.wait_for(lock, std::chrono::milliseconds(100), [this] { return !messages_.empty() || ended_; });
+            if (cancel_.cancelled() && !stopped) {
+                child_.terminate();  // the child, and every program it started (they are in its job)
+                stopped = true;
+            }
+            while (!messages_.empty()) {
+                const std::string text = std::move(messages_.front());
+                messages_.pop_front();
+                lock.unlock();
+                take(text);
+                lock.lock();
+            }
+            if (ended_) {
+                break;
+            }
+            end_if_answered_long_ago();
+        }
+    } catch (...) {
+        child_.terminate();  // on_message threw: the child must not outlive the run
+        reader_.join();
+        throw;
+    }
+    reader_.join();
+}
+
+// The reader's thread: each message line the child writes, until its output
+// ends.
+void ChildConversation::read() {
+    while (const std::optional<std::string> line = child_.read_line()) {
+        // Looked for anywhere in the line: a library may have written text
+        // without ending its line.
+        const std::size_t mark = line->find(message_mark);
+        if (mark != std::string::npos) {
+            const std::lock_guard lock(mutex_);
+            messages_.push_back(line->substr(mark + message_mark.size()));
+            arrived_.notify_one();
+        }
+    }
+    const std::lock_guard lock(mutex_);
+    ended_ = true;
+    arrived_.notify_one();
+}
+
+// One message of the child's: its result or its error kept, a line of its
+// log written to this app's under its own name, anything else handed to
+// on_message (not once Cancel stopped it).
+void ChildConversation::take(const std::string& text) {
+    const nlohmann::json message = nlohmann::json::parse(text, nullptr, false);
+    if (message.is_object() && message.contains("result")) {
+        result = message["result"];
+    } else if (message.is_object() && message.contains("error")) {
+        failure = message["error"].is_string() ? message["error"].get<std::string>() : message["error"].dump();
+    } else if (message.is_object() && message.contains("log") && message["log"].is_object()) {
+        const nlohmann::json& line = message["log"];
+        app_log::write(line.value("level", static_cast<int>(app_log::Level::info)),
+                       line.value("name", std::string("vml")), line.value("text", std::string()));
+    } else if (!message.is_discarded() && !stopped && on_message_) {
+        on_message_(message);
+    }
+}
+
+// Ends a child that has answered and not ended within answered_wait.
+void ChildConversation::end_if_answered_long_ago() {
+    if (!(result || failure) || ended_after_answer) {
+        return;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (!answered_) {
+        answered_ = now;
+    } else if (now - *answered_ >= answered_wait) {
+        child_.terminate();  // its answer is here; it and what it started go
+        ended_after_answer = true;
+    }
+}
+
+}  // namespace
+
 void set_isolation_program(std::optional<std::filesystem::path> path) { program() = std::move(path); }
 
 std::optional<std::filesystem::path> isolation_program() { return program(); }
@@ -112,14 +252,7 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
         throw std::logic_error("no program to run " + std::string(what) + " in");
     }
     const ChildFolder folder;
-    const std::filesystem::path request_file = folder.path() / "request.json";
-    {
-        std::ofstream file(request_file, std::ios::binary);
-        file << request.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
-        if (!file) {
-            throw std::runtime_error("The request of " + std::string(what) + " could not be written.");
-        }
-    }
+    const std::filesystem::path request_file = write_request(folder.path(), request, what);
     platform::ChildProcess child = platform::ChildProcess::start(
         {platform::path_text(*program()), std::string(isolated_argument), std::string(task),
          platform::path_text(request_file)},
@@ -127,93 +260,21 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
     // Pause holds the child and every program it started (they are in its
     // job), so the work in it waits whatever it is doing.
     const CancelToken::Attached attached = cancel.attach(child);
-
-    // A thread reads the child's messages as they come; this one hands them
-    // on and watches for Cancel, which the child cannot see.
-    std::mutex mutex;
-    std::condition_variable arrived;
-    std::deque<std::string> messages;
-    bool ended = false;
-    std::thread reader([&] {
-        while (const std::optional<std::string> line = child.read_line()) {
-            // Looked for anywhere in the line: a library may have written
-            // text without ending its line.
-            const std::size_t mark = line->find(message_mark);
-            if (mark != std::string::npos) {
-                const std::lock_guard lock(mutex);
-                messages.push_back(line->substr(mark + message_mark.size()));
-                arrived.notify_one();
-            }
-        }
-        const std::lock_guard lock(mutex);
-        ended = true;
-        arrived.notify_one();
-    });
-    std::optional<nlohmann::json> result;
-    std::optional<std::string> failure;
-    bool stopped = false;
-    std::optional<std::chrono::steady_clock::time_point> answered;  // when its result or error came
-    bool ended_after_answer = false;
-    try {
-        std::unique_lock lock(mutex);
-        while (true) {
-            arrived.wait_for(lock, std::chrono::milliseconds(100), [&] { return !messages.empty() || ended; });
-            if (cancel.cancelled() && !stopped) {
-                child.terminate();  // the child, and every program it started (they are in its job)
-                stopped = true;
-            }
-            while (!messages.empty()) {
-                const std::string text = std::move(messages.front());
-                messages.pop_front();
-                lock.unlock();
-                const nlohmann::json message = nlohmann::json::parse(text, nullptr, false);
-                if (message.is_object() && message.contains("result")) {
-                    result = message["result"];
-                } else if (message.is_object() && message.contains("error")) {
-                    failure = message["error"].is_string() ? message["error"].get<std::string>() : message["error"].dump();
-                } else if (message.is_object() && message.contains("log") && message["log"].is_object()) {
-                    // A line of the child's log, written to this app's under
-                    // its own name.
-                    const nlohmann::json& line = message["log"];
-                    app_log::write(line.value("level", static_cast<int>(app_log::Level::info)),
-                                   line.value("name", std::string("vml")), line.value("text", std::string()));
-                } else if (!message.is_discarded() && !stopped && on_message) {
-                    on_message(message);
-                }
-                lock.lock();
-            }
-            if (ended) {
-                break;
-            }
-            if ((result || failure) && !ended_after_answer) {
-                const auto now = std::chrono::steady_clock::now();
-                if (!answered) {
-                    answered = now;
-                } else if (now - *answered >= answered_wait) {
-                    child.terminate();  // its answer is here; it and what it started go
-                    ended_after_answer = true;
-                }
-            }
-        }
-    } catch (...) {
-        child.terminate();  // on_message threw: the child must not outlive the run
-        reader.join();
-        throw;
-    }
-    reader.join();
+    ChildConversation conversation(child, on_message, cancel);
+    conversation.run();
     const int exit_code = child.wait();
-    if (ended_after_answer) {
+    if (conversation.ended_after_answer) {
         app_log::write(app_log::Level::warning, "vml.isolated",
                        std::string(what) + " did not end within " + std::to_string(answered_wait.count()) +
                            " s of its answer, and was ended");
     }
-    if (stopped || cancel.cancelled()) {
+    if (conversation.stopped || cancel.cancelled()) {
         throw Cancelled();
     }
-    if (failure) {
-        throw std::runtime_error(*failure);
+    if (conversation.failure) {
+        throw std::runtime_error(*conversation.failure);
     }
-    if (!result) {
+    if (!conversation.result) {
         IsolatedCrashError crash(std::string(what), exit_code);
         if (const std::optional<std::string> report = platform::read_file(folder.path() / crash_report_name);
             report && !report->empty()) {
@@ -223,9 +284,9 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
         throw crash;
     }
     if (on_files) {
-        on_files(*result, folder.path());
+        on_files(*conversation.result, folder.path());
     }
-    return *result;
+    return *conversation.result;
 }
 
 void send_isolated_message(const nlohmann::json& message) {

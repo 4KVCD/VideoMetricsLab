@@ -510,6 +510,68 @@ struct V1Scorer::State {
 
     void check(int error, const std::string& what) const { check_vulkan(engine, error, what); }
 
+    // CAMBI on the GPU, where the engine and the model's options allow.
+    void start_cambi_on_gpu(const ModelOptions& options) {
+        if (engine.v1_cambi == nullptr || engine.v1_cambi_scores == nullptr) {
+            return;
+        }
+        if (const std::optional<std::array<double, 9>> cambi = cambi_gpu_options(options.at(v1_cambi))) {
+            const int code = engine.v1_cambi(gpu, cambi->data());
+            if (code == 0) {
+                on_gpu.insert(v1_cambi);
+            } else if (code != unsupported_options) {
+                check(code, "Starting CAMBI");
+            }
+        }
+    }
+    // SpEED on the GPU, where the engine and the model's options allow.
+    void start_speed_on_gpu(const ModelOptions& options) {
+        if (engine.v1_speed == nullptr || engine.submit_v1 == nullptr || engine.chroma_staging == nullptr ||
+            engine.v1_speed_scores == nullptr) {
+            return;
+        }
+        if (const std::optional<std::array<double, 7>> speed = speed_gpu_options(options.at(v1_speed))) {
+            const int code = engine.v1_speed(gpu, speed->data());
+            if (code == 0) {
+                on_gpu.insert(v1_speed);
+            } else if (code != unsupported_options) {
+                check(code, "Starting SpEED");
+            }
+        }
+    }
+    // What the decoder's hand-over gives besides the luma: the chroma in
+    // place for SpEED, and its timeline, to start after its copies.
+    void connect_handover(GpuFrameStream& stream) {
+        if (on_gpu.contains(v1_speed) && engine.shared_chroma != nullptr && stream.copies_planes()) {
+            SharedChroma chroma;
+            if (engine.shared_chroma(gpu, &chroma.offset, &chroma.spacing, &chroma.stride) == 0) {
+                shared_chroma = chroma;
+            }
+        }
+        if (engine.import_timeline != nullptr && engine.commit_after != nullptr) {
+            if (void* const timeline = stream.timeline(); timeline != nullptr) {
+                after = engine.import_timeline(gpu, timeline) == 0;
+                platform::close_native_handle(timeline);
+            }
+        }
+    }
+    // libvmaf's CPU extractors, which run only for the features the GPU
+    // does not calculate, on `threads` workers (else as many as the cores
+    // allow), with a pool of pictures for `width` x `height` x `bit_depth`.
+    void start_cpu_features(const ModelOptions& options, int width, int height, int bit_depth,
+                            std::optional<int> threads) {
+        const int workers = threads ? *threads : std::max(2, std::min(16, static_cast<int>(platform::logical_cores()) - 2));
+        LibvmafHandles handles(library);
+        handles.start(workers, 1);
+        use_cpu_features(library, handles.context, options, on_gpu);
+        const VmafPictureConfiguration pool{
+            {static_cast<unsigned>(width), static_cast<unsigned>(height), static_cast<unsigned>(bit_depth),
+             VMAF_PIX_FMT_YUV420P},
+            static_cast<unsigned>(2 * (workers + 2))};
+        check_libvmaf(library.preallocate_pictures(handles.context, pool), "Allocating pictures");
+        cpu = std::exchange(handles.context, nullptr);
+    }
+
     ~State() {
         shared.reset();  // the decoder's imports go back before the context that allocated them
         if (gpu != nullptr) {
@@ -606,33 +668,9 @@ struct V1Scorer::State {
     }
 };
 
-V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::path& model, int n_subsample,
-                   std::optional<int> device, std::optional<int> threads, std::string name, GpuFrameStream* shared,
-                   bool gpu_cambi, bool gpu_speed, bool pictures)
-    : state_(std::make_unique<State>()) {
-    State& s = *state_;
-    const VulkanEngine& engine = s.engine;
-    if (engine.create_v1 == nullptr || engine.features_v1 == nullptr) {
-        throw VmafV1Error("the bundled Vulkan engine has no VMAF v1");
-    }
-    s.model = model;
-    s.name = std::move(name);
-    s.step = static_cast<unsigned>(std::max(1, n_subsample));
-    const ModelOptions options = model_options(model);
-    if (speed_too_small(options.at(v1_speed), width, height)) {
-        throw VmafV1Error(std::to_string(width) + "x" + std::to_string(height) +
-                          " is too small for this VMAF v1 model's SpEED feature");
-    }
-    s.names = &feature_names(model);
-    if (!device) {
-        const std::optional<VulkanDevice> chosen = best_vulkan_device(vulkan_devices());
-        if (!chosen) {
-            throw VmafV1Error("no GPU that Vulkan can calculate VMAF on");
-        }
-        device = chosen->index;
-    }
-    const Options& adm = options.at(v1_adm3);
-    const Options& motion = options.at(v1_motion3);
+// The ADM and motion options of a VMAF v1 model as the GPU takes them, in
+// its order; throws for one it does not calculate.
+std::array<double, 9> adm_motion_values(const Options& adm, const Options& motion) {
     const std::array<double, 9> values{
         option_number(option_or(adm, "adm_norm_view_dist", 3.0)),
         option_number(option_or(adm, "adm_ref_display_height", 1080)),
@@ -666,6 +704,35 @@ V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::
         }
         throw VmafV1Error("the model has ADM or motion options the GPU does not calculate: " + listed);
     }
+    return values;
+}
+
+V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::path& model, int n_subsample,
+                   std::optional<int> device, std::optional<int> threads, std::string name, GpuFrameStream* shared,
+                   bool gpu_cambi, bool gpu_speed, bool pictures)
+    : state_(std::make_unique<State>()) {
+    State& s = *state_;
+    const VulkanEngine& engine = s.engine;
+    if (engine.create_v1 == nullptr || engine.features_v1 == nullptr) {
+        throw VmafV1Error("the bundled Vulkan engine has no VMAF v1");
+    }
+    s.model = model;
+    s.name = std::move(name);
+    s.step = static_cast<unsigned>(std::max(1, n_subsample));
+    const ModelOptions options = model_options(model);
+    if (speed_too_small(options.at(v1_speed), width, height)) {
+        throw VmafV1Error(std::to_string(width) + "x" + std::to_string(height) +
+                          " is too small for this VMAF v1 model's SpEED feature");
+    }
+    s.names = &feature_names(model);
+    if (!device) {
+        const std::optional<VulkanDevice> chosen = best_vulkan_device(vulkan_devices());
+        if (!chosen) {
+            throw VmafV1Error("no GPU that Vulkan can calculate VMAF on");
+        }
+        device = chosen->index;
+    }
+    const std::array<double, 9> values = adm_motion_values(options.at(v1_adm3), options.at(v1_motion3));
     int flags = (vulkan_frames_in_flight << 8) | (shared != nullptr ? vulkan_shared_flag : 0);
     if (pictures && shared != nullptr && engine.pictures != nullptr && engine.pictures_mode != nullptr) {
         flags |= pictures_flag;
@@ -677,53 +744,18 @@ V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::
         }
         s.shared.emplace(engine, s.gpu, *shared);
     }
-    if (gpu_cambi && engine.v1_cambi != nullptr && engine.v1_cambi_scores != nullptr) {
-        if (const std::optional<std::array<double, 9>> cambi = cambi_gpu_options(options.at(v1_cambi))) {
-            const int code = engine.v1_cambi(s.gpu, cambi->data());
-            if (code == 0) {
-                s.on_gpu.insert(v1_cambi);
-            } else if (code != unsupported_options) {
-                s.check(code, "Starting CAMBI");
-            }
-        }
+    if (gpu_cambi) {
+        s.start_cambi_on_gpu(options);
     }
-    if (gpu_speed && engine.v1_speed != nullptr && engine.submit_v1 != nullptr && engine.chroma_staging != nullptr &&
-        engine.v1_speed_scores != nullptr) {
-        if (const std::optional<std::array<double, 7>> speed = speed_gpu_options(options.at(v1_speed))) {
-            const int code = engine.v1_speed(s.gpu, speed->data());
-            if (code == 0) {
-                s.on_gpu.insert(v1_speed);
-            } else if (code != unsupported_options) {
-                s.check(code, "Starting SpEED");
-            }
-        }
+    if (gpu_speed) {
+        s.start_speed_on_gpu(options);
     }
-    if (s.on_gpu.contains(v1_speed) && s.shared && engine.shared_chroma != nullptr && shared->copies_planes()) {
-        State::SharedChroma chroma;
-        if (engine.shared_chroma(s.gpu, &chroma.offset, &chroma.spacing, &chroma.stride) == 0) {
-            s.shared_chroma = chroma;
-        }
-    }
-    if (s.shared && engine.import_timeline != nullptr && engine.commit_after != nullptr) {
-        if (void* const timeline = shared->timeline(); timeline != nullptr) {
-            s.after = engine.import_timeline(s.gpu, timeline) == 0;
-            platform::close_native_handle(timeline);
-        }
+    if (s.shared) {
+        s.connect_handover(*shared);
     }
     s.pictures = (flags & pictures_flag) != 0 && engine.pictures_mode(s.gpu) == 1;
-    // libvmaf's CPU extractors run only for the features the GPU does not
-    // calculate.
     if (!s.on_gpu.contains(v1_cambi) || !s.on_gpu.contains(v1_speed)) {
-        const int workers = threads ? *threads : std::max(2, std::min(16, static_cast<int>(platform::logical_cores()) - 2));
-        LibvmafHandles handles(s.library);
-        handles.start(workers, 1);
-        use_cpu_features(s.library, handles.context, options, s.on_gpu);
-        const VmafPictureConfiguration pool{
-            {static_cast<unsigned>(width), static_cast<unsigned>(height), static_cast<unsigned>(bit_depth),
-             VMAF_PIX_FMT_YUV420P},
-            static_cast<unsigned>(2 * (workers + 2))};
-        check_libvmaf(s.library.preallocate_pictures(handles.context, pool), "Allocating pictures");
-        s.cpu = std::exchange(handles.context, nullptr);
+        s.start_cpu_features(options, width, height, bit_depth, threads);
     }
     s.sample = bit_depth <= 8 ? 1 : 2;
     s.luma_stride = static_cast<std::ptrdiff_t>(static_cast<std::size_t>(width) * s.sample);
