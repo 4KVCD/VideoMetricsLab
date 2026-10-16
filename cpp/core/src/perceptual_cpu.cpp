@@ -894,22 +894,11 @@ std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const Vide
     return command;
 }
 
-PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, const std::vector<std::string>& keys,
-                                             const std::optional<CropPair>& crops,
-                                             const ProgressCallback& on_progress, const StatusCallback& on_status,
-                                             const CancelToken& cancel) {
-    if (keys.empty() || std::any_of(keys.begin(), keys.end(), [](const std::string& key) {
-            return key != "ssimulacra2" && key != "butteraugli";
-        })) {
-        throw std::invalid_argument("a CPU perceptual task takes SSIMULACRA2 and Butteraugli only");
-    }
-    const VideoInfo& source = request.source;
-    const VideoInfo& distorted = request.distorted;
-    const VmafOptions& options = request.options;
-    if (options.resample_test) {
-        throw PerceptualRunError("Perceptual CPU metrics do not support resolution round-trip tests yet.");
-    }
-    validate_pair(source, distorted, options.duration_limit);
+namespace {
+
+// The reference executables of `keys`' metrics; throws, naming the first
+// one not installed.
+std::vector<std::filesystem::path> metric_executables(const std::vector<std::string>& keys) {
     std::vector<std::filesystem::path> executables;
     for (const std::string& key : keys) {
         std::optional<std::filesystem::path> executable = find_metric_executable(key);
@@ -919,6 +908,12 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
         }
         executables.push_back(std::move(*executable));
     }
+    return executables;
+}
+
+// The one frame coverage (every how many frames) `keys`' metrics share;
+// throws when they differ.
+int common_step(const PerceptualRequest& request, const std::vector<std::string>& keys) {
     std::set<int> steps;
     for (const std::string& key : keys) {
         steps.insert(request.step_of(key));
@@ -926,163 +921,198 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
     if (steps.size() != 1) {
         throw PerceptualRunError("Perceptual metrics in one task must use the same frame coverage.");
     }
-    const int step = *steps.begin();
-    const auto [source_crop, distorted_crop] =
-        crops ? *crops
-              : resolve_crops(request.environment.ffmpeg, source, distorted, options.crop_mode, cancel, on_status);
+    return *steps.begin();
+}
+
+// How many frames the comparison is expected to have: the shorter video's,
+// at most as many as the duration limit holds.
+long long expected_frames(const VideoInfo& source, const VideoInfo& distorted, double duration_limit) {
     long long expected = std::min(source.estimated_frame_count(), distorted.estimated_frame_count());
-    if (options.duration_limit > 0) {
-        expected = std::min(expected,
-                            std::max(1LL, static_cast<long long>(std::ceil(options.duration_limit * source.fps))));
+    if (duration_limit > 0) {
+        expected =
+            std::min(expected, std::max(1LL, static_cast<long long>(std::ceil(duration_limit * source.fps))));
     }
-    const long long total_units = std::max(1LL, (expected + step - 1) / step) * step;
-    if (on_status) {
-        on_status(decoding_status("Calculating SSIMULACRA2/Butteraugli on the CPU as frames are extracted",
-                                  HardwareDecoding{}, StatusKind::step, "\xE2\x80\xA6"));
-    }
-    const auto started = std::chrono::steady_clock::now();
-    const auto rate_of = [&started](long long units) {
-        const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
-        return static_cast<double>(units) / std::max(seconds, 1e-6);
-    };
+    return expected;
+}
+
+// The frame pairs of one CPU perceptual task, scored `workers` pairs at a
+// time (the calling thread among them): each pair by every chosen tool in
+// turn. The first failure stops the others' tools, and is thrown.
+class CpuScoringPool {
+public:
+    CpuScoringPool(const std::vector<std::string>& keys, const std::vector<std::filesystem::path>& executables,
+                   const VideoInfo& source, const VideoInfo& distorted, const CancelToken& cancel)
+        : keys_(keys),
+          executables_(executables),
+          source_colour_(colour_of(source)),
+          distorted_colour_(colour_of(distorted)),
+          hdr_((source_colour_ && source_colour_->hdr()) || (distorted_colour_ && distorted_colour_->hdr())),
+          cancel_(cancel) {}
+    CpuScoringPool(const CpuScoringPool&) = delete;
+    CpuScoringPool& operator=(const CpuScoringPool&) = delete;
+
+    // Whether either video is HDR: the tools score it so.
+    bool hdr() const { return hdr_; }
+    // Set when the scoring is to stop (a failure, or Cancel): FFmpeg's
+    // extraction stops with it.
+    const std::atomic<bool>& stopping() const { return scores_.stop; }
+    // Scores every pair `pairs` gives, `workers` at a time, reporting how
+    // many are done (`step` frames each, of about `total_units`) to
+    // `on_progress`, at `rate_of` frames a second. Returns each pair's
+    // scores, in the order FFmpeg gave the pairs.
+    std::vector<std::vector<double>> score_all(PngPairs& pairs, int workers, int step, long long total_units,
+                                               const ProgressCallback& on_progress,
+                                               const std::function<double(long long)>& rate_of);
+
+private:
+    std::vector<double> score(const PngPairs::Pair& pair);
+    void work(PngPairs& pairs);
+    void keep(long long number, std::vector<double> values);
+    void fail(std::exception_ptr error);
+
+    const std::vector<std::string>& keys_;
+    const std::vector<std::filesystem::path>& executables_;
     // Each picture is tagged so that the tools read its values as Vship
     // reads the video's (describe_png). FFmpeg would tag a BT.709 picture
     // with H.273's BT.709 curve, the camera's, where Vship and a display use
     // a 2.4 gamma, and an untagged picture not at all (sRGB). A tagged BT.709
     // film then scored 40.4 SSIMULACRA2 here against 55.1 on the GPU.
-    const std::optional<VideoColour> source_colour = colour_of(source);
-    const std::optional<VideoColour> distorted_colour = colour_of(distorted);
-    const bool hdr = (source_colour && source_colour->hdr()) || (distorted_colour && distorted_colour->hdr());
-    const auto [width, height] =
-        compared_dimensions(source, distorted, options.scale_direction, source_crop, distorted_crop);
-    const int workers = scoring_workers(static_cast<long long>(width) * height, keys, request.concurrent_cpu_tasks,
-                                        platform::logical_cores(), platform::available_memory());
-    logger.info(join(keys, " and ") + " on the CPU: " + std::to_string(workers) + " frame pair" + (workers == 1 ? "" : "s") +
-                " at a time");
+    const std::optional<VideoColour> source_colour_;
+    const std::optional<VideoColour> distorted_colour_;
+    const bool hdr_;
+    const CancelToken& cancel_;
+    Scores scores_;
+    const std::function<bool()> stopped_ = [this] { return scores_.stop || cancel_.cancelled(); };
+    std::mutex pairs_mutex_;
+    long long handed_ = 0;  // how many pairs workers have taken
+    // How score_all reports.
+    int step_ = 1;
+    long long total_units_ = 0;
+    ProgressCallback on_progress_;
+    std::function<double(long long)> rate_of_;
+};
 
-    Scores scores;
-    const std::function<bool()> stopped = [&scores, &cancel] { return scores.stop || cancel.cancelled(); };
-    // Keeps the first failure, and ends the tools of every pair in progress.
-    const auto fail = [&scores](std::exception_ptr error) {
-        const std::lock_guard lock(scores.mutex);
-        if (!scores.failure) {
-            scores.failure = std::move(error);
+std::vector<std::vector<double>> CpuScoringPool::score_all(PngPairs& pairs, int workers, int step,
+                                                           long long total_units, const ProgressCallback& on_progress,
+                                                           const std::function<double(long long)>& rate_of) {
+    step_ = step;
+    total_units_ = total_units;
+    on_progress_ = on_progress;
+    rate_of_ = rate_of;
+    std::vector<std::thread> threads;
+    try {
+        for (int worker = 1; worker < workers; ++worker) {
+            threads.emplace_back([this, &pairs] { work(pairs); });
         }
-        scores.stop = true;
-    };
-    // One pair's scores, one tool after the other, in the keys' order. Each
-    // pair is deleted once every chosen tool has scored it; as FFmpeg is
-    // held to a small backlog, the folder never holds more than the backlog
-    // and the pairs being scored.
-    const auto score = [&](const PngPairs::Pair& pair) {
-        const auto& [reference, test] = pair;
-        const Deleted reference_deleted(reference);
-        const Deleted test_deleted(test);
-        if (source_colour) {
-            describe_png(reference, *source_colour);
-        }
-        if (distorted_colour) {
-            describe_png(test, *distorted_colour);
-        }
-        std::vector<double> values;
-        for (std::size_t position = 0; position < keys.size(); ++position) {
-            values.push_back(
-                run_metric(executables[position], keys[position], reference, test, hdr, stopped, cancel));
-        }
-        return values;
-    };
+    } catch (...) {
+        fail(std::current_exception());  // no thread for another worker: the others stop
+    }
+    work(pairs);
+    // The tools end before FFmpeg and the folder go: a tool still reading
+    // its pair would hold the folder.
+    for (std::thread& thread : threads) {
+        thread.join();
+    }
+    if (scores_.failure) {
+        std::rethrow_exception(scores_.failure);
+    }
+    return std::move(scores_.by_pair);
+}
 
-    {
-        // A folder of its own for the task's pictures, deleted with them.
-        const TempFolder folder = TempFolder::make<PerceptualRunError>("videometricslab-perceptual-",
-                                                                       "A folder for the frame pictures could not be made.");
-        // Room for every worker's next pair while FFmpeg wakes up.
-        PngPairs pairs(png_pairs_command(request.environment.ffmpeg, source, distorted, options, source_crop,
-                                         distorted_crop, step, folder.path()),
-                       folder.path(), std::max(backlog_pairs, 2 * workers), scores.stop, cancel);
-        std::mutex pairs_mutex;
-        long long handed = 0;  // how many pairs workers have taken
-        // A pair is taken from FFmpeg only when a worker is free for it, so
-        // the pairs not yet started count in FFmpeg's backlog, which holds it
-        // back.
-        const auto work = [&] {
-            while (!scores.stop) {
-                std::optional<PngPairs::Pair> pair;
-                long long number = 0;
-                try {
-                    const std::lock_guard lock(pairs_mutex);
-                    cancel.throw_if_cancelled();
-                    pair = pairs.next();
-                    if (!pair) {
-                        return;
-                    }
-                    number = handed++;
-                } catch (...) {
-                    fail(std::current_exception());
-                    return;
-                }
-                try {
-                    std::vector<double> values = score(*pair);
-                    const std::lock_guard lock(scores.mutex);
-                    if (scores.by_pair.size() <= static_cast<std::size_t>(number)) {
-                        scores.by_pair.resize(static_cast<std::size_t>(number) + 1);
-                    }
-                    scores.by_pair[static_cast<std::size_t>(number)] = std::move(values);
-                    ++scores.finished;
-                    // The progress counts how many pairs are scored, in
-                    // whatever order they finish. The estimated frame count
-                    // can be lower than the real one, so the total grows with
-                    // the work rather than going past 100%.
-                    const auto now = std::chrono::steady_clock::now();
-                    if (on_progress && (scores.finished == 1 || now - scores.reported >= progress_interval)) {
-                        scores.reported = now;
-                        const long long units = scores.finished * step;
-                        on_progress(units, std::max(total_units, units + step), rate_of(units));
-                    }
-                } catch (...) {
-                    fail(std::current_exception());
-                    return;
-                }
-            }
-        };
-        std::vector<std::thread> threads;
+// One pair's scores, one tool after the other, in the keys' order. Each pair
+// is deleted once every chosen tool has scored it; as FFmpeg is held to a
+// small backlog, the folder never holds more than the backlog and the pairs
+// being scored.
+std::vector<double> CpuScoringPool::score(const PngPairs::Pair& pair) {
+    const auto& [reference, test] = pair;
+    const Deleted reference_deleted(reference);
+    const Deleted test_deleted(test);
+    if (source_colour_) {
+        describe_png(reference, *source_colour_);
+    }
+    if (distorted_colour_) {
+        describe_png(test, *distorted_colour_);
+    }
+    std::vector<double> values;
+    for (std::size_t position = 0; position < keys_.size(); ++position) {
+        values.push_back(run_metric(executables_[position], keys_[position], reference, test, hdr_, stopped_, cancel_));
+    }
+    return values;
+}
+
+// One worker: takes a pair from FFmpeg only when free for it, so that the
+// pairs not yet started count in FFmpeg's backlog, which holds it back.
+void CpuScoringPool::work(PngPairs& pairs) {
+    while (!scores_.stop) {
+        std::optional<PngPairs::Pair> pair;
+        long long number = 0;
         try {
-            for (int worker = 1; worker < workers; ++worker) {
-                threads.emplace_back(work);
+            const std::lock_guard lock(pairs_mutex_);
+            cancel_.throw_if_cancelled();
+            pair = pairs.next();
+            if (!pair) {
+                return;
             }
+            number = handed_++;
         } catch (...) {
-            fail(std::current_exception());  // no thread for another worker: the others stop
+            fail(std::current_exception());
+            return;
         }
-        work();
-        // The tools end before FFmpeg and the folder go: a tool still reading
-        // its pair would hold the folder.
-        for (std::thread& thread : threads) {
-            thread.join();
+        try {
+            keep(number, score(*pair));
+        } catch (...) {
+            fail(std::current_exception());
+            return;
         }
     }
-    if (scores.failure) {
-        std::rethrow_exception(scores.failure);
-    }
+}
 
-    const auto total = static_cast<long long>(scores.by_pair.size());
-    if (const std::optional<std::string> short_reason = short_comparison(expected, total * step, source.fps, step)) {
-        throw ComparisonCutShortError(*short_reason);
+// Keeps pair `number`'s scores. The progress counts how many pairs are
+// scored, in whatever order they finish. The estimated frame count can be
+// lower than the real one, so the total grows with the work rather than
+// going past 100%.
+void CpuScoringPool::keep(long long number, std::vector<double> values) {
+    const std::lock_guard lock(scores_.mutex);
+    if (scores_.by_pair.size() <= static_cast<std::size_t>(number)) {
+        scores_.by_pair.resize(static_cast<std::size_t>(number) + 1);
     }
-    if (on_progress) {
-        on_progress(total * step, total * step, rate_of(total * step));
+    scores_.by_pair[static_cast<std::size_t>(number)] = std::move(values);
+    ++scores_.finished;
+    const auto now = std::chrono::steady_clock::now();
+    if (on_progress_ && (scores_.finished == 1 || now - scores_.reported >= progress_interval)) {
+        scores_.reported = now;
+        const long long units = scores_.finished * step_;
+        on_progress_(units, std::max(total_units_, units + step_), rate_of_(units));
     }
+}
+
+// Keeps the first failure, and ends the tools of every pair in progress.
+void CpuScoringPool::fail(std::exception_ptr error) {
+    const std::lock_guard lock(scores_.mutex);
+    if (!scores_.failure) {
+        scores_.failure = std::move(error);
+    }
+    scores_.stop = true;
+}
+
+// The scores `by_pair` (each pair's, in `keys`' order, scored by
+// `executables`) as the task's results: frames `step` apart, timed at `fps`,
+// with how they were made.
+MetricResultSet cpu_results(const std::vector<std::string>& keys, const std::vector<std::filesystem::path>& executables,
+                            const std::vector<std::vector<double>>& by_pair, int step, double fps, bool hdr) {
+    const auto total = static_cast<long long>(by_pair.size());
     std::vector<int> frames;
     std::vector<double> times;
     for (long long index = 0; index < total; ++index) {
         const auto frame = static_cast<int>(index * step);
         frames.push_back(frame);
-        times.push_back(static_cast<double>(frame) / std::max(source.fps, 1.0));
+        times.push_back(static_cast<double>(frame) / std::max(fps, 1.0));
     }
     MetricResultSet results;
     for (std::size_t position = 0; position < keys.size(); ++position) {
         const std::string& key = keys[position];
         std::vector<float> values;
-        for (const std::vector<double>& pair : scores.by_pair) {
+        for (const std::vector<double>& pair : by_pair) {
             values.push_back(static_cast<float>(pair[position]));
         }
         // The colours are read as Vship reads them, with its Butteraugli
@@ -1101,7 +1131,71 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
                                       MetricProvenance{key, implementation_version(executables[position]), "cpu",
                                                        score_identity::libjxl_cpu(key), std::move(parameters)}});
     }
-    return PerceptualTaskOutput{std::move(results), source_crop, distorted_crop, total * step, {}};
+    return results;
+}
+
+}  // namespace
+
+PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, const std::vector<std::string>& keys,
+                                             const std::optional<CropPair>& crops,
+                                             const ProgressCallback& on_progress, const StatusCallback& on_status,
+                                             const CancelToken& cancel) {
+    if (keys.empty() || std::any_of(keys.begin(), keys.end(), [](const std::string& key) {
+            return key != "ssimulacra2" && key != "butteraugli";
+        })) {
+        throw std::invalid_argument("a CPU perceptual task takes SSIMULACRA2 and Butteraugli only");
+    }
+    const VideoInfo& source = request.source;
+    const VideoInfo& distorted = request.distorted;
+    const VmafOptions& options = request.options;
+    if (options.resample_test) {
+        throw PerceptualRunError("Perceptual CPU metrics do not support resolution round-trip tests yet.");
+    }
+    validate_pair(source, distorted, options.duration_limit);
+    const std::vector<std::filesystem::path> executables = metric_executables(keys);
+    const int step = common_step(request, keys);
+    const auto [source_crop, distorted_crop] =
+        crops ? *crops
+              : resolve_crops(request.environment.ffmpeg, source, distorted, options.crop_mode, cancel, on_status);
+    const long long expected = expected_frames(source, distorted, options.duration_limit);
+    const long long total_units = std::max(1LL, (expected + step - 1) / step) * step;
+    if (on_status) {
+        on_status(decoding_status("Calculating SSIMULACRA2/Butteraugli on the CPU as frames are extracted",
+                                  HardwareDecoding{}, StatusKind::step, "\xE2\x80\xA6"));
+    }
+    const auto started = std::chrono::steady_clock::now();
+    const auto rate_of = [&started](long long units) {
+        const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+        return static_cast<double>(units) / std::max(seconds, 1e-6);
+    };
+    CpuScoringPool pool(keys, executables, source, distorted, cancel);
+    const auto [width, height] =
+        compared_dimensions(source, distorted, options.scale_direction, source_crop, distorted_crop);
+    const int workers = scoring_workers(static_cast<long long>(width) * height, keys, request.concurrent_cpu_tasks,
+                                        platform::logical_cores(), platform::available_memory());
+    logger.info(join(keys, " and ") + " on the CPU: " + std::to_string(workers) + " frame pair" + (workers == 1 ? "" : "s") +
+                " at a time");
+
+    std::vector<std::vector<double>> by_pair;
+    {
+        // A folder of its own for the task's pictures, deleted with them.
+        const TempFolder folder = TempFolder::make<PerceptualRunError>("videometricslab-perceptual-",
+                                                                       "A folder for the frame pictures could not be made.");
+        // Room for every worker's next pair while FFmpeg wakes up.
+        PngPairs pairs(png_pairs_command(request.environment.ffmpeg, source, distorted, options, source_crop,
+                                         distorted_crop, step, folder.path()),
+                       folder.path(), std::max(backlog_pairs, 2 * workers), pool.stopping(), cancel);
+        by_pair = pool.score_all(pairs, workers, step, total_units, on_progress, rate_of);
+    }
+    const auto total = static_cast<long long>(by_pair.size());
+    if (const std::optional<std::string> short_reason = short_comparison(expected, total * step, source.fps, step)) {
+        throw ComparisonCutShortError(*short_reason);
+    }
+    if (on_progress) {
+        on_progress(total * step, total * step, rate_of(total * step));
+    }
+    return PerceptualTaskOutput{cpu_results(keys, executables, by_pair, step, source.fps, pool.hdr()), source_crop,
+                                distorted_crop, total * step, {}};
 }
 
 }  // namespace vml
