@@ -1060,7 +1060,7 @@ bool MainWindow::on_locate_ffmpeg() {
     }
     const std::filesystem::path directory = path_of(chosen).parent_path();
     std::error_code error;
-    if (!std::filesystem::exists(directory / platform::path_from_text(ffprobe_exe.toStdString()), error)) {
+    if (!std::filesystem::is_regular_file(directory / platform::path_from_text(ffprobe_exe.toStdString()), error)) {
         dialogs_.inform(app::tr("ffprobe needed too"),
                         app::tr("{ffprobe_exe} wasn't found next to {ffmpeg_exe}.\n\nThe app needs both. Please select "
                                 "{ffprobe_exe} as well (it normally ships in the same folder).",

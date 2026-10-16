@@ -71,7 +71,7 @@ std::vector<std::filesystem::path> candidate_folders() {
 
 bool is_file(const std::filesystem::path& path) {
     std::error_code error;
-    return std::filesystem::exists(path, error);
+    return std::filesystem::is_regular_file(path, error);
 }
 
 std::string strip(std::string text) {
