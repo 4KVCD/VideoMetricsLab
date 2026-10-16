@@ -44,7 +44,7 @@ static bool draw(ID3D11Texture2D* frame, int width, int height, const float* to_
 
 // Sets `*destroyed` when the object it is given to (SetPrivateDataInterface)
 // is destroyed.
-struct DestroyWatch : IUnknown {
+struct DestroyWatch final : IUnknown {
     explicit DestroyWatch(bool* destroyed):destroyed(destroyed) {}
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id, void** out) override {
         if (id!=__uuidof(IUnknown)) { *out=nullptr; return E_NOINTERFACE; }
