@@ -234,6 +234,30 @@ VideoInfo with_assumed_colour(VideoInfo info, const std::optional<std::string>& 
     return info;
 }
 
+// Gives `to` the colour tags of `from` when only `from` has them (its
+// transfer and primaries, and its matrix unless `to` says its own), as
+// --colour would give them: an encode keeps its source's colours, so a y4m
+// encode of a tagged HDR10 source is HDR10 too. Returns whether it did.
+bool take_colour_tags(VideoInfo& to, const VideoInfo& from) {
+    if (has_colour_tags(to) || !has_colour_tags(from)) {
+        return false;
+    }
+    to.color_transfer = from.color_transfer;
+    to.color_primaries = from.color_primaries;
+    if (is_untagged_tag(to.color_space)) {
+        to.color_space = from.color_space;
+    }
+    return true;
+}
+
+// The note for a video that took the other's colour tags (take_colour_tags).
+std::string taken_colour_note(const VideoInfo& info, const std::string& which, const std::string& other) {
+    return which + " has no colour tags, so it was taken to have " + other + "'s (transfer " + info.color_transfer +
+           ", primaries " + info.color_primaries +
+           "). CVVDP, SSIMULACRA2 and Butteraugli depend on them: --colour says what they are, if they are not "
+           "those.";
+}
+
 // Why a raw stream cannot be compared without --fps: it records no frame
 // rate, and FFmpeg would read it at 25 frames a second. `which` names it.
 std::string frame_rate_needed(const VideoInfo& info, const std::string& which) {
@@ -863,12 +887,9 @@ private:
     void add_colour_notes(TestVideo& video) const;
     std::optional<std::string> queue_jobs(TestVideo& video);
     void queue_other_displays(TestVideo& video);
-    // Whether `video`'s scores may be read from the saved scores. The saved
-    // scores know a video by its file, not by the frame rate --fps gave a
-    // raw stream, so a pair with one neither reads nor saves them.
-    bool reads_saved(const TestVideo& video) const {
-        return use_saved_ && !source_.timed_raw && !video.info->timed_raw;
-    }
+    // Whether `video`'s scores may be read from the saved scores: those it
+    // would save (TestVideo::save_scores).
+    bool reads_saved(const TestVideo& video) const { return use_saved_ && video.save_scores; }
 
     const CompareArguments& arguments_;
     const Settings& settings_;
@@ -898,7 +919,16 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
         video.error = std::string("it could not be read: ") + error.what();
         return std::nullopt;
     }
-    video.save_scores = !arguments_.colour && !source_.timed_raw && !video.info->timed_raw;
+    video.source = source_;
+    if (!arguments_.colour) {
+        if (take_colour_tags(*video.info, source_)) {
+            video.colours_taken = "the test video";
+        } else if (take_colour_tags(video.source, *video.info)) {
+            video.colours_taken = "the reference";
+        }
+    }
+    video.save_scores =
+        !arguments_.colour && video.colours_taken.empty() && !source_.timed_raw && !video.info->timed_raw;
     if (arguments_.fps && !source_.is_raw_stream() && !video.info->is_raw_stream()) {
         video.notes.emplace_back("--fps is not used: it is for raw streams, and neither this video nor the "
                                  "reference is one");
@@ -910,7 +940,7 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
         return std::nullopt;
     }
     add_colour_notes(video);
-    if (const std::optional<std::string> note = sdr_display_note(arguments_, source_, video, displays_.front())) {
+    if (const std::optional<std::string> note = sdr_display_note(arguments_, video.source, video, displays_.front())) {
         video.notes.push_back(*note);
     }
     try {
@@ -951,7 +981,8 @@ void ComparisonPlanner::leave_out_cvvdp_if_unable(TestVideo& video) const {
 }
 
 // What the reader should know about how the colours were read, where a
-// perceptual metric depends on them: a video's guessed.
+// perceptual metric depends on them: a video's taken from the other video,
+// or guessed.
 void ComparisonPlanner::add_colour_notes(TestVideo& video) const {
     if (arguments_.colour ||
         std::none_of(video.metrics.begin(), video.metrics.end(), [](const std::string& key) {
@@ -959,10 +990,16 @@ void ComparisonPlanner::add_colour_notes(TestVideo& video) const {
         })) {
         return;
     }
-    for (const auto& [info, which] : {std::pair<const VideoInfo*, const char*>(&source_, "the reference"),
-                                      std::pair<const VideoInfo*, const char*>(&*video.info, "the test video")}) {
-        if (!has_colour_tags(*info)) {
-            video.notes.push_back(guessed_colour_note(*info, which));
+    const struct {
+        const VideoInfo* info;
+        const char* which;
+        const char* other;
+    } sides[] = {{&video.source, "the reference", "the test video"}, {&*video.info, "the test video", "the reference"}};
+    for (const auto& side : sides) {
+        if (video.colours_taken == side.which) {
+            video.notes.push_back(taken_colour_note(*side.info, side.which, side.other));
+        } else if (!has_colour_tags(*side.info)) {
+            video.notes.push_back(guessed_colour_note(*side.info, side.which));
         }
     }
 }
@@ -973,8 +1010,8 @@ void ComparisonPlanner::add_colour_notes(TestVideo& video) const {
 // nothing; throws when the two videos cannot be compared as asked.
 std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video) {
     video.options = row_options(arguments_, settings_, video.metrics, *video.info);
-    validate_video_pair(source_, *video.info, video.options);
-    const auto [width, height] = analysis_dimensions(source_, *video.info, video.options);
+    validate_video_pair(video.source, *video.info, video.options);
+    const auto [width, height] = analysis_dimensions(video.source, *video.info, video.options);
     VmafOptions options = video.options;
     options.model = video.options.compute_vmaf ? resolve_model(video.options, width, height) : "";
     const bool cvvdp = std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") != video.metrics.end();
@@ -982,7 +1019,7 @@ std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video) {
         video.display = displays_.front().first;
     }
     const std::size_t queued = jobs.size();
-    if (std::optional<std::string> missing = queue(video, source_, std::move(options), backends_,
+    if (std::optional<std::string> missing = queue(video, video.source, std::move(options), backends_,
                                                    displays_.front().second, reads_saved(video), cache_folder_, jobs)) {
         return missing;
     }
@@ -1001,14 +1038,16 @@ void ComparisonPlanner::queue_other_displays(TestVideo& video) {
         TestVideo& other = video.other_displays.emplace_back();
         other.path = video.path;
         other.info = video.info;
+        other.source = video.source;
+        other.colours_taken = video.colours_taken;
         other.metrics = {"cvvdp"};
         other.display = displays_[display].first;
         other.for_display_only = true;
         other.save_scores = video.save_scores;
         other.options = row_options(arguments_, settings_, other.metrics, *video.info);
         const std::size_t before = jobs.size();
-        queue(other, source_, other.options, backends_, displays_[display].second, reads_saved(other), cache_folder_,
-              jobs);
+        queue(other, other.source, other.options, backends_, displays_[display].second, reads_saved(other),
+              cache_folder_, jobs);
         if (jobs.size() > before) {
             job_videos_.emplace_back(videos.size() - 1, video.other_displays.size() - 1);
         }

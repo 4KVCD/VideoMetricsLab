@@ -104,10 +104,12 @@ options:
   --colour, --color {pq-bt2020,hlg-bt2020,bt709}
                         the colours of a video with no colour tags (y4m, say):
                         pq-bt2020 (HDR10), hlg-bt2020 or bt709 (SDR). A tagged
-                        video keeps its own. Without it such a video is taken
-                        as SDR, which changes CVVDP, SSIMULACRA2 and
-                        Butteraugli. These scores are neither read from nor
-                        saved to the saved scores
+                        video keeps its own. Without it such a video takes the
+                        other video's tags, if that one has them, and is
+                        otherwise taken as SDR, which changes CVVDP,
+                        SSIMULACRA2 and Butteraugli. Scores with colours given
+                        or taken are neither read from nor saved to the saved
+                        scores
   --fps RATE            the frame rate of a raw video stream (a .264, .265,
                         .266 or .obu file, with no container), which records
                         none, such as 24000/1001, 23.976 or 60: required for

@@ -1009,14 +1009,22 @@ FPS_HELP = ("the frame rate of a raw video stream (a .264, .265, .266 or .obu fi
             "nor saved to the saved scores")
 FPS_EXAMPLE = ("  VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001\n"
                "      a raw VVC stream from an encoder, at 23.976 frames a second\n")
+#: The C++ app's --colour: there, a video with no colour tags takes the other
+#: video's, which the Python app does not do.
+COLOUR_HELP = ("the colours of a video with no colour tags (y4m, say): pq-bt2020 (HDR10), hlg-bt2020 or bt709 "
+               "(SDR). A tagged video keeps its own. Without it such a video takes the other video's tags, if that "
+               "one has them, and is otherwise taken as SDR, which changes CVVDP, SSIMULACRA2 and Butteraugli. "
+               "Scores with colours given or taken are neither read from nor saved to the saved scores")
 
 
 def _add_cpp_options(parser: argparse.ArgumentParser) -> None:
-    """Adds the C++ app's own options to the Python app's parser where the
-    C++ app has them, after --colour, and their example to the examples, so
-    that the help and the errors are what the C++ app's must be."""
+    """Gives the Python app's parser the C++ app's own options where the C++
+    app has them (after --colour) and its own help where it differs, and
+    their example to the examples, so that the help and the errors are what
+    the C++ app's must be."""
     commands = next(action for action in parser._actions if isinstance(action, argparse._SubParsersAction))
     compare = commands.choices["compare"]
+    next(action for action in compare._actions if "--colour" in action.option_strings).help = COLOUR_HELP
     fps = compare.add_argument("--fps", type=_frame_rate(), metavar="RATE", help=FPS_HELP)
     for actions in (compare._actions, compare._optionals._group_actions):
         actions.remove(fps)

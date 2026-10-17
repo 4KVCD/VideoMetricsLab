@@ -17,12 +17,20 @@ namespace vml::cli {
 struct TestVideo {
     std::filesystem::path path;
     std::optional<VideoInfo> info;
+    // The reference as this video is compared with: the run's, with this
+    // video's colour tags where only this video has them (colours_taken).
+    VideoInfo source;
+    // Which of the two took the other's colour tags, having none of its own
+    // ("the reference" or "the test video"), or nothing.
+    std::string colours_taken;
     VmafOptions options;
     std::vector<std::string> metrics;  // the metric keys it is compared on
     // What it asks for, as its saved scores are looked up and saved under.
     AnalysisRequest request;
-    // Whether its scores are saved: not those of videos read with --colour,
-    // as the saved scores know a video by its file, not by its colours.
+    // Whether its scores are read from and saved to the saved scores: not
+    // those of a video read with --colour or with the other video's colour
+    // tags, nor of a raw stream, as the saved scores know a video by its
+    // file, not by the colours or frame rate it was read with.
     bool save_scores = true;
     // What the reader should know: metrics left out and why.
     std::vector<std::string> notes;

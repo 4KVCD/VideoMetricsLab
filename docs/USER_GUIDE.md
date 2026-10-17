@@ -175,7 +175,7 @@ $run.videos[0].metrics.vmaf.score
 | `--scaler bicubic\|bilinear\|lanczos\|spline` | Scaling algorithm. |
 | `--duration SECONDS` | Compare only the start of each video. |
 | `--frames N` | Compare only the first N frames of each video, such as a short encode of a longer reference. |
-| `--colour pq-bt2020\|hlg-bt2020\|bt709` | The colours of a video with no colour tags (y4m, say); a tagged video keeps its own. Left out, such a video is taken as SDR, which changes CVVDP, SSIMULACRA2 and Butteraugli. These scores are not saved. |
+| `--colour pq-bt2020\|hlg-bt2020\|bt709` | The colours of a video with no colour tags (y4m, say); a tagged video keeps its own. Left out, such a video takes the other video's tags when that one has them (a y4m encode of a tagged HDR10 source is read as HDR10), and is otherwise taken as SDR, which changes CVVDP, SSIMULACRA2 and Butteraugli. Scores with colours given or taken are not saved. |
 | `--fps RATE` | The frame rate of a raw video stream (below), such as `24000/1001`, `23.976` or `60`. Required when the reference or a test video is one. These scores are not saved. |
 | `--cvvdp-display PRESET` | The display CVVDP models, by preset name. Repeat it for a CVVDP score on each display. Left out: the app's default display. |
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
