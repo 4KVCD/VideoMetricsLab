@@ -11,6 +11,16 @@ folder where the build folder was not configured with it. It also needs
 MinGW-w64's `g++` on the PATH, for the native libraries, and `ffmpeg.exe`
 and `ffprobe.exe` on the PATH, for the self-test.
 
+The app itself is built with MSVC. The script configures with the `windows`
+preset (`cmake --preset windows`, from `cpp`), whose Visual Studio generator
+finds MSVC itself, from any shell. To configure a build folder with another
+generator, such as Ninja, do it from a vcvars64 prompt (x64 Native Tools
+Command Prompt for VS 2022): from another shell CMake takes the first
+compiler on the PATH, such as that MinGW-w64 `g++`, and stops with a message
+saying so. A `vml-cli` built with MinGW's `g++` loads its C++ runtime from
+the PATH, where another GCC's copy can come first, and was seen to fail
+silently when it scored videos.
+
 It builds the native libraries from the commit's own source, then the window
 and the command line (Release); puts Qt and Microsoft's C++ runtime beside
 them and the app's own files in `resources`; checks that everything the

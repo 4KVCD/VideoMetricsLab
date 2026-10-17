@@ -191,6 +191,10 @@ than 100 ms goes on an integration list in `tests/CMakeLists.txt`.
 | Linux | GCC 11+, CMake 3.25+, Ninja | the same with `linux` and `linux-release`; `linux-sanitizers` and `linux-sanitizers-debug` add AddressSanitizer and UndefinedBehaviorSanitizer |
 | macOS | Xcode 15+, CMake 3.25+, Ninja | the same with `macos` and `macos-release` |
 
+On Windows the app is built with MSVC, and CMake stops at any other
+compiler. The `windows` preset finds MSVC from any shell; another generator,
+such as Ninja, needs a vcvars64 prompt (`docs/BUILD.md`).
+
 The window and its tests are built where CMake finds Qt 6.5 or newer; name
 Qt's folder when configuring, as in
 `cmake --preset windows -DCMAKE_PREFIX_PATH=C:/Qt/6.12.0/msvc2022_64`. On

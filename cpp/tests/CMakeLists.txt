@@ -56,9 +56,6 @@ target_compile_definitions(vml_tests PRIVATE
 # A program for the process tests to start: it echoes, fails, or sleeps.
 add_executable(vml_test_child unit/test_child.cpp)
 target_link_libraries(vml_test_child PRIVATE vml_compile_options)
-if(MINGW)
-    target_link_options(vml_test_child PRIVATE -municode)  # its wmain, for Unicode arguments
-endif()
 
 # A library for the library test to load.
 add_library(vml_test_library SHARED unit/test_library.cpp)

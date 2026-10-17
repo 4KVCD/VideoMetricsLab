@@ -5,6 +5,22 @@ cmake_minimum_required(VERSION 3.25)
 # C only for miniz (third_party/miniz): the app itself is C++.
 project(VideoMetricsLab VERSION 2.1 LANGUAGES C CXX)
 
+# On Windows the app is built with MSVC, as the package and GitHub's CI build
+# it, with Qt's MSVC build. Configured with another generator than Visual
+# Studio's, from a shell without MSVC's environment, CMake takes the first
+# compiler on the PATH, such as MinGW's g++. Its programs load its run-time
+# DLLs (libstdc++-6.dll) from the PATH, where another GCC's copy can come
+# first (Git for Windows' does, in Git Bash); a vml-cli built so failed
+# silently when it was run to score videos.
+if(WIN32 AND NOT MSVC)
+    message(FATAL_ERROR
+        "On Windows VideoMetricsLab is built with MSVC, but CMake found ${CMAKE_CXX_COMPILER_ID} "
+        "${CMAKE_CXX_COMPILER_VERSION} (${CMAKE_CXX_COMPILER}). Configure with the Visual Studio "
+        "generator, from the cpp folder: cmake --preset windows. With another generator, such as Ninja, "
+        "configure from a vcvars64 prompt (x64 Native Tools Command Prompt for VS 2022). Delete this "
+        "build folder first (${CMAKE_BINARY_DIR}): CMake keeps the compiler it found.")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
