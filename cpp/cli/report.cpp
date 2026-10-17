@@ -53,12 +53,16 @@ std::optional<double> value_of(const Json& number) {
     return number.get<double>();
 }
 
-// One metric of a result: its score, and for a per-frame metric the
-// statistics the Metric Graphs tab shows; nothing if it has none.
+// One metric of a result: its score and how many frames it covers, and for
+// a per-frame metric the statistics the Metric Graphs tab shows; nothing if
+// it has none.
 std::optional<Json> metric_summary(const ComparisonResult& result, const std::string& key) {
     const MetricDefinition& definition = metric_definition(key);
     if (const SequenceMetricResult* sequence = result.metric_results.sequence(key)) {
+        // A whole-video score (CVVDP's) is of every frame compared: it is not
+        // calculated on a subsample.
         return Json{{"score", json_number(sequence->score)},
+                    {"frames", result.compared_frame_count},
                     {"computed_on", sequence->provenance.compute_backend},
                     {"implementation", sequence->provenance.implementation},
                     {"version", sequence->provenance.implementation_version}};
@@ -312,7 +316,7 @@ std::string results_table(const VideoInfo& source, const std::vector<TestVideo>&
                 return definition.format_value(value_of(summary.at(field)));
             };
             const std::string on = ascii_upper(summary.at("computed_on").get<std::string>());
-            if (!summary.contains("frames")) {  // one score for the video
+            if (definition.kind != MetricKind::frame) {  // one score for the video
                 // With several displays, each CVVDP row names its own.
                 const std::string label = video.other_displays.empty()
                                               ? std::string(definition.label)
