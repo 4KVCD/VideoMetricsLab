@@ -243,7 +243,7 @@ QGroupBox* SettingsPanel::build_gpu_box(const std::vector<GpuVendor>& gpu_vendor
     // Under Auto, VMAF is calculated with Vulkan whatever the GPU (with CUDA
     // only when CUDA is chosen here); the maker decides only Vship's build.
     // The text said "CUDA on NVIDIA", which VMAF does not use under Auto.
-    gpu_backend->addItem(app::tr("Auto (VMAF: Vulkan; SSIMULACRA2, Butteraugli, CVVDP: CUDA on NVIDIA, HIP on AMD, "
+    gpu_backend->addItem(app::tr("Auto (VMAF: Vulkan; SSIMULACRA2, Butteraugli, CVVDP: CUDA on NVIDIA, "
                                  "Vulkan on other GPUs)"),
                          "auto");
     gpu_backend->addItem(app::tr("Vulkan (any GPU)"), "vulkan");
@@ -257,7 +257,7 @@ QGroupBox* SettingsPanel::build_gpu_box(const std::vector<GpuVendor>& gpu_vendor
     gpu_backend->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     gpu_backend->setToolTip(app::tr(
         "Which of Vship's builds calculates the GPU metrics. Auto uses the fastest one whose scores agree with "
-        "the reference: CUDA on NVIDIA, HIP on AMD, and Vulkan on other GPUs, such as Intel's. Vulkan runs on "
+        "the reference: CUDA on NVIDIA, and Vulkan on other GPUs, such as AMD's and Intel's. Vulkan runs on "
         "any GPU. If the chosen build cannot run here, the others are tried."));
     connect(gpu_backend, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
     auto* backend_row = new QHBoxLayout;

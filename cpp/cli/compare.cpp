@@ -1183,7 +1183,10 @@ int compare(const CompareArguments& arguments) {
     const auto progress = std::make_shared<Progress>(arguments.quiet);
     const auto running = std::make_shared<std::atomic<bool>>(false);
     cancel_on_interrupt(cancel, progress, running);
-    const Settings settings = Settings::load();
+    Settings settings = Settings::load();
+    if (arguments.gpu_backend) {
+        settings.gpu_backend = *arguments.gpu_backend;  // for this run only; nothing is saved
+    }
     const std::filesystem::path cache_folder = apply_settings(settings);
     const ToolsStatus tools = check_tools(settings);
     if (!tools.ok()) {

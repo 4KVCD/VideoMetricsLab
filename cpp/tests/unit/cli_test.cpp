@@ -55,6 +55,7 @@ Json values_of(const Arguments& parsed) {
         {"vmaf_on", either(a.vmaf_on)},
         {"ssimulacra2_on", either(a.ssimulacra2_on)},
         {"butteraugli_on", either(a.butteraugli_on)},
+        {"gpu_backend", either(a.gpu_backend)},
         {"cpu", a.cpu},
         {"no_gpu_decode", a.no_gpu_decode},
         {"parallel", either(a.parallel)},

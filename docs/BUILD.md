@@ -126,10 +126,10 @@ previous build's output undeletable. The package therefore goes to
   rounding). Replace the HIP build with the first HIP release of 5.1.2 or
   later; until then FFmpeg upsamples 4:1:0 video to 4:4:4 for it, as 5.1.1
   cannot read it (`reads_410` in `cpp/core/src/vship.cpp`). Settings > GPU
-  metrics > GPU backend picks one; Auto, the default, uses CUDA on NVIDIA,
-  HIP on AMD and Vulkan on other GPUs, and a build that cannot run hands
-  over to the next. Re-measure every build when updating Vship
-  (docs/RELEASING.md, step 6): a build that scores a metric wrongly is not
+  metrics > GPU backend picks one; Auto, the default, uses CUDA on NVIDIA
+  and Vulkan on other GPUs (HIP only where Vulkan cannot run), and a build
+  that cannot run hands over to the next. Re-measure every build when
+  updating Vship (docs/RELEASING.md, step 6): a build that scores a metric wrongly is not
   bundled. Where no build can use the GPU, the input format is
   unsupported, or GPU processing fails, SSIMULACRA2 and Butteraugli fall
   back to the bundled CPU tools. A video the GPU's own decoder decodes is

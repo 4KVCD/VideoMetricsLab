@@ -236,7 +236,7 @@ std::optional<std::string> size_refusal(const VshipDevice& device, const std::st
                                         std::optional<std::pair<int, int>> computed = std::nullopt);
 
 // Tries the builds in turn for the backend setting `choice` ("auto": CUDA,
-// HIP, then Vulkan; a chosen build first, then the others), in this
+// Vulkan, then HIP; a chosen build first, then the others), in this
 // process, and returns the first usable GPU found, a discrete one first, or
 // the reasons none was found.
 std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(const std::string& choice);

@@ -33,8 +33,9 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--subsample N] [--threads N]
                                    [--vmaf-on {gpu,cpu}]
                                    [--ssimulacra2-on {gpu,cpu}]
-                                   [--butteraugli-on {gpu,cpu}] [--cpu]
-                                   [--no-gpu-decode] [--parallel N]
+                                   [--butteraugli-on {gpu,cpu}]
+                                   [--gpu-backend {auto,vulkan,cuda,hip}]
+                                   [--cpu] [--no-gpu-decode] [--parallel N]
                                    [--recalculate] [--csv FOLDER]
                                    [--json FILE] [-q] [-v]
                                    REFERENCE TEST [TEST ...]
@@ -143,6 +144,10 @@ options:
                         where SSIMULACRA2 is calculated (default: the app's)
   --butteraugli-on {gpu,cpu}
                         where Butteraugli is calculated (default: the app's)
+  --gpu-backend {auto,vulkan,cuda,hip}
+                        the GPU backend for this run, as in Settings > GPU
+                        metrics (default: the app's; auto uses CUDA on NVIDIA
+                        and Vulkan on other GPUs)
   --cpu                 calculate on the CPU every metric that can be (CVVDP
                         is GPU only); the same as --vmaf-on cpu
                         --ssimulacra2-on cpu --butteraugli-on cpu
@@ -755,6 +760,10 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--vmaf-on"}, where(parsed.vmaf_on)),
         option({"--ssimulacra2-on"}, where(parsed.ssimulacra2_on)),
         option({"--butteraugli-on"}, where(parsed.butteraugli_on)),
+        option({"--gpu-backend"},
+               [&parsed](const std::string& value) {
+                   parsed.gpu_backend = choice(value, {"auto", "vulkan", "cuda", "hip"});
+               }),
         flag({"--cpu"}, parsed.cpu),
         flag({"--no-gpu-decode"}, parsed.no_gpu_decode),
         option({"--parallel"},

@@ -30,9 +30,9 @@ default).
 
 SSIMULACRA2, Butteraugli and CVVDP are calculated on the GPU with Vship. Settings
 > GPU metrics > GPU backend chooses Vship's build: Auto (the default) uses CUDA
-on NVIDIA, HIP on AMD and Vulkan on other GPUs such as Intel's; Vulkan can also
-be chosen on any GPU. If no GPU can be used, the input
-format is unsupported, or GPU scoring fails, SSIMULACRA2 and Butteraugli fall
+on NVIDIA and Vulkan on other GPUs such as AMD's and Intel's (HIP only where
+Vulkan cannot run); Vulkan can also be chosen on any GPU. If no GPU can be
+used, the input format is unsupported, or GPU scoring fails, SSIMULACRA2 and Butteraugli fall
 back to the bundled libjxl CPU implementation; CVVDP runs on the GPU only. GPU and CPU results are cached separately
 because their implementations can produce different scores. These two metrics
 are opt-in and do not add processing to runs where they are unchecked.
@@ -192,6 +192,7 @@ $run.videos[0].metrics.vmaf.score
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
 | `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only). |
 | `--vmaf-on`, `--ssimulacra2-on`, `--butteraugli-on` `gpu\|cpu` | Where that one metric is calculated (`--vmaf-on` is VMAF v0.6.1, VMAF NEG and VMAF v1). Left out: as the app's Options panel was last set. |
+| `--gpu-backend` `auto\|vulkan\|cuda\|hip` | The GPU backend for this run, as in Settings > GPU metrics; the setting itself is not changed. Left out: as Settings was last set. |
 | `--no-gpu-decode` | Decode the videos on the CPU. |
 | `--threads N` | libvmaf threads. Left out: automatic. |
 | `--parallel 1\|2` | Videos calculated at once on the CPU. |

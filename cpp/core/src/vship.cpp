@@ -38,9 +38,13 @@ constexpr bool vship_bundled = false;
 const std::map<std::string, std::string, std::less<>> build_folders{
     {"cuda", "nvidia"}, {"hip", "amd"}, {"vulkan", "vulkan"}};
 // The settings' choices: "auto", or the build to try first. Auto tries CUDA,
-// then HIP, then Vulkan: the fastest build whose scores agree with the
-// reference on each GPU, and Vulkan for a GPU neither of the others can use.
-const std::vector<std::string> auto_order{"cuda", "hip", "vulkan"};
+// then Vulkan, then HIP: CUDA on NVIDIA, Vulkan on every other GPU, and HIP
+// only for an AMD GPU whose Vulkan driver cannot run Vship. Vship's author
+// recommends Vulkan on AMD, and the bundled HIP build (5.1.1's, which works
+// around an AMD driver bug) is much slower there: on a Radeon 8060S at
+// 1920x800 10-bit it scored SSIMULACRA2 at 39 pairs a second against
+// Vulkan's 264, Butteraugli at 10 against 59 and CVVDP at 17 against 120.
+const std::vector<std::string> auto_order{"cuda", "vulkan", "hip"};
 
 // The largest frame, in pixels, a (build, GPU maker, metric) combination is
 // given, with the GPUs it covers for the reason shown. Vship 5.1.2's Vulkan
