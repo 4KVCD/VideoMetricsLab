@@ -88,6 +88,13 @@ its distortion-based convention, not an arithmetic average of dB values.
 Identical XPSNR frames score infinity and contribute zero distortion while
 remaining in the aggregate's frame count. An em dash indicates unavailable data.
 
+PSNR, SSIM and XPSNR are of the luma (Y) plane alone: PSNR is what an
+encoder reports as PSNR-Y, not a weighted average of Y, U and V, and its
+score is the mean of the frames' PSNR. XPSNR takes the reference as the
+original, which FFmpeg's `xpsnr` filter wants as its first input whatever
+its inputs are called, so it differs from FFmpeg commands that give the test
+video first (`[dist][ref]xpsnr`).
+
 Subsampling reduces libvmaf-backed scored frames. XPSNR-only currently keeps
 every frame; do not interpret different coverage as identical measurements.
 
