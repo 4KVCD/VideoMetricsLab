@@ -23,18 +23,22 @@ TEST(Isolated, RunsWorkInAProcessOfItsOwn) {
     set_isolation_program(std::filesystem::path(VML_CLI));
     std::vector<nlohmann::json> messages;
     std::string echoed;
+    std::string working_folder;
     const nlohmann::json request{{"file", "written"}, {"n", 1.25}};
     const nlohmann::json result = run_isolated(
         "test-echo", "the test", request, [&](const nlohmann::json& message) { messages.push_back(message); },
         CancelToken(), [&](const nlohmann::json&, const std::filesystem::path& folder) {
             std::ifstream file(folder / "echo.txt");
             std::getline(file, echoed);
+            std::getline(file, working_folder);
         });
     EXPECT_EQ(result, request);
     ASSERT_EQ(messages.size(), 2u);
     EXPECT_EQ(messages[0], (nlohmann::json{{"progress", {1, 2, 3.5}}}));
     EXPECT_EQ(messages[1], (nlohmann::json{{"status", "on its way"}}));
     EXPECT_EQ(echoed, "written");
+    // This process's working folder, where a relative path names a video.
+    EXPECT_EQ(working_folder, platform::path_text(std::filesystem::current_path()));
 
     try {
         run_isolated("test-crash", "the test", nlohmann::json::object(), {}, CancelToken());

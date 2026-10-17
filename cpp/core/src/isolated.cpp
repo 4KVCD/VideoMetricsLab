@@ -253,10 +253,12 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
     }
     const ChildFolder folder;
     const std::filesystem::path request_file = write_request(folder.path(), request, what);
+    // In this process's working folder, as the Python app's child is: a
+    // video named by a relative path is found there (the child finds its own
+    // files by the request's path).
     platform::ChildProcess child = platform::ChildProcess::start(
         {platform::path_text(*program()), std::string(isolated_argument), std::string(task),
-         platform::path_text(request_file)},
-        platform::ProcessOptions{folder.path()});
+         platform::path_text(request_file)});
     // Pause holds the child and every program it started (they are in its
     // job), so the work in it waits whatever it is doing.
     const CancelToken::Attached attached = cancel.attach(child);
@@ -330,11 +332,14 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
             // For the window's self-test: that a process of its own starts.
             result = platform::process_id();
         } else if (task == "test-echo") {
-            // For the tests of run_isolated: two messages, a file, and the
+            // For the tests of run_isolated: two messages, a file (the
+            // request's text, then the folder the child works in), and the
             // request back as the result.
             send_isolated_message({{"progress", {1, 2, 3.5}}});
             send_isolated_message({{"status", "on its way"}});
-            std::ofstream(request_file.parent_path() / "echo.txt", std::ios::binary) << request.value("file", "");
+            std::ofstream(request_file.parent_path() / "echo.txt", std::ios::binary)
+                << request.value("file", "") << "\n"
+                << platform::path_text(std::filesystem::current_path());
             result = request;
         } else if (task == "test-crash") {
             // For the tests: ends as an access violation ends a process.
