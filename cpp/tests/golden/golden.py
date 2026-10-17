@@ -4,7 +4,7 @@ Three commands:
 
     golden.py clips                    makes the short clips cases.json uses
     golden.py run --out DIR [--app EXE] [--case NAME ...]
-                  [--python-app EXE] [--cpp-app EXE]
+                  [--python-app EXE] [--cpp-app EXE] [--jobs N]
                                        runs every case (or those named) with
                                        an app's command line: the Python
                                        app's by default, or the C++ app's
@@ -35,6 +35,7 @@ repository's root:
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import math
 import os
@@ -102,7 +103,7 @@ def make_clips() -> int:
 # ---------------------------------------------------------------------- run
 
 def run_cases(out: Path, app: Path | None, names: list[str],
-              python_app: Path | None = None, cpp_app: Path | None = None) -> int:
+              python_app: Path | None = None, cpp_app: Path | None = None, jobs: int = 1) -> int:
     """Runs the cases with the Python app's command line, or with `app`'s,
     and keeps what each gives in out/<case>.
 
@@ -126,8 +127,11 @@ def run_cases(out: Path, app: Path | None, names: list[str],
         print("the C++ app saves scores first in some of these cases: name it with --cpp-app")
         return 2
     clips = clips_folder()
-    seeds_failed = 0
-    for case in cases:
+
+    def run_case(case: dict) -> tuple[list[str], int]:
+        """Runs one case: what to print, and how many of its seeds failed."""
+        lines = []
+        seeds_failed = 0
         folder = out / case["name"]
         folder.mkdir(parents=True, exist_ok=True)
         videos = [str(clips / case["reference"]), *(str(clips / name) for name in case["tests"])]
@@ -152,8 +156,8 @@ def run_cases(out: Path, app: Path | None, names: list[str],
                 (folder / f"seed{number}_stderr.txt").write_text(seeded.stderr, encoding="utf-8")
                 if seeded.returncode != 0:
                     seeds_failed += 1
-                    print(f"{case['name']}: run {number} before it, which saves scores, exited with "
-                          f"{seeded.returncode}")
+                    lines.append(f"{case['name']}: run {number} before it, which saves scores, exited with "
+                                 f"{seeded.returncode}")
             started = time.perf_counter()
             result = subprocess.run(command, cwd=REPOSITORY, env=environment, capture_output=True,
                                     text=True, encoding="utf-8")
@@ -163,7 +167,18 @@ def run_cases(out: Path, app: Path | None, names: list[str],
         (folder / "stdout.txt").write_text(result.stdout, encoding="utf-8")
         (folder / "stderr.txt").write_text(result.stderr, encoding="utf-8")
         (folder / "exit_code.txt").write_text(f"{result.returncode}\n", encoding="utf-8")
-        print(f"{case['name']}: exit {result.returncode}, {seconds:.1f} s")
+        lines.append(f"{case['name']}: exit {result.returncode}, {seconds:.1f} s")
+        return lines, seeds_failed
+
+    # The cases are apart from each other (each its own profile and folder,
+    # and scores that do not depend on time), so `jobs` of them run at once;
+    # what they print comes in the cases' order.
+    seeds_failed = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
+        for lines, failed in pool.map(run_case, cases):
+            for line in lines:
+                print(line, flush=True)
+            seeds_failed += failed
     # A case's own exit code may be meant to fail; a run before it never is.
     return 1 if seeds_failed else 0
 
@@ -327,6 +342,7 @@ def main() -> int:
     run.add_argument("--cpp-app", type=Path, help="the C++ app's vml-cli for the cases it saves scores for first "
                                                   "(default: --app)")
     run.add_argument("--case", action="append", default=[], help="run only this case (repeatable)")
+    run.add_argument("--jobs", type=int, default=4, help="cases run at once (default: 4)")
     compare = commands.add_parser("compare", help="hold two runs to each other")
     compare.add_argument("first", type=Path)
     compare.add_argument("second", type=Path)
@@ -335,7 +351,7 @@ def main() -> int:
     if args.command == "clips":
         return make_clips()
     if args.command == "run":
-        return run_cases(args.out, args.app, args.case, args.python_app, args.cpp_app)
+        return run_cases(args.out, args.app, args.case, args.python_app, args.cpp_app, args.jobs)
     return compare_runs(args.first, args.second, args.digits)
 
 
