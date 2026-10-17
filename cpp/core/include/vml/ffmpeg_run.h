@@ -50,6 +50,9 @@ enum class StatusKind {
     gpu_pass,         // one of several GPU metric passes begins
     gpu_wait,         // waiting for another video's GPU pass to end
     gpu_vmaf_failed,  // VMAF on the GPU failed; the CPU takes over
+    // Perceptual metrics (SSIMULACRA2, Butteraugli) failed on the GPU; the
+    // CPU takes over within the same task.
+    gpu_perceptual_failed,
 };
 
 // A run's status, as the Python app words it.

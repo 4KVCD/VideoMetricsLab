@@ -196,7 +196,9 @@ $run.videos[0].metrics.vmaf.score
 
 `compare --help` lists the same with examples. The last column of each
 video's table says where a score was calculated: a metric asked for on the
-GPU is calculated on the CPU where no GPU can.
+GPU is calculated on the CPU where no GPU can, and when one fails on the GPU
+during the run and the CPU calculates it, a note says so and why (in the
+JSON too, with the video's other notes).
 
 Progress is written to the error stream and results to the output stream, so
 `--json -` can be piped. The exit code is 0 when every video got every metric

@@ -2511,7 +2511,8 @@ private:
         }
         if (hooks_.on_status) {
             hooks_.on_status({"Vship GPU compute failed (" + std::string(error.what()) +
-                              "); using CPU reference metrics\xE2\x80\xA6"});
+                                  "); using CPU reference metrics\xE2\x80\xA6",
+                              StatusKind::gpu_perceptual_failed});
         }
         // After a GPU failure, all metrics run together on the CPU, so that
         // the frames are extracted only once and the result stays whole.
@@ -2554,10 +2555,11 @@ private:
             return gpu_output;
         }
         announce_cpu(cpu_keys);
-        if (hooks_.on_status) {
-            hooks_.on_status({gpu_failed.empty() ? std::string("Calculating selected perceptual metric(s) on CPU\xE2\x80\xA6")
-                                                 : metric_labels(gpu_failed, " and ") +
-                                                       " failed on the GPU; calculating it on the CPU\xE2\x80\xA6"});
+        if (hooks_.on_status && gpu_failed.empty()) {
+            hooks_.on_status({"Calculating selected perceptual metric(s) on CPU\xE2\x80\xA6"});
+        } else if (hooks_.on_status) {
+            hooks_.on_status({metric_labels(gpu_failed, " and ") + " failed on the GPU; calculating it on the CPU\xE2\x80\xA6",
+                              StatusKind::gpu_perceptual_failed});
         }
         // A CPU failure's message, with the GPU failure first if there was one.
         const auto failed_on_cpu = [&gpu_reasons](const std::string& key, const std::string& reason) {
