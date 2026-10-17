@@ -9,7 +9,9 @@
 // them, or the window's language through a Wording.
 #pragma once
 
+#include <array>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -66,6 +68,24 @@ struct MetricLine {
 // A video's line (the Python app's metric_line). `paused` puts "paused" in
 // place of the speed and the time left.
 MetricLine metric_line(const std::vector<TaskSnapshot>& tasks, bool paused, const Wording& wording = english());
+
+// What a task's part of the line says apart from its figures (how far, how
+// fast, the time left): its state, its pass, what it waits for, and its
+// metrics moved to the CPU or done.
+struct TaskShape {
+    std::string state;
+    std::optional<std::array<long long, 3>> phase;
+    std::string waiting_for;
+    std::vector<std::string> cpu_keys;
+    std::vector<std::string> done_keys;
+    bool operator==(const TaskShape&) const = default;
+};
+using LineShape = std::vector<TaskShape>;
+
+// What a video's line says apart from its figures. The window and the
+// command line draw a line again at once when this changes, and for new
+// figures once a second.
+LineShape line_shape(const std::vector<TaskSnapshot>& tasks);
 
 // Where each video is decoded, as the line shows it: "Decoder: Source: GPU,
 // test video: CPU", each task named where they differ ("test video: CPU (CPU

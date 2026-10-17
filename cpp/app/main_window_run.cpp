@@ -784,10 +784,7 @@ void MainWindow::on_task_progress(int index, std::vector<TaskSnapshot> tasks) {
         return;  // the video is over; its line is gone
     }
     pause_free_rates(index, tasks);
-    LineShape shape;
-    for (const TaskSnapshot& task : tasks) {
-        shape.emplace_back(task.state, task.phase, task.waiting_for, task.cpu_keys, task.done_keys);
-    }
+    LineShape shape = line_shape(tasks);
     job_task_progress_[index] = std::move(tasks);
     const auto known = job_line_shape_.find(index);
     if (known == job_line_shape_.end() || known->second != shape) {

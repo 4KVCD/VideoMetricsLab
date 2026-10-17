@@ -21,7 +21,6 @@
 #include <QString>
 #include <QStringList>
 
-#include <array>
 #include <deque>
 #include <filesystem>
 #include <functional>
@@ -45,6 +44,7 @@
 #include "vml/job_runner.h"
 #include "vml/options.h"
 #include "vml/results.h"
+#include "vml/run_line.h"
 #include "vml/settings.h"
 #include "vml/update_check.h"
 #include "vml/video.h"
@@ -394,11 +394,6 @@ private:
     // something else there: "Paused" before the counts, or a message alone
     // ("Cancelling...").
     enum class RunHold { none, paused, message };
-    // What a video's line shows apart from its figures, which redraws it at
-    // once when it changes: each task's state, pass, wait, and metrics moved
-    // to the CPU or done.
-    using LineShape = std::vector<std::tuple<std::string, std::optional<std::array<long long, 3>>, std::string,
-                                             std::vector<std::string>, std::vector<std::string>>>;
 
     std::vector<int> checked_rows() const;
     void on_run_clicked();

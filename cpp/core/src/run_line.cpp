@@ -559,6 +559,14 @@ MetricLine metric_line(const std::vector<TaskSnapshot>& tasks, bool paused, cons
                       decoding_plans(tasks, numbering, wording)};
 }
 
+LineShape line_shape(const std::vector<TaskSnapshot>& tasks) {
+    LineShape shape;
+    for (const TaskSnapshot& task : tasks) {
+        shape.push_back({task.state, task.phase, task.waiting_for, task.cpu_keys, task.done_keys});
+    }
+    return shape;
+}
+
 std::string decoder_text(const std::vector<std::pair<std::string, HardwareDecoding>>& plans, bool source_only,
                          const Wording& wording) {
     // Where one video is decoded, "GPU" or "CPU", by task where they differ.

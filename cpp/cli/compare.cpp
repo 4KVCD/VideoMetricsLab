@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cerrno>
 #include <chrono>
+#include <condition_variable>
 #include <fstream>
 #include <future>
 #include <map>
@@ -13,6 +14,7 @@
 #include <optional>
 #include <set>
 #include <string_view>
+#include <thread>
 
 #include "report.h"
 #include "vml/app_log.h"
@@ -524,68 +526,169 @@ std::optional<std::string> gpu_not_yet(const std::vector<MetricTask>& tasks) {
 // ------------------------------------------------------------------ progress
 
 // The run's progress on stderr, nothing with --quiet: lines that stay, and
-// a line for each video, redrawn in place on a terminal and elsewhere
-// repeated every ten seconds.
+// a line for each video. On a terminal the videos share one line, redrawn
+// in place as the window draws its lines: at once when what it says apart
+// from its figures changes (line_shape), and with new figures once a
+// second, the videos with new figures taking the line in turn. Elsewhere
+// each video's line is written out, at most every ten seconds.
 class Progress {
 public:
     explicit Progress(bool quiet) : quiet_(quiet), redraw_(platform::is_terminal(platform::Stream::error)) {}
+    ~Progress() { stop_ticking(); }
 
     // Writes a line that stays.
     void message(const std::string& text) {
         const std::lock_guard lock(mutex_);
-        write(text, true);
+        write(text);
     }
 
-    // Shows the line of the video of job `index`.
-    void job(std::size_t index, const std::string& text) {
+    // Starts drawing new figures once a second, on a terminal, until done().
+    void start() {
         const std::lock_guard lock(mutex_);
-        if (redraw_) {
-            write(text, false);
+        if (redraw_ && !quiet_ && !ticker_.joinable()) {
+            stopping_ = false;
+            ticker_ = std::thread([this] { tick(); });
+        }
+    }
+
+    // Shows `text`, the line of the video of job `index`; `shape` is what it
+    // says apart from its figures (line_shape).
+    void job(std::size_t index, const std::string& text, const LineShape& shape) {
+        if (quiet_) {
             return;
         }
-        const Clock::time_point now = Clock::now();
-        const auto last = last_.find(index);
-        if (last == last_.end() || now - last->second >= every_) {
-            last_[index] = now;
-            write(text, true);
+        const std::lock_guard lock(mutex_);
+        if (!redraw_) {
+            const Clock::time_point now = Clock::now();
+            const auto last = last_written_.find(index);
+            if (last == last_written_.end() || now - last->second >= write_every_) {
+                last_written_[index] = now;
+                write(text);
+            }
+            return;
         }
+        const auto [found, added] = lines_.try_emplace(index);
+        Line& line = found->second;
+        line.text = text;
+        if (added || line.shape != shape) {
+            line.shape = shape;
+            draw(index);
+        } else {
+            line.due = true;
+        }
+    }
+
+    // Writes `text`, a line that stays, for the video of job `index`, which
+    // has ended: its line is not drawn again.
+    void finished(std::size_t index, const std::string& text) {
+        const std::lock_guard lock(mutex_);
+        lines_.erase(index);
+        if (shown_index_ == index) {
+            platform::write_text(platform::Stream::error, wipe());
+            shown_.clear();
+            shown_index_.reset();
+        }
+        write(text);
     }
 
     // Wipes the line being redrawn, at the end of the run.
     void done() {
+        stop_ticking();
         const std::lock_guard lock(mutex_);
         if (redraw_ && !shown_.empty() && !quiet_) {
-            platform::write_text(platform::Stream::error, "\r" + std::string(python_length(shown_), ' ') + "\r");
+            platform::write_text(platform::Stream::error, wipe());
         }
         shown_.clear();
+        shown_index_.reset();
+        lines_.clear();
     }
 
 private:
-    void write(const std::string& text, bool keep) {
+    struct Line {
+        std::string text;
+        LineShape shape;
+        bool due = false;  // it has new figures, not drawn yet
+    };
+
+    // Once a second until the run ends: the line of the next video with new
+    // figures, after the one shown, so that videos running at once take the
+    // line in turn.
+    void tick() {
+        std::unique_lock lock(mutex_);
+        while (!woken_.wait_for(lock, redraw_every_, [this] { return stopping_; })) {
+            if (const std::optional<std::size_t> next = next_due()) {
+                draw(*next);
+            }
+        }
+    }
+
+    std::optional<std::size_t> next_due() const {
+        const auto is_due = [](const auto& line) { return line.second.due; };
+        const auto after = shown_index_ ? lines_.upper_bound(*shown_index_) : lines_.begin();
+        auto found = std::find_if(after, lines_.end(), is_due);
+        if (found == lines_.end()) {
+            found = std::find_if(lines_.begin(), after, is_due);
+            if (found == after) {
+                return std::nullopt;
+            }
+        }
+        return found->first;
+    }
+
+    // Stops the ticks; the thread ends before this returns.
+    void stop_ticking() {
+        std::thread ticker;
+        {
+            const std::lock_guard lock(mutex_);
+            stopping_ = true;
+            ticker = std::move(ticker_);
+        }
+        woken_.notify_all();
+        if (ticker.joinable()) {
+            ticker.join();
+        }
+    }
+
+    // Draws the line of the video of job `index` in place of the one shown.
+    void draw(std::size_t index) {
+        Line& line = lines_.at(index);
+        line.due = false;
+        const std::string wiped = wipe();
+        shown_ = first_characters(line.text, 118);
+        shown_index_ = index;
+        platform::write_text(platform::Stream::error, wiped + shown_);
+    }
+
+    // Writes a line that stays: on a terminal, above the line being redrawn.
+    void write(const std::string& text) {
         if (quiet_) {
             return;
         }
         if (!redraw_) {
-            if (keep) {
-                platform::write_text(platform::Stream::error, text + "\n");
-            }
+            platform::write_text(platform::Stream::error, text + "\n");
             return;
         }
-        const std::string wipe = "\r" + std::string(python_length(shown_), ' ') + "\r";
-        if (keep) {
-            platform::write_text(platform::Stream::error, wipe + text + "\n" + shown_);
-        } else {
-            shown_ = first_characters(text, 118);
-            platform::write_text(platform::Stream::error, wipe + shown_);
-        }
+        platform::write_text(platform::Stream::error, wipe() + text + "\n" + shown_);
     }
 
-    static constexpr std::chrono::seconds every_{10};
+    // What wipes the line being redrawn, leaving the cursor at its start.
+    std::string wipe() const { return "\r" + std::string(python_length(shown_), ' ') + "\r"; }
+
+    static constexpr std::chrono::seconds redraw_every_{1};
+    static constexpr std::chrono::seconds write_every_{10};
     const bool quiet_;
     const bool redraw_;
     std::mutex mutex_;
-    std::string shown_;  // the line being redrawn
-    std::map<std::size_t, Clock::time_point> last_;
+    // On a terminal: each running video's line, the one being redrawn, and
+    // the thread that draws new figures once a second.
+    std::map<std::size_t, Line> lines_;
+    std::string shown_;
+    std::optional<std::size_t> shown_index_;
+    std::thread ticker_;
+    std::condition_variable woken_;
+    bool stopping_ = false;
+    // Elsewhere: when each video's line was last written.
+    std::map<std::size_t, Clock::time_point> last_written_;
 };
 
 // ------------------------------------------------------------------- the run
@@ -593,11 +696,18 @@ private:
 // Runs the jobs (job_runner.h), keeping each video's result, or why it or
 // some of its metrics failed, in its TestVideo (`targets` holds each job's),
 // saving it in the saved scores under `cache_folder` unless the video's
-// save_scores is false, and showing the run's progress, as the Python app's
-// command line does (cli.run).
+// save_scores is false, and showing the run's progress (Progress). A port of
+// the Python app's command line's cli.run.
 void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targets, const std::vector<VmafJob>& jobs,
          int parallel, bool gpu_metrics_together, const std::filesystem::path& cache_folder, Progress& progress,
          const CancelToken& cancel) {
+    // The line being redrawn is drawn with new figures once a second while
+    // the run lasts, and ends with the run, however the run ends.
+    progress.start();
+    struct EndsTheLine {
+        Progress& progress;
+        ~EndsTheLine() { progress.done(); }
+    } const ends_the_line{progress};
     const auto video = [&targets](std::size_t index) -> TestVideo& { return *targets[index]; };
     // A video's CVVDP on other displays is saved in the same comparison
     // folder, and two jobs replacing its context.json at once can fail on
@@ -652,7 +762,7 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
             line += (line.empty() ? "" : "; ") + part;
         }
         if (!line.empty()) {
-            progress.job(index, video(index).label() + ": " + line);
+            progress.job(index, video(index).label() + ": " + line, line_shape(tasks));
         }
     };
     // A video's result so far is kept, and saved, when one of its tasks
@@ -660,18 +770,18 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
     events.result_updated = keep;
     events.job_finished = [&](std::size_t index, const ComparisonResult& result) {
         keep(index, result);
-        progress.message(video(index).label() + ": done");
+        progress.finished(index, video(index).label() + ": done");
     };
     events.job_failed = [&](std::size_t index, const std::string& message, const std::string& /*stderr_tail*/) {
         video(index).error = message;
-        progress.message(video(index).label() + ": FAILED: " + message);
+        progress.finished(index, video(index).label() + ": FAILED: " + message);
     };
     events.job_partially_failed = [&](std::size_t index, const ComparisonResult& result, const std::string& message,
                                       const std::string& /*stderr_tail*/, const MetricFailures& failures) {
         keep(index, result);
         TestVideo& target = video(index);
         target.failures = failures.empty() ? MetricFailures{{"", message}} : failures;
-        progress.message(target.label() + ": some metrics FAILED: " + message);
+        progress.finished(index, target.label() + ": some metrics FAILED: " + message);
     };
     run_jobs(
         jobs, parallel, events,
@@ -1256,7 +1366,6 @@ int compare(const CompareArguments& arguments) {
         run(run_environment(tools, planner.jobs), planner.job_targets(), planner.jobs,
             arguments.parallel.value_or(settings.parallel_jobs), settings.gpu_metrics_together, cache_folder,
             *progress, cancel);
-        progress->done();
         cancelled = cancel.cancelled();
         *running = false;
         const double seconds = std::chrono::duration<double>(Clock::now() - started).count();
