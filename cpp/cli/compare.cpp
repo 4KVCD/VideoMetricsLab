@@ -197,15 +197,15 @@ bool has_colour_tags(const VideoInfo& info) {
     return !is_untagged_tag(info.color_transfer) || !is_untagged_tag(info.color_primaries);
 }
 
-// The note for a video read without colour tags: what the app took its
-// colours to be (colour.h's video_colour's guess).
+// The note for a video read without colour tags: that it was read as SDR
+// (colour.h's video_colour's guess), as HDR10 without its tags is too.
 std::string guessed_colour_note(const VideoInfo& info, const std::string& which) {
-    const std::string guess = !is_untagged_tag(info.color_space) ? "from its colour matrix, " + info.color_space
-                              : info.height > 650         ? "BT.709 SDR, as it is over 650 lines"
-                                                          : "BT.601 SDR, as it is 650 lines or fewer";
-    return which + " has no colour tags, so its colours were guessed (" + guess +
-           "). CVVDP, SSIMULACRA2 and Butteraugli depend on them: --colour says what they are, such as pq-bt2020 "
-           "for HDR10.";
+    const std::string guess = !is_untagged_tag(info.color_space) ? "with its colour matrix, " + info.color_space
+                              : info.height > 650         ? "BT.709, as it is over 650 lines"
+                                                          : "BT.601, as it is 650 lines or fewer";
+    return which + " has no colour tags, so it was read as SDR (" + guess +
+           "): HDR10 without its tags is read as SDR too, which changes CVVDP, SSIMULACRA2 and Butteraugli. If it "
+           "is HDR10, give --colour pq-bt2020.";
 }
 
 // `info` with the colours --colour gives, when it has no colour tags of its
