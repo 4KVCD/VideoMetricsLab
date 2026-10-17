@@ -1,6 +1,4 @@
 # The repository's Python scripts: ruff to check them, numpy for
-# cpp/tests/golden/golden.py. cpp/tests/reference/make_reference.py and
-# cpp/tests/fixtures/make_vvc_grain.py run the Python app, and need its
-# requirements (requirements.txt on the release/v2.1 branch).
+# cpp/tests/golden/golden.py.
 ruff>=0.16.5
 numpy>=2.0

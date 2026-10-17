@@ -1,5 +1,5 @@
-// Reading the Python app's answers (tests/reference, made by
-// make_reference.py) and comparing numbers with them.
+// Reading the Python app's answers (tests/reference, made by its own code
+// when the app was ported) and comparing numbers with them.
 #pragma once
 
 #include <nlohmann/json.hpp>
@@ -25,8 +25,8 @@ std::vector<double> reference_numbers(const nlohmann::json& list);
 // to 12 significant digits.
 bool same_number(double expected, double actual);
 
-// A result as make_reference.py's _result_json describes it, its numbers
-// written by float.hex().
+// A result as the reference files describe it, its numbers written by
+// float.hex().
 ComparisonResult result_from(const nlohmann::json& data);
 
 // A provenance as provenance_to_dict writes it.

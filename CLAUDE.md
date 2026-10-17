@@ -11,9 +11,7 @@ otherwise, and pull before you start. Follow these rules for all work.
   translations), and MinGW-w64's g++ for the native libraries. FFmpeg 9 or
   newer must be installed.
 - Python: `.venv\Scripts\python.exe` (3.14, `requirements-dev.txt`), for the
-  repository's scripts. The Python app, whose answers the C++ app's
-  reference values and golden suite hold it to, is a checkout of its last
-  release (the `release/v2.1` branch) in the folder `VML_PYTHON_APP` names.
+  repository's scripts.
 - After pulling, rebuild the native libraries with
   `scripts\build_gpu_frames.ps1`, `build_d3d11_tonemap.ps1` and
   `build_d3d11_film_grain.ps1` if your copies are older than the pull.

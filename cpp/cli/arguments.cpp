@@ -632,8 +632,7 @@ long long positive_int(const std::string& text) {
 }
 
 // A frame rate (--fps): a fraction of whole numbers below 2^53, as many as a
-// double holds exactly ("24000/1001"), or a number ("23.976"), above 0. The
-// reference's make_reference.py reads it by the same rule.
+// double holds exactly ("24000/1001"), or a number ("23.976"), above 0.
 double frame_rate(const std::string& text) {
     static const std::regex fraction("([0-9]+)/([0-9]+)");
     const std::string stripped(python_strip(text));
@@ -659,8 +658,7 @@ double frame_rate(const std::string& text) {
 }
 
 // A picture size (--size): a width and a height of 1 to 5 digits, above 0,
-// given back as FFmpeg's -video_size reads it ("1920x1080"). The reference's
-// make_reference.py reads it by the same rule.
+// given back as FFmpeg's -video_size reads it ("1920x1080").
 std::string picture_size(const std::string& text) {
     static const std::regex size("([0-9]{1,5})x([0-9]{1,5})");
     const std::string stripped(python_strip(text));

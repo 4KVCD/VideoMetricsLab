@@ -1,6 +1,7 @@
-# The engine's and the command line's tests. Their expected values come from
-# the Python app itself (reference/make_reference.py), so a test that passes
-# says the C++ code gives the Python app's answers.
+# The engine's and the command line's tests. Their expected values
+# (reference/) are the Python app's answers, made by its own code when the
+# app was ported, so a test that passes says the C++ code gives them, but
+# where a change since has edited one on purpose.
 add_executable(vml_tests
     unit/app_log_test.cpp
     unit/bitrate_test.cpp

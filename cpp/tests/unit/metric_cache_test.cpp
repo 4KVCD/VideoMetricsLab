@@ -72,8 +72,8 @@ void lay_saved_scores(const test::Folder& folder, const std::filesystem::path& b
     }
 }
 
-// A loaded result holds the scores `expected` lists (make_reference.py's
-// metric_json), with their frames and provenance, and the label saved.
+// A loaded result holds the scores `expected` lists (as metric_cache.json
+// lists them), with their frames and provenance, and the label saved.
 void expect_loaded(const std::optional<std::pair<ComparisonResult, std::string>>& loaded,
                    const nlohmann::json& expected, const std::string& label) {
     if (expected.empty()) {

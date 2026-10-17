@@ -9,47 +9,43 @@ from, on that branch.
 
 ## How it is checked
 
-The C++ code must give the Python app's answers:
+When it was ported, the C++ code was held to the Python app's answers:
 
-- **Scores from the libraries** (libvmaf, Vship, libjxl's tools) must be
-  identical, Python against C++ on the same PC: the same libraries, fed the
-  same frames, give the same numbers.
+- **Scores from the libraries** (libvmaf, Vship, libjxl's tools) identical,
+  Python against C++ on the same PC: the same libraries, fed the same
+  frames, give the same numbers.
 - **Numbers the app calculates itself** (the mean, median, standard
-  deviation, percentiles, XPSNR's average) must agree to 12 significant
-  digits. On Windows the tests ask for them exactly, and they are: sums are
-  made in numpy's order (`numpy_sum` in `core/src/stats.cpp`).
+  deviation, percentiles, XPSNR's average) to 12 significant digits. On
+  Windows the tests ask for them exactly, and they are: sums are made in
+  numpy's order (`numpy_sum` in `core/src/stats.cpp`).
 
-The tests read the Python app's answers from `tests/reference`, which
-`tests/reference/make_reference.py` makes by running the Python app's own
-code: a checkout of its last release (the `release/v2.1` branch), in the
-folder `VML_PYTHON_APP` names, run with a Python that has its
-requirements. After changing what it covers (its docstring lists it: the
-window's catalogs, say), run it again from the repository's root and
-commit what it writes. Its Vulkan cases need a GPU that Vulkan scores VMAF
-on; what they write is the same on every such GPU.
+The tests' expected values in `tests/reference` are those answers, made by
+the Python app's own code at the port, numbers as `float.hex()` text
+(`0x1.7a00000000000p+6`, `inf`, `nan`) so that they reach the tests
+exactly. The Python app is no longer run: the files are fixed data, and a
+change that means to give another answer edits them, in the same commit.
 
-    set VML_PYTHON_APP=<the checkout>
-    .venv\Scripts\python.exe cpp\tests\reference\make_reference.py
-
-On real videos, `tests/golden/golden.py` holds the command lines to each
-other: it runs the cases in `cases.json` (80 runs covering the ways the app
-scores videos) with either app, each with a fresh profile (and the case's
-own settings, where it has any; some cases save scores in it first, with
-either app), and compares the exit codes, the tables, the per-frame CSV
-files character for character, the JSON results, and what each run saved in
-the saved scores. The clips are 2-second cuts of real test videos
+On real videos, `tests/golden/golden.py` holds the command line to an
+earlier run of it: it runs the cases in `cases.json` (80 runs covering the
+ways the app scores videos) with a `vml-cli`, each with a fresh profile
+(and the case's own settings, where it has any; some cases save scores in
+it first), and compares the exit codes, the tables, the per-frame CSV files
+character for character, the JSON results, and what each run saved in the
+saved scores. The clips are 2-second cuts of real test videos
 (`clips.json`; `golden.py clips` makes them, outside the repository). Two
-runs of the Python app on this PC give identical results in every case, the
-GPU metrics included, so the C++ app is held to identical results here too.
-A video the app decodes itself and scales is, by the Python app's design,
-not exactly what FFmpeg's scale filter gives (gpu_frames.py's plan_decode);
-both apps scale it the same way, and the `...-by-ffmpeg` case holds them to
-each other on FFmpeg's route too.
+runs of the same build on this PC give identical results in every case, the
+GPU metrics included, so a new build is held to identical results with the
+last release, but where a change made on purpose says why. It runs before
+a release and in a round of bug checking, not for each change. With
+`--seed-app` another `vml-cli` saves the scores first: the last release's,
+say, so that the new build reads the scores that release saved. A video
+the app decodes itself and scales is, by design, not exactly what FFmpeg's
+scale filter gives (`plan_decode` in `core/src/gpu_frames.cpp`); the
+`...-scaled-by-ffmpeg` cases cover FFmpeg's route too.
 
-    set VML_PYTHON_APP=<a checkout of release/v2.1>
-    python cpp\tests\golden\golden.py run --out python-run --cpp-app path\to\vml-cli.exe
-    python cpp\tests\golden\golden.py run --out cpp-run --app path\to\vml-cli.exe
-    python cpp\tests\golden\golden.py compare python-run cpp-run
+    python cpp\tests\golden\golden.py run --out before --app <the last release>\vml-cli.exe
+    python cpp\tests\golden\golden.py run --out after --app cpp\build\windows\cli\Release\vml-cli.exe
+    python cpp\tests\golden\golden.py compare before after
 
 ## Layout
 
@@ -61,9 +57,9 @@ each other on FFmpeg's route too.
 | `app` | `VideoMetricsLab`, the window (Qt 6), and its code (`vml_app`), which its tests use too. |
 | `tests/unit` | The tests (GoogleTest). |
 | `tests/app` | The window's tests, run with no screen (Qt's offscreen platform), each in a profile of its own. |
-| `tests/reference` | The Python app's answers, and the script that makes them. |
-| `tests/fixtures` | Small videos the window's tests play, and the script that made them. |
-| `tests/golden` | The comparison of the two apps' command lines on real videos. |
+| `tests/reference` | The tests' expected values: the Python app's answers at the port, edited only on purpose since. |
+| `tests/fixtures` | Small videos the window's tests play. |
+| `tests/golden` | The command line's runs on real videos, held to an earlier run's. |
 | `third_party` | Vendored libraries: see its README. |
 | `packaging` | What the Windows package adds to the build (Qt's licence texts). |
 
@@ -218,6 +214,6 @@ development PC before each commit.
   why, as in the rest of the repository.
 - Warnings are errors, on every compiler.
 - A behaviour gets one test, through the real code, compared with the
-  Python app's answer wherever there is one.
+  expected values in `tests/reference` wherever they cover it.
 - On macOS, `std::to_chars` for doubles needs macOS 13.3 or later, which
   sets the earliest macOS the engine can run on.

@@ -39,7 +39,7 @@ VideoInfo video(const char* name, int width, int height, const char* pix_fmt, do
     return info;
 }
 
-// The cases' parts, as make_reference.py's run_cases names them.
+// The cases' parts, as runs.json names them.
 std::pair<VideoInfo, VideoInfo> pair_named(const std::string& name) {
     if (name == "4k against 1080p") {
         return {video("source.mp4", 3840, 2160, "yuv420p10le", 120.0),

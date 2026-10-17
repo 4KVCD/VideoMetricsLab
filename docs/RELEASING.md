@@ -35,10 +35,11 @@
    with the package's own files: `VML_RESOURCES=<package>\resources`, then
    `vml_app_tests --gtest_filter=NativeDecoderTest.*`. Record FFmpeg's
    version and each GPU's driver.
-5. Run the golden suite (`cpp/README.md`) against the Python app's last
-   release: a checkout of `release/v2.1` named by `VML_PYTHON_APP`, or that
-   release's command line as `--python-app`. Every case must be the same,
-   or differ only where a change made on purpose says why.
+5. Run the golden suite (`cpp/README.md`) with the new build against a run
+   of the last release's package, and once more with `--seed-app` set to
+   that package's `vml-cli`, so that the new build reads the scores the last
+   release saved. Every case must be the same, or differ only where a
+   change made on purpose says why.
 6. Test every metric, including SSIMULACRA2 and Butteraugli through both the
    Vship GPU path and the libjxl CPU fallback, with Settings > GPU metrics >
    GPU backend on Auto and on Vulkan. After updating Vship, compare each

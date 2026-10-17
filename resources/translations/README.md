@@ -18,4 +18,5 @@ One file per language, `<code>.json`, named by the codes in `cpp/app/i18n.cpp`'s
 - Only the window is translated. The log, saved results and exported files stay in English.
 
 `python scripts/i18n_catalog.py check` lists what each catalog lacks after the English text changes. The window's
-tests hold its text in each language to `cpp/tests/reference/i18n.json` (`cpp/tests/reference/make_reference.py`).
+tests hold its text in each language to `cpp/tests/reference/i18n.json`, made by the Python app at the port: a change
+to a text it lists, or to that text's translation, edits it too.

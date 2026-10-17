@@ -576,7 +576,7 @@ TEST_F(NativeDecoderTest, ARawStreamsFramesAreCountedFromItsStart) {
 // A VVC video's film grain is drawn as the Python app draws it: played from
 // the start, every frame of the film grain test's 8-bit stream
 // (fixtures/vvc_grain.266) and of its 10-bit one (vvc_grain_10bit.266) is
-// the Python app's frame (vvc_grain_app.npz, from make_vvc_grain.py --app),
+// the Python app's frame (vvc_grain_app.npz, which the Python app drew),
 // luma and chroma. That is FFmpeg's own frame where FFmpeg draws the grain
 // (8-bit, a message that persists), and the grain library's where it does
 // not (10-bit, a message for its own frame only), and the frame as decoded

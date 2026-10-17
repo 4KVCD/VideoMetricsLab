@@ -24,8 +24,8 @@ void expect_same(const nlohmann::json& expected, double actual, const char* what
     EXPECT_TRUE(test::same_number(value, actual)) << what << ": Python " << expected << ", C++ " << actual;
 }
 
-// Every statistic the app shows, over the shapes of data it meets (see
-// make_reference.py), is the Python app's.
+// Every statistic the app shows, over the shapes of data it meets (as
+// stats.json lists them), is the Python app's.
 TEST(Stats, ComputeStatsGivesThePythonAppsStatistics) {
     const nlohmann::json reference = test::load_reference("stats.json");
     ASSERT_FALSE(reference["cases"].empty());

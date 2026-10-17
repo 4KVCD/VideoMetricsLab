@@ -1,36 +1,30 @@
-"""Holds the C++ app's results to the Python app's, on real videos.
+"""Holds the app's command line to an earlier run of it, on real videos.
 
 Three commands:
 
     golden.py clips                    makes the short clips cases.json uses
-    golden.py run --out DIR [--app EXE] [--case NAME ...]
-                  [--python-app EXE] [--cpp-app EXE] [--jobs N]
+    golden.py run --out DIR --app EXE [--case NAME ...] [--seed-app EXE]
+                  [--jobs N]
                                        runs every case (or those named) with
-                                       an app's command line: the Python
-                                       app's by default, or the C++ app's
-                                       vml-cli (the other two: the apps
-                                       that save scores first, in the cases
+                                       an app's vml-cli (--seed-app: the one
+                                       that saves scores first, in the cases
                                        that need saved scores)
     golden.py compare DIR_A DIR_B [--digits N]
                                        holds two runs' results to each other
 
 Each case runs with a fresh profile (no saved scores, and no settings but
 the case's own "settings"; a case with "seeds" has scores saved in it
-first, by either app) and keeps the app's exit code, its output (the
-tables), its --json results, its --csv per-frame scores and what it saved
-in the saved scores. `compare` asks for the same exit codes, the same
-tables, the same CSV files character for character, and the same JSON
-results and saved scores: exactly, or with --digits N, numbers to N
-significant digits (for results made on another PC or system).
+first) and keeps the app's exit code, its output (the tables), its --json
+results, its --csv per-frame scores and what it saved in the saved scores.
+`compare` asks for the same exit codes, the same tables, the same CSV files
+character for character, and the same JSON results and saved scores:
+exactly, or with --digits N, numbers to N significant digits (for results
+made on another PC or system).
 
 The clips live outside the repository, in the folder VML_GOLDEN_CLIPS names,
-or Documents/VideoMetricsLab-golden/clips. The Python app is a checkout of
-its last release (the release/v2.1 branch), in the folder VML_PYTHON_APP
-names, run with the Python this script runs with, which needs the Python
-app's requirements (that checkout's requirements.txt). Run from the
-repository's root:
+or Documents/VideoMetricsLab-golden/clips. Run from the repository's root:
 
-    .venv\\Scripts\\python.exe cpp\\tests\\golden\\golden.py run --out run1
+    .venv\\Scripts\\python.exe cpp\\tests\\golden\\golden.py run --out run1 --app path\\to\\vml-cli.exe
 """
 from __future__ import annotations
 
@@ -50,18 +44,6 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 REPOSITORY = HERE.parents[2]
-#: The Python app's command line, run as python -c this with the checkout's
-#: folder first on the path.
-PYTHON_CLI = "import sys; sys.path.insert(0, {checkout!r}); from vmaf_app.cli import main; " \
-             "sys.exit(main(sys.argv[1:]))"
-
-
-def python_cli() -> list[str]:
-    """The Python app's command line, from the checkout VML_PYTHON_APP names."""
-    named = os.environ.get("VML_PYTHON_APP")
-    if not named or not (Path(named) / "vmaf_app" / "cli.py").is_file():
-        sys.exit("name a checkout of the Python app (the release/v2.1 branch) with VML_PYTHON_APP")
-    return [sys.executable, "-c", PYTHON_CLI.format(checkout=str(Path(named).resolve()))]
 
 
 def clips_folder() -> Path:
@@ -102,30 +84,21 @@ def make_clips() -> int:
 
 # ---------------------------------------------------------------------- run
 
-def run_cases(out: Path, app: Path | None, names: list[str],
-              python_app: Path | None = None, cpp_app: Path | None = None, jobs: int = 1) -> int:
-    """Runs the cases with the Python app's command line, or with `app`'s,
-    and keeps what each gives in out/<case>.
+def run_cases(out: Path, app: Path, names: list[str], seed_app: Path | None = None, jobs: int = 1) -> int:
+    """Runs the cases with `app`, a vml-cli, and keeps what each gives in
+    out/<case>.
 
     A case with "seeds" has runs before its own, in the same profile, to
-    save scores that its own run finds: each as a seed says ({"app":
-    "python" or "cpp", and the run's "tests" and "args", the case's own
-    where not given}). Their Python app is `python_app` (VML_PYTHON_APP's
-    if None), their C++ app `cpp_app` (`app` if None): so each app is held
-    to reading the other's saved scores."""
+    save scores that its own run finds: each with a seed's "tests" and
+    "args", the case's own where not given, and with `seed_app` (`app` if
+    None), so that one version can be held to reading another's saved
+    scores."""
     cases = [case for case in load("cases.json")["cases"] if not names or case["name"] in names]
     missing = set(names) - {case["name"] for case in cases}
     if missing:
         print(f"no case called {', '.join(sorted(missing))}")
         return 2
-    needs_python = not app or (not python_app and any(seed["app"] == "python" for case in cases
-                                                      for seed in case.get("seeds", ())))
-    python = python_cli() if needs_python else []
-    seeders = {"python": [str(python_app)] if python_app else python,
-               "cpp": [str(cpp_app or app)] if cpp_app or app else None}
-    if seeders["cpp"] is None and any(seed["app"] == "cpp" for case in cases for seed in case.get("seeds", ())):
-        print("the C++ app saves scores first in some of these cases: name it with --cpp-app")
-        return 2
+    seeder = str(seed_app or app)
     clips = clips_folder()
 
     def run_case(case: dict) -> tuple[list[str], int]:
@@ -136,21 +109,19 @@ def run_cases(out: Path, app: Path | None, names: list[str],
         folder.mkdir(parents=True, exist_ok=True)
         videos = [str(clips / case["reference"]), *(str(clips / name) for name in case["tests"])]
         options = [*case["args"], "--json", str(folder / "results.json"), "--csv", str(folder / "csv"), "-q"]
-        command = ([str(app)] if app else python) + ["compare", *videos, *options]
+        command = [str(app), "compare", *videos, *options]
         with tempfile.TemporaryDirectory(prefix="vml-golden-profile-") as profile:
             # A fresh home: no saved scores, no black bars kept, and no
-            # settings but the case's own, in both apps' settings.json.
+            # settings but the case's own, in the app's settings.json.
             if "settings" in case:
                 data = Path(profile) / ".videometricslab"
                 data.mkdir()
                 (data / "settings.json").write_text(json.dumps(case["settings"]), encoding="utf-8")
-            environment = {**os.environ, "USERPROFILE": profile, "HOME": profile, "PYTHONUTF8": "1",
-                           **case.get("environment", {})}
+            environment = {**os.environ, "USERPROFILE": profile, "HOME": profile, **case.get("environment", {})}
             for number, seed in enumerate(case.get("seeds", ()), 1):
                 seed_videos = [str(clips / case["reference"]), *(str(clips / name)
                                                                  for name in seed.get("tests", case["tests"]))]
-                seeded = subprocess.run([*seeders[seed["app"]], "compare", *seed_videos,
-                                         *seed.get("args", case["args"]), "-q"],
+                seeded = subprocess.run([seeder, "compare", *seed_videos, *seed.get("args", case["args"]), "-q"],
                                         cwd=REPOSITORY, env=environment, capture_output=True,
                                         text=True, encoding="utf-8")
                 (folder / f"seed{number}_stderr.txt").write_text(seeded.stderr, encoding="utf-8")
@@ -186,7 +157,7 @@ def run_cases(out: Path, app: Path | None, names: list[str],
 def saved_scores(profile: Path) -> dict:
     """What the runs saved in the profile's saved scores: each file by its
     path in the folder, a JSON file as its data and an .npz file as its
-    arrays (the metadata's JSON as its data), so that the two apps' files
+    arrays (the metadata's JSON as its data), so that two runs' files
     compare whatever compressed them."""
     folder = profile / ".videometricslab" / "results_cache"
     found = {}
@@ -303,10 +274,10 @@ def compare_runs(first: Path, second: Path, digits: int | None) -> int:
 
 
 #: A bundled model's path as a saved score records it, "path=" and the path
-#: to the app's models folder (the Python app's vmaf_app/models, the C++
-#: app's resources/models): each app saves its own copy's, and the two apps
-#: compared here run from different folders.
-_BUNDLED_MODEL = re.compile(r"path=.*?(?:vmaf_app|resources)[\\/]models[\\/]")
+#: to the app's models folder (resources/models): each copy of the app saves
+#: its own, and the two runs compared here may be of copies in different
+#: folders (a package and a build).
+_BUNDLED_MODEL = re.compile(r"path=.*?resources[\\/]models[\\/]")
 
 
 def _app_relative(value):
@@ -335,12 +306,9 @@ def main() -> int:
     commands.add_parser("clips", help="make the clips")
     run = commands.add_parser("run", help="run the cases")
     run.add_argument("--out", type=Path, required=True, help="the folder for the results")
-    run.add_argument("--app", type=Path, help="the C++ app's vml-cli (default: the Python app, "
-                                             "from VML_PYTHON_APP)")
-    run.add_argument("--python-app", type=Path, help="the Python app's command line for the cases it saves scores "
-                                                     "for first (default: VML_PYTHON_APP's)")
-    run.add_argument("--cpp-app", type=Path, help="the C++ app's vml-cli for the cases it saves scores for first "
-                                                  "(default: --app)")
+    run.add_argument("--app", type=Path, required=True, help="the app's vml-cli")
+    run.add_argument("--seed-app", type=Path, help="the vml-cli that saves scores first, in the cases that need "
+                                                   "saved scores (default: --app)")
     run.add_argument("--case", action="append", default=[], help="run only this case (repeatable)")
     run.add_argument("--jobs", type=int, default=4, help="cases run at once (default: 4)")
     compare = commands.add_parser("compare", help="hold two runs to each other")
@@ -351,7 +319,7 @@ def main() -> int:
     if args.command == "clips":
         return make_clips()
     if args.command == "run":
-        return run_cases(args.out, args.app, args.case, args.python_app, args.cpp_app, args.jobs)
+        return run_cases(args.out, args.app, args.case, args.seed_app, args.jobs)
     return compare_runs(args.first, args.second, args.digits)
 
 
