@@ -35,6 +35,14 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
 VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprobe,
                            const CancelToken& cancel = CancelToken());
 
+// A raw YUV file's details (a .yuv file: pictures and nothing else, FFmpeg's
+// rawvideo), read as pictures of `size` ("1920x1080") in `pix_fmt` at `fps`
+// frames a second, the command line's --size, --pix-fmt and --fps, and
+// timed as timed_raw_stream times a raw stream. Throws ProbeError when
+// ffprobe cannot read it so, Cancelled once cancelled.
+VideoInfo probe_raw_yuv(const std::filesystem::path& path, const std::string& size, const std::string& pix_fmt,
+                        double fps, const std::string& ffprobe, const CancelToken& cancel = CancelToken());
+
 // The video's details in ffprobe's JSON output for `path`
 // (-print_format json -show_format -show_streams). Throws ProbeError when
 // the output cannot be read or has no video stream.

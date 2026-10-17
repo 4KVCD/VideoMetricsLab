@@ -80,23 +80,26 @@ struct VideoInfo {
     // How long after the file's start the video's first frame comes, in
     // seconds.
     double start_offset = 0.0;
-    // A raw stream timed by the command line's --fps (ffprobe.h's
-    // timed_raw_stream): its frame rate is the one given, and its frame
-    // count, length and bitrate come from its counted frames.
+    // A raw stream or raw YUV file timed by the command line's --fps
+    // (ffprobe.h's timed_raw_stream, probe_raw_yuv): its frame rate is the
+    // one given, and its frame count, length and bitrate come from its
+    // counted frames.
     bool timed_raw = false;
 
     // The frame count ffprobe reports, or else duration times fps.
     long long estimated_frame_count() const;
-    // A bare elementary stream (a .hevc or .264 file), not a container: it
-    // has no timestamps, so its frame rate cannot be known.
+    // A bare elementary stream (a .hevc or .264 file) or raw pictures (a
+    // .yuv file), not a container: it has no timestamps, so its frame rate
+    // cannot be known.
     bool is_raw_stream() const;
     // Whether its samples use the full range (0-255 at 8 bits) rather than
     // the limited one (16-235 for luma): tagged so, or untagged in a "yuvj"
     // pixel format.
     bool full_range() const;
     // FFmpeg's options before the video's -i: a timed raw stream's frame
-    // rate (-framerate), so that FFmpeg's times for its frames are right.
-    // Nothing for any other video.
+    // rate (-framerate), so that FFmpeg's times for its frames are right,
+    // after a raw YUV file's format, picture size and pixel format. Nothing
+    // for any other video.
     std::vector<std::string> input_options() const;
     // Whether the nominal and the average frame rate differ by more than
     // rounding.

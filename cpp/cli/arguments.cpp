@@ -28,7 +28,8 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--scaler {bicubic,bilinear,lanczos,spline}]
                                    [--duration SECONDS | --frames N]
                                    [--colour {pq-bt2020,hlg-bt2020,bt709}]
-                                   [--fps RATE] [--cvvdp-display PRESET]
+                                   [--fps RATE] [--size WIDTHxHEIGHT]
+                                   [--pix-fmt FORMAT] [--cvvdp-display PRESET]
                                    [--subsample N] [--threads N]
                                    [--vmaf-on {gpu,cpu}]
                                    [--ssimulacra2-on {gpu,cpu}]
@@ -56,6 +57,8 @@ const char* const examples = R"(examples:
       HDR10 video in files with no colour tags, the first 33 frames
   VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001
       a raw VVC stream from an encoder, at 23.976 frames a second
+  VideoMetricsLab-cli compare reference.yuv encode.266 --size 1920x1080 --pix-fmt yuv420p10le --fps 24000/1001
+      a raw YUV reference, 1080p 10-bit 4:2:0, and a raw VVC stream
   VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display "30-inch 4K HDR monitor, dim room"
       CVVDP on a display other than the app's default (repeat it for several)
   VideoMetricsLab-cli devices
@@ -111,10 +114,16 @@ options:
                         or taken are neither read from nor saved to the saved
                         scores
   --fps RATE            the frame rate of a raw video stream (a .264, .265,
-                        .266 or .obu file, with no container), which records
-                        none, such as 24000/1001, 23.976 or 60: required for
-                        one. These scores are neither read from nor saved to
-                        the saved scores
+                        .266 or .obu file, with no container) or a raw YUV
+                        file (.yuv), which records none, such as 24000/1001,
+                        23.976 or 60: required for one. These scores are
+                        neither read from nor saved to the saved scores
+  --size WIDTHxHEIGHT   the picture size of a raw YUV file (.yuv), which
+                        records none, such as 1920x1080: required for one,
+                        with --pix-fmt and --fps
+  --pix-fmt FORMAT      the pixel format of a raw YUV file (.yuv), as FFmpeg
+                        names it, such as yuv420p or yuv420p10le: required for
+                        one
   --cvvdp-display PRESET
                         the display CVVDP models, by preset name (default: the
                         app's). Repeat it for a CVVDP score on each display;
@@ -644,6 +653,34 @@ double frame_rate(const std::string& text) {
     return *value;
 }
 
+// A picture size (--size): a width and a height of 1 to 5 digits, above 0,
+// given back as FFmpeg's -video_size reads it ("1920x1080"). The reference's
+// make_reference.py reads it by the same rule.
+std::string picture_size(const std::string& text) {
+    static const std::regex size("([0-9]{1,5})x([0-9]{1,5})");
+    const std::string stripped(python_strip(text));
+    std::smatch parts;
+    if (!std::regex_match(stripped, parts, size)) {
+        throw ArgumentError{"invalid parse value: " + python_string_repr(text)};
+    }
+    const long long width = *python_int(parts[1].str());
+    const long long height = *python_int(parts[2].str());
+    if (width <= 0 || height <= 0) {
+        throw ArgumentError{"must be above 0"};
+    }
+    return std::to_string(width) + "x" + std::to_string(height);
+}
+
+// A pixel format's name (--pix-fmt), as FFmpeg writes them: lower-case
+// letters, digits and underscores ("yuv420p10le").
+std::string pixel_format(const std::string& text) {
+    static const std::regex name("[0-9a-z_]+");
+    if (!std::regex_match(text, name)) {
+        throw ArgumentError{"invalid parse value: " + python_string_repr(text)};
+    }
+    return text;
+}
+
 std::string choice(const std::string& value, const std::vector<std::string>& choices) {
     if (std::find(choices.begin(), choices.end(), value) == choices.end()) {
         std::string listed;
@@ -708,6 +745,8 @@ Parser compare_parser(CompareArguments& parsed) {
                    parsed.colour = choice(value, {"pq-bt2020", "hlg-bt2020", "bt709"});
                }),
         option({"--fps"}, [&parsed](const std::string& value) { parsed.fps = frame_rate(value); }),
+        option({"--size"}, [&parsed](const std::string& value) { parsed.size = picture_size(value); }),
+        option({"--pix-fmt"}, [&parsed](const std::string& value) { parsed.pix_fmt = pixel_format(value); }),
         option({"--cvvdp-display"}, [&parsed](const std::string& value) { parsed.cvvdp_displays.push_back(value); }),
         option({"--subsample"},
                [&parsed](const std::string& value) { parsed.subsample = static_cast<int>(positive_int(value)); }),

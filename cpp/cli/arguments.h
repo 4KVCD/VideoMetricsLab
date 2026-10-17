@@ -28,7 +28,9 @@ struct CompareArguments {
     std::optional<double> duration;
     std::optional<long long> frames;
     std::optional<std::string> colour;
-    std::optional<double> fps;  // a raw stream's frame rate
+    std::optional<double> fps;            // a raw stream's or raw YUV file's frame rate
+    std::optional<std::string> size;      // a raw YUV file's picture size, "1920x1080"
+    std::optional<std::string> pix_fmt;   // a raw YUV file's pixel format, as FFmpeg names it
     std::vector<std::string> cvvdp_displays;
     int subsample = 1;
     std::optional<int> threads;

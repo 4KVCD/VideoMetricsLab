@@ -300,12 +300,17 @@ std::string box_filters(const std::optional<std::string>& hwaccel, const std::st
     return download_filters(hwaccel, download_format) + cropdetect();
 }
 
-std::vector<std::string> window_command(const std::string& ffmpeg, const std::string& path, double start,
-                                        double window, const std::optional<std::string>& hwaccel,
+// The command that samples the window from `start` to `start` + `window`
+// seconds (-ss and -t), `input` the video's input options (a raw YUV file's
+// size and format, VideoInfo::input_options).
+std::vector<std::string> window_command(const std::string& ffmpeg, const std::string& path,
+                                        const std::vector<std::string>& input, double start, double window,
+                                        const std::optional<std::string>& hwaccel,
                                         const std::string& download_format) {
     std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner"};
     const std::vector<std::string> decoding = hwaccel_args(hwaccel);
     command.insert(command.end(), decoding.begin(), decoding.end());
+    command.insert(command.end(), input.begin(), input.end());
     command.insert(command.end(), {"-ss", format_fixed(start, 3), "-i", path, "-map", "0:" + std::string(video_stream),
                                    "-t", format_fixed(window, 3), "-vf", box_filters(hwaccel, download_format), "-f",
                                    "null", "-"});
@@ -633,13 +638,14 @@ std::optional<CropBox> last_box(const std::string& errors) {
 
 // Runs one window, on the GPU decoder and else in software, and returns the
 // box it found, or nothing.
-std::optional<CropBox> run_single_window(const std::string& ffmpeg, const std::string& path, double start,
+std::optional<CropBox> run_single_window(const std::string& ffmpeg, const VideoInfo& info, double start,
                                          double window, const CancelToken& cancel,
                                          const std::optional<std::string>& hwaccel,
                                          const std::string& download_format) {
+    const std::string path = platform::path_text(info.path);
     return last_box(run_detection(
         [&](const std::optional<std::string>& attempt) {
-            return window_command(ffmpeg, path, start, window, attempt, download_format);
+            return window_command(ffmpeg, path, info.input_options(), start, window, attempt, download_format);
         },
         path, cancel, hwaccel, 60s));
 }
@@ -745,7 +751,9 @@ CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double
     cancel.throw_if_cancelled();
     std::vector<CropBox> boxes;
     std::vector<std::string> failures;
-    if (info.timed_raw) {
+    // A raw YUV file's pictures are all one size, so FFmpeg's -ss finds a
+    // window's first frame in it exactly, as in a container.
+    if (info.timed_raw && info.format_name != "rawvideo") {
         // Each window from a byte partway through where the stream allows
         // it: a pass from the start reaches the last window only after
         // decoding nine tenths of the video (for a 4K VVC film, still not
@@ -779,7 +787,7 @@ CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double
         for (const double start : starts) {
             try {
                 if (const std::optional<CropBox> box =
-                        run_single_window(ffmpeg, path, start, window, cancel, hwaccel, download_format)) {
+                        run_single_window(ffmpeg, info, start, window, cancel, hwaccel, download_format)) {
                     boxes.push_back(*box);
                 }
             } catch (const CropDetectError& error) {

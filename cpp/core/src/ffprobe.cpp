@@ -11,6 +11,7 @@
 #include <system_error>
 #include <vector>
 
+#include "vml/number_format.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -372,20 +373,24 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
 }
 
 VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprobe, const CancelToken& cancel) {
+    info.timed_raw = true;
+    info.fps = fps;
     // ffprobe's parser splits the stream into its frames without decoding
     // them (3.4 s for a 4K VVC film of 151,919 frames, 800 MB), but reads the
     // whole file, so it has as long as a slow disk needs. (The csv format
-    // adds a comma after some streams' count: "480,".)
-    const std::vector<std::string> command{
-        ffprobe,         "-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries",
-        "stream=nb_read_packets", "-of", "default=noprint_wrappers=1:nokey=1", text(info.path)};
+    // adds a comma after some streams' count: "480,".) A raw YUV file is
+    // read with its size and pixel format (input_options).
+    std::vector<std::string> command{ffprobe, "-v", "error"};
+    const std::vector<std::string> input = info.input_options();
+    command.insert(command.end(), input.begin(), input.end());
+    command.insert(command.end(), {"-select_streams", "v:0", "-count_packets", "-show_entries",
+                                   "stream=nb_read_packets", "-of", "default=noprint_wrappers=1:nokey=1",
+                                   text(info.path)});
     const std::optional<long long> frames =
         python_int(python_strip(run_ffprobe(command, info.path, std::chrono::hours(1), cancel)));
     if (!frames || *frames <= 0) {
         throw ProbeError("ffprobe found no frames in " + text(info.path));
     }
-    info.timed_raw = true;
-    info.fps = fps;
     info.nominal_fps = fps;
     info.average_fps = fps;
     info.nb_frames = *frames;
@@ -396,6 +401,15 @@ VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprob
     info.bit_rate = unknown ? 0 : std::llround(static_cast<double>(bytes) * 8 / info.duration);
     info.bit_rate_whole_file = false;
     return info;
+}
+
+VideoInfo probe_raw_yuv(const std::filesystem::path& path, const std::string& size, const std::string& pix_fmt,
+                        double fps, const std::string& ffprobe, const CancelToken& cancel) {
+    const std::vector<std::string> command{
+        ffprobe, "-v", "error", "-f", "rawvideo", "-video_size", size, "-pixel_format", pix_fmt, "-framerate",
+        python_repr(fps), "-print_format", "json", "-show_format", "-show_streams", text(path)};
+    return timed_raw_stream(video_info_from_probe(path, run_ffprobe(command, path, std::chrono::seconds(60), cancel)),
+                            fps, ffprobe, cancel);
 }
 
 }  // namespace vml

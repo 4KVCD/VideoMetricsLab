@@ -155,6 +155,9 @@ More examples:
 # A raw VVC stream straight from an encoder (no container), at 23.976 frames a second
 .\VideoMetricsLab-cli.exe compare reference.y4m encode.266 --fps 24000/1001
 
+# A raw YUV reference (pictures only: 1080p, 10-bit 4:2:0) and a raw VVC stream
+.\VideoMetricsLab-cli.exe compare reference.yuv encode.266 --size 1920x1080 --pix-fmt yuv420p10le --fps 24000/1001
+
 # A 1080p encode against a 4K reference, compared at 4K
 .\VideoMetricsLab-cli.exe compare reference_4k.mkv encode_1080p.mkv --scale-to reference
 
@@ -176,7 +179,8 @@ $run.videos[0].metrics.vmaf.score
 | `--duration SECONDS` | Compare only the start of each video. |
 | `--frames N` | Compare only the first N frames of each video, such as a short encode of a longer reference. |
 | `--colour pq-bt2020\|hlg-bt2020\|bt709` | The colours of a video with no colour tags (y4m, say); a tagged video keeps its own. Left out, such a video takes the other video's tags when that one has them (a y4m encode of a tagged HDR10 source is read as HDR10), and is otherwise taken as SDR, which changes CVVDP, SSIMULACRA2 and Butteraugli. Scores with colours given or taken are not saved. |
-| `--fps RATE` | The frame rate of a raw video stream (below), such as `24000/1001`, `23.976` or `60`. Required when the reference or a test video is one. These scores are not saved. |
+| `--fps RATE` | The frame rate of a raw video stream or raw YUV file (below), such as `24000/1001`, `23.976` or `60`. Required when the reference or a test video is one. These scores are not saved. |
+| `--size WIDTHxHEIGHT`, `--pix-fmt FORMAT` | The picture size and pixel format (as FFmpeg names it: `yuv420p`, `yuv420p10le`...) of a raw YUV file (below). Required with `--fps` for one. |
 | `--cvvdp-display PRESET` | The display CVVDP models, by preset name. Repeat it for a CVVDP score on each display. Left out: the app's default display. |
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
 | `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only). |
@@ -198,8 +202,9 @@ Progress is written to the error stream and results to the output stream, so
 `--json -` can be piped. The exit code is 0 when every video got every metric
 asked for that it can have (one it cannot, such as CVVDP with `--subsample`,
 is left out with a note, as in the app), 1 when a video failed or lost a
-metric, 2 for a wrong command (a raw stream without `--fps` among them), when
-FFmpeg cannot be used or when there is no test video, and 130 after Ctrl+C.
+metric, 2 for a wrong command (a raw stream without `--fps`, or a raw YUV
+file without `--size`, `--pix-fmt` and `--fps`, among them), when FFmpeg
+cannot be used or when there is no test video, and 130 after Ctrl+C.
 Ctrl+C stops the run as **Cancel** does; scores that had finished are saved.
 
 Unlike the app, the command line does not ask before a long SSIMULACRA2 or
@@ -229,6 +234,12 @@ first, or an H.264 or VVC stream with its parameter sets only at its start),
 is read from the start up to the last part sampled, which takes a while for
 a long stream (`--black-bars none` skips it). The app's window does not take
 raw streams.
+
+A raw YUV file (`.yuv`) is pictures and nothing else: `--size`, `--pix-fmt`
+and `--fps` say what they are, for every `.yuv` file of the command. It is
+read as FFmpeg's `rawvideo`, and scores exactly as the same pictures in a
+container. It has no colour tags: it takes the other video's when that one
+has them, and `--colour` gives them otherwise.
 
 ## Saved results and caches
 

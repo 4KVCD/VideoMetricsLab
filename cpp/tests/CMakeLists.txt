@@ -103,7 +103,8 @@ set(cpu_integration
     "PerceptualCpu.ThePicturesAreEachVideosFrameNCutAtTheLimit"
     "Process.AProgramRunningTooLongIsEnded"
     "Process.TerminateEndsARunningProgram"
-    "RawStream.ScoresAsTheSameStreamInAContainer")
+    "RawStream.ScoresAsTheSameStreamInAContainer"
+    "RawStream.AYuvFileScoresAsTheSamePicturesInAContainer")
 list(JOIN gpu_integration ":" gpu_integration)
 list(JOIN cpu_integration ":" cpu_integration)
 gtest_discover_tests(vml_tests TEST_FILTER "-${gpu_suites}:${cpu_integration}"

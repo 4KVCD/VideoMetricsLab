@@ -979,6 +979,23 @@ ARGUMENT_CASES = [
     ["compare", "ref.mkv", "a.266", "--fps", "9007199254740992/1"],
     ["compare", "ref.mkv", "a.266", "--fps", "x"],
     ["compare", "ref.mkv", "a.266", "--fps"],
+    ["compare", "ref.yuv", "a.mkv", "--size", "1920x1080", "--pix-fmt", "yuv420p10le", "--fps", "24000/1001"],
+    ["compare", "ref.yuv", "a.mkv", "--size", "01920x01080"],
+    ["compare", "ref.yuv", "a.mkv", "--size", " 1920x1080 "],
+    ["compare", "ref.yuv", "a.mkv", "--size=720x576"],
+    ["compare", "ref.yuv", "a.mkv", "--size", "1920X1080"],
+    ["compare", "ref.yuv", "a.mkv", "--size", "0x1080"],
+    ["compare", "ref.yuv", "a.mkv", "--size", "1920x0"],
+    ["compare", "ref.yuv", "a.mkv", "--size", "1920"],
+    ["compare", "ref.yuv", "a.mkv", "--size", "100000x1080"],
+    ["compare", "ref.yuv", "a.mkv", "--size", "-1920x1080"],
+    ["compare", "ref.yuv", "a.mkv", "--size"],
+    ["compare", "ref.yuv", "a.mkv", "--pix-fmt", "yuv420p"],
+    ["compare", "ref.yuv", "a.mkv", "--pix-fmt", "bayer_bggr8"],
+    ["compare", "ref.yuv", "a.mkv", "--pix-fmt", "YUV420P"],
+    ["compare", "ref.yuv", "a.mkv", "--pix-fmt", ""],
+    ["compare", "ref.yuv", "a.mkv", "--pix-fmt", "yuv 420p"],
+    ["compare", "ref.yuv", "a.mkv", "--pix-fmt"],
 ]
 
 
@@ -1003,12 +1020,46 @@ def _frame_rate():
     return parse
 
 
-#: The C++ app's own --fps, which the Python app never had, and its example.
-FPS_HELP = ("the frame rate of a raw video stream (a .264, .265, .266 or .obu file, with no container), which "
-            "records none, such as 24000/1001, 23.976 or 60: required for one. These scores are neither read from "
-            "nor saved to the saved scores")
-FPS_EXAMPLE = ("  VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001\n"
-               "      a raw VVC stream from an encoder, at 23.976 frames a second\n")
+def _picture_size():
+    """--size's type: a width and a height of 1 to 5 digits, above 0
+    ("1920x1080"), given back as FFmpeg's -video_size reads it."""
+    def parse(text: str) -> str:
+        """Reads `text` as a picture size."""
+        size = re.fullmatch(r"([0-9]{1,5})x([0-9]{1,5})", text.strip())
+        if not size:
+            raise ValueError(text)
+        width, height = int(size[1]), int(size[2])
+        if width <= 0 or height <= 0:
+            raise argparse.ArgumentTypeError("must be above 0")
+        return f"{width}x{height}"
+    return parse
+
+
+def _pixel_format():
+    """--pix-fmt's type: a pixel format's name as FFmpeg writes them
+    (lower-case letters, digits and underscores, "yuv420p10le")."""
+    def parse(text: str) -> str:
+        """Reads `text` as a pixel format's name."""
+        if not re.fullmatch(r"[0-9a-z_]+", text):
+            raise ValueError(text)
+        return text
+    return parse
+
+
+#: The C++ app's own --fps, --size and --pix-fmt, which the Python app
+#: never had, and their examples.
+FPS_HELP = ("the frame rate of a raw video stream (a .264, .265, .266 or .obu file, with no container) or a raw "
+            "YUV file (.yuv), which records none, such as 24000/1001, 23.976 or 60: required for one. These scores "
+            "are neither read from nor saved to the saved scores")
+SIZE_HELP = ("the picture size of a raw YUV file (.yuv), which records none, such as 1920x1080: required for one, "
+             "with --pix-fmt and --fps")
+PIX_FMT_HELP = ("the pixel format of a raw YUV file (.yuv), as FFmpeg names it, such as yuv420p or yuv420p10le: "
+                "required for one")
+RAW_EXAMPLES = ("  VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001\n"
+                "      a raw VVC stream from an encoder, at 23.976 frames a second\n"
+                "  VideoMetricsLab-cli compare reference.yuv encode.266 --size 1920x1080 --pix-fmt yuv420p10le "
+                "--fps 24000/1001\n"
+                "      a raw YUV reference, 1080p 10-bit 4:2:0, and a raw VVC stream\n")
 #: The C++ app's --colour: there, a video with no colour tags takes the other
 #: video's, which the Python app does not do.
 COLOUR_HELP = ("the colours of a video with no colour tags (y4m, say): pq-bt2020 (HDR10), hlg-bt2020 or bt709 "
@@ -1025,15 +1076,30 @@ def _add_cpp_options(parser: argparse.ArgumentParser) -> None:
     commands = next(action for action in parser._actions if isinstance(action, argparse._SubParsersAction))
     compare = commands.choices["compare"]
     next(action for action in compare._actions if "--colour" in action.option_strings).help = COLOUR_HELP
-    fps = compare.add_argument("--fps", type=_frame_rate(), metavar="RATE", help=FPS_HELP)
+    added = [compare.add_argument("--fps", type=_frame_rate(), metavar="RATE", help=FPS_HELP),
+             compare.add_argument("--size", type=_picture_size(), metavar="WIDTHxHEIGHT", help=SIZE_HELP),
+             compare.add_argument("--pix-fmt", type=_pixel_format(), metavar="FORMAT", help=PIX_FMT_HELP)]
     for actions in (compare._actions, compare._optionals._group_actions):
-        actions.remove(fps)
+        for action in added:
+            actions.remove(action)
         after = next(index for index, action in enumerate(actions) if "--colour" in action.option_strings)
-        actions.insert(after + 1, fps)
-    anchor = "      HDR10 video in files with no colour tags, the first 33 frames\n"
+        actions[after + 1:after + 1] = added
+    # The option strings too, in whose order an ambiguous abbreviation's
+    # matches are named ("--s could match --scale-to, --scaler, --size...").
+    strings = compare._option_string_actions
+    moved = [(text, action) for text, action in strings.items() if action in added]
+    order = []
+    for text, action in strings.items():
+        if action not in added:
+            order.append((text, action))
+            if text == "--color":
+                order += moved
+    strings.clear()
+    strings.update(order)
+    anchor ="      HDR10 video in files with no colour tags, the first 33 frames\n"
     for owner in (parser, compare):
         assert owner.epilog.count(anchor) == 1
-        owner.epilog = owner.epilog.replace(anchor, anchor + FPS_EXAMPLE)
+        owner.epilog = owner.epilog.replace(anchor, anchor + RAW_EXAMPLES)
 
 
 def _plain(value):

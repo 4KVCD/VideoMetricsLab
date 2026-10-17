@@ -164,5 +164,56 @@ TEST(RawStream, ScoresAsTheSameStreamInAContainer) {
     }
 }
 
+// A raw YUV file (pictures and nothing else), read at the size, pixel
+// format and rate the command line gives, scored as the same pictures in a
+// container: the same frames, black bars and scores.
+TEST(RawStream, AYuvFileScoresAsTheSamePicturesInAContainer) {
+    const std::optional<test::Tools> found = test::tools();
+    if (!found) {
+        GTEST_SKIP() << "no FFmpeg";
+    }
+    const test::Folder folder;
+    // Letterboxed, 640x280 pictures in a 640x360 frame.
+    const VideoInfo source = probe_video(
+        test::make_clip(*found, folder / "source.mkv", "libx264", "yuv420p", 4.0, {"-crf", "10", "-vf",
+                        "pad=640:360:0:40"}, "640x280"),
+        found->ffprobe);
+    const std::filesystem::path contained_path = test::make_clip(
+        *found, folder / "encode.mkv", "libx264", "yuv420p10le", 4.0, {"-crf", "30", "-vf", "pad=640:360:0:40"},
+        "640x280");
+    test::run_ffmpeg(*found, {"-i", platform::path_text(contained_path), "-f", "rawvideo", "-pix_fmt", "yuv420p10le",
+                              platform::path_text(folder / "encode.yuv")});
+    const VideoInfo contained = probe_video(contained_path, found->ffprobe);
+    const VideoInfo raw = probe_raw_yuv(folder / "encode.yuv", "640x360", "yuv420p10le", 24000.0 / 1001, found->ffprobe);
+    const auto frames = static_cast<std::size_t>(std::llround(4.0 * 24000 / 1001));
+    ASSERT_TRUE(raw.is_raw_stream());
+    EXPECT_EQ(raw.nb_frames, static_cast<long long>(frames));
+    EXPECT_EQ(raw.input_options(), (std::vector<std::string>{"-f", "rawvideo", "-video_size", "640x360",
+                                                             "-pixel_format", "yuv420p10le", "-framerate",
+                                                             "23.976023976023978"}));
+    const RunEnvironment environment{found->ffmpeg, found->version, found->ffprobe,
+                                     DecodingCapabilities::detect(found->ffmpeg), platform::logical_cores()};
+    const auto score = [&](const VideoInfo& test_video) {
+        VmafOptions options;
+        options.compute_vmaf = false;
+        options.extra_features = {"name=psnr", "name=float_ssim"};
+        options.crop_mode = CropMode::automatic;
+        return run_vmaf(environment, source, test_video, options, nullptr, {}, CancelToken());
+    };
+    const ComparisonResult from_container = score(contained);
+    const ComparisonResult from_raw = score(raw);
+    ASSERT_TRUE(from_container.distorted_crop.has_value());
+    EXPECT_EQ(from_container.distorted_crop->h, 280);
+    EXPECT_EQ(from_raw.distorted_crop, from_container.distorted_crop);
+    for (const std::string key : {"psnr", "ssim"}) {
+        const FrameMetricResult* expected = from_container.metric_results.frame(key);
+        const FrameMetricResult* from_pictures = from_raw.metric_results.frame(key);
+        ASSERT_NE(expected, nullptr) << key;
+        ASSERT_NE(from_pictures, nullptr) << key;
+        EXPECT_EQ(from_pictures->values.size(), frames) << key;
+        EXPECT_EQ(from_pictures->values, expected->values) << key;
+    }
+}
+
 }  // namespace
 }  // namespace vml

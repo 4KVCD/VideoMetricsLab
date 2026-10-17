@@ -47,6 +47,8 @@ Json values_of(const Arguments& parsed) {
         {"frames", either(a.frames)},
         {"colour", either(a.colour)},
         {"fps", either(a.fps)},
+        {"size", either(a.size)},
+        {"pix_fmt", either(a.pix_fmt)},
         {"cvvdp_displays", a.cvvdp_displays.empty() ? Json(nullptr) : Json(a.cvvdp_displays)},
         {"subsample", a.subsample},
         {"threads", either(a.threads)},

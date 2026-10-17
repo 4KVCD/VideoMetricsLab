@@ -258,23 +258,34 @@ std::string taken_colour_note(const VideoInfo& info, const std::string& which, c
            "those.";
 }
 
-// Why a raw stream cannot be compared without --fps: it records no frame
-// rate, and FFmpeg would read it at 25 frames a second. `which` names it.
-std::string frame_rate_needed(const VideoInfo& info, const std::string& which) {
-    return which + " is a raw " + codec_label(info.codec_name) +
-           " stream, which records no frame rate: give its frame rate with --fps, such as --fps 24000/1001.";
-}
+// Whether `path` is a raw YUV file (.yuv): pictures and nothing else, which
+// FFmpeg reads only when told their size, pixel format and frame rate.
+bool is_raw_yuv(const std::filesystem::path& path) { return ascii_lower(platform::path_text(path.extension())) == ".yuv"; }
 
-// `info`, a raw stream timed at --fps's rate (ffprobe.h's timed_raw_stream),
-// or any other video as it is; nothing for a raw stream when the command
-// gives no --fps. Throws ProbeError when a raw stream's frames cannot be
-// counted.
-std::optional<VideoInfo> timed_by_arguments(VideoInfo info, const CompareArguments& arguments,
-                                            const std::string& ffprobe) {
+// The video at `path` as the command reads it: a raw YUV file with --size,
+// --pix-fmt and --fps (ffprobe.h's probe_raw_yuv), a raw stream timed at
+// --fps (timed_raw_stream), any other video as ffprobe reads it. Nothing,
+// with `wrong` saying why, when the command does not give what it needs
+// (`which` names the video). Throws ProbeError when it cannot be read.
+std::optional<VideoInfo> read_video(const std::filesystem::path& path, const CompareArguments& arguments,
+                                    const std::string& ffprobe, const std::string& which, std::string& wrong) {
+    if (is_raw_yuv(path)) {
+        if (!arguments.size || !arguments.pix_fmt || !arguments.fps) {
+            wrong = which + " is a raw YUV file, which records no picture size, pixel format or frame rate: give "
+                            "them with --size, --pix-fmt and --fps, such as --size 1920x1080 --pix-fmt yuv420p10le "
+                            "--fps 24000/1001.";
+            return std::nullopt;
+        }
+        return probe_raw_yuv(path, *arguments.size, *arguments.pix_fmt, *arguments.fps, ffprobe);
+    }
+    VideoInfo info = probe_video(path, ffprobe);
     if (!info.is_raw_stream()) {
         return info;
     }
     if (!arguments.fps) {
+        // FFmpeg would read it at 25 frames a second.
+        wrong = which + " is a raw " + codec_label(info.codec_name) +
+                " stream, which records no frame rate: give its frame rate with --fps, such as --fps 24000/1001.";
         return std::nullopt;
     }
     return timed_raw_stream(std::move(info), *arguments.fps, ffprobe);
@@ -879,8 +890,9 @@ public:
     std::vector<TestVideo> videos;
     std::vector<VmafJob> jobs;
     // Why the command is wrong, once a test video turns out to be a raw
-    // stream and it gives no --fps.
-    std::optional<std::string> frame_rate_missing;
+    // stream or raw YUV file that it does not give what it needs for
+    // (read_video).
+    std::optional<std::string> command_wrong;
 
 private:
     void leave_out_cvvdp_if_unable(TestVideo& video) const;
@@ -907,14 +919,14 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
     TestVideo& video = videos.emplace_back();
     video.path = path;
     try {
-        VideoInfo info = probe_video(path, ffprobe);
-        std::optional<VideoInfo> timed = timed_by_arguments(info, arguments_, ffprobe);
-        if (!timed) {
-            video.error = "it is a raw stream with no frame rate";
-            frame_rate_missing = frame_rate_needed(info, platform::path_text(path.filename()));
+        std::string wrong;
+        std::optional<VideoInfo> read = read_video(path, arguments_, ffprobe, platform::path_text(path.filename()), wrong);
+        if (!read) {
+            video.error = "the command does not say how to read it";
+            command_wrong = wrong;
             return std::nullopt;
         }
-        video.info = with_assumed_colour(std::move(*timed), arguments_.colour);
+        video.info = with_assumed_colour(std::move(*read), arguments_.colour);
     } catch (const ProbeError& error) {
         video.error = std::string("it could not be read: ") + error.what();
         return std::nullopt;
@@ -930,8 +942,13 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
     video.save_scores =
         !arguments_.colour && video.colours_taken.empty() && !source_.timed_raw && !video.info->timed_raw;
     if (arguments_.fps && !source_.is_raw_stream() && !video.info->is_raw_stream()) {
-        video.notes.emplace_back("--fps is not used: it is for raw streams, and neither this video nor the "
-                                 "reference is one");
+        video.notes.emplace_back("--fps is not used: it is for raw streams and raw YUV files, and neither this "
+                                 "video nor the reference is one");
+    }
+    if ((arguments_.size || arguments_.pix_fmt) && source_.format_name != "rawvideo" &&
+        video.info->format_name != "rawvideo") {
+        video.notes.emplace_back("--size and --pix-fmt are not used: they are for raw YUV files, and neither this "
+                                 "video nor the reference is one");
     }
     video.metrics = asked_;
     leave_out_cvvdp_if_unable(video);
@@ -1163,13 +1180,15 @@ int compare(const CompareArguments& arguments) {
     VideoInfo source;
     try {
         const std::filesystem::path reference = python_path(arguments.reference);
-        const VideoInfo read = probe_video(reference, tools.ffprobe.path);
-        std::optional<VideoInfo> timed = timed_by_arguments(read, arguments, tools.ffprobe.path);
-        if (!timed) {
-            print_error(frame_rate_needed(read, "The reference, " + platform::path_text(reference.filename()) + ","));
+        std::string wrong;
+        std::optional<VideoInfo> read =
+            read_video(reference, arguments, tools.ffprobe.path,
+                       "The reference, " + platform::path_text(reference.filename()) + ",", wrong);
+        if (!read) {
+            print_error(wrong);
             return exit_usage;
         }
-        source = with_assumed_colour(std::move(*timed), arguments.colour);
+        source = with_assumed_colour(std::move(*read), arguments.colour);
     } catch (const ProbeError& error) {
         print_error(std::string("The reference could not be read: ") + error.what());
         return exit_usage;
@@ -1180,8 +1199,8 @@ int compare(const CompareArguments& arguments) {
             print_error("The C++ command line cannot do this yet: " + *missing + ".");
             return exit_usage;
         }
-        if (planner.frame_rate_missing) {
-            print_error(*planner.frame_rate_missing);
+        if (planner.command_wrong) {
+            print_error(*planner.command_wrong);
             return exit_usage;
         }
     }

@@ -56,10 +56,11 @@ long long VideoInfo::estimated_frame_count() const {
 
 bool VideoInfo::is_raw_stream() const {
     // FFmpeg's demuxers of bare elementary streams, which carry no timestamps
-    // (a .mjpeg file is read as jpeg_pipe, a run of JPEG pictures).
-    constexpr std::array<std::string_view, 18> raw_stream_formats{
-        "h264", "hevc", "vvc",   "evc",       "av1",  "obu",  "mpegvideo", "m4v", "h263",
-        "h261", "vc1",  "dirac", "cavsvideo", "avs2", "avs3", "mjpeg",     "jpeg_pipe", "apv"};
+    // (a .mjpeg file is read as jpeg_pipe, a run of JPEG pictures), and of
+    // raw pictures (rawvideo, a .yuv file).
+    constexpr std::array<std::string_view, 19> raw_stream_formats{
+        "h264", "hevc", "vvc",   "evc",       "av1",  "obu",  "mpegvideo", "m4v", "h263",   "h261",
+        "vc1",  "dirac", "cavsvideo", "avs2", "avs3", "mjpeg", "jpeg_pipe", "apv", "rawvideo"};
     return std::find(raw_stream_formats.begin(), raw_stream_formats.end(), format_name) != raw_stream_formats.end();
 }
 
@@ -76,9 +77,17 @@ std::vector<std::string> VideoInfo::input_options() const {
     if (!timed_raw) {
         return {};
     }
+    std::vector<std::string> options;
+    if (format_name == "rawvideo") {
+        // Pictures and nothing else, of the size and format the command line
+        // gave.
+        options = {"-f", "rawvideo", "-video_size", std::to_string(width) + "x" + std::to_string(height),
+                   "-pixel_format", pix_fmt};
+    }
     // The rate as a double's shortest exact text: FFmpeg turns it back into
     // the fraction it came from (24000/1001 for 23.976023976023978).
-    return {"-framerate", python_repr(fps)};
+    options.insert(options.end(), {"-framerate", python_repr(fps)});
+    return options;
 }
 
 bool VideoInfo::is_variable_frame_rate() const {
