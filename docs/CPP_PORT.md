@@ -222,7 +222,9 @@ through Vulkan (`scripts/build_vship_macos.sh`):
   (`scripts/patches/vship-moltenvk-addresses.patch`): SPIRV-Cross, which
   turns SPIR-V into Metal, mistranslates a byte pointer plus an offset read
   as another type, so no pipeline could be made. The patch does that
-  arithmetic on the address as an integer (the same memory).
+  arithmetic on the address as an integer (the same memory). Reported to
+  Vship's author with the patch:
+  [Line-fr/Vship#27](https://codeberg.org/Line-fr/Vship/issues/27).
 - **Scores**, against Windows' Vulkan build on an RTX 5090, the same 96
   frames: SSIMULACRA2 within 0.0006 a frame, Butteraugli 1e-5, CVVDP 7e-7.
   (Vship's SSIMULACRA2 of a video against itself is not 100 on either:
