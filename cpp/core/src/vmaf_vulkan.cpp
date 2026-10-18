@@ -8,6 +8,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/sha256.h"
+#include "vml/vship.h"
 
 namespace vml {
 
@@ -130,6 +131,9 @@ void check_vulkan(const VulkanEngine& engine, int error, const std::string& what
 }
 
 std::filesystem::path vulkan_engine_path() {
+#ifdef __APPLE__
+    static_cast<void>(vulkan_library_path());  // the loader it links pointed at MoltenVK before it loads
+#endif
     return resource_folder() / "tools" / "vmaf_vulkan" / platform::shared_library_name("vmaf_vulkan");
 }
 

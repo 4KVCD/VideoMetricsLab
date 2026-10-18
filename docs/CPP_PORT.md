@@ -232,6 +232,36 @@ through Vulkan (`scripts/build_vship_macos.sh`):
   there, and the run fell back to the CPU. The environment is set before
   any Vship library loads now.
 
+### VMAF on the GPU
+
+VMAF v0.6.1, VMAF NEG and VMAF v1 run on the Mac's GPU through
+libvmaf-fast's Vulkan engine, ported to macOS on its `macos-port` branch
+(`scripts/build_vmaf_vulkan_macos.sh` builds `vmaf_vulkan.dylib` from the
+commit it pins), on the same loader and MoltenVK as Vship:
+
+- **The port:** the loader opened by its rpath, the portability devices
+  asked for, and one shader change: Metal has no 64-bit subgroup sums, so
+  ADM's and CAMBI's are three 32-bit sums of pieces, which give the same
+  bits. Windows' SPIR-V is byte-identical.
+- **Compiled as libvmaf is on the Mac**, with Clang's own floating-point
+  settings (fused multiply-adds), as `build_libvmaf_fast_macos.sh` builds
+  libvmaf: the engine turns the GPU's sums into features with libvmaf's
+  expressions, and without the fusing ADM3 differed from libvmaf's in the
+  last bit on some 10-bit frames.
+- **The self-tests pass:** VMAF v0.6.1's exact sums at 8 and 10 bits, and
+  VMAF v1's features and scores bit for bit against the bundled libvmaf on
+  the CPU (`VmafV1Gpu.EveryGpuGivesLibvmafsCpuFeaturesAndScoresBitForBit`).
+- **VMAF v1's SpEED chroma is left to libvmaf** on arm64
+  (`start_speed_on_gpu`): the engine's is a port of libvmaf's x86 code,
+  and libvmaf's own on arm64 is its NEON code (another filter, fused
+  multiply-adds), so the self-test failed on it, and with it VMAF v1 fell
+  back to the CPU.
+- **Scores**, the same 96 frames: VMAF v0.6.1 and NEG on the GPU are within
+  one float step (4e-6) of FFmpeg's libvmaf on the CPU, as libvmaf's CUDA
+  features are of its CPU ones (the engine ports the CUDA ones). VMAF v1
+  within 5e-5: its SpEED is the bundled libvmaf-fast's, the CPU's run is
+  Homebrew's libvmaf 3.2.1 in FFmpeg, and the two SpEEDs differ by that.
+
 ### Still to do
 
 - VVC's film grain: Windows draws it with Direct3D 11 compute
@@ -240,8 +270,6 @@ through Vulkan (`scripts/build_vship_macos.sh`):
 - HDR on an HDR display (EDR): the presenter's layer takes PQ in BT.2020 for
   it, but the app does not yet ask macOS whether the display shows HDR
   (`query_display_hdr`), so HDR video is mapped to SDR.
-- VMAF v0.6.1, VMAF NEG and VMAF v1 on the GPU: libvmaf-fast's Vulkan
-  engine is Windows' only so far; on macOS they run on the CPU.
 
 ### For the Linux port
 

@@ -524,8 +524,16 @@ struct V1Scorer::State {
             }
         }
     }
-    // SpEED on the GPU, where the engine and the model's options allow.
+    // SpEED on the GPU, where the engine and the model's options allow. Not
+    // on arm64 (Apple silicon): libvmaf's SpEED there is its arm64 code (a
+    // NEON covariance kernel, the filter and the decimation in one, its
+    // multiplies and adds fused), which the engine, a port of its x86 code,
+    // does not give bit for bit; libvmaf calculates it.
     void start_speed_on_gpu(const ModelOptions& options) {
+#ifdef __aarch64__
+        static_cast<void>(options);
+        return;
+#endif
         if (engine.v1_speed == nullptr || engine.submit_v1 == nullptr || engine.chroma_staging == nullptr ||
             engine.v1_speed_scores == nullptr) {
             return;

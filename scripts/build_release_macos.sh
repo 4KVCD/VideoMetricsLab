@@ -57,6 +57,8 @@ step "Building dav1d"
 "$project/scripts/build_dav1d_macos.sh" | sed 's/^/    /'
 step "Building Vulkan (the loader and MoltenVK) and Vship for the GPU metrics"
 "$project/scripts/build_vship_macos.sh" | sed 's/^/    /'
+step "Building libvmaf-fast's Vulkan engine for VMAF on the GPU"
+"$project/scripts/build_vmaf_vulkan_macos.sh" | sed 's/^/    /'
 
 # 2. The programs, in their Release build.
 step "Building the C++ app"
@@ -141,7 +143,7 @@ EOF
 # (not Windows' .exe and .dll files, which share the folders).
 resources="$contents/Resources/resources"
 mkdir -p "$resources/translations" "$resources/tools/libjxl" "$resources/tools/libvmaf" "$resources/tools/ffmpeg" \
-    "$resources/tools/vship/vulkan"
+    "$resources/tools/vship/vulkan" "$resources/tools/vmaf_vulkan"
 ditto "$app_files/models" "$resources/models"
 cp "$app_files"/translations/*.json "$resources/translations/"
 cp "$app_files/tools/libjxl/ssimulacra2" "$app_files/tools/libjxl/butteraugli_main" \
@@ -150,10 +152,12 @@ cp "$app_files/tools/libvmaf/libvmaf.dylib" "$app_files/tools/libvmaf/libvmaf-fa
 ditto "$app_files/tools/libvmaf/licenses" "$resources/tools/libvmaf/licenses"
 cp "$app_files"/tools/ffmpeg/*.dylib "$resources/tools/ffmpeg/"
 ditto "$app_files/tools/ffmpeg/licenses" "$resources/tools/ffmpeg/licenses"
-# The GPU metrics: Vulkan (Khronos' loader with MoltenVK) and Vship.
+# The GPU metrics: Vulkan (Khronos' loader with MoltenVK), Vship and VMAF's engine.
 ditto "$app_files/tools/vulkan" "$resources/tools/vulkan"
 cp "$app_files/tools/vship/vulkan/libvship.dylib" "$resources/tools/vship/vulkan/"
 ditto "$app_files/tools/vship/licenses" "$resources/tools/vship/licenses"
+cp "$app_files/tools/vmaf_vulkan/vmaf_vulkan.dylib" "$resources/tools/vmaf_vulkan/"
+ditto "$app_files/tools/vmaf_vulkan/licenses" "$resources/tools/vmaf_vulkan/licenses"
 # The window finds them by @rpath in the bundle's tools/ffmpeg, where the app
 # looks for them (native_device_mac.mm), as a build run from its folder finds
 # the repository's. macdeployqt copied them into Frameworks and linked the
