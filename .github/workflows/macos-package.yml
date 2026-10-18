@@ -2,10 +2,14 @@ name: macOS package
 
 # Builds VideoMetricsLab.app for macOS (arm64, macOS 14.4 or later) with
 # scripts/build_release_macos.sh, runs both test suites, and uploads the
-# zipped bundle as an artifact. It runs only when asked (Actions > macOS
-# package > Run workflow).
+# zipped bundle as an artifact. It runs when asked (Actions > macOS package >
+# Run workflow, once this file is on master: GitHub offers that only for a
+# workflow on the default branch), and on each push to macos-port while the
+# port is on that branch.
 on:
   workflow_dispatch:
+  push:
+    branches: [macos-port]
 
 permissions:
   contents: read
