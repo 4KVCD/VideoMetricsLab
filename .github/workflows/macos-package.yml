@@ -57,6 +57,10 @@ jobs:
         env:
           OUTPUT_ROOT: ${{ runner.temp }}/package
         run: scripts/build_release_macos.sh --qt "$RUNNER_TEMP/Qt"
+      # The release script builds the two programs alone.
+      - name: Build the tests
+        working-directory: cpp
+        run: cmake --build --preset macos-release
       - name: Test
         working-directory: cpp
         env:
