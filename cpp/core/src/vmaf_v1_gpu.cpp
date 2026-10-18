@@ -574,9 +574,11 @@ struct V1Scorer::State {
         // GPU on three: an M1 Pro scored 4K 10-bit and 1080p as fast on two
         // as on eight, and the pool of pictures for eight was 380 MB more at
         // 4K (two pictures for each worker and two more pairs).
+#ifdef __aarch64__
         if (!threads && on_gpu.contains(v1_cambi) && !on_gpu.contains(v1_speed)) {
             workers = std::min(workers, 3);
         }
+#endif
         LibvmafHandles handles(library);
         handles.start(workers, 1);
         use_cpu_features(library, handles.context, options, on_gpu);
