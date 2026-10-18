@@ -16,6 +16,7 @@
 #include <wrl/client.h>
 #else
 #include <CoreVideo/CoreVideo.h>
+#include <sys/sysctl.h>
 #endif
 
 #include <QApplication>
@@ -244,6 +245,16 @@ protected:
         if (const std::optional<std::string> problem = load_ffmpeg_libraries()) {
             GTEST_SKIP() << *problem;
         }
+#ifdef __APPLE__
+        // A virtual Mac's (GitHub's runners'): its VideoToolbox gives H.264's
+        // and VP9's pictures converted on the way, not exactly the decoded
+        // ones a Mac's GPU gives, which these tests hold to FFmpeg's.
+        int virtual_machine = 0;
+        std::size_t size = sizeof virtual_machine;
+        if (sysctlbyname("kern.hv_vmm_present", &virtual_machine, &size, nullptr, 0) == 0 && virtual_machine != 0) {
+            GTEST_SKIP() << "a virtual machine's GPU decoders are not a Mac's";
+        }
+#endif
         for (const auto& [index, name] : gpus()) {
             try {
 #ifdef _WIN32
