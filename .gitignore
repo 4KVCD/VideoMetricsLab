@@ -15,3 +15,5 @@ resources/tools/libvmaf/libvmaf.dylib
 resources/tools/libjxl/ssimulacra2
 resources/tools/libjxl/butteraugli_main
 resources/tools/ffmpeg/*.dylib
+resources/tools/vulkan/
+resources/tools/vship/vulkan/libvship.dylib

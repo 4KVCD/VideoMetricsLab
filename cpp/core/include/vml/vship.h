@@ -203,6 +203,11 @@ struct VshipLibrary {
 // Where Vship's `backend` build is ("vulkan", "cuda" or "hip").
 std::filesystem::path vship_library_path(const std::string& backend);
 
+// The Vulkan the app bundles on macOS (tools/vulkan): Khronos' loader, with
+// MoltenVK as its driver, which Vship's and the Vulkan VMAF's builds there are
+// linked to. The first call points the loader at MoltenVK (VK_DRIVER_FILES).
+std::filesystem::path vulkan_library_path();
+
 // The GPU makers each build runs on: CUDA on NVIDIA, HIP on AMD; Vulkan on
 // any (the Vulkan loader says whose a GPU is).
 struct VshipDevice {

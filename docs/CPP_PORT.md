@@ -206,6 +206,32 @@ the presenter draws each pair in time with the source's soundtrack.
   software gave no frame. It is the system's EAGAIN now.
 - **Apple's GPUs decode 10-bit H.264**, which no Windows GPU does.
 
+### The GPU metrics
+
+CVVDP, SSIMULACRA2 and Butteraugli run on the Mac's GPU, through Vship's
+Vulkan build on MoltenVK (Khronos' Vulkan on Metal), as they run on Windows
+through Vulkan (`scripts/build_vship_macos.sh`):
+
+- **Vulkan:** Khronos' loader with MoltenVK as its driver, bundled in
+  `tools/vulkan`. MoltenVK alone is not enough: Vship asks for portability
+  devices (`VK_KHR_portability_enumeration`), which the loader provides. The
+  app points the loader at MoltenVK (`VK_DRIVER_FILES`) before Vulkan is
+  first loaded in a process, the GPU processes included, and turns off
+  MoltenVK's fast math.
+- **Vship:** v5.1.2, as on Windows, with two of its shaders patched
+  (`scripts/patches/vship-moltenvk-addresses.patch`): SPIRV-Cross, which
+  turns SPIR-V into Metal, mistranslates a byte pointer plus an offset read
+  as another type, so no pipeline could be made. The patch does that
+  arithmetic on the address as an integer (the same memory).
+- **Scores**, against Windows' Vulkan build on an RTX 5090, the same 96
+  frames: SSIMULACRA2 within 0.0006 a frame, Butteraugli 1e-5, CVVDP 7e-7.
+  (Vship's SSIMULACRA2 of a video against itself is not 100 on either:
+  99.67 on the Mac, 99.36 on Windows, where the score magnifies rounding.)
+- **Found:** the GPU pass runs in a process of its own, which had not
+  pointed the loader at MoltenVK: Vship's pinned memory could not be made
+  there, and the run fell back to the CPU. The environment is set before
+  any Vship library loads now.
+
 ### Still to do
 
 - VVC's film grain: Windows draws it with Direct3D 11 compute
@@ -214,8 +240,8 @@ the presenter draws each pair in time with the source's soundtrack.
 - HDR on an HDR display (EDR): the presenter's layer takes PQ in BT.2020 for
   it, but the app does not yet ask macOS whether the display shows HDR
   (`query_display_hdr`), so HDR video is mapped to SDR.
-- CVVDP and the GPU metrics run only on Vulkan; on macOS they stay on the
-  CPU (CVVDP is not available).
+- VMAF v0.6.1, VMAF NEG and VMAF v1 on the GPU: libvmaf-fast's Vulkan
+  engine is Windows' only so far; on macOS they run on the CPU.
 
 ### For the Linux port
 

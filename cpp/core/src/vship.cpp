@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <map>
@@ -26,9 +27,9 @@ namespace vml {
 
 namespace {
 
-// Whether the app bundles Vship's builds for this system: for Windows only,
-// so far.
-#ifdef _WIN32
+// Whether the app bundles Vship's builds for this system: Windows', and
+// macOS's Vulkan build on MoltenVK (scripts/build_vship_macos.sh).
+#if defined(_WIN32) || defined(__APPLE__)
 constexpr bool vship_bundled = true;
 #else
 constexpr bool vship_bundled = false;
@@ -160,10 +161,21 @@ struct VkInstanceCreateInfo {
 class VulkanLoader {
 public:
     VulkanLoader() {
+#ifdef __APPLE__
+        // macOS has no Vulkan of its own: the app bundles Khronos' loader with
+        // MoltenVK, Vulkan on Metal, as its driver, which Vship is linked to,
+        // and loads the loader by its path.
+        const std::filesystem::path vulkan = vulkan_library_path();
+        try {
+            library_.emplace(vulkan);
+        } catch (const platform::LibraryError&) {
+            problem_ = "Vulkan (MoltenVK) is not bundled (" + platform::path_text(vulkan.filename()) +
+                       " was not found)";
+            return;
+        }
+#else
 #ifdef _WIN32
         const std::string loader = "vulkan-1.dll";
-#elif defined(__APPLE__)
-        const std::string loader = "libvulkan.1.dylib";
 #else
         const std::string loader = "libvulkan.so.1";
 #endif
@@ -173,6 +185,7 @@ public:
             problem_ = "no Vulkan driver is installed (" + loader + " was not found)";
             return;
         }
+#endif
         create_ = library_->function<int (*)(const VkInstanceCreateInfo*, const void*, void**)>("vkCreateInstance");
         enumerate_ =
             library_->function<int (*)(void*, std::uint32_t*, void**)>("vkEnumeratePhysicalDevices");
@@ -181,6 +194,14 @@ public:
         const VkApplicationInfo application;
         VkInstanceCreateInfo info;
         info.pApplicationInfo = &application;
+#ifdef __APPLE__
+        // MoltenVK is a portability driver: the loader shows its GPUs only to
+        // an instance that asks for them, as Vship's does.
+        static const char* const portability = "VK_KHR_portability_enumeration";
+        info.flags = 0x00000001;  // VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR
+        info.enabledExtensionCount = 1;
+        info.ppEnabledExtensionNames = &portability;
+#endif
         const int result = create_(&info, nullptr, &instance_);
         if (result != 0) {
             instance_ = nullptr;
@@ -435,7 +456,37 @@ std::string VshipLibrary::handler_error(void* handler, int code) const {
     return message(code);
 }
 
+namespace {
+
+// The bundled Vulkan's folder (macOS), its loader pointed at it once, before
+// Vulkan is first loaded in this process: by the app's probe, or by Vship's
+// library, which loads it itself (in a GPU process of its own, too). The
+// loader's driver is MoltenVK, from its manifest beside it; MoltenVK compiles
+// shaders without fast math, as Vulkan's drivers do elsewhere, which would
+// change scores; and says only its errors on standard error. A value the user
+// set stays.
+std::filesystem::path vulkan_folder() {
+    const std::filesystem::path folder = resource_folder() / "tools" / "vulkan";
+#ifdef __APPLE__
+    static const bool prepared = [&folder] {
+        setenv("VK_DRIVER_FILES", platform::path_text(folder / "MoltenVK_icd.json").c_str(), 0);
+        setenv("MVK_CONFIG_FAST_MATH_ENABLED", "0", 0);
+        setenv("MVK_CONFIG_LOG_LEVEL", "1", 0);
+        return true;
+    }();
+    static_cast<void>(prepared);
+#endif
+    return folder;
+}
+
+}  // namespace
+
+std::filesystem::path vulkan_library_path() { return vulkan_folder() / "libvulkan.1.dylib"; }
+
 std::filesystem::path vship_library_path(const std::string& backend) {
+#ifdef __APPLE__
+    static_cast<void>(vulkan_folder());  // the loader pointed at MoltenVK before Vship loads it
+#endif
     return resource_folder() / "tools" / "vship" / build_folders.at(backend) / platform::shared_library_name("libvship");
 }
 
