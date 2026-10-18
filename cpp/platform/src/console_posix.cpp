@@ -70,7 +70,13 @@ void on_interrupt(std::function<void()> handler) {
     action.sa_handler = on_signal;
     sigemptyset(&action.sa_mask);
     action.sa_flags = SA_RESTART;  // calls a signal interrupts carry on
-    sigaction(SIGINT, &action, nullptr);
+    // Ctrl+C, and, as Windows' handler takes a closed console window, the
+    // terminal's going (SIGHUP) and an ending asked for (SIGTERM: `timeout`,
+    // a job's cancel): the run is cancelled and its programs ended, not left
+    // running with no one to read them.
+    for (const int signal : {SIGINT, SIGHUP, SIGTERM}) {
+        sigaction(signal, &action, nullptr);
+    }
 }
 
 }  // namespace vml::platform

@@ -46,8 +46,15 @@ const app_log::Logger logger("vml.perceptual_vship");
 // Vship handlers working at once per metric. One handler leaves the GPU idle
 // between its own kernels, and two keep it busy: at 4K 10-bit on an RTX
 // 5090 (Vship's CUDA build), SSIMULACRA2 scores 277 pairs a second rather
-// than 217, and Butteraugli 95 rather than 82.
+// than 217, and Butteraugli 95 rather than 82. On MoltenVK one: two
+// Butteraugli handlers above 720p lost the GPU (an M1 Pro: "Invalid
+// Resource", the run then on the CPU), and one is as fast there (1080p, 480
+// pairs: SSIMULACRA2 9.7 s with one and 9.8 with two, Butteraugli 38.8 s).
+#ifdef __APPLE__
+constexpr std::size_t lanes_per_metric = 1;
+#else
 constexpr std::size_t lanes_per_metric = 2;
+#endif
 // Frames in flight per video: one per lane being scored, one waiting and
 // one being filled, so that decoding, transfer and GPU work overlap. A 4K
 // 10-bit frame is 25 MB of pinned memory, so this is 250 MB for a 4K pair.

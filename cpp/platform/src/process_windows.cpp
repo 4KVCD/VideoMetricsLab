@@ -459,4 +459,6 @@ std::string ChildProcess::standard_error() {
 
 int ChildProcess::process_id() const { return static_cast<int>(state_->id); }
 
+void start_programs_in_this_group() {}  // a job holds them already
+
 }  // namespace vml::platform

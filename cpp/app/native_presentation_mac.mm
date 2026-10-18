@@ -17,6 +17,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <map>
 #include <stdexcept>
@@ -65,6 +66,9 @@ struct Presenter {
     id<MTLSamplerState> sampler = nil;
     CVMetalTextureCacheRef cache = nullptr;
     std::optional<Space> asked;
+    // Whether the view is on screen, as follow() last found it: its window
+    // shown and not wholly covered. The drawing thread draws only then.
+    std::atomic<bool> shown{true};
 };
 
 // YUV-to-RGB rows for frames of one kind, worked out once each.
@@ -118,6 +122,11 @@ void follow(Presenter& presenter) {
     if (parent == nil) {
         return;
     }
+    // Off screen only in a window that is (minimised, hidden or wholly
+    // covered): a layer in no window yet still gives drawables at once.
+    NSWindow* window = parent.window;
+    presenter.shown = window == nil || (window.visible && (window.occlusionState & NSWindowOcclusionStateVisible) != 0 &&
+                                        !presenter.view.hiddenOrHasHiddenAncestor);
     if (!NSEqualRects(presenter.view.frame, parent.bounds)) {
         presenter.view.frame = parent.bounds;
     }
@@ -274,6 +283,17 @@ void NativePresentation::present_paced() {
             if (stopping_) {
                 return;
             }
+        }
+        if (!presenter->shown) {
+            // Not on screen (minimised, covered): nothing is drawn, and the
+            // frame goes, as the layer would give no drawable for it but
+            // after waiting a second, which a Close (joining this thread)
+            // would wait too.
+            const std::lock_guard lock(mutex_);
+            if (!due_.empty()) {
+                due_.pop_front();
+            }
+            continue;
         }
         @autoreleasepool {
             // Waits at most a second (the layer's own limit): nil for a hidden

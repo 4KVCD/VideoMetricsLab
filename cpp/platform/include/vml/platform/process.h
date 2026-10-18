@@ -151,6 +151,15 @@ private:
     std::unique_ptr<State> state_;
 };
 
+// From now on, the programs this process starts are ended, stopped and
+// resumed with it by whoever started it, as the programs a Windows process
+// starts are in its job: called by a process of its own (run_isolated's
+// child), whose parent ends it with what it started. Elsewhere than Windows
+// they then join this process's group instead of making their own, and
+// terminate(), suspend() and resume() reach the program alone. On Windows
+// it does nothing.
+void start_programs_in_this_group();
+
 // Runs a program to its end and returns what it wrote. A program still
 // running after `timeout`, or once `stop` returns true (asked every 100 ms,
 // before the time is checked), is ended, and the result says which. Throws

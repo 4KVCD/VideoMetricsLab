@@ -29,10 +29,13 @@ std::string random_part() {
     return text;
 }
 
+// The start of the names of a process's FIFOs.
+std::string pipe_prefix(int process_id) { return "vml-vmaf-" + std::to_string(process_id) + "-"; }
+
 }  // namespace
 
 InboundPipe::InboundPipe(std::string_view name, std::size_t)
-    : path_((std::filesystem::temp_directory_path() / ("vml-vmaf-" + std::to_string(getpid()) + "-" +
+    : path_((std::filesystem::temp_directory_path() / (pipe_prefix(getpid()) +
                                                         random_part() + "-" + std::string(name)))
                 .string()),
       state_(std::make_unique<State>()) {
@@ -88,6 +91,17 @@ void InboundPipe::touch(const std::string& path) {
     const int writer = open(path.c_str(), O_WRONLY | O_NONBLOCK | O_CLOEXEC);
     if (writer >= 0) {
         ::close(writer);
+    }
+}
+
+void InboundPipe::remove_left_by(int process_id) {
+    const std::string prefix = pipe_prefix(process_id);
+    std::error_code error;
+    for (const auto& entry : std::filesystem::directory_iterator(std::filesystem::temp_directory_path(error), error)) {
+        const std::string name = entry.path().filename().string();
+        if (name.starts_with(prefix) && entry.is_fifo(error)) {
+            unlink(entry.path().c_str());
+        }
     }
 }
 

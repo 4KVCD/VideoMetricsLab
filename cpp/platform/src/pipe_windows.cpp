@@ -118,4 +118,6 @@ void InboundPipe::touch(const std::string& path) {
     }
 }
 
+void InboundPipe::remove_left_by(int) {}
+
 }  // namespace vml::platform

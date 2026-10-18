@@ -11,6 +11,7 @@
 #import <VideoToolbox/VideoToolbox.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <chrono>
 #include <cmath>
 #include <map>
@@ -250,13 +251,16 @@ id<MTLLibrary> native_metal_library(id<MTLDevice> device, NSError** error) {
 // The pixel buffer pools (take_buffer), and the scaler's pipelines.
 struct NativeDevice::Pools {
     std::mutex mutex;
-    std::map<std::tuple<int, int, bool>, CVPixelBufferPoolRef> pools;
+    // Each with the turn it was last taken from (`turn`), for the least
+    // used to go first.
+    std::map<std::tuple<int, int, bool>, std::pair<CVPixelBufferPoolRef, std::uint64_t>> pools;
+    std::uint64_t turn = 0;
     std::map<MTLPixelFormat, id<MTLRenderPipelineState>> scalers;
     id<MTLCommandQueue> queue = nil;
     id<MTLSamplerState> sampler = nil;
     ~Pools() {
         for (auto& [key, pool] : pools) {
-            CVPixelBufferPoolRelease(pool);
+            CVPixelBufferPoolRelease(pool.first);
         }
     }
 };
@@ -314,16 +318,22 @@ NativeDevice::~NativeDevice() {
 
 std::vector<std::string> NativeDevice::gpu_decoders() const {
     // The codecs FFmpeg's VideoToolbox decoders take, in the order Windows'
-    // self-test names them.
-    const std::array<std::pair<CMVideoCodecType, const char*>, 7> known{{
+    // self-test names them; not ProRes, which VideoToolbox decodes but in
+    // 4:2:2 or 4:4:4, which the presenter does not draw (videotoolbox_format:
+    // it is decoded in software).
+    const std::array<std::pair<CMVideoCodecType, const char*>, 6> known{{
         {kCMVideoCodecType_H264, "H.264"},
         {kCMVideoCodecType_HEVC, "HEVC"},
         {kCMVideoCodecType_HEVC, "HEVC 10-bit"},
         {kCMVideoCodecType_AV1, "AV1"},
         {kCMVideoCodecType_VP9, "VP9"},
         {kCMVideoCodecType_MPEG2Video, "MPEG-2"},
-        {kCMVideoCodecType_AppleProRes422, "ProRes"},
     }};
+    // VP9's decoder (and AV1's, on the Macs with one) is a supplemental one,
+    // which counts as there only once registered, as libavcodec registers it
+    // before it decodes.
+    VTRegisterSupplementalVideoDecoderIfAvailable(kCMVideoCodecType_VP9);
+    VTRegisterSupplementalVideoDecoderIfAvailable(kCMVideoCodecType_AV1);
     std::vector<std::string> found;
     for (const auto& [codec, name] : known) {
         if (VTIsHardwareDecodeSupported(codec)) {
@@ -338,16 +348,19 @@ HeldPixelBuffer NativeDevice::take_buffer(int width, int height, bool ten_bit) {
     const auto key = std::make_tuple(width, height, ten_bit);
     auto found = pools_->pools.find(key);
     if (found == pools_->pools.end()) {
-        // A few sizes and formats at once: a source decoded in software and
-        // scaled down takes two in turn, each frame (one pool each, as
-        // Windows' decoders keep an UploadTextures each). Past that, they go:
-        // the comparison changed. A pool's buffers still held outlive it.
-        constexpr std::size_t kept_pools = 4;
+        // A pool per size and format in use: a video decoded in software
+        // takes one, and a source scaled to the test videos' size another,
+        // each frame (as Windows' decoders keep an UploadTextures each). As
+        // many as twice the decoders the app runs at once are kept; past
+        // that the least used goes (the comparison changed), not all of them,
+        // which with five in turn made every frame's buffer anew. A pool's
+        // buffers still held outlive it. (The app runs up to ten decoders.)
+        constexpr std::size_t kept_pools = 24;
         if (pools_->pools.size() >= kept_pools) {
-            for (auto& [other, pool] : pools_->pools) {
-                CVPixelBufferPoolRelease(pool);
-            }
-            pools_->pools.clear();
+            const auto oldest = std::min_element(pools_->pools.begin(), pools_->pools.end(),
+                                                 [](const auto& a, const auto& b) { return a.second.second < b.second.second; });
+            CVPixelBufferPoolRelease(oldest->second.first);
+            pools_->pools.erase(oldest);
         }
         NSDictionary* attributes = @{
             (id)kCVPixelBufferPixelFormatTypeKey : @(ten_bit ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
@@ -362,10 +375,11 @@ HeldPixelBuffer NativeDevice::take_buffer(int width, int height, bool ten_bit) {
             kCVReturnSuccess) {
             return nullptr;
         }
-        found = pools_->pools.emplace(key, pool).first;
+        found = pools_->pools.emplace(key, std::make_pair(pool, std::uint64_t{0})).first;
     }
+    found->second.second = ++pools_->turn;
     CVPixelBufferRef buffer = nullptr;
-    if (CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, found->second, &buffer) != kCVReturnSuccess) {
+    if (CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, found->second.first, &buffer) != kCVReturnSuccess) {
         return nullptr;
     }
     return HeldPixelBuffer(buffer, [](PixelBuffer held) { CVPixelBufferRelease(held); });

@@ -233,6 +233,10 @@ through Vulkan (`scripts/build_vship_macos.sh`):
   pointed the loader at MoltenVK: Vship's pinned memory could not be made
   there, and the run fell back to the CPU. The environment is set before
   any Vship library loads now.
+- **Found:** two Butteraugli handlers at once (the lanes Windows runs per
+  metric) lost the GPU above 720p ("Invalid Resource"), and the run fell back
+  to the CPU. On macOS one handler per metric scores, as fast there (1080p:
+  SSIMULACRA2 9.7 s for 480 pairs with one, 9.8 with two).
 
 ### VMAF on the GPU
 
@@ -263,6 +267,17 @@ commit it pins), on the same loader and MoltenVK as Vship:
   features are of its CPU ones (the engine ports the CUDA ones). VMAF v1
   within 5e-5: its SpEED is the bundled libvmaf-fast's, the CPU's run is
   Homebrew's libvmaf 3.2.1 in FFmpeg, and the two SpEEDs differ by that.
+
+### Ending and pausing programs
+
+- **Found:** a Cancel or Pause did not reach the FFmpeg that a process of its
+  own (the GPU and CPU passes) had started: a process group is not a job, and
+  each program had a group of its own. Such a process's programs now join its
+  group (`start_programs_in_this_group`), which its parent ends and stops, and
+  the parent removes the FIFOs a killed child left in the temporary folder.
+- **Found:** the command line ignores SIGPIPE, and programs inherit that; they
+  get the default back now. It also cancels on SIGTERM and SIGHUP (a closed
+  Terminal window), as Windows' console handler does for a closed console.
 
 ### Still to do
 

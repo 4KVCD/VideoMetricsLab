@@ -464,12 +464,15 @@ namespace {
 // loader's driver is MoltenVK, from its manifest beside it; MoltenVK compiles
 // shaders without fast math, as Vulkan's drivers do elsewhere, which would
 // change scores; and says only its errors on standard error. A value the user
-// set stays.
+// set stays, the loader's older name for its drivers (VK_ICD_FILENAMES)
+// too, which VK_DRIVER_FILES would otherwise override.
 std::filesystem::path vulkan_folder() {
     const std::filesystem::path folder = resource_folder() / "tools" / "vulkan";
 #ifdef __APPLE__
     static const bool prepared = [&folder] {
-        setenv("VK_DRIVER_FILES", platform::path_text(folder / "MoltenVK_icd.json").c_str(), 0);
+        if (std::getenv("VK_ICD_FILENAMES") == nullptr) {
+            setenv("VK_DRIVER_FILES", platform::path_text(folder / "MoltenVK_icd.json").c_str(), 0);
+        }
         setenv("MVK_CONFIG_FAST_MATH_ENABLED", "0", 0);
         setenv("MVK_CONFIG_LOG_LEVEL", "1", 0);
         return true;

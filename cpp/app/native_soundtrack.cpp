@@ -238,6 +238,12 @@ private:
     AudioQueueRef sound_queue_ = nullptr;
     std::array<AudioQueueBufferRef, queue_buffers> buffers_{};
     std::array<bool, queue_buffers> queued_{};
+    // The frames given to the queue since its clock last started from 0, and
+    // how far its clock ran on past them while it had none to play (a slow
+    // read): its timeline goes on in silence, and what is given after plays
+    // that much later, so the clock leaves the gap out (read_clock).
+    double given_frames_ = 0;
+    double starved_frames_ = 0;
     int channels_ = 0;
     int rate_ = 0;
     std::size_t frame_bytes_ = 0;
@@ -517,6 +523,8 @@ void FfmpegSoundtrack::Player::make_seek(double position_ms) {
     AudioQueueStop(sound_queue_, true);
     started_ = false;
     queued_.fill(false);
+    given_frames_ = 0;
+    starved_frames_ = 0;
 #endif
     queue_.clear();
     queue_start_ = 0;
@@ -645,10 +653,19 @@ bool FfmpegSoundtrack::Player::feed_device(bool enabled) {
             std::memset(data, 0, given * frame_bytes_);
         }
         buffer->mAudioDataByteSize = static_cast<UInt32>(given * frame_bytes_);
+        // A queue that had nothing left to play has gone on in silence: this
+        // buffer plays from where its clock is, not from where the last one
+        // ended.
+        AudioTimeStamp now{};
+        if (started_ && AudioQueueGetCurrentTime(sound_queue_, nullptr, &now, nullptr) == noErr &&
+            (now.mFlags & kAudioTimeStampSampleTimeValid) != 0 && now.mSampleTime > given_frames_ + starved_frames_) {
+            starved_frames_ = now.mSampleTime - given_frames_;
+        }
         if (AudioQueueEnqueueBuffer(sound_queue_, buffer, 0, nullptr) != noErr) {
             fail(QStringLiteral("The sound device went"));
             return false;
         }
+        given_frames_ += static_cast<double>(given);
         queued_[index] = true;
         queue_start_ += from_queue * frame_bytes_;
         if (queue_start_ > queue_.size() / 2) {
@@ -698,9 +715,12 @@ void FfmpegSoundtrack::Player::read_clock() {
     AudioTimeStamp played{};
     if (AudioQueueGetCurrentTime(sound_queue_, nullptr, &played, nullptr) == noErr &&
         (played.mFlags & kAudioTimeStampSampleTimeValid) != 0 && played.mSampleTime >= 0) {
+        // The sound played, less the silence the queue went on in while it
+        // had none, and never past the sound given.
+        const double frames = std::clamp(played.mSampleTime - starved_frames_, 0.0, given_frames_);
         const std::lock_guard lock(soundtrack_.mutex_);
         if (!soundtrack_.wanted_ms_) {
-            soundtrack_.clock_ms_ = base_ms_ + played.mSampleTime * 1000 / rate_;
+            soundtrack_.clock_ms_ = base_ms_ + frames * 1000 / rate_;
         }
     }
 #else
