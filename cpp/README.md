@@ -54,7 +54,7 @@ scale filter gives (`plan_decode` in `core/src/gpu_frames.cpp`); the
 | `core` | `vml_core`, the engine. No Qt and no operating-system headers, so the same code runs on every system, under the command line and the window. |
 | `platform` | `vml_platform`: what differs between the systems (starting programs, pipes, loading libraries, the console, the PATH, the GPUs), behind headers that are the same on all of them. |
 | `cli` | `vml-cli`, the command line, and its code (`vml_cli`), which the tests use too. |
-| `app` | `VideoMetricsLab`, the window (Qt 6), and its code (`vml_app`), which its tests use too. |
+| `app` | `VideoMetricsLab`, the window (Qt 6), and its code (`vml_app`), which its tests use too. Its icon, in `app/icons`, is drawn by `scripts/make_icons.py`, which writes the Windows `.ico`, the macOS `.icns` and the SVGs. |
 | `tests/unit` | The tests (GoogleTest). |
 | `tests/app` | The window's tests, run with no screen (Qt's offscreen platform), each in a profile of its own. |
 | `tests/reference` | The tests' expected values: the Python app's answers at the port, edited only on purpose since. |

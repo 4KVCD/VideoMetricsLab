@@ -81,8 +81,8 @@ endif()
 add_executable(VideoMetricsLab WIN32 main.cpp)
 target_link_libraries(VideoMetricsLab PRIVATE vml_app vml_compile_options)
 if(MSVC)
-    # Long paths, as vml-cli (cli/CMakeLists.txt).
-    target_sources(VideoMetricsLab PRIVATE ../cli/vml-cli.manifest)
+    # Long paths, as vml-cli (cli/CMakeLists.txt); and the app's icon.
+    target_sources(VideoMetricsLab PRIVATE ../cli/vml-cli.manifest icons/VideoMetricsLab.rc)
 endif()
 
 if(WIN32)

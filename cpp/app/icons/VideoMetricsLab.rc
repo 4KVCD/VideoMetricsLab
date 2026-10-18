@@ -1,0 +1,5 @@
+// The app's icon on Windows (VideoMetricsLab.ico, made by
+// scripts/make_icons.py), in the window's and the command line's programs:
+// Explorer's and the taskbar's. Qt takes a window's icon from IDI_ICON1 when
+// the window sets none.
+IDI_ICON1 ICON "VideoMetricsLab.ico"
