@@ -184,6 +184,13 @@ int main(int argc, char** argv) {
 
     QApplication app(argc, argv);
     QApplication::setApplicationName("VideoMetricsLab");
+#ifdef __APPLE__
+    // Qt's Fusion style, as the window looks on Windows: macOS's own style
+    // draws its controls larger, which squeezed the Videos tab's table to one
+    // row and hid the metric headings' tick boxes. (Fusion is built into Qt
+    // Widgets: no plugin.)
+    QApplication::setStyle(QStringLiteral("Fusion"));
+#endif
     if (std::find(words.begin(), words.end(), "--self-test") != words.end()) {
         return app::run_self_test(app, std::find(words.begin(), words.end(), "--quiet") != words.end());
     }
