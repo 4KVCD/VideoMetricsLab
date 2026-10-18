@@ -1117,7 +1117,11 @@ void VideoCompareView::native_tick() {
         }
         const QString separator = QString::fromUtf8(" \xC2\xB7 ");
         status((wanted_playing_ ? QStringLiteral("Playing") : QStringLiteral("Paused")) + separator +
+#ifdef _WIN32
                QStringLiteral("FFmpeg D3D11") + separator +
+#else
+               QStringLiteral("FFmpeg VideoToolbox") + separator +
+#endif
                QStringLiteral("%1/%2 streams").arg(pool.decoders()).arg(decoder_limit()) + separator +
                pool.description());
         check_end();

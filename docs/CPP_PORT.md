@@ -123,6 +123,11 @@ CVVDP runs, on the CPU.
   names without `.exe`.
 - The self-test spoke of `ffmpeg.exe` and warned about the GPU metrics'
   frame decoders, which are built for Windows only.
+- macOS's own widget style draws its controls larger than Windows' (32 px
+  buttons to 26): the Videos tab's table showed one row, the bottom row of
+  buttons was cut off and the metric headings' tick boxes were not drawn.
+  The window uses Qt's Fusion style on macOS, which keeps Windows'
+  proportions.
 - Settings offered "Same as Windows" for the language and the theme, and
   the graphs asked for Consolas, which macOS lacks (100 ms to find a
   substitute at the first graph): macOS gets "Same as macOS" in every
@@ -163,14 +168,52 @@ CPU, frame by frame:
 - VMAF runs in FFmpeg's libvmaf filter, which is the libvmaf the user's
   FFmpeg links (Homebrew's), not the app's.
 
+### Video Compare
+
+Video Compare plays natively, as on Windows: the GPU decodes both videos,
+the presenter draws each pair in time with the source's soundtrack.
+
+| On Windows | On macOS |
+| --- | --- |
+| Direct3D 11 device | Metal device, with FFmpeg's VideoToolbox device beside it (`native_device_mac.mm`) |
+| D3D11VA decoding into textures | VideoToolbox decoding into pixel buffers (CVPixelBuffer, NV12 and P010's layouts), which Metal reads where they are |
+| Pictures decoded in software uploaded to textures | written into pooled IOSurface pixel buffers |
+| The source scaled down by the video processor | scaled down by a Metal pass (each pixel the average of the source it covers) |
+| `d3d11_tonemap.dll`'s presenter in a child window | a CAMetalLayer in a view of its own over the view, two drawables, one frame a refresh (`native_presentation_mac.mm`) |
+| HLSL shader | its port to MSL, the same arithmetic in the same order (`native_metal.h`) |
+| WASAPI | CoreAudio (an AudioQueue, its callbacks on the player's thread) |
+| `dav1d.dll` | `libdav1d.dylib` (`scripts/build_dav1d_macos.sh`) |
+| FFmpeg's DLLs, committed | its dylibs, built by `scripts/build_ffmpeg_decoders_macos.sh` and linked weakly by @rpath, not committed |
+
+- **The shaders** are compiled from their source when Video Compare is
+  first loaded (`newLibraryWithSource:`): the Command Line Tools have no
+  offline Metal compiler. That runs off the window's thread
+  (`NativePool::load`, as Windows compiles its HLSL), so it adds nothing to
+  the app's start or to the window's thread: on an M1 Pro it took 718 ms,
+  on a thread of its own, the first time.
+- **Checked on an M1 Pro** (macOS 27.0.1), in the window: a 1080p H.264
+  source with its soundtrack against a 720p H.264 and a 10-bit HEVC encode,
+  both decoded by VideoToolbox, drawn by Metal in time with the sound;
+  played, paused, switched between the encodes, stepped. The decoder's
+  tests (`NativeDecoderTest`): each codec's frame 30 is FFmpeg's, sample for
+  sample, by VideoToolbox (H.264, 10-bit H.264, HEVC, AV1 and VP9 where the
+  Mac decodes them) or in software (MPEG-2 within its leeway, ProRes 4:2:2,
+  AV1 by dav1d); a seek back; a raw stream; the source scaled down.
+  `FramePanelTest.APairPlaysNativelyOnTheDisplay` plays a pair on the
+  display (`VML_TEST_ON_SCREEN=1`).
+- **Found:** the dav1d mirror took EAGAIN for 11, as on Windows and Linux;
+  it is 35 on macOS, so dav1d's "more data" read as an error and AV1 in
+  software gave no frame. It is the system's EAGAIN now.
+- **Apple's GPUs decode 10-bit H.264**, which no Windows GPU does.
+
 ### Still to do
 
-- Video Compare plays through FFmpeg's pipes: native playback with Metal,
-  VideoToolbox and CoreAudio is the next phase. Its shaders will be compiled
-  from their source when the app starts (`newLibraryWithSource:`), because
-  the Command Line Tools have no offline Metal compiler. The compile runs
-  off the window's thread, so it does not hold up the window, and its time
-  is to be measured.
+- VVC's film grain: Windows draws it with Direct3D 11 compute
+  (`native/d3d11_film_grain.cpp`); on macOS FFmpeg draws 8-bit 4:2:0's, and
+  10-bit VVC shows without it.
+- HDR on an HDR display (EDR): the presenter's layer takes PQ in BT.2020 for
+  it, but the app does not yet ask macOS whether the display shows HDR
+  (`query_display_hdr`), so HDR video is mapped to SDR.
 - CVVDP and the GPU metrics run only on Vulkan; on macOS they stay on the
   CPU (CVVDP is not available).
 

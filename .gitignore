@@ -14,3 +14,4 @@ resources/native/*.dll
 resources/tools/libvmaf/libvmaf.dylib
 resources/tools/libjxl/ssimulacra2
 resources/tools/libjxl/butteraugli_main
+resources/tools/ffmpeg/*.dylib

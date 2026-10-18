@@ -4,7 +4,9 @@
 // decoder draws H.274 grain on 8-bit 4:2:0 video only; native playback has
 // it give each frame's grain message instead (film_grain.h turns it into the
 // library's parameters), uploads the frame's planes, has the library draw
-// the grain on them and pack them into the NV12 or P010 texture shown.
+// the grain on them and pack them into the NV12 or P010 texture shown. On
+// macOS it is not drawn yet (native_grain_mac.cpp): FFmpeg draws 8-bit
+// video's.
 #pragma once
 
 #include <QString>
@@ -26,6 +28,7 @@ public:
     // library, and readies its shaders, the first time.
     static std::optional<QString> unavailable();
 
+#ifdef _WIN32
     // A drawer on `device`. Throws std::runtime_error when it cannot be made.
     explicit NativeGrain(ID3D11Device* device);
     ~NativeGrain();
@@ -45,6 +48,7 @@ public:
 
 private:
     void* drawer_ = nullptr;
+#endif
 };
 
 }  // namespace vml::app

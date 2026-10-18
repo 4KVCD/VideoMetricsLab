@@ -202,7 +202,8 @@ NativePool::Parts NativePool::default_parts(const PreviewColorSettings& colors) 
     };
     const bool hdr_display = colors.display_hdr_enabled == true;
     parts.make_presentation = [device, hdr_display](PairedFrameWidget& surface) -> std::unique_ptr<NativeOutput> {
-        return std::make_unique<NativePresentation>(device, reinterpret_cast<HWND__*>(surface.winId()), hdr_display);
+        return std::make_unique<NativePresentation>(device, reinterpret_cast<NativeWindowHandle>(surface.winId()),
+                                                    hdr_display);
     };
     parts.make_soundtrack = [](const FrameComparison& source, int position_ms,
                                bool enabled) -> std::unique_ptr<Soundtrack> {

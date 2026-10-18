@@ -78,6 +78,49 @@ if(WIN32 AND MSVC)
     target_compile_definitions(vml_app PUBLIC VML_NATIVE_PLAYBACK PRIVATE NOMINMAX)
 endif()
 
+# Video Compare's native playback on macOS: FFmpeg's libraries with
+# VideoToolbox's decoding and dav1d (resources/tools/ffmpeg, built by
+# scripts/build_ffmpeg_decoders_macos.sh and build_dav1d_macos.sh, not
+# committed), Metal to draw and CoreAudio for the soundtrack. Built where
+# FFmpeg's libraries have been built; else the window plays with FFmpeg's
+# programs. They are linked weakly, by @rpath: the window starts without
+# them (native_device_mac.mm then says they are missing), and finds them in
+# the bundle (Contents/Resources/resources/tools/ffmpeg) or, in a build run
+# from its folder, in the repository's.
+set(vml_ffmpeg_dylibs libavcodec.63 libavformat.63 libavutil.61 libswresample.7 libswscale.10)
+set(vml_ffmpeg_built ${PROJECT_SOURCE_DIR}/../resources/tools/ffmpeg)
+set(vml_ffmpeg_found TRUE)
+foreach(library ${vml_ffmpeg_dylibs})
+    if(NOT EXISTS ${vml_ffmpeg_built}/${library}.dylib)
+        set(vml_ffmpeg_found FALSE)
+    endif()
+endforeach()
+if(APPLE AND NOT vml_ffmpeg_found)
+    message(STATUS "FFmpeg's libraries are not built: Video Compare plays with FFmpeg's programs "
+                   "(scripts/build_ffmpeg_decoders_macos.sh builds them)")
+elseif(APPLE)
+    enable_language(OBJCXX)
+    set(vml_ffmpeg ${PROJECT_SOURCE_DIR}/../native/ffmpeg)
+    target_sources(vml_app PRIVATE native_dav1d.cpp native_decoder.cpp native_device_mac.mm native_grain_mac.cpp
+                                   native_pool.cpp native_presentation_mac.mm native_soundtrack.cpp)
+    set_source_files_properties(native_device_mac.mm native_presentation_mac.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+    # The headers are Windows' build's (native/ffmpeg), the same for this
+    # version: avconfig.h's endianness and alignment are the same on arm64.
+    target_include_directories(vml_app SYSTEM PRIVATE ${vml_ffmpeg}/include ${PROJECT_SOURCE_DIR}/../native/dav1d)
+    foreach(library ${vml_ffmpeg_dylibs})
+        target_link_options(vml_app INTERFACE "LINKER:-weak_library,${vml_ffmpeg_built}/${library}.dylib")
+    endforeach()
+    # The repository's copy, for a build run from its folder (the release
+    # script deletes this run path from the bundle's program).
+    target_link_options(vml_app INTERFACE "LINKER:-rpath,${vml_ffmpeg_built}")
+    target_link_libraries(vml_app PUBLIC "-framework AppKit" "-framework AudioToolbox" "-framework CoreAudio"
+                                         "-framework CoreMedia" "-framework CoreVideo" "-framework Metal"
+                                         "-framework QuartzCore" "-framework VideoToolbox")
+    target_compile_definitions(vml_app PUBLIC VML_NATIVE_PLAYBACK)
+    # For the tests (tests/CMakeLists.txt).
+    set_property(GLOBAL PROPERTY vml_native_playback_macos TRUE)
+endif()
+
 add_executable(VideoMetricsLab WIN32 MACOSX_BUNDLE main.cpp)
 target_link_libraries(VideoMetricsLab PRIVATE vml_app vml_compile_options)
 if(APPLE)
@@ -85,6 +128,8 @@ if(APPLE)
     # (CMAKE_OSX_DEPLOYMENT_TARGET: 14.4, Qt 6.12's earliest).
     set_target_properties(VideoMetricsLab PROPERTIES
         MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/packaging/macos/Info.plist.in)
+    # The bundle's FFmpeg libraries, for native playback.
+    target_link_options(VideoMetricsLab PRIVATE "LINKER:-rpath,@executable_path/../Resources/resources/tools/ffmpeg")
 endif()
 if(MSVC)
     # Long paths, as vml-cli (cli/CMakeLists.txt).

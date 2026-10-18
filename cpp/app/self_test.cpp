@@ -68,6 +68,15 @@ void check_native_playback(SelfTestReport& report) {
 #ifdef VML_NATIVE_PLAYBACK
     // Native playback: FFmpeg's libraries, the GPU's decoders and the
     // presenter.
+#ifdef _WIN32
+    const std::string decoding = "Direct3D 11";
+    const std::string drawing = "Direct3D 11";
+    const std::string presenter = "d3d11_tonemap.dll";
+#else
+    const std::string decoding = "VideoToolbox";
+    const std::string drawing = "Metal";
+    const std::string presenter = "Metal";
+#endif
     if (const std::optional<std::string> problem = load_ffmpeg_libraries()) {
         report.warn("Native playback unavailable, videos play through " + ffmpeg_program + ": " + *problem);
     } else {
@@ -75,12 +84,12 @@ void check_native_playback(SelfTestReport& report) {
         try {
             const std::vector<std::string> decoders = NativeDevice::shared()->gpu_decoders();
             if (decoders.empty()) {
-                report.warn("no Direct3D 11 GPU decoders; video decodes in software");
+                report.warn("no " + decoding + " GPU decoders; video decodes in software");
             } else {
-                report.ok("GPU decoders on this machine (Direct3D 11): " + join(decoders, ", "));
+                report.ok("GPU decoders on this machine (" + decoding + "): " + join(decoders, ", "));
             }
         } catch (const std::exception& error) {
-            report.warn("no Direct3D 11 device, videos play through " + ffmpeg_program + ": " + error.what());
+            report.warn("no " + drawing + " device, videos play through " + ffmpeg_program + ": " + error.what());
         }
         if (const std::optional<QString> no_grain = NativeGrain::unavailable()) {
             report.warn("Film grain for VVC videos unavailable (" + no_grain->toStdString() +
@@ -98,7 +107,7 @@ void check_native_playback(SelfTestReport& report) {
     if (const std::optional<QString> problem = NativePresentation::unavailable()) {
         report.warn("Native playback's presenter absent or out of date; videos play through FFmpeg");
     } else {
-        report.ok("Native playback's presenter and HDR shader (d3d11_tonemap.dll)");
+        report.ok("Native playback's presenter and HDR shader (" + presenter + ")");
     }
 #else
     report.warn("Native playback is not built on this system; videos play through " + ffmpeg_program);

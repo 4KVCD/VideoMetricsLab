@@ -7,6 +7,7 @@
 // (cpp/app/native_dav1d.cpp); each checks dav1d's API version before use.
 #pragma once
 
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -61,4 +62,6 @@ constexpr int kDav1dI420 = 1;
 constexpr int kDav1dI422 = 2;
 constexpr int kDav1dI444 = 3;
 constexpr unsigned kDav1dApiMajor = 7;
-constexpr int kDav1dAgain = -11;  // DAV1D_ERR(EAGAIN)
+// DAV1D_ERR(EAGAIN): the system's EAGAIN, negated (11 on Windows and Linux,
+// 35 on macOS).
+constexpr int kDav1dAgain = -EAGAIN;

@@ -1,8 +1,13 @@
 #include "native_soundtrack.h"
 
+#ifdef _WIN32
 #include <audioclient.h>
 #include <mmdeviceapi.h>
 #include <wrl/client.h>
+#else
+#include <AudioToolbox/AudioToolbox.h>
+#include <CoreFoundation/CoreFoundation.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -14,7 +19,9 @@
 #include "ffmpeg_api.h"
 #include "vml/platform/system.h"
 
+#ifdef _WIN32
 using Microsoft::WRL::ComPtr;
+#endif
 
 namespace vml::app {
 
@@ -24,8 +31,15 @@ namespace {
 // waits for before the soundtrack counts as ready to play.
 constexpr double queued_ms = 300;
 constexpr double ready_ms = 100;
+#ifdef _WIN32
 // The device's buffer: 100 ms (in 100 ns units).
 constexpr REFERENCE_TIME buffer_hns = 1'000'000;
+#else
+// The sound queue's buffers on macOS: four of 25 ms, 100 ms in all, as
+// Windows' device buffer.
+constexpr int queue_buffers = 4;
+constexpr double queue_buffer_ms = 25;
+#endif
 
 double seconds_now() {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -63,6 +77,7 @@ struct Reader {
     }
 };
 
+#ifdef _WIN32
 // Closes an event handle.
 struct EventHandle {
     HANDLE handle = nullptr;
@@ -75,6 +90,7 @@ struct EventHandle {
     EventHandle(const EventHandle&) = delete;
     EventHandle& operator=(const EventHandle&) = delete;
 };
+#endif
 
 }  // namespace
 
@@ -195,6 +211,7 @@ private:
     FfmpegSoundtrack& soundtrack_;
     Reader reader_;
 
+#ifdef _WIN32
     // The sound device: Windows' default, shared, in its own format.
     ComPtr<IMMDeviceEnumerator> devices_;
     ComPtr<IMMDevice> device_;
@@ -207,6 +224,25 @@ private:
     ComPtr<IAudioRenderClient> render_;
     ComPtr<IAudioClock> clock_;
     UINT64 frequency_ = 0;
+#else
+public:
+    ~Player();
+
+private:
+    // A buffer the queue has played, free to fill again (on this thread: its
+    // run loop calls back).
+    static void played(void* self, AudioQueueRef queue, AudioQueueBufferRef buffer);
+    // The sound queue: CoreAudio's, to the Mac's default output, which it
+    // follows, stereo float at the soundtrack's own rate (the queue resamples
+    // for the device).
+    AudioQueueRef sound_queue_ = nullptr;
+    std::array<AudioQueueBufferRef, queue_buffers> buffers_{};
+    std::array<bool, queue_buffers> queued_{};
+    int channels_ = 0;
+    int rate_ = 0;
+    std::size_t frame_bytes_ = 0;
+    std::size_t buffer_frames_ = 0;
+#endif
 
     // The sound decoded, in the device's format, not yet given to it.
     std::vector<std::uint8_t> queue_;
@@ -223,7 +259,9 @@ private:
 };
 
 void FfmpegSoundtrack::run() {
+#ifdef _WIN32
     const HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+#endif
     {
         // Freed before COM goes.
         Player player(*this);
@@ -231,9 +269,11 @@ void FfmpegSoundtrack::run() {
             player.play();
         }
     }
+#ifdef _WIN32
     if (SUCCEEDED(com)) {
         CoUninitialize();
     }
+#endif
 }
 
 // It cannot play: its clock goes too, so that the frames follow the wall
@@ -298,6 +338,7 @@ bool FfmpegSoundtrack::Player::open_file() {
 // The sound device, and the resampler that turns the soundtrack into its
 // format.
 bool FfmpegSoundtrack::Player::open_device() {
+#ifdef _WIN32
     WAVEFORMATEX* mix = nullptr;
     if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&devices_))) ||
         FAILED(devices_->GetDefaultAudioEndpoint(eRender, eConsole, &device_)) ||
@@ -328,6 +369,34 @@ bool FfmpegSoundtrack::Player::open_device() {
     }
     const AVSampleFormat sample_format = floats ? AV_SAMPLE_FMT_FLT : AV_SAMPLE_FMT_S16;
     frame_bytes_ = static_cast<std::size_t>(channels_) * (floats ? 4 : 2);
+#else
+    channels_ = 2;
+    rate_ = reader_.codec->sample_rate > 0 ? reader_.codec->sample_rate : 48000;
+    const AVSampleFormat sample_format = AV_SAMPLE_FMT_FLT;
+    frame_bytes_ = static_cast<std::size_t>(channels_) * 4;
+    AudioStreamBasicDescription format{};
+    format.mSampleRate = rate_;
+    format.mFormatID = kAudioFormatLinearPCM;
+    format.mFormatFlags = kLinearPCMFormatFlagIsFloat | kLinearPCMFormatFlagIsPacked;
+    format.mBytesPerPacket = static_cast<UInt32>(frame_bytes_);
+    format.mFramesPerPacket = 1;
+    format.mBytesPerFrame = static_cast<UInt32>(frame_bytes_);
+    format.mChannelsPerFrame = static_cast<UInt32>(channels_);
+    format.mBitsPerChannel = 32;
+    // Called back on this thread, in play()'s run loop.
+    if (AudioQueueNewOutput(&format, &Player::played, this, CFRunLoopGetCurrent(), kCFRunLoopCommonModes, 0, &sound_queue_) !=
+        noErr) {
+        fail(QStringLiteral("No sound device"));
+        return false;
+    }
+    buffer_frames_ = static_cast<std::size_t>(std::llround(queue_buffer_ms * rate_ / 1000));
+    for (AudioQueueBufferRef& buffer : buffers_) {
+        if (AudioQueueAllocateBuffer(sound_queue_, static_cast<UInt32>(buffer_frames_ * frame_bytes_), &buffer) != noErr) {
+            fail(QStringLiteral("The sound device cannot play"));
+            return false;
+        }
+    }
+#endif
     AVChannelLayout out_layout{};
     av_channel_layout_default(&out_layout, channels_);
     AVChannelLayout in_layout{};
@@ -346,6 +415,23 @@ bool FfmpegSoundtrack::Player::open_device() {
     }
     return true;
 }
+
+#ifndef _WIN32
+FfmpegSoundtrack::Player::~Player() {
+    if (sound_queue_ != nullptr) {
+        AudioQueueDispose(sound_queue_, true);  // its buffers with it
+    }
+}
+
+void FfmpegSoundtrack::Player::played(void* self, AudioQueueRef /*queue*/, AudioQueueBufferRef buffer) {
+    auto* player = static_cast<Player*>(self);
+    for (std::size_t index = 0; index < player->buffers_.size(); ++index) {
+        if (player->buffers_[index] == buffer) {
+            player->queued_[index] = false;
+        }
+    }
+}
+#endif
 
 void FfmpegSoundtrack::Player::play() {
     while (!soundtrack_.stopping()) {
@@ -373,13 +459,22 @@ void FfmpegSoundtrack::Player::play() {
             }
         }
         if (want_playing && ready_ && !started_) {
+#ifdef _WIN32
             if (FAILED(client_->Start())) {
+#else
+            // The queue's buffers filled first, so that it starts with sound.
+            if (!feed_device(enabled) || AudioQueueStart(sound_queue_, nullptr) != noErr) {
+#endif
                 fail(QStringLiteral("The sound device cannot play"));
                 return;
             }
             started_ = true;
         } else if (!want_playing && started_) {
+#ifdef _WIN32
             client_->Stop();
+#else
+            AudioQueuePause(sound_queue_);  // its clock kept, as WASAPI's Stop keeps it
+#endif
             started_ = false;
         }
         if (!started_) {
@@ -387,25 +482,42 @@ void FfmpegSoundtrack::Player::play() {
             soundtrack_.changed_.wait_for(lock, std::chrono::milliseconds(10));
             continue;
         }
+#ifdef _WIN32
         WaitForSingleObject(ready_event_.handle, 20);
+#else
+        // The queue's calls back for buffers played, made here.
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.02, true);
+#endif
         if (!feed_device(enabled)) {
             return;
         }
         read_clock();
     }
     if (started_) {
+#ifdef _WIN32
         client_->Stop();
+#else
+        AudioQueueStop(sound_queue_, true);
+#endif
     }
 }
 
 // Seeks to `position_ms` on the file's timeline: the device and the queue
 // emptied, the decoder started again from the key frame before it.
 void FfmpegSoundtrack::Player::make_seek(double position_ms) {
+#ifdef _WIN32
     if (started_) {
         client_->Stop();
         started_ = false;
     }
     client_->Reset();
+#else
+    // Stopped, the queue lets go of its buffers and starts its clock again
+    // from 0, as WASAPI's Reset.
+    AudioQueueStop(sound_queue_, true);
+    started_ = false;
+    queued_.fill(false);
+#endif
     queue_.clear();
     queue_start_ = 0;
     reader_.draining = false;
@@ -514,6 +626,38 @@ void FfmpegSoundtrack::Player::take_sound() {
 // the frames; silence too while muted (not `enabled`). False when the device
 // went (fail() then says so).
 bool FfmpegSoundtrack::Player::feed_device(bool enabled) {
+#ifndef _WIN32
+    for (std::size_t index = 0; index < buffers_.size(); ++index) {
+        if (queued_[index]) {
+            continue;
+        }
+        const std::size_t given = reader_.ended ? buffer_frames_ : std::min(buffer_frames_, queued_frames());
+        if (given == 0) {
+            return true;
+        }
+        AudioQueueBufferRef buffer = buffers_[index];
+        auto* data = static_cast<std::uint8_t*>(buffer->mAudioData);
+        const std::size_t from_queue = std::min(given, queued_frames());
+        if (enabled) {
+            std::memcpy(data, queue_.data() + queue_start_, from_queue * frame_bytes_);
+            std::memset(data + from_queue * frame_bytes_, 0, (given - from_queue) * frame_bytes_);
+        } else {
+            std::memset(data, 0, given * frame_bytes_);
+        }
+        buffer->mAudioDataByteSize = static_cast<UInt32>(given * frame_bytes_);
+        if (AudioQueueEnqueueBuffer(sound_queue_, buffer, 0, nullptr) != noErr) {
+            fail(QStringLiteral("The sound device went"));
+            return false;
+        }
+        queued_[index] = true;
+        queue_start_ += from_queue * frame_bytes_;
+        if (queue_start_ > queue_.size() / 2) {
+            queue_.erase(queue_.begin(), queue_.begin() + static_cast<std::ptrdiff_t>(queue_start_));
+            queue_start_ = 0;
+        }
+    }
+    return true;
+#else
     UINT32 padding = 0;
     if (FAILED(client_->GetCurrentPadding(&padding))) {
         fail(QStringLiteral("The sound device went"));
@@ -543,11 +687,23 @@ bool FfmpegSoundtrack::Player::feed_device(bool enabled) {
         queue_start_ = 0;
     }
     return true;
+#endif
 }
 
 // The clock: where the device has played to, on the file's timeline (ms),
 // unless a seek waits.
 void FfmpegSoundtrack::Player::read_clock() {
+#ifndef _WIN32
+    // The samples the queue has played since it started (its timeline).
+    AudioTimeStamp played{};
+    if (AudioQueueGetCurrentTime(sound_queue_, nullptr, &played, nullptr) == noErr &&
+        (played.mFlags & kAudioTimeStampSampleTimeValid) != 0 && played.mSampleTime >= 0) {
+        const std::lock_guard lock(soundtrack_.mutex_);
+        if (!soundtrack_.wanted_ms_) {
+            soundtrack_.clock_ms_ = base_ms_ + played.mSampleTime * 1000 / rate_;
+        }
+    }
+#else
     UINT64 position = 0;
     UINT64 counter = 0;
     if (SUCCEEDED(clock_->GetPosition(&position, &counter))) {
@@ -556,6 +712,7 @@ void FfmpegSoundtrack::Player::read_clock() {
             soundtrack_.clock_ms_ = base_ms_ + static_cast<double>(position) * 1000 / static_cast<double>(frequency_);
         }
     }
+#endif
 }
 
 }  // namespace vml::app

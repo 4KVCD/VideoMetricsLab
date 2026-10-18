@@ -8,6 +8,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDeadlineTimer>
+#include <QGuiApplication>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -20,9 +21,11 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -31,6 +34,7 @@
 #include "test_videos.h"
 #include "video_compare_view.h"
 #include "vml/ffprobe.h"
+#include "vml/platform/system.h"
 #include "widgets.h"
 
 namespace vml::app {
@@ -44,6 +48,9 @@ protected:
         panel.on_frame_ready(panel.generation_, static_cast<int>(side), image);
     }
     static bool idle(const FrameComparePanel& panel) { return panel.live_workers().empty(); }
+#ifdef VML_NATIVE_PLAYBACK
+    static bool plays_natively(const VideoCompareView& view) { return view.native_active(); }
+#endif
     static std::size_t frames_kept(const FrameComparePanel& panel) { return panel.cache_.size(); }
     static const QImage* current_image(const FrameComparePanel& panel) { return panel.current_image(); }
     static QWidget* shown_page(const FrameComparePanel& panel) { return panel.content_stack_->currentWidget(); }
@@ -451,6 +458,90 @@ TEST_F(FramePanelTest, APairThatCanPlayIsPlayedWithThePanelsControls) {
     EXPECT_EQ(decoders(*panel->video_view), playing) << "the decoders were started again";
     panel->cancel();
     ASSERT_TRUE(wait_until([&panel] { return FramePanelTest::idle(*panel); }));
+}
+
+// On the display (VML_TEST_ON_SCREEN=1; offscreen, native playback is off),
+// a pair plays natively as the window plays it: the GPU decodes both videos
+// (Direct3D 11's or VideoToolbox's decoders), the presenter draws them
+// (Direct3D 11, or Metal), in time with the source's soundtrack, frame-locked;
+// it plays on through a switch to another test video and the source shown,
+// and Stop ends every decoder. The frames a second it played are printed,
+// not held to: they depend on the machine.
+TEST_F(FramePanelTest, APairPlaysNativelyOnTheDisplay) {
+#ifndef VML_NATIVE_PLAYBACK
+    GTEST_SKIP() << "native playback is not built here";
+#else
+    if (QGuiApplication::platformName() == "offscreen") {
+        GTEST_SKIP() << "offscreen: native playback runs on the display (VML_TEST_ON_SCREEN=1)";
+    }
+    const std::optional<test::Tools> found = test::tools();
+    if (!found) {
+        GTEST_SKIP() << "no FFmpeg";
+    }
+    const test::Folder folder;
+    const std::string source = platform::path_text(folder / "source.mkv");
+    test::run_ffmpeg(*found, {"-f", "lavfi", "-i", "testsrc2=s=1280x720:r=24000/1001:d=12", "-f", "lavfi", "-i",
+                              "sine=frequency=440:sample_rate=48000:duration=12", "-map", "0:v", "-map", "1:a",
+                              "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", source});
+    FrameComparison comparison;
+    comparison.source_info = probe_video(source, found->ffprobe);
+    comparison.distorted_info = probe_video(
+        test::make_clip(*found, folder / "encode.mkv", "libx265", "yuv420p10le", 12.0, {}, "640x360"), found->ffprobe);
+    comparison.fps = comparison.source_info.fps;
+    comparison.frame_count = 287;
+    FrameComparison other = comparison;
+    other.distorted_info = probe_video(
+        test::make_clip(*found, folder / "encode2.mkv", "libx264", "yuv420p", 12.0, {}, "1280x720"), found->ffprobe);
+    const auto panel = make_panel(found->ffmpeg);
+    panel->audio_checkbox->setChecked(true);
+    panel->resize(1000, 700);
+    panel->show();
+    panel->set_runs({{"row:encode", "encode", comparison, nullptr, "row:encode"},
+                     {"row:encode2", "encode2", other, nullptr, "row:encode2"}});
+    // The view is made as the first pair is set.
+    ASSERT_NE(panel->video_view, nullptr);
+    QString status;
+    QObject::connect(panel->video_view, &VideoCompareView::status_changed, [&status](const QString& text) { status = text; });
+    ASSERT_TRUE(wait_until([&panel] { return plays_natively(*panel->video_view); }))
+        << "native playback did not start: " << status.toStdString();
+
+    panel->play_button->click();
+    ASSERT_TRUE(wait_until([&panel] { return panel->frame_spin->value() >= 24; })) << status.toStdString();
+    const auto started = std::chrono::steady_clock::now();
+    const int from = panel->frame_spin->value();
+    ASSERT_TRUE(wait_until([&panel] { return panel->frame_spin->value() >= 96; })) << status.toStdString();
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    std::cout << "[  PLAYED  ] " << (panel->frame_spin->value() - from) / seconds << " frames a second ("
+              << comparison.fps << " the video's): " << status.toStdString() << "\n";
+#ifdef _WIN32
+    const QString decoding = QStringLiteral("GPU: d3d11va");
+    const QString drawing = QStringLiteral("Direct3D 11");
+#else
+    const QString decoding = QStringLiteral("GPU: videotoolbox");
+    const QString drawing = QStringLiteral("Metal");
+#endif
+    EXPECT_TRUE(status.contains("Frame-locked GPU pair")) << status.toStdString();
+    EXPECT_TRUE(status.contains("source soundtrack")) << status.toStdString();
+    EXPECT_TRUE(status.contains(drawing)) << status.toStdString();
+    EXPECT_TRUE(status.contains("source " + decoding)) << status.toStdString();
+    EXPECT_TRUE(status.contains("distorted " + decoding)) << status.toStdString();
+
+    panel->cycle_distorted(1);  // what Right does
+    EXPECT_EQ(panel->video_combo->currentText().toStdString(), "encode2");
+    const int switched = panel->frame_spin->value();
+    ASSERT_TRUE(wait_until([&panel, switched] { return panel->frame_spin->value() >= switched + 48; }))
+        << status.toStdString();
+    QTest::keyPress(panel->video_view, Qt::Key_S);
+    const int sourced = panel->frame_spin->value();
+    ASSERT_TRUE(wait_until([&panel, sourced] { return panel->frame_spin->value() >= sourced + 48; }))
+        << status.toStdString();
+    QTest::keyRelease(panel->video_view, Qt::Key_S);
+    EXPECT_TRUE(status.contains("Frame-locked GPU pair")) << status.toStdString();
+
+    panel->play_button->click();
+    panel->cancel();
+    ASSERT_TRUE(wait_until([&panel] { return FramePanelTest::idle(*panel); }));
+#endif
 }
 
 // Real frames of a real clip's resolution test (still frames: it does not

@@ -1,7 +1,11 @@
 #include "native_decoder.h"
 
+#ifdef _WIN32
 #include <d3d11.h>
 #include <wrl/client.h>
+#else
+#include <CoreVideo/CoreVideo.h>
+#endif
 
 #include <QStringList>
 
@@ -21,7 +25,9 @@
 #include "vml/film_grain.h"
 #include "vml/platform/system.h"
 
+#ifdef _WIN32
 using Microsoft::WRL::ComPtr;
+#endif
 
 namespace vml::app {
 
@@ -41,6 +47,7 @@ QString error_text(int code) {
     return QString::fromUtf8(text.data());
 }
 
+#ifdef _WIN32
 // The most pictures an HEVC stream's decoder keeps at once (its decoded
 // picture buffer, MaxDpbSize), from its level and picture size as H.265's
 // Annex A.4.2 limits them; 16, the most the standard allows, where the
@@ -285,6 +292,38 @@ private:
     Size output_;
     DXGI_FORMAT format_ = DXGI_FORMAT_NV12;
 };
+#else
+// FFmpeg's choice of pictures on macOS: VideoToolbox's, for 4:2:0 video of 8
+// or 10 bits, which it gives in NV12's or P010's layout, as the presenter
+// draws them; else none (the decoder then fails, and the video is decoded in
+// software, as on Windows for a GPU without the video's decoder).
+AVPixelFormat videotoolbox_format(AVCodecContext* context, const AVPixelFormat* formats) {
+    const AVPixelFormat software = context->sw_pix_fmt;
+    const bool drawn = software == AV_PIX_FMT_YUV420P || software == AV_PIX_FMT_YUVJ420P ||
+                       software == AV_PIX_FMT_YUV420P10LE || software == AV_PIX_FMT_NV12 ||
+                       software == AV_PIX_FMT_P010LE;
+    for (const AVPixelFormat* format = formats; *format != AV_PIX_FMT_NONE; ++format) {
+        if (*format == AV_PIX_FMT_VIDEOTOOLBOX && drawn) {
+            return *format;
+        }
+    }
+    return AV_PIX_FMT_NONE;
+}
+
+// Whether FFmpeg decodes `codec` with VideoToolbox.
+bool decodes_on_gpu(const AVCodec* codec) {
+    for (int index = 0;; ++index) {
+        const AVCodecHWConfig* config = avcodec_get_hw_config(codec, index);
+        if (config == nullptr) {
+            return false;
+        }
+        if (config->device_type == AV_HWDEVICE_TYPE_VIDEOTOOLBOX && config->pix_fmt == AV_PIX_FMT_VIDEOTOOLBOX &&
+            (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) != 0) {
+            return true;
+        }
+    }
+}
+#endif
 
 }  // namespace
 
@@ -299,8 +338,10 @@ struct FfmpegNativeVideo::Decoding {
     // frame's grain message rather than drawing it; the planes a frame with
     // grain is uploaded to, and the textures it is shown from.
     std::unique_ptr<NativeGrain> grain;
+#ifdef _WIN32
     std::array<ComPtr<ID3D11Texture2D>, 3> grain_planes;
     std::shared_ptr<UploadTextures> grain_targets;
+#endif
     AVPacket* packet = nullptr;
     AVFrame* frame = nullptr;
     SwsContext* converter = nullptr;
@@ -310,9 +351,11 @@ struct FfmpegNativeVideo::Decoding {
     std::int64_t frame_ns = 0;
     bool hardware = false;
     std::string codec_name;
+#ifdef _WIN32
     ComPtr<ID3D11Texture2D> staging;
     std::shared_ptr<UploadTextures> uploads;
     std::unique_ptr<Downscaler> downscaler;
+#endif
     // Whether the source could not be scaled down (it is then shown at its
     // own size).
     bool downscale_failed = false;
@@ -460,8 +503,9 @@ void FfmpegNativeVideo::fail(const QString& error) {
 
 namespace {
 
-// Opens `path` and its video's decoder: with Direct3D 11's video decoding on
-// `device` (`hardware`), or FFmpeg's software decoder; its reading stops when
+// Opens `path` and its video's decoder: with the GPU's video decoding on
+// `device` (`hardware`: Direct3D 11's, VideoToolbox's on macOS), or FFmpeg's
+// software decoder; its reading stops when
 // `interrupt` says so. A VVC video's film grain is drawn by the grain library
 // where it can be (`library_grain`), else by FFmpeg. Returns nothing, with
 // `error` set, when it cannot.
@@ -504,7 +548,11 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::p
     decoding->frame_ns = rate.num > 0 ? av_rescale(1'000'000'000, rate.den, rate.num) : 41'666'667;
     decoding->codec_name = codec->name;
     if (hardware && !decodes_on_gpu(codec)) {
+#ifdef _WIN32
         error = QStringLiteral("no Direct3D 11 decoder for %1").arg(QString::fromUtf8(codec->name));
+#else
+        error = QStringLiteral("no VideoToolbox decoder for %1").arg(QString::fromUtf8(codec->name));
+#endif
         return nullptr;
     }
     decoding->packet = av_packet_alloc();
@@ -532,6 +580,7 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::p
     }
     avcodec_parameters_to_context(decoding->codec, stream->codecpar);
     decoding->codec->pkt_timebase = stream->time_base;
+#ifdef _WIN32
     if (!hardware && library_grain && codec->id == AV_CODEC_ID_VVC && !NativeGrain::unavailable()) {
         // Each frame's film grain message given, not drawn: FFmpeg draws
         // H.274 grain on 8-bit video only, the grain library on every frame,
@@ -544,9 +593,16 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::p
             logger.warning(std::string("Film grain could not be drawn, and is left to FFmpeg: ") + error.what());
         }
     }
+#else
+    static_cast<void>(library_grain);  // FFmpeg draws it (native_grain_mac.cpp)
+#endif
     if (hardware) {
         decoding->codec->hw_device_ctx = av_buffer_ref(device.hardware());
+#ifdef _WIN32
         decoding->codec->get_format = direct3d_format;
+#else
+        decoding->codec->get_format = videotoolbox_format;
+#endif
         decoding->codec->extra_hw_frames = held_frames;
     } else {
         decoding->codec->thread_count = 0;  // as many as the CPU has
@@ -581,8 +637,10 @@ void copy_rows(std::uint8_t* target, std::size_t target_pitch, const std::uint8_
 }
 
 // Writes `frame`'s picture, in 4:2:0 with three planes or two, into NV12's
-// or P010's two planes at `luma` and `chroma`.
-bool write_planes(const AVFrame* frame, std::uint8_t* luma, std::uint8_t* chroma, std::size_t pitch) {
+// or P010's two planes at `luma` and `chroma`, `pitch` and `chroma_pitch`
+// bytes a row.
+bool write_planes(const AVFrame* frame, std::uint8_t* luma, std::uint8_t* chroma, std::size_t pitch,
+                  std::size_t chroma_pitch) {
     const int width = frame->width;
     const int height = frame->height;
     const int chroma_width = (width + 1) / 2;
@@ -591,13 +649,13 @@ bool write_planes(const AVFrame* frame, std::uint8_t* luma, std::uint8_t* chroma
     if (format == AV_PIX_FMT_NV12 || format == AV_PIX_FMT_P010LE) {
         const std::size_t sample = format == AV_PIX_FMT_NV12 ? 1 : 2;
         copy_rows(luma, pitch, frame->data[0], frame->linesize[0], sample * width, height);
-        copy_rows(chroma, pitch, frame->data[1], frame->linesize[1], sample * 2 * chroma_width, chroma_height);
+        copy_rows(chroma, chroma_pitch, frame->data[1], frame->linesize[1], sample * 2 * chroma_width, chroma_height);
         return true;
     }
     if (format == AV_PIX_FMT_YUV420P || format == AV_PIX_FMT_YUVJ420P) {
         copy_rows(luma, pitch, frame->data[0], frame->linesize[0], width, height);
         for (int row = 0; row < chroma_height; ++row) {
-            std::uint8_t* out = chroma + pitch * static_cast<std::size_t>(row);
+            std::uint8_t* out = chroma + chroma_pitch * static_cast<std::size_t>(row);
             const std::uint8_t* u = frame->data[1] + static_cast<std::ptrdiff_t>(frame->linesize[1]) * row;
             const std::uint8_t* v = frame->data[2] + static_cast<std::ptrdiff_t>(frame->linesize[2]) * row;
             for (int x = 0; x < chroma_width; ++x) {
@@ -618,7 +676,7 @@ bool write_planes(const AVFrame* frame, std::uint8_t* luma, std::uint8_t* chroma
             }
         }
         for (int row = 0; row < chroma_height; ++row) {
-            auto* out = reinterpret_cast<std::uint16_t*>(chroma + pitch * static_cast<std::size_t>(row));
+            auto* out = reinterpret_cast<std::uint16_t*>(chroma + chroma_pitch * static_cast<std::size_t>(row));
             const auto* u =
                 reinterpret_cast<const std::uint16_t*>(frame->data[1] + static_cast<std::ptrdiff_t>(frame->linesize[1]) * row);
             const auto* v =
@@ -667,6 +725,7 @@ OwnedFrame converted_to_420(SwsContext*& converter, const AVFrame* frame, bool t
     return converted;
 }
 
+#ifdef _WIN32
 // A film grain message as FFmpeg gives it (H.274's), as the grain library
 // takes it.
 FilmGrainMessage grain_message(const AVFilmGrainH274Params& h274) {
@@ -688,7 +747,9 @@ FilmGrainMessage grain_message(const AVFilmGrainH274Params& h274) {
     }
     return message;
 }
+#endif
 
+#ifdef _WIN32
 // Makes sure `texture` is a `width` x `height` texture in `format`, for
 // `usage` and `bind` (with `cpu_access`), making it again if not; false
 // when it cannot be made.
@@ -714,6 +775,7 @@ bool ensure_texture(ID3D11Device* device, ComPtr<ID3D11Texture2D>& texture, UINT
     texture.Reset();
     return SUCCEEDED(device->CreateTexture2D(&description, nullptr, &texture));
 }
+#endif
 
 }  // namespace
 
@@ -742,7 +804,9 @@ private:
     bool grain_left_to_ffmpeg();
     bool decode_on_in_software();
     bool give(const AVFrame* frame, std::int64_t time_ns);
+#ifdef _WIN32
     std::shared_ptr<ID3D11Texture2D> grained(const AVFrame* frame, const AVFilmGrainParams& given);
+#endif
     bool upload(const AVFrame* frame, NativeFrame& made);
     void scale_down(const AVFrame* frame, NativeFrame& made);
     void report(const NativeFrame& made);
@@ -752,8 +816,8 @@ private:
     const AVIOInterruptCB interrupt_;
     // Why the video could not be opened, if it could not.
     QString why_;
-    // Direct3D 11's video decoding where the GPU decodes the video, else
-    // software (FFmpeg's decoders, dav1d for AV1).
+    // The GPU's video decoding (Direct3D 11's, VideoToolbox's) where it
+    // decodes the video, else software (FFmpeg's decoders, dav1d for AV1).
     std::unique_ptr<Decoding> decoding_;
     const QString side_name_;
     // PQ video shown as it comes (NativeFrame::hdr10).
@@ -779,7 +843,9 @@ private:
     // What the status line says about the film grain: drawn, or turned off
     // by an error (then not tried again for this video).
     std::optional<QString> grain_note_;
+#ifdef _WIN32
     bool grain_off_ = false;
+#endif
     // The status line given, and the grain note it had.
     bool reported_ = false;
     std::optional<QString> reported_grain_note_;
@@ -1041,6 +1107,7 @@ bool FfmpegNativeVideo::Session::give(const AVFrame* frame, std::int64_t time_ns
     made->matrix = std::string(yuv_matrix_name(space != nullptr ? space : "", frame->height));
     made->full_range = frame->color_range == AVCOL_RANGE_JPEG;
     made->hdr10 = hdr10_;
+#ifdef _WIN32
     if (frame->format == AV_PIX_FMT_D3D11) {
         // A slice of the decoder's texture array, held with the frame.
         const auto* frames = reinterpret_cast<const AVHWFramesContext*>(frame->hw_frames_ctx->data);
@@ -1071,6 +1138,29 @@ bool FfmpegNativeVideo::Session::give(const AVFrame* frame, std::int64_t time_ns
             return false;
         }
     }
+#else
+    if (frame->format == AV_PIX_FMT_VIDEOTOOLBOX) {
+        // VideoToolbox's pixel buffer, held with the frame.
+        made->picture = reinterpret_cast<CVPixelBufferRef>(frame->data[3]);
+        const OSType layout = CVPixelBufferGetPixelFormatType(made->picture);
+        made->ten_bit = layout == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange ||
+                        layout == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange;
+        AVFrame* kept = av_frame_clone(frame);
+        if (kept == nullptr) {
+            return false;
+        }
+        made->keep = std::shared_ptr<AVFrame>(kept, [](AVFrame* held) { av_frame_free(&held); });
+    } else {
+        const AVPixFmtDescriptor* description = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(frame->format));
+        if (description == nullptr) {
+            return false;
+        }
+        made->ten_bit = description->comp[0].depth > 8;
+        if (!upload(frame, *made)) {
+            return false;
+        }
+    }
+#endif
     if (video_.scale_to_ && !decoding_->downscale_failed) {
         scale_down(frame, *made);
     }
@@ -1079,6 +1169,7 @@ bool FfmpegNativeVideo::Session::give(const AVFrame* frame, std::int64_t time_ns
     return true;
 }
 
+#ifdef _WIN32
 // `frame`'s film grain (`given`, its message as FFmpeg gave it) drawn on its
 // planes, uploaded, and packed into the texture it is shown from; nothing
 // when it cannot be drawn so (it is then shown without it): only H.274's
@@ -1142,11 +1233,13 @@ std::shared_ptr<ID3D11Texture2D> FfmpegNativeVideo::Session::grained(const AVFra
     grain_note_ = QStringLiteral("film grain synthesized");
     return target;
 }
+#endif
 
 // `frame`, decoded in software, uploaded into a texture of its own, NV12 or
 // P010, which `made` then holds: converted first when it is not 4:2:0.
 // False when it cannot be.
 bool FfmpegNativeVideo::Session::upload(const AVFrame* frame, NativeFrame& made) {
+#ifdef _WIN32
     const DXGI_FORMAT format = made.ten_bit ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
     // NV12 and P010 textures have even sizes; the picture is drawn from its
     // own size.
@@ -1184,7 +1277,7 @@ bool FfmpegNativeVideo::Session::upload(const AVFrame* frame, NativeFrame& made)
         // The second plane follows the first, at the same pitch.
         const bool written = write_planes(
             picture, luma, luma + static_cast<std::size_t>(mapped.RowPitch) * static_cast<std::size_t>(height),
-            mapped.RowPitch);
+            mapped.RowPitch, mapped.RowPitch);
         context->Unmap(decoding_->staging.Get(), 0);
         if (!written) {
             return false;
@@ -1194,11 +1287,58 @@ bool FfmpegNativeVideo::Session::upload(const AVFrame* frame, NativeFrame& made)
     made.texture = texture.get();
     made.keep = std::move(texture);
     return true;
+#else
+    // Into a pixel buffer of its own (an IOSurface, which the GPU reads as
+    // it is), NV12's or P010's layout: even sizes, the picture drawn from its
+    // own.
+    const int width = (frame->width + 1) & ~1;
+    const int height = (frame->height + 1) & ~1;
+    OwnedFrame converted;
+    const AVFrame* picture = frame;
+    if (!is_420(static_cast<AVPixelFormat>(frame->format))) {
+        converted = converted_to_420(decoding_->converter, frame, made.ten_bit);
+        if (!converted) {
+            return false;
+        }
+        picture = converted.get();
+    }
+    HeldPixelBuffer buffer = video_.device_->take_buffer(width, height, made.ten_bit);
+    if (!buffer || CVPixelBufferLockBaseAddress(buffer.get(), 0) != kCVReturnSuccess) {
+        return false;
+    }
+    const bool written =
+        write_planes(picture, static_cast<std::uint8_t*>(CVPixelBufferGetBaseAddressOfPlane(buffer.get(), 0)),
+                     static_cast<std::uint8_t*>(CVPixelBufferGetBaseAddressOfPlane(buffer.get(), 1)),
+                     CVPixelBufferGetBytesPerRowOfPlane(buffer.get(), 0),
+                     CVPixelBufferGetBytesPerRowOfPlane(buffer.get(), 1));
+    CVPixelBufferUnlockBaseAddress(buffer.get(), 0);
+    if (!written) {
+        return false;
+    }
+    made.picture = buffer.get();
+    made.keep = std::move(buffer);
+    return true;
+#endif
 }
 
 // The source, `made` from `frame`, scaled down to the test video's size
 // (cropped first), when it can be; else it is shown at its own size.
 void FfmpegNativeVideo::Session::scale_down(const AVFrame* frame, NativeFrame& made) {
+#ifndef _WIN32
+    // On the GPU, by the device's scaler (native_device_mac.mm).
+    const std::optional<CropBox>& crop = video_.comparison_.source_crop;
+    const std::array<int, 4> area = crop ? std::array<int, 4>{crop->x, crop->y, crop->w, crop->h}
+                                         : std::array<int, 4>{0, 0, frame->width, frame->height};
+    if (HeldPixelBuffer scaled = video_.device_->scale(made.picture, area, *video_.scale_to_)) {
+        made.picture = scaled.get();
+        made.width = video_.scale_to_->first;
+        made.height = video_.scale_to_->second;
+        made.prepared = true;
+        made.keep = std::move(scaled);
+    } else {
+        decoding_->downscale_failed = true;
+    }
+#else
     const std::lock_guard lock(video_.device_->lock());
     try {
         if (!decoding_->downscaler) {
@@ -1222,6 +1362,7 @@ void FfmpegNativeVideo::Session::scale_down(const AVFrame* frame, NativeFrame& m
     } catch (const std::exception&) {
         decoding_->downscale_failed = true;
     }
+#endif
 }
 
 // The status line for frames like `made`, given when it changes: the first
@@ -1238,9 +1379,15 @@ void FfmpegNativeVideo::Session::report(const NativeFrame& made) {
             .arg(made.width)
             .arg(made.height)
             .arg(made.ten_bit ? QStringLiteral("P010_10LE") : QStringLiteral("NV12")),
+#ifdef _WIN32
         QStringLiteral("memory:D3D11Memory"),
         decoding_->hardware ? QStringLiteral("%1 GPU: d3d11va %2").arg(side_name_, decoder)
                             : QStringLiteral("%1 software: %2").arg(side_name_, decoder)};
+#else
+        QStringLiteral("memory:IOSurface"),
+        decoding_->hardware ? QStringLiteral("%1 GPU: videotoolbox %2").arg(side_name_, decoder)
+                            : QStringLiteral("%1 software: %2").arg(side_name_, decoder)};
+#endif
     if (grain_note_) {
         details.append(*grain_note_);
     }

@@ -45,11 +45,16 @@ if [[ -z "$ffmpeg" ]] || ! command -v ffprobe > /dev/null; then
 fi
 
 # 1. The bundled tools, from their pinned releases' source: libvmaf-fast's
-#    libvmaf.dylib and libjxl's two tools (not in git).
+#    libvmaf.dylib, libjxl's two tools, and Video Compare's FFmpeg libraries
+#    and dav1d (not in git).
 step "Building libvmaf-fast"
 "$project/scripts/build_libvmaf_fast_macos.sh" | sed 's/^/    /'
 step "Building libjxl's ssimulacra2 and butteraugli_main"
 "$project/scripts/build_libjxl_macos.sh" | sed 's/^/    /'
+step "Building FFmpeg's libraries for Video Compare"
+"$project/scripts/build_ffmpeg_decoders_macos.sh" | sed 's/^/    /'
+step "Building dav1d"
+"$project/scripts/build_dav1d_macos.sh" | sed 's/^/    /'
 
 # 2. The programs, in their Release build.
 step "Building the C++ app"
@@ -133,13 +138,31 @@ EOF
 # The app's files: the models, the window's catalogs, and macOS's tools
 # (not Windows' .exe and .dll files, which share the folders).
 resources="$contents/Resources/resources"
-mkdir -p "$resources/translations" "$resources/tools/libjxl" "$resources/tools/libvmaf"
+mkdir -p "$resources/translations" "$resources/tools/libjxl" "$resources/tools/libvmaf" "$resources/tools/ffmpeg"
 ditto "$app_files/models" "$resources/models"
 cp "$app_files"/translations/*.json "$resources/translations/"
 cp "$app_files/tools/libjxl/ssimulacra2" "$app_files/tools/libjxl/butteraugli_main" \
     "$app_files/tools/libjxl/LIBJXL-VERSION.txt" "$app_files"/tools/libjxl/LICENSE.*.txt "$resources/tools/libjxl/"
 cp "$app_files/tools/libvmaf/libvmaf.dylib" "$app_files/tools/libvmaf/libvmaf-fast.json" "$resources/tools/libvmaf/"
 ditto "$app_files/tools/libvmaf/licenses" "$resources/tools/libvmaf/licenses"
+cp "$app_files"/tools/ffmpeg/*.dylib "$resources/tools/ffmpeg/"
+ditto "$app_files/tools/ffmpeg/licenses" "$resources/tools/ffmpeg/licenses"
+# The window finds them by @rpath in the bundle's tools/ffmpeg, where the app
+# looks for them (native_device_mac.mm), as a build run from its folder finds
+# the repository's. macdeployqt copied them into Frameworks and linked the
+# window to its copies: the links go back to @rpath and the copies go. It
+# also dropped the repository's run path, which would name the Mac that
+# built it.
+for library in "$app_files"/tools/ffmpeg/lib{avcodec,avformat,avutil,swresample,swscale}.*.dylib; do
+    name="$(basename "$library")"
+    install_name_tool -change "@loader_path/../Frameworks/$name" "@rpath/$name" "$contents/MacOS/VideoMetricsLab"
+    rm -f "$contents/Frameworks/$name"
+done
+install_name_tool -delete_rpath "$cpp/../resources/tools/ffmpeg" "$contents/MacOS/VideoMetricsLab" 2>/dev/null || true
+if otool -l "$contents/MacOS/VideoMetricsLab" | grep -A2 LC_RPATH | grep -q "$HOME"; then
+    echo "The window still has a run path of this Mac's" >&2
+    exit 1
+fi
 
 # The project's terms, the notices of what it bundles, Qt's licence, and the
 # MIT notices of nlohmann/json and miniz, compiled into both programs.

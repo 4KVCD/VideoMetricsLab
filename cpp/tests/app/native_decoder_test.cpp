@@ -6,12 +6,17 @@
 // size is the source's picture; and a VVC video's film grain is drawn as the
 // Python app draws it, or by FFmpeg where that is AV1's. The tests run on
 // every GPU of the PC (NVIDIA's and Intel's on the development PC). They
-// need a Direct3D 11 GPU and the bundled FFmpeg libraries.
+// need a Direct3D 11 GPU (on macOS, the Mac's, with VideoToolbox) and the
+// bundled FFmpeg libraries.
 #include "native_decoder.h"
 
+#ifdef _WIN32
 #include <d3d11.h>
 #include <dxgi.h>
 #include <wrl/client.h>
+#else
+#include <CoreVideo/CoreVideo.h>
+#endif
 
 #include <QApplication>
 #include <QDeadlineTimer>
@@ -23,6 +28,7 @@
 #include <array>
 #include <cmath>
 #include <fstream>
+#include <iostream>
 #include <iterator>
 #include <map>
 #include <numeric>
@@ -83,6 +89,31 @@ NativeFramePtr decode_frame(const std::shared_ptr<NativeDevice>& device, const F
 // (ffmpeg_picture): the luma's rows, then the chroma's, its two samples side
 // by side; 8-bit samples, or 10-bit ones. The luma alone unless `chroma`.
 std::vector<int> read_picture(NativeDevice& device, const NativeFrame& frame, bool chroma = true) {
+#ifndef _WIN32
+    // The pixel buffer's planes, read where they are (an IOSurface).
+    static_cast<void>(device);
+    std::vector<int> samples;
+    if (CVPixelBufferLockBaseAddress(frame.picture, kCVPixelBufferLock_ReadOnly) != kCVReturnSuccess) {
+        ADD_FAILURE() << "the frame could not be read back";
+        return samples;
+    }
+    const auto rows = [&](std::size_t plane, int count, int per_row) {
+        const auto* base = static_cast<const unsigned char*>(CVPixelBufferGetBaseAddressOfPlane(frame.picture, plane));
+        const std::size_t pitch = CVPixelBufferGetBytesPerRowOfPlane(frame.picture, plane);
+        for (int row = 0; row < count; ++row) {
+            const unsigned char* line = base + pitch * static_cast<std::size_t>(row);
+            for (int x = 0; x < per_row; ++x) {
+                samples.push_back(frame.ten_bit ? (line[2 * x] | (line[2 * x + 1] << 8)) >> 6 : line[x]);
+            }
+        }
+    };
+    rows(0, frame.height, frame.width);
+    if (chroma) {
+        rows(1, (frame.height + 1) / 2, 2 * ((frame.width + 1) / 2));
+    }
+    CVPixelBufferUnlockBaseAddress(frame.picture, kCVPixelBufferLock_ReadOnly);
+    return samples;
+#else
     D3D11_TEXTURE2D_DESC description{};
     frame.texture->GetDesc(&description);
     D3D11_TEXTURE2D_DESC staged = description;
@@ -123,6 +154,7 @@ std::vector<int> read_picture(NativeDevice& device, const NativeFrame& frame, bo
     }
     device.context()->Unmap(staging.Get(), 0);
     return samples;
+#endif
 }
 
 // FFmpeg's own picture of frame `wanted` of `path`, through `filter` after
@@ -147,6 +179,18 @@ std::vector<int> ffmpeg_picture(const test::Tools& found, const std::filesystem:
     return luma;
 }
 
+// Whether `found`'s FFmpeg has the encoder `name` (Homebrew's has no
+// libvvenc, say).
+bool has_encoder(const test::Tools& found, const std::string& name) {
+    platform::ChildProcess process = platform::ChildProcess::start({found.ffmpeg, "-hide_banner", "-encoders"});
+    std::string listed;
+    while (const std::optional<std::string> line = process.read_line()) {
+        listed += *line + "\n";
+    }
+    process.wait();
+    return listed.find(" " + name + " ") != std::string::npos;
+}
+
 // The numbers of the first `count` frames `video` gives once its seek asked
 // for is made, as the playback pool takes them; fewer if they do not come.
 std::vector<long long> frames_after_seek(FfmpegNativeVideo& video, double fps, std::size_t count) {
@@ -167,8 +211,11 @@ std::vector<long long> frames_after_seek(FfmpegNativeVideo& video, double fps, s
 }
 
 // The PC's GPUs, by DXGI's order: each's number and name. Windows' software
-// renderer is left out.
+// renderer is left out. (The Mac's one GPU on macOS.)
 std::vector<std::pair<unsigned, std::string>> gpus() {
+#ifndef _WIN32
+    return {{0, "Metal"}};
+#else
     std::vector<std::pair<unsigned, std::string>> found;
     Microsoft::WRL::ComPtr<IDXGIFactory1> factory;
     if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
@@ -184,6 +231,7 @@ std::vector<std::pair<unsigned, std::string>> gpus() {
         adapter.Reset();
     }
     return found;
+#endif
 }
 
 class NativeDecoderTest : public ::testing::Test {
@@ -198,13 +246,18 @@ protected:
         }
         for (const auto& [index, name] : gpus()) {
             try {
+#ifdef _WIN32
                 devices_.emplace_back(name, std::make_shared<NativeDevice>(index));
+#else
+                static_cast<void>(index);
+                devices_.emplace_back(name, std::make_shared<NativeDevice>());
+#endif
             } catch (const std::exception& error) {
                 ADD_FAILURE() << name << ": " << error.what();
             }
         }
         if (devices_.empty()) {
-            GTEST_SKIP() << "no Direct3D 11 GPU";
+            GTEST_SKIP() << "no GPU device";
         }
     }
 
@@ -242,18 +295,37 @@ TEST_F(NativeDecoderTest, TheFramesAreFfmpegsCountedFromTheFirst) {
         std::string decoder;                // the decoder every GPU uses, or ""
         bool exact = true;                  // false: MPEG-2's own leeway
     };
-    const std::vector<Case> cases{
-        {"h264.mp4", {"-c:v", "libx264", "-preset", "veryfast", "-bf", "3", "-pix_fmt", "yuv420p"}, "GPU: d3d11va h264"},
+#ifdef _WIN32
+    const std::string gpu_decoding = "GPU: d3d11va ";
+#else
+    const std::string gpu_decoding = "GPU: videotoolbox ";
+#endif
+    std::vector<Case> cases{
+        {"h264.mp4", {"-c:v", "libx264", "-preset", "veryfast", "-bf", "3", "-pix_fmt", "yuv420p"}, gpu_decoding + "h264"},
         {"hevc.mkv", {"-c:v", "libx265", "-preset", "ultrafast", "-x265-params", "bframes=4:log-level=error",
                       "-pix_fmt", "yuv420p10le"},
-         "GPU: d3d11va hevc"},
+         gpu_decoding + "hevc"},
         {"av1.mkv", {"-c:v", "libsvtav1", "-preset", "12", "-pix_fmt", "yuv420p"}, ""},
         {"vp9.webm", {"-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "-pix_fmt", "yuv420p"}, ""},
         {"mpeg2.mkv", {"-c:v", "mpeg2video", "-q:v", "4", "-pix_fmt", "yuv420p"}, "", false},
+        // Apple's GPUs decode 10-bit H.264 (an M1 Pro does).
+#ifdef _WIN32
         {"high10.mkv", {"-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p10le"}, "software: h264"},
+#else
+        {"high10.mkv", {"-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p10le"}, gpu_decoding + "h264"},
+#endif
         {"vvc.mkv", {"-c:v", "libvvenc", "-preset", "faster", "-pix_fmt", "yuv420p10le"}, "software: vvc"},
         {"prores.mov", {"-c:v", "prores_ks", "-profile:v", "2", "-pix_fmt", "yuv422p10le"}, "software: prores"},
     };
+    // A clip whose encoder this FFmpeg lacks is left out, and said so.
+    std::erase_if(cases, [this](const Case& item) {
+        const std::string& encoder = item.encoding[1];
+        if (has_encoder(*found_, encoder)) {
+            return false;
+        }
+        std::cerr << "[   NOTE   ] " << item.name << " left out: this FFmpeg has no " << encoder << " encoder\n";
+        return true;
+    });
     std::vector<FrameComparison> clips;
     for (const Case& item : cases) {
         std::vector<std::string> arguments{"-f", "lavfi", "-i", "testsrc2=s=640x360:r=24000/1001:d=2"};
@@ -650,6 +722,7 @@ TEST_F(NativeDecoderTest, VvcFilmGrainIsDrawnAsThePythonAppDrawsIt) {
     }
 }
 
+#ifdef _WIN32
 // A texture's samples read back as stored: an NV12 or P010 texture's luma
 // rows (`height` of `width`), then its chroma rows, two samples side by side.
 std::vector<int> read_stored(NativeDevice& device, ID3D11Texture2D* texture, int width, int height) {
@@ -828,6 +901,7 @@ TEST_F(NativeDecoderTest, FilmGrainOnOtherFormatsIsTheLibrarysDrawingShownAs420)
         }
     }
 }
+#endif
 
 // AV1's film grain in a VVC video (AFGS1), which the grain library does not
 // draw, is left to FFmpeg, which does: frames 0 and 9 of a VVC clip with it
