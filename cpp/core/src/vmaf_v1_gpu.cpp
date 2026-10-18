@@ -565,10 +565,18 @@ struct V1Scorer::State {
     }
     // libvmaf's CPU extractors, which run only for the features the GPU
     // does not calculate, on `threads` workers (else as many as the cores
-    // allow), with a pool of pictures for `width` x `height` x `bit_depth`.
+    // allow, or three for SpEED alone), with a pool of pictures for `width`
+    // x `height` x `bit_depth`.
     void start_cpu_features(const ModelOptions& options, int width, int height, int bit_depth,
                             std::optional<int> threads) {
-        const int workers = threads ? *threads : std::max(2, std::min(16, static_cast<int>(platform::logical_cores()) - 2));
+        int workers = threads ? *threads : std::max(2, std::min(16, static_cast<int>(platform::logical_cores()) - 2));
+        // SpEED's chroma alone (arm64, start_speed_on_gpu) keeps up with the
+        // GPU on three: an M1 Pro scored 4K 10-bit and 1080p as fast on two
+        // as on eight, and the pool of pictures for eight was 380 MB more at
+        // 4K (two pictures for each worker and two more pairs).
+        if (!threads && on_gpu.contains(v1_cambi) && !on_gpu.contains(v1_speed)) {
+            workers = std::min(workers, 3);
+        }
         LibvmafHandles handles(library);
         handles.start(workers, 1);
         use_cpu_features(library, handles.context, options, on_gpu);
