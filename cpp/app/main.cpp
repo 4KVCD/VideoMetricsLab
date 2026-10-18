@@ -44,17 +44,25 @@
 
 namespace {
 
-// Shows the window in the `chosen` language, or Windows' display language
-// when none is chosen, with English where there is no translation. Qt's own
-// dialogs and buttons follow, in Qt's translations where it has them, and a
-// right-to-left language mirrors the window.
+// The system the language and the theme follow when Settings leaves them so.
+#ifdef __APPLE__
+const std::string system_name = "macOS";
+#else
+const std::string system_name = "Windows";
+#endif
+
+// Shows the window in the `chosen` language, or the system's (Windows' or
+// macOS's) display language when none is chosen, with English where there
+// is no translation. Qt's own dialogs and buttons follow, in Qt's
+// translations where it has them, and a right-to-left language mirrors the
+// window.
 void apply_language(const QString& chosen) {
     const QString windows = vml::app::windows_language();
     const QString code = vml::app::set_language(chosen.isEmpty() ? windows : chosen);
     vml::app_log::write(vml::app_log::Level::info, "vml.main",
                         "Language: " + code.toStdString() + " (" +
-                            (chosen.isEmpty() ? "as Windows" : "chosen in Settings") +
-                            "; Windows: " + windows.toStdString() + ")");
+                            (chosen.isEmpty() ? "as " + system_name : std::string("chosen in Settings")) + "; " +
+                            system_name + ": " + windows.toStdString() + ")");
     vml::app::install_qt_translations(code);
     if (vml::app::right_to_left(code)) {
         QApplication::setLayoutDirection(Qt::RightToLeft);
@@ -195,7 +203,7 @@ int main(int argc, char** argv) {
     // Before the window is built, which reads it to colour itself.
     app::theme::apply_theme(QString::fromStdString(settings.theme));
     app_log::write(app_log::Level::info, "vml.main",
-                   "Theme: " + (settings.theme.empty() ? std::string("as Windows") : settings.theme));
+                   "Theme: " + (settings.theme.empty() ? "as " + system_name : settings.theme));
     set_gpu_backend(settings.gpu_backend);
     set_vship_backend(settings.gpu_backend);
     // The first probes load Vship and start the GPU's driver, which takes

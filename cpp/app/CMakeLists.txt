@@ -78,8 +78,14 @@ if(WIN32 AND MSVC)
     target_compile_definitions(vml_app PUBLIC VML_NATIVE_PLAYBACK PRIVATE NOMINMAX)
 endif()
 
-add_executable(VideoMetricsLab WIN32 main.cpp)
+add_executable(VideoMetricsLab WIN32 MACOSX_BUNDLE main.cpp)
 target_link_libraries(VideoMetricsLab PRIVATE vml_app vml_compile_options)
+if(APPLE)
+    # An app bundle, VideoMetricsLab.app; built for the macOS the presets set
+    # (CMAKE_OSX_DEPLOYMENT_TARGET: 14.4, Qt 6.12's earliest).
+    set_target_properties(VideoMetricsLab PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/packaging/macos/Info.plist.in)
+endif()
 if(MSVC)
     # Long paths, as vml-cli (cli/CMakeLists.txt).
     target_sources(VideoMetricsLab PRIVATE ../cli/vml-cli.manifest)

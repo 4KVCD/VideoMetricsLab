@@ -136,11 +136,23 @@ struct ChildProcess::State {
         return ended;
     }
 
-    ~State() {
-        if (!reap(false)) {
-            kill(-id, SIGKILL);
-            reap(true);
+    // Sends `signal` to the program's process group: the program and what it
+    // started, which may run on after the program itself has ended. Only
+    // while the program is not reaped (running, or ended and waiting to be
+    // reaped), when its id -- the group's -- cannot belong to another
+    // process. Whether it was sent.
+    bool signal_group(int signal) {
+        const std::lock_guard lock(wait_mutex);
+        if (ended) {
+            return false;
         }
+        kill(-id, signal);
+        return true;
+    }
+
+    ~State() {
+        signal_group(SIGKILL);
+        reap(true);
         if (error_reader.joinable()) {
             error_reader.join();
         }
@@ -302,19 +314,14 @@ bool ChildProcess::wait_for(std::chrono::milliseconds timeout) {
     return true;
 }
 
-void ChildProcess::terminate() {
-    if (!state_->reap(false)) {
-        kill(-state_->id, SIGKILL);
-    }
-}
+void ChildProcess::terminate() { state_->signal_group(SIGKILL); }
 
 void ChildProcess::suspend() {
     // Sent again each time: a process stopped already stays so, and one that
     // joined the group since stops too.
     const std::lock_guard lock(state_->hold_mutex);
     ++state_->holds;
-    if (!state_->reap(false)) {
-        kill(-state_->id, SIGSTOP);
+    if (state_->signal_group(SIGSTOP)) {
         state_->stopped = true;
     }
 }
@@ -324,8 +331,8 @@ void ChildProcess::resume() {
     if (state_->holds == 0 || --state_->holds > 0) {
         return;  // not held, or still held by another
     }
-    if (state_->stopped && !state_->reap(false)) {
-        kill(-state_->id, SIGCONT);
+    if (state_->stopped) {
+        state_->signal_group(SIGCONT);
     }
     state_->stopped = false;
 }

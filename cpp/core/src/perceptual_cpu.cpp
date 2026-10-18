@@ -688,11 +688,18 @@ std::optional<std::filesystem::path> find_metric_executable(std::string_view met
         return std::filesystem::exists(path, error) ? std::optional(path) : std::nullopt;
     }
     // libjxl names the tool butteraugli_main. The short name is accepted too,
-    // for tools the user installed.
+    // for tools the user installed. Elsewhere than Windows, never the .exe
+    // files: the repository's resources folder has Windows' tools.
+#ifdef _WIN32
     const std::vector<std::string> names =
         metric == "ssimulacra2"
             ? std::vector<std::string>{"ssimulacra2.exe", "ssimulacra2"}
             : std::vector<std::string>{"butteraugli_main.exe", "butteraugli.exe", "butteraugli_main", "butteraugli"};
+#else
+    const std::vector<std::string> names = metric == "ssimulacra2"
+                                               ? std::vector<std::string>{"ssimulacra2"}
+                                               : std::vector<std::string>{"butteraugli_main", "butteraugli"};
+#endif
     for (const std::string& name : names) {
         const std::filesystem::path candidate = libjxl_folder() / name;
         std::error_code error;

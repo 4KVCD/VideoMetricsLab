@@ -10,3 +10,7 @@ gui_stdout.log
 gui_stderr.log
 # The native libraries, built from native/ by the scripts' build_*.ps1
 resources/native/*.dll
+# macOS's tools, built by scripts/build_*_macos.sh (the release script runs them)
+resources/tools/libvmaf/libvmaf.dylib
+resources/tools/libjxl/ssimulacra2
+resources/tools/libjxl/butteraugli_main

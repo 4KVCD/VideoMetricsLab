@@ -74,3 +74,115 @@ reaches the tab or a tab beside it opens.
   ported from: the same tables, per-frame CSV files, JSON results, saved
   scores and exit codes.
 - v2.1 keeps its saved scores in the same files as v2.0 and reads v2.0's.
+
+## macOS port
+
+The command line and the window run on Apple silicon Macs (arm64), macOS
+14.4 or later (Qt 6.12's earliest), as a self-contained app bundle,
+`VideoMetricsLab.app` (`scripts/build_release_macos.sh`). Every metric but
+CVVDP runs, on the CPU.
+
+### What macOS needed
+
+- **The build.** The engine and the window compiled with Apple Clang with
+  four fixes for warnings MSVC does not give (an unused constant, a test's
+  missing field, a copied loop variable). The `macos` preset builds for
+  arm64 and macOS 14.4.
+- **The app bundle.** The window is built as `VideoMetricsLab.app`
+  (`cpp/packaging/macos/Info.plist.in`). Its programs are in
+  `Contents/MacOS` and the app's files in `Contents/Resources/resources`.
+  `packaged_resource_folder()` finds them there, and the self-test uses the
+  same function.
+- **FFmpeg.** The user installs it, `brew install ffmpeg`, which has
+  libvmaf. An app opened from the Finder does not have Homebrew on its
+  PATH, so the app also looks in Homebrew's and MacPorts' folders.
+- **The bundled tools** are built from their pinned releases' source,
+  because neither project publishes macOS builds: libvmaf-fast v1.1's
+  `libvmaf.dylib` and libjxl 0.12.0's `ssimulacra2` and `butteraugli_main`,
+  linked statically (`scripts/build_libvmaf_fast_macos.sh`,
+  `scripts/build_libjxl_macos.sh`). They link only the system's libraries,
+  and building them twice gives the same bytes. They are not committed.
+- **Processes and signals.** A cancelled or ended program's process group
+  is now signalled until the program is reaped, not only while it runs, so
+  what it started ends with it. The command line ignores SIGPIPE, as
+  Windows has no such signal: `VideoMetricsLab-cli ... | head` no longer
+  ends with 141 after the run. Ctrl+C's pipe is closed on exec.
+- **The package.** macdeployqt, then Qt's binaries thinned to arm64 (they
+  are universal), the plugins the app does not use removed as on Windows,
+  Qt's translations in `Contents/Resources/translations` (`qt.conf`), every
+  Mach-O file signed ad hoc and then the bundle. The script checks that
+  everything links only what is in the bundle or the system's, and runs the
+  self-test and `devices` from the bundle in an empty profile.
+  `.github/workflows/macos-package.yml` builds it on GitHub.
+
+### What failed, and why
+
+- The bundled SSIMULACRA2 and Butteraugli failed ("Permission denied"): the
+  lookup tried `ssimulacra2.exe` first and found Windows' copy in the
+  repository's resources. Elsewhere than Windows it now looks only for the
+  names without `.exe`.
+- The self-test spoke of `ffmpeg.exe` and warned about the GPU metrics'
+  frame decoders, which are built for Windows only.
+- Settings offered "Same as Windows" for the language and the theme, and
+  the graphs asked for Consolas, which macOS lacks (100 ms to find a
+  substitute at the first graph): macOS gets "Same as macOS" in every
+  language, and Menlo.
+- The window's tests set the profile folder with USERPROFILE, which macOS
+  does not read: run on a Mac, they wrote the user's real settings. They set
+  HOME there. A test that empties the PATH to hide FFmpeg also names no
+  other folders to look in (VML_FFMPEG_FOLDERS), Homebrew's included.
+- A Bitrate tab test read the table before the window had taken a message
+  already posted to it, and failed one run in three under load.
+
+### The same scores as Windows
+
+On the same frames (made by FFmpeg's filters alone, lossless FFV1, with the
+same frame hashes on both systems: a 1280x720 clip of 96 frames), on the
+CPU, frame by frame:
+
+| Metric | Mac against Windows |
+| --- | --- |
+| PSNR, XPSNR | identical on every frame, in FFmpeg and in the app |
+| SSIM | 10 frames differ, by 1e-6, in FFmpeg and in the app alike |
+| VMAF v0.6.1, VMAF NEG | 2 frames differ, by 8e-6 (one float step) |
+| VMAF v1 | 75 frames differ, by up to 8e-5 |
+| Butteraugli | 1 frame differs, by one float step (1e-6) |
+| SSIMULACRA2 | every frame differs, by up to 0.015 |
+
+- Clang fuses a multiply and an add into one instruction on Apple's chips,
+  rounding once where the Windows builds round twice; the app's own code is
+  built without that for this reason (`cpp/CMakeLists.txt`). Homebrew's
+  FFmpeg and libvmaf are built with it, and so is the app's libvmaf-fast,
+  so that its PSNR, SSIM and XPSNR are the user's FFmpeg's to the last
+  digit, as on Windows they are Gyan's FFmpeg's, and a score saved from
+  either route is the same. Built without it, libvmaf-fast's SSIM was
+  Windows' on every frame, and then differed from Homebrew's FFmpeg's.
+- libjxl's tools are built without it: Butteraugli then differs on 1 frame
+  rather than 10. SSIMULACRA2's vector code sums in another order on
+  Apple's chips (Highway's NEON against AVX2).
+- VMAF runs in FFmpeg's libvmaf filter, which is the libvmaf the user's
+  FFmpeg links (Homebrew's), not the app's.
+
+### Still to do
+
+- Video Compare plays through FFmpeg's pipes: native playback with Metal,
+  VideoToolbox and CoreAudio is the next phase. Its shaders will be compiled
+  from their source when the app starts (`newLibraryWithSource:`), because
+  the Command Line Tools have no offline Metal compiler. The compile runs
+  off the window's thread, so it does not hold up the window, and its time
+  is to be measured.
+- CVVDP and the GPU metrics run only on Vulkan; on macOS they stay on the
+  CPU (CVVDP is not available).
+
+### For the Linux port
+
+- Do the same: look for FFmpeg in the distribution's folders as well as on
+  the PATH; build libvmaf-fast and libjxl's tools from their pinned source,
+  linked statically; never pick a `.exe` file; ignore SIGPIPE in the command
+  line; decide, library by library, whether to fuse multiply-adds (GCC
+  does by default, on ARM and on x86 with FMA): as the distribution's
+  FFmpeg is built, for libvmaf-fast, and not, for libjxl's tools; set the
+  tests' profile folder with HOME.
+- Do differently: the resources are beside the programs, as on Windows,
+  and `libvulkan.so.1` is the Vulkan loader, so Vship's and VMAF's Vulkan
+  code may run there.

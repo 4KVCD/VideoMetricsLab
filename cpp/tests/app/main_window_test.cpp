@@ -51,6 +51,7 @@
 #include "theme.h"
 #include "vml/app_log.h"
 #include "vml/ffmpeg_run.h"
+#include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/metrics.h"
@@ -85,13 +86,22 @@ protected:
 
     static void TearDownTestSuite() { clips_.reset(); }
 
+#ifdef _WIN32
+    static constexpr const char* home_variable = "USERPROFILE";
+#else
+    static constexpr const char* home_variable = "HOME";
+#endif
+
     // A profile of the test's own, so that the user's real settings and
     // saved scores are never read or written. Its settings.json ticks VMAF,
     // PSNR, SSIM and XPSNR, as the Python app's tests' does, with VMAF on
     // the CPU: on the GPU, a run of these half-second clips would be mostly
     // the GPU starting, in a process of its own.
+    // (The home folder is USERPROFILE on Windows and HOME elsewhere: on macOS
+    // these tests wrote the user's real settings while USERPROFILE alone was
+    // set.)
     WindowTest()
-        : profile_(folder_ / "profile"), user_profile_("USERPROFILE", platform::path_text(profile_)) {
+        : profile_(folder_ / "profile"), user_profile_(home_variable, platform::path_text(profile_)) {
         std::filesystem::create_directories(profile_ / ".videometricslab");
         std::filesystem::create_directories(folder_ / "results_cache");
         write_settings(nlohmann::json::object());
@@ -1436,6 +1446,8 @@ TEST_F(WindowTest, MissingToolsShowABannerWithAButtonToFindThem) {
     std::filesystem::create_directories(folder("no ffmpeg"));
     write_settings({{"ffmpeg_dir", platform::path_text(folder("no ffmpeg"))}});
     const test::ScopedVariable path("PATH", "");
+    // Nor in Homebrew's folder (macOS).
+    const test::ScopedVariable folders(std::string(ffmpeg_folders_variable), "");
     MainWindow window;
     EXPECT_TRUE(ffmpeg_banner(window).isVisibleTo(&window));
     EXPECT_TRUE(locate_ffmpeg_button(window).isVisibleTo(&window));

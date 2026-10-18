@@ -139,7 +139,7 @@ TEST(RawStream, ScoresAsTheSameStreamInAContainer) {
             ASSERT_TRUE(from_container.distorted_crop.has_value());
             EXPECT_EQ(from_container.distorted_crop->h, 280);
             EXPECT_EQ(from_raw.distorted_crop, from_container.distorted_crop);
-            for (const std::string key : vmaf ? std::vector<std::string>{"vmaf", "psnr"}
+            for (const std::string& key : vmaf ? std::vector<std::string>{"vmaf", "psnr"}
                                               : std::vector<std::string>{"psnr", "ssim"}) {
                 const FrameMetricResult* expected = from_container.metric_results.frame(key);
                 const FrameMetricResult* from_stream = from_raw.metric_results.frame(key);

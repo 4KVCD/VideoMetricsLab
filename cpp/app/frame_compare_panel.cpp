@@ -60,9 +60,11 @@ constexpr qsizetype cache_byte_limit = 192LL * 1024 * 1024;
 // same frame; the device is made again off the window's thread, from when
 // the pointer comes over the tab (prepare_playback).
 constexpr int release_after_ms = 30'000;
+#ifdef VML_NATIVE_PLAYBACK
 // The device being made for a start meanwhile: how long until it is let go
 // of after all, unless the tab is shown.
 constexpr int retry_unload_ms = 2'000;
+#endif
 
 // A file's identity for remembering its black bars: its path, size and time.
 std::string crop_file_key(const std::filesystem::path& path) {

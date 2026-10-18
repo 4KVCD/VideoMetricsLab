@@ -42,8 +42,14 @@ namespace vml::app {
 
 namespace {
 
-// The statistics' cells: a monospaced face, so that digits share a width.
+// The statistics' cells, the readout and the exported table: a monospaced
+// face, so that digits share a width; the system's own (asking Qt for one
+// the system lacks costs 100 ms the first time, finding a substitute).
+#ifdef __APPLE__
+constexpr const char* number_font_family = "Menlo";
+#else
 constexpr const char* number_font_family = "Consolas";
+#endif
 
 // How many lines the table at the top shows before it scrolls: any more
 // would crowd out the graph it describes.
@@ -284,7 +290,7 @@ MetricPage::MetricPage(const MetricDefinition& metric, QWidget* parent)
     // the readout's, it would look out of place). Its height is fixed and its width
     // capped (fit_hover_label).
     hover_label_ = new ReadoutLabel(placeholder_);
-    readout_font_ = QFont(QStringLiteral("Consolas"));
+    readout_font_ = QFont(QString::fromLatin1(number_font_family));
     readout_font_.setStyleHint(QFont::Monospace);
     fit_readout_margins();
     fit_hover_label();
@@ -1561,7 +1567,7 @@ QPixmap GraphPanel::render_export_image() {
     if (metric.key == "xpsnr") {
         title += app::tr(" — ∞ plotted at {db:g} dB (display only)", {{"db", xpsnr_infinity_plot_db}});
     }
-    QFont cell_font(QStringLiteral("Consolas"));
+    QFont cell_font(QString::fromLatin1(number_font_family));
     cell_font.setStyleHint(QFont::Monospace);
     const QFontMetrics cell_metrics(cell_font);
     const int row_height = cell_metrics.lineSpacing() + export_row_padding;

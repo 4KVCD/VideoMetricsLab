@@ -475,7 +475,7 @@ TEST_F(FramePanelTest, TheFramesShownAreFfmpegsFramesOfBothVideos) {
     const auto panel = make_panel(found->ffmpeg);
     panel->resize(800, 600);
     panel->show();
-    panel->set_runs({{"row:encode", "encode", comparison, nullptr}});
+    panel->set_runs({{"row:encode", "encode", comparison, nullptr, {}}});
     panel->set_frame(5);
     ASSERT_TRUE(wait_until([&panel] { return !panel->viewer->image().isNull(); }))
         << panel->viewer->message().toStdString();
@@ -494,7 +494,7 @@ TEST_F(FramePanelTest, TheFramesShownAreFfmpegsFramesOfBothVideos) {
     EXPECT_EQ(panel->viewer->image(), test_frame);
 
     std::filesystem::remove(comparison.source_info.path);
-    panel->set_runs({{"row:encode", "encode", comparison, nullptr}});  // read again, as the window does
+    panel->set_runs({{"row:encode", "encode", comparison, nullptr, {}}});  // read again, as the window does
     panel->set_frame(6);
     ASSERT_TRUE(wait_until([&panel] { return panel->viewer->message().startsWith("Could not load frame"); }))
         << panel->viewer->message().toStdString();

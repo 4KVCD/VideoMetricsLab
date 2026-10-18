@@ -1,6 +1,7 @@
 // The console on Linux and macOS.
 #include "vml/platform/console.h"
 
+#include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -48,6 +49,10 @@ void on_interrupt(std::function<void()> handler) {
     if (interrupt_pipe[0] < 0) {
         if (pipe(interrupt_pipe) != 0) {
             return;  // Ctrl+C keeps its default: it ends the program
+        }
+        // Neither end goes into a program started later.
+        for (const int end : interrupt_pipe) {
+            fcntl(end, F_SETFD, FD_CLOEXEC);
         }
         std::thread([] {
             char byte = 0;

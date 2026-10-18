@@ -333,7 +333,11 @@ QGroupBox* SettingsPanel::build_window_box() {
             windows_name = item.name;
         }
     }
+#ifdef __APPLE__
+    language->addItem(app::tr("Same as macOS ({language})", {{"language", windows_name}}), "");
+#else
     language->addItem(app::tr("Same as Windows ({language})", {{"language", windows_name}}), "");
+#endif
     for (const Language& item : languages()) {
         language->addItem(item.name, item.code);
     }
@@ -373,10 +377,14 @@ QGroupBox* SettingsPanel::build_window_box() {
     language_row->addWidget(language);
     language_row->addStretch(1);
     window_layout->addLayout(language_row);
-    // Light or dark, at once; "Same as Windows" also follows Windows changing
-    // while the app is open.
+    // Light or dark, at once; "Same as Windows" (macOS) also follows the
+    // system changing while the app is open.
     theme = new QComboBox;
+#ifdef __APPLE__
+    theme->addItem(app::tr("Same as macOS"), "");
+#else
     theme->addItem(app::tr("Same as Windows"), "");
+#endif
     theme->addItem(app::tr("Light"), "light");
     theme->addItem(app::tr("Dark"), "dark");
     theme->setCurrentIndex(std::max(0, theme->findData(text_of(settings_.theme))));

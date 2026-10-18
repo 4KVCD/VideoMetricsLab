@@ -162,6 +162,8 @@ public:
     VulkanLoader() {
 #ifdef _WIN32
         const std::string loader = "vulkan-1.dll";
+#elif defined(__APPLE__)
+        const std::string loader = "libvulkan.1.dylib";
 #else
         const std::string loader = "libvulkan.so.1";
 #endif

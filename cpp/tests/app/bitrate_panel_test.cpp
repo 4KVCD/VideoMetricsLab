@@ -166,6 +166,9 @@ TEST_F(BitratePanelTest, StopEndsTheScanAndKeepsWhatWasRead) {
     panel->analyze_button->click();
     EXPECT_EQ(asked, std::vector<QString>{"Recalculate bitrate?"});
     ASSERT_TRUE(wait_until([&log] { return !std::filesystem::is_empty(log); })) << "ffprobe never started";
+    // The scan said the file had started before it started ffprobe, but the
+    // window may not have taken the message yet: it is waiting, posted.
+    QApplication::processEvents();
     panel->add_files({paths[2]}, {}, true);
     EXPECT_EQ(cell(*panel, 0, col_status).toStdString(), "Complete");
     EXPECT_EQ(cell(*panel, 1, col_status).toStdString(), "Reading video packets\xE2\x80\xA6");
