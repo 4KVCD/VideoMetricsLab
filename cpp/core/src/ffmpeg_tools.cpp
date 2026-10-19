@@ -49,8 +49,10 @@ std::vector<std::filesystem::path> matching_folders(const std::filesystem::path&
 }
 #endif
 
-// The common install folders to look in (Windows): winget's FFmpeg
-// packages, then C:\ffmpeg\bin and C:\Program Files\ffmpeg\bin.
+// The common install folders to look in. Windows: winget's FFmpeg
+// packages, then C:\ffmpeg\bin and C:\Program Files\ffmpeg\bin. macOS:
+// Homebrew's (Apple silicon, then Intel) and MacPorts' -- an app opened
+// from the Finder does not have them on its PATH.
 std::vector<std::filesystem::path> candidate_folders() {
     std::vector<std::filesystem::path> candidates;
 #ifdef _WIN32
@@ -66,6 +68,21 @@ std::vector<std::filesystem::path> candidate_folders() {
     }
     candidates.emplace_back(L"C:\\ffmpeg\\bin");
     candidates.emplace_back(L"C:\\Program Files\\ffmpeg\\bin");
+#elif defined(__APPLE__)
+    if (const std::optional<std::string> named = platform::environment_variable(ffmpeg_folders_variable)) {
+        std::string_view rest = *named;
+        while (!rest.empty()) {
+            const std::size_t end = std::min(rest.find(':'), rest.size());
+            if (end > 0) {
+                candidates.emplace_back(std::string(rest.substr(0, end)));
+            }
+            rest.remove_prefix(std::min(end + 1, rest.size()));
+        }
+        return candidates;
+    }
+    candidates.emplace_back("/opt/homebrew/bin");
+    candidates.emplace_back("/usr/local/bin");
+    candidates.emplace_back("/opt/local/bin");
 #endif
     return candidates;
 }

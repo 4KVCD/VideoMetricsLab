@@ -688,11 +688,18 @@ std::optional<std::filesystem::path> find_metric_executable(std::string_view met
         return std::filesystem::exists(path, error) ? std::optional(path) : std::nullopt;
     }
     // libjxl names the tool butteraugli_main. The short name is accepted too,
-    // for tools the user installed.
+    // for tools the user installed. Elsewhere than Windows, never the .exe
+    // files: the repository's resources folder has Windows' tools.
+#ifdef _WIN32
     const std::vector<std::string> names =
         metric == "ssimulacra2"
             ? std::vector<std::string>{"ssimulacra2.exe", "ssimulacra2"}
             : std::vector<std::string>{"butteraugli_main.exe", "butteraugli.exe", "butteraugli_main", "butteraugli"};
+#else
+    const std::vector<std::string> names = metric == "ssimulacra2"
+                                               ? std::vector<std::string>{"ssimulacra2"}
+                                               : std::vector<std::string>{"butteraugli_main", "butteraugli"};
+#endif
     for (const std::string& name : names) {
         const std::filesystem::path candidate = libjxl_folder() / name;
         std::error_code error;
@@ -828,9 +835,11 @@ double butteraugli_norm3(const std::filesystem::path& distortion_map) {
     return std::pow(mean, 1.0 / 3.0);
 }
 
-std::string image_filtergraph(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options,
-                              const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
-                              int step) {
+std::string image_filtergraph(const VideoInfo& source_info, const VideoInfo& distorted_info,
+                              const VmafOptions& options, const std::optional<CropBox>& source_crop,
+                              const std::optional<CropBox>& distorted_crop, int step) {
+    // Read with one colour matrix, as Vship reads them (with_shared_matrix).
+    const auto [source, distorted] = with_shared_matrix(source_info, distorted_info);
     GraphPlan plan{source, distorted, source_crop, distorted_crop, std::nullopt, std::nullopt,
                    content_size(source, source_crop), {}, options.scale_algorithm};
     const Size distorted_size = content_size(distorted, distorted_crop);
@@ -1172,7 +1181,9 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
         const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
         return static_cast<double>(units) / std::max(seconds, 1e-6);
     };
-    CpuScoringPool pool(keys, executables, source, distorted, cancel);
+    // Tagged with the colours the pictures are read with (with_shared_matrix).
+    const auto [source_read, distorted_read] = with_shared_matrix(source, distorted);
+    CpuScoringPool pool(keys, executables, source_read, distorted_read, cancel);
     const auto [width, height] =
         compared_dimensions(source, distorted, options.scale_direction, source_crop, distorted_crop);
     const int workers = scoring_workers(static_cast<long long>(width) * height, keys, request.concurrent_cpu_tasks,

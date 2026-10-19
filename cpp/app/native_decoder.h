@@ -1,7 +1,8 @@
 // One video of a comparison decoded for Video Compare's native playback. It
-// is read with libavformat and decoded by Direct3D 11's video decoding on the
-// presenter's device where the GPU decodes the video, else by FFmpeg's
-// software decoder (dav1d for AV1, native_dav1d.h) and uploaded. Its frames
+// is read with libavformat and decoded by the GPU's video decoding
+// (Direct3D 11's on the presenter's device; VideoToolbox's on macOS) where
+// the GPU decodes the video, else by FFmpeg's software decoder (dav1d for
+// AV1, native_dav1d.h) and uploaded. Its frames
 // are timed from the video's first frame (a raw stream's, which have no
 // times, are counted from its start). It decodes freely, at most a frame
 // ahead of what is taken; seeks are made on its thread, only the latest one
@@ -24,7 +25,11 @@
 #include "vml/frame_extract.h"
 #include "vml/native_playback.h"
 
+#ifdef _WIN32
 struct ID3D11Texture2D;
+#else
+struct __CVBuffer;
+#endif
 
 namespace vml::app {
 
@@ -39,13 +44,19 @@ constexpr std::size_t pool_kept_frames = 5;
 constexpr std::size_t presenter_waiting_frames = 2;
 
 // A decoded frame on the GPU: a slice of a decoder's texture array, or the
-// upload of a picture decoded in software, in NV12 or P010. It stays valid
-// while anything holds it.
+// upload of a picture decoded in software, in NV12 or P010 (on macOS a
+// VideoToolbox pixel buffer, or one a software picture is written to, in
+// their layouts). It stays valid while anything holds it.
 struct NativeFrame {
     // From the video's first frame.
     std::int64_t time_ns = 0;
+#ifdef _WIN32
     ID3D11Texture2D* texture = nullptr;
     unsigned subresource = 0;
+#else
+    // A CVPixelBufferRef.
+    __CVBuffer* picture = nullptr;
+#endif
     // The picture's size; its texture can be larger (a decoder pads it).
     int width = 0;
     int height = 0;
@@ -59,7 +70,8 @@ struct NativeFrame {
     // Already cropped and scaled to the size it is shown at (the source
     // scaled down to the test video's size): drawn whole.
     bool prepared = false;
-    // What keeps the texture: the decoder's frame, or the uploaded texture.
+    // What keeps the texture (the picture): the decoder's frame, or the
+    // uploaded texture.
     std::shared_ptr<void> keep;
 };
 using NativeFramePtr = std::shared_ptr<const NativeFrame>;

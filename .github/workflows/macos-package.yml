@@ -1,0 +1,73 @@
+name: macOS package
+
+# Builds VideoMetricsLab.app for macOS (arm64, macOS 14.4 or later) with
+# scripts/build_release_macos.sh, runs both test suites, and uploads the
+# zipped bundle as an artifact. It runs when asked (Actions > macOS package >
+# Run workflow, once this file is on master: GitHub offers that only for a
+# workflow on the default branch), and on each push to macos-port while the
+# port is on that branch.
+on:
+  workflow_dispatch:
+  push:
+    branches: [macos-port]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: macOS (arm64)
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      # Meson for libvmaf-fast, Ninja for the app and libjxl, and FFmpeg 9
+      # (with libvmaf) for the tests and the self-test.
+      - name: Install the tools
+        run: brew install meson ninja ffmpeg sevenzip
+      # Qt 6.12's macOS build (universal): qtbase, and Qt's translations of
+      # its own dialogs, from Qt's own servers, each checked against the
+      # SHA-1 Qt publishes beside it, as ci.yml installs Windows'.
+      - name: Cache Qt
+        id: qt-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/Qt
+          key: qt-6.12.0-0-202609280346-clang_64-qtbase-qttranslations
+      - name: Install Qt
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          repository=https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_6120/qt6_6120/qt.qt6.6120.clang_64/6.12.0-0-202609280346
+          qt="$RUNNER_TEMP/Qt"
+          mkdir -p "$qt"
+          for module in qtbase qttranslations; do
+              url="$repository$module-MacOS-MacOS_26-Clang-MacOS-MacOS_26-X86_64-ARM64.7z"
+              archive="$RUNNER_TEMP/$module.7z"
+              curl -sSfL -o "$archive" "$url"
+              expected="$(curl -sSfL "$url.sha1" | cut -d' ' -f1)"
+              actual="$(shasum -a 1 "$archive" | cut -d' ' -f1)"
+              if [[ "$actual" != "$expected" ]]; then
+                  echo "$module.7z: SHA-1 $actual, Qt publishes $expected" >&2
+                  exit 1
+              fi
+              7zz x -y -bso0 -bsp0 "-o$qt" "$archive"
+          done
+      - name: Build the package
+        env:
+          OUTPUT_ROOT: ${{ runner.temp }}/package
+        run: scripts/build_release_macos.sh --qt "$RUNNER_TEMP/Qt"
+      # The release script builds the two programs alone.
+      - name: Build the tests
+        working-directory: cpp
+        run: cmake --build --preset macos-release
+      - name: Test
+        working-directory: cpp
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --preset macos-release-all
+      - uses: actions/upload-artifact@v6
+        with:
+          name: VideoMetricsLab-macos-arm64
+          path: ${{ runner.temp }}/package/VideoMetricsLab-macos-arm64.zip
+          if-no-files-found: error

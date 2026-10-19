@@ -631,6 +631,16 @@ long long positive_int(const std::string& text) {
     return *value;
 }
 
+// A whole number from 1 to `most`, the range the app's own field takes
+// (options_panel.cpp): --threads and --subsample.
+int int_up_to(const std::string& text, int most) {
+    const long long value = positive_int(text);
+    if (value > most) {
+        throw ArgumentError{"must be from 1 to " + std::to_string(most)};
+    }
+    return static_cast<int>(value);
+}
+
 // A frame rate (--fps): a fraction of whole numbers below 2^53, as many as a
 // double holds exactly ("24000/1001"), or a number ("23.976"), above 0.
 double frame_rate(const std::string& text) {
@@ -752,9 +762,8 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--pix-fmt"}, [&parsed](const std::string& value) { parsed.pix_fmt = pixel_format(value); }),
         option({"--cvvdp-display"}, [&parsed](const std::string& value) { parsed.cvvdp_displays.push_back(value); }),
         option({"--subsample"},
-               [&parsed](const std::string& value) { parsed.subsample = static_cast<int>(positive_int(value)); }),
-        option({"--threads"},
-               [&parsed](const std::string& value) { parsed.threads = static_cast<int>(positive_int(value)); }),
+               [&parsed](const std::string& value) { parsed.subsample = int_up_to(value, 60); }),
+        option({"--threads"}, [&parsed](const std::string& value) { parsed.threads = int_up_to(value, 128); }),
         option({"--vmaf-on"}, where(parsed.vmaf_on)),
         option({"--ssimulacra2-on"}, where(parsed.ssimulacra2_on)),
         option({"--butteraugli-on"}, where(parsed.butteraugli_on)),

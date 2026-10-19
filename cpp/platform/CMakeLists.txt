@@ -13,6 +13,10 @@ else()
         src/console_posix.cpp src/library_posix.cpp src/pipe_posix.cpp src/process_posix.cpp
         src/system_posix.cpp)
     target_link_libraries(vml_platform PRIVATE ${CMAKE_DL_LIBS})  # dlopen, where it is not in libc
+    if(APPLE)
+        # keep_system_awake: a power assertion (IOKit).
+        target_link_libraries(vml_platform PRIVATE "-framework IOKit" "-framework CoreFoundation")
+    endif()
 endif()
 target_include_directories(vml_platform PUBLIC include)
 target_link_libraries(vml_platform PRIVATE vml_compile_options)

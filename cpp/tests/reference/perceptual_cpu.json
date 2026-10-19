@@ -205,7 +205,7 @@
    "to_source": false,
    "algorithm": "bicubic",
    "by_time": false,
-   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,scale=1920:1080:flags=bicubic,format=yuvj420p,setparams=colorspace=bt470bg:range=pc,scale,format=rgb48le[reference]"
+   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt470bg:range=tv,scale,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,scale=1920:1080:flags=bicubic,format=yuvj420p,setparams=colorspace=bt470bg:range=pc,scale,format=rgb48le[reference]"
   },
   {
    "name": "planar RGB and an unknown matrix",
@@ -301,7 +301,7 @@
    "to_source": false,
    "algorithm": "bicubic",
    "by_time": true,
-   "graph": "[0:V:0]setpts=PTS-STARTPTS,split=2[test_frames][test_times];[test_times]crop=2:2:0:0,scale,format=yuv420p,pad=854:480,crop=853:480:0:0:exact=1,lut=c0=0:c1=0:c2=0:c3=0[clock];[1:V:0]scale=853:480:flags=bicubic,format=yuv420p,setpts=PTS-STARTPTS[source_frames];[clock][source_frames]blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest,setparams=range=unknown:color_primaries=unknown:color_trc=unknown:colorspace=unknown:chroma_location=unspecified,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference];[test_frames]select=not(mod(n\\,3)),setparams=colorspace=bt470bg:range=tv,scale,format=rgb48le[distorted]"
+   "graph": "[0:V:0]setpts=PTS-STARTPTS,split=2[test_frames][test_times];[test_times]crop=2:2:0:0,scale,format=yuv420p,pad=854:480,crop=853:480:0:0:exact=1,lut=c0=0:c1=0:c2=0:c3=0[clock];[1:V:0]scale=853:480:flags=bicubic,format=yuv420p,setpts=PTS-STARTPTS[source_frames];[clock][source_frames]blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest,setparams=range=unknown:color_primaries=unknown:color_trc=unknown:colorspace=bt709:chroma_location=unspecified,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference];[test_frames]select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted]"
   },
   {
    "name": "by timestamp, scaled to the source and cropped",
@@ -338,7 +338,7 @@
    "to_source": true,
    "algorithm": "bilinear",
    "by_time": true,
-   "graph": "[0:V:0]scale=3840:1600:flags=bilinear,format=yuv420p,setpts=PTS-STARTPTS,split=2[test_frames][test_times];[test_times]crop=2:2:0:0,scale,format=yuv420p10le,pad=3840:1600,lut=c0=0:c1=0:c2=0:c3=0[clock];[1:V:0]crop=3840:1600:0:280,format=yuv420p10le,setpts=PTS-STARTPTS[source_frames];[clock][source_frames]blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest,setparams=range=unknown:color_primaries=unknown:color_trc=unknown:colorspace=unknown:chroma_location=unspecified,select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference];[test_frames]select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted]"
+   "graph": "[0:V:0]scale=3840:1600:flags=bilinear,format=yuv420p,setpts=PTS-STARTPTS,split=2[test_frames][test_times];[test_times]crop=2:2:0:0,scale,format=yuv420p10le,pad=3840:1600,lut=c0=0:c1=0:c2=0:c3=0[clock];[1:V:0]crop=3840:1600:0:280,format=yuv420p10le,setpts=PTS-STARTPTS[source_frames];[clock][source_frames]blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest,setparams=range=unknown:color_primaries=unknown:color_trc=unknown:colorspace=bt709:chroma_location=unspecified,select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference];[test_frames]select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted]"
   },
   {
    "name": "by timestamp, an NV12 source by position",

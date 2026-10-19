@@ -145,6 +145,12 @@ if(TARGET vml_app)
         target_sources(vml_app_tests PRIVATE app/native_decoder_test.cpp app/native_pool_test.cpp)
         target_compile_definitions(vml_app_tests PRIVATE NOMINMAX)
     endif()
+    get_property(native_playback_macos GLOBAL PROPERTY vml_native_playback_macos)
+    if(APPLE AND native_playback_macos)
+        # Native playback on macOS, where FFmpeg's libraries are built
+        # (app/CMakeLists.txt).
+        target_sources(vml_app_tests PRIVATE app/native_decoder_test.cpp app/native_pool_test.cpp)
+    endif()
     if(WIN32)
         # Qt beside the tests, with the platform they run on, and Qt's
         # translations (app/CMakeLists.txt); before the tests are listed,
@@ -160,6 +166,7 @@ if(TARGET vml_app)
         "NativeDecoderTest.*"
         "BitratePanelTest.StopEndsTheScanAndKeepsWhatWasRead"
         "FramePanelTest.APairThatCanPlayIsPlayedWithThePanelsControls"
+        "FramePanelTest.APairPlaysNativelyOnTheDisplay"
         "FramePanelTest.EachPairIsCroppedToThePictureItsOwnTwoVideosShare"
         "FramePanelTest.TheFramesShownAreFfmpegsFramesOfBothVideos"
         "PlaybackTest.AFailedDecoderResumesDownABoundedLadderWithoutReplaying"

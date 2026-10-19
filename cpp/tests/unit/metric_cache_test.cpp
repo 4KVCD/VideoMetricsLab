@@ -4,6 +4,7 @@
 // which scores answer a request, what requests load from the Python app's
 // files, and the VMAF model a loaded result has.
 #include "vml/metric_cache.h"
+#include "vml/colour.h"
 
 #include <gtest/gtest.h>
 
@@ -178,7 +179,7 @@ TEST(MetricCache, AnswersAsThePythonApp) {
     for (const nlohmann::json& item : reference.at("answers")) {
         std::vector<ColourTags> infos;
         for (const nlohmann::json& info : item.at("infos")) {
-            infos.push_back({info.at("pix_fmt"), info.at("color_transfer"), {}});  // no chroma siting given
+            infos.push_back({info.at("pix_fmt"), info.at("color_transfer"), {}, {}, 0});  // no siting or matrix given
         }
         EXPECT_EQ(answers(*request.metric(item.at("key")), test::provenance_from(item.at("provenance")), infos),
                   item.at("answers").get<bool>())
@@ -210,12 +211,61 @@ TEST(MetricCache, AVshipScoreReadWithItsChromaApartIsCalculatedAgain) {
     const MetricRequestSpec& spec = *request.metric("ssimulacra2");
     MetricProvenance saved{"Vship/ssimulacra2", "Vship 5.1.2", "gpu", "ssimulacra2-vship-gpu-v1",
                            {{"coverage_step", "1"}, {"color_tags", "\"ffvship-5.1.1\""}}};
-    const std::vector<ColourTags> apart{{"yuv420p", "bt709", "center"}, {"yuv420p", "bt709", ""}};
-    const std::vector<ColourTags> left{{"yuv420p", "bt709", "left"}, {"yuv420p", "bt709", ""}};
+    const std::vector<ColourTags> apart{{"yuv420p", "bt709", "center", "bt709", 1080},
+                                        {"yuv420p", "bt709", "", "bt709", 1080}};
+    const std::vector<ColourTags> left{{"yuv420p", "bt709", "left", "bt709", 1080},
+                                       {"yuv420p", "bt709", "", "bt709", 1080}};
     EXPECT_FALSE(answers(spec, saved, apart));
     EXPECT_TRUE(answers(spec, saved, left));
     saved.parameters["color_tags"] = nlohmann::json(score_identity::vship_colour_tags).dump();
     EXPECT_TRUE(answers(spec, saved, apart));
+}
+
+// A score saved before an untagged pair was read with one colour matrix is
+// calculated again for a pair whose heights gave the videos different
+// guesses, and kept for the rest.
+TEST(MetricCache, AScoreReadWithTwoGuessedMatricesIsCalculatedAgain) {
+    const AnalysisRequest request = analysis_request(VmafOptions{}, {"ssimulacra2"}, {}, CvvdpSettings{});
+    const MetricRequestSpec& spec = *request.metric("ssimulacra2");
+    MetricProvenance gpu{"Vship/ssimulacra2", "Vship 5.1.2", "gpu", "ssimulacra2-vship-gpu-v1",
+                         {{"coverage_step", "1"}, {"color_tags", "\"ffvship-5.1.1/2\""}}};
+    MetricProvenance cpu{"ssimulacra2", "libjxl 0.11", "cpu", "ssimulacra2-libjxl-cpu-v1",
+                         {{"coverage_step", "1"}, {"color_tags", "\"vship-5.1.1/2\""}}};
+    const std::vector<ColourTags> guessed_apart{{"yuv420p", "", "", "", 720}, {"yuv420p", "", "", "", 540}};
+    const std::vector<ColourTags> guessed_alike{{"yuv420p", "", "", "", 1080}, {"yuv420p", "", "", "", 720}};
+    const std::vector<ColourTags> one_tagged{{"yuv420p", "", "", "bt709", 720}, {"yuv420p", "", "", "", 540}};
+    const std::vector<ColourTags> tagged{{"yuv420p", "", "", "bt709", 720}, {"yuv420p", "", "", "bt470bg", 540}};
+    for (const MetricProvenance& saved : {gpu, cpu}) {
+        EXPECT_FALSE(answers(spec, saved, guessed_apart)) << saved.implementation;
+        EXPECT_FALSE(answers(spec, saved, one_tagged)) << saved.implementation;
+        EXPECT_TRUE(answers(spec, saved, guessed_alike)) << saved.implementation;
+        EXPECT_TRUE(answers(spec, saved, tagged)) << saved.implementation;
+    }
+    gpu.parameters["color_tags"] = nlohmann::json(score_identity::vship_colour_tags).dump();
+    cpu.parameters["color_tags"] = nlohmann::json(score_identity::cpu_colour_tags).dump();
+    EXPECT_TRUE(answers(spec, gpu, guessed_apart));
+    EXPECT_TRUE(answers(spec, cpu, guessed_apart));
+}
+
+// Two untagged videos are read with the reference's guess, and one untagged
+// video with the other's tag.
+TEST(MetricCache, AnUntaggedPairIsReadWithOneMatrix) {
+    VideoInfo source;
+    source.pix_fmt = "yuv420p";
+    source.height = 720;
+    VideoInfo distorted = source;
+    distorted.height = 540;
+    auto [source_read, distorted_read] = with_shared_matrix(source, distorted);
+    EXPECT_EQ(source_read.color_space, "bt709");
+    EXPECT_EQ(distorted_read.color_space, "bt709");
+    EXPECT_TRUE(matrix_shared(source, distorted));
+    distorted.color_space = "bt470bg";
+    std::tie(source_read, distorted_read) = with_shared_matrix(source, distorted);
+    EXPECT_EQ(source_read.color_space, "bt470bg");
+    EXPECT_TRUE(matrix_shared(source, distorted));
+    source.height = 480;
+    distorted.color_space.clear();
+    EXPECT_FALSE(matrix_shared(source, distorted));
 }
 
 // What each request loads from a comparison folder the Python app saved:

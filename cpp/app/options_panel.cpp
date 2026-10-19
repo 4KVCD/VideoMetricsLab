@@ -71,8 +71,25 @@ const std::vector<ModelChoice>& v1_model_choices() {
     return choices;
 }
 
+namespace {
+
+// Whether VMAF can be calculated on a GPU here: one of the GPUs found (an
+// NVIDIA, Intel or AMD one), or on macOS, where every Mac has one and it is
+// not among them (Vulkan on Metal, vmaf_vulkan; a run whose GPU fails
+// calculates on the CPU, as anywhere).
+bool vmaf_gpu_possible(const std::vector<GpuVendor>& gpu_vendors) {
+#ifdef __APPLE__
+    static_cast<void>(gpu_vendors);
+    return true;
+#else
+    return !gpu_vendors.empty();
+#endif
+}
+
+}  // namespace
+
 OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* parent)
-    : QGroupBox(app::tr("Options"), parent), vmaf_gpu_possible_(!gpu_vendors.empty()) {
+    : QGroupBox(app::tr("Options"), parent), vmaf_gpu_possible_(vmaf_gpu_possible(gpu_vendors)) {
     // Which videos it edits, then three boxes side by side (video
     // preparation, metric-specific settings, performance), then a note on
     // what affects scores.
@@ -134,6 +151,9 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
     duration_edit->setLayoutDirection(Qt::LeftToRight);
     duration_edit->setDisplayFormat("HH:mm:ss.zzz");
     duration_edit->setTime(QTime(0, 0, 0, 0));
+    // Applied when the time is entered or a step is taken, not at every
+    // digit typed: each change takes the rows' scores away.
+    duration_edit->setKeyboardTracking(false);
     connect(duration_edit, &QTimeEdit::timeChanged, this, [this] { emit field_edited("duration_limit"); });
     form->addRow(app::tr("Duration limit (0 = full):"), duration_edit);
 
@@ -179,6 +199,7 @@ void OptionsPanel::build_metric_settings(QFormLayout* form) {
     subsample_spin = new QSpinBox;
     subsample_spin->setRange(1, 60);
     subsample_spin->setValue(1);
+    subsample_spin->setKeyboardTracking(false);  // as the duration: not at every digit typed
     connect(subsample_spin, &QSpinBox::valueChanged, this, [this] { emit field_edited("n_subsample"); });
     form->addRow(app::tr("libvmaf frame subsample:"), subsample_spin);
     subsample_spin->setToolTip(
@@ -312,6 +333,7 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
     threads_spin->setRange(0, 128);
     threads_spin->setValue(0);
     threads_spin->setSpecialValueText(app::tr("Auto"));
+    threads_spin->setKeyboardTracking(false);
     connect(threads_spin, &QSpinBox::valueChanged, this, [this] { emit field_edited("n_threads"); });
     form->addRow(app::tr("libvmaf threads:"), threads_spin);
     threads_spin->setToolTip(

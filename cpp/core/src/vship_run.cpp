@@ -19,6 +19,7 @@
 #include <thread>
 
 #include "vml/app_log.h"
+#include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
 #include "vml/frame_sync_by_time.h"
@@ -46,8 +47,15 @@ const app_log::Logger logger("vml.perceptual_vship");
 // Vship handlers working at once per metric. One handler leaves the GPU idle
 // between its own kernels, and two keep it busy: at 4K 10-bit on an RTX
 // 5090 (Vship's CUDA build), SSIMULACRA2 scores 277 pairs a second rather
-// than 217, and Butteraugli 95 rather than 82.
+// than 217, and Butteraugli 95 rather than 82. On MoltenVK one: two
+// Butteraugli handlers above 720p lost the GPU (an M1 Pro: "Invalid
+// Resource", the run then on the CPU), and one is as fast there (1080p, 480
+// pairs: SSIMULACRA2 9.7 s with one and 9.8 with two, Butteraugli 38.8 s).
+#ifdef __APPLE__
+constexpr std::size_t lanes_per_metric = 1;
+#else
 constexpr std::size_t lanes_per_metric = 2;
+#endif
 // Frames in flight per video: one per lane being scored, one waiting and
 // one being filled, so that decoding, transfer and GPU work overlap. A 4K
 // 10-bit frame is 25 MB of pinned memory, so this is 250 MB for a 4K pair.
@@ -1216,7 +1224,9 @@ private:
     // How each video is decoded, sized and laid out for Vship. Decoding
     // follows the run's GPU decode setting, per video and per codec;
     // hardware decoding is bit-exact, so it changes only the speed. A video
-    // without chroma siting is read with the other's (shared_chroma_location).
+    // without chroma siting is read with the other's (shared_chroma_location),
+    // and one without a colour matrix with the other's, or the reference's
+    // guess (with_shared_matrix).
     void plan_videos() {
         const auto [source_size, distorted_size] =
             vship_scaled_sizes(request_.source, request_.distorted, request_.options.scale_direction,
@@ -1226,9 +1236,13 @@ private:
         if (chroma_location_shared(request_.source.chroma_location, request_.distorted.chroma_location)) {
             logger.info("Vship: one video gives no chroma siting; both are read as " + source_siting);
         }
+        const auto [source_read, distorted_read] = with_shared_matrix(request_.source, request_.distorted);
+        if (matrix_shared(request_.source, request_.distorted)) {
+            logger.info("Vship: the videos are read with one colour matrix, " + source_read.color_space);
+        }
         for (const bool source : {true, false}) {
             VideoPlan& video = videos_[source ? 0 : 1];
-            video.info = source ? request_.source : request_.distorted;
+            video.info = source ? source_read : distorted_read;
             video.crop = source ? plan_.source_crop : plan_.distorted_crop;
             video.side = source ? "source" : "distorted";
             video.label = source ? "reference" : "test video";

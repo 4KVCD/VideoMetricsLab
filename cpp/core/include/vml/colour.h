@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "vml/video.h"
 
@@ -67,6 +68,19 @@ bool is_rgb_format(const std::string& pix_fmt);
 // The video's colours as both implementations read them, or nothing for a
 // tag neither can read.
 std::optional<VideoColour> colour_of(const VideoInfo& info);
+
+// A pair's videos with the colour matrix they are read with: a video without
+// a matrix tag is read with the other's, or, neither having one, both with
+// the reference's guess (its height, as video_colour guesses). An encode keeps
+// its source's YUV coding whatever its size, so a 540p encode of an untagged
+// 720p source, each guessed from its own height (BT.470BG and BT.709), was
+// read with another matrix than its source and scored as badly broken. A
+// pair with an RGB video is left as it is.
+std::pair<VideoInfo, VideoInfo> with_shared_matrix(VideoInfo source, VideoInfo distorted);
+
+// Whether with_shared_matrix reads either video of the pair with another
+// matrix than its own tags or height give.
+bool matrix_shared(const VideoInfo& source, const VideoInfo& distorted);
 
 // FFmpeg's name for an H.273 matrix (setparams' colorspace=), for the
 // matrices FFmpeg can convert with; nothing for the others.

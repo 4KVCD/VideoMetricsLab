@@ -16,11 +16,16 @@ namespace vml {
 inline constexpr std::string_view default_model = "version=vmaf_v0.6.1";
 inline constexpr std::string_view uhd_model = "version=vmaf_4k_v0.6.1";
 
+// A packaged build's resources folder, when the program runs from one: the
+// "resources" folder beside its programs (scripts/build_release.ps1), or on
+// macOS the app bundle's Contents/Resources/resources, the programs being in
+// Contents/MacOS (scripts/build_release_macos.sh).
+std::optional<std::filesystem::path> packaged_resource_folder();
+
 // The folder the app's own files are in (the VMAF models, the bundled tools):
 // the folder the VML_RESOURCES environment variable names; else a packaged
-// build's "resources" folder beside its programs; else the one this build
-// was made to use (the repository's resources folder, in a development
-// build).
+// build's (packaged_resource_folder); else the one this build was made to
+// use (the repository's resources folder, in a development build).
 std::filesystem::path resource_folder();
 
 // Whether a model choice names a bundled model ("__builtin:<id>").

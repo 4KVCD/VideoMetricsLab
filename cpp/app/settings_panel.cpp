@@ -103,7 +103,7 @@ QGroupBox* SettingsPanel::build_ffmpeg_box() {
     connect(ffmpeg_edit, &QLineEdit::editingFinished, this, [this] { on_edited(); });
     auto* browse_ffmpeg = new QPushButton(app::tr("Browse..."));
     connect(browse_ffmpeg, &QPushButton::clicked, this,
-            [this] { pick_directory(app::tr("Select the folder containing ffmpeg.exe"), ffmpeg_edit); });
+            [this] { pick_directory(app::with_program_names(app::tr("Select the folder containing ffmpeg.exe")), ffmpeg_edit); });
     auto* ffmpeg_row = new QHBoxLayout;
     ffmpeg_row->addWidget(ffmpeg_edit, 1);
     ffmpeg_row->addWidget(browse_ffmpeg);
@@ -333,7 +333,11 @@ QGroupBox* SettingsPanel::build_window_box() {
             windows_name = item.name;
         }
     }
+#ifdef __APPLE__
+    language->addItem(app::tr("Same as macOS ({language})", {{"language", windows_name}}), "");
+#else
     language->addItem(app::tr("Same as Windows ({language})", {{"language", windows_name}}), "");
+#endif
     for (const Language& item : languages()) {
         language->addItem(item.name, item.code);
     }
@@ -373,10 +377,14 @@ QGroupBox* SettingsPanel::build_window_box() {
     language_row->addWidget(language);
     language_row->addStretch(1);
     window_layout->addLayout(language_row);
-    // Light or dark, at once; "Same as Windows" also follows Windows changing
-    // while the app is open.
+    // Light or dark, at once; "Same as Windows" (macOS) also follows the
+    // system changing while the app is open.
     theme = new QComboBox;
+#ifdef __APPLE__
+    theme->addItem(app::tr("Same as macOS"), "");
+#else
     theme->addItem(app::tr("Same as Windows"), "");
+#endif
     theme->addItem(app::tr("Light"), "light");
     theme->addItem(app::tr("Dark"), "dark");
     theme->setCurrentIndex(std::max(0, theme->findData(text_of(settings_.theme))));
@@ -450,7 +458,12 @@ void SettingsPanel::show_default_metric(const std::string& key, bool checked) {
 
 void SettingsPanel::clear_saved_results() {
     const std::filesystem::path directory = cache_folder();
-    if (vml::cache_summary(directory).comparisons == 0 && file_writes_.idle()) {
+    // The count the tab shows, made off the window's thread
+    // (refresh_status): counting a large folder here would freeze the
+    // window. While it is still being made, the question is asked anyway.
+    const bool counted = counting_->isFinished() && counting_->future().resultCount() > 0 &&
+                         counted_folder_ == directory;
+    if (counted && counting_->result().comparisons == 0 && file_writes_.idle()) {
         status->setText(app::tr("There are no saved results to clear."));
         return;
     }
@@ -511,6 +524,7 @@ void SettingsPanel::on_file_writes_idle() {
     cleared_.reset();
     status->setText(ntr("Removed {count} saved result.", "Removed {count} saved results.", removed));
     refresh_status();
+    emit saved_results_cleared();
 }
 
 void SettingsPanel::on_edited() {

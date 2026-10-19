@@ -747,5 +747,24 @@ TEST(PerceptualRouting, CancellingDoesNotStartTheCpu) {
     EXPECT_TRUE(routed.cpu.empty());
 }
 
+// The bundled tool is the one built for this system: the repository's
+// resources have Windows' ssimulacra2.exe, which macOS found first and could
+// not run ("Permission denied").
+TEST(PerceptualCpu, TheBundledToolIsTheOneForThisSystem) {
+    const test::Folder resources;
+    std::filesystem::create_directories(resources / "tools/libjxl");
+    const test::ScopedVariable named("VML_RESOURCES", platform::path_text(resources / ""));
+    const test::ScopedVariable chosen("SSIMULACRA2_PATH", "");
+    const test::ScopedVariable path("PATH", platform::path_text(resources / "tools"));
+    std::ofstream(resources / "tools/libjxl/ssimulacra2.exe") << "";
+#ifdef _WIN32
+    EXPECT_EQ(find_metric_executable("ssimulacra2"), resources / "tools/libjxl/ssimulacra2.exe");
+#else
+    EXPECT_EQ(find_metric_executable("ssimulacra2"), std::nullopt);
+    std::ofstream(resources / "tools/libjxl/ssimulacra2") << "";
+    EXPECT_EQ(find_metric_executable("ssimulacra2"), resources / "tools/libjxl/ssimulacra2");
+#endif
+}
+
 }  // namespace
 }  // namespace vml

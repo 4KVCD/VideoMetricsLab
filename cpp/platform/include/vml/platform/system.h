@@ -116,8 +116,9 @@ void raise_thread_priority();
 // Holds (`awake`) or releases Windows' "system required" request, which
 // keeps the PC from going to sleep while a run takes hours; the screen may
 // still turn off (the Python app's power.keep_system_awake). The request is
-// the calling thread's, and ends with it at the latest. False where nothing
-// was done: not Windows, or Windows refused.
+// the calling thread's, and ends with it at the latest. On macOS a power
+// assertion against idle sleep (the process's), which also keeps App Nap
+// off. False where nothing was done: Linux, or the system refused.
 bool keep_system_awake(bool awake);
 
 // The PCI vendor IDs of the GPU makers the app knows. AMD's GPUs report

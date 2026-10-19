@@ -27,9 +27,15 @@ inline const std::vector<int> minimum_ffmpeg_version{9};
 
 // The program to run for `name` ("ffmpeg" or "ffprobe"): in the folder chosen
 // in Settings, then on the PATH, then in common install folders (a newly
-// installed winget package is not on the PATH of programs already running);
-// else the bare name, in case it is on the PATH by the time it runs.
+// installed winget package is not on the PATH of programs already running;
+// on macOS, Homebrew's folder is not on the PATH of an app the Finder
+// opens); else the bare name, in case it is on the PATH by the time it runs.
 std::string find_tool(std::string_view name, const Settings& settings);
+
+// On macOS, the folders find_tool looks in after the PATH, separated by ':',
+// instead of Homebrew's and MacPorts': for tests, which need a Mac where
+// FFmpeg is missing.
+inline constexpr std::string_view ffmpeg_folders_variable = "VML_FFMPEG_FOLDERS";
 
 // The version in a tool's -version output, such as {9, 0, 1}; nothing for a
 // development build ("N-113411-g1234567"), which has no usable number.

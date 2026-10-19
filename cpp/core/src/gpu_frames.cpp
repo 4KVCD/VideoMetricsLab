@@ -934,7 +934,13 @@ std::pair<std::vector<std::string>, std::string> software_codecs() {
     return {decodes, decodes.empty() ? why : std::string()};
 }
 
-std::filesystem::path dav1d_library_path() { return software_folder() / "dav1d.dll"; }
+std::filesystem::path dav1d_library_path() {
+#ifdef __APPLE__
+    return software_folder() / "libdav1d.dylib";  // scripts/build_dav1d_macos.sh
+#else
+    return software_folder() / "dav1d.dll";
+#endif
+}
 
 std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan, std::string_view backend) {
     if (!decodes_codec(plan.codec, backend)) {

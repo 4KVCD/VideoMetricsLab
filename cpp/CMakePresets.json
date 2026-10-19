@@ -37,6 +37,7 @@
       "inherits": "base",
       "displayName": "macOS (Apple Clang)",
       "generator": "Ninja Multi-Config",
+      "cacheVariables": { "CMAKE_OSX_DEPLOYMENT_TARGET": "14.4", "CMAKE_OSX_ARCHITECTURES": "arm64" },
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" }
     }
   ],

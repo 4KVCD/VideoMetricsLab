@@ -654,7 +654,14 @@ void ChartWidget::mouseDoubleClickEvent(QMouseEvent* /*event*/) { reset_view(); 
 
 void ChartWidget::wheelEvent(QWheelEvent* event) {
     // Zooms the time axis around the pointer: what is under it stays under it.
-    const double steps = event->angleDelta().y() / 120.0;
+    // A trackpad's glide after the fingers lift zooms no further; and the
+    // wheel zooms the same way round whichever way the system scrolls
+    // (macOS's natural scrolling, inverted, scrolls the other way).
+    if (event->phase() == Qt::ScrollMomentum) {
+        event->accept();
+        return;
+    }
+    const double steps = (event->inverted() ? -1 : 1) * event->angleDelta().y() / 120.0;
     if (steps == 0) {
         return;
     }

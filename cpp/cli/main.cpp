@@ -8,6 +8,7 @@
 // Progress goes to stderr, results to stdout. Exit code 0 when every video
 // got every metric asked for, 1 when one failed, 2 for a wrong command (or
 // one this version cannot do yet), 130 when cancelled with Ctrl+C.
+#include <csignal>
 #include <exception>
 #include <string>
 #include <vector>
@@ -22,6 +23,12 @@
 
 int main(int argc, char** argv) {
     using namespace vml;
+#ifndef _WIN32
+    // Output to a pipe whose reader has gone (`vml-cli compare ... | head`)
+    // fails, as on Windows, rather than ending the program with SIGPIPE
+    // after the run, with exit code 141.
+    std::signal(SIGPIPE, SIG_IGN);
+#endif
     const std::vector<std::string> words = platform::utf8_arguments(argc, argv);
     // This program again, as the process of its own that native GPU code
     // runs in (isolated.h): a task and its request, not a command.

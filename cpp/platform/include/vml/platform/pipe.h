@@ -58,6 +58,12 @@ public:
     // reader is not waiting in connect() yet.
     static void touch(const std::string& path);
 
+    // Removes the pipes a process that has ended left: its FIFOs (named by
+    // its id), which an ending it did not choose (a Cancel's SIGKILL) left in
+    // the temporary folder. Windows' pipes go with their last handle: there
+    // it does nothing.
+    static void remove_left_by(int process_id);
+
 private:
     std::string path_;
     struct State;  // each system's own (pipe_windows.cpp, pipe_posix.cpp)

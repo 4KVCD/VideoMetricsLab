@@ -1,6 +1,7 @@
 // The console on Linux and macOS.
 #include "vml/platform/console.h"
 
+#include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -49,6 +50,10 @@ void on_interrupt(std::function<void()> handler) {
         if (pipe(interrupt_pipe) != 0) {
             return;  // Ctrl+C keeps its default: it ends the program
         }
+        // Neither end goes into a program started later.
+        for (const int end : interrupt_pipe) {
+            fcntl(end, F_SETFD, FD_CLOEXEC);
+        }
         std::thread([] {
             char byte = 0;
             while (true) {
@@ -65,7 +70,31 @@ void on_interrupt(std::function<void()> handler) {
     action.sa_handler = on_signal;
     sigemptyset(&action.sa_mask);
     action.sa_flags = SA_RESTART;  // calls a signal interrupts carry on
-    sigaction(SIGINT, &action, nullptr);
+    // Ctrl+C, and, as Windows' handler takes a closed console window, the
+    // terminal's going (SIGHUP) and an ending asked for (SIGTERM: `timeout`,
+    // a job's cancel): the run is cancelled and its programs ended, not left
+    // running with no one to read them.
+    // A signal ignored as the program started stays ignored: `nohup` ignores
+    // SIGHUP, and a shell its background jobs' SIGINT.
+    static const bool ignored_at_start[] = {[] {
+        struct sigaction now {};
+        sigaction(SIGINT, nullptr, &now);
+        return now.sa_handler == SIG_IGN;
+    }(), [] {
+        struct sigaction now {};
+        sigaction(SIGHUP, nullptr, &now);
+        return now.sa_handler == SIG_IGN;
+    }(), [] {
+        struct sigaction now {};
+        sigaction(SIGTERM, nullptr, &now);
+        return now.sa_handler == SIG_IGN;
+    }()};
+    const int signals[] = {SIGINT, SIGHUP, SIGTERM};
+    for (int i = 0; i < 3; ++i) {
+        if (!ignored_at_start[i]) {
+            sigaction(signals[i], &action, nullptr);
+        }
+    }
 }
 
 }  // namespace vml::platform

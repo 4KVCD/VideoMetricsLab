@@ -64,6 +64,11 @@ constexpr const char* N_(const char* text) { return text; }
 QString tr(const char* text, std::initializer_list<NamedValue> values = {});
 QString tr(const QString& text, std::initializer_list<NamedValue> values = {});
 
+// The program's own names in a translated text: on Windows "ffmpeg.exe" and
+// "ffprobe.exe", as the texts and their translations name them; elsewhere
+// "ffmpeg" and "ffprobe".
+QString with_program_names(QString text);
+
 // The text for `count` of something, {count} filled in: `singular` for one
 // in English, `plural` otherwise, and in another language the form its rules
 // give.

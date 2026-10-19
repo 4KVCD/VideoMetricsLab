@@ -402,11 +402,12 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
 }
 
 bool write_csvs(const std::vector<TestVideo>& videos, const std::filesystem::path& folder,
-                const std::function<void(const std::string&)>& message) {
+                const std::function<void(const std::string&)>& message,
+                const std::function<void(const std::string&)>& failed) {
     std::error_code error;
     std::filesystem::create_directories(folder, error);
     if (error) {
-        message("The CSV folder could not be made: " + python_os_error(error, folder));
+        failed("The CSV folder could not be made: " + python_os_error(error, folder));
         return false;
     }
     bool written = true;
@@ -424,7 +425,7 @@ bool write_csvs(const std::vector<TestVideo>& videos, const std::filesystem::pat
             message(video.name() + ": per-frame scores in " + platform::path_text(path));
         } catch (const std::exception& failure) {
             written = false;
-            message(video.name() + ": the CSV could not be written (" + failure.what() + ")");
+            failed(video.name() + ": the CSV could not be written (" + failure.what() + ")");
         }
     }
     return written;

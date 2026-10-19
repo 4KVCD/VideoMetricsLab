@@ -1,6 +1,7 @@
 // ChildProcess on Linux and macOS: posix_spawnp with pipes, in a process
 // group of its own, so that terminate() ends the program and whatever it
-// started together.
+// started together (or, in a process that start_programs_in_this_group()
+// was called in, in that process's group, which its parent ends).
 //
 // Still to do (for the Linux and macOS releases): a program is not yet ended
 // when the app crashes, as Windows' job objects do.
@@ -13,9 +14,11 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <condition_variable>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <thread>
 #include <utility>
@@ -84,6 +87,17 @@ Pipe make_pipe() {
     return Pipe{Descriptor(ends[0]), Descriptor(ends[1])};
 }
 
+// Whether programs join this process's group (start_programs_in_this_group).
+std::atomic<bool> programs_in_this_group{false};
+
+// The programs started and not yet reaped, and whether each leads a group
+// of its own, for end_programs_now.
+std::mutex running_mutex;
+std::map<pid_t, bool>& running_programs() {
+    static std::map<pid_t, bool> running;
+    return running;
+}
+
 // An exit status as Python's subprocess gives it: the exit code, or minus
 // the signal that ended the program.
 int exit_code_of(int status) {
@@ -100,6 +114,7 @@ int exit_code_of(int status) {
 
 struct ChildProcess::State {
     pid_t id = -1;
+    bool own_group = true;  // the leader of a group of its own, which signals reach as one
     std::mutex wait_mutex;
     bool ended = false;
     int exit_code = -1;
@@ -119,10 +134,25 @@ struct ChildProcess::State {
     bool error_ended = false;
 
     // Reaps the program if it has ended (or, with `block`, once it has).
+    // The leader of a group of its own takes the rest of its group with it:
+    // what it started and left running (FFmpeg, after a crash) is ended
+    // first, while its id, the group's, is still its own (not yet reaped).
     bool reap(bool block) {
         const std::lock_guard lock(wait_mutex);
         if (ended) {
             return true;
+        }
+        if (own_group) {
+            siginfo_t info{};
+            int waited = waitid(P_PID, static_cast<id_t>(id), &info, WEXITED | WNOWAIT | (block ? 0 : WNOHANG));
+            while (waited < 0 && errno == EINTR) {
+                waited = waitid(P_PID, static_cast<id_t>(id), &info, WEXITED | WNOWAIT | (block ? 0 : WNOHANG));
+            }
+            if (waited == 0 && info.si_pid == id) {
+                kill(-id, SIGKILL);
+            } else if (!block) {
+                return false;  // still running
+            }
         }
         int status = 0;
         pid_t done = waitpid(id, &status, block ? 0 : WNOHANG);
@@ -132,15 +162,29 @@ struct ChildProcess::State {
         if (done == id) {
             ended = true;
             exit_code = exit_code_of(status);
+            const std::lock_guard running_lock(running_mutex);
+            running_programs().erase(id);
         }
         return ended;
     }
 
-    ~State() {
-        if (!reap(false)) {
-            kill(-id, SIGKILL);
-            reap(true);
+    // Sends `signal` to the program's process group: the program and what it
+    // started, which may run on after the program itself has ended. Only
+    // while the program is not reaped (running, or ended and waiting to be
+    // reaped), when its id -- the group's -- cannot belong to another
+    // process. Whether it was sent.
+    bool signal_group(int signal) {
+        const std::lock_guard lock(wait_mutex);
+        if (ended) {
+            return false;
         }
+        kill(own_group ? -id : id, signal);
+        return true;
+    }
+
+    ~State() {
+        signal_group(SIGKILL);
+        reap(true);
         if (error_reader.joinable()) {
             error_reader.join();
         }
@@ -172,7 +216,10 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     // The program gets its three descriptors and none of the app's others,
     // whatever their close-on-exec flag: given another program's pipe, it
     // would make that program's output last as long as its own copy.
-    short flags = POSIX_SPAWN_SETPGROUP;
+    // A process group of its own, which terminate() ends as one, unless
+    // this process's own group holds the programs it starts.
+    const bool own_group = !programs_in_this_group.load();
+    short flags = own_group ? POSIX_SPAWN_SETPGROUP : 0;
 #ifdef __APPLE__
     flags |= POSIX_SPAWN_CLOEXEC_DEFAULT;
 #elif defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 34))
@@ -180,7 +227,14 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
 #endif
     posix_spawnattr_t attributes;
     posix_spawnattr_init(&attributes);
-    // A process group of its own, which terminate() ends as one.
+    // SIGPIPE as a program starts with it, whatever this process does with
+    // it (the command line ignores it, and an ignored signal is inherited):
+    // a program writing to a reader that has gone then ends, as it should.
+    sigset_t defaults;
+    sigemptyset(&defaults);
+    sigaddset(&defaults, SIGPIPE);
+    posix_spawnattr_setsigdefault(&attributes, &defaults);
+    flags |= POSIX_SPAWN_SETSIGDEF;
     posix_spawnattr_setflags(&attributes, flags);
     posix_spawnattr_setpgroup(&attributes, 0);
 
@@ -199,6 +253,11 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
 
     auto state = std::make_unique<State>();
     state->id = id;
+    state->own_group = own_group;
+    {
+        const std::lock_guard running_lock(running_mutex);
+        running_programs()[id] = own_group;
+    }
     // The program has its copies; ours must close, or the pipes never end.
     output.write.reset();
     error.write.reset();
@@ -302,19 +361,14 @@ bool ChildProcess::wait_for(std::chrono::milliseconds timeout) {
     return true;
 }
 
-void ChildProcess::terminate() {
-    if (!state_->reap(false)) {
-        kill(-state_->id, SIGKILL);
-    }
-}
+void ChildProcess::terminate() { state_->signal_group(SIGKILL); }
 
 void ChildProcess::suspend() {
     // Sent again each time: a process stopped already stays so, and one that
     // joined the group since stops too.
     const std::lock_guard lock(state_->hold_mutex);
     ++state_->holds;
-    if (!state_->reap(false)) {
-        kill(-state_->id, SIGSTOP);
+    if (state_->signal_group(SIGSTOP)) {
         state_->stopped = true;
     }
 }
@@ -324,8 +378,8 @@ void ChildProcess::resume() {
     if (state_->holds == 0 || --state_->holds > 0) {
         return;  // not held, or still held by another
     }
-    if (state_->stopped && !state_->reap(false)) {
-        kill(-state_->id, SIGCONT);
+    if (state_->stopped) {
+        state_->signal_group(SIGCONT);
     }
     state_->stopped = false;
 }
@@ -337,5 +391,16 @@ std::string ChildProcess::standard_error() {
 }
 
 int ChildProcess::process_id() const { return static_cast<int>(state_->id); }
+
+void start_programs_in_this_group() { programs_in_this_group = true; }
+
+void end_programs_now() {
+    // Not waiting for the lock: the process is ending, and a thread that
+    // holds it may be the one that will not come back.
+    std::unique_lock lock(running_mutex, std::try_to_lock);
+    for (const auto& [id, own_group] : running_programs()) {
+        kill(own_group ? -id : id, SIGKILL);
+    }
+}
 
 }  // namespace vml::platform

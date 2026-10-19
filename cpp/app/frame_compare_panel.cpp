@@ -60,9 +60,11 @@ constexpr qsizetype cache_byte_limit = 192LL * 1024 * 1024;
 // same frame; the device is made again off the window's thread, from when
 // the pointer comes over the tab (prepare_playback).
 constexpr int release_after_ms = 30'000;
+#ifdef VML_NATIVE_PLAYBACK
 // The device being made for a start meanwhile: how long until it is let go
 // of after all, unless the tab is shown.
 constexpr int retry_unload_ms = 2'000;
+#endif
 
 // A file's identity for remembering its black bars: its path, size and time.
 std::string crop_file_key(const std::filesystem::path& path) {
@@ -814,7 +816,11 @@ bool FrameComparePanel::eventFilter(QObject* watched, QEvent* event) {
     }
     const bool key_event = type == QEvent::KeyPress || type == QEvent::KeyRelease;
     const auto* key = key_event ? static_cast<QKeyEvent*>(event) : nullptr;
-    if (key != nullptr && key->key() == Qt::Key_S && key->modifiers() == Qt::NoModifier) {
+    // No modifier the user pressed: macOS's arrow keys come with Qt's keypad
+    // modifier (as the keypad's do elsewhere), and its keys just after one
+    // can too.
+    const bool unmodified = key != nullptr && (key->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier;
+    if (key != nullptr && key->key() == Qt::Key_S && unmodified) {
         if (!key->isAutoRepeat()) {
             showing_source_ = type == QEvent::KeyPress;
             update_labels();
@@ -822,8 +828,7 @@ bool FrameComparePanel::eventFilter(QObject* watched, QEvent* event) {
         }
         return true;
     }
-    if (key != nullptr && type == QEvent::KeyPress && key->key() == Qt::Key_Space &&
-        key->modifiers() == Qt::NoModifier) {
+    if (key != nullptr && type == QEvent::KeyPress && key->key() == Qt::Key_Space && unmodified) {
         QWidget* focus = QApplication::focusWidget();
         if (qobject_cast<QLineEdit*>(focus) == nullptr && qobject_cast<QAbstractSpinBox*>(focus) == nullptr &&
             qobject_cast<QComboBox*>(focus) == nullptr) {
@@ -839,7 +844,7 @@ bool FrameComparePanel::eventFilter(QObject* watched, QEvent* event) {
             qobject_cast<QSlider*>(focus) != nullptr || qobject_cast<QComboBox*>(focus) != nullptr) {
             return QWidget::eventFilter(watched, event);
         }
-        if (!key->isAutoRepeat() && key->modifiers() == Qt::NoModifier) {
+        if (!key->isAutoRepeat() && unmodified) {
             cycle_distorted(key->key() == Qt::Key_Left ? -1 : 1);
         }
         return true;

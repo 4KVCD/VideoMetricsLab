@@ -14,6 +14,7 @@
 #include "vml/ffmpeg_run.h"
 #include "vml/gpu_frames.h"
 #include "vml/platform/console.h"
+#include "vml/platform/pipe.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/temp_files.h"
@@ -265,6 +266,7 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
     ChildConversation conversation(child, on_message, cancel);
     conversation.run();
     const int exit_code = child.wait();
+    platform::InboundPipe::remove_left_by(child.process_id());  // a Cancel's kill left them
     if (conversation.ended_after_answer) {
         app_log::write(app_log::Level::warning, "vml.isolated",
                        std::string(what) + " did not end within " + std::to_string(answered_wait.count()) +
@@ -299,6 +301,9 @@ void send_isolated_message(const nlohmann::json& message) {
 
 int run_isolated_task(std::string_view task, const std::filesystem::path& request_file) {
     platform::crash_quietly();  // its parent reports a crash; no dialog waits for the user
+    // What it starts (FFmpeg) is ended and paused with it, by its parent's
+    // Cancel and Pause.
+    platform::start_programs_in_this_group();
     // Where a crash happened, for the parent to put in its log: a crash ends
     // this process before it could send anything.
     platform::report_crashes_to(request_file.parent_path() / crash_report_name);

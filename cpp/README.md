@@ -189,7 +189,7 @@ than 100 ms goes on an integration list in `tests/CMakeLists.txt`.
 | --- | --- | --- |
 | Windows | Visual Studio 2022 or its Build Tools (the compiler Qt 6.12 supports), CMake 3.25+ | `cmake --preset windows`, `cmake --build --preset windows-release`, `ctest --preset windows-release` |
 | Linux | GCC 11+, CMake 3.25+, Ninja | the same with `linux` and `linux-release`; `linux-sanitizers` and `linux-sanitizers-debug` add AddressSanitizer and UndefinedBehaviorSanitizer |
-| macOS | Xcode 15+, CMake 3.25+, Ninja | the same with `macos` and `macos-release` |
+| macOS | Xcode 15+ or its Command Line Tools, CMake 3.25+, Ninja | the same with `macos` and `macos-release`; it builds for Apple silicon (arm64) and macOS 14.4 or later, Qt 6.12's earliest |
 
 On Windows the app is built with MSVC, and CMake stops at any other
 compiler. The `windows` preset finds MSVC from any shell; another generator,
@@ -201,7 +201,13 @@ Qt's folder when configuring, as in
 Windows the build puts Qt's libraries beside the window and its tests
 (windeployqt), so that they run from the build folder, and Qt's translations
 of its own dialogs where they are installed with Qt (qttranslations), which
-the package needs.
+the package needs. On macOS the window is an app bundle,
+`build/macos/app/Release/VideoMetricsLab.app`, which runs from the build
+folder with Qt's libraries where Qt is installed. The bundled tools for
+macOS are built from their pinned releases' source and are not committed:
+`scripts/build_libvmaf_fast_macos.sh` (libvmaf.dylib, needs meson) and
+`scripts/build_libjxl_macos.sh` (ssimulacra2 and butteraugli_main), and
+`scripts/build_release_macos.sh` runs both and packages the app.
 
 GitHub builds and tests the app when asked (`.github/workflows/ci.yml`:
 Actions > CI > Run workflow), at the end of each phase of the work and
@@ -219,5 +225,5 @@ development PC before each commit.
 - Warnings are errors, on every compiler.
 - A behaviour gets one test, through the real code, compared with the
   expected values in `tests/reference` wherever they cover it.
-- On macOS, `std::to_chars` for doubles needs macOS 13.3 or later, which
-  sets the earliest macOS the engine can run on.
+- On macOS, `std::to_chars` for doubles needs macOS 13.3 or later; Qt 6.12
+  needs 14.4, which sets the earliest macOS the app runs on.
