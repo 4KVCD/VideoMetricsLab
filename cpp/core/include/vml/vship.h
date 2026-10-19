@@ -318,6 +318,20 @@ std::optional<std::pair<VshipImageFormat, std::string>> passthrough_format(const
 // Vship does not take.
 vship_api::Colorspace vship_colorspace(const VideoInfo& info, const VshipImageFormat& image, int width, int height);
 
+// The chroma siting each of two videos is read with: its own, except that a
+// video that gives none (no tag, "unspecified" or "unknown") takes the other
+// video's, so that two videos are not read half a pixel apart for want of a
+// tag. FFmpeg writes "center" into a y4m file made from a video that gives
+// no siting: such a reference, against a test video that gives none, scored
+// SSIMULACRA2 -44.09 where the video it was made from scored -42.62, and
+// Butteraugli 11.20 where it scored 10.48 (a 720p test clip, on Vulkan).
+std::pair<std::string, std::string> shared_chroma_location(const std::string& source, const std::string& distorted);
+
+// Whether shared_chroma_location changes what Vship reads of a pair: one
+// video gives no siting, which Vship reads as left, and the other gives
+// another.
+bool chroma_location_shared(const std::string& source, const std::string& distorted);
+
 // The sizes the source's and the test video's frames are scaled to: both
 // the same, by the comparison's scaling direction.
 std::pair<std::pair<int, int>, std::pair<int, int>> vship_scaled_sizes(const VideoInfo& source,

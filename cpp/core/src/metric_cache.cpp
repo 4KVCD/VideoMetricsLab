@@ -22,6 +22,7 @@
 #include "vml/result_json.h"
 #include "vml/score_identity.h"
 #include "vml/sha256.h"
+#include "vml/vship.h"
 
 namespace vml {
 
@@ -122,14 +123,23 @@ bool stale_cpu_score(const MetricProvenance& provenance) {
 }
 
 // Whether a saved score is known to be wrong and must be calculated again:
-// a stale CPU score, or a GPU score from app version 1.2 or 1.2.1 of a pair
-// with an RGB video that has no transfer tag.
+// a stale CPU score; a GPU score made before a video without chroma siting
+// was read with the other's, of a pair where that changes what Vship reads
+// (chroma_location_shared); or a GPU score from app version 1.2 or 1.2.1 of
+// a pair with an RGB video that has no transfer tag.
 bool stale_vship_score(const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {
     if (stale_cpu_score(provenance)) {
         return true;
     }
+    const nlohmann::json mapping = parameter(provenance, "color_tags");
     if (provenance.compute_backend != "gpu" || !provenance.implementation.starts_with("Vship/") ||
-        parameter(provenance, "color_tags") == nlohmann::json(score_identity::vship_colour_tags)) {
+        mapping == nlohmann::json(score_identity::vship_colour_tags)) {
+        return false;
+    }
+    if (infos.size() == 2 && chroma_location_shared(infos[0].chroma_location, infos[1].chroma_location)) {
+        return true;
+    }
+    if (mapping == nlohmann::json(score_identity::vship_colour_tags_unshared_siting)) {
         return false;
     }
     return std::any_of(infos.begin(), infos.end(), [](const ColourTags& info) {
@@ -300,7 +310,7 @@ std::vector<ColourTags> context_colour_tags(const std::filesystem::path& directo
                 const nlohmann::json value = info.value(name, nlohmann::json());
                 return value.is_null() ? std::string() : python_str(value);
             };
-            infos.push_back({text("pix_fmt"), text("color_transfer")});
+            infos.push_back({text("pix_fmt"), text("color_transfer"), text("chroma_location")});
         }
     }
     return infos;
@@ -843,7 +853,8 @@ std::filesystem::path recipe_directory(const std::filesystem::path& base, const 
 }
 
 std::vector<ColourTags> colour_tags(const VideoInfo& source, const VideoInfo& distorted) {
-    return {{source.pix_fmt, source.color_transfer}, {distorted.pix_fmt, distorted.color_transfer}};
+    return {{source.pix_fmt, source.color_transfer, source.chroma_location},
+            {distorted.pix_fmt, distorted.color_transfer, distorted.chroma_location}};
 }
 
 bool answers(const MetricRequestSpec& spec, const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {

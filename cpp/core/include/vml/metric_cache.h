@@ -46,10 +46,11 @@ std::filesystem::path recipe_directory(const std::filesystem::path& base, const 
                                        const std::filesystem::path& distorted, const ComparisonRecipe& recipe);
 
 // What the rule against known-wrong Vship scores reads of a video: its
-// pixel format and transfer tag (video_infos).
+// pixel format, transfer tag and chroma siting (video_infos).
 struct ColourTags {
     std::string pix_fmt;
     std::string color_transfer;
+    std::string chroma_location;
 };
 std::vector<ColourTags> colour_tags(const VideoInfo& source, const VideoInfo& distorted);
 

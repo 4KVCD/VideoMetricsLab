@@ -148,6 +148,20 @@ TEST(Vship, DescribesColoursAsThePythonApp) {
     }
 }
 
+// A video that gives no chroma siting is read with the other's: a y4m
+// file's "center" (as FFmpeg writes it for a source without one) against a
+// test video without a siting was read half a pixel apart from it.
+TEST(Vship, AVideoWithoutChromaSitingIsReadWithTheOthers) {
+    using Sitings = std::pair<std::string, std::string>;
+    EXPECT_EQ(shared_chroma_location("center", "unspecified"), Sitings("center", "center"));
+    EXPECT_EQ(shared_chroma_location("", "topleft"), Sitings("topleft", "topleft"));
+    EXPECT_EQ(shared_chroma_location("left", "center"), Sitings("left", "center"));  // both given
+    EXPECT_EQ(shared_chroma_location("", "unknown"), Sitings("", "unknown"));        // neither given
+    EXPECT_TRUE(chroma_location_shared("center", ""));
+    EXPECT_FALSE(chroma_location_shared("", "left"));  // read as left before too
+    EXPECT_FALSE(chroma_location_shared("left", "center"));
+}
+
 // The filters and outputs FFmpeg is given, the sizes compared at, and the
 // sizes a metric is refused at on a GPU.
 TEST(Vship, PlansFfmpegAndSizesAsThePythonApp) {
