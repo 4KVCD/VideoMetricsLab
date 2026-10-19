@@ -31,10 +31,6 @@ namespace vml {
 namespace {
 
 using Json = nlohmann::json;
-using test::Folder;
-using test::make_clip;
-using test::Tools;
-using test::tools;
 
 // VML_SOFTWARE_DECODE as a test sets it, put back as it was.
 class SoftwareDecode : public test::ScopedVariable {
@@ -170,26 +166,6 @@ TEST(GpuFrames, PicturesThatDoNotMatchThePacketsFailTheRun) {
     PictureChecks made_up("the GPU's decoder");
     made_up.fed(1000, false);
     EXPECT_EQ(message([&] { made_up.take(500); }), "the GPU's decoder gave pictures the packets do not have");
-}
-
-// ----------------------------------------------------- on the PC's decoders
-
-// The decoder's pictures, packed, one after another.
-std::string decoded_pictures(const Tools& found, const VideoInfo& info, const DecodePlan& plan,
-                             const std::string& backend) {
-    GpuFrameStream stream(info, plan, 0, 4, backend, found.ffmpeg, found.ffprobe);
-    stream.start();
-    std::string pictures;
-    std::vector<char> picture(plan.frame_bytes());
-    std::optional<long long> last;
-    while (const std::optional<GpuFrameStream::Picture> next = stream.next(CancelToken())) {
-        stream.download(next->slot, picture.data());
-        stream.release(next->slot);
-        pictures.append(picture.data(), picture.size());
-        EXPECT_TRUE(!last || next->pts > *last);
-        last = next->pts;
-    }
-    return pictures;
 }
 
 }  // namespace
