@@ -141,6 +141,16 @@ void follow(Presenter& presenter) {
     }
 }
 
+// The window's keys back with Qt: when a video's surface (a native view of
+// its own, which had them) goes, the window keeps them itself, and none
+// reach the app (Video Compare's S, Space and arrows) until something is
+// clicked. Its content view, the window's Qt view, takes them again.
+void keep_keys(NSWindow* window) {
+    if (window != nil && window.firstResponder == window && window.contentView != nil) {
+        [window makeFirstResponder:window.contentView];
+    }
+}
+
 // Tells the layer what its colours are, when that changes.
 void set_space(Presenter& presenter, Space space) {
     if (presenter.asked == space) {
@@ -229,6 +239,7 @@ NativePresentation::NativePresentation(std::shared_ptr<NativeDevice> device, Nat
     presenter->layer.displaySyncEnabled = YES;
     set_space(*presenter, Space::sdr);
     [parent addSubview:presenter->view];
+    keep_keys(parent.window);
     follow(*presenter);
     presenter_ = presenter.release();
     thread_ = std::thread([this] { present_paced(); });
@@ -247,7 +258,9 @@ NativePresentation::~NativePresentation() {
     // The view goes on the window's thread, which AppKit's views belong to.
     VMLNativeVideoView* view = presenter->view;
     dispatch_async(dispatch_get_main_queue(), ^{
+      NSWindow* window = view.window;
       [view removeFromSuperview];
+      keep_keys(window);
     });
     delete presenter;
 }

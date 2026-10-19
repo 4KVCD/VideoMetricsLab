@@ -205,6 +205,12 @@ the presenter draws each pair in time with the source's soundtrack.
   it is 35 on macOS, so dav1d's "more data" read as an error and AV1 in
   software gave no frame. It is the system's EAGAIN now.
 - **Apple's GPUs decode 10-bit H.264**, which no Windows GPU does.
+- **Found:** Video Compare's ←/→ never switched videos: macOS's arrow keys
+  come with Qt's keypad modifier, which the keys' check took for one the user
+  pressed. And after a switch no key worked at all (S, Space, the arrows):
+  the old video's surface, a native view of its own, had the window's keys,
+  which went with it. The presenter gives them back to the window's Qt view
+  (`keep_keys`).
 
 ### The GPU metrics
 
