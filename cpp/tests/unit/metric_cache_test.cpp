@@ -178,7 +178,7 @@ TEST(MetricCache, AnswersAsThePythonApp) {
     for (const nlohmann::json& item : reference.at("answers")) {
         std::vector<ColourTags> infos;
         for (const nlohmann::json& info : item.at("infos")) {
-            infos.push_back({info.at("pix_fmt"), info.at("color_transfer")});
+            infos.push_back({info.at("pix_fmt"), info.at("color_transfer"), {}});  // no chroma siting given
         }
         EXPECT_EQ(answers(*request.metric(item.at("key")), test::provenance_from(item.at("provenance")), infos),
                   item.at("answers").get<bool>())
