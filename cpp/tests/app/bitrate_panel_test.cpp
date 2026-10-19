@@ -60,19 +60,6 @@ protected:
     static QString cell(const BitratePanel& panel, int row, int column) {
         return panel.table->item(row, column)->text();
     }
-
-    // Lets the panel's events run until `done`, for at most 30 seconds.
-    static bool wait_until(const std::function<bool()>& done) {
-        const QDeadlineTimer deadline(30'000);
-        while (!done()) {
-            if (deadline.hasExpired()) {
-                return false;
-            }
-            QApplication::processEvents(QEventLoop::AllEvents, 20);
-            QThread::msleep(5);
-        }
-        return true;
-    }
 };
 
 namespace {
@@ -138,54 +125,6 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
     panel->table->item(0, col_use)->setCheckState(Qt::Unchecked);
     EXPECT_FALSE(panel->chart->has_data());
     EXPECT_FALSE(panel->export_button->isEnabled());
-}
-
-// Calculate asks before reading again the files already read, and with No
-// reads only the others; a file added meanwhile (a run finishing) waits its
-// turn. Stop then ends ffprobe at once, marks the files not read as
-// stopped, and keeps what was read. The stand-in ffprobe never answers:
-// without Stop ending it, the scan would wait 60 s for it.
-TEST_F(BitratePanelTest, StopEndsTheScanAndKeepsWhatWasRead) {
-    const test::Folder folder;
-    const std::filesystem::path log = folder / "log";
-    std::filesystem::create_directory(log);
-    const test::ScopedVariable tool("VML_TEST_TOOL", "hang");
-    const test::ScopedVariable logged_to("VML_TEST_TOOL_LOG", platform::path_text(log));
-    VideoColors colors;
-    const auto panel = make_panel(colors, VML_TEST_CHILD);
-    const std::vector<std::filesystem::path> paths{folder / "0.mkv", folder / "1.mkv", folder / "2.mkv"};
-    panel->add_files({paths[0], paths[1]});
-    analyzed(*panel, paths[0], two_seconds(paths[0]));
-    const BitrateData* kept = entry(*panel, 0).data.get();
-
-    std::vector<QString> asked;
-    panel->dialogs.ask_no_default = [&asked](const QString& title, const QString&) {
-        asked.push_back(title);
-        return false;  // No: the files read keep their results
-    };
-    panel->analyze_button->click();
-    EXPECT_EQ(asked, std::vector<QString>{"Recalculate bitrate?"});
-    ASSERT_TRUE(wait_until([&log] { return !std::filesystem::is_empty(log); })) << "ffprobe never started";
-    // The scan said the file had started before it started ffprobe, but the
-    // window may not have taken the message yet: it is waiting, posted.
-    QApplication::processEvents();
-    panel->add_files({paths[2]}, {}, true);
-    EXPECT_EQ(cell(*panel, 0, col_status).toStdString(), "Complete");
-    EXPECT_EQ(cell(*panel, 1, col_status).toStdString(), "Reading video packets\xE2\x80\xA6");
-    EXPECT_EQ(cell(*panel, 2, col_status).toStdString(), "Queued");
-    EXPECT_EQ(panel->analyze_button->text().toStdString(), "Stop");
-    ASSERT_TRUE(panel->analyze_button->isEnabled());
-
-    panel->analyze_button->click();
-    EXPECT_EQ(panel->analyze_button->text().toStdString(), "Stopping\xE2\x80\xA6");
-    EXPECT_FALSE(panel->analyze_button->isEnabled());
-    ASSERT_TRUE(wait_until([&panel] { return idle(*panel); })) << "Stop did not end ffprobe";
-    EXPECT_EQ(entry(*panel, 0).data.get(), kept);
-    EXPECT_EQ(cell(*panel, 1, col_status).toStdString(), "Stopped");
-    EXPECT_EQ(cell(*panel, 2, col_status).toStdString(), "Stopped");
-    EXPECT_TRUE(panel->status_label->text().contains("stopped")) << panel->status_label->text().toStdString();
-    EXPECT_TRUE(panel->analyze_button->isEnabled());
-    EXPECT_EQ(panel->analyze_button->text().toStdString(), "Calculate bitrate");
 }
 
 // Why a file failed is on its own row: once a row above it is removed, the

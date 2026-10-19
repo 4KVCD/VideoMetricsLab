@@ -65,7 +65,7 @@ jobs:
         working-directory: cpp
         env:
           QT_QPA_PLATFORM: offscreen
-        run: ctest --preset macos-release-all
+        run: ctest --preset macos-release
       - uses: actions/upload-artifact@v6
         with:
           name: VideoMetricsLab-macos-arm64

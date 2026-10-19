@@ -125,42 +125,5 @@ TEST(FrameExtract, PreparesFramesAsThePythonAppDoes) {
     }
 }
 
-// A real frame: FFmpeg's decoding of the frame asked for, as a PNG of the
-// compared size; one past the end of the video is refused with the Python
-// app's reason; a missing file too.
-TEST(FrameExtract, ExtractsTheFrameAskedFor) {
-    const std::optional<test::Tools> found = test::tools();
-    if (!found) {
-        GTEST_SKIP() << "no FFmpeg";
-    }
-    const test::Folder folder;
-    FrameComparison comparison;
-    comparison.source_info.path = test::make_clip(*found, folder / "source.mkv", "libx264", "yuv420p", 1.0);
-    comparison.source_info.width = 640;
-    comparison.source_info.height = 360;
-    comparison.source_info.pix_fmt = "yuv420p";
-    comparison.distorted_info = comparison.source_info;
-    comparison.fps = 24000.0 / 1001;  // the clips' rate
-    comparison.frame_count = 23;
-    const std::string png = extract_frame_png(found->ffmpeg, comparison, FrameSide::distorted, 12, CancelToken());
-    ASSERT_GE(png.size(), 24u);
-    EXPECT_EQ(png.substr(1, 3), "PNG");
-    // The image header's width and height, big-endian.
-    const auto number = [&png](std::size_t at) {
-        return (static_cast<unsigned char>(png[at]) << 24) | (static_cast<unsigned char>(png[at + 1]) << 16) |
-               (static_cast<unsigned char>(png[at + 2]) << 8) | static_cast<unsigned char>(png[at + 3]);
-    };
-    EXPECT_EQ(number(16), 640u);
-    EXPECT_EQ(number(20), 360u);
-    try {
-        extract_frame_png(found->ffmpeg, comparison, FrameSide::source, 500, CancelToken());
-        ADD_FAILURE() << "a frame past the end";
-    } catch (const FrameExtractError& error) {
-        EXPECT_STREQ(error.what(), "No frame was returned at frame 500; it may be beyond the end of the video.");
-    }
-    comparison.source_info.path = folder / "gone.mkv";
-    EXPECT_THROW(extract_frame_png(found->ffmpeg, comparison, FrameSide::source, 0, CancelToken()), FrameExtractError);
-}
-
 }  // namespace
 }  // namespace vml

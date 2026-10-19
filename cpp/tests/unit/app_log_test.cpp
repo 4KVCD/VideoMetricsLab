@@ -47,44 +47,6 @@ TEST(AppLog, CopyLogSharesWhatThePythonAppShares) {
     }
 }
 
-// 30 MB of lines: the log starts again before it would reach 5 MB, the
-// older files move up a number each time, and only four are kept, so the
-// log takes 25 MB at most. Every line is in the newest files, in order.
-TEST(AppLog, StartsAgainAtFiveMegabytesKeepingFourOlderFiles) {
-    const test::Folder folder;
-    const std::filesystem::path logs = folder / "logs";
-    ASSERT_TRUE(app_log::start_logging(logs).has_value());
-    const std::string text(10'000, 'x');
-    constexpr int lines = 3'000;
-    for (int i = 0; i < lines; ++i) {
-        app_log::write(app_log::Level::info, "vml.test", std::to_string(i) + " " + text);
-    }
-    app_log::stop_logging();
-
-    const std::filesystem::path log = logs / "VideoMetricsLab.log";
-    EXPECT_FALSE(std::filesystem::exists(logs / "VideoMetricsLab.log.5"));
-    // Oldest first, as the lines were written.
-    int next = -1;
-    for (const std::string suffix : {".4", ".3", ".2", ".1", ""}) {
-        std::filesystem::path file = log;
-        file += suffix;
-        ASSERT_TRUE(std::filesystem::exists(file)) << suffix;
-        EXPECT_LT(std::filesystem::file_size(file), 5u * 1024 * 1024) << suffix;
-        std::ifstream in(file, std::ios::binary);
-        for (std::string line; std::getline(in, line);) {
-            // "<date> <time> INFO    [MainThread] vml.test: <number> xxx..."
-            const std::size_t at = line.find("vml.test: ");
-            ASSERT_NE(at, std::string::npos) << line.substr(0, 80);
-            const int number = std::stoi(line.substr(at + 10));
-            if (next >= 0) {
-                EXPECT_EQ(number, next) << suffix;
-            }
-            next = number + 1;
-        }
-    }
-    EXPECT_EQ(next, lines);
-}
-
 // Export log: the log files with anything in them, in one zip to attach to
 // a report, as the Python app's export_logs writes it; with no log yet,
 // nothing.

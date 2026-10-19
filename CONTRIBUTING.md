@@ -41,10 +41,9 @@ ctest --preset windows-release
 ctest --preset windows-debug
 ```
 
-These are the unit tests, at most 100 ms each. The integration tests, which
-decode, score and play real videos with FFmpeg and the GPU, run with
-`ctest --preset windows-release-integration`; run them when you change
-their area. Tests that need a GPU, or FFmpeg, skip themselves without it.
+These are the tests, at most 100 ms each. Real videos are scored by the
+golden suite (`cpp/README.md`). Tests that need a GPU, or FFmpeg, skip
+themselves without it.
 
 From the repository root, after changing a script or the window's text:
 

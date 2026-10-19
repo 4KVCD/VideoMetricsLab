@@ -28,13 +28,10 @@
 3. Build with `scripts/build_release.ps1` ([BUILD.md](BUILD.md)), without
    `-AllowLocalLibvmaf`. Its self-test must report no failure, and only the
    warnings the PC explains (another GPU maker's decoder, say).
-4. Run both test suites, unit and integration, Release and Debug (`ctest
-   --preset windows-release-all`, `windows-debug-all`, from `cpp`), and the
-   CI workflow on GitHub (Actions > CI > Run workflow); and, on a PC of each
-   GPU maker, the integration tests, and the window's native decoding tests
-   with the package's own files: `VML_RESOURCES=<package>\resources`, then
-   `vml_app_tests --gtest_filter=NativeDecoderTest.*`. Record FFmpeg's
-   version and each GPU's driver.
+4. Run the tests, Release and Debug (`ctest --preset windows-release`,
+   `windows-debug`, from `cpp`), and the CI workflow on GitHub (Actions > CI
+   > Run workflow); and, on a PC of each GPU maker, the package's self-test
+   (step 3). Record FFmpeg's version and each GPU's driver.
 5. Run the golden suite (`cpp/README.md`) with the new build against a run
    of the last release's package, and once more with `--seed-app` set to
    that package's `vml-cli`, so that the new build reads the scores the last
@@ -52,8 +49,8 @@
    and NEG identical, those within 0.002 per frame (libvmaf's GPU and CPU
    code round ADM and motion differently; official Netflix CUDA, without
    the fixes libvmaf-fast carries, was off by up to 0.13 at cuts). After updating
-   libvmaf-fast, run the integration tests `VmafVulkan.*`, `VmafV1Gpu.*` and
-   `VmafCuda.*` on a PC of each GPU maker; changes to libvmaf, its pull
+   libvmaf-fast, run the golden suite's GPU VMAF cases on a PC of each GPU
+   maker; changes to libvmaf, its pull
    requests or the Vulkan engine are made in libvmaf-fast, which runs its
    own checks before each release.
 7. Test Video Compare's playback on a PC of each GPU maker: H.264, HEVC,

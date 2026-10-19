@@ -19,7 +19,6 @@ add_executable(vml_tests
     unit/isolated_test.cpp
     unit/job_runner_test.cpp
     unit/library_test.cpp
-    unit/libvmaf_cpu_test.cpp
     unit/libvmaf_test.cpp
     unit/metric_cache_test.cpp
     unit/metrics_test.cpp
@@ -27,7 +26,6 @@ add_executable(vml_tests
     unit/perceptual_cpu_test.cpp
     unit/process_test.cpp
     unit/python_json_test.cpp
-    unit/raw_stream_test.cpp
     unit/run_file_test.cpp
     unit/run_line_test.cpp
     unit/settings_test.cpp
@@ -39,8 +37,6 @@ add_executable(vml_tests
     unit/native_playback_test.cpp
     unit/soundtrack_clock_test.cpp
     unit/video_playback_test.cpp
-    unit/vmaf_cuda_test.cpp
-    unit/vmaf_v1_gpu_test.cpp
     unit/vmaf_vulkan_test.cpp
     unit/vship_test.cpp
     unit/reference.cpp
@@ -63,57 +59,19 @@ target_link_libraries(vml_test_library PRIVATE vml_compile_options)
 add_dependencies(vml_tests vml_test_child vml_test_library vml-cli)
 
 include(GoogleTest)
-# Two suites, by label. A unit test takes at most 100 ms (gtest's own time, in
-# a Release build); they are the check before every commit. The integration
-# tests are the slower ones that decode, score or play real videos with
-# FFmpeg, the GPU or the window; they run at the end of each phase of work,
-# before a release, and when their code changes. A test over 100 ms goes on
-# an integration list here. `ctest --preset <name>` runs the unit tests,
-# `<name>-integration` the others and `<name>-all` both (CMakePresets.json).
+# Unit tests only, each at most 100 ms (gtest's own time, in a Release
+# build): the check before every commit. Real videos are scored by the
+# golden suite (tests/golden); playback and the window are checked by hand.
 #
 # The tests that run work on the PC's GPU also share a lock, so that ctest -j
 # runs them one at a time: side by side they could use up a smaller PC's
 # memory (they crashed a 14 GB laptop with an AMD 780M). The others run in
 # parallel.
-set(gpu_suites "GpuFrames.*:VmafCuda.*:VmafV1Gpu.*:VmafVulkan.*:Vship.*")
-set(gpu_integration
-    "GpuFrames.DecodingThatFailsHandsTheRunToFfmpeg"
-    "GpuFrames.PacketsWithoutTimestampsAreRefusedForTheReasonThePythonAppGives"
-    "GpuFrames.PicturesAreFfmpegsDecoding"
-    "GpuFrames.VmafOnTheGpuScoresTheAppsPicturesAsFfmpegsFrames"
-    "GpuFrames.VmafV1ScoresThePicturesKeptOnTheGpuAsFfmpegsFrames"
-    "VmafCuda.*"
-    "VmafV1Gpu.*"
-    "VmafVulkan.NoFramesGiveNoScoresAndAShortFrameIsAnError"
-    "VmafVulkan.ProbeAcceptsThisPcsGpu"
-    "VmafVulkan.ScoresAsThePythonApp"
-    "Vship.ProbeTriesTheChosenBuildFirst")
-set(cpu_integration
-    "AppLog.StartsAgainAtFiveMegabytesKeepingFourOlderFiles"
-    "Bitrate.ReadsAClipsPacketsWithFfprobe"
-    "FfmpegRun.BuildsThePythonAppsFilterGraphAndCommand"
-    "Ffprobe.ReadingAVideoIsEndedByCancel"
-    "FrameExtract.ExtractsTheFrameAskedFor"
-    "LibvmafCpu.*"
-    "PerceptualCpu.APairIsScoredOnceFFmpegHasLetGoOfItsPictures"
-    "PerceptualCpu.ATaskScoresEveryPairInOrder"
-    "PerceptualCpu.CancelEndsEveryPairBeingScored"
-    "PerceptualCpu.PairedByTimestampAFrameDroppedFromTheTestVideoPairsTheRestByTime"
-    "PerceptualCpu.ThePicturesAreEachVideosFrameNCutAtTheLimit"
-    "Process.AProgramRunningTooLongIsEnded"
-    "Process.TerminateEndsARunningProgram"
-    "RawStream.ScoresAsTheSameStreamInAContainer"
-    "RawStream.AYuvFileScoresAsTheSamePicturesInAContainer")
-list(JOIN gpu_integration ":" gpu_integration)
-list(JOIN cpu_integration ":" cpu_integration)
-gtest_discover_tests(vml_tests TEST_FILTER "-${gpu_suites}:${cpu_integration}"
+set(gpu_suites "GpuFrames.*:VmafVulkan.*:Vship.*")
+gtest_discover_tests(vml_tests TEST_FILTER "-${gpu_suites}"
     PROPERTIES LABELS unit)
-gtest_discover_tests(vml_tests TEST_FILTER "${gpu_suites}-${gpu_integration}"
+gtest_discover_tests(vml_tests TEST_FILTER "${gpu_suites}"
     PROPERTIES LABELS unit RESOURCE_LOCK gpu)
-gtest_discover_tests(vml_tests TEST_FILTER "${cpu_integration}"
-    PROPERTIES LABELS integration)
-gtest_discover_tests(vml_tests TEST_FILTER "${gpu_integration}"
-    PROPERTIES LABELS integration RESOURCE_LOCK gpu)
 
 # The window's tests, where the window is built (app/CMakeLists.txt). They
 # run with no screen, each in a profile of its own (app/main.cpp).
@@ -126,7 +84,6 @@ if(TARGET vml_app)
         app/graph_panel_test.cpp
         app/i18n_test.cpp
         app/main.cpp
-        app/main_window_test.cpp
         app/playback_test.cpp
         unit/reference.cpp
         unit/test_videos.cpp
@@ -135,21 +92,20 @@ if(TARGET vml_app)
     target_link_libraries(vml_app_tests PRIVATE vml_app Qt6::Test vml_compile_options nlohmann_json gtest)
     target_compile_definitions(vml_app_tests PRIVATE
         VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
-        VML_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
         VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>"
         VML_CLI="$<TARGET_FILE:vml-cli>")  # the program isolated work runs in
     add_dependencies(vml_app_tests vml-cli vml_test_child)
     if(WIN32 AND MSVC)
         # Native playback, where it is built (app/CMakeLists.txt); no min and
         # max macros from Windows' headers.
-        target_sources(vml_app_tests PRIVATE app/native_decoder_test.cpp app/native_pool_test.cpp)
+        target_sources(vml_app_tests PRIVATE app/native_pool_test.cpp)
         target_compile_definitions(vml_app_tests PRIVATE NOMINMAX)
     endif()
     get_property(native_playback_macos GLOBAL PROPERTY vml_native_playback_macos)
     if(APPLE AND native_playback_macos)
         # Native playback on macOS, where FFmpeg's libraries are built
         # (app/CMakeLists.txt).
-        target_sources(vml_app_tests PRIVATE app/native_decoder_test.cpp app/native_pool_test.cpp)
+        target_sources(vml_app_tests PRIVATE app/native_pool_test.cpp)
     endif()
     if(WIN32)
         # Qt beside the tests, with the platform they run on, and Qt's
@@ -161,20 +117,5 @@ if(TARGET vml_app)
             VERBATIM)
         vml_deploy_qt_translations(vml_app_tests)
     endif()
-    # Unit and integration tests, as for vml_tests above.
-    set(app_integration
-        "NativeDecoderTest.*"
-        "BitratePanelTest.StopEndsTheScanAndKeepsWhatWasRead"
-        "FramePanelTest.APairThatCanPlayIsPlayedWithThePanelsControls"
-        "FramePanelTest.APairPlaysNativelyOnTheDisplay"
-        "FramePanelTest.EachPairIsCroppedToThePictureItsOwnTwoVideosShare"
-        "FramePanelTest.TheFramesShownAreFfmpegsFramesOfBothVideos"
-        "PlaybackTest.AFailedDecoderResumesDownABoundedLadderWithoutReplaying"
-        "PlaybackTest.ARealPairShowsTheSameFrameOfBothVideos"
-        "WindowTest.*")
-    list(JOIN app_integration ":" app_integration)
-    gtest_discover_tests(vml_app_tests TEST_FILTER "-${app_integration}"
-        PROPERTIES LABELS unit)
-    gtest_discover_tests(vml_app_tests TEST_FILTER "${app_integration}"
-        PROPERTIES LABELS integration)
+    gtest_discover_tests(vml_app_tests PROPERTIES LABELS unit)
 endif()

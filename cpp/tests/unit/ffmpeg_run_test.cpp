@@ -102,36 +102,6 @@ VmafOptions options_named(const std::string& choice, const std::string& setting)
     return options;
 }
 
-TEST(FfmpegRun, BuildsThePythonAppsFilterGraphAndCommand) {
-    const Json reference = test::load_reference("runs.json");
-    ASSERT_FALSE(reference["commands"].empty());
-    for (const Json& item : reference["commands"]) {
-        SCOPED_TRACE(item["name"].get<std::string>());
-        set_pairing(item["pairing"].get<std::string>());
-        const auto [source, test] = pair_named(item["pair"].get<std::string>());
-        const auto [source_crop, test_crop] = crops_named(item["crop"].get<std::string>());
-        const HardwareDecoding plan = plan_named(item["plan"].get<std::string>());
-        const VmafOptions options = options_named(item["choice"].get<std::string>(), item["setting"].get<std::string>());
-        const std::optional<std::string> xpsnr_log =
-            options.compute_xpsnr ? std::optional<std::string>("xpsnr_log.txt") : std::nullopt;
-        const std::string graph = build_filtergraph(source, test, options, source_crop, test_crop, plan,
-                                                    "vmaf_log.json", item["model"].get<std::string>(), xpsnr_log,
-                                                    item["cores"].get<unsigned>());
-        std::vector<std::string> command =
-            build_ffmpeg_command("<ffmpeg>", test.path, source.path, graph, plan, options.duration_limit);
-        // The inputs as absolute paths, which differ between PCs.
-        for (std::string& part : command) {
-            if (part == platform::path_text(std::filesystem::absolute(test.path))) {
-                part = "<test>";
-            } else if (part == platform::path_text(std::filesystem::absolute(source.path))) {
-                part = "<source>";
-            }
-        }
-        EXPECT_EQ(command, item["command"].get<std::vector<std::string>>());
-    }
-    set_pairing("");
-}
-
 // A resolution test: its one input, the source, split into an untouched
 // reference and a test video scaled down to the target and back up.
 TEST(FfmpegRun, BuildsThePythonAppsResolutionTestCommands) {

@@ -241,7 +241,6 @@ protected:
 
 private:
     friend class FramePanelTest;  // the panel's tests (tests/app)
-    friend class WindowTest;      // the window's tests: the pairs it lists
 
     // A frame kept: whose, which, and what it is made from. A pair keeps its
     // identity while what its frames are made from changes (its black bars

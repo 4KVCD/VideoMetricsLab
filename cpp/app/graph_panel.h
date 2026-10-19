@@ -226,7 +226,6 @@ signals:
 
 private:
     friend class GraphPanelTest;  // the graph's tests (tests/app)
-    friend class WindowTest;      // and the window's
 
     MetricPage* build_page(const MetricDefinition& metric);
     void on_tab_changed(int index);

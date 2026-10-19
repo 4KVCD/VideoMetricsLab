@@ -82,13 +82,9 @@ A fixed step between "tests pass" and "commit".
       .venv\Scripts\python.exe -m ruff check --output-format concise scripts cpp/tests
       .venv\Scripts\python.exe scripts\i18n_catalog.py check
 
-- The integration tests (`ctest --preset windows-release-integration`) run
-  when their code changes, at the end of each phase of work and before a
-  release.
 - If a test hangs, run its program alone with `--gtest_filter` to find where.
-- A unit test takes at most 100 ms (gtest's time, Release build). A slower
-  one is an integration test: put it on an integration list in
-  `cpp/tests/CMakeLists.txt`.
+- A test takes at most 100 ms (gtest's time, Release build). Do not write a
+  slower one: real videos are scored by the golden suite and checked by hand.
 - Never write or keep a test that depends on real elapsed time or machine
   load. Use a fake clock. Delete a flaky test rather than loosening it.
 - Write few tests, only important ones: a test for a bug you fix where it

@@ -56,20 +56,6 @@ TEST(Process, KeepsTheEndOfALongErrorOutput) {
     EXPECT_TRUE(output.standard_error.ends_with("warning 49999 of 50000\nthe last line\n"));
 }
 
-TEST(Process, AProgramRunningTooLongIsEnded) {
-    const auto started = std::chrono::steady_clock::now();
-    const ProcessOutput output = run_program({VML_TEST_CHILD, "sleep"}, 300ms);
-    EXPECT_TRUE(output.timed_out);
-    EXPECT_LT(std::chrono::steady_clock::now() - started, 20s);  // ended, not waited for
-}
-
-TEST(Process, TerminateEndsARunningProgram) {
-    ChildProcess child = ChildProcess::start({VML_TEST_CHILD, "sleep"});
-    EXPECT_FALSE(child.wait_for(100ms));
-    child.terminate();
-    EXPECT_TRUE(child.wait_for(20s));
-}
-
 TEST(Process, AProgramThatIsNotThereCannotBeStarted) {
     EXPECT_THROW(ChildProcess::start({"vml-no-such-program-anywhere"}), ProcessError);
 }

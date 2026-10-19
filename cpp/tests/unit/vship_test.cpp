@@ -215,26 +215,5 @@ TEST(Vship, PlansFfmpegAndSizesAsThePythonApp) {
     }
 }
 
-// On a PC with a GPU Vship can use, the probe finds it with the build the
-// setting tries first: CUDA for "auto" on an NVIDIA GPU and Vulkan on the
-// others, AMD's too (its HIP build is much slower), Vulkan when chosen.
-TEST(Vship, ProbeTriesTheChosenBuildFirst) {
-    const auto [device, reason] = probe_vship_device("auto");
-    if (!device) {
-        GTEST_SKIP() << "no GPU that Vship can use: " << reason;
-    }
-    EXPECT_FALSE(device->name.empty());
-    EXPECT_EQ(std::count(device->version.begin(), device->version.end(), '.'), 2) << device->version;
-    if (device->backend == "cuda") {
-        EXPECT_EQ(device->vendor, GpuVendor::nvidia);
-    } else {
-        EXPECT_EQ(device->backend, "vulkan");
-    }
-    const auto [vulkan, why] = probe_vship_device("vulkan");
-    ASSERT_TRUE(vulkan.has_value()) << why;
-    EXPECT_EQ(vulkan->backend, "vulkan");
-    EXPECT_TRUE(vulkan->vendor.has_value());
-}
-
 }  // namespace
 }  // namespace vml

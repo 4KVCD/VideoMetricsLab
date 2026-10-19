@@ -58,7 +58,6 @@ scale filter gives (`plan_decode` in `core/src/gpu_frames.cpp`); the
 | `tests/unit` | The tests (GoogleTest). |
 | `tests/app` | The window's tests, run with no screen (Qt's offscreen platform), each in a profile of its own. |
 | `tests/reference` | The tests' expected values: the Python app's answers at the port, edited only on purpose since. |
-| `tests/fixtures` | Small videos the window's tests play. |
 | `tests/golden` | The command line's runs on real videos, held to an earlier run's. |
 | `third_party` | Vendored libraries: see its README. |
 | `packaging` | What the Windows package adds to the build (Qt's licence texts). |
@@ -176,14 +175,10 @@ iterator, so run them too; on Linux, the sanitizer preset does that job.
 The tests that need a GPU, or a library the app does not ship for the
 system yet, are skipped without it, as on GitHub's runners.
 
-The tests come in two suites. The unit tests take at most 100 ms each, a
-few seconds together, and are the check before every commit:
-`ctest --preset windows-release`. The integration tests decode, score and
-play real videos with FFmpeg, the GPU and the window, and take longer:
-`ctest --preset windows-release-integration`, or both suites with
-`windows-release-all`. They run at the end of each phase of the work,
-before a release, and when their code changes. A test that takes longer
-than 100 ms goes on an integration list in `tests/CMakeLists.txt`.
+The tests take at most 100 ms each, a few seconds together, and are the
+check before every commit: `ctest --preset windows-release`. Real videos
+are scored by the golden suite (below); a test that would take longer than
+100 ms is not written.
 
 | System | Needs | Commands (from `cpp`) |
 | --- | --- | --- |

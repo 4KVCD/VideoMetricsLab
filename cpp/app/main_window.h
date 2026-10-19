@@ -207,8 +207,6 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
-    friend class WindowTest;  // the window's tests (tests/app)
-
     // ------------------------------------------------------------ the window
     void build_ui();
     QWidget* build_files_panel();

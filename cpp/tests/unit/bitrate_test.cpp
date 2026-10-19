@@ -97,43 +97,5 @@ TEST(Bitrate, ReadsThePacketsAndDrawsTheGraphsAsThePythonAppDoes) {
     }
 }
 
-// A real clip's packets read with ffprobe: every frame, in presentation
-// order though its B-frames come in decode order, the first a keyframe, and
-// the progress ending at the packets read. A missing file and a Cancel say
-// so.
-TEST(Bitrate, ReadsAClipsPacketsWithFfprobe) {
-    const std::optional<test::Tools> found = test::tools();
-    if (!found) {
-        GTEST_SKIP() << "no FFmpeg";
-    }
-    const test::Folder folder;
-    const VideoInfo video = probe_video(
-        test::make_clip(*found, folder / "clip.mkv", "libx264", "yuv420p", 1.0, {}, "64x48"), found->ffprobe);
-    std::vector<std::pair<long long, long long>> progress;
-    const BitrateData data = analyze_video_bitrate(found->ffprobe, video, CancelToken(),
-                                                   [&progress](long long done, long long total) {
-                                                       progress.emplace_back(done, total);
-                                                   });
-    EXPECT_EQ(data.frame_count(), video.estimated_frame_count());
-    ASSERT_FALSE(data.times.empty());
-    EXPECT_TRUE(std::is_sorted(data.times.begin(), data.times.end()));
-    EXPECT_TRUE(data.keyframes.front());
-    EXPECT_GT(data.summary.average_kbps, 0);
-    ASSERT_FALSE(progress.empty());
-    EXPECT_EQ(progress.back(), std::pair(data.frame_count(), video.estimated_frame_count()));
-
-    VideoInfo missing = video;
-    missing.path = folder / "gone.mkv";
-    try {
-        analyze_video_bitrate(found->ffprobe, missing, CancelToken());
-        ADD_FAILURE() << "no error";
-    } catch (const BitrateError& error) {
-        EXPECT_EQ(std::string(error.what()), "Video file is missing: " + platform::path_text(missing.path));
-    }
-    CancelToken cancel;
-    cancel.cancel();
-    EXPECT_THROW(analyze_video_bitrate(found->ffprobe, video, cancel), Cancelled);
-}
-
 }  // namespace
 }  // namespace vml

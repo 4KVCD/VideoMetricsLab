@@ -8,11 +8,9 @@ name: CI
 # Linux (GCC 11, GCC 13) and macOS (Apple Clang) builds come back when the
 # port reaches those systems.
 #
-# It runs only when asked (Actions > CI > Run workflow): at the end of
-# each phase of the port, and before a release, both suites (unit and
-# integration, cpp/tests/CMakeLists.txt). In between, the unit tests run on
-# the development PC before each commit, GPU tests included, which GitHub's
-# runners cannot run.
+# It runs only when asked (Actions > CI > Run workflow): before a release.
+# In between, the unit tests run on the development PC before each commit,
+# GPU tests included, which GitHub's runners cannot run.
 on:
   workflow_dispatch:
 
@@ -85,4 +83,4 @@ jobs:
         # The offscreen platform finds no fonts of its own on Windows.
         env:
           QT_QPA_FONTDIR: ${{ runner.os == 'Windows' && 'C:\Windows\Fonts' || '' }}
-        run: ctest --preset ${{ matrix.build }}-all
+        run: ctest --preset ${{ matrix.build }}
