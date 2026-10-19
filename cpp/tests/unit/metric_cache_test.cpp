@@ -20,6 +20,7 @@
 #include "vml/npz.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
+#include "vml/score_identity.h"
 #include "vml/sha256.h"
 
 namespace vml {
@@ -199,6 +200,22 @@ TEST(MetricCache, AnswersAsThePythonApp) {
                                               colour_tags(result.source_info, result.distorted_info));
         EXPECT_EQ(nlohmann::json(kept.keys()), item.at("kept")) << item.dump();
     }
+}
+
+// A Vship score saved before a video without chroma siting was read with
+// the other's is calculated again for a pair where that changes the score,
+// and kept for the rest.
+TEST(MetricCache, AVshipScoreReadWithItsChromaApartIsCalculatedAgain) {
+    const AnalysisRequest request = analysis_request(VmafOptions{}, {"ssimulacra2"}, {}, CvvdpSettings{});
+    const MetricRequestSpec& spec = *request.metric("ssimulacra2");
+    MetricProvenance saved{"Vship/ssimulacra2", "Vship 5.1.2", "gpu", "ssimulacra2-vship-gpu-v1",
+                           {{"coverage_step", "1"}, {"color_tags", "\"ffvship-5.1.1\""}}};
+    const std::vector<ColourTags> apart{{"yuv420p", "bt709", "center"}, {"yuv420p", "bt709", ""}};
+    const std::vector<ColourTags> left{{"yuv420p", "bt709", "left"}, {"yuv420p", "bt709", ""}};
+    EXPECT_FALSE(answers(spec, saved, apart));
+    EXPECT_TRUE(answers(spec, saved, left));
+    saved.parameters["color_tags"] = nlohmann::json(score_identity::vship_colour_tags).dump();
+    EXPECT_TRUE(answers(spec, saved, apart));
 }
 
 // What each request loads from a comparison folder the Python app saved:

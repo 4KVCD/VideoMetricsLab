@@ -1222,11 +1222,17 @@ public:
 private:
     // How each video is decoded, sized and laid out for Vship. Decoding
     // follows the run's GPU decode setting, per video and per codec;
-    // hardware decoding is bit-exact, so it changes only the speed.
+    // hardware decoding is bit-exact, so it changes only the speed. A video
+    // without chroma siting is read with the other's (shared_chroma_location).
     void plan_videos() {
         const auto [source_size, distorted_size] =
             vship_scaled_sizes(request_.source, request_.distorted, request_.options.scale_direction,
                                plan_.source_crop, plan_.distorted_crop);
+        const auto [source_siting, distorted_siting] =
+            shared_chroma_location(request_.source.chroma_location, request_.distorted.chroma_location);
+        if (chroma_location_shared(request_.source.chroma_location, request_.distorted.chroma_location)) {
+            logger.info("Vship: one video gives no chroma siting; both are read as " + source_siting);
+        }
         for (const bool source : {true, false}) {
             VideoPlan& video = videos_[source ? 0 : 1];
             video.info = source ? request_.source : request_.distorted;
@@ -1239,7 +1245,9 @@ private:
             video.image = video.passthrough ? video.passthrough->first
                                             : vship_image_format(video.info, plan_.device.version);
             video.layout = video.image.frame_layout(video.size.first, video.size.second);
-            video.colour = vship_colorspace(video.info, video.image, video.size.first, video.size.second);
+            VideoInfo described = video.info;
+            described.chroma_location = source ? source_siting : distorted_siting;
+            video.colour = vship_colorspace(described, video.image, video.size.first, video.size.second);
         }
     }
 

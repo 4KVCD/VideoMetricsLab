@@ -803,6 +803,38 @@ std::optional<std::pair<VshipImageFormat, std::string>> passthrough_format(const
     return std::nullopt;
 }
 
+namespace {
+
+// A chroma siting as Vship's Vship_ChromaLocation_t, which has no bottom or
+// bottom-left siting; none given is read as left.
+std::optional<int> vship_siting(const std::string& location) {
+    std::string name = ascii_lower(location.empty() ? "left" : location);
+    std::erase(name, '-');
+    static const std::map<std::string, int, std::less<>> locations{
+        {"left", 0}, {"center", 1}, {"topleft", 2}, {"top", 3}, {"unspecified", 0}, {"unknown", 0}};
+    const auto found = locations.find(name);
+    return found == locations.end() ? std::nullopt : std::optional(found->second);
+}
+
+bool siting_given(const std::string& location) {
+    const std::string name = ascii_lower(location);
+    return !name.empty() && name != "unspecified" && name != "unknown";
+}
+
+}  // namespace
+
+std::pair<std::string, std::string> shared_chroma_location(const std::string& source, const std::string& distorted) {
+    const bool source_given = siting_given(source);
+    const bool distorted_given = siting_given(distorted);
+    return {source_given || !distorted_given ? source : distorted,
+            distorted_given || !source_given ? distorted : source};
+}
+
+bool chroma_location_shared(const std::string& source, const std::string& distorted) {
+    const auto [source_read, distorted_read] = shared_chroma_location(source, distorted);
+    return vship_siting(source_read) != vship_siting(source) || vship_siting(distorted_read) != vship_siting(distorted);
+}
+
 vship_api::Colorspace vship_colorspace(const VideoInfo& info, const VshipImageFormat& image, int width, int height) {
     VideoColour colour;
     try {
@@ -815,13 +847,8 @@ vship_api::Colorspace vship_colorspace(const VideoInfo& info, const VshipImageFo
             : kind == "primaries" ? "Vship does not support the " + error.value() + " color primaries."
                                   : "Vship does not support the " + error.value() + " range tag.");
     }
-    std::string location = ascii_lower(info.chroma_location.empty() ? "left" : info.chroma_location);
-    std::erase(location, '-');
-    // Vship_ChromaLocation_t has no bottom or bottom-left siting.
-    static const std::map<std::string, int, std::less<>> locations{
-        {"left", 0}, {"center", 1}, {"topleft", 2}, {"top", 3}, {"unspecified", 0}, {"unknown", 0}};
-    const auto siting = locations.find(location);
-    if (siting == locations.end()) {
+    const std::optional<int> siting = vship_siting(info.chroma_location);
+    if (!siting) {
         throw VshipUnavailableError("Vship does not support " + info.chroma_location + " chroma siting.");
     }
     vship_api::Colorspace space;
@@ -832,7 +859,7 @@ vship_api::Colorspace vship_colorspace(const VideoInfo& info, const VshipImageFo
     space.sample = image.sample;
     space.range = colour.full_range ? 1 : 0;
     space.subsampling = {image.subw, image.subh};
-    space.chromaLocation = siting->second;
+    space.chromaLocation = *siting;
     space.colorFamily = image.family;
     space.YUVMatrix = colour.matrix;
     space.transferFunction = colour.transfer;

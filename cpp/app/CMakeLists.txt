@@ -132,8 +132,8 @@ if(APPLE)
     target_link_options(VideoMetricsLab PRIVATE "LINKER:-rpath,@executable_path/../Resources/resources/tools/ffmpeg")
 endif()
 if(MSVC)
-    # Long paths, as vml-cli (cli/CMakeLists.txt).
-    target_sources(VideoMetricsLab PRIVATE ../cli/vml-cli.manifest)
+    # Long paths, as vml-cli (cli/CMakeLists.txt); and the app's icon.
+    target_sources(VideoMetricsLab PRIVATE ../cli/vml-cli.manifest icons/VideoMetricsLab.rc)
 endif()
 
 if(WIN32)

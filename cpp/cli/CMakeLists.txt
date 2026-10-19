@@ -17,6 +17,7 @@ if(MSVC)
     # (LongPathsEnabled), as the Python app's python.exe and PyInstaller's
     # programs declare too. A saved score's file, and the temporary file it
     # is written through, are up to 165 characters below the saved scores'
-    # folder: past the limit once that folder's path is over 94.
-    target_sources(vml-cli PRIVATE vml-cli.manifest)
+    # folder: past the limit once that folder's path is over 94. And the
+    # app's icon (app/icons).
+    target_sources(vml-cli PRIVATE vml-cli.manifest ../app/icons/VideoMetricsLab.rc)
 endif()
