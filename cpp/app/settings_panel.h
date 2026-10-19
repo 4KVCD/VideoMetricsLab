@@ -103,6 +103,9 @@ signals:
     void decoded_videos_changed(int count);
     // The FFmpeg folder changed and was saved: the window checks the tools.
     void ffmpeg_folder_changed();
+    // Clear saved results has deleted them: the window's rows are to be
+    // calculated again.
+    void saved_results_cleared();
 
 private:
     QGroupBox* build_ffmpeg_box();

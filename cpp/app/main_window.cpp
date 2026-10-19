@@ -621,6 +621,7 @@ void MainWindow::build_ui() {
     connect(settings_panel_, &SettingsPanel::decoded_videos_changed, frame_compare_panel_,
             &FrameComparePanel::set_decoded_videos);
     connect(settings_panel_, &SettingsPanel::ffmpeg_folder_changed, this, [this] { check_ffmpeg(false); });
+    connect(settings_panel_, &SettingsPanel::saved_results_cleared, this, [this] { on_saved_results_cleared(); });
     tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
 }
@@ -2480,7 +2481,8 @@ std::vector<std::string> MainWindow::reusable_metric_keys(const RowData& row_dat
     std::vector<ColourTags> infos;
     for (const std::optional<VideoInfo>* info : {&source_info_, &row_data.video_info}) {
         if (*info) {
-            infos.push_back({(*info)->pix_fmt, (*info)->color_transfer, (*info)->chroma_location});
+            infos.push_back({(*info)->pix_fmt, (*info)->color_transfer, (*info)->chroma_location,
+                             (*info)->color_space, (*info)->height});
         }
     }
     return reusable_keys(row_data.completed_run->result,

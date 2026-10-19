@@ -458,7 +458,12 @@ void SettingsPanel::show_default_metric(const std::string& key, bool checked) {
 
 void SettingsPanel::clear_saved_results() {
     const std::filesystem::path directory = cache_folder();
-    if (vml::cache_summary(directory).comparisons == 0 && file_writes_.idle()) {
+    // The count the tab shows, made off the window's thread
+    // (refresh_status): counting a large folder here would freeze the
+    // window. While it is still being made, the question is asked anyway.
+    const bool counted = counting_->isFinished() && counting_->future().resultCount() > 0 &&
+                         counted_folder_ == directory;
+    if (counted && counting_->result().comparisons == 0 && file_writes_.idle()) {
         status->setText(app::tr("There are no saved results to clear."));
         return;
     }
@@ -519,6 +524,7 @@ void SettingsPanel::on_file_writes_idle() {
     cleared_.reset();
     status->setText(ntr("Removed {count} saved result.", "Removed {count} saved results.", removed));
     refresh_status();
+    emit saved_results_cleared();
 }
 
 void SettingsPanel::on_edited() {

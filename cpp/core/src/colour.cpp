@@ -188,6 +188,33 @@ std::optional<VideoColour> colour_of(const VideoInfo& info) {
     }
 }
 
+std::pair<VideoInfo, VideoInfo> with_shared_matrix(VideoInfo source, VideoInfo distorted) {
+    if (is_rgb_format(source.pix_fmt) || is_rgb_format(distorted.pix_fmt)) {
+        return {std::move(source), std::move(distorted)};
+    }
+    const bool source_untagged = is_untagged_tag(source.color_space);
+    const bool distorted_untagged = is_untagged_tag(distorted.color_space);
+    if (source_untagged && distorted_untagged) {
+        const std::string guess = source.height > 650 ? "bt709" : "bt470bg";
+        source.color_space = guess;
+        distorted.color_space = guess;
+    } else if (source_untagged) {
+        source.color_space = distorted.color_space;
+    } else if (distorted_untagged) {
+        distorted.color_space = source.color_space;
+    }
+    return {std::move(source), std::move(distorted)};
+}
+
+bool matrix_shared(const VideoInfo& source, const VideoInfo& distorted) {
+    const auto [source_read, distorted_read] = with_shared_matrix(source, distorted);
+    const auto matrix = [](const VideoInfo& info) {
+        const std::optional<VideoColour> colour = colour_of(info);
+        return colour ? std::optional(colour->matrix) : std::nullopt;
+    };
+    return matrix(source_read) != matrix(source) || matrix(distorted_read) != matrix(distorted);
+}
+
 std::optional<std::string_view> ffmpeg_matrix_name(int matrix) {
     const auto found = ffmpeg_matrices.find(matrix);
     return found != ffmpeg_matrices.end() ? std::optional(found->second) : std::nullopt;

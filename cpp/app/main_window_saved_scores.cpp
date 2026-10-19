@@ -215,10 +215,11 @@ void MainWindow::show_table_menu(const QPoint& position) {
     }
 }
 
-void MainWindow::recompute_rows(const std::vector<int>& rows) {
+void MainWindow::recompute_rows(const std::vector<int>& rows, bool forget_saved) {
     // Forgets the saved scores of the rows' ticked metrics, so that the next
     // run calculates them again. Those of unticked metrics are neither
-    // calculated again nor forgotten, and stay on show.
+    // calculated again nor forgotten, and stay on show. Without
+    // `forget_saved` the saved files are left alone: already gone.
     const std::filesystem::path base = cache_folder();  // now, not as each deletion runs
     // A lookup under way must not bring back the scores just forgotten; the
     // other rows it was asked about are asked about again below.
@@ -229,7 +230,7 @@ void MainWindow::recompute_rows(const std::vector<int>& rows) {
         row_data.analysis_status.reset();
         drop_metric_results(row, requested_metrics(row_data));
         row_data.status_detail.clear();
-        if (source_info_) {
+        if (forget_saved && source_info_) {
             file_writes_->submit(QStringLiteral("clear cached result for %1").arg(name_of(row_data.path)),
                                  [base, source = source_info_->path, identity = row_data.identity_path(),
                                   request = analysis_request_of(row_data)] {
@@ -255,6 +256,26 @@ void MainWindow::recompute_rows(const std::vector<int>& rows) {
         }
     }
     start_cache_lookup(others);
+}
+
+void MainWindow::on_saved_results_cleared() {
+    // Settings' Clear saved results has deleted every saved score: the rows
+    // showing scores have their ticked metrics calculated again by the next
+    // run, as its question said, rather than skipped for the scores on show.
+    // Not during a run (Settings is locked then; a clear asked for just
+    // before it started): the run's rows are being calculated afresh.
+    if (run_active_) {
+        return;
+    }
+    std::vector<int> scored;
+    for (std::size_t row = 0; row < rows_.size(); ++row) {
+        if (rows_[row]->completed_run) {
+            scored.push_back(static_cast<int>(row));
+        }
+    }
+    if (!scored.empty()) {
+        recompute_rows(scored, false);
+    }
 }
 
 void MainWindow::drop_metric_results(int row, const std::vector<std::string>& keys) {

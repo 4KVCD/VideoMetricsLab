@@ -151,6 +151,9 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
     duration_edit->setLayoutDirection(Qt::LeftToRight);
     duration_edit->setDisplayFormat("HH:mm:ss.zzz");
     duration_edit->setTime(QTime(0, 0, 0, 0));
+    // Applied when the time is entered or a step is taken, not at every
+    // digit typed: each change takes the rows' scores away.
+    duration_edit->setKeyboardTracking(false);
     connect(duration_edit, &QTimeEdit::timeChanged, this, [this] { emit field_edited("duration_limit"); });
     form->addRow(app::tr("Duration limit (0 = full):"), duration_edit);
 
@@ -196,6 +199,7 @@ void OptionsPanel::build_metric_settings(QFormLayout* form) {
     subsample_spin = new QSpinBox;
     subsample_spin->setRange(1, 60);
     subsample_spin->setValue(1);
+    subsample_spin->setKeyboardTracking(false);  // as the duration: not at every digit typed
     connect(subsample_spin, &QSpinBox::valueChanged, this, [this] { emit field_edited("n_subsample"); });
     form->addRow(app::tr("libvmaf frame subsample:"), subsample_spin);
     subsample_spin->setToolTip(
@@ -329,6 +333,7 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
     threads_spin->setRange(0, 128);
     threads_spin->setValue(0);
     threads_spin->setSpecialValueText(app::tr("Auto"));
+    threads_spin->setKeyboardTracking(false);
     connect(threads_spin, &QSpinBox::valueChanged, this, [this] { emit field_edited("n_threads"); });
     form->addRow(app::tr("libvmaf threads:"), threads_spin);
     threads_spin->setToolTip(

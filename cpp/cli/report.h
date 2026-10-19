@@ -37,8 +37,10 @@ nlohmann::ordered_json results_document(const VideoInfo& source, const std::vect
                                         const std::vector<Summaries>& summaries, bool cancelled);
 
 // Each result's per-frame scores as the window's Export CSV writes them, in
-// `folder`; `message` says what was written. False if one could not be.
+// `folder`; `message` says what was written and `failed` what could not be
+// (shown with -q too). False if one could not be.
 bool write_csvs(const std::vector<TestVideo>& videos, const std::filesystem::path& folder,
-                const std::function<void(const std::string&)>& message);
+                const std::function<void(const std::string&)>& message,
+                const std::function<void(const std::string&)>& failed);
 
 }  // namespace vml::cli

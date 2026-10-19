@@ -177,6 +177,10 @@ protected:
     static bool best_worst_due(MainWindow& window) { return window.best_worst_timer_->isActive(); }
     // Shows a row's scores, as a finished video or its saved scores do.
     static void show_scores(MainWindow& window, int row) { window.set_row_metrics(row); }
+    // Every file dialog the window opens is cancelled.
+    static void cancel_file_dialogs(MainWindow& window) {
+        window.dialogs_.open_file = [](const QString&, const QString&) { return QString(); };
+    }
     static void remove_selected(MainWindow& window) { window.on_remove_distorted(); }
     // A resolution test of the reference, as Add resolution test adds the
     // one chosen.
@@ -897,6 +901,65 @@ TEST_F(WindowTest, AnOptionThatChangesWhatIsComparedTakesTheScoresAwayOneThatCha
     EXPECT_TRUE(table(window).item(row, col_vmaf)->text().isEmpty());
 }
 
+// A VMAF model decides its own column's score and no other: the rest stay
+// on the row and its line. A custom model's file dialog cancelled changes
+// nothing.
+TEST_F(WindowTest, AVmafModelChangeTakesAwayThatModelsScoreAlone) {
+    MainWindow window;
+    const int row = add_row(window, "a.mp4");
+    RowData& row_data = *rows(window)[static_cast<std::size_t>(row)];
+    const auto run = std::make_shared<CompletedRun>();
+    for (const char* key : {"vmaf", "psnr"}) {
+        run->result.metric_results.add(FrameMetricResult{
+            key, {0}, {0.0}, {90.0f}, MetricProvenance{"ffmpeg/libvmaf", "ffmpeg 9.0.1", "cpu", key, {}}});
+    }
+    row_data.completed_run = run;
+    show_scores(window, row);
+    select_rows(window, row, row);
+    OptionsPanel& panel = options_panel(window);
+
+    cancel_file_dialogs(window);
+    const int before = panel.model_combo->currentIndex();
+    panel.model_combo->setCurrentIndex(panel.model_combo->count() - 1);  // Custom model file..., cancelled
+    EXPECT_EQ(panel.model_combo->currentIndex(), before);
+    EXPECT_EQ(row_data.options.model_choice, std::string(auto_model_choice));
+    EXPECT_EQ(row_data.completed_run, run);
+
+    panel.model_combo->setCurrentIndex(1);
+    ASSERT_NE(row_data.completed_run, nullptr);
+    EXPECT_FALSE(row_data.completed_run->result.has_metric("vmaf"));
+    EXPECT_TRUE(row_data.completed_run->result.has_metric("psnr"));
+    EXPECT_EQ(row_data.completed_run->graph_identity, run->graph_identity);
+    EXPECT_TRUE(table(window).item(row, col_vmaf)->text().isEmpty());
+    EXPECT_FALSE(table(window).item(row, col_psnr)->text().isEmpty());
+
+    const std::shared_ptr<CompletedRun> kept = row_data.completed_run;
+    panel.model_v1_combo->setCurrentIndex(1);  // no VMAF v1 score to take away
+    EXPECT_EQ(row_data.completed_run, kept);
+}
+
+// A number typed into the subsample box is applied once it is entered, not
+// at each digit: each change takes the row's scores away.
+TEST_F(WindowTest, ASubsampleTypedIsAppliedWhenEnteredNotAtEachDigit) {
+    MainWindow window;
+    const int row = add_row(window, "a.mp4");
+    RowData& row_data = *rows(window)[static_cast<std::size_t>(row)];
+    const auto run = std::make_shared<CompletedRun>();
+    run->result.metric_results.add(FrameMetricResult{
+        "psnr", {0}, {0.0}, {40.0f}, MetricProvenance{"ffmpeg/libvmaf", "ffmpeg 9.0.1", "cpu", "psnr", {}}});
+    row_data.completed_run = run;
+    select_rows(window, row, row);
+    QSpinBox& spin = *options_panel(window).subsample_spin;
+
+    spin.selectAll();
+    QTest::keyClicks(&spin, "12");
+    EXPECT_EQ(row_data.options.n_subsample, 1);
+    EXPECT_EQ(row_data.completed_run, run);
+    QTest::keyClick(&spin, Qt::Key_Return);
+    EXPECT_EQ(row_data.options.n_subsample, 12);
+    EXPECT_EQ(row_data.completed_run, nullptr);
+}
+
 TEST_F(WindowTest, WhereSsimulacra2IsCalculatedIsSetForTheSelectedVideosAndKeptForTheNextSession) {
     MainWindow window;
     const int a = add_row(window, "a.mp4");
@@ -1542,6 +1605,32 @@ TEST_F(WindowTest, ClearingSavedResultsDeletesOnlyWhatTheQuestionNamed) {
     EXPECT_EQ(platform::read_file(named / "family_budget.json"), "important");
     EXPECT_TRUE(std::filesystem::exists(other / "v2" / "comparison" / "context.json"));
     EXPECT_TRUE(std::filesystem::exists(other / "black_bars.json"));
+}
+
+// Once the saved results are cleared, a row's scores on show are not taken
+// for done: its ticked metrics are calculated by the next run.
+TEST_F(WindowTest, ClearingSavedResultsPutsTheScoredRowsBackToCalculate) {
+    const std::filesystem::path base = folder("saved");
+    std::filesystem::create_directories(base / "v2" / "comparison");
+    std::ofstream(base / "v2" / "comparison" / "context.json", std::ios::binary) << "{}";
+    write_settings({{"cache_dir", platform::path_text(base)}});
+    MainWindow window;
+    const auto asked = answer_questions(window, true);
+    const int row = add_row(window, "a.mp4");
+    RowData& row_data = *rows(window)[static_cast<std::size_t>(row)];
+    const std::vector<std::string> ticked = requested(window, row);
+    ASSERT_FALSE(ticked.empty());
+    const auto run = std::make_shared<CompletedRun>();
+    run->result.metric_results.add(FrameMetricResult{
+        ticked.front(), {0}, {0.0}, {40.0f},
+        MetricProvenance{"ffmpeg/libvmaf", "ffmpeg 9.0.1", "cpu", ticked.front(), {}}});
+    row_data.completed_run = run;
+    show_scores(window, row);
+
+    settings_panel(window).clear_saved_results();
+    ASSERT_TRUE(wait_for_writes(window));
+    EXPECT_TRUE(wait_until([&] { return row_data.completed_run == nullptr; }));
+    EXPECT_FALSE(std::filesystem::exists(base / "v2"));
 }
 
 // Each edit in the tab is saved at once, to the setting it shows and no

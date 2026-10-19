@@ -34,11 +34,18 @@ inline std::string gpu_or_cpu(std::string_view key) { return std::string(key) + 
 // reads a video without chroma siting with the other video's
 // (shared_chroma_location in vship.h). A CPU SSIMULACRA2 or Butteraugli
 // score: as Vship reads them, with Vship's Butteraugli 3-norm; "/2" marks
-// the version that converts a scaled video to RGB after its tags are set. A
-// score without its mapping is calculated again where it would differ
-// (stale_vship_score in metric_cache.cpp).
-inline constexpr std::string_view vship_colour_tags = "ffvship-5.1.1/2";
-inline constexpr std::string_view cpu_colour_tags = "vship-5.1.1/2";
+// the version that converts a scaled video to RGB after its tags are set.
+// "/3", both: the version that reads a video without a colour matrix with
+// the other's, or both untagged with the reference's guess
+// (with_shared_matrix in colour.h). A score without its mapping is
+// calculated again where it would differ (stale_vship_score in
+// metric_cache.cpp).
+inline constexpr std::string_view vship_colour_tags = "ffvship-5.1.1/3";
+inline constexpr std::string_view cpu_colour_tags = "vship-5.1.1/3";
+// The mappings before "/3", whose scores differ only for a pair whose
+// videos' matrices with_shared_matrix reads otherwise (matrix_shared).
+inline constexpr std::string_view vship_colour_tags_unshared_matrix = "ffvship-5.1.1/2";
+inline constexpr std::string_view cpu_colour_tags_unshared_matrix = "vship-5.1.1/2";
 // The Vship mapping before "/2", whose scores differ only for a pair with
 // one video's chroma siting given and the other's not.
 inline constexpr std::string_view vship_colour_tags_unshared_siting = "ffvship-5.1.1";

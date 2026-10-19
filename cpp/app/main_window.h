@@ -339,7 +339,8 @@ private:
     void on_saved_found(int generation, const SavedScoresFound& found);
     void on_other_displays_found(int generation, const OtherDisplaysFound& found);
     void show_table_menu(const QPoint& position);
-    void recompute_rows(const std::vector<int>& rows);
+    void recompute_rows(const std::vector<int>& rows, bool forget_saved = true);
+    void on_saved_results_cleared();
     void drop_metric_results(int row, const std::vector<std::string>& keys);
     QString cvvdp_elsewhere_note(const RowData& row_data) const;
 

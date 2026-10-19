@@ -2,7 +2,6 @@
 // "per-video settings panel"): the selected rows' settings shown in the
 // panel, and each control the user edits applied to them.
 #include <QComboBox>
-#include <QFileDialog>
 #include <QLabel>
 #include <QMessageBox>
 
@@ -171,7 +170,20 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         }
     }
     const std::vector<int> changed = execution_only ? std::vector<int>() : applied;
-    invalidate_completed_results(changed);
+    if (field == "model" || field == "model_v1") {
+        // A model decides its own VMAF column's score only: the rest stay.
+        std::vector<int> without_scores;
+        for (const int row : changed) {
+            if (rows_[static_cast<std::size_t>(row)]->completed_run) {
+                drop_metric_results(row, {field == "model" ? "vmaf" : "vmaf_v1"});
+            } else {
+                without_scores.push_back(row);
+            }
+        }
+        invalidate_completed_results(without_scores);
+    } else {
+        invalidate_completed_results(changed);
+    }
     for (const int row : applied) {
         set_row_black_bars(row);
     }
@@ -201,10 +213,21 @@ void MainWindow::on_model_changed(int index) {
         return;
     }
     if (model_choices()[static_cast<std::size_t>(index)].choice == custom_model_choice) {
-        const QString path = QFileDialog::getOpenFileName(this, app::tr("Select VMAF model file (.json)"));
+        const QString path = dialogs_.open_file(app::tr("Select VMAF model file (.json)"), QString());
         if (path.isEmpty()) {
-            // Back to Auto, which comes here again and is applied below.
-            options_panel_->model_combo->setCurrentIndex(0);
+            // Cancelled: the model stays the one the rows have, and so do
+            // their scores.
+            const VmafOptions& current = panel_target_rows_.empty()
+                                             ? default_options_
+                                             : rows_[static_cast<std::size_t>(panel_target_rows_.front())]->options;
+            const std::vector<ModelChoice>& choices = model_choices();
+            const auto found = std::find_if(choices.begin(), choices.end(), [&current](const ModelChoice& item) {
+                return item.choice == current.model_choice;
+            });
+            syncing_panel_ = true;
+            options_panel_->model_combo->setCurrentIndex(
+                found == choices.end() ? 0 : static_cast<int>(found - choices.begin()));
+            syncing_panel_ = false;
             return;
         }
         options_panel_->custom_model_path = path.toStdString();

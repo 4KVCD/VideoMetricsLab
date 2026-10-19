@@ -114,26 +114,63 @@ const MetricProvenance& provenance_of(const LoadedMetric& metric) {
     return std::visit([](const auto& result) -> const MetricProvenance& { return result.provenance; }, metric);
 }
 
+// Whether the pair's videos are read with another colour matrix now than
+// each video's own tag or guess gave (matrix_shared in colour.h); not where
+// the two videos' tags are not known.
+bool matrix_read_otherwise(const std::vector<ColourTags>& infos) {
+    if (infos.size() != 2) {
+        return false;
+    }
+    const auto video = [](const ColourTags& tags) {
+        VideoInfo info;
+        info.pix_fmt = tags.pix_fmt;
+        info.color_transfer = tags.color_transfer;
+        info.color_space = tags.color_space;
+        info.height = tags.height;
+        return info;
+    };
+    try {
+        return matrix_shared(video(infos[0]), video(infos[1]));
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
 // Whether a CPU SSIMULACRA2 or Butteraugli score predates the colour
-// handling the CPU's tools have now.
-bool stale_cpu_score(const MetricProvenance& provenance) {
-    return provenance.compute_backend == "cpu" &&
-           (provenance.implementation == "ssimulacra2" || provenance.implementation == "butteraugli") &&
-           parameter(provenance, "color_tags") != nlohmann::json(score_identity::cpu_colour_tags);
+// handling the CPU's tools have now: one made before the pair was read with
+// one colour matrix only where that changes what is read.
+bool stale_cpu_score(const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {
+    if (provenance.compute_backend != "cpu" ||
+        (provenance.implementation != "ssimulacra2" && provenance.implementation != "butteraugli")) {
+        return false;
+    }
+    const nlohmann::json mapping = parameter(provenance, "color_tags");
+    if (mapping == nlohmann::json(score_identity::cpu_colour_tags)) {
+        return false;
+    }
+    return mapping != nlohmann::json(score_identity::cpu_colour_tags_unshared_matrix) || matrix_read_otherwise(infos);
 }
 
 // Whether a saved score is known to be wrong and must be calculated again:
-// a stale CPU score; a GPU score made before a video without chroma siting
-// was read with the other's, of a pair where that changes what Vship reads
-// (chroma_location_shared); or a GPU score from app version 1.2 or 1.2.1 of
-// a pair with an RGB video that has no transfer tag.
+// a stale CPU score; a GPU score made before the pair was read with one
+// colour matrix, of a pair where that changes what Vship reads
+// (matrix_read_otherwise); a GPU score made before a video without chroma
+// siting was read with the other's, of a pair where that changes what Vship
+// reads (chroma_location_shared); or a GPU score from app version 1.2 or
+// 1.2.1 of a pair with an RGB video that has no transfer tag.
 bool stale_vship_score(const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {
-    if (stale_cpu_score(provenance)) {
+    if (stale_cpu_score(provenance, infos)) {
         return true;
     }
     const nlohmann::json mapping = parameter(provenance, "color_tags");
     if (provenance.compute_backend != "gpu" || !provenance.implementation.starts_with("Vship/") ||
         mapping == nlohmann::json(score_identity::vship_colour_tags)) {
+        return false;
+    }
+    if (matrix_read_otherwise(infos)) {
+        return true;
+    }
+    if (mapping == nlohmann::json(score_identity::vship_colour_tags_unshared_matrix)) {
         return false;
     }
     if (infos.size() == 2 && chroma_location_shared(infos[0].chroma_location, infos[1].chroma_location)) {
@@ -310,7 +347,9 @@ std::vector<ColourTags> context_colour_tags(const std::filesystem::path& directo
                 const nlohmann::json value = info.value(name, nlohmann::json());
                 return value.is_null() ? std::string() : python_str(value);
             };
-            infos.push_back({text("pix_fmt"), text("color_transfer"), text("chroma_location")});
+            const nlohmann::json height = info.value("height", nlohmann::json());
+            infos.push_back({text("pix_fmt"), text("color_transfer"), text("chroma_location"), text("color_space"),
+                             height.is_number_integer() ? height.get<int>() : 0});
         }
     }
     return infos;
@@ -735,9 +774,6 @@ std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, 
     std::optional<std::vector<ColourTags>> infos;
     const auto stale = [&](const LoadedMetric& metric) {
         const MetricProvenance& provenance = provenance_of(metric);
-        if (provenance.compute_backend != "gpu") {
-            return stale_cpu_score(provenance);
-        }
         if (!infos) {
             infos = context_colour_tags(directory);
         }
@@ -853,8 +889,9 @@ std::filesystem::path recipe_directory(const std::filesystem::path& base, const 
 }
 
 std::vector<ColourTags> colour_tags(const VideoInfo& source, const VideoInfo& distorted) {
-    return {{source.pix_fmt, source.color_transfer, source.chroma_location},
-            {distorted.pix_fmt, distorted.color_transfer, distorted.chroma_location}};
+    return {{source.pix_fmt, source.color_transfer, source.chroma_location, source.color_space, source.height},
+            {distorted.pix_fmt, distorted.color_transfer, distorted.chroma_location, distorted.color_space,
+             distorted.height}};
 }
 
 bool answers(const MetricRequestSpec& spec, const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {

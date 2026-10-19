@@ -200,11 +200,20 @@ bool has_colour_tags(const VideoInfo& info) {
 }
 
 // The note for a video read without colour tags: that it was read as SDR
-// (colour.h's video_colour's guess), as HDR10 without its tags is too.
-std::string guessed_colour_note(const VideoInfo& info, const std::string& which) {
-    const std::string guess = !is_untagged_tag(info.color_space) ? "with its colour matrix, " + info.color_space
-                              : info.height > 650         ? "BT.709, as it is over 650 lines"
-                                                          : "BT.601, as it is 650 lines or fewer";
+// (colour.h's video_colour's guess), as HDR10 without its tags is too, with
+// the colour matrix the pair is read with (with_shared_matrix): its own, the
+// other video's, or the reference's guess. `source` is the reference.
+std::string guessed_colour_note(const VideoInfo& info, const std::string& which, const VideoInfo& source,
+                                const VideoInfo& distorted) {
+    const bool reference = &info == &source;
+    const VideoInfo& other = reference ? distorted : source;
+    const std::string guess =
+        !is_untagged_tag(info.color_space)   ? "with its colour matrix, " + info.color_space
+        : !is_untagged_tag(other.color_space) ? "with the other video's colour matrix, " + other.color_space
+        : source.height > 650 ? std::string(reference ? "BT.709, as it is over 650 lines"
+                                                      : "BT.709, as the reference is over 650 lines")
+                              : std::string(reference ? "BT.601, as it is 650 lines or fewer"
+                                                      : "BT.601, as the reference is 650 lines or fewer");
     return which + " has no colour tags, so it was read as SDR (" + guess +
            "): HDR10 without its tags is read as SDR too, which changes CVVDP, SSIMULACRA2 and Butteraugli. If it "
            "is HDR10, give --colour pq-bt2020.";
@@ -540,6 +549,16 @@ public:
     void message(const std::string& text) {
         const std::lock_guard lock(mutex_);
         write(text);
+    }
+
+    // Writes a line that stays, with -q too: a failure the user must see.
+    void problem(const std::string& text) {
+        const std::lock_guard lock(mutex_);
+        if (quiet_ || !redraw_) {
+            platform::write_text(platform::Stream::error, text + "\n");
+            return;
+        }
+        platform::write_text(platform::Stream::error, wipe() + text + "\n" + shown_);
     }
 
     // Starts drawing new figures once a second, on a terminal, until done().
@@ -1156,7 +1175,7 @@ void ComparisonPlanner::add_colour_notes(TestVideo& video) const {
         if (video.colours_taken == side.which) {
             video.notes.push_back(taken_colour_note(*side.info, side.which, side.other));
         } else if (!has_colour_tags(*side.info)) {
-            video.notes.push_back(guessed_colour_note(*side.info, side.which));
+            video.notes.push_back(guessed_colour_note(*side.info, side.which, video.source, *video.info));
         }
     }
 }
@@ -1259,6 +1278,22 @@ std::optional<std::string> write_json_file(const std::filesystem::path& path, co
     return std::nullopt;
 }
 
+// Why --model's file cannot be VMAF's model, when VMAF is asked for and it
+// names one that is not there: said before anything is calculated.
+std::optional<std::string> model_file_wrong(const CompareArguments& arguments, const std::vector<std::string>& asked) {
+    if (arguments.model == "auto" || arguments.model == "standard" || arguments.model == "4k" ||
+        std::find(asked.begin(), asked.end(), "vmaf") == asked.end()) {
+        return std::nullopt;
+    }
+    std::error_code error;
+    const std::filesystem::path path = python_path(arguments.model);
+    if (std::filesystem::is_regular_file(path, error)) {
+        return std::nullopt;
+    }
+    return "--model: no VMAF model file at " + platform::path_text(path) +
+           " (give auto, standard, 4k, or a model .json file)";
+}
+
 // Gives the results: printed as tables, or as JSON alone for "--json -",
 // which is for a program to read; and written to the CSV files and the JSON
 // file asked for (the tables are printed as well then). False when a file
@@ -1269,8 +1304,9 @@ bool write_results(const CompareArguments& arguments, const VideoInfo& source, c
     const nlohmann::ordered_json document = results_document(source, videos, summaries, cancelled);
     bool written = true;
     if (arguments.csv) {
-        written = write_csvs(videos, python_path(*arguments.csv),
-                             [&progress](const std::string& text) { progress.message(text); });
+        written = write_csvs(
+            videos, python_path(*arguments.csv), [&progress](const std::string& text) { progress.message(text); },
+            [&progress](const std::string& text) { progress.problem(text); });
     }
     const std::optional<std::filesystem::path> json_file =
         arguments.json_path ? std::optional(python_path(*arguments.json_path)) : std::nullopt;
@@ -1314,6 +1350,10 @@ int compare(const CompareArguments& arguments) {
         return exit_usage;
     }
     const std::vector<std::string> asked = arguments.metrics.value_or(default_metrics(settings));
+    if (const std::optional<std::string> wrong = model_file_wrong(arguments, asked)) {
+        print_error(*wrong);
+        return exit_usage;
+    }
     if (const std::optional<std::string> missing = not_yet(arguments, settings, asked)) {
         print_error("The C++ command line cannot do this yet: " + *missing + ".");
         return exit_usage;
