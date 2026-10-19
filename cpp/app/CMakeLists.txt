@@ -128,6 +128,10 @@ if(APPLE)
     # (CMAKE_OSX_DEPLOYMENT_TARGET: 14.4, Qt 6.12's earliest).
     set_target_properties(VideoMetricsLab PROPERTIES
         MACOSX_BUNDLE_INFO_PLIST ${PROJECT_SOURCE_DIR}/packaging/macos/Info.plist.in)
+    # The app's icon, in Contents/Resources (Info.plist's CFBundleIconFile):
+    # Finder's and the Dock's.
+    target_sources(VideoMetricsLab PRIVATE icons/VideoMetricsLab.icns)
+    set_source_files_properties(icons/VideoMetricsLab.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
     # The bundle's FFmpeg libraries, for native playback.
     target_link_options(VideoMetricsLab PRIVATE "LINKER:-rpath,@executable_path/../Resources/resources/tools/ffmpeg")
 endif()

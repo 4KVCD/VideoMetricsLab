@@ -9,6 +9,8 @@
     <string>VideoMetricsLab</string>
     <key>CFBundleExecutable</key>
     <string>VideoMetricsLab</string>
+    <key>CFBundleIconFile</key>
+    <string>VideoMetricsLab.icns</string>
     <key>CFBundleIdentifier</key>
     <string>io.github.4kvcd.VideoMetricsLab</string>
     <key>CFBundleInfoDictionaryVersion</key>
