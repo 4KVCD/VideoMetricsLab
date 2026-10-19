@@ -96,11 +96,19 @@ void InboundPipe::touch(const std::string& path) {
 
 void InboundPipe::remove_left_by(int process_id) {
     const std::string prefix = pipe_prefix(process_id);
+    // Never throws: a folder that cannot be read leaves them (the run's
+    // result stands).
     std::error_code error;
-    for (const auto& entry : std::filesystem::directory_iterator(std::filesystem::temp_directory_path(error), error)) {
-        const std::string name = entry.path().filename().string();
-        if (name.starts_with(prefix) && entry.is_fifo(error)) {
-            unlink(entry.path().c_str());
+    const std::filesystem::path folder = std::filesystem::temp_directory_path(error);
+    if (error) {
+        return;
+    }
+    for (std::filesystem::directory_iterator entry(folder, error), end; !error && entry != end;
+         entry.increment(error)) {
+        const std::string name = entry->path().filename().string();
+        std::error_code type_error;
+        if (name.starts_with(prefix) && entry->is_fifo(type_error)) {
+            unlink(entry->path().c_str());
         }
     }
 }

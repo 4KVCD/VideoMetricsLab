@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <map>
 #include <stdexcept>
@@ -66,9 +67,13 @@ struct Presenter {
     id<MTLSamplerState> sampler = nil;
     CVMetalTextureCacheRef cache = nullptr;
     std::optional<Space> asked;
-    // Whether the view is on screen, as follow() last found it: its window
-    // shown and not wholly covered. The drawing thread draws only then.
+    // Whether the view is on screen, as follow() or the window's
+    // notifications last found it: its window shown and not wholly covered.
+    // The drawing thread draws only then.
     std::atomic<bool> shown{true};
+    // The window's notifications that it was covered, uncovered, minimised
+    // or restored (removed with the presenter).
+    std::vector<id> observers;
 };
 
 // YUV-to-RGB rows for frames of one kind, worked out once each.
@@ -117,16 +122,21 @@ void make_constants(float* k, float width, float height, const float* source, co
 
 // The layer follows the view's size: its drawables are the view's size in
 // the display's pixels. On the window's thread.
+// Whether the presenter's view is on screen: off screen only in a window
+// that is (minimised, hidden or wholly covered); a layer in no window yet
+// still gives drawables at once.
+bool on_screen(const Presenter& presenter) {
+    NSWindow* window = presenter.view.window;
+    return window == nil || (window.visible && (window.occlusionState & NSWindowOcclusionStateVisible) != 0 &&
+                             !presenter.view.hiddenOrHasHiddenAncestor);
+}
+
 void follow(Presenter& presenter) {
     NSView* parent = presenter.view.superview;
     if (parent == nil) {
         return;
     }
-    // Off screen only in a window that is (minimised, hidden or wholly
-    // covered): a layer in no window yet still gives drawables at once.
-    NSWindow* window = parent.window;
-    presenter.shown = window == nil || (window.visible && (window.occlusionState & NSWindowOcclusionStateVisible) != 0 &&
-                                        !presenter.view.hiddenOrHasHiddenAncestor);
+    presenter.shown = on_screen(presenter);
     if (!NSEqualRects(presenter.view.frame, parent.bounds)) {
         presenter.view.frame = parent.bounds;
     }
@@ -241,6 +251,25 @@ NativePresentation::NativePresentation(std::shared_ptr<NativeDevice> device, Nat
     [parent addSubview:presenter->view];
     keep_keys(parent.window);
     follow(*presenter);
+    // Shown again (uncovered, restored) with no frame coming (paused): the
+    // frame kept while it was not is drawn then (present_paced).
+    Presenter* raw = presenter.get();
+    for (NSNotificationName name : {NSWindowDidChangeOcclusionStateNotification, NSWindowDidDeminiaturizeNotification,
+                                    NSWindowDidMiniaturizeNotification}) {
+        raw->observers.push_back([[NSNotificationCenter defaultCenter]
+            addObserverForName:name
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(NSNotification* note) {
+                      if (note.object == raw->view.window) {
+                          raw->shown = on_screen(*raw);
+                          {
+                              const std::lock_guard lock(mutex_);
+                          }
+                          due_ready_.notify_all();
+                      }
+                    }]);
+    }
     presenter_ = presenter.release();
     thread_ = std::thread([this] { present_paced(); });
 }
@@ -255,6 +284,9 @@ NativePresentation::~NativePresentation() {
         thread_.join();
     }
     auto* presenter = static_cast<Presenter*>(presenter_);
+    for (id observer : presenter->observers) {
+        [[NSNotificationCenter defaultCenter] removeObserver:observer];
+    }
     // The view goes on the window's thread, which AppKit's views belong to.
     VMLNativeVideoView* view = presenter->view;
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -298,14 +330,16 @@ void NativePresentation::present_paced() {
             }
         }
         if (!presenter->shown) {
-            // Not on screen (minimised, covered): nothing is drawn, and the
-            // frame goes, as the layer would give no drawable for it but
-            // after waiting a second, which a Close (joining this thread)
-            // would wait too.
-            const std::lock_guard lock(mutex_);
-            if (!due_.empty()) {
+            // Not on screen (minimised, covered): nothing is drawn, as the
+            // layer would give no drawable but after waiting a second, which
+            // a Close (joining this thread) would wait too. The newest frame
+            // is kept, to be drawn when it is shown again, a paused one too.
+            std::unique_lock lock(mutex_);
+            while (due_.size() > 1) {
                 due_.pop_front();
             }
+            due_ready_.wait_for(lock, std::chrono::milliseconds(100),
+                                [this, presenter] { return stopping_ || presenter->shown.load(); });
             continue;
         }
         @autoreleasepool {

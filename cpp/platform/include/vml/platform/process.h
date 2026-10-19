@@ -160,6 +160,11 @@ private:
 // it does nothing.
 void start_programs_in_this_group();
 
+// Ends at once every program this process started that is still running,
+// with what they started (end_process_now calls it before the process
+// ends: a Windows job does this by itself).
+void end_programs_now();
+
 // Runs a program to its end and returns what it wrote. A program still
 // running after `timeout`, or once `stop` returns true (asked every 100 ms,
 // before the time is checked), is ended, and the result says which. Throws

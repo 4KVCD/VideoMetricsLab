@@ -1556,7 +1556,15 @@ QPixmap GraphPanel::render_export_image() {
     // the file leaves the app: the title, a legend keyed by the lines'
     // colours, and the statistics go around it.
     const MetricDefinition& metric = current_metric();
-    const QPixmap chart = pages_.at(std::string(metric.key))->chart().render_to_pixmap();
+    // The chart comes in the screen's pixels (twice its size on a Retina
+    // display); the title, legend and table are drawn at the same scale, in
+    // the same units, or their text would be half the size of its labels.
+    const ChartWidget& chart_widget = pages_.at(std::string(metric.key))->chart();
+    QPixmap chart = chart_widget.render_to_pixmap();
+    const double ratio = std::max(1.0, chart_widget.devicePixelRatioF());
+    chart.setDevicePixelRatio(ratio);
+    const int chart_width = static_cast<int>(std::lround(chart.width() / ratio));
+    const int chart_height = static_cast<int>(std::lround(chart.height() / ratio));
     const auto [headers, rows] = export_table();
 
     QFont title_font(font());
@@ -1589,11 +1597,13 @@ QPixmap GraphPanel::render_export_image() {
         table_width += width;
     }
     const int table_height = rows.empty() ? 0 : static_cast<int>(rows.size() + 1) * row_height;
-    const int content_width = std::max(chart.width(), table_width);
-    const int height = export_margin + title_metrics.height() + export_gap + chart.height() +
+    const int content_width = std::max(chart_width, table_width);
+    const int height = export_margin + title_metrics.height() + export_gap + chart_height +
                        (rows.empty() ? 0 : export_gap + table_height) + export_margin;
 
-    QPixmap image(content_width + 2 * export_margin, height);
+    QPixmap image(static_cast<int>(std::lround((content_width + 2 * export_margin) * ratio)),
+                  static_cast<int>(std::lround(height * ratio)));
+    image.setDevicePixelRatio(ratio);
     image.fill(Qt::white);
     QPainter painter(&image);
     painter.setPen(QColor(QStringLiteral("#111111")));
@@ -1601,7 +1611,7 @@ QPixmap GraphPanel::render_export_image() {
     painter.drawText(export_margin, export_margin + title_metrics.ascent(), title);
     int y = export_margin + title_metrics.height() + export_gap;
     painter.drawPixmap(export_margin, y, chart);
-    y += chart.height() + export_gap;
+    y += chart_height + export_gap;
     if (!rows.empty()) {
         QFont header_font(cell_font);
         header_font.setBold(true);

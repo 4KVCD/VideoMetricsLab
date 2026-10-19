@@ -1,6 +1,8 @@
 // The system on Linux and macOS.
 #include "vml/platform/system.h"
 
+#include "vml/platform/process.h"
+
 #include <execinfo.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -8,6 +10,7 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 #ifdef __APPLE__
+#include <IOKit/pwr_mgt/IOPMLib.h>
 #include <mach-o/dyld.h>
 #include <mach/mach.h>
 #include <sys/sysctl.h>
@@ -18,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <mutex>
 #include <thread>
 
 namespace vml::platform {
@@ -131,7 +135,38 @@ DisplayHdrInfo query_display_hdr(void* /*window*/) { return {}; }  // not known 
 
 void raise_thread_priority() {}
 
+#ifdef __APPLE__
+bool keep_system_awake(bool awake) {
+    // A power assertion against idle sleep for the run, as Windows' "system
+    // required" request: the display may still sleep. While it is held, App
+    // Nap does not slow the app either. It is the process's, not the
+    // thread's; held once however many ask, and let go by the last.
+    static std::mutex mutex;
+    static int holds = 0;
+    static IOPMAssertionID assertion = kIOPMNullAssertionID;
+    const std::lock_guard lock(mutex);
+    if (awake) {
+        if (holds == 0 &&
+            IOPMAssertionCreateWithName(kIOPMAssertionTypePreventUserIdleSystemSleep, kIOPMAssertionLevelOn,
+                                        CFSTR("VideoMetricsLab is calculating metrics"), &assertion) != kIOReturnSuccess) {
+            assertion = kIOPMNullAssertionID;
+            return false;
+        }
+        ++holds;
+        return true;
+    }
+    if (holds == 0) {
+        return false;
+    }
+    if (--holds == 0 && assertion != kIOPMNullAssertionID) {
+        IOPMAssertionRelease(assertion);
+        assertion = kIOPMNullAssertionID;
+    }
+    return true;
+}
+#else
 bool keep_system_awake(bool /*awake*/) { return false; }
+#endif
 
 std::vector<unsigned> gpu_vendor_ids() { return {}; }
 
@@ -199,7 +234,10 @@ bool report_crashes_to(const std::filesystem::path& file) {
     return true;
 }
 
-void end_process_now(int exit_code) { _exit(exit_code); }
+void end_process_now(int exit_code) {
+    end_programs_now();  // what it started goes with it, as Windows' jobs end with a process
+    _exit(exit_code);
+}
 
 int process_id() { return static_cast<int>(getpid()); }
 

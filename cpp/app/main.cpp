@@ -8,6 +8,7 @@
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
+#include <clocale>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -184,12 +185,29 @@ int main(int argc, char** argv) {
 
     QApplication app(argc, argv);
     QApplication::setApplicationName("VideoMetricsLab");
+#ifndef _WIN32
+    // Qt sets the C library's locale from the system's (setlocale(LC_ALL,
+    // "")) on Linux and macOS, and with a decimal comma (German, French)
+    // strtod and printf then read and write "93,75": FFmpeg's and the
+    // metrics' numbers lost their decimals, CVVDP went missing and Vship's
+    // scores changed. Numbers are read and written in C's way, as Windows'
+    // C runtime keeps them; Qt's own text (QLocale) still follows the system.
+    std::setlocale(LC_NUMERIC, "C");
+#endif
 #ifdef __APPLE__
     // Qt's Fusion style, as the window looks on Windows: macOS's own style
     // draws its controls larger, which squeezed the Videos tab's table to one
     // row and hid the metric headings' tick boxes. (Fusion is built into Qt
     // Widgets: no plugin.)
     QApplication::setStyle(QStringLiteral("Fusion"));
+    // Started from Finder (or `open`), the app's working folder is the disk's
+    // root, and the file dialogs, which start in it or name a file relative
+    // to it (Save analysis results, Export graph as PNG), opened there, where
+    // nothing can be saved. They start in the home folder instead, as a
+    // Windows program started from its shortcut starts in its own.
+    if (std::error_code error; std::filesystem::current_path(error) == "/") {
+        std::filesystem::current_path(platform::home_directory(), error);
+    }
 #endif
     if (std::find(words.begin(), words.end(), "--self-test") != words.end()) {
         return app::run_self_test(app, std::find(words.begin(), words.end(), "--quiet") != words.end());

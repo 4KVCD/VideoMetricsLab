@@ -103,7 +103,7 @@ QGroupBox* SettingsPanel::build_ffmpeg_box() {
     connect(ffmpeg_edit, &QLineEdit::editingFinished, this, [this] { on_edited(); });
     auto* browse_ffmpeg = new QPushButton(app::tr("Browse..."));
     connect(browse_ffmpeg, &QPushButton::clicked, this,
-            [this] { pick_directory(app::tr("Select the folder containing ffmpeg.exe"), ffmpeg_edit); });
+            [this] { pick_directory(app::with_program_names(app::tr("Select the folder containing ffmpeg.exe")), ffmpeg_edit); });
     auto* ffmpeg_row = new QHBoxLayout;
     ffmpeg_row->addWidget(ffmpeg_edit, 1);
     ffmpeg_row->addWidget(browse_ffmpeg);

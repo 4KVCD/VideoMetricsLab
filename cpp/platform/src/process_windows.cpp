@@ -461,4 +461,6 @@ int ChildProcess::process_id() const { return static_cast<int>(state_->id); }
 
 void start_programs_in_this_group() {}  // a job holds them already
 
+void end_programs_now() {}  // their jobs end them as this process ends
+
 }  // namespace vml::platform

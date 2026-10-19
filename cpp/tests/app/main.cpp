@@ -9,6 +9,8 @@
 
 #include <gtest/gtest.h>
 
+#include <clocale>
+
 #include "main_window.h"
 #include "vml/isolated.h"
 #include "vml/platform/system.h"
@@ -22,6 +24,9 @@ int main(int argc, char** argv) {
     vml::set_isolation_program(vml::platform::path_from_text(VML_CLI));
     vml::app::set_keep_awake([](bool /*awake*/) { return false; });
     QApplication app(argc, argv);
+#ifndef _WIN32
+    std::setlocale(LC_NUMERIC, "C");  // as the app does (app/main.cpp)
+#endif
     ::testing::InitGoogleTest(&argc, argv);
     QTimer dialogs;
     QObject::connect(&dialogs, &QTimer::timeout, [] {

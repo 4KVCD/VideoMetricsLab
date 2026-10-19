@@ -745,4 +745,12 @@ const std::vector<QString>& message_templates() {
     return all;
 }
 
+QString with_program_names(QString text) {
+#ifndef _WIN32
+    text.replace(QStringLiteral("ffmpeg.exe"), QStringLiteral("ffmpeg"));
+    text.replace(QStringLiteral("ffprobe.exe"), QStringLiteral("ffprobe"));
+#endif
+    return text;
+}
+
 }  // namespace vml::app

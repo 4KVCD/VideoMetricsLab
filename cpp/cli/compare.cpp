@@ -968,13 +968,16 @@ namespace {
 // nothing more, as the Python app's KeyboardInterrupt ends it. An FFmpeg
 // check or ffprobe under way ends with it, as this process's job ends.
 // During the run (`running`), the run is cancelled and what finished is
-// reported. Set up first: the checks and probes before the run can take a
-// while (60 s for ffprobe on a slow share). The handler outlives the
-// command, so it shares what it uses.
+// reported; a second Ctrl+C (or SIGTERM) ends the command at once, for a
+// run whose cancel does not come back (a GPU driver that hangs). Set up
+// first: the checks and probes before the run can take a while (60 s for
+// ffprobe on a slow share). The handler outlives the command, so it shares
+// what it uses.
 void cancel_on_interrupt(CancelToken cancel, const std::shared_ptr<Progress>& progress,
                          const std::shared_ptr<std::atomic<bool>>& running) {
-    platform::on_interrupt([cancel, progress, running]() mutable {
-        if (!*running) {
+    auto asked = std::make_shared<std::atomic<bool>>(false);
+    platform::on_interrupt([cancel, progress, running, asked]() mutable {
+        if (!*running || asked->exchange(true)) {
             platform::end_process_now(exit_cancelled);
         }
         progress->message("Cancelling...");

@@ -544,7 +544,7 @@ void MainWindow::build_ui() {
                                  "border: 1px solid {banner_border};");
     ffmpeg_banner_->setWordWrap(true);
     ffmpeg_banner_->setVisible(false);
-    locate_ffmpeg_button_ = new QPushButton(app::tr("Locate ffmpeg.exe..."));
+    locate_ffmpeg_button_ = new QPushButton(app::with_program_names(app::tr("Locate ffmpeg.exe...")));
     connect(locate_ffmpeg_button_, &QPushButton::clicked, this, [this] { on_locate_ffmpeg(); });
     locate_ffmpeg_button_->setVisible(false);
     banner_row->addWidget(ffmpeg_banner_, 1);
@@ -1025,7 +1025,8 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     for (const std::string& problem : status.problems()) {
         problems.append(QString::fromStdString(problem));
     }
-    ffmpeg_banner_->setText(problems.join("  ") + app::tr("  Click \"Locate ffmpeg.exe...\" to point at it."));
+    ffmpeg_banner_->setText(problems.join("  ") +
+                            app::with_program_names(app::tr("  Click \"Locate ffmpeg.exe...\" to point at it.")));
     ffmpeg_banner_->setVisible(true);
     locate_ffmpeg_button_->setVisible(true);
     // A run with no screen (the tests) has nobody to answer a dialog.
@@ -1035,7 +1036,7 @@ bool MainWindow::check_ffmpeg(bool prompt) {
             problems.join("\n") +
                 app::tr("\n\nffmpeg was looked for at:\n  {path}", {{"path", status.ffmpeg.path}}) +
                 app::tr("\nffprobe at:\n  {path}", {{"path", status.ffprobe.path}}) +
-                app::tr("\n\nWould you like to point the app at ffmpeg.exe now?"),
+                app::with_program_names(app::tr("\n\nWould you like to point the app at ffmpeg.exe now?")),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
         if (answer == QMessageBox::Yes) {
             return on_locate_ffmpeg();

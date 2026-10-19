@@ -71,8 +71,25 @@ const std::vector<ModelChoice>& v1_model_choices() {
     return choices;
 }
 
+namespace {
+
+// Whether VMAF can be calculated on a GPU here: one of the GPUs found (an
+// NVIDIA, Intel or AMD one), or on macOS, where every Mac has one and it is
+// not among them (Vulkan on Metal, vmaf_vulkan; a run whose GPU fails
+// calculates on the CPU, as anywhere).
+bool vmaf_gpu_possible(const std::vector<GpuVendor>& gpu_vendors) {
+#ifdef __APPLE__
+    static_cast<void>(gpu_vendors);
+    return true;
+#else
+    return !gpu_vendors.empty();
+#endif
+}
+
+}  // namespace
+
 OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* parent)
-    : QGroupBox(app::tr("Options"), parent), vmaf_gpu_possible_(!gpu_vendors.empty()) {
+    : QGroupBox(app::tr("Options"), parent), vmaf_gpu_possible_(vmaf_gpu_possible(gpu_vendors)) {
     // Which videos it edits, then three boxes side by side (video
     // preparation, metric-specific settings, performance), then a note on
     // what affects scores.

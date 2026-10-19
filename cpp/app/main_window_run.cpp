@@ -482,7 +482,7 @@ void MainWindow::set_run_ui_active(bool active) {
     // A run can take hours: the PC must not go to sleep under it. Released as
     // soon as the run ends.
     if (keep_awake()(active)) {
-        logger.info(std::string("Windows keep-awake request ") + (active ? "held for the run" : "released"));
+        logger.info(std::string("Keep-awake request ") + (active ? "held for the run" : "released"));
     }
     // The table itself stays live, so that the queue can be scrolled and
     // read while it runs. Nothing reachable through it can change a running

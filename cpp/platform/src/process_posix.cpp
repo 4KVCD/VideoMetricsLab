@@ -18,6 +18,7 @@
 #include <cerrno>
 #include <condition_variable>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <thread>
 #include <utility>
@@ -89,6 +90,14 @@ Pipe make_pipe() {
 // Whether programs join this process's group (start_programs_in_this_group).
 std::atomic<bool> programs_in_this_group{false};
 
+// The programs started and not yet reaped, and whether each leads a group
+// of its own, for end_programs_now.
+std::mutex running_mutex;
+std::map<pid_t, bool>& running_programs() {
+    static std::map<pid_t, bool> running;
+    return running;
+}
+
 // An exit status as Python's subprocess gives it: the exit code, or minus
 // the signal that ended the program.
 int exit_code_of(int status) {
@@ -125,10 +134,25 @@ struct ChildProcess::State {
     bool error_ended = false;
 
     // Reaps the program if it has ended (or, with `block`, once it has).
+    // The leader of a group of its own takes the rest of its group with it:
+    // what it started and left running (FFmpeg, after a crash) is ended
+    // first, while its id, the group's, is still its own (not yet reaped).
     bool reap(bool block) {
         const std::lock_guard lock(wait_mutex);
         if (ended) {
             return true;
+        }
+        if (own_group) {
+            siginfo_t info{};
+            int waited = waitid(P_PID, static_cast<id_t>(id), &info, WEXITED | WNOWAIT | (block ? 0 : WNOHANG));
+            while (waited < 0 && errno == EINTR) {
+                waited = waitid(P_PID, static_cast<id_t>(id), &info, WEXITED | WNOWAIT | (block ? 0 : WNOHANG));
+            }
+            if (waited == 0 && info.si_pid == id) {
+                kill(-id, SIGKILL);
+            } else if (!block) {
+                return false;  // still running
+            }
         }
         int status = 0;
         pid_t done = waitpid(id, &status, block ? 0 : WNOHANG);
@@ -138,6 +162,8 @@ struct ChildProcess::State {
         if (done == id) {
             ended = true;
             exit_code = exit_code_of(status);
+            const std::lock_guard running_lock(running_mutex);
+            running_programs().erase(id);
         }
         return ended;
     }
@@ -228,6 +254,10 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     auto state = std::make_unique<State>();
     state->id = id;
     state->own_group = own_group;
+    {
+        const std::lock_guard running_lock(running_mutex);
+        running_programs()[id] = own_group;
+    }
     // The program has its copies; ours must close, or the pipes never end.
     output.write.reset();
     error.write.reset();
@@ -363,5 +393,14 @@ std::string ChildProcess::standard_error() {
 int ChildProcess::process_id() const { return static_cast<int>(state_->id); }
 
 void start_programs_in_this_group() { programs_in_this_group = true; }
+
+void end_programs_now() {
+    // Not waiting for the lock: the process is ending, and a thread that
+    // holds it may be the one that will not come back.
+    std::unique_lock lock(running_mutex, std::try_to_lock);
+    for (const auto& [id, own_group] : running_programs()) {
+        kill(own_group ? -id : id, SIGKILL);
+    }
+}
 
 }  // namespace vml::platform

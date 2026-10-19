@@ -285,6 +285,41 @@ commit it pins), on the same loader and MoltenVK as Vship:
   get the default back now. It also cancels on SIGTERM and SIGHUP (a closed
   Terminal window), as Windows' console handler does for a closed console.
 
+### Second QA round
+
+- **Found:** with a decimal-comma locale (German, French) and the window
+  started from Terminal, every number the app read lost its decimals: Qt sets
+  the C library's locale from the system's on Linux and macOS, which Windows'
+  C runtime does not. Scores came out wrong (SSIMULACRA2 48.29 for 48.24,
+  CVVDP missing) and the tests could not even read their videos. The app
+  reads and writes numbers in C's way again (`LC_NUMERIC`, `app/main.cpp`).
+- **Found:** a Mac went to sleep under a long run: `keep_system_awake` held
+  nothing. It holds a power assertion now, which also keeps App Nap off.
+- **Found:** started from Finder, the app's working folder is `/`, where the
+  file dialogs opened and Save analysis results suggested a file that could
+  not be written. It starts in the home folder.
+- **Found:** VMAF compute was locked to CPU ("No GPU was found"): the GPUs
+  the app lists are NVIDIA, Intel and AMD ones, and a Mac's is none. VMAF ran
+  on the GPU all the same; the choice is offered now.
+- **Found:** the graph's wheel zoom went the other way with macOS's natural
+  scrolling, and a trackpad's glide went on zooming; an exported graph's
+  title and table were half the size of its axes on a Retina display; the
+  window said "ffmpeg.exe".
+- **Found, in this port's own fixes:** `nohup` no longer protected the command
+  line (its SIGHUP handler replaced nohup's ignore); a SIGTERM to a run whose
+  cancel did not come back did nothing (a second one now ends the command);
+  `vml-cli devices` ended by a signal left its GPU checks running (the
+  programs a process started now end with it, `end_programs_now`); FFmpeg
+  left by a crashed process of its own ran on (a group's leader that ends
+  takes its group with it); a paused Video Compare uncovered showed the frame
+  before the one it was on.
+- **4K at 120 fps:** HEVC 10-bit plays at 120 fps (one refresh a frame, after
+  a hiccup in its first second). HEVC 8-bit does not: VideoToolbox decodes it
+  at about 125 frames a second a stream on an M1 Pro (10-bit: 330), whatever
+  output is asked for, so a pair plays at about 107, a frame in six shown
+  twice. FFmpeg's VideoToolbox decoder works one frame at a time; the limit
+  is its, or the chip's.
+
 ### Still to do
 
 - VVC's film grain: Windows draws it with Direct3D 11 compute

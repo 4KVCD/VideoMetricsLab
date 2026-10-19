@@ -74,8 +74,26 @@ void on_interrupt(std::function<void()> handler) {
     // terminal's going (SIGHUP) and an ending asked for (SIGTERM: `timeout`,
     // a job's cancel): the run is cancelled and its programs ended, not left
     // running with no one to read them.
-    for (const int signal : {SIGINT, SIGHUP, SIGTERM}) {
-        sigaction(signal, &action, nullptr);
+    // A signal ignored as the program started stays ignored: `nohup` ignores
+    // SIGHUP, and a shell its background jobs' SIGINT.
+    static const bool ignored_at_start[] = {[] {
+        struct sigaction now {};
+        sigaction(SIGINT, nullptr, &now);
+        return now.sa_handler == SIG_IGN;
+    }(), [] {
+        struct sigaction now {};
+        sigaction(SIGHUP, nullptr, &now);
+        return now.sa_handler == SIG_IGN;
+    }(), [] {
+        struct sigaction now {};
+        sigaction(SIGTERM, nullptr, &now);
+        return now.sa_handler == SIG_IGN;
+    }()};
+    const int signals[] = {SIGINT, SIGHUP, SIGTERM};
+    for (int i = 0; i < 3; ++i) {
+        if (!ignored_at_start[i]) {
+            sigaction(signals[i], &action, nullptr);
+        }
     }
 }
 
