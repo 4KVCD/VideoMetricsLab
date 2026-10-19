@@ -27,6 +27,7 @@
 #include <thread>
 
 #include "i18n.h"
+#include "key_guide.h"
 #include "theme.h"
 #include "video_compare_view.h"
 #ifdef VML_NATIVE_PLAYBACK
@@ -140,29 +141,47 @@ double parse_timestamp(const QString& value) {
 
 FrameView::FrameView(Zoom& zoom, QWidget* parent) : QWidget(parent), zoom_(zoom) {
     setFocusPolicy(Qt::StrongFocus);
-    label_ = new QLabel(app::tr(nothing_to_compare), this);
+    // The black screen's text: the message, and the tab's keys under it.
+    screen_text_ = new QWidget(this);
+    screen_text_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    auto* column = new QVBoxLayout(screen_text_);
+    column->addStretch(1);
+    label_ = new QLabel(app::tr(nothing_to_compare));
     label_->setAlignment(Qt::AlignCenter);
     label_->setWordWrap(true);
     label_->setStyleSheet("color: #ddd; background: transparent;");
-    label_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    column->addWidget(label_);
+    column->addSpacing(16);
+    key_guide_ = new KeyGuide;
+    column->addWidget(key_guide_, 0, Qt::AlignHCenter);
+    column->addStretch(1);
 }
 
-void FrameView::set_message(const QString& message) {
+void FrameView::set_message(const QString& message, bool with_keys) {
     image_ = QImage();
     scaled_ = QPixmap();
     label_->setText(message);
-    label_->show();
+    key_guide_->setVisible(with_keys);
+    screen_text_->show();
+    fit_screen_text();
     zoom_changed();
 }
 
 void FrameView::set_image(const QImage& image) {
     image_ = image;
     scaled_ = QPixmap();
-    label_->hide();
+    screen_text_->hide();
     zoom_changed();
 }
 
-QString FrameView::message() const { return label_->isVisibleTo(this) ? label_->text() : QString(); }
+QString FrameView::message() const { return screen_text_->isVisibleTo(this) ? label_->text() : QString(); }
+
+void FrameView::fit_screen_text() {
+    // The keys at the largest size that leaves the message room.
+    screen_text_->setGeometry(rect());
+    const int message_height = label_->text().isEmpty() ? 0 : label_->heightForWidth(width() * 9 / 10) + 16;
+    key_guide_->fit(QSize(width() * 9 / 10, std::max(0, height() * 9 / 10 - message_height)));
+}
 
 void FrameView::zoom_changed() {
     refresh_cursor();
@@ -186,7 +205,9 @@ void FrameView::refresh_cursor() {
 }
 
 void FrameView::resizeEvent(QResizeEvent* event) {
-    label_->setGeometry(rect());
+    if (screen_text_->isVisibleTo(this)) {
+        fit_screen_text();
+    }
     QWidget::resizeEvent(event);
     refresh_cursor();
 }
@@ -1408,9 +1429,12 @@ void FrameComparePanel::show_or_request() {
         if (const auto error = errors_.find(*key); error != errors_.end()) {
             viewer->set_message(app::tr("Could not load frame:\n{error}", {{"error", tr_message(error->second)}}));
         } else {
+            // Without the keys: shown at each step to a frame not kept yet,
+            // they would flash between the frames.
             viewer->set_message(shown_side() == FrameSide::source
                                     ? app::tr("Loading source frame {frame:,}\xE2\x80\xA6", {{"frame", frame_}})
-                                    : app::tr("Loading test frame {frame:,}\xE2\x80\xA6", {{"frame", frame_}}));
+                                    : app::tr("Loading test frame {frame:,}\xE2\x80\xA6", {{"frame", frame_}}),
+                                false);
         }
     }
     seek_timer_->start();

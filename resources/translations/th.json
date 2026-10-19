@@ -715,7 +715,11 @@
   "{rate} kb/s": "{rate} kbps",
   "Always calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "คำนวณ SSIMULACRA2, Butteraugli และ CVVDP พร้อมกันเสมอ ในรอบเดียวต่อวิดีโอ",
   "Unticked, the three are calculated together when the GPU has the memory for it as each video starts, and one at a time otherwise. Together, each video is decoded once instead of once per metric: much less CPU work for 4K VVC, and about 7.3 GB of GPU memory at 4K.": "เมื่อไม่ได้เลือก ทั้งสามจะคำนวณพร้อมกันเมื่อ GPU มีหน่วยความจำพอตอนเริ่มแต่ละวิดีโอ มิฉะนั้นจะคำนวณทีละตัว เมื่อคำนวณพร้อมกัน แต่ละวิดีโอจะถอดรหัสครั้งเดียวแทนที่จะครั้งละเมตริก: CPU ทำงานน้อยลงมากกับ 4K VVC และใช้หน่วยความจำ GPU ประมาณ 7.3 GB สำหรับ 4K",
-  "Checking the GPU before the run…": "กำลังตรวจสอบ GPU ก่อนเริ่มการคำนวณ…"
+  "Checking the GPU before the run…": "กำลังตรวจสอบ GPU ก่อนเริ่มการคำนวณ…",
+  "Hold to see the source": "กดค้างเพื่อดูต้นฉบับ",
+  "Switch test video": "สลับวิดีโอทดสอบ",
+  "Play / pause": "เล่น / หยุดชั่วคราว",
+  "Space": "Space"
  },
  "plurals": {
   "about {count} day": [

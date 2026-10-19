@@ -19,6 +19,7 @@ add_library(vml_app STATIC
     frame_compare_panel.cpp
     graph_panel.cpp
     i18n.cpp
+    key_guide.cpp
     main_window.cpp
     main_window_compare.cpp
     main_window_graph.cpp

@@ -715,7 +715,11 @@
   "{rate} kb/s": "{rate} kb/s",
   "Always calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2、Butteraugli 和 CVVDP 始终在每个视频的同一遍中一起计算",
   "Unticked, the three are calculated together when the GPU has the memory for it as each video starts, and one at a time otherwise. Together, each video is decoded once instead of once per metric: much less CPU work for 4K VVC, and about 7.3 GB of GPU memory at 4K.": "不勾选时，每个视频开始时如果显存足够，三个指标会一起计算，否则逐个计算。一起计算时，每个视频只解码一次，而不是每个指标一次：4K VVC 的 CPU 工作量大大减少，4K 时约占用 7.3 GB 显存。",
-  "Checking the GPU before the run…": "运行前正在检查 GPU…"
+  "Checking the GPU before the run…": "运行前正在检查 GPU…",
+  "Hold to see the source": "按住可显示源视频",
+  "Switch test video": "切换测试视频",
+  "Play / pause": "播放 / 暂停",
+  "Space": "空格"
  },
  "plurals": {
   "about {count} day": [

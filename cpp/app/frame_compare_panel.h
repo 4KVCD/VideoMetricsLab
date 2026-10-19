@@ -45,6 +45,7 @@ class QVBoxLayout;
 namespace vml::app {
 
 class ElidedLabel;
+class KeyGuide;
 
 // One video pair to choose from. `scores` are its run's, if it has one:
 // the frames of a pair are worth comparing whether or not anyone has
@@ -65,15 +66,17 @@ struct FrameComparisonEntry {
 double parse_timestamp(const QString& value);
 
 // A still frame, fitted to the view or zoomed (the tab's one Zoom), dragged
-// with the mouse when larger than the view.
+// with the mouse when larger than the view. Without one, a black screen
+// with a message and the tab's keys in large type (key_guide.h).
 class FrameView : public QWidget {
     Q_OBJECT
 
 public:
     explicit FrameView(Zoom& zoom, QWidget* parent = nullptr);
 
-    // Shows a message instead of a frame.
-    void set_message(const QString& message);
+    // Shows a message instead of a frame, and the keys under it unless not
+    // `with_keys`.
+    void set_message(const QString& message, bool with_keys = true);
     // Shows a frame.
     void set_image(const QImage& image);
     // Draws the frame again after the zoom changed.
@@ -92,9 +95,12 @@ protected:
 private:
     bool can_drag() const;
     void refresh_cursor();
+    void fit_screen_text();
 
     Zoom& zoom_;
+    QWidget* screen_text_ = nullptr;  // the message and the keys
     QLabel* label_ = nullptr;
+    KeyGuide* key_guide_ = nullptr;
     QImage image_;
     // The frame scaled down smoothly, at the size last drawn: a drag paints
     // often, and scaling a 4K frame each time is slow.
