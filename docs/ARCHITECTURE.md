@@ -72,8 +72,10 @@ to the row, source and settings it was calculated for.
 ## Persistence contracts
 
 The C++ app reads and writes the Python app's files, so a user's saved
-scores, saved runs and settings carry over from v2.1 and before, and either
-app opens the other's.
+scores, saved runs and settings carry over from earlier versions, and either
+app opens the other's. (SSIMULACRA2, Butteraugli and CVVDP scores saved on
+the GPU before v2.2 are calculated again: Vship-fast computes them otherwise,
+score_identity.h.)
 
 Saved runs are `.metrics.json` files (format v2, `run_file.h`): each metric
 serialized on its own, with its kind, its frame or time axis where it has

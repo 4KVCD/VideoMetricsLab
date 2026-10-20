@@ -1,5 +1,78 @@
 # Changelog
 
+## v2.2
+
+v2.2 adds a macOS version for Apple silicon and makes SSIMULACRA2, Butteraugli
+and CVVDP faster with Vship-fast.
+
+### Metric performance
+
+- SSIMULACRA2, Butteraugli and CVVDP now use
+  [Vship-fast](https://github.com/4KVCD/Vship-fast): Butteraugli
+  **1.75x-2.5x**, CVVDP **1.6x-2.4x** and SSIMULACRA2 up to **1.6x** faster
+  than Vship's Vulkan build.
+
+### New features
+
+- Added a macOS version for Apple silicon (macOS 14.4 or later), with GPU
+  metrics and Video Compare playback on the Mac's GPU.
+- Added an app icon.
+- Video Compare now shows its keys (S, ←/→ and Space) in large type on its
+  black screen.
+- Command line: added `--fps` to compare raw video streams (.264, .265, .266,
+  .obu and others), and `--size` and `--pix-fmt` (with `--fps`) for raw .yuv
+  files.
+- Command line: a video without colour tags now takes the other video's, so a
+  .y4m encode of an HDR10 source is read as HDR10.
+
+### Other changes
+
+- Removed the GPU backend setting: the GPU metrics now always use Vulkan
+  (VMAF v0.6.1 and VMAF NEG use CUDA on an NVIDIA GPU where Vulkan can't run
+  them).
+- Removed the GPU/CPU choice for SSIMULACRA2 and Butteraugli: they now run on
+  the GPU when one can be used, and on the CPU otherwise.
+- SSIMULACRA2, Butteraugli and CVVDP on the GPU now compute as libjxl and
+  pycvvdp do, so scores saved on the GPU by earlier versions are calculated
+  again.
+- Command line: removed `--ssimulacra2-on` and `--butteraugli-on`; `--cpu`
+  still calculates both on the CPU.
+- Command line: a metric that falls back from the GPU to the CPU now gets a
+  note in the results and the JSON.
+- Command line: CVVDP's JSON entry now gives its frame count, as the other
+  metrics' entries do.
+- Command line: on a terminal, the progress line now updates once a second,
+  as the window's does.
+
+### Bug fixes
+
+- Fixed wrong VMAF, PSNR, SSIM and XPSNR scores when the test video's colour
+  range or colour matrix differs from the reference's.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP reading the two videos with
+  different colour matrices when one or both had no colour tags, such as a
+  540p encode of an untagged 720p source.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP on the GPU reading the two videos'
+  colours half a pixel apart when only one gave its chroma siting, such as a
+  .y4m reference made from an .mkv.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP on the GPU reading full-range
+  greyscale videos with too little contrast.
+- Fixed changing a VMAF model removing the video's other scores too.
+- Fixed cancelling the custom VMAF model file dialog switching the video to
+  the Auto model and removing its scores.
+- Fixed the duration limit, frame subsample and threads boxes applying a value
+  digit by digit as it was typed.
+- Fixed videos still showing scores after Clear saved results being skipped by
+  the next run.
+- Fixed Metric Graphs' exported PNG drawing its title and table too small on
+  high-DPI screens.
+- Command line: fixed CVVDP failing, and VMAF, SSIMULACRA2 and Butteraugli
+  falling back to the CPU, when the videos were given as relative paths.
+- Command line: fixed very large `--threads` or `--subsample` values hanging
+  the run.
+- Command line: fixed a missing `--model` file being found only when VMAF
+  failed during the run.
+- Command line: fixed CSV write failures not being shown with `-q`.
+
 ## v2.1
 
 v2.1 is VideoMetricsLab rewritten in C++: a smaller download, faster runs,

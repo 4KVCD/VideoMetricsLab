@@ -1,8 +1,8 @@
 # VideoMetricsLab
 
-Calculate VMAF, VMAF NEG, VMAF v1, SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD and Intel GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly to easily spot differences.
+Calculate VMAF, VMAF NEG, VMAF v1, SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD, Intel and Apple GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly to easily spot differences.
 
-New in v2.1: VideoMetricsLab is now a C++ app: a **39 MB** download instead of 87 MB, **1.25x** faster runs, and a window that opens **3x** faster and idles in a third of the memory. See the [changelog](CHANGELOG.md) and [the C++ port](docs/CPP_PORT.md).
+New in v2.2: VideoMetricsLab now runs on macOS (Apple silicon), and SSIMULACRA2, Butteraugli and ColorVideo VDP use [Vship-fast](https://github.com/4KVCD/Vship-fast): Butteraugli **1.75x-2.5x**, ColorVideo VDP **1.6x-2.4x** and SSIMULACRA2 up to **1.6x** faster. See the [changelog](CHANGELOG.md).
 
 ## Features
 
@@ -11,8 +11,8 @@ New in v2.1: VideoMetricsLab is now a C++ app: a **39 MB** download instead of 8
 - VMAF models for standard, phone, 4K and HFR viewing.
 
 **Fast on any GPU**
-- VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD and Intel GPUs with [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast): VMAF v1 up to **17x** faster.
-- SSIMULACRA2, Butteraugli and ColorVideo VDP on the GPU with Vship (CUDA, HIP or Vulkan); libjxl on the CPU when no GPU can be used, for SSIMULACRA2 and Butteraugli.
+- VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD, Intel and Apple GPUs with [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast): VMAF v1 up to **17x** faster.
+- SSIMULACRA2, Butteraugli and ColorVideo VDP on any GPU with [Vship-fast](https://github.com/4KVCD/Vship-fast) (Vulkan); libjxl on the CPU when no GPU can be used, for SSIMULACRA2 and Butteraugli.
 - PSNR, SSIM and XPSNR **2.7x-11x** faster, calculated in the app.
 - GPU video decoding, with software decoding for formats the GPU can't handle, such as VVC.
 
@@ -71,11 +71,14 @@ For detailed instructions, see the [User Guide](docs/USER_GUIDE.md).
 
 ### Packaged release
 
-Download the Windows zip from the [latest release](https://github.com/4KVCD/VideoMetricsLab/releases/latest),
-extract it, and run `VideoMetricsLab.exe`.
+Download the Windows or macOS zip from the [latest release](https://github.com/4KVCD/VideoMetricsLab/releases/latest),
+extract it, and run `VideoMetricsLab.exe` (Windows) or `VideoMetricsLab.app`
+(macOS). The macOS app is not notarized: the first time, open it from System
+Settings > Privacy & Security > Open Anyway.
 
 The app requires **FFmpeg 9 or newer with libvmaf**. FFmpeg is not bundled; the
-app prompts for its location if it is not available on `PATH`.
+app prompts for its location if it is not available on `PATH`. On macOS,
+`brew install ffmpeg` installs it.
 
 ### Build from source
 
@@ -88,9 +91,10 @@ Requires Visual Studio 2022, CMake 3.25+, Qt 6.12 and MinGW-w64; see the
 
 ## Requirements
 
-- Windows 10 or 11
+- Windows 10 or 11, or macOS 14.4 or later on Apple silicon
 - FFmpeg 9+ with `ffmpeg`, `ffprobe`, and `libvmaf`
-- Optional NVIDIA, Intel, or AMD GPU for hardware decoding and the GPU metrics
+- On Windows, an optional NVIDIA, Intel, or AMD GPU for hardware decoding and
+  the GPU metrics
 
 ## Development
 
