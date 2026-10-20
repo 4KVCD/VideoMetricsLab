@@ -3420,6 +3420,34 @@
    "hwaccel": null,
    "numbered_at": null,
    "chain": "select=not(mod(n\\,2)),scale=1280:720:flags=bilinear,setpts=PTS-STARTPTS,format=yuv420p"
+  },
+  {
+   "name": "full-range gray, kept in the full range",
+   "info": {
+    "width": 1280,
+    "height": 720,
+    "pix_fmt": "gray",
+    "color_range": "pc",
+    "color_space": "",
+    "color_transfer": "",
+    "color_primaries": "",
+    "chroma_location": ""
+   },
+   "crop": null,
+   "target": [
+    1280,
+    720
+   ],
+   "pixel_format": "yuv420p",
+   "step": 1,
+   "algorithm": "bicubic",
+   "hwaccel": null,
+   "numbered_at": [
+    24000,
+    1001
+   ],
+   "chain": "settb=AVTB,setpts=N*1001000000/24000,scale=out_range=pc,format=yuv420p",
+   "full_range": true
   }
  ],
  "piped": {

@@ -1395,7 +1395,8 @@ private:
             const std::string chain =
                 vship_filter_chain(video.info, video.crop, video.size, pixel_format, every,
                                    request_.options.scale_algorithm, accel,
-                                   by_time_ ? std::nullopt : std::optional(numbering_rate_));
+                                   by_time_ ? std::nullopt : std::optional(numbering_rate_),
+                                   video.colour.colorFamily == 0 && video.colour.range == 1);
             std::vector<std::string> command{request_.environment.ffmpeg, "-hide_banner", "-loglevel", "error",
                                              "-nostdin"};
             const std::vector<std::string> decode = hwaccel_args(accel);

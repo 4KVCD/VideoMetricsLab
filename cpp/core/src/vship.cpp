@@ -795,7 +795,7 @@ std::pair<std::pair<int, int>, std::pair<int, int>> vship_scaled_sizes(const Vid
 std::string vship_filter_chain(const VideoInfo& info, const std::optional<CropBox>& crop,
                                std::pair<int, int> target_size, const std::string& pixel_format, int step,
                                const std::string& algorithm, const std::optional<std::string>& hwaccel,
-                               const std::optional<Rational>& numbered_at) {
+                               const std::optional<Rational>& numbered_at, bool full_range) {
     std::vector<std::string> operations;
     if (numbered_at) {
         operations = numbering_filters(*numbered_at);
@@ -822,6 +822,14 @@ std::string vship_filter_chain(const VideoInfo& info, const std::optional<CropBo
     }
     if (!numbered_at) {
         operations.push_back("setpts=PTS-STARTPTS");
+    }
+    if (full_range) {
+        // FFmpeg brings full-range gray to the limited range as it gives it
+        // chroma for Vship's 4:2:0 (and as scale resizes it), though Vship is
+        // told it is full range: it read 30-219 where the video held 16-236.
+        // Asked for the full range, the conversion keeps it; full-range 4:2:0,
+        // NV12 and 4:2:0 with alpha kept theirs either way, and are untouched.
+        operations.push_back("scale=out_range=pc");
     }
     operations.push_back("format=" + pixel_format);
     std::string chain;

@@ -173,7 +173,7 @@ TEST(Vship, PlansFfmpegAndSizesAsThePythonApp) {
                                      std::pair(expected["target"][0].get<int>(), expected["target"][1].get<int>()),
                                      expected["pixel_format"].get<std::string>(), expected["step"].get<int>(),
                                      expected["algorithm"].get<std::string>(), text_or_none(expected["hwaccel"]),
-                                     numbered_at),
+                                     numbered_at, expected.value("full_range", false)),
                   expected["chain"].get<std::string>());
     }
     for (const auto& [pixel_format, arguments] : vship_reference()["piped"].items()) {

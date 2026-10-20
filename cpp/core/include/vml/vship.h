@@ -339,11 +339,12 @@ std::pair<std::pair<int, int>, std::pair<int, int>> vship_scaled_sizes(const Vid
 // at the test video's frame rate `numbered_at` (frame_sync.h; nothing when
 // pairing by timestamp, where each video's times start at 0 instead), every
 // step-th kept, brought from the GPU (`hwaccel`), cropped, scaled and
-// converted to `pixel_format`.
+// converted to `pixel_format`, in the full range where Vship is told the
+// video is (`full_range`, vship_colorspace).
 std::string vship_filter_chain(const VideoInfo& info, const std::optional<CropBox>& crop,
                                std::pair<int, int> target_size, const std::string& pixel_format, int step,
                                const std::string& algorithm, const std::optional<std::string>& hwaccel,
-                               const std::optional<Rational>& numbered_at);
+                               const std::optional<Rational>& numbered_at, bool full_range);
 
 // FFmpeg's output arguments for sending frames of `pixel_format` down its
 // standard output: YUV4MPEG where the muxer takes the layout (FFmpeg writes
