@@ -5,7 +5,6 @@
 #include <cmath>
 #include <fstream>
 #include <random>
-#include <regex>
 #include <stdexcept>
 #include <system_error>
 #include <tuple>
@@ -22,7 +21,6 @@
 #include "vml/result_json.h"
 #include "vml/score_identity.h"
 #include "vml/sha256.h"
-#include "vml/vship.h"
 
 namespace vml {
 
@@ -37,14 +35,6 @@ constexpr const char* unversioned_compatibility = "unversioned";
 // The scaling algorithms of the older identity, which had one folder per
 // algorithm (recipe_directory).
 constexpr std::array<std::string_view, 4> legacy_scale_algorithms{"bicubic", "lanczos", "bilinear", "spline"};
-
-// The RGB pixel formats Vship scored wrongly without a transfer tag before
-// app version 1.2.2, and the transfer tags that count as none.
-const std::regex& old_vship_rgb() {
-    static const std::regex pattern(
-        "gbrp(?:(?:9|10|12|14|16)(?:le|be)?)?|rgb24|bgr24|rgba|bgra|argb|abgr|rgb0|bgr0|rgb48(?:le|be)|rgba64(?:le|be)");
-    return pattern;
-}
 
 using LoadedMetric = std::variant<FrameMetricResult, SequenceMetricResult>;
 
@@ -136,9 +126,11 @@ bool matrix_read_otherwise(const std::vector<ColourTags>& infos) {
     }
 }
 
-// Whether a CPU SSIMULACRA2 or Butteraugli score predates the colour
-// handling the CPU's tools have now: one made before the pair was read with
-// one colour matrix only where that changes what is read.
+// Whether a saved score is known to be wrong and must be calculated again:
+// a CPU SSIMULACRA2 or Butteraugli score that predates the colour handling
+// the CPU's tools have now, one made before the pair was read with one colour
+// matrix, where that changes what is read. (Every GPU score made before
+// Vship-fast is refused by its id: score_identity.h.)
 bool stale_cpu_score(const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {
     if (provenance.compute_backend != "cpu" ||
         (provenance.implementation != "ssimulacra2" && provenance.implementation != "butteraugli")) {
@@ -151,52 +143,18 @@ bool stale_cpu_score(const MetricProvenance& provenance, const std::vector<Colou
     return mapping != nlohmann::json(score_identity::cpu_colour_tags_unshared_matrix) || matrix_read_otherwise(infos);
 }
 
-// Whether a saved score is known to be wrong and must be calculated again:
-// a stale CPU score; a GPU score made before the pair was read with one
-// colour matrix, of a pair where that changes what Vship reads
-// (matrix_read_otherwise); a GPU score made before a video without chroma
-// siting was read with the other's, of a pair where that changes what Vship
-// reads (chroma_location_shared); or a GPU score from app version 1.2 or
-// 1.2.1 of a pair with an RGB video that has no transfer tag.
-bool stale_vship_score(const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {
-    if (stale_cpu_score(provenance, infos)) {
-        return true;
-    }
-    const nlohmann::json mapping = parameter(provenance, "color_tags");
-    if (provenance.compute_backend != "gpu" || !provenance.implementation.starts_with("Vship/") ||
-        mapping == nlohmann::json(score_identity::vship_colour_tags)) {
-        return false;
-    }
-    if (matrix_read_otherwise(infos)) {
-        return true;
-    }
-    if (mapping == nlohmann::json(score_identity::vship_colour_tags_unshared_matrix)) {
-        return false;
-    }
-    if (infos.size() == 2 && chroma_location_shared(infos[0].chroma_location, infos[1].chroma_location)) {
-        return true;
-    }
-    if (mapping == nlohmann::json(score_identity::vship_colour_tags_unshared_siting)) {
-        return false;
-    }
-    return std::any_of(infos.begin(), infos.end(), [](const ColourTags& info) {
-        const std::string transfer = ascii_lower(python_strip(info.color_transfer));
-        return std::regex_match(ascii_lower(python_strip(info.pix_fmt)), old_vship_rgb()) &&
-               is_untagged_tag(transfer);
-    });
-}
-
 bool is_auto_perceptual(const MetricRequestSpec& spec) {
     return spec.backend_id == "perceptual" && spec.implementation_compatibility_id.ends_with(score_identity::gpu_or_cpu_suffix);
 }
 
 // Whether a saved perceptual score's compatibility id answers a request
-// that does not fix where the metric is calculated. Older scores have the
-// library's version in the id too ("ssimulacra2-vship-5.1.1-gpu-v1").
+// that does not fix where the metric is calculated: Vship-fast's on the
+// GPU, or libjxl's on the CPU, whose id may have a version inside. Vship
+// 5.1's GPU scores ("ssimulacra2-vship-gpu-v1", and the older
+// "ssimulacra2-vship-5.1.0-gpu-v1") are calculated again.
 bool auto_perceptual_compatible(const MetricRequestSpec& spec, const std::string& value) {
     const std::string& key = spec.key;
     return value == score_identity::vship_gpu(key) || value == score_identity::libjxl_cpu(key) ||
-           (value.starts_with(key + "-vship-") && value.ends_with("-gpu-v1")) ||
            (value.starts_with(key + "-libjxl-") && value.ends_with("-cpu-v1"));
 }
 
@@ -348,7 +306,7 @@ std::vector<ColourTags> context_colour_tags(const std::filesystem::path& directo
                 return value.is_null() ? std::string() : python_str(value);
             };
             const nlohmann::json height = info.value("height", nlohmann::json());
-            infos.push_back({text("pix_fmt"), text("color_transfer"), text("chroma_location"), text("color_space"),
+            infos.push_back({text("pix_fmt"), text("color_transfer"), text("color_space"),
                              height.is_number_integer() ? height.get<int>() : 0});
         }
     }
@@ -744,7 +702,7 @@ std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::files
             }
             if (const nlohmann::json made = metadata.value("provenance", nlohmann::json()); made.is_object()) {
                 const std::optional<MetricProvenance> provenance = provenance_from(made);
-                if (!provenance || stale_vship_score(*provenance, infos)) {
+                if (!provenance || stale_cpu_score(*provenance, infos)) {
                     continue;
                 }
             }
@@ -777,7 +735,7 @@ std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, 
         if (!infos) {
             infos = context_colour_tags(directory);
         }
-        return stale_vship_score(provenance, *infos);
+        return stale_cpu_score(provenance, *infos);
     };
     if (is_auto_perceptual(spec)) {
         for (const auto& [path, concrete] : auto_perceptual_candidates(directory, spec)) {
@@ -889,13 +847,13 @@ std::filesystem::path recipe_directory(const std::filesystem::path& base, const 
 }
 
 std::vector<ColourTags> colour_tags(const VideoInfo& source, const VideoInfo& distorted) {
-    return {{source.pix_fmt, source.color_transfer, source.chroma_location, source.color_space, source.height},
-            {distorted.pix_fmt, distorted.color_transfer, distorted.chroma_location, distorted.color_space,
+    return {{source.pix_fmt, source.color_transfer, source.color_space, source.height},
+            {distorted.pix_fmt, distorted.color_transfer, distorted.color_space,
              distorted.height}};
 }
 
 bool answers(const MetricRequestSpec& spec, const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {
-    return compatible(spec, provenance) && !stale_vship_score(provenance, infos);
+    return compatible(spec, provenance) && !stale_cpu_score(provenance, infos);
 }
 
 bool made_as_chosen(const std::string& key, const std::optional<std::string>& choice, const std::string& produced,

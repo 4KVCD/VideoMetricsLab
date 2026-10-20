@@ -231,12 +231,10 @@ MainWindow::MainWindow() {
     settings_ = Settings::load();
     logger.info(std::string("Settings: parallel CPU metrics ") + (settings_.parallel_jobs > 1 ? "on" : "off") +
                 ", GPU decode " + (settings_.default_gpu_decode ? "on" : "off") + ", VMAF v0.6.1 and NEG on " +
-                (settings_.default_vmaf_on_gpu ? "GPU" : "CPU") + ", SSIMULACRA2 on " +
-                ascii_upper(settings_.default_ssimulacra2_backend) + ", Butteraugli on " +
-                ascii_upper(settings_.default_butteraugli_backend) + ", GPU metrics " +
-                (settings_.gpu_metrics_together ? "always in one pass" : "in one pass when the GPU has the memory") + " on the " +
-                settings_.gpu_backend + " backend, saved results " + (settings_.use_cache ? "reused" : "not reused") +
-                " (" + (settings_.cache_dir.empty() ? std::string("default folder") : settings_.cache_dir) + ")");
+                (settings_.default_vmaf_on_gpu ? "GPU" : "CPU") + ", GPU metrics " +
+                (settings_.gpu_metrics_together ? "always in one pass" : "in one pass when the GPU has the memory") +
+                ", saved results " + (settings_.use_cache ? "reused" : "not reused") + " (" +
+                (settings_.cache_dir.empty() ? std::string("default folder") : settings_.cache_dir) + ")");
     if (settings_.remember_window_size) {
         resize(settings_.window_width, settings_.window_height);
     } else {
@@ -246,10 +244,6 @@ MainWindow::MainWindow() {
     // selected rows' settings, and there is no one global setting.
     default_options_ = options_from_settings();
     default_extra_metric_keys_ = extra_metrics_from_settings();
-    default_metric_backends_ = {
-        {"ssimulacra2", settings_.default_ssimulacra2_backend == "cpu" ? "cpu" : "gpu"},
-        {"butteraugli", settings_.default_butteraugli_backend == "cpu" ? "cpu" : "gpu"},
-    };
     default_cvvdp_ = cvvdp_from_settings();
     for (const std::string& key : settings_.hidden_metrics) {
         if (std::any_of(metric_columns().begin(), metric_columns().end(),
@@ -578,8 +572,6 @@ void MainWindow::build_ui() {
     connect(options_panel_, &OptionsPanel::field_edited, this,
             [this](const QString& field) { on_panel_field_edited(field); });
     connect(options_panel_, &OptionsPanel::model_chosen, this, [this](int index) { on_model_changed(index); });
-    connect(options_panel_, &OptionsPanel::metric_backend_changed, this,
-            [this](const QString& key) { on_metric_backend_changed(key); });
     connect(options_panel_, &OptionsPanel::cvvdp_preset_chosen, this,
             [this](int index) { on_cvvdp_preset_chosen(index); });
     connect(options_panel_, &OptionsPanel::cvvdp_resize_toggled, this,
@@ -615,8 +607,7 @@ void MainWindow::build_ui() {
     // Its own list of videos: a finished run adds its own (on_job_finished).
     bitrate_panel_ = new BitratePanel([this] { return find_tool("ffprobe", settings_); }, video_colors_);
     tabs_->addTab(new ScrollingPage(bitrate_panel_), app::tr("Bitrate Viewer"));
-    settings_panel_ = new SettingsPanel(settings_, *file_writes_, detected_gpu_vendors_,
-                                        [this] { return tools_status_; }, dialogs_);
+    settings_panel_ = new SettingsPanel(settings_, *file_writes_, [this] { return tools_status_; }, dialogs_);
     connect(settings_panel_, &SettingsPanel::defaults_changed, this, [this] { on_default_settings_changed(); });
     connect(settings_panel_, &SettingsPanel::decoded_videos_changed, frame_compare_panel_,
             &FrameComparePanel::set_decoded_videos);
@@ -1440,7 +1431,6 @@ int MainWindow::add_table_row(const std::filesystem::path& path) {
     row_data->path = path;
     row_data->options = default_options_;
     row_data->extra_metric_keys = default_extra_metric_keys_;
-    row_data->metric_backends = default_metric_backends_;
     row_data->cvvdp = default_cvvdp_;
     row_data->cvvdp_preset = settings_.cvvdp_default_preset;
     rows_.push_back(row_data);
@@ -1505,8 +1495,7 @@ void MainWindow::show_score_cell(QTableWidgetItem& item, const RowData& row_data
     const MetricDefinition& definition = metric_definition(metric.key);
     const FrameMetricResult* frame_metric = run.result.metric_results.frame(metric.key);
     QString text = qt_text(definition.format_value(score));
-    const bool other_scale = frame_metric != nullptr && row_data.metric_backends.contains(metric.key) &&
-                             !backend_matches(row_data, metric.key, frame_metric->provenance);
+    const bool other_scale = frame_metric != nullptr && !backend_matches(metric.key, frame_metric->provenance);
     if (other_scale) {
         // Visible without hovering: a score from the other
         // implementation is on a different scale from the rest.
@@ -1517,9 +1506,8 @@ void MainWindow::show_score_cell(QTableWidgetItem& item, const RowData& row_data
     item.setData(score_role, other_scale ? QVariant() : QVariant(score));
     item.setToolTip(definition.kind == MetricKind::sequence
                         ? cvvdp_note(row_data)
-                        : app::tr("Mean of calculated frame scores.") +
-                              identical_frames_note(run, metric.column) +
-                              backend_note(row_data, metric.key, frame_metric));
+                        : app::tr("Mean of calculated frame scores.") + identical_frames_note(run, metric.column) +
+                              (other_scale ? other_scale_note() : QString()));
     QFont font;
     font.setBold(true);
     item.setFont(font);
@@ -2481,15 +2469,14 @@ std::vector<std::string> MainWindow::reusable_metric_keys(const RowData& row_dat
     std::vector<ColourTags> infos;
     for (const std::optional<VideoInfo>* info : {&source_info_, &row_data.video_info}) {
         if (*info) {
-            infos.push_back({(*info)->pix_fmt, (*info)->color_transfer, (*info)->chroma_location,
-                             (*info)->color_space, (*info)->height});
+            infos.push_back({(*info)->pix_fmt, (*info)->color_transfer, (*info)->color_space, (*info)->height});
         }
     }
     return reusable_keys(row_data.completed_run->result,
-                         analysis_request(row_data.options, requested_metrics(row_data), row_data.metric_backends,
+                         analysis_request(row_data.options, requested_metrics(row_data), automatic_perceptual_backends,
                                           row_data.cvvdp)
                              .metrics,
-                         row_data.metric_backends, [](const std::string&) { return vship_available(); }, infos);
+                         automatic_perceptual_backends, [](const std::string&) { return vship_available(); }, infos);
 }
 
 MetricResultSet MainWindow::reusable_results(const RowData& row_data) const {
@@ -2518,28 +2505,22 @@ bool MainWindow::has_requested_results(const RowData& row_data) const {
     });
 }
 
-bool MainWindow::backend_matches(const RowData& row_data, const std::string& key,
-                                 const MetricProvenance& provenance) {
-    // Whether a score was made the way the row asks for it (metric_cache.h's
-    // made_as_chosen); a metric without a GPU or CPU choice always is.
-    const auto choice = row_data.metric_backends.find(key);
-    return made_as_chosen(key, choice == row_data.metric_backends.end() ? std::nullopt : std::optional(choice->second),
+bool MainWindow::backend_matches(const std::string& key, const MetricProvenance& provenance) {
+    // Whether a score was made where its metric is calculated now
+    // (metric_cache.h's made_as_chosen): SSIMULACRA2 and Butteraugli on the
+    // GPU where one can. The other metrics' always are.
+    const auto choice = automatic_perceptual_backends.find(key);
+    return made_as_chosen(key,
+                          choice == automatic_perceptual_backends.end() ? std::nullopt : std::optional(choice->second),
                           provenance.compute_backend, [](const std::string&) { return vship_available(); });
 }
 
-QString MainWindow::backend_note(const RowData& row_data, const std::string& key, const FrameMetricResult* metric) {
+QString MainWindow::other_scale_note() {
     // The tooltip's word on a SSIMULACRA2 or Butteraugli score calculated on
-    // the other device than the row's choice, the rare case marked "(CPU)" or
-    // "(GPU)" in the cell. A score calculated where chosen needs none.
-    const auto choice = row_data.metric_backends.find(key);
-    if (choice == row_data.metric_backends.end() || metric == nullptr ||
-        backend_matches(row_data, key, metric->provenance)) {
-        return {};
-    }
-    return app::tr("\n\nCalculated on the {produced}, but this row is set to {wanted}; the two give different numbers, "
-                   "so the next run recalculates it on the {wanted}.",
-                   {{"produced", QString::fromStdString(metric->provenance.compute_backend).toUpper()},
-                    {"wanted", choice->second == "gpu" ? "GPU" : "CPU"}});
+    // the CPU where the GPU can calculate it (before a GPU was found, or after
+    // it failed), the rare case marked "(CPU)" in the cell.
+    return app::tr("\n\nCalculated on the CPU, which gives different numbers from the GPU, so the next run calculates "
+                   "it again on this PC's GPU.");
 }
 
 std::optional<double> MainWindow::score_of(CompletedRun& run, int column) {

@@ -38,7 +38,7 @@ void MainWindow::on_table_selection_changed() {
         options_panel_->target_label->setText(
             app::tr("Select one or more videos in the table to view or edit their settings."));
         syncing_panel_ = true;
-        options_panel_->show_backends(default_options_.vmaf_on_gpu, default_metric_backends_);
+        options_panel_->show_vmaf_backend(default_options_.vmaf_on_gpu);
         syncing_panel_ = false;
         return;
     }
@@ -73,8 +73,7 @@ void MainWindow::write_panel_options(const VmafOptions& options) {
     if (selected.empty()) {
         selected.push_back(options);
     }
-    options_panel_->show_options(options, first != nullptr ? first->metric_backends : default_metric_backends_,
-                                 selected);
+    options_panel_->show_options(options, selected);
     const std::vector<std::string> requested = first != nullptr ? requested_metrics(*first) : std::vector<std::string>();
     for (const MetricColumn& metric : metric_columns()) {
         metric_header_->set_checked(metric.column, first != nullptr ? std::find(requested.begin(), requested.end(),
@@ -153,8 +152,7 @@ void MainWindow::on_panel_field_edited(const QString& field) {
     };
     apply(default_options_);
     if (field == "vmaf_on_gpu") {
-        // The last choice is what the next session starts with, as for
-        // SSIMULACRA2's and Butteraugli's (on_metric_backend_changed).
+        // The last choice is what the next session starts with.
         settings_.default_vmaf_on_gpu = panel.vmaf_on_gpu;
         save_settings();
     }
@@ -188,23 +186,6 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         set_row_black_bars(row);
     }
     reload_saved_scores(changed);
-}
-
-void MainWindow::on_metric_backend_changed(const QString& metric_key) {
-    // Sets where SSIMULACRA2 or Butteraugli is calculated for the selected
-    // rows. Where, never what: no score is taken away.
-    if (syncing_panel_) {
-        return;
-    }
-    const std::string key = metric_key.toStdString();
-    const std::string backend = options_panel_->metric_backend(key);
-    default_metric_backends_[key] = backend;
-    for (const int row : panel_target_rows_) {
-        rows_[static_cast<std::size_t>(row)]->metric_backends[key] = backend;
-    }
-    // The last choice is what the next session starts with, too.
-    (key == "ssimulacra2" ? settings_.default_ssimulacra2_backend : settings_.default_butteraugli_backend) = backend;
-    save_settings();
 }
 
 void MainWindow::on_model_changed(int index) {
@@ -294,12 +275,10 @@ void MainWindow::add_opposite_scale_direction_rows(const std::vector<int>& rows)
         RowData& companion = *rows_[static_cast<std::size_t>(new_row)];
         companion.options = original->options;
         companion.options.scale_direction = opposite;
-        // The same comparison in the other direction: the same metric ticks,
-        // GPU/CPU choices and CVVDP display. Don't take the defaults: a video
-        // set to CPU SSIMULACRA2 with CVVDP ticked would get a companion
-        // without CVVDP and with SSIMULACRA2 on the GPU.
+        // The same comparison in the other direction: the same metric ticks
+        // and CVVDP display. Don't take the defaults: where they leave CVVDP
+        // out, a video with CVVDP ticked would get a companion without it.
         companion.extra_metric_keys = original->extra_metric_keys;
-        companion.metric_backends = original->metric_backends;
         companion.cvvdp = original->cvvdp;
         companion.cvvdp_preset = original->cvvdp_preset;
         companion.scale_direction_pinned = true;

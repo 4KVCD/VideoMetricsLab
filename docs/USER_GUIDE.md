@@ -28,35 +28,35 @@ best score green and its worst red among the test videos that have one.
 whether the app reopens the videos it had open when it was last closed (off by
 default).
 
-SSIMULACRA2, Butteraugli and CVVDP are calculated on the GPU with Vship. Settings
-> GPU metrics > GPU backend chooses Vship's build: Auto (the default) uses CUDA
-on NVIDIA and Vulkan on other GPUs such as AMD's and Intel's (HIP only where
-Vulkan cannot run); Vulkan can also be chosen on any GPU. If no GPU can be
-used, the input format is unsupported, or GPU scoring fails, SSIMULACRA2 and Butteraugli fall
-back to the bundled libjxl CPU implementation; CVVDP runs on the GPU only. GPU and CPU results are cached separately
-because their implementations can produce different scores. These two metrics
-are opt-in and do not add processing to runs where they are unchecked.
+SSIMULACRA2, Butteraugli and CVVDP are calculated on the GPU with Vship-fast, a
+faster Vship whose metrics compute as libjxl's and the reference CVVDP's do,
+with Vulkan on any GPU (NVIDIA's, AMD's and Intel's). If no GPU can be used,
+the input format is unsupported, or GPU scoring fails, SSIMULACRA2 and
+Butteraugli are calculated with the bundled libjxl on the CPU; CVVDP runs on
+the GPU only. The GPU and the CPU convert the video to RGB differently, so
+their scores differ: on a PC whose GPU can calculate them, a score calculated
+on the CPU is marked "(CPU)" and the next run calculates it again on the GPU.
+These metrics are opt-in and do not add processing to runs where they are
+unchecked.
 
 VMAF v0.6.1 and VMAF NEG are calculated on the GPU too, with a Vulkan version
-of libvmaf's calculation on any GPU (NVIDIA's, AMD's and Intel's). When
-Settings > GPU metrics > GPU backend is CUDA, an NVIDIA GPU (GeForce GTX 16 and
-RTX 20 series or newer) uses a bundled libvmaf built with CUDA instead. The two
-give the same scores to the last decimal. The choice is each
+of libvmaf's calculation on any GPU (NVIDIA's, AMD's and Intel's). An NVIDIA
+GPU (GeForce GTX 16 and RTX 20 series or newer) whose Vulkan cannot calculate
+them uses a bundled libvmaf built with CUDA instead. The two give the same
+scores to the last decimal. The choice is each
 video's Performance > VMAF compute, GPU by default and greyed out
 at CPU without a GPU. A small integrated GPU can be slower at it than a fast
-CPU: choose CPU there. Like
-SSIMULACRA2's and Butteraugli's, the last choice is what newly added videos
-start with. The GPU's scores agree with FFmpeg's libvmaf on the CPU to within a
-thousandth of a point on every frame, so unlike those two, a saved VMAF score is
-reused whichever is chosen. PSNR, SSIM and XPSNR have no GPU code: the app
+CPU: choose CPU there. The last choice is what newly added videos start with.
+The GPU's scores agree with FFmpeg's libvmaf on the CPU to within a thousandth
+of a point on every frame, so a saved VMAF score is reused whichever is
+chosen. PSNR, SSIM and XPSNR have no GPU code: the app
 calculates them on the CPU with the bundled libvmaf-fast, beside the GPU's run,
 so they do not slow VMAF down. With VMAF on the CPU, FFmpeg calculates them in
 the same run.
 
 VMAF v1 follows the same choice, with any GPU that has a Vulkan driver. Its
 four features, detail loss (ADM), motion, banding (CAMBI) and colour (SpEED),
-are calculated on the GPU with Vulkan -- on an NVIDIA GPU too, whatever the GPU
-backend setting -- and give libvmaf's CPU values to the last bit, and libvmaf's
+are calculated on the GPU with Vulkan -- on an NVIDIA GPU too -- and give libvmaf's CPU values to the last bit, and libvmaf's
 own model turns them into the score, so VMAF v1 with the GPU is the score
 FFmpeg's libvmaf gives. It is about 17 times the CPU's speed on 4K video with
 an RTX 5090 that also decodes both videos, 2.5 times with a VVC test video
@@ -138,8 +138,8 @@ window (from a source build: `cpp\build\windows\cli\Release\vml-cli.exe`):
 
 It runs what **Calculate metrics** runs and prints each video's scores, and
 for several videos a summary side by side. The app's saved settings are its
-defaults (FFmpeg's folder, the cache, the GPU backend, the metrics a new video
-starts with); options override them for one run and nothing is written to the
+defaults (FFmpeg's folder, the cache, the metrics a new video starts
+with); options override them for one run and nothing is written to the
 settings. Scores go to the same cache, so a comparison made on the command
 line opens in the app already calculated, and scores the app has saved are
 not calculated again.
@@ -190,9 +190,8 @@ $run.videos[0].metrics.vmaf.score
 | `--size WIDTHxHEIGHT`, `--pix-fmt FORMAT` | The picture size and pixel format (as FFmpeg names it: `yuv420p`, `yuv420p10le`...) of a raw YUV file (below). Required with `--fps` for one. |
 | `--cvvdp-display PRESET` | The display CVVDP models, by preset name. Repeat it for a CVVDP score on each display. Left out: the app's default display. |
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
-| `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only). |
-| `--vmaf-on`, `--ssimulacra2-on`, `--butteraugli-on` `gpu\|cpu` | Where that one metric is calculated (`--vmaf-on` is VMAF v0.6.1, VMAF NEG and VMAF v1). Left out: as the app's Options panel was last set. |
-| `--gpu-backend` `auto\|vulkan\|cuda\|hip` | The GPU backend for this run, as in Settings > GPU metrics; the setting itself is not changed. Left out: as Settings was last set. |
+| `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only): VMAF as with `--vmaf-on cpu`, and SSIMULACRA2 and Butteraugli with libjxl rather than on the GPU. |
+| `--vmaf-on` `gpu\|cpu` | Where VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated. Left out: as the app's Options panel was last set. |
 | `--no-gpu-decode` | Decode the videos on the CPU. |
 | `--threads N` | libvmaf threads. Left out: automatic. |
 | `--parallel 1\|2` | Videos calculated at once on the CPU. |

@@ -52,9 +52,17 @@ struct MetricRequestSpec {
     nlohmann::json identity() const;
 };
 
+// Where SSIMULACRA2 and Butteraugli are calculated unless a run asks for
+// the CPU (the command line's --cpu): "gpu", on the GPU where one can, and
+// on the CPU without one. Their GPU and CPU scores differ (each converts
+// the videos to RGB its own way), so a CPU score of theirs counts
+// only where the GPU cannot calculate it (made_as_chosen in metric_cache.h).
+inline const std::map<std::string, std::string> automatic_perceptual_backends{{"butteraugli", "gpu"},
+                                                                              {"ssimulacra2", "gpu"}};
+
 // A comparison's request: its recipe, each metric's request in the order
-// asked, and where SSIMULACRA2 and Butteraugli are set to be calculated
-// ("gpu" or "cpu"), which decides which saved scores of theirs count.
+// asked, and where SSIMULACRA2 and Butteraugli are calculated ("gpu" or
+// "cpu"), which decides which saved scores of theirs count.
 struct AnalysisRequest {
     ComparisonRecipe recipe;
     std::vector<MetricRequestSpec> metrics;

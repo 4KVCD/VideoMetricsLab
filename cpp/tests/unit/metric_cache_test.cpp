@@ -179,7 +179,7 @@ TEST(MetricCache, AnswersAsThePythonApp) {
     for (const nlohmann::json& item : reference.at("answers")) {
         std::vector<ColourTags> infos;
         for (const nlohmann::json& info : item.at("infos")) {
-            infos.push_back({info.at("pix_fmt"), info.at("color_transfer"), {}, {}, 0});  // no siting or matrix given
+            infos.push_back({info.at("pix_fmt"), info.at("color_transfer"), {}, 0});  // no matrix given
         }
         EXPECT_EQ(answers(*request.metric(item.at("key")), test::provenance_from(item.at("provenance")), infos),
                   item.at("answers").get<bool>())
@@ -203,47 +203,32 @@ TEST(MetricCache, AnswersAsThePythonApp) {
     }
 }
 
-// A Vship score saved before a video without chroma siting was read with
-// the other's is calculated again for a pair where that changes the score,
-// and kept for the rest.
-TEST(MetricCache, AVshipScoreReadWithItsChromaApartIsCalculatedAgain) {
-    const AnalysisRequest request = analysis_request(VmafOptions{}, {"ssimulacra2"}, {}, CvvdpSettings{});
-    const MetricRequestSpec& spec = *request.metric("ssimulacra2");
-    MetricProvenance saved{"Vship/ssimulacra2", "Vship 5.1.2", "gpu", "ssimulacra2-vship-gpu-v1",
-                           {{"coverage_step", "1"}, {"color_tags", "\"ffvship-5.1.1\""}}};
-    const std::vector<ColourTags> apart{{"yuv420p", "bt709", "center", "bt709", 1080},
-                                        {"yuv420p", "bt709", "", "bt709", 1080}};
-    const std::vector<ColourTags> left{{"yuv420p", "bt709", "left", "bt709", 1080},
-                                       {"yuv420p", "bt709", "", "bt709", 1080}};
-    EXPECT_FALSE(answers(spec, saved, apart));
-    EXPECT_TRUE(answers(spec, saved, left));
-    saved.parameters["color_tags"] = nlohmann::json(score_identity::vship_colour_tags).dump();
-    EXPECT_TRUE(answers(spec, saved, apart));
-}
-
-// A score saved before an untagged pair was read with one colour matrix is
+// A GPU score of Vship 5.1 is calculated again, Vship-fast's kept. A CPU
+// score saved before an untagged pair was read with one colour matrix is
 // calculated again for a pair whose heights gave the videos different
 // guesses, and kept for the rest.
-TEST(MetricCache, AScoreReadWithTwoGuessedMatricesIsCalculatedAgain) {
+TEST(MetricCache, OldVshipScoresAndCpuScoresReadWithTwoGuessedMatricesAreCalculatedAgain) {
     const AnalysisRequest request = analysis_request(VmafOptions{}, {"ssimulacra2"}, {}, CvvdpSettings{});
     const MetricRequestSpec& spec = *request.metric("ssimulacra2");
-    MetricProvenance gpu{"Vship/ssimulacra2", "Vship 5.1.2", "gpu", "ssimulacra2-vship-gpu-v1",
-                         {{"coverage_step", "1"}, {"color_tags", "\"ffvship-5.1.1/2\""}}};
+    const std::vector<ColourTags> guessed_apart{{"yuv420p", "", "", 720}, {"yuv420p", "", "", 540}};
+    const std::vector<ColourTags> guessed_alike{{"yuv420p", "", "", 1080}, {"yuv420p", "", "", 720}};
+    const std::vector<ColourTags> one_tagged{{"yuv420p", "", "bt709", 720}, {"yuv420p", "", "", 540}};
+    const std::vector<ColourTags> tagged{{"yuv420p", "", "bt709", 720}, {"yuv420p", "", "bt470bg", 540}};
+    const std::map<std::string, std::string> gpu_parameters{
+        {"coverage_step", "1"}, {"color_tags", nlohmann::json(score_identity::vship_colour_tags).dump()}};
+    EXPECT_FALSE(answers(spec, {"Vship/ssimulacra2", "Vship 5.1.2", "gpu", "ssimulacra2-vship-gpu-v1", gpu_parameters},
+                         tagged));
+    EXPECT_TRUE(answers(spec,
+                        {"Vship/ssimulacra2", "Vship-fast 5.1.2", "gpu", score_identity::vship_gpu("ssimulacra2"),
+                         gpu_parameters},
+                        guessed_apart));
     MetricProvenance cpu{"ssimulacra2", "libjxl 0.11", "cpu", "ssimulacra2-libjxl-cpu-v1",
                          {{"coverage_step", "1"}, {"color_tags", "\"vship-5.1.1/2\""}}};
-    const std::vector<ColourTags> guessed_apart{{"yuv420p", "", "", "", 720}, {"yuv420p", "", "", "", 540}};
-    const std::vector<ColourTags> guessed_alike{{"yuv420p", "", "", "", 1080}, {"yuv420p", "", "", "", 720}};
-    const std::vector<ColourTags> one_tagged{{"yuv420p", "", "", "bt709", 720}, {"yuv420p", "", "", "", 540}};
-    const std::vector<ColourTags> tagged{{"yuv420p", "", "", "bt709", 720}, {"yuv420p", "", "", "bt470bg", 540}};
-    for (const MetricProvenance& saved : {gpu, cpu}) {
-        EXPECT_FALSE(answers(spec, saved, guessed_apart)) << saved.implementation;
-        EXPECT_FALSE(answers(spec, saved, one_tagged)) << saved.implementation;
-        EXPECT_TRUE(answers(spec, saved, guessed_alike)) << saved.implementation;
-        EXPECT_TRUE(answers(spec, saved, tagged)) << saved.implementation;
-    }
-    gpu.parameters["color_tags"] = nlohmann::json(score_identity::vship_colour_tags).dump();
+    EXPECT_FALSE(answers(spec, cpu, guessed_apart));
+    EXPECT_FALSE(answers(spec, cpu, one_tagged));
+    EXPECT_TRUE(answers(spec, cpu, guessed_alike));
+    EXPECT_TRUE(answers(spec, cpu, tagged));
     cpu.parameters["color_tags"] = nlohmann::json(score_identity::cpu_colour_tags).dump();
-    EXPECT_TRUE(answers(spec, gpu, guessed_apart));
     EXPECT_TRUE(answers(spec, cpu, guessed_apart));
 }
 

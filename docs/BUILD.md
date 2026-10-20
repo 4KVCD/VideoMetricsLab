@@ -125,29 +125,24 @@ previous build's output undeletable. The package therefore goes to
 - **SSIMULACRA2 and Butteraugli on the CPU**, the official libjxl 0.12.0
   static Windows command-line tools, with their notices; users do not need
   to install libjxl.
-- **Vship's GPU libraries** for SSIMULACRA2, Butteraugli and CVVDP, in three
-  builds: `resources/tools/vship/nvidia` (CUDA, the 5.1.2 release), `amd`
-  (HIP, the 5.1.1 release: 5.1.2 has no HIP build) and `vulkan` (any GPU
-  with a Vulkan driver, NVIDIA, AMD and Intel alike). The Vulkan build is
-  made from the v5.1.2 tag by `scripts/build_vship_vulkan.ps1` (MinGW-w64
-  g++; the same source gives the same file, in any folder). Against the
-  release's own Vulkan library, which is not bundled, it scores Butteraugli
-  and CVVDP to the bit and SSIMULACRA2 within 0.00003 (another compiler's
-  rounding). Replace the HIP build with the first HIP release of 5.1.2 or
-  later; until then FFmpeg upsamples 4:1:0 video to 4:4:4 for it, as 5.1.1
-  cannot read it (`reads_410` in `cpp/core/src/vship.cpp`). Settings > GPU
-  metrics > GPU backend picks one; Auto, the default, uses CUDA on NVIDIA
-  and Vulkan on other GPUs (HIP only where Vulkan cannot run), and a build
-  that cannot run hands over to the next. Re-measure every build when
-  updating Vship (docs/RELEASING.md, step 6): a build that scores a metric wrongly is not
-  bundled. Where no build can use the GPU, the input format is
-  unsupported, or GPU processing fails, SSIMULACRA2 and Butteraugli fall
-  back to the bundled CPU tools. A video the GPU's own decoder decodes is
+- **Vship-fast's GPU library** for SSIMULACRA2, Butteraugli and CVVDP,
+  `resources/tools/vship/vulkan` (any GPU with a Vulkan driver, NVIDIA, AMD
+  and Intel alike): [Vship-fast](https://github.com/4KVCD/Vship-fast), this
+  project's faster fork of Vship, whose metrics compute as libjxl 0.12.0's
+  and pycvvdp's do. `scripts/build_vship_vulkan.ps1` builds its Vulkan
+  library from a pinned commit (MinGW-w64 g++; the same source gives the
+  same file, in any folder). Vship's CUDA and HIP builds are not bundled:
+  on an RTX 5090, Vship-fast's Vulkan build scores the three metrics on 4K
+  10-bit video at 45 pairs a second, Vship 5.1.2's CUDA build at 36.
+  Re-measure it when updating Vship-fast (docs/RELEASING.md, step 6).
+  Where it cannot use the GPU, the input format is unsupported, or GPU
+  processing fails, SSIMULACRA2 and Butteraugli fall back to the bundled
+  CPU tools. A video the GPU's own decoder decodes is
   decoded by the frame decoders above in Vship's process, FFmpeg only
   copying its compressed stream out of the container; FFmpeg decodes the
   others.
 - **libvmaf with CUDA** (`resources/tools/libvmaf/libvmaf.dll`): VMAF and
-  VMAF NEG on NVIDIA GPUs, the libvmaf that turns every GPU scorer's
+  VMAF NEG on an NVIDIA GPU whose Vulkan cannot calculate them, the libvmaf that turns every GPU scorer's
   features into its score, and the app's PSNR, SSIM and XPSNR on the CPU:
   from [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast), this project's
   fork of libvmaf. The DLLs are committed, so building the app does not
@@ -166,8 +161,7 @@ previous build's output undeletable. The package therefore goes to
   their own (`cpp/core/include/vml/isolated.h`), so a crash in either, or in
   the GPU's driver, falls back to the CPU instead of ending the run.
 - **VMAF's features with Vulkan** (`resources/tools/vmaf_vulkan/vmaf_vulkan.dll`),
-  for VMAF and VMAF NEG on GPUs other than NVIDIA's, or on any GPU when the
-  GPU backend setting is Vulkan: libvmaf-fast's Vulkan engine, a port of
+  for VMAF and VMAF NEG on any GPU: libvmaf-fast's Vulkan engine, a port of
   libvmaf's CUDA feature extractors (VIF, ADM and motion) to Vulkan compute
   shaders, from the same build. It needs only Windows and a Vulkan driver,
   and gives the same feature values as the CUDA code bit for bit; the score

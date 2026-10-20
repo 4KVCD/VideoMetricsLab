@@ -188,19 +188,15 @@ void check_isolation(SelfTestReport& report) {
     }
 }
 
-// Vship's metrics, VMAF and VMAF v1 on the GPU, with the GPU backend the
-// settings choose.
-void check_gpu_metrics(SelfTestReport& report, const Settings& settings) {
-    set_vship_backend(settings.gpu_backend);
+// Vship's metrics, VMAF and VMAF v1 on the GPU.
+void check_gpu_metrics(SelfTestReport& report) {
     const auto [vship_device, vship_reason] = detect_vship_device();
     if (vship_device) {
-        report.ok("Vship " + vship_device->version + " GPU metrics (" + backend_label(vship_device->backend) + ": " +
-                  vship_device->name + ")");
+        report.ok("Vship-fast " + vship_device->version + " GPU metrics (Vulkan: " + vship_device->name + ")");
     } else {
         report.warn("Vship GPU metrics unavailable; CPU fallback is enabled (" + vship_reason + ")");
     }
 
-    set_gpu_backend(settings.gpu_backend);
     const GpuVmafBackend vmaf = gpu_vmaf_backend();
     if (!vmaf.backend.empty()) {
         report.ok("VMAF on the GPU (" + vmaf.text + ")");
@@ -228,7 +224,7 @@ SelfTestReport self_test(const QApplication& app) {
     check_frame_decoders(report);
     check_cpu_tools(report);
     check_isolation(report);
-    check_gpu_metrics(report, settings);
+    check_gpu_metrics(report);
     return report;
 }
 

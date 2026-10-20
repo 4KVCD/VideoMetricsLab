@@ -17,7 +17,6 @@ namespace vml::cli {
 // What the command finds on this PC.
 struct DeviceFindings {
     ToolsStatus tools;
-    std::string gpu_backend;           // the GPU backend setting
     std::optional<VshipDevice> vship;  // the GPU Vship uses, if there is one
     std::string no_vship;              // why there is none
     GpuVmafBackend vmaf;

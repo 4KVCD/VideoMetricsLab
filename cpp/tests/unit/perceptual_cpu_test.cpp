@@ -441,8 +441,8 @@ TEST(PerceptualRouting, AMetricThatFailedOnTheGpuMovesToTheCpuOnlyForShortVideos
             ASSERT_NE(failure_of(output.failures, "ssimulacra2"), nullptr);
             EXPECT_EQ(*failure_of(output.failures, "ssimulacra2"),
                       "GPU scoring failed (Vship SSIMULACRA2 failed: out of memory). It was not retried on the CPU, "
-                      "which would take hours to days for a video over 10 minutes. Choose CPU for SSIMULACRA2 to "
-                      "calculate it on the CPU anyway.");
+                      "which would take hours to days for a video over 10 minutes. Run SSIMULACRA2 again to try the "
+                      "GPU again.");
         }
     }
 }
@@ -479,8 +479,8 @@ TEST(PerceptualRouting, AFailedGpuTaskMovesToTheCpuOnlyForShortVideos) {
         } catch (const PerceptualRunError& error) {
             EXPECT_EQ(std::string(error.what()),
                       "GPU scoring failed (the frame rates differ). It was not retried on the CPU, which would take "
-                      "hours to days for a video over 10 minutes. Choose CPU for SSIMULACRA2 to calculate it on the "
-                      "CPU anyway.\nCVVDP could not be calculated: the frame rates differ");
+                      "hours to days for a video over 10 minutes. Run SSIMULACRA2 again to try the GPU again.\n"
+                      "CVVDP could not be calculated: the frame rates differ");
         }
         EXPECT_TRUE(routed.cpu.empty());
     }

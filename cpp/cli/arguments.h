@@ -35,9 +35,6 @@ struct CompareArguments {
     int subsample = 1;
     std::optional<int> threads;
     std::optional<std::string> vmaf_on;
-    std::optional<std::string> ssimulacra2_on;
-    std::optional<std::string> butteraugli_on;
-    std::optional<std::string> gpu_backend;  // Settings > GPU metrics > GPU backend, for this run
     bool cpu = false;
     bool no_gpu_decode = false;
     std::optional<int> parallel;

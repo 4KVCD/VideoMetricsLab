@@ -64,7 +64,7 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
     AnalysisRequest request;
     request.recipe = {options.crop_mode, options.scale_algorithm, options.scale_direction, options.duration_limit,
                       options.resample_test};
-    request.perceptual_backends = {{"butteraugli", "gpu"}, {"ssimulacra2", "gpu"}};
+    request.perceptual_backends = automatic_perceptual_backends;
     for (const auto& [key, backend] : perceptual_backends) {
         if (!request.perceptual_backends.contains(key)) {
             throw std::invalid_argument("Unknown perceptual metric backend setting: '" + key + "'");

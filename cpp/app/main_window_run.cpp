@@ -224,7 +224,7 @@ std::optional<std::vector<VmafJob>> MainWindow::plan_jobs(const std::vector<int>
 std::variant<VmafJob, QString> MainWindow::job_for(const RowData& row_data) const {
     const VideoInfo& info = *row_data.video_info;
     const std::vector<std::string> metric_keys = requested_metrics(row_data);
-    const PerceptualBackends backends(row_data.metric_backends.begin(), row_data.metric_backends.end());
+    const PerceptualBackends backends(automatic_perceptual_backends.begin(), automatic_perceptual_backends.end());
     VmafOptions options = row_data.options;
     MetricResultSet kept = reusable_results(row_data);
     std::vector<MetricTask> tasks;
@@ -395,10 +395,9 @@ void MainWindow::stop_waiting_for_gpu_checks() {
 
 bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<RowData>>& job_rows) {
     // Asks before SSIMULACRA2 or Butteraugli on the CPU for a video over ten
-    // minutes. The CPU tools score one pair of still images at a time, 1-2 s
-    // per tool for a 4K pair, which is days for a film. Only metrics this run
-    // will calculate count. A metric set to the GPU counts too when no
-    // supported GPU was found, because it runs on the CPU just the same.
+    // minutes: where Vship can use no GPU. The CPU tools score one pair of
+    // still images at a time, 1-2 s per tool for a 4K pair, which is days for
+    // a film. Only metrics this run will calculate count.
     QStringList lines;
     std::optional<bool> gpu_missing;  // asked once, and only if needed
     for (const std::shared_ptr<RowData>& row_data : job_rows) {
@@ -406,40 +405,24 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
             continue;
         }
         const VideoInfo& info = *row_data->video_info;
-        const auto backend = [&row_data](const std::string& key) {
-            const auto found = row_data->metric_backends.find(key);
-            return found == row_data->metric_backends.end() ? std::string() : found->second;
-        };
         const std::vector<std::string> reusable = reusable_metric_keys(*row_data);
         const std::vector<std::string> requested = requested_metrics(*row_data);
-        std::vector<std::string> pending;
-        for (const std::string key : {"ssimulacra2", "butteraugli"}) {
-            if (contains(requested, key) && !contains(reusable, key)) {
-                pending.push_back(key);
-            }
-        }
-        const bool any_on_gpu =
-            std::any_of(pending.begin(), pending.end(), [&](const std::string& key) { return backend(key) != "cpu"; });
-        if (!gpu_missing && any_on_gpu) {
-            gpu_missing = !vship_available();
-        }
-        // Calculated on the CPU: set to it, or set to the GPU where Vship can
-        // use none.
         std::vector<std::string> cpu_keys;
         QStringList cpu_metrics;
-        for (const std::string& key : pending) {
-            if (backend(key) != "cpu" && !gpu_missing.value_or(false)) {
-                continue;
+        for (const std::string key : {"ssimulacra2", "butteraugli"}) {
+            if (contains(requested, key) && !contains(reusable, key)) {
+                cpu_keys.push_back(key);
+                cpu_metrics.append(qt_text(metric_definition(key).label));
             }
-            cpu_keys.push_back(key);
-            QString label = qt_text(metric_definition(key).label);
-            if (backend(key) != "cpu") {
-                label += app::tr(" (set to GPU, but no supported GPU was found)");
-            }
-            cpu_metrics.append(label);
         }
         if (cpu_keys.empty()) {
             continue;
+        }
+        if (!gpu_missing) {
+            gpu_missing = !vship_available();
+        }
+        if (!*gpu_missing) {
+            return true;  // on the GPU, every video's
         }
         double seconds = std::min(info.duration, source_info_->duration);
         if (row_data->options.duration_limit > 0) {
@@ -468,10 +451,10 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
         app::tr("Calculating SSIMULACRA2 or Butteraugli on the CPU is not recommended for videos longer than 10 "
                 "minutes:\n\n") +
             lines.join("\n") +
-            app::tr("\n\nThe CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for "
-                    "Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one "
-                    "they were measured on). Choose GPU for these metrics, or set a duration limit.\n\nCalculate "
-                    "anyway?"),
+            app::tr("\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still "
+                    "image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film "
+                    "takes days (the estimates above assume a CPU like the one they were measured on). Set a duration "
+                    "limit to score only the start.\n\nCalculate anyway?"),
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     return answer == QMessageBox::Yes;
 }
@@ -920,7 +903,8 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
 void MainWindow::save_job_result(std::size_t job, const RowData& row_data, const ComparisonResult& result,
                                  const QString& label) {
     const AnalysisRequest request =
-        analysis_request(job_options_[job], requested_metrics(row_data), row_data.metric_backends, job_cvvdp_[job]);
+        analysis_request(job_options_[job], requested_metrics(row_data), automatic_perceptual_backends,
+                         job_cvvdp_[job]);
     file_writes_->submit(QStringLiteral("cache %1").arg(label),
                          [base = cache_folder(), identity = row_data.identity_path(), result,
                           label = label.toStdString(), request] {

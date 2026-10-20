@@ -150,9 +150,6 @@ struct RowData {
     VmafOptions options;
     // The metrics not run by FFmpeg that the row has ticked.
     std::set<std::string> extra_metric_keys;
-    // Whether each Vship metric runs on the GPU or the CPU: where it runs,
-    // never a score or its saved scores' identity.
-    std::map<std::string, std::string> metric_backends{{"ssimulacra2", "gpu"}, {"butteraugli", "gpu"}};
     // The display CVVDP models for this row: part of what a CVVDP score
     // means, so part of its saved scores' identity.
     CvvdpSettings cvvdp;
@@ -346,7 +343,6 @@ private:
     void write_panel_options(const VmafOptions& options);
     VmafOptions read_panel_options() const;
     void on_panel_field_edited(const QString& field);
-    void on_metric_backend_changed(const QString& metric_key);
     void on_model_changed(int index);
     void on_scale_direction_combo_changed(int index);
     void add_opposite_scale_direction_rows(const std::vector<int>& rows);
@@ -381,8 +377,8 @@ private:
     std::vector<std::string> reusable_metric_keys(const RowData& row_data) const;
     MetricResultSet reusable_results(const RowData& row_data) const;
     bool has_requested_results(const RowData& row_data) const;
-    static bool backend_matches(const RowData& row_data, const std::string& key, const MetricProvenance& provenance);
-    static QString backend_note(const RowData& row_data, const std::string& key, const FrameMetricResult* metric);
+    static bool backend_matches(const std::string& key, const MetricProvenance& provenance);
+    static QString other_scale_note();
     static std::optional<double> score_of(CompletedRun& run, int column);
     static QString identical_frames_note(CompletedRun& run, int column);
     QString cvvdp_note(const RowData& row_data) const;
@@ -478,7 +474,6 @@ private:
     // in the Options panel.
     VmafOptions default_options_;
     std::set<std::string> default_extra_metric_keys_;
-    std::map<std::string, std::string> default_metric_backends_;
     CvvdpSettings default_cvvdp_;
     std::set<std::string> hidden_metrics_;
 

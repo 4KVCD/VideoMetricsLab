@@ -35,10 +35,8 @@
 #include "vml/app_log.h"
 #include "vml/crop_detect.h"
 #include "vml/cvvdp.h"
-#include "vml/gpu_vmaf.h"
 #include "vml/metric_cache.h"
 #include "vml/platform/system.h"
-#include "vml/vship.h"
 
 // The panel's text is app::tr's: inside a Q_OBJECT class, tr() is Qt's.
 namespace vml::app {
@@ -70,8 +68,8 @@ const std::string& default_preset_name() { return builtin_cvvdp_presets().front(
 
 }  // namespace
 
-SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, const std::vector<GpuVendor>& gpu_vendors,
-                             std::function<ToolsStatus()> tools, const Dialogs& dialogs, QWidget* parent)
+SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::function<ToolsStatus()> tools,
+                             const Dialogs& dialogs, QWidget* parent)
     : QWidget(parent),
       settings_(settings),
       file_writes_(file_writes),
@@ -81,7 +79,7 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, const 
     connect(counting_, &QFutureWatcher<CacheSummary>::finished, this, [this] { show_cache_summary(); });
     connect(&file_writes_, &FileWrites::became_idle, this, [this] { on_file_writes_idle(); });
     auto* layout = new QVBoxLayout(this);
-    for (QGroupBox* box : {build_ffmpeg_box(), build_storage_box(), build_defaults_box(), build_gpu_box(gpu_vendors),
+    for (QGroupBox* box : {build_ffmpeg_box(), build_storage_box(), build_defaults_box(), build_gpu_box(),
                            build_compare_box(), build_window_box()}) {
         layout->addWidget(box);
     }
@@ -229,42 +227,9 @@ QGroupBox* SettingsPanel::build_defaults_box() {
     return defaults_box;
 }
 
-QGroupBox* SettingsPanel::build_gpu_box(const std::vector<GpuVendor>& gpu_vendors) {
+QGroupBox* SettingsPanel::build_gpu_box() {
     auto* gpu_box = new QGroupBox(app::tr("GPU metrics"));
     auto* gpu_layout = new QVBoxLayout(gpu_box);
-    // Which Vship build: Auto unless the user has a reason to pick one.
-    // Vulkan runs on any GPU. CUDA is offered with an NVIDIA GPU and HIP with
-    // an AMD one, or when already chosen, so that a GPU detection missed
-    // does not lose the choice.
-    const auto has = [&gpu_vendors](GpuVendor vendor) {
-        return std::find(gpu_vendors.begin(), gpu_vendors.end(), vendor) != gpu_vendors.end();
-    };
-    gpu_backend = new QComboBox;
-    // Under Auto, VMAF is calculated with Vulkan whatever the GPU (with CUDA
-    // only when CUDA is chosen here); the maker decides only Vship's build.
-    // The text said "CUDA on NVIDIA", which VMAF does not use under Auto.
-    gpu_backend->addItem(app::tr("Auto (VMAF: Vulkan; SSIMULACRA2, Butteraugli, CVVDP: CUDA on NVIDIA, "
-                                 "Vulkan on other GPUs)"),
-                         "auto");
-    gpu_backend->addItem(app::tr("Vulkan (any GPU)"), "vulkan");
-    if (has(GpuVendor::nvidia) || settings_.gpu_backend == "cuda") {
-        gpu_backend->addItem(app::tr("CUDA (NVIDIA)"), "cuda");
-    }
-    if (has(GpuVendor::amd) || settings_.gpu_backend == "hip") {
-        gpu_backend->addItem(app::tr("HIP (AMD)"), "hip");
-    }
-    gpu_backend->setCurrentIndex(std::max(0, gpu_backend->findData(text_of(settings_.gpu_backend))));
-    gpu_backend->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    gpu_backend->setToolTip(app::tr(
-        "Which of Vship's builds calculates the GPU metrics. Auto uses the fastest one whose scores agree with "
-        "the reference: CUDA on NVIDIA, and Vulkan on other GPUs, such as AMD's and Intel's. Vulkan runs on "
-        "any GPU. If the chosen build cannot run here, the others are tried."));
-    connect(gpu_backend, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
-    auto* backend_row = new QHBoxLayout;
-    backend_row->addWidget(new QLabel(app::tr("GPU backend:")));
-    backend_row->addWidget(gpu_backend);
-    backend_row->addStretch(1);
-    gpu_layout->addLayout(backend_row);
     gpu_together =
         new QCheckBox(app::tr("Always calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video"));
     gpu_together->setToolTip(app::tr(
@@ -571,21 +536,11 @@ void SettingsPanel::read_controls() {
     settings_.language = language->currentData().toString().toStdString();
     settings_.theme = theme->currentData().toString().toStdString();
     settings_.gpu_metrics_together = gpu_together->isChecked();
-    const std::string backend = gpu_backend->currentData().toString().toStdString();
-    settings_.gpu_backend = backend.empty() ? "auto" : backend;
 }
 
 void SettingsPanel::apply_global_changes(const Settings& before) {
     if (settings_.theme != before.theme) {
         theme::apply_theme(text_of(settings_.theme));  // the window's changeEvent follows
-    }
-    if (settings_.gpu_backend != before.gpu_backend) {
-        // Probed again now, off the window's thread, for the next run and
-        // for what the table says about GPU metrics.
-        set_vship_backend(settings_.gpu_backend);
-        (void)QtConcurrent::run([] { detect_vship_device(); });
-        set_gpu_backend(settings_.gpu_backend);  // VMAF follows it: Vulkan or CUDA
-        (void)QtConcurrent::run([] { gpu_vmaf_backend(); });
     }
 }
 

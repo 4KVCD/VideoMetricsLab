@@ -38,11 +38,10 @@
    release saved. Every case must be the same, or differ only where a
    change made on purpose says why.
 6. Test every metric, including SSIMULACRA2 and Butteraugli through both the
-   Vship GPU path and the libjxl CPU fallback, with Settings > GPU metrics >
-   GPU backend on Auto and on Vulkan. After updating Vship, compare each
-   build's SSIMULACRA2, Butteraugli and CVVDP against the CUDA build and
-   libjxl, on an NVIDIA and an Intel GPU: a build that scores one wrongly is
-   not bundled. Check saved-result round-trip,
+   Vship-fast GPU path and the libjxl CPU fallback. After updating
+   Vship-fast, compare its SSIMULACRA2, Butteraugli and CVVDP against the
+   build it replaces and against libjxl, on an NVIDIA and an Intel GPU: a
+   build that scores one wrongly is not bundled. Check saved-result round-trip,
    backend-specific cache reuse, still comparison and independent bitrate
    analysis. On an NVIDIA GPU, compare a long run (30 minutes of 4K) with
    Performance > VMAF compute set to GPU and to CPU: every metric but VMAF

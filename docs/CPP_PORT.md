@@ -214,35 +214,33 @@ the presenter draws each pair in time with the source's soundtrack.
 
 ### The GPU metrics
 
-CVVDP, SSIMULACRA2 and Butteraugli run on the Mac's GPU, through Vship's
-Vulkan build on MoltenVK (Khronos' Vulkan on Metal), as they run on Windows
-through Vulkan (`scripts/build_vship_macos.sh`):
+CVVDP, SSIMULACRA2 and Butteraugli run on the Mac's GPU, through
+Vship-fast's Vulkan build on MoltenVK (Khronos' Vulkan on Metal), as they run
+on Windows through Vulkan (`scripts/build_vship_macos.sh`):
 
 - **Vulkan:** Khronos' loader with MoltenVK as its driver, bundled in
   `tools/vulkan`. MoltenVK alone is not enough: Vship asks for portability
   devices (`VK_KHR_portability_enumeration`), which the loader provides. The
   app points the loader at MoltenVK (`VK_DRIVER_FILES`) before Vulkan is
-  first loaded in a process, the GPU processes included, and turns off
-  MoltenVK's fast math.
-- **Vship:** v5.1.2, as on Windows, with two of its shaders patched
-  (`scripts/patches/vship-moltenvk-addresses.patch`): SPIRV-Cross, which
-  turns SPIR-V into Metal, mistranslates a byte pointer plus an offset read
-  as another type, so no pipeline could be made. The patch does that
-  arithmetic on the address as an integer (the same memory). Reported to
-  Vship's author with the patch:
-  [Line-fr/Vship#27](https://codeberg.org/Line-fr/Vship/issues/27).
-- **Scores**, against Windows' Vulkan build on an RTX 5090, the same 96
-  frames: SSIMULACRA2 within 0.0006 a frame, Butteraugli 1e-5, CVVDP 7e-7.
-  (Vship's SSIMULACRA2 of a video against itself is not 100 on either:
-  99.67 on the Mac, 99.36 on Windows, where the score magnifies rounding.)
+  first loaded in a process, the GPU processes included. MoltenVK's fast
+  math stays on its default: Vship-fast turns it off in the kernels that
+  need Metal's safe math (with it off everywhere, CVVDP was 1.24x slower on
+  an M1 Pro, for scores within 2e-6).
+- **Vship:** Vship-fast, the same commit as on Windows, unmodified. It
+  runs on MoltenVK as it is: its shaders avoid what SPIRV-Cross, which turns
+  SPIR-V into Metal, mistranslated (Vship 5.1.2 needed a patch here, reported
+  upstream as [Line-fr/Vship#27](https://codeberg.org/Line-fr/Vship/issues/27)),
+  and it rewrites them for Metal as they load. Its README's "Apple GPUs
+  (MoltenVK)" section gives its speed and scores on an M1 Pro.
 - **Found:** the GPU pass runs in a process of its own, which had not
   pointed the loader at MoltenVK: Vship's pinned memory could not be made
   there, and the run fell back to the CPU. The environment is set before
   any Vship library loads now.
-- **Found:** two Butteraugli handlers at once (the lanes Windows runs per
-  metric) lost the GPU above 720p ("Invalid Resource"), and the run fell back
-  to the CPU. On macOS one handler per metric scores, as fast there (1080p:
-  SSIMULACRA2 9.7 s for 480 pairs with one, 9.8 with two).
+- **Found:** with Vship 5.1.2, two Butteraugli handlers at once (the lanes
+  Windows runs per metric) lost the GPU above 720p ("Invalid Resource"), and
+  the run fell back to the CPU; Vship-fast fixed it. On macOS the app runs
+  one handler per metric: with Vship-fast, two gained at most 3% on an M1
+  Pro (1080p, 480 pairs: SSIMULACRA2 53.2 against 54.5 pairs a second).
 
 ### VMAF on the GPU
 

@@ -24,10 +24,8 @@ std::vector<std::string> device_lines(const DeviceFindings& found) {
             lines.push_back("FFmpeg: NOT USABLE: " + problem);
         }
     }
-    lines.push_back("GPU backend setting: " + found.gpu_backend);
     if (found.vship) {
-        const std::string vship = "GPU: " + found.vship->name + " (Vship " + found.vship->version + ", " +
-                                  backend_label(found.vship->backend) + ")";
+        const std::string vship = "GPU: " + found.vship->name + " (Vship-fast " + found.vship->version + ", Vulkan)";
         lines.push_back("CVVDP: " + vship);
         for (const std::string key : {"ssimulacra2", "butteraugli"}) {
             lines.push_back(std::string(metric_definition(key).label) + ": " + vship);
@@ -58,8 +56,6 @@ int devices() {
     // app's KeyboardInterrupt ends it; a check under way ends with it.
     platform::on_interrupt([] { platform::end_process_now(exit_cancelled); });
     const Settings settings = Settings::load();
-    set_gpu_backend(settings.gpu_backend);
-    set_vship_backend(settings.gpu_backend);
     // The GPU checks together rather than one after another: each starts a
     // process of its own (Vship's takes 1.8 s, VMAF's and VMAF v1's 0.5 s).
     std::future<std::pair<std::optional<VshipDevice>, std::string>> vship_check =
@@ -68,7 +64,6 @@ int devices() {
     std::future<V1Probe> v1_check = std::async(std::launch::async, [] { return v1_available(); });
     DeviceFindings found;
     found.tools = check_tools(settings);
-    found.gpu_backend = settings.gpu_backend;
     const auto [vship, no_vship] = vship_check.get();
     found.vship = vship;
     found.no_vship = no_vship;

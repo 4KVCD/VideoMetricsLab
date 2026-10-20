@@ -40,13 +40,10 @@ const std::unordered_map<std::string, Field>& fields() {
         {"default_compute_ssimulacra2", &Settings::default_compute_ssimulacra2},
         {"default_compute_butteraugli", &Settings::default_compute_butteraugli},
         {"default_compute_cvvdp", &Settings::default_compute_cvvdp},
-        {"default_ssimulacra2_backend", &Settings::default_ssimulacra2_backend},
-        {"default_butteraugli_backend", &Settings::default_butteraugli_backend},
         {"default_vmaf_on_gpu", &Settings::default_vmaf_on_gpu},
         {"graph_metric", &Settings::graph_metric},
         {"parallel_jobs", &Settings::parallel_jobs},
         {"gpu_metrics_together", &Settings::gpu_metrics_together},
-        {"gpu_backend", &Settings::gpu_backend},
         {"use_cache", &Settings::use_cache},
         {"check_for_updates", &Settings::check_for_updates},
         {"skipped_update_version", &Settings::skipped_update_version},
@@ -214,13 +211,10 @@ std::string Settings::text() const {
     data["default_compute_ssimulacra2"] = default_compute_ssimulacra2;
     data["default_compute_butteraugli"] = default_compute_butteraugli;
     data["default_compute_cvvdp"] = default_compute_cvvdp;
-    data["default_ssimulacra2_backend"] = default_ssimulacra2_backend;
-    data["default_butteraugli_backend"] = default_butteraugli_backend;
     data["default_vmaf_on_gpu"] = default_vmaf_on_gpu;
     data["graph_metric"] = graph_metric;
     data["parallel_jobs"] = parallel_jobs;
     data["gpu_metrics_together"] = gpu_metrics_together;
-    data["gpu_backend"] = gpu_backend;
     data["use_cache"] = use_cache;
     data["check_for_updates"] = check_for_updates;
     data["skipped_update_version"] = skipped_update_version;

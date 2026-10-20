@@ -304,14 +304,11 @@ std::optional<VideoInfo> read_video(const std::filesystem::path& path, const Com
 
 // ------------------------------------------------------------------- options
 
-// Where the command says `key` is calculated: its own option, else --cpu;
-// nothing when it says nothing.
-std::optional<std::string> where(const CompareArguments& arguments, std::string_view key) {
-    const std::optional<std::string>& own = key == "vmaf"          ? arguments.vmaf_on
-                                            : key == "ssimulacra2" ? arguments.ssimulacra2_on
-                                                                   : arguments.butteraugli_on;
-    if (own) {
-        return own;
+// Where the command says VMAF is calculated: --vmaf-on, else --cpu; nothing
+// when it says nothing.
+std::optional<std::string> vmaf_where(const CompareArguments& arguments) {
+    if (arguments.vmaf_on) {
+        return arguments.vmaf_on;
     }
     return arguments.cpu ? std::optional<std::string>("cpu") : std::nullopt;
 }
@@ -337,7 +334,7 @@ double duration_limit(const CompareArguments& arguments, const VideoInfo& test) 
 // video `test`.
 VmafOptions row_options(const CompareArguments& arguments, const Settings& settings,
                         const std::vector<std::string>& metric_keys, const VideoInfo& test) {
-    const std::optional<std::string> vmaf_on = where(arguments, "vmaf");
+    const std::optional<std::string> vmaf_on = vmaf_where(arguments);
     VmafOptions options;
     options.gpu_decode = settings.default_gpu_decode && !arguments.no_gpu_decode;
     options.vmaf_on_gpu = vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu;
@@ -367,17 +364,14 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
     return options;
 }
 
-// Where SSIMULACRA2 and Butteraugli run: as asked on the command line, else
-// as saved in Settings.
-PerceptualBackends perceptual_backends(const CompareArguments& arguments, const Settings& settings) {
-    PerceptualBackends chosen;
-    for (const std::string key : {"ssimulacra2", "butteraugli"}) {
-        const std::optional<std::string> asked = where(arguments, key);
-        const std::string& saved =
-            key == "ssimulacra2" ? settings.default_ssimulacra2_backend : settings.default_butteraugli_backend;
-        chosen[key] = asked ? *asked : saved == "cpu" ? "cpu" : "gpu";
+// Where SSIMULACRA2 and Butteraugli run: as the window runs them, on the GPU
+// where one can and on the CPU without one (so that a score of theirs saved
+// from the CPU is calculated again where the GPU can); on the CPU with --cpu.
+PerceptualBackends perceptual_backends(const CompareArguments& arguments) {
+    if (!arguments.cpu) {
+        return {automatic_perceptual_backends.begin(), automatic_perceptual_backends.end()};
     }
-    return chosen;
+    return {{"ssimulacra2", "cpu"}, {"butteraugli", "cpu"}};
 }
 
 // Starts the GPU checks a run of `metrics` needs, together and in the
@@ -391,12 +385,10 @@ std::vector<std::future<void>> start_gpu_checks(const CompareArguments& argument
     const auto asked = [&metrics](std::string_view key) {
         return std::find(metrics.begin(), metrics.end(), key) != metrics.end();
     };
-    const PerceptualBackends backends = perceptual_backends(arguments, settings);
-    const std::optional<std::string> vmaf_on = where(arguments, "vmaf");
+    const std::optional<std::string> vmaf_on = vmaf_where(arguments);
     const bool vmaf_on_gpu = vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu;
     std::vector<std::future<void>> checks;
-    if (asked("cvvdp") || (asked("ssimulacra2") && backends.at("ssimulacra2") == "gpu") ||
-        (asked("butteraugli") && backends.at("butteraugli") == "gpu")) {
+    if (asked("cvvdp") || (!arguments.cpu && (asked("ssimulacra2") || asked("butteraugli")))) {
         checks.push_back(std::async(std::launch::async, [] { detect_vship_device(); }));
     }
     if (vmaf_on_gpu && (asked("vmaf") || asked("vmaf_neg"))) {
@@ -504,7 +496,7 @@ std::optional<std::string> not_yet(const CompareArguments& arguments, const Sett
     const bool vmaf = std::any_of(asked.begin(), asked.end(), [](const std::string& key) {
         return key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1";
     });
-    const std::optional<std::string> vmaf_on = where(arguments, "vmaf");
+    const std::optional<std::string> vmaf_on = vmaf_where(arguments);
     const bool cpu_metrics = std::any_of(asked.begin(), asked.end(), [](const std::string& key) {
         return key == "psnr" || key == "ssim" || key == "xpsnr";
     });
@@ -1005,12 +997,9 @@ void cancel_on_interrupt(CancelToken cancel, const std::shared_ptr<Progress>& pr
     });
 }
 
-// Sets up what the run reads from `settings` where it is kept: the GPU
-// backend, and where the black bars found are stored. Returns the saved
-// scores' folder.
+// Sets up where the black bars found are stored, as `settings` say. Returns
+// the saved scores' folder.
 std::filesystem::path apply_settings(const Settings& settings) {
-    set_gpu_backend(settings.gpu_backend);
-    set_vship_backend(settings.gpu_backend);
     const std::filesystem::path cache_folder = settings.cache_dir_path().value_or(default_cache_dir());
     set_crop_store([cache_folder] {
         std::filesystem::create_directories(cache_folder);
@@ -1033,7 +1022,7 @@ public:
           source_(source),
           displays_(displays),
           asked_(std::move(asked)),
-          backends_(perceptual_backends(arguments, settings)),
+          backends_(perceptual_backends(arguments)),
           // The saved scores know a video by its file, not by the colours it
           // was read with, so --colour scores are neither read nor saved.
           use_saved_(!arguments.recalculate && settings.use_cache && !arguments.colour),
@@ -1332,10 +1321,7 @@ int compare(const CompareArguments& arguments) {
     const auto progress = std::make_shared<Progress>(arguments.quiet);
     const auto running = std::make_shared<std::atomic<bool>>(false);
     cancel_on_interrupt(cancel, progress, running);
-    Settings settings = Settings::load();
-    if (arguments.gpu_backend) {
-        settings.gpu_backend = *arguments.gpu_backend;  // for this run only; nothing is saved
-    }
+    const Settings settings = Settings::load();
     const std::filesystem::path cache_folder = apply_settings(settings);
     const ToolsStatus tools = check_tools(settings);
     if (!tools.ok()) {

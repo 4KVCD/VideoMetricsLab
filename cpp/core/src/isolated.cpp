@@ -330,7 +330,7 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
         } else if (task == "vship-pass") {
             result = vship_pass_task(request, request_file.parent_path());
         } else if (task == "vship-probe") {
-            result = vship_probe_result(probe_vship_device(request.at("backend").get<std::string>()));
+            result = vship_probe_result(probe_vship_device());
         } else if (task == "gpu-run" || task == "cpu-metrics") {
             result = scoring_task(request, request_file.parent_path());
         } else if (task == "process-id") {

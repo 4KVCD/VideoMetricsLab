@@ -25,8 +25,8 @@
    "recipe_hash": "46f2c05cf4c5ab68c8df07189d0539c362003703e9213c4981597d949267cd75",
    "specs": [
     {
-     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}",
-     "hash": "58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca"
+     "hash": "58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca",
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}"
     }
    ]
   },
@@ -59,24 +59,24 @@
    "recipe_hash": "46f2c05cf4c5ab68c8df07189d0539c362003703e9213c4981597d949267cd75",
    "specs": [
     {
-     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":3},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}",
-     "hash": "c7ceac52a5c98876d4d4e347f897d13d66814f8da5110c1d9eb35b83ee5efb38"
+     "hash": "c7ceac52a5c98876d4d4e347f897d13d66814f8da5110c1d9eb35b83ee5efb38",
+     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":3},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}"
     },
     {
-     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":3},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_neg\",\"parameters\":{\"model\":\"version=vmaf_v0.6.1neg\"}}",
-     "hash": "a58597c72d2670450af48e7ed5718df0719eb735c7327007d784afe03397ecea"
+     "hash": "a58597c72d2670450af48e7ed5718df0719eb735c7327007d784afe03397ecea",
+     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":3},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_neg\",\"parameters\":{\"model\":\"version=vmaf_v0.6.1neg\"}}"
     },
     {
-     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":3},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"psnr\",\"parameters\":{}}",
-     "hash": "845a174deb60b95c20ea3848333fa3f44ed523d45a934c2e17797f7e1bcf87fb"
+     "hash": "845a174deb60b95c20ea3848333fa3f44ed523d45a934c2e17797f7e1bcf87fb",
+     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":3},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"psnr\",\"parameters\":{}}"
     },
     {
-     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":3},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"ssim\",\"parameters\":{}}",
-     "hash": "ed91fc45d8ccd8b6155e92f8951761d94e522891ce44ad4c1ae7cfd23f712253"
+     "hash": "ed91fc45d8ccd8b6155e92f8951761d94e522891ce44ad4c1ae7cfd23f712253",
+     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":3},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"ssim\",\"parameters\":{}}"
     },
     {
-     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":3},\"implementation_compatibility_id\":\"ffmpeg-xpsnr-v2\",\"key\":\"xpsnr\",\"parameters\":{}}",
-     "hash": "7924e5c014ba39cf8e99a419c2f8296fe34bd8f1f638b6e2da73edc975980666"
+     "hash": "7924e5c014ba39cf8e99a419c2f8296fe34bd8f1f638b6e2da73edc975980666",
+     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":3},\"implementation_compatibility_id\":\"ffmpeg-xpsnr-v2\",\"key\":\"xpsnr\",\"parameters\":{}}"
     }
    ]
   },
@@ -105,8 +105,8 @@
    "recipe_hash": "46f2c05cf4c5ab68c8df07189d0539c362003703e9213c4981597d949267cd75",
    "specs": [
     {
-     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-xpsnr-v2\",\"key\":\"xpsnr\",\"parameters\":{}}",
-     "hash": "a991719296a82a834bc1e8d9f9bc514e500aaf801e4daad31308a2f67e552f7c"
+     "hash": "a991719296a82a834bc1e8d9f9bc514e500aaf801e4daad31308a2f67e552f7c",
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-xpsnr-v2\",\"key\":\"xpsnr\",\"parameters\":{}}"
     }
    ]
   },
@@ -136,12 +136,12 @@
    "recipe_hash": "46f2c05cf4c5ab68c8df07189d0539c362003703e9213c4981597d949267cd75",
    "specs": [
     {
-     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"version=vmaf_4k_v0.6.1\",\"model_choice\":\"version=vmaf_4k_v0.6.1\"}}",
-     "hash": "5ffb6279ca12e8e528a8816ac69a000ccf5e6c70ccc0ab7436dc41d28feef509"
+     "hash": "5ffb6279ca12e8e528a8816ac69a000ccf5e6c70ccc0ab7436dc41d28feef509",
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"version=vmaf_4k_v0.6.1\",\"model_choice\":\"version=vmaf_4k_v0.6.1\"}}"
     },
     {
-     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_v1\",\"parameters\":{\"model\":\"\",\"model_choice\":\"__auto__\"}}",
-     "hash": "2b2bebbad96a274044b1afc1dcde665b3cdf0eecf782b3af64c4d1b685545792"
+     "hash": "2b2bebbad96a274044b1afc1dcde665b3cdf0eecf782b3af64c4d1b685545792",
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_v1\",\"parameters\":{\"model\":\"\",\"model_choice\":\"__auto__\"}}"
     }
    ]
   },
@@ -171,12 +171,12 @@
    "recipe_hash": "46f2c05cf4c5ab68c8df07189d0539c362003703e9213c4981597d949267cd75",
    "specs": [
     {
-     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_v1\",\"parameters\":{\"model\":\"__builtin:vmaf_v1_1d5h_2160\",\"model_choice\":\"__builtin:vmaf_v1_1d5h_2160\"}}",
-     "hash": "d3ae1f36b8d56799af838e5d957f108604f403ecbb16c511feabc4576697c93a"
+     "hash": "d3ae1f36b8d56799af838e5d957f108604f403ecbb16c511feabc4576697c93a",
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf_v1\",\"parameters\":{\"model\":\"__builtin:vmaf_v1_1d5h_2160\",\"model_choice\":\"__builtin:vmaf_v1_1d5h_2160\"}}"
     },
     {
-     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"psnr\",\"parameters\":{}}",
-     "hash": "06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83"
+     "hash": "06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83",
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"psnr\",\"parameters\":{}}"
     }
    ]
   },
@@ -208,12 +208,12 @@
    "recipe_hash": "46f2c05cf4c5ab68c8df07189d0539c362003703e9213c4981597d949267cd75",
    "specs": [
     {
-     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"ssimulacra2-auto-or-libjxl-cpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}",
-     "hash": "01c4bb35095241da67b234a44c282cdd95411976c549234c26c0964ef5c8c04f"
+     "hash": "01c4bb35095241da67b234a44c282cdd95411976c549234c26c0964ef5c8c04f",
+     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"ssimulacra2-auto-or-libjxl-cpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}"
     },
     {
-     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"butteraugli-auto-or-libjxl-cpu-v1\",\"key\":\"butteraugli\",\"parameters\":{}}",
-     "hash": "73f73dc44acee6e756ea68378d9fbca5cceacccbe86ebaeef37a1f09ffcad872"
+     "hash": "73f73dc44acee6e756ea68378d9fbca5cceacccbe86ebaeef37a1f09ffcad872",
+     "identity": "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"butteraugli-auto-or-libjxl-cpu-v1\",\"key\":\"butteraugli\",\"parameters\":{}}"
     }
    ]
   },
@@ -259,12 +259,12 @@
    "recipe_hash": "46f2c05cf4c5ab68c8df07189d0539c362003703e9213c4981597d949267cd75",
    "specs": [
     {
-     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v1\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":10.0,\"contrast\":100000.0,\"diagonal_inches\":55.0,\"exposure\":1.0,\"hdr\":true,\"peak_luminance\":1000.0,\"reflectivity\":0.01,\"resolution\":[1920,1080],\"viewing_distance_m\":2.1},\"resize_to_display\":true}}",
-     "hash": "8c972bd4217003ad4040b7bb093b9e8cee47773723e2aa0fe4a4fdc7a5ea1166"
+     "hash": "50c3ef0294932846e70ca673394635fbb3a10f5c973a9d9337b5bd30cffd071d",
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v2\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":10.0,\"contrast\":100000.0,\"diagonal_inches\":55.0,\"exposure\":1.0,\"hdr\":true,\"peak_luminance\":1000.0,\"reflectivity\":0.01,\"resolution\":[1920,1080],\"viewing_distance_m\":2.1},\"resize_to_display\":true}}"
     },
     {
-     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}",
-     "hash": "58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca"
+     "hash": "58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca",
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}"
     }
    ]
   },
@@ -297,12 +297,12 @@
    "recipe_hash": "9a74459a73d5707d008417074c39e943c784f840539c2ac23694c12003d6f662",
    "specs": [
     {
-     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}",
-     "hash": "58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca"
+     "hash": "58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca",
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}"
     },
     {
-     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"psnr\",\"parameters\":{}}",
-     "hash": "06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83"
+     "hash": "06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83",
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"psnr\",\"parameters\":{}}"
     }
    ]
   },
@@ -334,12 +334,12 @@
    "recipe_hash": "03e3bac2f0fc8410f28f5c62d1ae3b5c667d365d87f8cb9d019b011b7b23e2d2",
    "specs": [
     {
-     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}",
-     "hash": "58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca"
+     "hash": "58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca",
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}"
     },
     {
-     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ssimulacra2-auto-or-libjxl-cpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}",
-     "hash": "398b833d2eca55be3652e6edd83f3370ac2c40070d95aa76a78a218158350377"
+     "hash": "398b833d2eca55be3652e6edd83f3370ac2c40070d95aa76a78a218158350377",
+     "identity": "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ssimulacra2-auto-or-libjxl-cpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}"
     }
    ]
   }
@@ -490,7 +490,7 @@
       "implementation": "Vship/ssimulacra2",
       "implementation_version": "Vship 5.1.2",
       "compute_backend": "gpu",
-      "implementation_compatibility_id": "ssimulacra2-vship-gpu-v1",
+      "implementation_compatibility_id": "ssimulacra2-vship-gpu-v2",
       "parameters": {
        "coverage_step": 1,
        "color_tags": "ffvship-5.1.1"
@@ -522,7 +522,7 @@
       "implementation": "Vship/cvvdp",
       "implementation_version": "Vship 5.1.2",
       "compute_backend": "gpu",
-      "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
+      "implementation_compatibility_id": "cvvdp-vship-gpu-v2",
       "parameters": {
        "display": {
         "resolution": [
@@ -562,9 +562,9 @@
   "label": "t",
   "context": "{\"compared_frame_count\":240,\"distorted\":\"t.mp4\",\"distorted_crop\":null,\"distorted_info\":{\"average_fps\":23.976023976023978,\"bit_rate\":4500000,\"bit_rate_whole_file\":false,\"chroma_location\":\"left\",\"codec_name\":\"hevc\",\"color_primaries\":\"bt709\",\"color_range\":\"tv\",\"color_space\":\"bt709\",\"color_transfer\":\"smpte2084\",\"duration\":10.01,\"fps\":23.976023976023978,\"height\":1080,\"nb_frames\":240,\"nominal_fps\":23.976023976023978,\"path\":\"t.mp4\",\"pix_fmt\":\"yuv420p10le\",\"sar\":\"1:1\",\"width\":1920},\"format_version\":2,\"fps\":23.976023976023978,\"label\":\"t\",\"model\":\"version=vmaf_v0.6.1\",\"model_choice\":\"__auto__\",\"model_choice_v1\":null,\"model_v1\":\"\",\"recipe\":{\"crop_mode\":\"auto\",\"duration_limit\":0.0,\"manual_distorted_crop\":null,\"manual_source_crop\":null,\"resample_test\":null,\"scale_direction\":\"source_to_distorted\"},\"resample_target\":null,\"scale_algorithm\":\"bicubic\",\"scale_direction\":\"source_to_distorted\",\"source\":\"s.mp4\",\"source_crop\":{\"h\":800,\"w\":1920,\"x\":0,\"y\":140},\"source_info\":{\"average_fps\":23.976023976023978,\"bit_rate\":4500000,\"bit_rate_whole_file\":false,\"chroma_location\":\"left\",\"codec_name\":\"hevc\",\"color_primaries\":\"bt709\",\"color_range\":\"tv\",\"color_space\":\"bt709\",\"color_transfer\":\"smpte2084\",\"duration\":10.01,\"fps\":23.976023976023978,\"height\":1080,\"nb_frames\":240,\"nominal_fps\":23.976023976023978,\"path\":\"s.mp4\",\"pix_fmt\":\"yuv420p10le\",\"sar\":\"1:1\",\"width\":1920}}",
   "files": {
-   "cvvdp_b16a7293ec667dc5bae894a10351fe0fcf4da4c40658d5abb8397191a5fa2f3b.npz": "{\"format_version\":2,\"key\":\"cvvdp\",\"kind\":\"sequence\",\"provenance\":{\"compute_backend\":\"gpu\",\"implementation\":\"Vship/cvvdp\",\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v1\",\"implementation_version\":\"\",\"parameters\":{\"color_tags\":\"ffvship-5.1.1\",\"display\":{\"ambient_lux\":250.0,\"contrast\":1000.0,\"diagonal_inches\":30.0,\"exposure\":1.0,\"hdr\":false,\"peak_luminance\":200.0,\"reflectivity\":0.005,\"resolution\":[3840,2160],\"viewing_distance_m\":0.7472},\"resize_to_display\":false}},\"request\":{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v1\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":250.0,\"contrast\":1000.0,\"diagonal_inches\":30.0,\"exposure\":1.0,\"hdr\":false,\"peak_luminance\":200.0,\"reflectivity\":0.005,\"resolution\":[3840,2160],\"viewing_distance_m\":0.7472},\"resize_to_display\":false}}}",
+   "cvvdp_c77a97bae6723e71148ed7074b1d64306d89023c4badba79071f08a313f7eb79.npz": "{\"format_version\":2,\"key\":\"cvvdp\",\"kind\":\"sequence\",\"provenance\":{\"compute_backend\":\"gpu\",\"implementation\":\"Vship/cvvdp\",\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v2\",\"implementation_version\":\"\",\"parameters\":{\"color_tags\":\"ffvship-5.1.1\",\"display\":{\"ambient_lux\":250.0,\"contrast\":1000.0,\"diagonal_inches\":30.0,\"exposure\":1.0,\"hdr\":false,\"peak_luminance\":200.0,\"reflectivity\":0.005,\"resolution\":[3840,2160],\"viewing_distance_m\":0.7472},\"resize_to_display\":false}},\"request\":{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v2\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":250.0,\"contrast\":1000.0,\"diagonal_inches\":30.0,\"exposure\":1.0,\"hdr\":false,\"peak_luminance\":200.0,\"reflectivity\":0.005,\"resolution\":[3840,2160],\"viewing_distance_m\":0.7472},\"resize_to_display\":false}}}",
    "psnr_06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83.npz": "{\"format_version\":2,\"key\":\"psnr\",\"kind\":\"frame\",\"provenance\":{\"compute_backend\":\"cpu\",\"implementation\":\"libvmaf\",\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"implementation_version\":\"\",\"parameters\":{}},\"request\":{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"psnr\",\"parameters\":{}}}",
-   "ssimulacra2_5c7f8a14bfef2485aaef15ac87be1c672a47b2b70111951fe2fcd69eaad83ccc.npz": "{\"format_version\":2,\"key\":\"ssimulacra2\",\"kind\":\"frame\",\"provenance\":{\"compute_backend\":\"gpu\",\"implementation\":\"Vship/ssimulacra2\",\"implementation_compatibility_id\":\"ssimulacra2-vship-gpu-v1\",\"implementation_version\":\"\",\"parameters\":{\"color_tags\":\"ffvship-5.1.1\",\"coverage_step\":1}},\"request\":{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ssimulacra2-vship-gpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}}",
+   "ssimulacra2_ce0e3314244d24fb0b5eaba9d18146ab37ad52d4fe6bcb6a04086494ad0b0301.npz": "{\"format_version\":2,\"key\":\"ssimulacra2\",\"kind\":\"frame\",\"provenance\":{\"compute_backend\":\"gpu\",\"implementation\":\"Vship/ssimulacra2\",\"implementation_compatibility_id\":\"ssimulacra2-vship-gpu-v2\",\"implementation_version\":\"\",\"parameters\":{\"color_tags\":\"ffvship-5.1.1\",\"coverage_step\":1}},\"request\":{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ssimulacra2-vship-gpu-v2\",\"key\":\"ssimulacra2\",\"parameters\":{}}}",
    "vmaf_58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca.npz": "{\"format_version\":2,\"key\":\"vmaf\",\"kind\":\"frame\",\"provenance\":{\"compute_backend\":\"gpu\",\"implementation\":\"libvmaf/vulkan\",\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"implementation_version\":\"libvmaf-fast v1\",\"parameters\":{\"model\":\"version=vmaf_v0.6.1\"}},\"request\":{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-libvmaf-v1\",\"key\":\"vmaf\",\"parameters\":{\"custom_model\":\"\",\"model\":\"\",\"model_choice\":\"__auto__\"}}}"
   }
  },
@@ -747,7 +747,7 @@
     }
    },
    "infos": [],
-   "answers": true
+   "answers": false
   },
   {
    "key": "ssimulacra2",
@@ -817,7 +817,7 @@
      "color_transfer": "bt709"
     }
    ],
-   "answers": true
+   "answers": false
   },
   {
    "key": "ssimulacra2",
@@ -1341,13 +1341,14 @@
      {
       "key": "ssimulacra2",
       "provenance": {
-       "implementation": "Vship/ssimulacra2",
+       "implementation": "ssimulacra2",
        "implementation_version": "",
-       "compute_backend": "gpu",
-       "implementation_compatibility_id": "ssimulacra2-vship-gpu-v1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ssimulacra2-libjxl-cpu-v1",
        "parameters": {
-        "color_tags": "ffvship-5.1.1",
-        "coverage_step": 1
+        "color_tags": "vship-5.1.1/2",
+        "coverage_step": 1,
+        "intermediate": "png/rgb48le"
        }
       },
       "kind": "frame",
@@ -1368,53 +1369,12 @@
        "0x1.ab17e4b17e4b1p-3"
       ],
       "values": [
+       "0x1.3800000000000p+6",
+       "0x1.3e00000000000p+6",
+       "0x1.3500000000000p+6",
        "0x1.4000000000000p+6",
-       "0x1.4600000000000p+6",
-       "0x1.3d00000000000p+6",
-       "0x1.4800000000000p+6",
-       "0x1.4300000000000p+6",
-       "0x1.4400000000000p+6"
-      ]
-     },
-     {
-      "key": "cvvdp",
-      "provenance": {
-       "implementation": "Vship/cvvdp",
-       "implementation_version": "",
-       "compute_backend": "gpu",
-       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
-       "parameters": {
-        "color_tags": "ffvship-5.1.1",
-        "display": {
-         "ambient_lux": 250.0,
-         "contrast": 1000.0,
-         "diagonal_inches": 30.0,
-         "exposure": 1.0,
-         "hdr": false,
-         "peak_luminance": 200.0,
-         "reflectivity": 0.005,
-         "resolution": [
-          3840,
-          2160
-         ],
-         "viewing_distance_m": 0.7472
-        },
-        "resize_to_display": false
-       }
-      },
-      "kind": "sequence",
-      "score": "0x1.2800000000000p+3",
-      "frame": [
-       0,
-       24
-      ],
-      "time": [
-       "0x0.0p+0",
-       "0x1.004189374bc6ap+0"
-      ],
-      "values": [
-       "0x1.2000000000000p+3",
-       "0x1.3000000000000p+3"
+       "0x1.3b00000000000p+6",
+       "0x1.3c00000000000p+6"
       ]
      }
     ]
@@ -1636,37 +1596,7 @@
      },
      "resize_to_display": true
     },
-    "loaded": [
-     {
-      "key": "cvvdp",
-      "provenance": {
-       "implementation": "Vship/cvvdp",
-       "implementation_version": "",
-       "compute_backend": "gpu",
-       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
-       "parameters": {
-        "color_tags": "ffvship-5.1.1",
-        "display": {
-         "ambient_lux": 250.0,
-         "contrast": 1000.0,
-         "diagonal_inches": 30.0,
-         "exposure": 1.0,
-         "hdr": false,
-         "peak_luminance": 200.0,
-         "reflectivity": 0.005,
-         "resolution": [
-          3840,
-          2160
-         ],
-         "viewing_distance_m": 0.7472
-        },
-        "resize_to_display": false
-       }
-      },
-      "kind": "sequence",
-      "score": "0x1.e000000000000p+2"
-     }
-    ]
+    "loaded": []
    }
   ],
   "window_loads": [
@@ -1698,7 +1628,7 @@
      "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-xpsnr-v2\",\"key\":\"xpsnr\",\"parameters\":{}}",
      "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ssimulacra2-auto-or-libjxl-cpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}",
      "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"butteraugli-auto-or-libjxl-cpu-v1\",\"key\":\"butteraugli\",\"parameters\":{}}",
-     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v1\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":250.0,\"contrast\":1000.0,\"diagonal_inches\":30.0,\"exposure\":1.0,\"hdr\":false,\"peak_luminance\":200.0,\"reflectivity\":0.005,\"resolution\":[3840,2160],\"viewing_distance_m\":0.7472},\"resize_to_display\":false}}"
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v2\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":250.0,\"contrast\":1000.0,\"diagonal_inches\":30.0,\"exposure\":1.0,\"hdr\":false,\"peak_luminance\":200.0,\"reflectivity\":0.005,\"resolution\":[3840,2160],\"viewing_distance_m\":0.7472},\"resize_to_display\":false}}"
     ],
     "loaded": [
      {
@@ -1774,47 +1704,6 @@
       ]
      },
      {
-      "key": "cvvdp",
-      "provenance": {
-       "implementation": "Vship/cvvdp",
-       "implementation_version": "",
-       "compute_backend": "gpu",
-       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
-       "parameters": {
-        "color_tags": "ffvship-5.1.1",
-        "display": {
-         "ambient_lux": 250.0,
-         "contrast": 1000.0,
-         "diagonal_inches": 30.0,
-         "exposure": 1.0,
-         "hdr": false,
-         "peak_luminance": 200.0,
-         "reflectivity": 0.005,
-         "resolution": [
-          3840,
-          2160
-         ],
-         "viewing_distance_m": 0.7472
-        },
-        "resize_to_display": false
-       }
-      },
-      "kind": "sequence",
-      "score": "0x1.2800000000000p+3",
-      "frame": [
-       0,
-       24
-      ],
-      "time": [
-       "0x0.0p+0",
-       "0x1.004189374bc6ap+0"
-      ],
-      "values": [
-       "0x1.2000000000000p+3",
-       "0x1.3000000000000p+3"
-      ]
-     },
-     {
       "key": "vmaf_v1",
       "provenance": {
        "implementation": "libvmaf",
@@ -1887,13 +1776,14 @@
      {
       "key": "ssimulacra2",
       "provenance": {
-       "implementation": "Vship/ssimulacra2",
+       "implementation": "ssimulacra2",
        "implementation_version": "",
-       "compute_backend": "gpu",
-       "implementation_compatibility_id": "ssimulacra2-vship-gpu-v1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ssimulacra2-libjxl-cpu-v1",
        "parameters": {
-        "color_tags": "ffvship-5.1.1",
-        "coverage_step": 1
+        "color_tags": "vship-5.1.1/2",
+        "coverage_step": 1,
+        "intermediate": "png/rgb48le"
        }
       },
       "kind": "frame",
@@ -1914,55 +1804,34 @@
        "0x1.ab17e4b17e4b1p-3"
       ],
       "values": [
+       "0x1.3800000000000p+6",
+       "0x1.3e00000000000p+6",
+       "0x1.3500000000000p+6",
        "0x1.4000000000000p+6",
-       "0x1.4600000000000p+6",
-       "0x1.3d00000000000p+6",
-       "0x1.4800000000000p+6",
-       "0x1.4300000000000p+6",
-       "0x1.4400000000000p+6"
+       "0x1.3b00000000000p+6",
+       "0x1.3c00000000000p+6"
       ]
      }
     ],
     "other_cvvdp": {
      "parameters": {
       "display": {
+       "ambient_lux": 250.0,
+       "contrast": 1000.0,
+       "diagonal_inches": 30.0,
+       "exposure": 1.0,
+       "hdr": false,
+       "peak_luminance": 200.0,
+       "reflectivity": 0.005,
        "resolution": [
         3840,
         2160
        ],
-       "diagonal_inches": 30.0,
-       "viewing_distance_m": 0.7472,
-       "peak_luminance": 200.0,
-       "contrast": 1000.0,
-       "ambient_lux": 250.0,
-       "reflectivity": 0.005,
-       "exposure": 1.0,
-       "hdr": false
+       "viewing_distance_m": 0.7472
       },
       "resize_to_display": false
      },
-     "scores": [
-      {
-       "parameters": {
-        "display": {
-         "resolution": [
-          1920,
-          1080
-         ],
-         "diagonal_inches": 55.0,
-         "viewing_distance_m": 2.1,
-         "peak_luminance": 1000.0,
-         "contrast": 100000.0,
-         "ambient_lux": 10.0,
-         "reflectivity": 0.01,
-         "exposure": 1.0,
-         "hdr": true
-        },
-        "resize_to_display": true
-       },
-       "score": "0x1.e000000000000p+2"
-      }
-     ]
+     "scores": []
     }
    },
    {
@@ -1991,7 +1860,7 @@
      "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-xpsnr-v2\",\"key\":\"xpsnr\",\"parameters\":{}}",
      "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ssimulacra2-auto-or-libjxl-cpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}",
      "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"butteraugli-auto-or-libjxl-cpu-v1\",\"key\":\"butteraugli\",\"parameters\":{}}",
-     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v1\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":250.0,\"contrast\":1000.0,\"diagonal_inches\":30.0,\"exposure\":1.0,\"hdr\":false,\"peak_luminance\":200.0,\"reflectivity\":0.005,\"resolution\":[3840,2160],\"viewing_distance_m\":0.7472},\"resize_to_display\":false}}"
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v2\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":250.0,\"contrast\":1000.0,\"diagonal_inches\":30.0,\"exposure\":1.0,\"hdr\":false,\"peak_luminance\":200.0,\"reflectivity\":0.005,\"resolution\":[3840,2160],\"viewing_distance_m\":0.7472},\"resize_to_display\":false}}"
     ],
     "loaded": [
      {
@@ -2139,13 +2008,14 @@
      {
       "key": "ssimulacra2",
       "provenance": {
-       "implementation": "Vship/ssimulacra2",
+       "implementation": "ssimulacra2",
        "implementation_version": "",
-       "compute_backend": "gpu",
-       "implementation_compatibility_id": "ssimulacra2-vship-gpu-v1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ssimulacra2-libjxl-cpu-v1",
        "parameters": {
-        "color_tags": "ffvship-5.1.1",
-        "coverage_step": 1
+        "color_tags": "vship-5.1.1/2",
+        "coverage_step": 1,
+        "intermediate": "png/rgb48le"
        }
       },
       "kind": "frame",
@@ -2166,96 +2036,34 @@
        "0x1.ab17e4b17e4b1p-3"
       ],
       "values": [
+       "0x1.3800000000000p+6",
+       "0x1.3e00000000000p+6",
+       "0x1.3500000000000p+6",
        "0x1.4000000000000p+6",
-       "0x1.4600000000000p+6",
-       "0x1.3d00000000000p+6",
-       "0x1.4800000000000p+6",
-       "0x1.4300000000000p+6",
-       "0x1.4400000000000p+6"
-      ]
-     },
-     {
-      "key": "cvvdp",
-      "provenance": {
-       "implementation": "Vship/cvvdp",
-       "implementation_version": "",
-       "compute_backend": "gpu",
-       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
-       "parameters": {
-        "color_tags": "ffvship-5.1.1",
-        "display": {
-         "ambient_lux": 250.0,
-         "contrast": 1000.0,
-         "diagonal_inches": 30.0,
-         "exposure": 1.0,
-         "hdr": false,
-         "peak_luminance": 200.0,
-         "reflectivity": 0.005,
-         "resolution": [
-          3840,
-          2160
-         ],
-         "viewing_distance_m": 0.7472
-        },
-        "resize_to_display": false
-       }
-      },
-      "kind": "sequence",
-      "score": "0x1.2800000000000p+3",
-      "frame": [
-       0,
-       24
-      ],
-      "time": [
-       "0x0.0p+0",
-       "0x1.004189374bc6ap+0"
-      ],
-      "values": [
-       "0x1.2000000000000p+3",
-       "0x1.3000000000000p+3"
+       "0x1.3b00000000000p+6",
+       "0x1.3c00000000000p+6"
       ]
      }
     ],
     "other_cvvdp": {
      "parameters": {
       "display": {
+       "ambient_lux": 250.0,
+       "contrast": 1000.0,
+       "diagonal_inches": 30.0,
+       "exposure": 1.0,
+       "hdr": false,
+       "peak_luminance": 200.0,
+       "reflectivity": 0.005,
        "resolution": [
         3840,
         2160
        ],
-       "diagonal_inches": 30.0,
-       "viewing_distance_m": 0.7472,
-       "peak_luminance": 200.0,
-       "contrast": 1000.0,
-       "ambient_lux": 250.0,
-       "reflectivity": 0.005,
-       "exposure": 1.0,
-       "hdr": false
+       "viewing_distance_m": 0.7472
       },
       "resize_to_display": false
      },
-     "scores": [
-      {
-       "parameters": {
-        "display": {
-         "resolution": [
-          1920,
-          1080
-         ],
-         "diagonal_inches": 55.0,
-         "viewing_distance_m": 2.1,
-         "peak_luminance": 1000.0,
-         "contrast": 100000.0,
-         "ambient_lux": 10.0,
-         "reflectivity": 0.01,
-         "exposure": 1.0,
-         "hdr": true
-        },
-        "resize_to_display": true
-       },
-       "score": "0x1.e000000000000p+2"
-      }
-     ]
+     "scores": []
     }
    },
    {
@@ -2287,7 +2095,7 @@
      "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-xpsnr-v2\",\"key\":\"xpsnr\",\"parameters\":{}}",
      "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"ssimulacra2-auto-or-libjxl-cpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}",
      "{\"coverage\":{\"mode\":\"sampled\",\"step\":2},\"implementation_compatibility_id\":\"butteraugli-auto-or-libjxl-cpu-v1\",\"key\":\"butteraugli\",\"parameters\":{}}",
-     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v1\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":250.0,\"contrast\":1000.0,\"diagonal_inches\":30.0,\"exposure\":1.0,\"hdr\":false,\"peak_luminance\":200.0,\"reflectivity\":0.005,\"resolution\":[3840,2160],\"viewing_distance_m\":0.7472},\"resize_to_display\":false}}"
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v2\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":250.0,\"contrast\":1000.0,\"diagonal_inches\":30.0,\"exposure\":1.0,\"hdr\":false,\"peak_luminance\":200.0,\"reflectivity\":0.005,\"resolution\":[3840,2160],\"viewing_distance_m\":0.7472},\"resize_to_display\":false}}"
     ],
     "loaded": [
      {
@@ -2350,89 +2158,27 @@
        "0x1.6800000000000p+5",
        "0x1.7000000000000p+5"
       ]
-     },
-     {
-      "key": "cvvdp",
-      "provenance": {
-       "implementation": "Vship/cvvdp",
-       "implementation_version": "",
-       "compute_backend": "gpu",
-       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
-       "parameters": {
-        "color_tags": "ffvship-5.1.1",
-        "display": {
-         "ambient_lux": 250.0,
-         "contrast": 1000.0,
-         "diagonal_inches": 30.0,
-         "exposure": 1.0,
-         "hdr": false,
-         "peak_luminance": 200.0,
-         "reflectivity": 0.005,
-         "resolution": [
-          3840,
-          2160
-         ],
-         "viewing_distance_m": 0.7472
-        },
-        "resize_to_display": false
-       }
-      },
-      "kind": "sequence",
-      "score": "0x1.2800000000000p+3",
-      "frame": [
-       0,
-       24
-      ],
-      "time": [
-       "0x0.0p+0",
-       "0x1.004189374bc6ap+0"
-      ],
-      "values": [
-       "0x1.2000000000000p+3",
-       "0x1.3000000000000p+3"
-      ]
      }
     ],
     "other_cvvdp": {
      "parameters": {
       "display": {
+       "ambient_lux": 250.0,
+       "contrast": 1000.0,
+       "diagonal_inches": 30.0,
+       "exposure": 1.0,
+       "hdr": false,
+       "peak_luminance": 200.0,
+       "reflectivity": 0.005,
        "resolution": [
         3840,
         2160
        ],
-       "diagonal_inches": 30.0,
-       "viewing_distance_m": 0.7472,
-       "peak_luminance": 200.0,
-       "contrast": 1000.0,
-       "ambient_lux": 250.0,
-       "reflectivity": 0.005,
-       "exposure": 1.0,
-       "hdr": false
+       "viewing_distance_m": 0.7472
       },
       "resize_to_display": false
      },
-     "scores": [
-      {
-       "parameters": {
-        "display": {
-         "resolution": [
-          1920,
-          1080
-         ],
-         "diagonal_inches": 55.0,
-         "viewing_distance_m": 2.1,
-         "peak_luminance": 1000.0,
-         "contrast": 100000.0,
-         "ambient_lux": 10.0,
-         "reflectivity": 0.01,
-         "exposure": 1.0,
-         "hdr": true
-        },
-        "resize_to_display": true
-       },
-       "score": "0x1.e000000000000p+2"
-      }
-     ]
+     "scores": []
     }
    },
    {
@@ -2477,7 +2223,7 @@
      "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ffmpeg-xpsnr-v2\",\"key\":\"xpsnr\",\"parameters\":{}}",
      "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"ssimulacra2-auto-or-libjxl-cpu-v1\",\"key\":\"ssimulacra2\",\"parameters\":{}}",
      "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"butteraugli-auto-or-libjxl-cpu-v1\",\"key\":\"butteraugli\",\"parameters\":{}}",
-     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v1\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":10.0,\"contrast\":100000.0,\"diagonal_inches\":55.0,\"exposure\":1.0,\"hdr\":true,\"peak_luminance\":1000.0,\"reflectivity\":0.01,\"resolution\":[1920,1080],\"viewing_distance_m\":2.1},\"resize_to_display\":true}}"
+     "{\"coverage\":{\"mode\":\"full\",\"step\":1},\"implementation_compatibility_id\":\"cvvdp-vship-gpu-v2\",\"key\":\"cvvdp\",\"parameters\":{\"display\":{\"ambient_lux\":10.0,\"contrast\":100000.0,\"diagonal_inches\":55.0,\"exposure\":1.0,\"hdr\":true,\"peak_luminance\":1000.0,\"reflectivity\":0.01,\"resolution\":[1920,1080],\"viewing_distance_m\":2.1},\"resize_to_display\":true}}"
     ],
     "loaded": [
      {
@@ -2625,13 +2371,14 @@
      {
       "key": "ssimulacra2",
       "provenance": {
-       "implementation": "Vship/ssimulacra2",
+       "implementation": "ssimulacra2",
        "implementation_version": "",
-       "compute_backend": "gpu",
-       "implementation_compatibility_id": "ssimulacra2-vship-gpu-v1",
+       "compute_backend": "cpu",
+       "implementation_compatibility_id": "ssimulacra2-libjxl-cpu-v1",
        "parameters": {
-        "color_tags": "ffvship-5.1.1",
-        "coverage_step": 1
+        "color_tags": "vship-5.1.1/2",
+        "coverage_step": 1,
+        "intermediate": "png/rgb48le"
        }
       },
       "kind": "frame",
@@ -2652,84 +2399,34 @@
        "0x1.ab17e4b17e4b1p-3"
       ],
       "values": [
+       "0x1.3800000000000p+6",
+       "0x1.3e00000000000p+6",
+       "0x1.3500000000000p+6",
        "0x1.4000000000000p+6",
-       "0x1.4600000000000p+6",
-       "0x1.3d00000000000p+6",
-       "0x1.4800000000000p+6",
-       "0x1.4300000000000p+6",
-       "0x1.4400000000000p+6"
+       "0x1.3b00000000000p+6",
+       "0x1.3c00000000000p+6"
       ]
-     },
-     {
-      "key": "cvvdp",
-      "provenance": {
-       "implementation": "Vship/cvvdp",
-       "implementation_version": "",
-       "compute_backend": "gpu",
-       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
-       "parameters": {
-        "color_tags": "ffvship-5.1.1",
-        "display": {
-         "ambient_lux": 250.0,
-         "contrast": 1000.0,
-         "diagonal_inches": 30.0,
-         "exposure": 1.0,
-         "hdr": false,
-         "peak_luminance": 200.0,
-         "reflectivity": 0.005,
-         "resolution": [
-          3840,
-          2160
-         ],
-         "viewing_distance_m": 0.7472
-        },
-        "resize_to_display": false
-       }
-      },
-      "kind": "sequence",
-      "score": "0x1.e000000000000p+2"
      }
     ],
     "other_cvvdp": {
      "parameters": {
       "display": {
+       "ambient_lux": 10.0,
+       "contrast": 100000.0,
+       "diagonal_inches": 55.0,
+       "exposure": 1.0,
+       "hdr": true,
+       "peak_luminance": 1000.0,
+       "reflectivity": 0.01,
        "resolution": [
         1920,
         1080
        ],
-       "diagonal_inches": 55.0,
-       "viewing_distance_m": 2.1,
-       "peak_luminance": 1000.0,
-       "contrast": 100000.0,
-       "ambient_lux": 10.0,
-       "reflectivity": 0.01,
-       "exposure": 1.0,
-       "hdr": true
+       "viewing_distance_m": 2.1
       },
       "resize_to_display": true
      },
-     "scores": [
-      {
-       "parameters": {
-        "display": {
-         "resolution": [
-          3840,
-          2160
-         ],
-         "diagonal_inches": 30.0,
-         "viewing_distance_m": 0.7472,
-         "peak_luminance": 200.0,
-         "contrast": 1000.0,
-         "ambient_lux": 250.0,
-         "reflectivity": 0.005,
-         "exposure": 1.0,
-         "hdr": false
-        },
-        "resize_to_display": false
-       },
-       "score": "0x1.2800000000000p+3"
-      }
-     ]
+     "scores": []
     }
    }
   ],
@@ -2757,11 +2454,13 @@
     ],
     "backends": {},
     "cvvdp": null,
-    "removed": 8,
+    "removed": 6,
     "left": [
      "context.json",
      "cvvdp_8c972bd4217003ad4040b7bb093b9e8cee47773723e2aa0fe4a4fdc7a5ea1166.npz",
-     "psnr_123329faf9b4fa0bc59895bf055f21cdbec6c92fb82ef270a915f138a645f43a.npz"
+     "cvvdp_b16a7293ec667dc5bae894a10351fe0fcf4da4c40658d5abb8397191a5fa2f3b.npz",
+     "psnr_123329faf9b4fa0bc59895bf055f21cdbec6c92fb82ef270a915f138a645f43a.npz",
+     "ssimulacra2_5c7f8a14bfef2485aaef15ac87be1c672a47b2b70111951fe2fcd69eaad83ccc.npz"
     ]
    },
    {
@@ -2814,7 +2513,7 @@
      "ssimulacra2": "cpu"
     },
     "cvvdp": null,
-    "removed": 2,
+    "removed": 1,
     "left": [
      "butteraugli_27850760876cf7e5600b13b31c703102c95abb025b437c8a96f1886f3a59f55b.npz",
      "context.json",
@@ -2822,6 +2521,7 @@
      "cvvdp_b16a7293ec667dc5bae894a10351fe0fcf4da4c40658d5abb8397191a5fa2f3b.npz",
      "psnr_06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83.npz",
      "psnr_123329faf9b4fa0bc59895bf055f21cdbec6c92fb82ef270a915f138a645f43a.npz",
+     "ssimulacra2_5c7f8a14bfef2485aaef15ac87be1c672a47b2b70111951fe2fcd69eaad83ccc.npz",
      "vmaf_0012615264fa558fb311fdab506bc62efabd8f67b8005637d1002dbe5b33dbf1.npz",
      "vmaf_58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca.npz",
      "xpsnr_a991719296a82a834bc1e8d9f9bc514e500aaf801e4daad31308a2f67e552f7c.npz"
@@ -2891,10 +2591,11 @@
      },
      "resize_to_display": true
     },
-    "removed": 1,
+    "removed": 0,
     "left": [
      "butteraugli_27850760876cf7e5600b13b31c703102c95abb025b437c8a96f1886f3a59f55b.npz",
      "context.json",
+     "cvvdp_8c972bd4217003ad4040b7bb093b9e8cee47773723e2aa0fe4a4fdc7a5ea1166.npz",
      "cvvdp_b16a7293ec667dc5bae894a10351fe0fcf4da4c40658d5abb8397191a5fa2f3b.npz",
      "psnr_06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83.npz",
      "psnr_123329faf9b4fa0bc59895bf055f21cdbec6c92fb82ef270a915f138a645f43a.npz",

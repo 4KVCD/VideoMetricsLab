@@ -53,9 +53,6 @@ Json values_of(const Arguments& parsed) {
         {"subsample", a.subsample},
         {"threads", either(a.threads)},
         {"vmaf_on", either(a.vmaf_on)},
-        {"ssimulacra2_on", either(a.ssimulacra2_on)},
-        {"butteraugli_on", either(a.butteraugli_on)},
-        {"gpu_backend", either(a.gpu_backend)},
         {"cpu", a.cpu},
         {"no_gpu_decode", a.no_gpu_decode},
         {"parallel", either(a.parallel)},
@@ -161,7 +158,6 @@ TEST(CommandLine, SaysWhereEachMetricIsCalculatedAsThePythonApp) {
         SCOPED_TRACE(expected["name"].get<std::string>());
         DeviceFindings found;
         found.tools = ToolsStatus{tool(expected["tools"][0]), tool(expected["tools"][1])};
-        found.gpu_backend = expected["gpu_backend"].get<std::string>();
         if (const Json& vship = expected["vship"]; !vship.is_null()) {
             found.vship = VshipDevice{vship["backend"].get<std::string>(), vship["name"].get<std::string>(),
                                       vship["gpu_id"].get<int>(), vship["version"].get<std::string>(), std::nullopt};

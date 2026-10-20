@@ -280,39 +280,22 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
     form->addRow(app::tr("GPU decode:"), gpu_row);
 
     // VMAF v0.6.1 and NEG: libvmaf has GPU code (CUDA) for their features,
-    // ported to Vulkan (vmaf_vulkan), which every GPU uses unless the GPU
-    // backend is CUDA. VMAF v1: all four of its features on the GPU, with
-    // Vulkan, where the engine supports the model's options (vmaf_v1_gpu).
+    // ported to Vulkan (vmaf_vulkan), which every GPU uses; CUDA only where
+    // Vulkan cannot score VMAF. VMAF v1: all four of its features on the GPU,
+    // with Vulkan, where the engine supports the model's options
+    // (vmaf_v1_gpu). SSIMULACRA2 and Butteraugli have no choice: on the GPU
+    // where one can calculate them, and on the CPU without one.
     vmaf_backend_combo = new QComboBox;
     vmaf_backend_combo->addItems({"GPU", "CPU"});
     vmaf_backend_combo->setToolTip(app::tr(
-        "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU. VMAF v0.6.1 and NEG: with Vulkan on "
-        "every GPU, or with CUDA on an NVIDIA GPU when Settings > GPU metrics > GPU backend is CUDA. Both give the "
-        "same scores. VMAF v1: all four of its features on the GPU with Vulkan; for a model whose options the GPU "
-        "code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are "
-        "calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point "
-        "on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are "
-        "calculated on the CPU instead."));
+        "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG "
+        "with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model "
+        "whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. "
+        "PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a "
+        "thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation "
+        "fails, they are calculated on the CPU instead."));
     connect(vmaf_backend_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("vmaf_on_gpu"); });
     form->addRow(app::tr("VMAF compute:"), vmaf_backend_combo);
-
-    // SSIMULACRA2's and Butteraugli's GPU/CPU choice, the same for both.
-    const QString vship_tip =
-        app::tr("GPU uses Vship when a supported device is available. If GPU computation cannot run, the metric "
-                "automatically falls back to CPU. Choose CPU to always use the bundled libjxl reference "
-                "implementation.");
-    ssimulacra2_backend_combo = new QComboBox;
-    ssimulacra2_backend_combo->addItems({"GPU", "CPU"});
-    ssimulacra2_backend_combo->setToolTip(vship_tip);
-    connect(ssimulacra2_backend_combo, &QComboBox::currentIndexChanged, this,
-            [this] { emit metric_backend_changed("ssimulacra2"); });
-    form->addRow(app::tr("SSIMULACRA2 compute:"), ssimulacra2_backend_combo);
-    butteraugli_backend_combo = new QComboBox;
-    butteraugli_backend_combo->addItems({"GPU", "CPU"});
-    butteraugli_backend_combo->setToolTip(vship_tip);
-    connect(butteraugli_backend_combo, &QComboBox::currentIndexChanged, this,
-            [this] { emit metric_backend_changed("butteraugli"); });
-    form->addRow(app::tr("Butteraugli compute:"), butteraugli_backend_combo);
 
     // Without a GPU there is no choice: it shows CPU, which is where VMAF is
     // calculated (see show_vmaf_backend).
@@ -341,8 +324,7 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
                 "core, or half of them for each video when two are calculated in parallel."));
 }
 
-void OptionsPanel::show_options(const VmafOptions& options, const std::map<std::string, std::string>& metric_backends,
-                                const std::vector<VmafOptions>& selected) {
+void OptionsPanel::show_options(const VmafOptions& options, const std::vector<VmafOptions>& selected) {
     model_combo->setCurrentIndex(index_of(model_choices(), options.model_choice));
     custom_model_path = options.custom_model_path;
     model_v1_combo->setCurrentIndex(index_of(v1_model_choices(), options.model_choice_v1));
@@ -353,7 +335,7 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::map<std::
         vendor == gpu_vendor_entries.end() ? 0 : static_cast<int>(vendor - gpu_vendor_entries.begin()));
     gpu_vendor_combo->setEnabled(options.gpu_decode);
 
-    show_backends(options.vmaf_on_gpu, metric_backends);
+    show_vmaf_backend(options.vmaf_on_gpu);
 
     crop_combo->setCurrentIndex(options.crop_mode == CropMode::automatic ? 0 : 1);
     threads_spin->setValue(options.n_threads);
@@ -376,16 +358,6 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::map<std::
     // Also while it is above 1: CVVDP is unavailable then, and the way back
     // to it must not be a disabled control.
     subsample_spin->setEnabled(uses_libvmaf || any([](const VmafOptions& item) { return item.n_subsample > 1; }));
-}
-
-void OptionsPanel::show_backends(bool vmaf_on_gpu, const std::map<std::string, std::string>& metric_backends) {
-    show_vmaf_backend(vmaf_on_gpu);
-    const auto on_gpu = [&metric_backends](const std::string& key) {
-        const auto found = metric_backends.find(key);
-        return found == metric_backends.end() || found->second == "gpu";
-    };
-    ssimulacra2_backend_combo->setCurrentIndex(on_gpu("ssimulacra2") ? 0 : 1);
-    butteraugli_backend_combo->setCurrentIndex(on_gpu("butteraugli") ? 0 : 1);
 }
 
 void OptionsPanel::show_vmaf_backend(bool on_gpu) {
@@ -463,16 +435,6 @@ VmafOptions OptionsPanel::read_options(const std::vector<std::string>& extra_fea
     options.vmaf_on_gpu = vmaf_backend_combo->currentIndex() == 0;
     options.crop_mode = crop_combo->currentIndex() == 0 ? CropMode::automatic : CropMode::none;
     return options;
-}
-
-std::string OptionsPanel::metric_backend(const std::string& metric_key) const {
-    const QComboBox* combo = metric_key == "ssimulacra2"   ? ssimulacra2_backend_combo
-                             : metric_key == "butteraugli" ? butteraugli_backend_combo
-                                                           : nullptr;
-    if (combo == nullptr) {
-        throw std::invalid_argument("Unknown standalone metric: " + metric_key);
-    }
-    return combo->currentIndex() == 0 ? "gpu" : "cpu";
 }
 
 }  // namespace vml::app

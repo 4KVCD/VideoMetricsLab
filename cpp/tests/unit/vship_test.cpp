@@ -72,23 +72,21 @@ void expect_image(const Json& expected, const VshipImageFormat& image) {
               expected["plane_order"].get<std::vector<int>>());
 }
 
-// Each decoded pixel format becomes the Python app's layout for each Vship
-// version (4:1:0 as it is only from 5.1.2), with its frames' sizes, or the
-// same refusal.
+// Each decoded pixel format becomes the Python app's layout, with its
+// frames' sizes, or the same refusal.
 TEST(Vship, LaysFramesOutAsThePythonApp) {
     for (const Json& expected : vship_reference()["formats"]) {
-        const std::optional<std::string> version = text_or_none(expected["version"]);
-        SCOPED_TRACE("'" + expected["pix_fmt"].get<std::string>() + "', Vship " + version.value_or("unknown"));
+        SCOPED_TRACE(expected["pix_fmt"].get<std::string>());
         if (expected.contains("error")) {
             try {
-                vship_image_format(plain_video(expected["pix_fmt"].get<std::string>()), version);
+                vship_image_format(plain_video(expected["pix_fmt"].get<std::string>()));
                 ADD_FAILURE() << "no error";
             } catch (const VshipUnavailableError& error) {
                 EXPECT_EQ(error.what(), expected["error"].get<std::string>());
             }
             continue;
         }
-        const VshipImageFormat image = vship_image_format(plain_video(expected["pix_fmt"].get<std::string>()), version);
+        const VshipImageFormat image = vship_image_format(plain_video(expected["pix_fmt"].get<std::string>()));
         expect_image(expected["image"], image);
         for (const Json& layout : expected["layouts"]) {
             const VshipImageFormat::Layout got = image.frame_layout(layout["width"].get<int>(), layout["height"].get<int>());
@@ -123,7 +121,7 @@ TEST(Vship, DescribesColoursAsThePythonApp) {
         SCOPED_TRACE(expected["name"].get<std::string>());
         const VideoInfo info = video_from(expected["info"]);
         try {
-            const vship_api::Colorspace space = vship_colorspace(info, vship_image_format(info, "5.1.2"), 1280, 720);
+            const vship_api::Colorspace space = vship_colorspace(info, vship_image_format(info), 1280, 720);
             ASSERT_TRUE(expected.contains("colorspace")) << "no error";
             const Json& wanted = expected["colorspace"];
             EXPECT_EQ(space.width, wanted["width"].get<std::int64_t>());
@@ -198,7 +196,7 @@ TEST(Vship, PlansFfmpegAndSizesAsThePythonApp) {
     }
     for (const Json& expected : vship_reference()["refusals"]) {
         SCOPED_TRACE(expected.dump());
-        VshipDevice device{expected["backend"].get<std::string>(), "a GPU", 0, "5.1.2", std::nullopt};
+        VshipDevice device{"vulkan", "a GPU", 0, "5.1.2", std::nullopt};
         const std::string vendor = expected["vendor"].get<std::string>();
         device.vendor = vendor == "intel"    ? std::optional(GpuVendor::intel)
                         : vendor == "nvidia" ? std::optional(GpuVendor::nvidia)

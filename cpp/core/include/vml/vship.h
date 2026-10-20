@@ -4,10 +4,12 @@
 // it. A port of the first parts of vmaf_app/core/perceptual_vship.py; the
 // passes that score are vship_run.h's.
 //
-// Vship's builds are bundled in tools/vship/<folder>, for Windows only:
-// CUDA runs on NVIDIA, HIP on AMD, and Vulkan on any GPU with a Vulkan
-// driver. Vship converts each frame from the colour space it is described
-// in (vship_colorspace), and takes a frame as three planes.
+// One build is bundled, in tools/vship/vulkan, on Windows and macOS: the
+// Vulkan build of Vship-fast (github.com/4KVCD/Vship-fast), a faster fork of
+// Vship whose metrics compute as libjxl's and pycvvdp's do (its README's
+// measurements), on any GPU with a Vulkan driver. Vship converts each frame
+// from the colour space it is described in (vship_colorspace), and takes a
+// frame as three planes.
 #pragma once
 
 #include <nlohmann/json.hpp>
@@ -200,51 +202,40 @@ struct VshipLibrary {
     std::string handler_error(void* handler, int code) const;
 };
 
-// Where Vship's `backend` build is ("vulkan", "cuda" or "hip").
-std::filesystem::path vship_library_path(const std::string& backend);
+// Where Vship's Vulkan build is.
+std::filesystem::path vship_library_path();
 
 // The Vulkan the app bundles on macOS (tools/vulkan): Khronos' loader, with
 // MoltenVK as its driver, which Vship's and the Vulkan VMAF's builds there are
 // linked to. The first call points the loader at MoltenVK (VK_DRIVER_FILES).
 std::filesystem::path vulkan_library_path();
 
-// The GPU makers each build runs on: CUDA on NVIDIA, HIP on AMD; Vulkan on
-// any (the Vulkan loader says whose a GPU is).
+// The GPU Vship runs on.
 struct VshipDevice {
-    std::string backend;  // "vulkan", "cuda" or "hip": the build it runs on
+    std::string backend;  // the build it runs on, "vulkan", as scores record it
     std::string name;
     int gpu_id = 0;
     std::string version;  // "5.1.2"
-    // Who made the GPU: NVIDIA for CUDA, AMD for HIP, and for Vulkan what
-    // the Vulkan loader says (GpuVendor::none for another maker). Nothing
-    // when it could not be told.
+    // Who made the GPU, as the Vulkan loader says (GpuVendor::none for
+    // another maker). Nothing when it could not be told.
     std::optional<GpuVendor> vendor;
 };
 
-// The library `device` runs on, loaded once in this process. Throws
+// Vship's library, loaded once in this process. Throws
 // VshipUnavailableError.
-const VshipLibrary& vship_library(const VshipDevice& device);
-
-// Settings > GPU metrics > GPU backend: "auto", or the build to try first.
-// An unknown name means "auto". A probe made for another choice is
-// forgotten.
-void set_vship_backend(const std::string& backend);
-
-// The name shown for a build: "Vulkan", "CUDA" or "HIP".
-std::string backend_label(const std::string& backend);
+const VshipLibrary& vship_library();
 
 // Why `device` does not calculate `key` on frames of `size`, or nothing if
-// it does: Vship 5.1.2's Vulkan CVVDP hangs Intel's GPU above 1920x1080.
+// it does: Vship 5.1.2's Vulkan CVVDP hung Intel's GPU above 1920x1080, and
+// Vship-fast's has not been tried there (a hang resets the GPU).
 // `computed` is the size the metric is calculated at, where that differs
 // (CVVDP scaled to the display).
 std::optional<std::string> size_refusal(const VshipDevice& device, const std::string& key, std::pair<int, int> size,
                                         std::optional<std::pair<int, int>> computed = std::nullopt);
 
-// Tries the builds in turn for the backend setting `choice` ("auto": CUDA,
-// Vulkan, then HIP; a chosen build first, then the others), in this
-// process, and returns the first usable GPU found, a discrete one first, or
-// the reasons none was found.
-std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(const std::string& choice);
+// Loads Vship's build in this process and returns the GPU it would use, a
+// discrete one first, or the reasons none was found.
+std::pair<std::optional<VshipDevice>, std::string> probe_vship_device();
 
 // The probe's answer as the isolated "vship-probe" task sends it.
 nlohmann::json vship_probe_result(const std::pair<std::optional<VshipDevice>, std::string>& probed);
@@ -303,12 +294,11 @@ struct VshipImageFormat {
     bool wide() const;
 };
 
-// The layout FFmpeg sends a decoded video in, and how Vship `version`
-// ("5.1.2") reads it: a semi-planar or big-endian layout as the planar
-// little-endian one, with alpha dropped and neutral chroma added to a
-// monochrome video; 4:1:0 as it is to a Vship that reads it, else upsampled
-// to 4:4:4. Throws VshipUnavailableError for a layout it cannot read.
-VshipImageFormat vship_image_format(const VideoInfo& info, const std::optional<std::string>& version = std::nullopt);
+// The layout FFmpeg sends a decoded video in, and how Vship reads it: a
+// semi-planar or big-endian layout as the planar little-endian one, with
+// alpha dropped and neutral chroma added to a monochrome video. Throws
+// VshipUnavailableError for a layout it cannot read.
+VshipImageFormat vship_image_format(const VideoInfo& info);
 
 // The planar layout Vship is given and the layout FFmpeg sends, when a
 // hardware-decoded 4:2:0 frame can cross the pipe exactly as it is

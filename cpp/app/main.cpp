@@ -229,8 +229,6 @@ int main(int argc, char** argv) {
     app::theme::apply_theme(QString::fromStdString(settings.theme));
     app_log::write(app_log::Level::info, "vml.main",
                    "Theme: " + (settings.theme.empty() ? "as " + system_name : settings.theme));
-    set_gpu_backend(settings.gpu_backend);
-    set_vship_backend(settings.gpu_backend);
     // The first probes load Vship and start the GPU's driver, which takes
     // seconds; started now, they are usually done before a run is asked for.
     // The window never waits for them (window_helpers.h), but a run does

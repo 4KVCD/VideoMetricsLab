@@ -32,9 +32,6 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--pix-fmt FORMAT] [--cvvdp-display PRESET]
                                    [--subsample N] [--threads N]
                                    [--vmaf-on {gpu,cpu}]
-                                   [--ssimulacra2-on {gpu,cpu}]
-                                   [--butteraugli-on {gpu,cpu}]
-                                   [--gpu-backend {auto,vulkan,cuda,hip}]
                                    [--cpu] [--no-gpu-decode] [--parallel N]
                                    [--recalculate] [--csv FOLDER]
                                    [--json FILE] [-q] [-v]
@@ -140,17 +137,10 @@ options:
   --threads N           libvmaf threads (default: automatic)
   --vmaf-on {gpu,cpu}   where VMAF v0.6.1, VMAF NEG and VMAF v1 is calculated
                         (default: the app's)
-  --ssimulacra2-on {gpu,cpu}
-                        where SSIMULACRA2 is calculated (default: the app's)
-  --butteraugli-on {gpu,cpu}
-                        where Butteraugli is calculated (default: the app's)
-  --gpu-backend {auto,vulkan,cuda,hip}
-                        the GPU backend for this run, as in Settings > GPU
-                        metrics (default: the app's; auto uses CUDA on NVIDIA
-                        and Vulkan on other GPUs)
   --cpu                 calculate on the CPU every metric that can be (CVVDP
-                        is GPU only); the same as --vmaf-on cpu
-                        --ssimulacra2-on cpu --butteraugli-on cpu
+                        is GPU only): VMAF as with --vmaf-on cpu, and
+                        SSIMULACRA2 and Butteraugli with libjxl's tools rather
+                        than on the GPU where one can
   --no-gpu-decode       decode the videos on the CPU
   --parallel N          videos calculated at once on the CPU, 1-2 (default:
                         the app's)
@@ -731,9 +721,6 @@ Action help(const std::string& text) {
 // The compare command's parser, keeping what it reads in `parsed`.
 Parser compare_parser(CompareArguments& parsed) {
     const std::string help_text = std::string(compare_usage) + compare_sections + examples;
-    const auto where = [](std::optional<std::string>& target) {
-        return [&target](const std::string& value) { target = choice(value, {"gpu", "cpu"}); };
-    };
     Parser parser;
     parser.actions = {
         help(help_text),
@@ -764,13 +751,7 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--subsample"},
                [&parsed](const std::string& value) { parsed.subsample = int_up_to(value, 60); }),
         option({"--threads"}, [&parsed](const std::string& value) { parsed.threads = int_up_to(value, 128); }),
-        option({"--vmaf-on"}, where(parsed.vmaf_on)),
-        option({"--ssimulacra2-on"}, where(parsed.ssimulacra2_on)),
-        option({"--butteraugli-on"}, where(parsed.butteraugli_on)),
-        option({"--gpu-backend"},
-               [&parsed](const std::string& value) {
-                   parsed.gpu_backend = choice(value, {"auto", "vulkan", "cuda", "hip"});
-               }),
+        option({"--vmaf-on"}, [&parsed](const std::string& value) { parsed.vmaf_on = choice(value, {"gpu", "cpu"}); }),
         flag({"--cpu"}, parsed.cpu),
         flag({"--no-gpu-decode"}, parsed.no_gpu_decode),
         option({"--parallel"},

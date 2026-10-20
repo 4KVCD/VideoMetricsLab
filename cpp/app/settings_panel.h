@@ -1,7 +1,7 @@
 // The Settings tab (the Python app's vmaf_app/ui/settings_panel.py): the
 // app-wide settings, saved as soon as they are edited.
 //
-// The panel applies what is global itself: the theme and the GPU backends.
+// The panel applies what is global itself: the theme.
 // It tells the window, with signals, about the changes that concern the
 // window: the defaults for newly added videos, how many test videos Video
 // Compare decodes, and the FFmpeg folder, which the window then checks
@@ -17,12 +17,10 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "dialogs.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/settings.h"
-#include "vml/video.h"
 
 class QCheckBox;
 class QComboBox;
@@ -51,8 +49,8 @@ public:
     // FFmpeg (each check starts two programs, so the panel does not check
     // again itself); `dialogs` the window's, which outlive the panel (its
     // tests answer them).
-    SettingsPanel(Settings& settings, FileWrites& file_writes, const std::vector<GpuVendor>& gpu_vendors,
-                  std::function<ToolsStatus()> tools, const Dialogs& dialogs, QWidget* parent = nullptr);
+    SettingsPanel(Settings& settings, FileWrites& file_writes, std::function<ToolsStatus()> tools,
+                  const Dialogs& dialogs, QWidget* parent = nullptr);
     ~SettingsPanel() override;
 
     // Shows the tools and the saved results as they are now. Called when the
@@ -86,7 +84,6 @@ public:
     QCheckBox* default_gpu = nullptr;
     std::map<std::string, QCheckBox*> default_metrics;  // by metric key
     QComboBox* cvvdp_default = nullptr;
-    QComboBox* gpu_backend = nullptr;
     QCheckBox* gpu_together = nullptr;
     QComboBox* decoded_videos = nullptr;
     QComboBox* language = nullptr;
@@ -111,7 +108,7 @@ private:
     QGroupBox* build_ffmpeg_box();
     QGroupBox* build_storage_box();
     QGroupBox* build_defaults_box();
-    QGroupBox* build_gpu_box(const std::vector<GpuVendor>& gpu_vendors);
+    QGroupBox* build_gpu_box();
     QGroupBox* build_compare_box();
     QGroupBox* build_window_box();
 
@@ -124,7 +121,7 @@ private:
     // Copies every control's value into the settings.
     void read_controls();
     // Applies at once what changed since `before` and is not the window's
-    // alone: the theme and the GPU backends.
+    // alone: the theme.
     void apply_global_changes(const Settings& before);
     // Lets the user pick a folder for `edit`, and saves it.
     void pick_directory(const QString& title, QLineEdit* edit);

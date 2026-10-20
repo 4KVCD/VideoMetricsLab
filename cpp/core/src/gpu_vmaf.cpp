@@ -72,7 +72,6 @@ bool read_exactly(platform::InboundPipe& pipe, std::uint8_t* into, std::size_t s
 
 struct Probe {
     std::mutex mutex;
-    std::string preference = "auto";
     std::optional<GpuVmafBackend> found;
     std::chrono::steady_clock::time_point found_at;
 };
@@ -86,10 +85,9 @@ Probe& probe_state() {
     return probe;
 }
 
-// The backends to try, in order, for a GPU backend setting.
-std::vector<std::string> backend_order(const std::string& preference) {
-    return preference == "cuda" ? std::vector<std::string>{"cuda", "vulkan"} : std::vector<std::string>{"vulkan", "cuda"};
-}
+// The backends to try, in order: libvmaf-fast's Vulkan engine, the faster,
+// and libvmaf's CUDA code for an NVIDIA GPU whose Vulkan cannot score VMAF.
+const std::vector<std::string> backend_order{"vulkan", "cuda"};
 
 // The Vulkan probe, in a process of its own where a program to run it is
 // set (the Python app's run_isolated(vmaf_vulkan.probe)): a driver that
@@ -128,12 +126,12 @@ CudaProbe probe_cuda_apart() {
     }
 }
 
-GpuVmafBackend probe_backends(const std::string& preference) {
+GpuVmafBackend probe_backends() {
     std::string reasons;
     const auto add_reason = [&reasons](const std::string& reason) {
         reasons += (reasons.empty() ? "" : "; ") + reason;
     };
-    for (const std::string& backend : backend_order(preference)) {
+    for (const std::string& backend : backend_order) {
         // Any failure means "not on this GPU": one that escaped would fail
         // every video's setup instead of VMAF being calculated on the CPU.
         try {
@@ -189,23 +187,11 @@ GpuModels gpu_models(bool compute_vmaf, bool compute_vmaf_neg, const std::string
     return models;
 }
 
-void set_gpu_backend(const std::string& preference) {
-    Probe& probe = probe_state();
-    const std::lock_guard lock(probe.mutex);
-    if (backend_order(preference) != backend_order(probe.preference)) {
-        if (probe.found) {
-            logger.info("VMAF on the GPU: GPU backend set to " + preference);
-        }
-        probe.found.reset();
-    }
-    probe.preference = preference;
-}
-
 GpuVmafBackend gpu_vmaf_backend() {
     Probe& probe = probe_state();
     const std::lock_guard lock(probe.mutex);
     if (!probe.found) {
-        probe.found = probe_backends(probe.preference);
+        probe.found = probe_backends();
         probe.found_at = std::chrono::steady_clock::now();
         logger.info((probe.found->backend.empty() ? "VMAF on the GPU unavailable: " : "VMAF on the GPU: ") +
                     probe.found->text);

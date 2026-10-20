@@ -37,9 +37,6 @@ struct Settings {
     bool default_compute_ssimulacra2 = true;
     bool default_compute_butteraugli = true;
     bool default_compute_cvvdp = true;
-    // "gpu" (Vship) or "cpu" (libjxl's tools).
-    std::string default_ssimulacra2_backend = "gpu";
-    std::string default_butteraugli_backend = "gpu";
     // Whether VMAF v0.6.1, NEG and v1 run on the GPU.
     bool default_vmaf_on_gpu = true;
     std::string graph_metric = "vmaf";
@@ -49,9 +46,6 @@ struct Settings {
     // Calculate a video's GPU metrics in one Vship pass always; otherwise in
     // one when the GPU has the memory for it, and one at a time when not.
     bool gpu_metrics_together = false;
-    // Which Vship build calculates the GPU metrics: "auto", "vulkan", "cuda"
-    // or "hip".
-    std::string gpu_backend = "auto";
     // Use a saved result instead of calculating again.
     bool use_cache = true;
 

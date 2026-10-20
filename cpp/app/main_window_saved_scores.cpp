@@ -29,7 +29,8 @@ std::filesystem::path MainWindow::cache_folder() const {
 AnalysisRequest MainWindow::analysis_request_of(const RowData& row_data) const {
     // The row's request as runs save it and lookups ask for it: one place,
     // so that a lookup never asks with other settings than a run saves under.
-    return analysis_request(row_data.options, requested_metrics(row_data), row_data.metric_backends, row_data.cvvdp);
+    return analysis_request(row_data.options, requested_metrics(row_data), automatic_perceptual_backends,
+                            row_data.cvvdp);
 }
 
 void MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& paths) {

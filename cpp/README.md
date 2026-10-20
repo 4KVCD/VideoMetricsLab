@@ -76,22 +76,20 @@ not use it yet.
 --help`), and reads them as its argparse parser does. So far it compares on
 the CPU path, VMAF v0.6.1, NEG and v1 calculated by FFmpeg's libvmaf with
 PSNR, SSIM and XPSNR beside them (`--vmaf-on cpu` or `--cpu`); scores VMAF,
-NEG and v1 on the GPU, the app's default, with Vulkan or, where the GPU
-backend setting says CUDA or Vulkan cannot, with libvmaf's CUDA code on an
-NVIDIA GPU; scores PSNR, SSIM and XPSNR in the app, with its libvmaf's own
+NEG and v1 on the GPU, the app's default, with Vulkan or, where Vulkan
+cannot, with libvmaf's CUDA code on an NVIDIA GPU; scores PSNR, SSIM and XPSNR in the app, with its libvmaf's own
 extractors, as the Python app does; scores SSIMULACRA2, Butteraugli and
-CVVDP on the GPU with Vship, in a pass each or (Settings > GPU metrics) in
+CVVDP on the GPU with Vship-fast's Vulkan build, in a pass each or (Settings > GPU metrics) in
 one, CVVDP on the display preset Settings chooses or on each
 `--cvvdp-display`; and scores SSIMULACRA2 and Butteraugli on the CPU with
-libjxl's tools where they are set to run there (`--ssimulacra2-on cpu`,
-`--butteraugli-on cpu` or `--cpu`), or where the GPU cannot: without a GPU
+libjxl's tools with `--cpu`, or where the GPU cannot: without a GPU
 Vship can use, or after their GPU pass failed in a comparison up to ten
 minutes long. FFmpeg writes each frame pair as 16-bit PNG pictures, held a
 few pairs ahead of the tools, which score several pairs at once.
 With VMAF on the GPU, PSNR, SSIM and XPSNR are a task of their own on the
 CPU, and the two run at once, as the Python app runs a video's tasks; so
 are Vship's metrics, in the GPU's queue after VMAF, and SSIMULACRA2 and
-Butteraugli set to the CPU, in the CPU's queue. For VMAF and Vship's
+Butteraugli on the CPU, in the CPU's queue. For VMAF and Vship's
 metrics on the GPU, and PSNR, SSIM and XPSNR in the app, it decodes the
 videos itself, as the Python app does: with the GPU's own decoder (NVIDIA's,
 Intel's or AMD's, through the app's libraries in `resources/native`; for VMAF

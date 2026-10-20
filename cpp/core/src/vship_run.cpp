@@ -44,13 +44,16 @@ namespace {
 
 const app_log::Logger logger("vml.perceptual_vship");
 
-// Vship handlers working at once per metric. One handler leaves the GPU idle
-// between its own kernels, and two keep it busy: at 4K 10-bit on an RTX
-// 5090 (Vship's CUDA build), SSIMULACRA2 scores 277 pairs a second rather
-// than 217, and Butteraugli 95 rather than 82. On MoltenVK one: two
-// Butteraugli handlers above 720p lost the GPU (an M1 Pro: "Invalid
-// Resource", the run then on the CPU), and one is as fast there (1080p, 480
-// pairs: SSIMULACRA2 9.7 s with one and 9.8 with two, Butteraugli 38.8 s).
+// Vship handlers working at once per metric. Where the GPU sets the pace,
+// more keep it busy between one handler's kernels: Vship-fast's README
+// measures three at 1.2-1.6x the speed of one on an RTX 3070. Where decoding
+// does, they change nothing: on an RTX 5090, FFmpeg decoding 4K 10-bit, each
+// metric scored about 50 pairs a second with one, two or three, with the
+// same scores. On MoltenVK one: on an M1 Pro two gained at most 3%
+// (1080p, 480 pairs: SSIMULACRA2 53.2 against 54.5 pairs a second,
+// Butteraugli 21.7 against 22.0, CVVDP 39.1 against 39.2), for twice the
+// handlers' memory; Vship 5.1.2 lost the GPU there with two Butteraugli
+// handlers.
 #ifdef __APPLE__
 constexpr std::size_t lanes_per_metric = 1;
 #else
@@ -1129,7 +1132,7 @@ public:
           on_progress_(on_progress),
           on_status_(on_status),
           cancel_(cancel),
-          library_(vship_library(plan.device)),
+          library_(vship_library()),
           decode_(plan.decoding) {
         if (plan.keys.empty() || !std::all_of(plan.keys.begin(), plan.keys.end(), is_perceptual_metric)) {
             throw std::invalid_argument("A Vship pass scores SSIMULACRA2, Butteraugli and CVVDP only.");
@@ -1249,8 +1252,7 @@ private:
             video.hwaccel = source ? plan_.decoding.source : plan_.decoding.distorted;
             video.size = source ? source_size : distorted_size;
             video.passthrough = passthrough_format(video.info, video.hwaccel);
-            video.image = video.passthrough ? video.passthrough->first
-                                            : vship_image_format(video.info, plan_.device.version);
+            video.image = video.passthrough ? video.passthrough->first : vship_image_format(video.info);
             video.layout = video.image.frame_layout(video.size.first, video.size.second);
             VideoInfo described = video.info;
             described.chroma_location = source ? source_siting : distorted_siting;
@@ -1295,20 +1297,16 @@ private:
     // The decoder of the app's that decodes a video FFmpeg would decode with
     // `hwaccel`, in this process: the GPU's, or the software decoder for a
     // video FFmpeg would decode in software. Nothing when FFmpeg must decode
-    // it. NVIDIA's decoder copies each picture into the ring with the GPU, so
-    // the ring must be CUDA's page-locked memory (Vship's CUDA build).
+    // it, as for NVIDIA's: its decoder copies each picture into the ring with
+    // the GPU, so the ring would have to be CUDA's page-locked memory, and
+    // Vship's Vulkan build reads its own.
     std::optional<std::string> decoded_here(const std::optional<std::string>& hwaccel) const {
         if (!hwaccel) {
             return software_decoder_bundled() ? std::optional(std::string(software_decoder)) : std::nullopt;
         }
-        const std::optional<std::string> backend = *hwaccel == "cuda"      ? std::optional<std::string>("nvidia")
-                                                   : *hwaccel == "qsv"     ? std::optional<std::string>("intel")
-                                                   : *hwaccel == "d3d11va" ? std::optional<std::string>("amd")
-                                                                           : std::nullopt;
-        if (backend == "nvidia" && plan_.device.backend != "cuda") {
-            return std::nullopt;
-        }
-        return backend;
+        return *hwaccel == "qsv"       ? std::optional<std::string>("intel")
+               : *hwaccel == "d3d11va" ? std::optional<std::string>("amd")
+                                       : std::nullopt;
     }
 
     // The decoder of one video, when `backend`'s can give it in the layout
@@ -1790,7 +1788,7 @@ private:
             if (failure_of(failures, key) != nullptr) {
                 continue;
             }
-            MetricProvenance provenance{"Vship/" + key, "Vship " + device.version, "gpu", score_identity::vship_gpu(key),
+            MetricProvenance provenance{"Vship/" + key, "Vship-fast " + device.version, "gpu", score_identity::vship_gpu(key),
                                         parameters};
             found.add(FrameMetricResult{key, frame_numbers, times, scores_.at(key)->values(frames),
                                         std::move(provenance)});
@@ -1809,7 +1807,7 @@ private:
         result.key = "cvvdp";
         result.score = pool_cvvdp_windows(windows);
         result.provenance = {"Vship/cvvdp",
-                             "Vship " + device.version,
+                             "Vship-fast " + device.version,
                              "gpu",
                              std::string(score_identity::cvvdp),
                              {{"gpu_backend", nlohmann::json(device.backend).dump()},
@@ -2391,9 +2389,8 @@ std::vector<std::string> without(const std::vector<std::string>& keys, const std
 // terabytes of temporary pictures for a film.
 std::string not_retried(const std::string& reason, const std::string& labels) {
     return "GPU scoring failed (" + reason +
-           "). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. "
-           "Choose CPU for " +
-           labels + " to calculate it on the CPU anyway.";
+           "). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Run " +
+           labels + " again to try the GPU again.";
 }
 
 // Calculates a task's SSIMULACRA2, Butteraugli and CVVDP each where it is

@@ -38,13 +38,9 @@ using GpuModels = std::vector<std::pair<std::string, std::string>>;
 GpuModels gpu_models(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model,
                      bool compute_vmaf_v1 = false, const std::string& model_v1 = "");
 
-// The GPU backend setting ("auto", "vulkan" or "cuda"): which backend is
-// tried first. The GPU is checked again when it changes that.
-void set_gpu_backend(const std::string& preference);
-
-// What scores VMAF on this PC's GPU, as the Python app's probe finds it:
-// each backend in the order the GPU backend setting gives (Vulkan first,
-// unless it is "cuda"), the first that scores VMAF here.
+// What scores VMAF on this PC's GPU: the Vulkan engine, or else libvmaf's
+// CUDA code (an NVIDIA GPU whose Vulkan cannot), the first that scores VMAF
+// here.
 struct GpuVmafBackend {
     // "vulkan" for the Vulkan engine, "cuda" for libvmaf's CUDA code (on an
     // NVIDIA GPU), "" when the CPU scores VMAF.

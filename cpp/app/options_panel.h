@@ -50,14 +50,10 @@ public:
     // be calculated on the CPU.
     explicit OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* parent = nullptr);
 
-    // Shows `options` (the first selected video's) in the controls.
-    // `metric_backends` are its Vship metrics' GPU/CPU choices, and
+    // Shows `options` (the first selected video's) in the controls, and
     // `selected` every selected video's options, which decide what can be
     // edited. The window ignores its own handlers while this runs.
-    void show_options(const VmafOptions& options, const std::map<std::string, std::string>& metric_backends,
-                      const std::vector<VmafOptions>& selected);
-    // Shows the GPU/CPU choices: VMAF's, and each Vship metric's.
-    void show_backends(bool vmaf_on_gpu, const std::map<std::string, std::string>& metric_backends);
+    void show_options(const VmafOptions& options, const std::vector<VmafOptions>& selected);
     // The VMAF GPU/CPU choice as a run would take it: CPU when there is no
     // GPU, whatever the video is set to.
     void show_vmaf_backend(bool on_gpu);
@@ -77,9 +73,6 @@ public:
     // the window gives them, from the table's column headings.
     VmafOptions read_options(const std::vector<std::string>& extra_features, bool compute_vmaf, bool compute_vmaf_neg,
                              bool compute_vmaf_v1, bool compute_xpsnr) const;
-    // A Vship metric's GPU/CPU choice: "gpu" or "cpu". Throws
-    // std::invalid_argument for another metric.
-    std::string metric_backend(const std::string& metric_key) const;
 
     // The model file chosen for "Custom model file...", until it is applied
     // to the rows.
@@ -104,8 +97,6 @@ public:
     QCheckBox* gpu_checkbox = nullptr;
     QComboBox* gpu_vendor_combo = nullptr;
     QComboBox* vmaf_backend_combo = nullptr;
-    QComboBox* ssimulacra2_backend_combo = nullptr;
-    QComboBox* butteraugli_backend_combo = nullptr;
     QSpinBox* threads_spin = nullptr;
 
 signals:
@@ -114,8 +105,6 @@ signals:
     void field_edited(const QString& field);
     // The VMAF v0.6.1 model dropdown changed to this index (model_choices).
     void model_chosen(int index);
-    // A Vship metric's GPU/CPU choice changed ("ssimulacra2", "butteraugli").
-    void metric_backend_changed(const QString& metric_key);
     // The CVVDP preset dropdown changed to this index.
     void cvvdp_preset_chosen(int index);
     // "Scale the video to fill the display" was ticked (true) or unticked.
