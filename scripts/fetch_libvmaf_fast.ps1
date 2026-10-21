@@ -15,15 +15,16 @@
 # developed, build_libvmaf_fast_local.ps1 builds the fork's latest commit
 # into the same place instead.
 #
-# Release v1.1 is the tag libvmaf-fast-v1.1, its archive
-# libvmaf-fast-v1.1-windows-x64.zip (the fork's fast/README.md); v1 before it
-# (-Version v1 -Sha256 a57fda1ca60870c52cba31ef75722311b7a8fc1fd13070b01aeb9340c6cdfc0f).
+# Release v1.2 is the tag libvmaf-fast-v1.2, its archive
+# libvmaf-fast-v1.2-windows-x64.zip (the fork's fast/README.md); v1.1 before it
+# (-Version v1.1 -Sha256 e4a6cc5c0d5f5d1bddfa254cce96ba992a633d1f8424dc044eab785cd7a6cbe0),
+# and v1 (-Version v1 -Sha256 a57fda1ca60870c52cba31ef75722311b7a8fc1fd13070b01aeb9340c6cdfc0f).
 # The release before those was named after libvmaf: 3.2.0-fast.1, tag
 # v3.2.0-fast.1, its archive named the same way (-Version 3.2.0-fast.1 -Sha256 3ad8ab2b0fd26f0c
 # 89389d55e086f4cad1d0e059d63845ecf88e5aaed6c38f9c).
 param(
-    [string]$Version = 'v1.1',
-    [string]$Sha256 = 'e4a6cc5c0d5f5d1bddfa254cce96ba992a633d1f8424dc044eab785cd7a6cbe0',
+    [string]$Version = 'v1.2',
+    [string]$Sha256 = '83cb02fb4272af580d510981582999aa24aae8733d8a0dae66b493b9dcaa763a',
     [string]$Archive = ''  # a copy of the release archive on disk, instead of downloading it
 )
 $ErrorActionPreference = 'Stop'
