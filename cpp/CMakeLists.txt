@@ -3,7 +3,7 @@
 # describes the layout, how to build, and the rules the code follows.
 cmake_minimum_required(VERSION 3.25)
 # C only for miniz (third_party/miniz): the app itself is C++.
-project(VideoMetricsLab VERSION 2.2 LANGUAGES C CXX)
+project(VideoMetricsLab VERSION 2.2.1 LANGUAGES C CXX)
 
 # On Windows the app is built with MSVC, as the package and GitHub's CI build
 # it, with Qt's MSVC build. Configured with another generator than Visual

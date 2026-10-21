@@ -2,7 +2,7 @@
 
 Calculate VMAF, VMAF NEG, VMAF v1, SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD, Intel and Apple GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly to easily spot differences.
 
-New in v2.2: VideoMetricsLab now runs on macOS (Apple silicon), and SSIMULACRA2, Butteraugli and ColorVideo VDP use [Vship-fast](https://github.com/4KVCD/Vship-fast): Butteraugli **1.75x-2.5x**, ColorVideo VDP **1.6x-2.4x** and SSIMULACRA2 up to **1.6x** faster. See the [changelog](CHANGELOG.md).
+New in v2.2.1: VideoMetricsLab now runs on macOS (Apple silicon), and SSIMULACRA2, Butteraugli and ColorVideo VDP use [Vship-fast](https://github.com/4KVCD/Vship-fast): Butteraugli **1.75x-2.5x**, ColorVideo VDP **1.6x-2.4x** and SSIMULACRA2 up to **1.6x** faster, and as accurate as libjxl and pycvvdp. See the [changelog](CHANGELOG.md).
 
 ## Features
 

@@ -1,8 +1,8 @@
 # Changelog
 
-## v2.2
+## v2.2.1
 
-v2.2 adds a macOS version for Apple silicon, and with Vship-fast makes
+v2.2.1 adds a macOS version for Apple silicon, and with Vship-fast makes
 SSIMULACRA2, Butteraugli and CVVDP on the GPU faster and as accurate as
 libjxl and pycvvdp.
 
@@ -31,8 +31,6 @@ libjxl and pycvvdp.
 
 ### Other changes
 
-- SSIMULACRA2, Butteraugli and CVVDP scores saved on the GPU by earlier
-  versions are calculated again.
 - SSIMULACRA2, Butteraugli and CVVDP are now calculated one at a time, which
   needs less GPU memory; Settings > GPU metrics can still put them in one
   pass, which is faster only on very powerful GPUs.
