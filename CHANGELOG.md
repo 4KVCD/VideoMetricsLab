@@ -31,6 +31,10 @@ libjxl and pycvvdp.
 
 ### Other changes
 
+- SSIMULACRA2, Butteraugli and CVVDP now try Vship 5.1.2 when Vship-fast
+  fails on the GPU, before SSIMULACRA2 and Butteraugli fall back to the CPU.
+- SSIMULACRA2 and Butteraugli now fall back to the CPU after a GPU failure
+  for videos of any length, not only up to 10 minutes.
 - SSIMULACRA2, Butteraugli and CVVDP are now calculated one at a time, which
   needs less GPU memory; Settings > GPU metrics can still put them in one
   pass, which is faster only on very powerful GPUs.
@@ -63,6 +67,10 @@ libjxl and pycvvdp.
 - Fixed SSIMULACRA2, Butteraugli and CVVDP scoring a test video of another
   shape than the reference (such as a 1440x1080 encode of a 4K source)
   stretched, instead of refusing it as VMAF does.
+- Fixed VMAF on the GPU sometimes crashing on NVIDIA GPUs and being
+  calculated again on the CPU.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP scores saved on the GPU by earlier
+  versions being calculated again.
 - Fixed SSIMULACRA2, Butteraugli and CVVDP on the GPU reading the two videos'
   colours half a pixel apart when only one gave its chroma siting, such as a
   .y4m reference made from an .mkv.
