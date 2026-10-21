@@ -99,13 +99,13 @@ port](docs/CPP_PORT.md) has the details and measurements.
 
 ### System performance
 
-- The download is **39 MB** instead of 87 MB.
-- Runs are **1.25x** faster with 28% less CPU (three 4K test videos, every
-  metric).
-- The app opens **3x** faster and idles in 26 MB of memory instead of 87 MB.
-- Moving the pointer over a graph uses **6x** less CPU.
 - Video Compare now frees its memory 30 s after you leave it: 0.1 GB instead
   of 7.6 GB with four 4K videos.
+- Moving the pointer over a graph uses **6x** less CPU.
+- The app opens **3x** faster and idles in 26 MB of memory instead of 87 MB.
+- Runs are **1.25x** faster with 28% less CPU (three 4K test videos, every
+  metric).
+- The download is **39 MB** instead of 87 MB.
 
 ### New features
 
