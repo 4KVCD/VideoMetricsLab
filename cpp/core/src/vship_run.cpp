@@ -615,6 +615,7 @@ public:
                       int gpu_id)
         : FrameRing(library, frame_bytes, gpu_id),
           decoder_(std::move(decoder)),
+          frame_bytes_(frame_bytes),
           step_(step),
           limit_(limit),
           by_time_(by_time),
@@ -624,6 +625,18 @@ public:
 
     void start() override {
         decoder_->start();
+        // NVIDIA's decoder copies each picture with the GPU: straight into
+        // Vship's memory once CUDA has page-locked it too; else CUDA stages
+        // the copy itself.
+        if (decoder_->backend() == "nvidia") {
+            for (const std::unique_ptr<PinnedBuffer>& buffer : buffers_) {
+                if (decoder_->pin(buffer->data(), frame_bytes_)) {
+                    pinned_.push_back(buffer->data());
+                }
+            }
+            logger.info("Vship: " + std::to_string(pinned_.size()) + " of " + std::to_string(buffers_.size()) +
+                        " frame buffers page-locked for NVIDIA's decoder");
+        }
         thread_ = std::thread([this] { run(); });
     }
 
@@ -634,6 +647,10 @@ public:
         if (thread_.joinable()) {
             thread_.join();
         }
+        for (void* host : pinned_) {
+            decoder_->unpin(host);
+        }
+        pinned_.clear();
         decoder_->close();
     }
 
@@ -704,6 +721,8 @@ private:
     }
 
     std::unique_ptr<GpuFrameStream> decoder_;
+    std::size_t frame_bytes_;
+    std::vector<void*> pinned_;  // the buffers CUDA page-locked, unpinned before the decoder closes
     int step_;
     std::optional<long long> limit_;
     bool by_time_;
@@ -1296,15 +1315,13 @@ private:
 
     // The decoder of the app's that decodes a video FFmpeg would decode with
     // `hwaccel`, in this process: the GPU's, or the software decoder for a
-    // video FFmpeg would decode in software. Nothing when FFmpeg must decode
-    // it, as for NVIDIA's: its decoder copies each picture into the ring with
-    // the GPU, so the ring would have to be CUDA's page-locked memory, and
-    // Vship's Vulkan build reads its own.
+    // video FFmpeg would decode in software.
     std::optional<std::string> decoded_here(const std::optional<std::string>& hwaccel) const {
         if (!hwaccel) {
             return software_decoder_bundled() ? std::optional(std::string(software_decoder)) : std::nullopt;
         }
-        return *hwaccel == "qsv"       ? std::optional<std::string>("intel")
+        return *hwaccel == "cuda"      ? std::optional<std::string>("nvidia")
+               : *hwaccel == "qsv"     ? std::optional<std::string>("intel")
                : *hwaccel == "d3d11va" ? std::optional<std::string>("amd")
                                        : std::nullopt;
     }
@@ -1329,14 +1346,27 @@ private:
                     throw GpuDecodeUnavailableError("its frames would be " + std::to_string(decode.frame_bytes()) +
                                                     " bytes, not " + std::to_string(video.layout.frame_bytes));
                 }
+                // NVIDIA's decoder takes a video only at its own size: one
+                // scaled stays FFmpeg's, whose scale filter the decoders'
+                // scaling matches only to within 1 (gpu_frames.h), so that
+                // its scores stay FFmpeg's sample for sample.
+                if (backend == "nvidia" && decode.scaled()) {
+                    const auto [width, height] = decode.output_size();
+                    throw GpuDecodeUnavailableError("it is scaled to " + std::to_string(width) + "x" +
+                                                    std::to_string(height) + ", which FFmpeg's scale filter does");
+                }
+                // NVIDIA's decoder on CUDA's first GPU, where FFmpeg's
+                // -hwaccel cuda decodes too: Vship's number is Vulkan's, a
+                // list in another order.
+                const int device = backend == "nvidia" ? 0 : plan_.device.gpu_id;
                 // Asked first, because a stream the decoder refuses once the
                 // pass has started (10-bit H.264, say) means making the
                 // whole pass again.
-                const auto [supported, refusal] = decoder_supports(plan_.device.gpu_id, decode, backend);
+                const auto [supported, refusal] = decoder_supports(device, decode, backend);
                 if (!supported) {
                     throw GpuDecodeUnavailableError(refusal);
                 }
-                auto decoder = std::make_unique<GpuFrameStream>(video.info, decode, plan_.device.gpu_id, 4, backend,
+                auto decoder = std::make_unique<GpuFrameStream>(video.info, decode, device, 4, backend,
                                                                 request_.environment.ffmpeg,
                                                                 request_.environment.ffprobe);
                 logger.info("Vship: the " + video.label + " is decoded by the " + backend +
