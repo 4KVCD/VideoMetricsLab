@@ -66,15 +66,17 @@ std::vector<std::vector<std::string>> vship_passes(const std::vector<std::string
 // The steps run_perceptual_task takes a task's metrics through, each a
 // function, so that the tests can stand in for them (the Python app's tests
 // replace the same functions): finding the GPU Vship uses, finding the
-// black bars, Vship's passes on that GPU, and the CPU's tools with the
+// black bars, Vship-fast's passes on that GPU, the same passes on stock
+// Vship 5.1.2 (none where it is not bundled), and the CPU's tools with the
 // black bars already found, if they were.
 struct PerceptualRoutes {
+    using GpuRoute = std::function<PerceptualTaskOutput(const PerceptualRequest&, const std::vector<std::string>& keys,
+                                                        const VshipDevice&, const CropPair&, bool together,
+                                                        const PerceptualHooks&, const CancelToken&)>;
     std::function<std::pair<std::optional<VshipDevice>, std::string>()> find_gpu;
     std::function<CropPair(const PerceptualRequest&, const StatusCallback&, const CancelToken&)> find_crops;
-    std::function<PerceptualTaskOutput(const PerceptualRequest&, const std::vector<std::string>& keys,
-                                       const VshipDevice&, const CropPair&, bool together, const PerceptualHooks&,
-                                       const CancelToken&)>
-        run_gpu;
+    GpuRoute run_gpu;
+    GpuRoute run_vship51;
     std::function<PerceptualTaskOutput(const PerceptualRequest&, const std::vector<std::string>& keys,
                                        const std::optional<CropPair>&, const ProgressCallback&,
                                        const StatusCallback&, const CancelToken&)>
@@ -82,17 +84,21 @@ struct PerceptualRoutes {
 };
 
 // The app's routes: the Vship probe (after forgetting one that failed a
-// while ago, forget_failed_vship_probe), resolve_crops, Vship's passes, and
+// while ago, forget_failed_vship_probe), resolve_crops, Vship's passes on
+// Vship-fast and, where it is bundled, on stock Vship 5.1.2, and
 // run_cpu_perceptual_task.
 PerceptualRoutes app_perceptual_routes();
 
 // Calculates `keys` (SSIMULACRA2, Butteraugli, CVVDP) where each is set to
 // run (the Python app's apply_vship_cpu_fallback): on the GPU through
-// Vship, each in a pass of its own, or with `together` in one pass; or on
-// the CPU. A metric moves from the GPU to the CPU where the GPU cannot
-// calculate it: without a GPU Vship can use, and after it failed on the
-// GPU, unless the comparison is longer than long_cpu_run_seconds, which
-// nobody agreed to on the CPU.
+// Vship-fast, each in a pass of its own, or with `together` in one pass; or
+// on the CPU. What Vship-fast fails on the GPU is calculated again with
+// stock Vship 5.1.2 where it is bundled, but a metric refused for the size
+// compared at (size_refusal); on a GPU only 5.1.2 found
+// (VshipDevice::vship51) every metric runs on 5.1.2. A metric moves from
+// the GPU to the CPU where the GPU cannot calculate it, whatever the
+// video's length: without a GPU Vship can use, and after it failed on the
+// GPU with both builds.
 // CVVDP runs on the GPU only, and fails with its own reason. A metric that
 // fails while others finish is in the output's failures. `hooks.on_cpu`
 // gets the metrics the CPU is about to calculate, just before it starts;

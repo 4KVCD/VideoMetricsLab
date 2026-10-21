@@ -192,7 +192,7 @@ void check_isolation(SelfTestReport& report) {
 void check_gpu_metrics(SelfTestReport& report) {
     const auto [vship_device, vship_reason] = detect_vship_device();
     if (vship_device) {
-        report.ok("Vship-fast " + vship_device->version + " GPU metrics (Vulkan: " + vship_device->name + ")");
+        report.ok(vship_build_name(*vship_device) + " GPU metrics (Vulkan: " + vship_device->name + ")");
     } else {
         report.warn("Vship GPU metrics unavailable; CPU fallback is enabled (" + vship_reason + ")");
     }

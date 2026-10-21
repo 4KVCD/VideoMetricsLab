@@ -25,7 +25,7 @@ std::vector<std::string> device_lines(const DeviceFindings& found) {
         }
     }
     if (found.vship) {
-        const std::string vship = "GPU: " + found.vship->name + " (Vship-fast " + found.vship->version + ", Vulkan)";
+        const std::string vship = "GPU: " + found.vship->name + " (" + vship_build_name(*found.vship) + ", Vulkan)";
         lines.push_back("CVVDP: " + vship);
         for (const std::string key : {"ssimulacra2", "butteraugli"}) {
             lines.push_back(std::string(metric_definition(key).label) + ": " + vship);

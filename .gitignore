@@ -17,4 +17,5 @@ resources/tools/libjxl/butteraugli_main
 resources/tools/ffmpeg/*.dylib
 resources/tools/vulkan/
 resources/tools/vship/vulkan/libvship.dylib
+resources/tools/vship/vship51/libvship.dylib
 resources/tools/vmaf_vulkan/vmaf_vulkan.dylib

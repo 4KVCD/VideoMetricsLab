@@ -202,8 +202,13 @@ struct VshipLibrary {
     std::string handler_error(void* handler, int code) const;
 };
 
-// Where Vship's Vulkan build is.
-std::filesystem::path vship_library_path();
+// Where Vship's Vulkan build is: Vship-fast's, or with `vship51` stock Vship
+// 5.1.2's, which the GPU metrics fall back to when Vship-fast fails
+// (MetricRouting in vship_run.cpp). A package may bundle only Vship-fast.
+std::filesystem::path vship_library_path(bool vship51 = false);
+
+// Whether stock Vship 5.1.2 is bundled.
+bool vship51_bundled();
 
 // The Vulkan the app bundles on macOS (tools/vulkan): Khronos' loader, with
 // MoltenVK as its driver, which Vship's and the Vulkan VMAF's builds there are
@@ -219,11 +224,19 @@ struct VshipDevice {
     // Who made the GPU, as the Vulkan loader says (GpuVendor::none for
     // another maker). Nothing when it could not be told.
     std::optional<GpuVendor> vendor;
+    // Found by stock Vship 5.1.2's probe, where Vship-fast could use no GPU:
+    // the metrics run on 5.1.2.
+    bool vship51 = false;
 };
 
-// Vship's library, loaded once in this process. Throws
-// VshipUnavailableError.
-const VshipLibrary& vship_library();
+// The build `device` was found by, as the app shows it: "Vship-fast 5.1.2"
+// or "Vship 5.1.2".
+std::string vship_build_name(const VshipDevice& device);
+
+// Vship's library, Vship-fast's or with `vship51` stock Vship 5.1.2's,
+// loaded once in this process: a process loads only one of the two (the
+// fallback runs in a process of its own). Throws VshipUnavailableError.
+const VshipLibrary& vship_library(bool vship51 = false);
 
 // Why `device` does not calculate `key` on frames of `size`, or nothing if
 // it does: Vship 5.1.2's Vulkan CVVDP hung Intel's GPU above 1920x1080, and
@@ -233,9 +246,10 @@ const VshipLibrary& vship_library();
 std::optional<std::string> size_refusal(const VshipDevice& device, const std::string& key, std::pair<int, int> size,
                                         std::optional<std::pair<int, int>> computed = std::nullopt);
 
-// Loads Vship's build in this process and returns the GPU it would use, a
-// discrete one first, or the reasons none was found.
-std::pair<std::optional<VshipDevice>, std::string> probe_vship_device();
+// Loads Vship's build in this process, Vship-fast's or with `vship51` stock
+// Vship 5.1.2's, and returns the GPU it would use, a discrete one first, or
+// the reasons none was found.
+std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(bool vship51 = false);
 
 // The probe's answer as the isolated "vship-probe" task sends it.
 nlohmann::json vship_probe_result(const std::pair<std::optional<VshipDevice>, std::string>& probed);
@@ -247,7 +261,8 @@ std::optional<VshipDevice> vship_device_from(const nlohmann::json& text);
 // The GPU for Vship, checked once in a process of its own where a program to
 // run it is set (loading Vship starts the GPU driver, and a crash there
 // would end the run), and kept; or a reason the user can read for why there
-// is none.
+// is none. Where Vship-fast can use none (it compiles every shader as it
+// starts on a GPU), stock Vship 5.1.2 is tried in a process of its own too.
 std::pair<std::optional<VshipDevice>, std::string> detect_vship_device();
 
 // What the last probe to finish found, at once: never waiting for a probe in

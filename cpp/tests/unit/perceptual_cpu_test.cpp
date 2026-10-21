@@ -281,6 +281,7 @@ PerceptualTaskOutput scored(const std::string& key, float value, const std::stri
 struct Routed {
     bool probed = false;
     std::vector<std::string> gpu;
+    std::vector<std::string> vship51;  // what stock Vship 5.1.2 was asked for
     std::vector<std::string> cpu;
     std::optional<CropPair> cpu_crops;
     std::vector<std::string> events;  // progress reports and the CPU's announcements
@@ -288,11 +289,13 @@ struct Routed {
 };
 
 // Routes whose GPU is `device` (none: "no supported GPU"), and whose GPU and
-// CPU work is `on_gpu` and `on_cpu`.
+// CPU work is `on_gpu` and `on_cpu`, and stock Vship 5.1.2's `on_vship51`
+// (none: not bundled).
 PerceptualRoutes stand_in_routes(
     Routed& routed, std::optional<VshipDevice> device,
     std::function<PerceptualTaskOutput(const std::vector<std::string>&, const PerceptualHooks&)> on_gpu,
-    std::function<PerceptualTaskOutput(const std::vector<std::string>&, const ProgressCallback&)> on_cpu) {
+    std::function<PerceptualTaskOutput(const std::vector<std::string>&, const ProgressCallback&)> on_cpu,
+    std::function<PerceptualTaskOutput(const std::vector<std::string>&)> on_vship51 = {}) {
     PerceptualRoutes routes;
     routes.find_gpu = [&routed, device] {
         routed.probed = true;
@@ -305,6 +308,14 @@ PerceptualRoutes stand_in_routes(
         routed.gpu = keys;
         return on_gpu(keys, hooks);
     };
+    if (on_vship51) {
+        routes.run_vship51 = [&routed, on_vship51](const PerceptualRequest&, const std::vector<std::string>& keys,
+                                                   const VshipDevice&, const CropPair&, bool, const PerceptualHooks&,
+                                                   const CancelToken&) {
+            routed.vship51 = keys;
+            return on_vship51(keys);
+        };
+    }
     routes.run_cpu = [&routed, on_cpu](const PerceptualRequest&, const std::vector<std::string>& keys,
                                        const std::optional<CropPair>& crops, const ProgressCallback& on_progress,
                                        const StatusCallback&, const CancelToken&) {
@@ -412,77 +423,92 @@ TEST(PerceptualRouting, EachMetricRunsWhereItIsSet) {
     EXPECT_FALSE(cpu_only.cpu_crops.has_value());  // the CPU task finds the black bars itself
 }
 
-// A metric that failed on the GPU while CVVDP finished is calculated on the
-// CPU for a video up to ten minutes long; for a longer one, nobody agreed
-// to the CPU's days, so it fails with the advice.
-TEST(PerceptualRouting, AMetricThatFailedOnTheGpuMovesToTheCpuOnlyForShortVideos) {
-    for (const double seconds : {60.0, 7200.0}) {
-        SCOPED_TRACE(seconds);
+// A metric that failed on Vship-fast while CVVDP finished is calculated
+// again with stock Vship 5.1.2 where it is bundled, and on the CPU where it
+// is not or fails too, however long the video (two hours here).
+TEST(PerceptualRouting, AMetricThatFailedOnTheGpuMovesToVship51ThenToTheCpuAtAnyLength) {
+    const auto failed_ssimulacra2 = [](const auto&, const auto&) {
+        PerceptualTaskOutput output = scored("cvvdp", 9.4f, "gpu");
+        output.failures = {{"ssimulacra2", "Vship SSIMULACRA2 failed: out of memory"}};
+        return output;
+    };
+    const auto on_cpu = [](const auto&, const auto&) { return scored("ssimulacra2", 80.0f, "cpu"); };
+    const std::string on_vship51 = "SSIMULACRA2 failed on the GPU; calculating it with Vship 5.1.2\xE2\x80\xA6";
+    const std::string to_cpu = "SSIMULACRA2 failed on the GPU; calculating it on the CPU\xE2\x80\xA6";
+    for (const std::string vship51 : {"not bundled", "scores", "fails"}) {
+        SCOPED_TRACE(vship51);
         Routed routed;
-        const PerceptualRoutes routes = stand_in_routes(
-            routed, test_gpu,
-            [](const auto&, const auto&) {
-                PerceptualTaskOutput output = scored("cvvdp", 9.4f, "gpu");
-                output.failures = {{"ssimulacra2", "Vship SSIMULACRA2 failed: out of memory"}};
-                return output;
-            },
-            [](const auto&, const auto&) { return scored("ssimulacra2", 80.0f, "cpu"); });
+        std::function<PerceptualTaskOutput(const std::vector<std::string>&)> stock;
+        if (vship51 == "scores") {
+            stock = [](const auto&) { return scored("ssimulacra2", 81.0f, "gpu"); };
+        } else if (vship51 == "fails") {
+            stock = [](const auto&) -> PerceptualTaskOutput { throw VshipUnavailableError("device lost"); };
+        }
+        const PerceptualRoutes routes = stand_in_routes(routed, test_gpu, failed_ssimulacra2, on_cpu, stock);
         const PerceptualTaskOutput output = run_perceptual_task(
-            routed_request(seconds), {"ssimulacra2", "cvvdp"}, false, recording_hooks(routed), CancelToken(), routes);
+            routed_request(7200.0), {"ssimulacra2", "cvvdp"}, false, recording_hooks(routed), CancelToken(), routes);
         EXPECT_TRUE(output.metrics.has("cvvdp"));
-        if (seconds < long_cpu_run_seconds) {
-            EXPECT_EQ(routed.cpu, (std::vector<std::string>{"ssimulacra2"}));
-            EXPECT_TRUE(output.failures.empty());
-            EXPECT_EQ(output.metrics.frame("ssimulacra2")->provenance.compute_backend, "cpu");
-            EXPECT_EQ(routed.statuses.back(), "SSIMULACRA2 failed on the GPU; calculating it on the CPU\xE2\x80\xA6");
-        } else {
+        EXPECT_TRUE(output.failures.empty());
+        const std::string backend = output.metrics.frame("ssimulacra2")->provenance.compute_backend;
+        if (vship51 == "scores") {
+            EXPECT_EQ(routed.vship51, (std::vector<std::string>{"ssimulacra2"}));
             EXPECT_TRUE(routed.cpu.empty());
-            EXPECT_FALSE(output.metrics.has("ssimulacra2"));
-            ASSERT_NE(failure_of(output.failures, "ssimulacra2"), nullptr);
-            EXPECT_EQ(*failure_of(output.failures, "ssimulacra2"),
-                      "GPU scoring failed (Vship SSIMULACRA2 failed: out of memory). It was not retried on the CPU, "
-                      "which would take hours to days for a video over 10 minutes. Run SSIMULACRA2 again to try the "
-                      "GPU again.");
+            EXPECT_EQ(backend, "gpu");
+            EXPECT_EQ(routed.statuses, (std::vector<std::string>{on_vship51}));
+        } else {
+            EXPECT_EQ(routed.cpu, (std::vector<std::string>{"ssimulacra2"}));
+            EXPECT_EQ(backend, "cpu");
+            EXPECT_EQ(routed.statuses.back(), to_cpu);
         }
     }
 }
 
-// When the GPU task fails, the CPU calculates what it can, for a video up to
-// ten minutes long; CVVDP fails with the GPU's reason, which does not blame
-// the GPU. For a longer video the task fails, with CVVDP's reason too.
-TEST(PerceptualRouting, AFailedGpuTaskMovesToTheCpuOnlyForShortVideos) {
-    for (const double seconds : {60.0, 7200.0}) {
-        SCOPED_TRACE(seconds);
+// When Vship-fast's task fails, stock Vship 5.1.2 calculates its metrics
+// again where it is bundled; where it is not, fails too, or is what failed
+// (on a GPU only 5.1.2 found), the CPU calculates what it can, however long
+// the video, and CVVDP fails with the GPU's reason, which does not blame the
+// GPU.
+TEST(PerceptualRouting, AFailedGpuTaskMovesToVship51ThenToTheCpuAtAnyLength) {
+    const auto frame_rates = [](const auto&, const auto&) -> PerceptualTaskOutput {
+        throw PerceptualRunError("the frame rates differ");
+    };
+    const auto on_cpu = [](const auto&, const auto&) { return scored("ssimulacra2", 80.0f, "cpu"); };
+    for (const std::string vship51 : {"not bundled", "scores", "fails", "found the GPU"}) {
+        SCOPED_TRACE(vship51);
         Routed routed;
-        const PerceptualRoutes routes = stand_in_routes(
-            routed, test_gpu,
-            [](const auto&, const auto&) -> PerceptualTaskOutput {
-                throw PerceptualRunError("the frame rates differ");
-            },
-            [](const auto&, const auto&) { return scored("ssimulacra2", 80.0f, "cpu"); });
-        const PerceptualRequest request = routed_request(seconds);
-        if (seconds < long_cpu_run_seconds) {
-            const PerceptualTaskOutput output = run_perceptual_task(request, {"ssimulacra2", "cvvdp"}, false,
-                                                                    recording_hooks(routed), CancelToken(), routes);
-            EXPECT_EQ(routed.cpu, (std::vector<std::string>{"ssimulacra2"}));
-            EXPECT_TRUE(output.metrics.has("ssimulacra2"));
-            ASSERT_NE(failure_of(output.failures, "cvvdp"), nullptr);
-            EXPECT_EQ(*failure_of(output.failures, "cvvdp"), "CVVDP could not be calculated: the frame rates differ");
-            EXPECT_EQ(routed.statuses.back(),
-                      "Vship GPU compute failed (the frame rates differ); using CPU reference metrics\xE2\x80\xA6");
+        std::function<PerceptualTaskOutput(const std::vector<std::string>&)> stock;
+        if (vship51 == "scores" || vship51 == "found the GPU") {
+            stock = [](const auto&) {
+                PerceptualTaskOutput output = scored("ssimulacra2", 81.0f, "gpu");
+                output.metrics.add_all(scored("cvvdp", 9.4f, "gpu").metrics);
+                return output;
+            };
+        } else if (vship51 == "fails") {
+            stock = [](const auto&) -> PerceptualTaskOutput { throw PerceptualRunError("the frame rates differ"); };
+        }
+        VshipDevice gpu = test_gpu;
+        gpu.vship51 = vship51 == "found the GPU";
+        const PerceptualRoutes routes = stand_in_routes(routed, gpu, frame_rates, on_cpu, stock);
+        const PerceptualTaskOutput output = run_perceptual_task(routed_request(7200.0), {"ssimulacra2", "cvvdp"}, false,
+                                                                recording_hooks(routed), CancelToken(), routes);
+        EXPECT_EQ(routed.vship51.empty(), vship51 == "not bundled" || vship51 == "found the GPU");
+        if (!routed.vship51.empty()) {
+            EXPECT_EQ(routed.vship51, (std::vector<std::string>{"ssimulacra2", "cvvdp"}));
+            EXPECT_EQ(routed.statuses.front(), "Vship-fast failed (the frame rates differ); calculating SSIMULACRA2 "
+                                               "and CVVDP with Vship 5.1.2\xE2\x80\xA6");
+        }
+        if (vship51 == "scores") {
+            EXPECT_TRUE(routed.cpu.empty());
+            EXPECT_TRUE(output.failures.empty());
+            EXPECT_TRUE(output.metrics.has("cvvdp"));
             continue;
         }
-        try {
-            run_perceptual_task(request, {"ssimulacra2", "cvvdp"}, false, recording_hooks(routed), CancelToken(),
-                                routes);
-            ADD_FAILURE() << "no error";
-        } catch (const PerceptualRunError& error) {
-            EXPECT_EQ(std::string(error.what()),
-                      "GPU scoring failed (the frame rates differ). It was not retried on the CPU, which would take "
-                      "hours to days for a video over 10 minutes. Run SSIMULACRA2 again to try the GPU again.\n"
-                      "CVVDP could not be calculated: the frame rates differ");
-        }
-        EXPECT_TRUE(routed.cpu.empty());
+        EXPECT_EQ(routed.cpu, (std::vector<std::string>{"ssimulacra2"}));
+        EXPECT_TRUE(output.metrics.has("ssimulacra2"));
+        ASSERT_NE(failure_of(output.failures, "cvvdp"), nullptr);
+        EXPECT_EQ(*failure_of(output.failures, "cvvdp"), "CVVDP could not be calculated: the frame rates differ");
+        EXPECT_EQ(routed.statuses.back(),
+                  "Vship GPU compute failed (the frame rates differ); using CPU reference metrics\xE2\x80\xA6");
     }
 }
 

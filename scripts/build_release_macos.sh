@@ -143,7 +143,7 @@ EOF
 # (not Windows' .exe and .dll files, which share the folders).
 resources="$contents/Resources/resources"
 mkdir -p "$resources/translations" "$resources/tools/libjxl" "$resources/tools/libvmaf" "$resources/tools/ffmpeg" \
-    "$resources/tools/vship/vulkan" "$resources/tools/vmaf_vulkan"
+    "$resources/tools/vship/vulkan" "$resources/tools/vship/vship51" "$resources/tools/vmaf_vulkan"
 ditto "$app_files/models" "$resources/models"
 cp "$app_files"/translations/*.json "$resources/translations/"
 cp "$app_files/tools/libjxl/ssimulacra2" "$app_files/tools/libjxl/butteraugli_main" \
@@ -155,6 +155,7 @@ ditto "$app_files/tools/ffmpeg/licenses" "$resources/tools/ffmpeg/licenses"
 # The GPU metrics: Vulkan (Khronos' loader with MoltenVK), Vship and VMAF's engine.
 ditto "$app_files/tools/vulkan" "$resources/tools/vulkan"
 cp "$app_files/tools/vship/vulkan/libvship.dylib" "$resources/tools/vship/vulkan/"
+cp "$app_files/tools/vship/vship51/libvship.dylib" "$resources/tools/vship/vship51/"  # stock 5.1.2, the fallback
 ditto "$app_files/tools/vship/licenses" "$resources/tools/vship/licenses"
 cp "$app_files/tools/vmaf_vulkan/vmaf_vulkan.dylib" "$resources/tools/vmaf_vulkan/"
 ditto "$app_files/tools/vmaf_vulkan/licenses" "$resources/tools/vmaf_vulkan/licenses"

@@ -8,6 +8,9 @@
 #   vulkan/MoltenVK_icd.json     the loader's manifest for it
 #   vulkan/licenses/             their licences (Apache 2.0)
 #   vship/vulkan/libvship.dylib  Vship-fast, linked to the loader
+#   vship/vship51/libvship.dylib stock Vship 5.1.2, patched for MoltenVK: the
+#                                app's second try when Vship-fast fails on
+#                                the GPU, before the CPU
 #
 # The app points the loader at MoltenVK (VK_DRIVER_FILES) before Vship loads
 # it (cpp/core/src/vship.cpp). macOS has no Vulkan of its own, and MoltenVK
@@ -20,6 +23,17 @@
 # MoltenVK turns SPIR-V into Metal with, mistranslates, and it rewrites them
 # for Metal as they load; Vship-fast's README, "Apple GPUs (MoltenVK)").
 #
+# Stock Vship 5.1.2 does not run on MoltenVK as it is: SPIRV-Cross mistranslates
+# a byte pointer plus an offset taken as another type's pointer in two of its
+# shaders, so no pipeline could be made ("reinterpret_cast from 'uchar' to
+# 'ulong' is not allowed"). scripts/patches/vship-moltenvk-addresses.patch
+# does that arithmetic on the address as an integer instead (the same memory),
+# and those two are compiled again with Slang's release compiler: the build
+# macOS shipped before Vship-fast (v2.2's 327e118). Its notice is v5.1.2's own
+# LICENSE (resources/tools/vship/licenses/LICENSE.vship-5.1.2.txt): Vship's
+# MIT NON-AI licence as it was then, without the later clauses 1a and 1b
+# (VshipAPI.h, VshipColor.h and compiled binaries exempt from clause 1).
+#
 # Not committed (.gitignore): the release script runs this.
 #
 #     scripts/build_vship_macos.sh
@@ -28,6 +42,9 @@
 set -euo pipefail
 
 vship_commit="2a937ebaa1ae18718596a047c1e4947caf858c8e"              # Vship-fast perf-metrics, 2026-10-21 (as Windows')
+vship51_commit="5a627933274196219f782b3b74e13fad47cd6370"            # stock Vship v5.1.2, 2026-10-06 (as Windows' vship51)
+slang_version="2026.18.3"
+slang_sha256="6c8bf066a4254e8d053f864a52ea18388702d409ed9f20b3d6da66e8d772c906"
 vulkan_headers_commit="3c65a01745e4a1134d32b9c2c456472212dba16d"     # 2026-09-25 (as Windows')
 vulkan_loader_commit="fa218055ff4948b159f31d43f800c808a13d51df"      # vulkan-sdk-1.4.363.0
 moltenvk_version="v1.4.2"
@@ -37,6 +54,7 @@ deployment_target="14.4"
 project="$(cd "$(dirname "$0")/.." && pwd)"
 vulkan_out="$project/resources/tools/vulkan"
 vship_out="$project/resources/tools/vship/vulkan"
+vship51_out="$project/resources/tools/vship/vship51"
 work="$(mktemp -d "${TMPDIR:-/tmp}/vship-macos-XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
@@ -55,11 +73,15 @@ fetch() {  # url sha256 file
 }
 
 checkout https://github.com/4KVCD/Vship-fast.git "$vship_commit" "$work/Vship"
+checkout https://codeberg.org/Line-fr/Vship.git "$vship51_commit" "$work/Vship51"
 checkout https://github.com/KhronosGroup/Vulkan-Headers.git "$vulkan_headers_commit" "$work/Vulkan-Headers"
 checkout https://github.com/KhronosGroup/Vulkan-Loader.git "$vulkan_loader_commit" "$work/Vulkan-Loader"
 fetch "https://github.com/KhronosGroup/MoltenVK/releases/download/$moltenvk_version/MoltenVK-macos.tar" \
     "$moltenvk_sha256" "$work/MoltenVK-macos.tar"
 tar -xf "$work/MoltenVK-macos.tar" -C "$work"
+fetch "https://github.com/shader-slang/slang/releases/download/v$slang_version/slang-$slang_version-macos-aarch64.tar.gz" \
+    "$slang_sha256" "$work/slang.tar.gz"
+mkdir -p "$work/slang" && tar -xzf "$work/slang.tar.gz" -C "$work/slang"
 
 # The loader.
 cmake -S "$work/Vulkan-Headers" -B "$work/headers" -G Ninja -DCMAKE_INSTALL_PREFIX="$work/prefix" > /dev/null
@@ -69,8 +91,8 @@ cmake -S "$work/Vulkan-Loader" -B "$work/loader" -G Ninja -DCMAKE_BUILD_TYPE=Rel
     > "$work/loader.log" || { tail -30 "$work/loader.log" >&2; exit 1; }
 cmake --build "$work/loader" > "$work/loader-build.log" || { tail -30 "$work/loader-build.log" >&2; exit 1; }
 
-rm -rf "$vulkan_out"
-mkdir -p "$vulkan_out/licenses" "$vship_out"
+rm -rf "$vulkan_out" "$vship51_out"
+mkdir -p "$vulkan_out/licenses" "$vship_out" "$vship51_out"
 cp "$(find "$work/loader/loader" -name 'libvulkan.1.*.dylib' -type f | head -1)" "$vulkan_out/libvulkan.1.dylib"
 install_name_tool -id @rpath/libvulkan.1.dylib "$vulkan_out/libvulkan.1.dylib" 2>/dev/null
 # MoltenVK's universal build, its Apple silicon half.
@@ -103,7 +125,32 @@ clang++ src/VshipLib.cpp -DVSHIP_VERSION_MAJOR="${version[0]}" -DVSHIP_VERSION_M
     "$vulkan_out/libvulkan.1.dylib" -install_name @rpath/libvship.dylib -Wl,-rpath,@loader_path/../../vulkan \
     -o "$vship_out/libvship.dylib"
 
-for file in "$vulkan_out/libvulkan.1.dylib" "$vulkan_out/libMoltenVK.dylib" "$vship_out/libvship.dylib"; do
+# Stock Vship 5.1.2, its two shaders compiled again from the patched source.
+cd "$work/Vship51"
+if ! cmp -s LICENSE "$project/resources/tools/vship/licenses/LICENSE.vship-5.1.2.txt"; then
+    echo "Vship 5.1.2's LICENSE differs from resources/tools/vship/licenses/LICENSE.vship-5.1.2.txt" >&2
+    exit 1
+fi
+git apply "$project/scripts/patches/vship-moltenvk-addresses.patch"
+slangc="$work/slang/bin/slangc"
+"$slangc" src/Vulkan/util/shaders/Planed.slang -O2 -target spirv -profile spirv_1_3 -emit-spirv-directly \
+    -fvk-use-entrypoint-name -entry StrideEliminator -entry StrideAdder -o libvshipSpvShaders/Planed.spv
+"$slangc" src/Vulkan/gpuColorToLinear/shaders/anyDepthToFloat.slang -O2 -target spirv -profile spirv_1_3 \
+    -emit-spirv-directly -fvk-use-entrypoint-name -entry convertToFloatPlane -o libvshipSpvShaders/anyDepthToFloat.spv
+clang++ src/Vulkan/spvFileToCppHeader.cpp -std=c++17 -O2 -o shaderEmbedder
+./shaderEmbedder libvshipSpvShaders include/libvshipSpvShaders.hpp
+version51=()
+for part in MAJOR MINOR MINORMINOR; do
+    version51+=("$(sed -n "s/^VSHIP_VERSION_$part=\([0-9]*\)/\1/p" Makefile)")
+done
+clang++ src/VshipLib.cpp -DVSHIP_VERSION_MAJOR="${version51[0]}" -DVSHIP_VERSION_MINOR="${version51[1]}" \
+    -DVSHIP_VERSION_MINORMINOR="${version51[2]}" -std=c++17 -I include -I "$work/Vulkan-Headers/include" -DNDEBUG -O3 \
+    -DVULKANBUILD -w -arch arm64 -mmacosx-version-min="$deployment_target" -ffp-contract=off -fPIC -shared \
+    "$vulkan_out/libvulkan.1.dylib" -install_name @rpath/libvship.dylib -Wl,-rpath,@loader_path/../../vulkan \
+    -o "$vship51_out/libvship.dylib"
+
+for file in "$vulkan_out/libvulkan.1.dylib" "$vulkan_out/libMoltenVK.dylib" "$vship_out/libvship.dylib" \
+    "$vship51_out/libvship.dylib"; do
     codesign --force --sign - "$file" 2>/dev/null
     if otool -L "$file" | tail -n +2 | awk '{print $1}' | grep -v -E '^(@rpath/|/usr/lib/|/System/Library/)'; then
         echo "$(basename "$file") links a library that is neither bundled nor the system's" >&2
@@ -112,4 +159,5 @@ for file in "$vulkan_out/libvulkan.1.dylib" "$vulkan_out/libMoltenVK.dylib" "$vs
 done
 echo "Vulkan (loader $vulkan_loader_commit, MoltenVK $moltenvk_version) in $vulkan_out"
 echo "Vship-fast ${version[0]}.${version[1]}.${version[2]} (commit ${vship_commit:0:7}) in $vship_out"
-shasum -a 256 "$vulkan_out"/*.dylib "$vship_out/libvship.dylib"
+echo "Vship ${version51[0]}.${version51[1]}.${version51[2]} (commit ${vship51_commit:0:7}, patched for MoltenVK) in $vship51_out"
+shasum -a 256 "$vulkan_out"/*.dylib "$vship_out/libvship.dylib" "$vship51_out/libvship.dylib"

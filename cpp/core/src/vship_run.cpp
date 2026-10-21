@@ -1120,13 +1120,15 @@ struct VideoPlan {
 };
 
 // What a pass is given, beside the request: its metrics, the GPU, the
-// black-bar crops, and each video's decoder.
+// black-bar crops, each video's decoder, and whether it runs on stock Vship
+// 5.1.2 (the fallback after Vship-fast failed) rather than Vship-fast.
 struct PassPlan {
     std::vector<std::string> keys;
     VshipDevice device;
     std::optional<CropBox> source_crop;
     std::optional<CropBox> distorted_crop;
     HardwareDecoding decoding;
+    bool vship51 = false;
     // Where the pass's own files go: the folder of its process's task, which
     // the run removes whatever becomes of the process; or, in the run's
     // process, the system's temporary folder.
@@ -1151,7 +1153,7 @@ public:
           on_progress_(on_progress),
           on_status_(on_status),
           cancel_(cancel),
-          library_(vship_library()),
+          library_(vship_library(plan.vship51)),
           decode_(plan.decoding) {
         if (plan.keys.empty() || !std::all_of(plan.keys.begin(), plan.keys.end(), is_perceptual_metric)) {
             throw std::invalid_argument("A Vship pass scores SSIMULACRA2, Butteraugli and CVVDP only.");
@@ -1832,8 +1834,7 @@ private:
             if (failure_of(failures, key) != nullptr) {
                 continue;
             }
-            MetricProvenance provenance{"Vship/" + key, "Vship-fast " + device.version, "gpu", score_identity::vship_gpu(key),
-                                        parameters};
+            MetricProvenance provenance{"Vship/" + key, build_name(), "gpu", score_id(key), parameters};
             found.add(FrameMetricResult{key, frame_numbers, times, scores_.at(key)->values(frames),
                                         std::move(provenance)});
         }
@@ -1841,6 +1842,26 @@ private:
             found.add(cvvdp_result());
         }
         return found;
+    }
+
+    // The build that calculated the scores, as their provenance names it:
+    // Vship-fast, or stock Vship with the version it says.
+    std::string build_name() const {
+        if (!plan_.vship51) {
+            return "Vship-fast " + plan_.device.version;
+        }
+        const vship_api::Version version = library_.get_version();
+        return "Vship " + std::to_string(version.major) + "." + std::to_string(version.minor) + "." +
+               std::to_string(version.minorMinor);
+    }
+
+    // The id a score of `key` is saved under (score_identity.h): Vship-fast's,
+    // or Vship 5.1's for stock Vship 5.1.2's.
+    std::string score_id(const std::string& key) const {
+        if (key == "cvvdp") {
+            return std::string(plan_.vship51 ? score_identity::vship51_cvvdp : score_identity::cvvdp);
+        }
+        return plan_.vship51 ? score_identity::vship51_gpu(key) : score_identity::vship_gpu(key);
     }
 
     // CVVDP's score, with each second's JOD at the second's first frame.
@@ -1851,9 +1872,9 @@ private:
         result.key = "cvvdp";
         result.score = pool_cvvdp_windows(windows);
         result.provenance = {"Vship/cvvdp",
-                             "Vship-fast " + device.version,
+                             build_name(),
                              "gpu",
-                             std::string(score_identity::cvvdp),
+                             score_id("cvvdp"),
                              {{"gpu_backend", nlohmann::json(device.backend).dump()},
                               {"gpu_name", nlohmann::json(device.name).dump()},
                               {"display", cvvdp_->display.identity().dump()},
@@ -1938,7 +1959,8 @@ nlohmann::json request_json(const PerceptualRequest& request, const PassPlan& pl
             {"distorted_crop", crop_json(plan.distorted_crop)},
             {"decoding",
              {{"source", plan.decoding.source ? nlohmann::json(*plan.decoding.source) : nlohmann::json()},
-              {"distorted", plan.decoding.distorted ? nlohmann::json(*plan.decoding.distorted) : nlohmann::json()}}}};
+              {"distorted", plan.decoding.distorted ? nlohmann::json(*plan.decoding.distorted) : nlohmann::json()}}},
+            {"vship51", plan.vship51}};
 }
 
 // A metric's frames, times and values into the scores file.
@@ -2068,6 +2090,10 @@ PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const Pass
         throw VshipUnavailableError("The GPU metrics do not support resolution round-trip tests yet.");
     }
     if (!isolation_program()) {
+        if (plan.vship51) {
+            // This process has Vship-fast's library (vship_library).
+            throw VshipUnavailableError("Vship 5.1.2 runs only in a process of its own");
+        }
         return score_vship_pass(request, plan, on_progress, on_status, cancel);
     }
     PerceptualTaskOutput output;
@@ -2109,13 +2135,40 @@ PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const Pass
 
 // ------------------------------------------------------------------- a task
 
+// The metrics of `keys` that `device` does not calculate at the size the
+// videos are compared at (size_refusal), each with the reason.
+PerceptualFailures size_refusals(const PerceptualRequest& request, const std::vector<std::string>& keys,
+                                 const VshipDevice& device, const std::optional<CropBox>& source_crop,
+                                 const std::optional<CropBox>& distorted_crop) {
+    const std::pair<int, int> size =
+        vship_scaled_sizes(request.source, request.distorted, request.options.scale_direction, source_crop,
+                           distorted_crop)
+            .first;
+    PerceptualFailures refused;
+    for (const std::string& key : keys) {
+        // CVVDP set to fill the display is calculated at the display's size,
+        // so a 1080p comparison on a 4K display would otherwise get through
+        // at the size that hangs Intel's GPU.
+        const std::optional<std::pair<int, int>> computed =
+            key == "cvvdp" ? std::optional(cvvdp_computed_size(
+                                 size, CvvdpSettings::from_parameters(nlohmann::json(request.cvvdp.parameters()))))
+                           : std::nullopt;
+        if (const std::optional<std::string> reason = size_refusal(device, key, size, computed)) {
+            set_failure(refused, key, *reason);
+        }
+    }
+    return refused;
+}
+
 // Scores one task's Vship metrics, in one pass or several (the Python app's
 // _VshipTask).
 class VshipTask {
 public:
+    // `vship51`: on stock Vship 5.1.2, the fallback, rather than Vship-fast;
+    // always on a device only 5.1.2 found.
     VshipTask(const PerceptualRequest& request, const std::vector<std::string>& keys, const VshipDevice& device,
               const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
-              bool together, const PerceptualHooks& hooks, const CancelToken& cancel)
+              bool together, const PerceptualHooks& hooks, const CancelToken& cancel, bool vship51 = false)
         : request_(request),
           keys_(keys),
           device_(device),
@@ -2123,7 +2176,8 @@ public:
           distorted_crop_(distorted_crop),
           together_(together),
           hooks_(hooks),
-          cancel_(cancel) {}
+          cancel_(cancel),
+          vship51_(vship51 || device.vship51) {}
 
     PerceptualTaskOutput run() {
         const PerceptualFailures refused = refused_for_size();
@@ -2147,27 +2201,8 @@ public:
     }
 
 private:
-    // The metrics this GPU does not calculate at the size compared at, each
-    // with the reason.
     PerceptualFailures refused_for_size() const {
-        const std::pair<int, int> size =
-            vship_scaled_sizes(request_.source, request_.distorted, request_.options.scale_direction, source_crop_,
-                               distorted_crop_)
-                .first;
-        PerceptualFailures refused;
-        for (const std::string& key : keys_) {
-            // CVVDP set to fill the display is calculated at the display's
-            // size, so a 1080p comparison on a 4K display would otherwise get
-            // through at the size that hangs Intel's GPU.
-            const std::optional<std::pair<int, int>> computed =
-                key == "cvvdp" ? std::optional(cvvdp_computed_size(
-                                     size, CvvdpSettings::from_parameters(nlohmann::json(request_.cvvdp.parameters()))))
-                               : std::nullopt;
-            if (const std::optional<std::string> reason = size_refusal(device_, key, size, computed)) {
-                set_failure(refused, key, *reason);
-            }
-        }
-        return refused;
+        return size_refusals(request_, keys_, device_, source_crop_, distorted_crop_);
     }
 
     // Scores the metrics not `refused`, which are reported as failed with
@@ -2187,7 +2222,9 @@ private:
         }
         PerceptualTaskOutput output;
         try {
-            output = VshipTask(request_, keys, device_, source_crop_, distorted_crop_, together_, hooks_, cancel_).run();
+            output = VshipTask(request_, keys, device_, source_crop_, distorted_crop_, together_, hooks_, cancel_,
+                               vship51_)
+                         .run();
         } catch (const Cancelled&) {
             throw;
         } catch (const ComparisonCutShortError&) {
@@ -2218,11 +2255,15 @@ private:
     PerceptualTaskOutput run_pass(const std::vector<std::string>& keys, const ProgressCallback& progress) const {
         // On a Mac every video VideoToolbox decodes, 8-bit ones too: the
         // pass is slower than its decoding (MacGpuDecoding).
-        const PassPlan plan{keys, device_, source_crop_, distorted_crop_,
+        const PassPlan plan{keys,
+                            device_,
+                            source_crop_,
+                            distorted_crop_,
                             request_.options.gpu_decode
                                 ? plan_hardware_decoding(request_.environment.decoding, request_.options.gpu_vendor,
                                                          request_.source, request_.distorted, MacGpuDecoding::on)
-                                : HardwareDecoding{}};
+                                : HardwareDecoding{},
+                            vship51_};
         return run_vship_pass(request_, plan, progress, hooks_.on_status, cancel_);
     }
 
@@ -2354,6 +2395,7 @@ private:
     bool together_;
     const PerceptualHooks& hooks_;
     const CancelToken& cancel_;
+    bool vship51_;
     MetricResultSet metrics_;
     PerceptualFailures failures_;
     std::vector<std::exception_ptr> errors_;
@@ -2395,28 +2437,10 @@ std::vector<std::vector<std::string>> vship_passes(const std::vector<std::string
 
 namespace {
 
-// The keys of `keys` that are not in `left_out`, in order.
-std::vector<std::string> without(const std::vector<std::string>& keys, const std::vector<std::string>& left_out) {
-    std::vector<std::string> kept;
-    std::copy_if(keys.begin(), keys.end(), std::back_inserter(kept), [&left_out](const std::string& key) {
-        return std::find(left_out.begin(), left_out.end(), key) == left_out.end();
-    });
-    return kept;
-}
-
-// The advice for a metric that failed on the GPU in a comparison too long
-// for the CPU to take over unasked: nobody agreed to a CPU run of this
-// length. Falling back without asking would mean days of CPU work and
-// terabytes of temporary pictures for a film.
-std::string not_retried(const std::string& reason, const std::string& labels) {
-    return "GPU scoring failed (" + reason +
-           "). It was not retried on the CPU, which would take hours to days for a video over 10 minutes. Run " +
-           labels + " again to try the GPU again.";
-}
-
 // Calculates a task's SSIMULACRA2, Butteraugli and CVVDP each where it is
-// set to run, and moves a metric from the GPU to the CPU when the GPU
-// cannot calculate it (the Python app's _MetricRouting).
+// set to run (the Python app's _MetricRouting). What Vship-fast fails on the
+// GPU is calculated again with stock Vship 5.1.2 where it is bundled, and
+// what that fails too moves to the CPU, whatever the video's length.
 class MetricRouting {
 public:
     MetricRouting(const PerceptualRequest& request, const std::vector<std::string>& keys, bool together,
@@ -2441,24 +2465,25 @@ public:
         if (!device) {
             return without_gpu(reason);
         }
+        device_ = *device;
         const CropPair crops = routes_.find_crops(request_, hooks_.on_status, cancel_);
         PerceptualTaskOutput gpu_output;
         try {
-            gpu_output = routes_.run_gpu(request_, gpu_, *device, crops, together_, hooks_, cancel_);
+            gpu_output = routes_.run_gpu(request_, gpu_, *device_, crops, together_, hooks_, cancel_);
         } catch (const Cancelled&) {
             throw;
         } catch (const ComparisonCutShortError&) {
-            // A video cut short (one that ends early) is not retried on the
-            // CPU: it would stop as short, after hours instead of the GPU's
-            // minutes.
+            // A video cut short (one that ends early) is not retried with
+            // stock Vship or on the CPU: it would stop as short, after hours
+            // instead of the GPU's minutes.
             throw;
         } catch (const std::exception& error) {
             if (cancel_.cancelled()) {
                 throw Cancelled();
             }
-            return after_gpu_failure(error, crops);
+            return after_vship_fast_failure(error, crops);
         }
-        return after_gpu(std::move(gpu_output), crops);
+        return after_gpu(std::move(gpu_output), crops, true);
     }
 
 private:
@@ -2522,33 +2547,71 @@ private:
         return on_cpu(retryable_, failures, std::nullopt);
     }
 
-    // Whether the comparison is too long to move to the CPU unasked.
-    bool too_long_for_cpu() const {
-        return compared_seconds(request_.source, request_.distorted, request_.options.duration_limit) >
-               long_cpu_run_seconds;
+    // ------------------------------------------------------------ stock Vship 5.1.2
+
+    // The metrics of `keys` that stock Vship 5.1.2 calculates again after
+    // Vship-fast failed them: none where it is not bundled or is what failed
+    // them (on a GPU only 5.1.2 found), and none refused for the size
+    // compared at, which hung the GPU with it (size_refusal).
+    std::vector<std::string> for_vship51(const std::vector<std::string>& keys, const CropPair& crops) const {
+        if (!routes_.run_vship51 || keys.empty() || device_->vship51) {
+            return {};
+        }
+        const PerceptualFailures refused = size_refusals(request_, keys, *device_, crops.first, crops.second);
+        std::vector<std::string> kept;
+        std::copy_if(keys.begin(), keys.end(), std::back_inserter(kept),
+                     [&refused](const std::string& key) { return failure_of(refused, key) == nullptr; });
+        return kept;
     }
 
+    // After Vship-fast's task failed: its metrics again with stock Vship
+    // 5.1.2, then on the CPU what that fails too (after_gpu); or, where Vship
+    // 5.1.2 cannot take them or fails them all, on the CPU.
+    PerceptualTaskOutput after_vship_fast_failure(const std::exception& error, const CropPair& crops) {
+        const std::vector<std::string> keys = for_vship51(gpu_, crops);
+        if (keys.empty()) {
+            return after_gpu_failure(error, crops);
+        }
+        logger.warning("Vship-fast failed (" + std::string(error.what()) + "); calculating " +
+                       metric_labels(keys, ", ") + " with Vship 5.1.2");
+        if (hooks_.on_status) {
+            hooks_.on_status({"Vship-fast failed (" + std::string(error.what()) + "); calculating " +
+                                  metric_labels(keys, " and ") + " with Vship 5.1.2\xE2\x80\xA6",
+                              StatusKind::gpu_perceptual_failed});
+        }
+        PerceptualTaskOutput output;
+        try {
+            output = routes_.run_vship51(request_, keys, *device_, crops, together_, hooks_, cancel_);
+        } catch (const Cancelled&) {
+            throw;
+        } catch (const ComparisonCutShortError&) {
+            throw;
+        } catch (const std::exception& again) {
+            if (cancel_.cancelled()) {
+                throw Cancelled();
+            }
+            return after_gpu_failure(again, crops);
+        }
+        // A metric not retried keeps Vship-fast's reason.
+        const auto* passes = dynamic_cast<const VshipPassesFailedError*>(&error);
+        for (const std::string& key : gpu_) {
+            if (std::find(keys.begin(), keys.end(), key) == keys.end()) {
+                const std::string* own = passes != nullptr ? failure_of(passes->failures(), key) : nullptr;
+                set_failure(output.failures, key, own != nullptr ? *own : std::string(error.what()));
+            }
+        }
+        return after_gpu(std::move(output), crops, false);
+    }
+
+    // ------------------------------------------------------------ the CPU after the GPU
+
     // Calculates every metric that can be on the CPU after the GPU task
-    // failed, unless the video is too long to do that unasked.
+    // failed.
     PerceptualTaskOutput after_gpu_failure(const std::exception& error, const CropPair& crops) {
         const auto* passes = dynamic_cast<const VshipPassesFailedError*>(&error);
         const PerceptualFailures failures =
             gpu_only_.empty() ? PerceptualFailures{}
                               : gpu_only_failed(error.what(), false, passes != nullptr ? &passes->failures() : nullptr);
-        const std::vector<std::string> gpu_retry = without(gpu_, gpu_only_);
-        if (!gpu_retry.empty() && too_long_for_cpu()) {
-            // CVVDP's own failure goes into the same message, because the
-            // advice about the CPU does not apply to a GPU-only metric.
-            std::string message = not_retried(error.what(), metric_labels(gpu_retry, " and "));
-            std::vector<std::string> said;
-            for (const auto& [key, reason] : failures) {
-                if (std::find(said.begin(), said.end(), reason) == said.end()) {
-                    said.push_back(reason);
-                    message += "\n" + reason;
-                }
-            }
-            throw PerceptualRunError(message);
-        }
         if (hooks_.on_status) {
             hooks_.on_status({"Vship GPU compute failed (" + std::string(error.what()) +
                                   "); using CPU reference metrics\xE2\x80\xA6",
@@ -2561,24 +2624,70 @@ private:
 
     // ------------------------------------------------------------ after the GPU task
 
+    // A metric of Vship-fast's `gpu_output` that failed while the others
+    // finished, calculated again with stock Vship 5.1.2, CVVDP too: its
+    // scores join the output's, or its new reason replaces Vship-fast's.
+    void retry_with_vship51(PerceptualTaskOutput& gpu_output, const CropPair& crops) {
+        std::vector<std::string> failed;
+        for (const std::string& key : gpu_) {
+            if (failure_of(gpu_output.failures, key) != nullptr) {
+                failed.push_back(key);
+            }
+        }
+        const std::vector<std::string> keys = for_vship51(failed, crops);
+        if (keys.empty()) {
+            return;
+        }
+        logger.warning(metric_labels(keys, ", ") + " failed with Vship-fast; calculating it with Vship 5.1.2");
+        if (hooks_.on_status) {
+            hooks_.on_status({metric_labels(keys, " and ") + " failed on the GPU; calculating it with Vship 5.1.2\xE2\x80\xA6",
+                              StatusKind::gpu_perceptual_failed});
+        }
+        PerceptualTaskOutput again;
+        try {
+            again = routes_.run_vship51(request_, keys, *device_, crops, together_, hooks_, cancel_);
+        } catch (const Cancelled&) {
+            throw;
+        } catch (const ComparisonCutShortError&) {
+            throw;
+        } catch (const std::exception& error) {
+            if (cancel_.cancelled()) {
+                throw Cancelled();
+            }
+            logger.error("Vship 5.1.2 failed too: " + std::string(error.what()));
+            const auto* passes = dynamic_cast<const VshipPassesFailedError*>(&error);
+            for (const std::string& key : keys) {
+                const std::string* own = passes != nullptr ? failure_of(passes->failures(), key) : nullptr;
+                set_failure(gpu_output.failures, key, own != nullptr ? *own : std::string(error.what()));
+            }
+            return;
+        }
+        for (const std::string& key : keys) {
+            if (again.metrics.has(key)) {
+                gpu_output.metrics.copy_from(again.metrics, key);
+                std::erase_if(gpu_output.failures, [&key](const auto& failure) { return failure.first == key; });
+            } else if (const std::string* reason = failure_of(again.failures, key)) {
+                set_failure(gpu_output.failures, key, *reason);
+            }
+        }
+        gpu_output.compared_frame_count = std::max(gpu_output.compared_frame_count, again.compared_frame_count);
+    }
+
     // Calculates the CPU's metrics once the GPU task is done, with any metric
-    // that failed on the GPU, and combines the two.
-    PerceptualTaskOutput after_gpu(PerceptualTaskOutput gpu_output, const CropPair& crops) {
+    // that failed on the GPU (after Vship 5.1.2 too, with `vship51_next`),
+    // and combines the two.
+    PerceptualTaskOutput after_gpu(PerceptualTaskOutput gpu_output, const CropPair& crops, bool vship51_next) {
+        if (vship51_next) {
+            retry_with_vship51(gpu_output, crops);
+        }
         // A metric that failed on the GPU while the others finished is
-        // retried on the CPU on the same terms as a failed pass: only for
-        // videos up to ten minutes, which nobody has to agree to.
+        // retried on the CPU, as a failed pass is, whatever the video's length.
         PerceptualFailures failures = gpu_output.failures;
         std::vector<std::string> gpu_failed;
         for (const std::string& key : gpu_) {
             if (key != "cvvdp" && failure_of(failures, key) != nullptr) {
                 gpu_failed.push_back(key);
             }
-        }
-        if (!gpu_failed.empty() && too_long_for_cpu()) {
-            for (const std::string& key : gpu_failed) {
-                set_failure(failures, key, not_retried(*failure_of(failures, key), label_of(key)));
-            }
-            gpu_failed.clear();
         }
         // Kept for the message if the CPU retry fails too: the GPU failure is
         // the first cause, and without it a GPU user would be sent to fix a
@@ -2667,6 +2776,7 @@ private:
     const PerceptualHooks& hooks_;
     const CancelToken& cancel_;
     const PerceptualRoutes& routes_;
+    std::optional<VshipDevice> device_;   // the GPU Vship runs on, once found
     std::vector<std::string> gpu_;        // the metrics set to run on the GPU
     std::vector<std::string> cpu_;        // the metrics set to run on the CPU
     std::vector<std::string> gpu_only_;   // the GPU's metrics that run on no CPU (CVVDP)
@@ -2691,6 +2801,13 @@ PerceptualRoutes app_perceptual_routes() {
                         const CancelToken& cancel) {
         return VshipTask(request, keys, device, crops.first, crops.second, together, hooks, cancel).run();
     };
+    if (vship51_bundled()) {
+        routes.run_vship51 = [](const PerceptualRequest& request, const std::vector<std::string>& keys,
+                                const VshipDevice& device, const CropPair& crops, bool together,
+                                const PerceptualHooks& hooks, const CancelToken& cancel) {
+            return VshipTask(request, keys, device, crops.first, crops.second, together, hooks, cancel, true).run();
+        };
+    }
     routes.run_cpu = [](const PerceptualRequest& request, const std::vector<std::string>& keys,
                         const std::optional<CropPair>& crops, const ProgressCallback& on_progress,
                         const StatusCallback& on_status, const CancelToken& cancel) {
@@ -2725,6 +2842,7 @@ nlohmann::json vship_pass_task(const nlohmann::json& request, const std::filesys
     plan.decoding.distorted = decoding.at("distorted").is_null()
                                   ? std::nullopt
                                   : std::optional(decoding.at("distorted").get<std::string>());
+    plan.vship51 = request.value("vship51", false);
     // The task's folder, which the run removes even when this process is
     // ended (Ctrl+C reaches it too): no file of FFmpeg's timestamps is left.
     plan.scratch_folder = folder;

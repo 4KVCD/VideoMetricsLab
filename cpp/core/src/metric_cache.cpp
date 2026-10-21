@@ -153,8 +153,8 @@ bool stale_cpu_score(const MetricProvenance& provenance, const std::vector<Colou
 
 // Whether a score's id is one of Vship 5.1's on the GPU (score_identity.h).
 bool vship51_id(const std::string& id) {
-    return id == score_identity::vship51_cvvdp || score_identity::vship51_gpu("ssimulacra2", id) ||
-           score_identity::vship51_gpu("butteraugli", id);
+    return id == score_identity::vship51_cvvdp || score_identity::is_vship51_gpu("ssimulacra2", id) ||
+           score_identity::is_vship51_gpu("butteraugli", id);
 }
 
 // Whether a video is gray tagged full range, which Vship 5.1 was sent
@@ -218,7 +218,7 @@ bool is_auto_perceptual(const MetricRequestSpec& spec) {
 // inside.
 bool auto_perceptual_compatible(const MetricRequestSpec& spec, const std::string& value) {
     const std::string& key = spec.key;
-    return value == score_identity::vship_gpu(key) || score_identity::vship51_gpu(key, value) ||
+    return value == score_identity::vship_gpu(key) || score_identity::is_vship51_gpu(key, value) ||
            value == score_identity::libjxl_cpu(key) ||
            (value.starts_with(key + "-libjxl-") && value.ends_with("-cpu-v1"));
 }

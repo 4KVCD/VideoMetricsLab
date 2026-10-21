@@ -98,8 +98,8 @@ struct PerceptualTaskOutput {
 
 // For comparisons longer than this, SSIMULACRA2 and Butteraugli run on the
 // CPU only when the user has agreed: the CPU tools take a second or two per
-// 4K pair, which is days for a film. A failed GPU run does not fall back to
-// the CPU by itself past this length.
+// 4K pair, which is days for a film. (A failed GPU run falls back to the
+// CPU whatever its length.)
 inline constexpr double long_cpu_run_seconds = 10 * 60;
 
 // How much video a comparison scores: the shorter input, capped by the

@@ -293,15 +293,15 @@ const char* const templates[] = {
     "Calculating selected perceptual metric(s) on CPU…",
     "{metrics} failed in the shared GPU pass; calculating it in a pass of its own…",
     "{metrics} failed in the shared GPU pass; calculating each in a pass of its own…",
+    "{metrics} failed on the GPU; calculating it with Vship 5.1.2…",
     "{metrics} failed on the GPU; calculating it on the CPU…",
     "Vship GPU unavailable ({reason}); using CPU reference metrics…",
+    "Vship-fast failed ({error}); calculating {metrics} with Vship 5.1.2…",
     "Vship GPU compute failed ({error}); using CPU reference metrics…",
     "Waiting for the GPU: another video's GPU pass is running…",
     // --- why a video or a metric failed
     "{metrics} failed: {error}",
     "Cancelled by user",
-    "GPU scoring failed ({error}). It was not retried on the CPU, which would take hours to days for a video "
-    "over 10 minutes. Run {metrics} again to try the GPU again.",
     "GPU scoring failed ({error}); the CPU retry failed too: {reason}",
     "{metric} needs a GPU that Vship can use, and could not use one: {reason}",
     "{metric} could not be calculated: {reason}",

@@ -32,10 +32,12 @@ inline constexpr std::string_view vship51_cvvdp = "cvvdp-vship-gpu-v1";
 
 // SSIMULACRA2 or Butteraugli (`key`): calculated by Vship on the GPU, by
 // libjxl's tools on the CPU, and the request that takes a score from either.
-// Vship 5.1's GPU ids are "<key>-vship-gpu-v1", and before that had its
-// version inside ("<key>-vship-5.1.0-gpu-v1").
+// Vship 5.1's GPU ids are "<key>-vship-gpu-v1" (the fallback's, stock Vship
+// 5.1.2's, too), and before that had its version inside
+// ("<key>-vship-5.1.0-gpu-v1").
 inline std::string vship_gpu(std::string_view key) { return std::string(key) + "-vship-gpu-v2"; }
-inline bool vship51_gpu(std::string_view key, std::string_view id) {
+inline std::string vship51_gpu(std::string_view key) { return std::string(key) + "-vship-gpu-v1"; }
+inline bool is_vship51_gpu(std::string_view key, std::string_view id) {
     const std::string prefix = std::string(key) + "-vship-";
     return id.starts_with(prefix) && id.ends_with("-gpu-v1");
 }
