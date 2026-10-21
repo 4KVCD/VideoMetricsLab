@@ -97,6 +97,32 @@ TEST(Decisions, GpuDecodingIsChosenAsThePythonAppChoosesIt) {
     }
 }
 
+// A Mac's GPU decodes a video for a caller that allows it (the Vship pass)
+// where FFmpeg has VideoToolbox and the GPU decodes the codec, in the 4:2:0
+// 8- or 10-bit pictures at an even size the download takes; not otherwise.
+TEST(Decisions, AMacsGpuDecodesWhereTheCallerAllowsIt) {
+    DecodingCapabilities mac;
+    mac.hwaccels = {"videotoolbox"};
+    mac.videotoolbox_codecs = {"h264", "hevc"};
+    const auto pick = [&mac](const std::string& codec, const std::string& pix_fmt, int width, MacGpuDecoding allowed,
+                             GpuVendor vendor = GpuVendor::automatic) {
+        return pick_decode(mac, vendor, codec, pix_fmt, width, 1080, allowed);
+    };
+    EXPECT_EQ(pick("hevc", "yuv420p10le", 1920, MacGpuDecoding::on), "videotoolbox");
+    EXPECT_EQ(pick("h264", "yuv420p", 1920, MacGpuDecoding::on), "videotoolbox");
+    EXPECT_EQ(pick("hevc", "yuv420p", 1920, MacGpuDecoding::off), std::nullopt);
+    EXPECT_EQ(pick("hevc", "yuv420p", 1920, MacGpuDecoding::on, GpuVendor::none), std::nullopt);
+    EXPECT_EQ(pick("vp9", "yuv420p", 1920, MacGpuDecoding::on), std::nullopt);   // not this GPU's
+    EXPECT_EQ(pick("ffv1", "yuv420p", 1920, MacGpuDecoding::on), std::nullopt);
+    EXPECT_EQ(pick("h264", "yuv420p10le", 1920, MacGpuDecoding::on), std::nullopt);  // 10-bit H.264
+    EXPECT_EQ(pick("hevc", "yuv444p", 1920, MacGpuDecoding::on), std::nullopt);
+    EXPECT_EQ(pick("hevc", "yuv420p", 1919, MacGpuDecoding::on), std::nullopt);
+    mac.hwaccels.clear();  // an FFmpeg without VideoToolbox
+    EXPECT_EQ(pick("hevc", "yuv420p", 1920, MacGpuDecoding::on), std::nullopt);
+    EXPECT_EQ(hwaccel_args("videotoolbox"),
+              (std::vector<std::string>{"-hwaccel", "videotoolbox", "-hwaccel_output_format", "videotoolbox_vld"}));
+}
+
 TEST(Decisions, FrameRatesBecomeThePythonAppsFractions) {
     for (const Json& item : decisions()["fractions"]) {
         const double rate = *test::reference_number(item["value"]);

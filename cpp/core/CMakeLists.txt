@@ -63,6 +63,10 @@ target_include_directories(vml_core PUBLIC ../../native/h274)
 # (third_party/README.md). SYSTEM: their warnings are not ours to fix.
 target_include_directories(vml_core SYSTEM PUBLIC ../third_party/libvmaf-fast/include)
 target_link_libraries(vml_core PUBLIC vml_platform nlohmann_json PRIVATE vml_compile_options vml_miniz)
+if(APPLE)
+    # Which codecs the Mac's GPU decodes (hardware_decoding.cpp).
+    target_link_libraries(vml_core PUBLIC "-framework VideoToolbox" "-framework CoreMedia")
+endif()
 # The app's own files (VMAF models, bundled tools) in a development build:
 # the repository's resources folder. An installed app sets VML_RESOURCES.
 cmake_path(SET resources NORMALIZE "${PROJECT_SOURCE_DIR}/../resources")

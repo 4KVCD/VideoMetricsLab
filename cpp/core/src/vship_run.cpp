@@ -1387,8 +1387,10 @@ private:
     std::unique_ptr<FrameRing> open_stream(const VideoPlan& video) {
         const bool cut = video.side == "distorted" || !by_time_;
         const int every = video.side == "source" && every_source_frame_ ? 1 : step_;
+        bool said = false;  // native_decoder logs which decoder the video has
         if (native_) {
             if (const std::optional<std::string> backend = decoded_here(video.hwaccel)) {
+                said = true;
                 if (std::unique_ptr<GpuFrameStream> decoder = native_decoder(video, *backend)) {
                     return std::make_unique<NativeFrameStream>(
                         library_, video.layout.frame_bytes, std::move(decoder), every,
@@ -1396,6 +1398,11 @@ private:
                         by_time_ && cut ? duration_limit_ : std::nullopt, plan_.device.gpu_id);
                 }
             }
+        }
+        if (!said) {
+            logger.info("Vship: the " + video.label + " is decoded by FFmpeg " +
+                        (video.hwaccel ? "on the GPU (-hwaccel " + *video.hwaccel + ")"
+                                       : "in software (" + software_decoding_reason(video.info) + ")"));
         }
         std::optional<InterleavedChroma> split;
         if (video.passthrough) {
@@ -1407,6 +1414,21 @@ private:
                                              ffmpeg_commands(video, pixel_format, every, cut), video.label, split,
                                              [this, side] { decoded_in_software(side); }, plan_.device.gpu_id,
                                              by_time_, plan_.scratch_folder);
+    }
+
+    // Why FFmpeg decodes a video in software, for the log.
+    std::string software_decoding_reason(const VideoInfo& info) const {
+        if (!request_.options.gpu_decode) {
+            return "GPU decoding is off";
+        }
+        if (!downloads_from_gpu(info.pix_fmt, info.width, info.height)) {
+            return "GPU decoding takes 4:2:0 at 8 or 10 bits and an even size, not " + info.pix_fmt + " at " +
+                   std::to_string(info.width) + "x" + std::to_string(info.height);
+        }
+        if (ascii_lower(info.codec_name) == "h264" && bit_depth(info.pix_fmt) > 8) {
+            return "this GPU does not decode H.264 deeper than 8 bits";
+        }
+        return "no GPU decoder here for " + info.codec_name;
     }
 
     // The FFmpeg commands to try for one video, keeping every `every`-th
@@ -2203,10 +2225,12 @@ private:
     }
 
     PerceptualTaskOutput run_pass(const std::vector<std::string>& keys, const ProgressCallback& progress) const {
+        // The pass decodes on a Mac's GPU too (MacGpuDecoding): its scores
+        // were checked byte-identical to software decoding.
         const PassPlan plan{keys, device_, source_crop_, distorted_crop_,
                             request_.options.gpu_decode
                                 ? plan_hardware_decoding(request_.environment.decoding, request_.options.gpu_vendor,
-                                                         request_.source, request_.distorted)
+                                                         request_.source, request_.distorted, MacGpuDecoding::on)
                                 : HardwareDecoding{}};
         return run_vship_pass(request_, plan, progress, hooks_.on_status, cancel_);
     }

@@ -160,6 +160,19 @@ TEST(Vship, AVideoWithoutChromaSitingIsReadWithTheOthers) {
     EXPECT_FALSE(chroma_location_shared("left", "center"));
 }
 
+// A Mac's GPU-decoded frames take the same chain as Windows' hardware
+// decoding: downloaded as P010 (or NV12) first, then cut and scaled by the
+// filters a software decode takes.
+TEST(Vship, AMacsGpuDecodedFramesAreDownloadedBeforeTheFilters) {
+    VideoInfo info = plain_video("yuv420p10le");
+    info.width = 3840;
+    info.height = 2160;
+    EXPECT_EQ(vship_filter_chain(info, CropBox{3840, 1608, 0, 276}, std::pair(1920, 804), "p010le", 3, "lanczos",
+                                 std::string("videotoolbox"), Rational{120, 1}, false),
+              "settb=AVTB,setpts=N*1000000/120,select=not(mod(n\\,3)),hwdownload,format=p010le,"
+              "crop=3840:1608:0:276,scale=1920:804:flags=lanczos,format=p010le");
+}
+
 // The filters and outputs FFmpeg is given, the sizes compared at, and the
 // sizes a metric is refused at on a GPU.
 TEST(Vship, PlansFfmpegAndSizesAsThePythonApp) {

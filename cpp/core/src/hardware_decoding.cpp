@@ -12,6 +12,10 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 
+#ifdef __APPLE__
+#include <VideoToolbox/VideoToolbox.h>
+#endif
+
 namespace vml {
 
 namespace {
@@ -40,6 +44,31 @@ std::optional<std::string> preferred_hwaccel(GpuVendor vendor) {
     }
 }
 
+// The codecs this Mac's GPU decodes through VideoToolbox, as FFmpeg names
+// them; none elsewhere. VP9's and AV1's decoders are supplemental ones, there
+// only once registered, as libavcodec registers them before it decodes
+// (the same check as Video Compare's, NativeDevice::gpu_decoders).
+std::set<std::string> codecs_this_mac_decodes() {
+    std::set<std::string> codecs;
+#ifdef __APPLE__
+    VTRegisterSupplementalVideoDecoderIfAvailable(kCMVideoCodecType_VP9);
+    VTRegisterSupplementalVideoDecoderIfAvailable(kCMVideoCodecType_AV1);
+    const std::array<std::pair<CMVideoCodecType, const char*>, 5> known{{
+        {kCMVideoCodecType_H264, "h264"},
+        {kCMVideoCodecType_HEVC, "hevc"},
+        {kCMVideoCodecType_VP9, "vp9"},
+        {kCMVideoCodecType_AV1, "av1"},
+        {kCMVideoCodecType_MPEG2Video, "mpeg2video"},
+    }};
+    for (const auto& [type, name] : known) {
+        if (VTIsHardwareDecodeSupported(type)) {
+            codecs.insert(name);
+        }
+    }
+#endif
+    return codecs;
+}
+
 // Whether FFmpeg on this PC has `hwaccel` and it decodes `codec`.
 bool decodes(const DecodingCapabilities& capabilities, const std::optional<std::string>& hwaccel,
              const std::string& codec) {
@@ -51,12 +80,17 @@ bool decodes(const DecodingCapabilities& capabilities, const std::optional<std::
 }
 
 // The -hwaccel to try for a codec on this GPU maker (or the first one
-// found, for "auto"), or nothing for software decoding.
+// found, for "auto"), or nothing for software decoding. On a Mac, for a
+// caller that allows it, VideoToolbox's where the GPU decodes the codec.
 std::optional<std::string> pick_hwaccel(const DecodingCapabilities& capabilities, GpuVendor vendor,
-                                        const std::string& codec_name) {
+                                        const std::string& codec_name, MacGpuDecoding mac) {
     const std::string codec = ascii_lower(codec_name);
     if (vendor == GpuVendor::none) {
         return std::nullopt;
+    }
+    if (mac == MacGpuDecoding::on && capabilities.hwaccels.contains("videotoolbox") &&
+        capabilities.videotoolbox_codecs.contains(codec)) {
+        return "videotoolbox";
     }
     if (vendor == GpuVendor::automatic) {
         for (const GpuVendor found : capabilities.vendors) {
@@ -147,6 +181,7 @@ DecodingCapabilities DecodingCapabilities::detect(const std::string& ffmpeg) {
         // No FFmpeg to ask: no hardware decoding.
     }
     capabilities.vendors = detected_gpu_vendors();
+    capabilities.videotoolbox_codecs = codecs_this_mac_decodes();
     return capabilities;
 }
 
@@ -198,14 +233,15 @@ bool downloads_from_gpu(const std::string& pix_fmt, int width, int height) {
 }
 
 std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
-                                       const std::string& codec, const std::string& pix_fmt, int width, int height) {
+                                       const std::string& codec, const std::string& pix_fmt, int width, int height,
+                                       MacGpuDecoding mac) {
     if (!downloads_from_gpu(pix_fmt, width, height)) {
         return std::nullopt;
     }
-    std::optional<std::string> hwaccel = pick_hwaccel(capabilities, vendor, codec);
-    // Intel's and AMD's GPUs do not decode H.264 deeper than 8 bits (FFmpeg
-    // then decodes it in software and the download fails); NVIDIA's RTX 50
-    // series does.
+    std::optional<std::string> hwaccel = pick_hwaccel(capabilities, vendor, codec, mac);
+    // Intel's, AMD's and Apple's GPUs do not decode H.264 deeper than 8 bits
+    // (FFmpeg then decodes it in software and the download fails); NVIDIA's
+    // RTX 50 series does.
     if (hwaccel != "cuda" && ascii_lower(codec) == "h264" && !pix_fmt.empty() && bit_depth(pix_fmt) > 8) {
         return std::nullopt;
     }
@@ -213,10 +249,11 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
 }
 
 HardwareDecoding plan_hardware_decoding(const DecodingCapabilities& capabilities, GpuVendor vendor,
-                                        const VideoInfo& source, const VideoInfo& distorted) {
+                                        const VideoInfo& source, const VideoInfo& distorted, MacGpuDecoding mac) {
     return HardwareDecoding{
-        pick_decode(capabilities, vendor, source.codec_name, source.pix_fmt, source.width, source.height),
-        pick_decode(capabilities, vendor, distorted.codec_name, distorted.pix_fmt, distorted.width, distorted.height),
+        pick_decode(capabilities, vendor, source.codec_name, source.pix_fmt, source.width, source.height, mac),
+        pick_decode(capabilities, vendor, distorted.codec_name, distorted.pix_fmt, distorted.width, distorted.height,
+                    mac),
     };
 }
 
@@ -231,8 +268,11 @@ std::vector<std::string> hwaccel_args(const std::optional<std::string>& hwaccel)
         args = {"-threads", "1"};
     }
     // The frames stay on the GPU for a graph that downloads them. The
-    // format's name is the hwaccel's own, except D3D11VA's ("d3d11").
-    const std::string output_format = *hwaccel == "d3d11va" ? "d3d11" : *hwaccel;
+    // format's name is the hwaccel's own, except D3D11VA's ("d3d11") and
+    // VideoToolbox's ("videotoolbox_vld").
+    const std::string output_format = *hwaccel == "d3d11va"        ? "d3d11"
+                                      : *hwaccel == "videotoolbox" ? "videotoolbox_vld"
+                                                                   : *hwaccel;
     args.insert(args.end(), {"-hwaccel", *hwaccel, "-hwaccel_output_format", output_format});
     return args;
 }

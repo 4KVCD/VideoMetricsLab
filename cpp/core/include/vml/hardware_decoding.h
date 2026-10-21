@@ -43,11 +43,13 @@ struct HardwareDecoding {
 };
 
 // What decides the choice on this PC: the -hwaccel methods its FFmpeg was
-// built with, and the GPU makers DirectX lists (NVIDIA first, then Intel,
-// then AMD, the order "auto" tries them in).
+// built with, the GPU makers DirectX lists (NVIDIA first, then Intel, then
+// AMD, the order "auto" tries them in), and on a Mac the codecs its GPU
+// decodes through VideoToolbox, as FFmpeg names them (h264, hevc, ...).
 struct DecodingCapabilities {
     std::set<std::string> hwaccels;
     std::vector<GpuVendor> vendors;
+    std::set<std::string> videotoolbox_codecs;
 
     // Asks `ffmpeg` (-hwaccels) and the system.
     static DecodingCapabilities detect(const std::string& ffmpeg);
@@ -66,16 +68,26 @@ std::vector<GpuVendor> detected_gpu_vendors();
 // 4:2:0 at 8 or 10 bits, and an even width and height.
 bool downloads_from_gpu(const std::string& pix_fmt, int width, int height);
 
+// Whether a caller decodes on a Mac's GPU (FFmpeg's -hwaccel videotoolbox).
+// Only the Vship pass does: its scores were checked byte-identical to
+// software decoding, the frames downloaded as NV12/P010 and split as on
+// Windows. The libvmaf routes, black-bar detection and playback have not
+// been, so they decode in software on a Mac.
+enum class MacGpuDecoding { off, on };
+
 // The -hwaccel to start a video with, or nothing for software decoding.
 std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
-                                       const std::string& codec, const std::string& pix_fmt, int width, int height);
+                                       const std::string& codec, const std::string& pix_fmt, int width, int height,
+                                       MacGpuDecoding mac = MacGpuDecoding::off);
 
 // The plan for a comparison of two videos.
 HardwareDecoding plan_hardware_decoding(const DecodingCapabilities& capabilities, GpuVendor vendor,
-                                        const VideoInfo& source, const VideoInfo& distorted);
+                                        const VideoInfo& source, const VideoInfo& distorted,
+                                        MacGpuDecoding mac = MacGpuDecoding::off);
 
 // The -hwaccel options for one video (FFmpeg reads them as options of the
-// next -i): NVIDIA's decoding on one thread, frames kept on the GPU.
+// next -i): NVIDIA's decoding on one thread, frames kept on the GPU (in
+// VideoToolbox's own surfaces on a Mac, videotoolbox_vld).
 std::vector<std::string> hwaccel_args(const std::optional<std::string>& hwaccel);
 
 }  // namespace vml
