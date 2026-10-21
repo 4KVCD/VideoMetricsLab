@@ -184,6 +184,13 @@ std::filesystem::path dav1d_library_path();
 // several threads, the decoder would on one).
 std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan, std::string_view backend);
 
+// Why a GPU's decoder cannot scale the plan's pictures exactly as this
+// FFmpeg's scale filter does, or nothing (nothing too for a plan that is not
+// scaled): so large a downscale that swscale makes it in two steps, or an
+// FFmpeg whose scale filter gives other pictures (checked once for each FFmpeg
+// and algorithm, at 8 and 10 bits). FFmpeg then scales the video.
+std::optional<std::string> scaling_refusal(const DecodePlan& plan, const std::string& ffmpeg);
+
 // The decoders the app would decode the source and the test video with
 // itself, or nothing when FFmpeg must decode them: each video by the decoder
 // of the GPU FFmpeg would use (cuda: NVIDIA's, qsv: Intel's, d3d11va:

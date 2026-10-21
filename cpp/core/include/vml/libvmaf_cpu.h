@@ -129,10 +129,11 @@ int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr);
 // luma only, as score_decoded (gpu_vmaf.h) does for VMAF: by `decoders`
 // (the source's and the test video's), cropped as FFmpeg's crop filter
 // crops and widened as FFmpeg converts, paired frame N with frame N as far
-// as `duration_limit` (-t's text) keeps them. A comparison that is scaled
-// is refused with GpuDecodeUnavailableError: the decoders do not scale
-// exactly as FFmpeg does, and unlike VMAF's, these scores must be FFmpeg's.
-// Throws GpuDecodeFailedError when decoding fails after it started,
+// as `duration_limit` (-t's text) keeps them. A video compared at another
+// size is scaled by its GPU decoder as FFmpeg's scale filter scales it; the
+// software decoder does not scale, so such a video it would decode is
+// refused (GpuDecodeUnavailableError, from decoder_supports) and FFmpeg
+// scales it. Throws GpuDecodeFailedError when decoding fails after it started,
 // LibvmafError and Cancelled.
 PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted,
                              const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,

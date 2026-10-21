@@ -1014,19 +1014,25 @@ bool xpsnr_in_app(int width, int height, int bit_depth) {
 }
 
 // Whether the app will decode both videos itself (score_decoded_cpu), as far
-// as can be known before it asks the decoders.
+// as can be known before it asks the decoders: a video compared at another
+// size only with a GPU's decoder that scales it as `ffmpeg` would
+// (scaling_refusal; the software decoder does not scale).
 bool decoded_in_app(const VideoInfo& source, const VideoInfo& distorted, const std::optional<CropBox>& source_crop,
                     const std::optional<CropBox>& distorted_crop, std::pair<int, int> size,
-                    const HardwareDecoding& decoding) {
+                    const std::string& scale_algorithm, const HardwareDecoding& decoding, const std::string& ffmpeg) {
     const std::optional<std::pair<std::string, std::string>> decoders = decoders_here(decoding);
     if (!decoders || !decodes_codec(ascii_lower(source.codec_name), decoders->first) ||
         !decodes_codec(ascii_lower(distorted.codec_name), decoders->second) ||
         source.full_range() != distorted.full_range()) {  // as require_same_range
         return false;
     }
+    const auto decodes_here = [&ffmpeg](const std::string& decoder, const DecodePlan& plan) {
+        return !plan.scaled() || (decoder != software_decoder && !scaling_refusal(plan, ffmpeg));
+    };
     try {
-        return !plan_decode(source, source_crop, 6, true, size).scaled() &&
-               !plan_decode(distorted, distorted_crop, 6, true, size).scaled();
+        return decodes_here(decoders->first, plan_decode(source, source_crop, 6, true, size, scale_algorithm)) &&
+               decodes_here(decoders->second,
+                            plan_decode(distorted, distorted_crop, 6, true, size, scale_algorithm));
     } catch (const GpuDecodeUnavailableError&) {
         return false;
     }
@@ -1039,12 +1045,13 @@ bool decoded_in_app(const VideoInfo& source, const VideoInfo& distorted, const s
 // filters, which it runs anyway). XPSNR stays with FFmpeg where libvmaf-fast's
 // score would not be FFmpeg's exactly (xpsnr_frame_rate, xpsnr_in_app),
 // while PSNR and SSIM are still scored in the app. `cores` are "Auto"'s
-// threads.
+// threads; `ffmpeg` scales a video the decoders cannot (decoded_in_app).
 std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<int, int> size,
                                         const VideoInfo& source, const VideoInfo& distorted,
                                         const HardwareDecoding& decoding,
                                         const std::optional<CropBox>& source_crop,
-                                        const std::optional<CropBox>& distorted_crop, unsigned cores) {
+                                        const std::optional<CropBox>& distorted_crop, unsigned cores,
+                                        const std::string& ffmpeg) {
     if (!cpu_metrics_in_app() || uses_vmaf_model(options)) {
         return std::nullopt;
     }
@@ -1075,7 +1082,8 @@ std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<in
         return std::nullopt;
     }
     if (metrics == std::vector<std::string>{"xpsnr"} &&
-        !decoded_in_app(source, distorted, source_crop, distorted_crop, size, decoding)) {
+        !decoded_in_app(source, distorted, source_crop, distorted_crop, size, options.scale_algorithm, decoding,
+                        ffmpeg)) {
         // XPSNR alone, with its frames from FFmpeg's pipes: FFmpeg's own
         // filter keeps up with FFmpeg's decoding and uses far less (the
         // Python app measured twice the CPU and 825 MB against 453 for a 4K
@@ -1873,7 +1881,7 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
     if (!scores) {
         if (const std::optional<GpuPlan> cpu = cpu_metrics_plan(options, std::pair(width, height), source, distorted,
                                                                 decoding, source_crop, distorted_crop,
-                                                                environment.cores)) {
+                                                                environment.cores, environment.ffmpeg)) {
             scores = run_cpu_metrics(environment, source, distorted, options, source_crop, distorted_crop, *cpu,
                                      distorted.fps, total_frames, decoding, on_progress, on_status, cancel);
             if (scores) {

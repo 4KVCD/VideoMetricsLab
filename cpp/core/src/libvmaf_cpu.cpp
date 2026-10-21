@@ -317,9 +317,6 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
         const VideoInfo& info = test_video ? distorted : source;
         DecodePlan plan = plan_decode(info, test_video ? distorted_crop : source_crop, 6, true,
                                       std::pair(width, height), scale_algorithm);
-        if (plan.scaled()) {
-            throw GpuDecodeUnavailableError("the comparison is scaled, by FFmpeg");
-        }
         widen_to(plan, info, bit_depth);
         const auto [supported, refusal] = decoder_supports(0, plan, test_video ? test_backend : source_backend);
         if (!supported) {

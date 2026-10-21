@@ -1076,6 +1076,29 @@ std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan
     return {ok != 0, buffer_text(error.data(), error.size())};
 }
 
+std::optional<std::string> scaling_refusal(const DecodePlan& plan, const std::string& ffmpeg) {
+    if (!plan.scaled()) {
+        return std::nullopt;
+    }
+    // The filters the decoders would make (luma along and down, then
+    // chroma); none where swscale would cascade.
+    const auto [out_w, out_h] = plan.output_size();
+    const int scaler = scaler_number(plan.scaler);
+    const std::array<std::array<int, 3>, 4> filters{{{plan.crop_w, out_w, 0},
+                                                     {plan.crop_h, out_h, 1},
+                                                     {(plan.crop_w + 1) / 2, (out_w + 1) / 2, 0},
+                                                     {(plan.crop_h + 1) / 2, (out_h + 1) / 2, 1}}};
+    for (const auto& [from, to, vertical] : filters) {
+        if (plane_filter(from, to, scaler, vertical != 0).taps == 0) {
+            return "so large a downscale is left to FFmpeg, which makes it in two steps";
+        }
+    }
+    if (!scales_as_ffmpeg(ffmpeg, plan.scaler)) {
+        return "this FFmpeg's scale filter scales differently from the decoders";
+    }
+    return std::nullopt;
+}
+
 std::optional<std::pair<std::string, std::string>> decoders_here(const HardwareDecoding& decoding) {
     std::vector<std::string> decoders;
     for (const std::optional<std::string>& accel : {decoding.source, decoding.distorted}) {
@@ -1265,8 +1288,8 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
     if (!decodes_codec(plan.codec, backend)) {
         throw GpuDecodeUnavailableError(plan.codec + " is not decoded by the " + std::string(backend) + " decoder");
     }
-    if (plan.scaled() && !scales_as_ffmpeg(ffmpeg, plan.scaler)) {
-        throw GpuDecodeUnavailableError("this FFmpeg's scale filter scales differently from the decoders");
+    if (const std::optional<std::string> refusal = scaling_refusal(plan, ffmpeg)) {
+        throw GpuDecodeUnavailableError(*refusal);
     }
     state.library = &load_decoder(backend);
     state.reader = std::make_unique<PacketReader>(ffmpeg, info.path, plan.codec);
