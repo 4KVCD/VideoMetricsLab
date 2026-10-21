@@ -14,7 +14,8 @@
 // The conversions are exact: the samples are moved, never computed, except
 // for a right shift by 6 that turns P016's 10-bit samples (in the top bits)
 // into the low-bit layout of yuv420p10le, which is what FFmpeg's own
-// conversion does (checked frame by frame against FFmpeg).
+// conversion does (checked frame by frame against FFmpeg). A picture scaled
+// here is FFmpeg's scale filter's to the sample too (scale/scale_filter.h).
 //
 // Everything runs in the device's primary CUDA context: Vship (CUDA runtime)
 // and libvmaf use that one too, so their memory and this pool are one address
@@ -44,7 +45,7 @@
 #include "ffnvcodec/dynlink_cuda.h"
 #include "ffnvcodec/dynlink_nvcuvid.h"
 #include "gpu_frames.h"
-#include "scale_filter.h"
+#include "scale/scale_filter.h"
 
 namespace {
 
@@ -184,13 +185,16 @@ std::string cuda_error(CUresult result) {
 // (bytes), and for 16-bit samples shifted right by `shift`. U and V are two
 // launches over the interleaved chroma plane, src_step 2 samples apart.
 //
-// Scaling (scale_filter.h) is two passes: hpass filters each input row into
-// floats at the output width (taps from starts[x], weights[x * taps + k],
-// edges repeated; 16-bit samples shifted right by in_shift first), capped
-// where swscale's 15-bit intermediate saturates (kIntermediateCap), vpass
-// filters those down each column to the output height, rounds, multiplies by
-// gain, clamps to max and shifts left by out_shift. widen8 makes an 8-bit
-// plane 16-bit as FFmpeg does: v << 2, with the top bits repeated if asked.
+// Scaling (scale_filter.h) is swscale's two passes, in its integer
+// arithmetic: hpass filters each input row into its 15-bit intermediate at
+// the output width (taps from starts[x], 16-bit weights[x * taps + k], edges
+// repeated; 16-bit samples shifted right by in_shift first, 8-bit ones
+// widened first if asked; the sum shifted right by `shift` and capped at
+// 32767), vpass filters those down each column to the output height as
+// column_sample does (10-bit; or 8-bit, rows below simd_rows as swscale's
+// SSE/AVX code, the rest as its C code), clamps and shifts left by
+// out_shift. widen8 makes an 8-bit plane 16-bit as FFmpeg does: v << 2, with
+// the top bits repeated if asked.
 const char kKernels[] = R"PTX(
 .version 6.0
 .target sm_30
@@ -291,12 +295,11 @@ PLANE16_DONE:
 .visible .entry hpass(
     .param .u64 p_src, .param .u32 p_src_pitch, .param .u32 p_src_step, .param .u32 p_wide, .param .u32 p_in_shift,
     .param .u32 p_src_w, .param .u64 p_dst, .param .u32 p_dst_pitch, .param .u32 p_width, .param .u32 p_height,
-    .param .u64 p_starts, .param .u64 p_weights, .param .u32 p_taps)
+    .param .u64 p_starts, .param .u64 p_weights, .param .u32 p_taps, .param .u32 p_widen, .param .u32 p_shift)
 {
-    .reg .pred %p<6>;
+    .reg .pred %p<8>;
     .reg .b16 %rs<3>;
-    .reg .b32 %r<24>;
-    .reg .f32 %f<6>;
+    .reg .b32 %r<28>;
     .reg .b64 %rd<20>;
 
     mov.u32 %r1, %ctaid.x;
@@ -331,11 +334,14 @@ PLANE16_DONE:
     add.s64 %rd7, %rd2, %rd6;
     ld.global.s32 %r14, [%rd7];
     mul.lo.s32 %r15, %r4, %r13;
-    mul.wide.u32 %rd8, %r15, 4;
+    mul.wide.u32 %rd8, %r15, 2;
     add.s64 %rd9, %rd3, %rd8;
     sub.s32 %r16, %r12, 1;
     setp.ne.u32 %p3, %r10, 0;
-    mov.f32 %f1, 0f00000000;
+    ld.param.u32 %r21, [p_widen];
+    setp.ne.u32 %p5, %r21, 0;
+    setp.eq.u32 %p6, %r21, 2;
+    mov.u32 %r23, 0;
     mov.u32 %r17, 0;
 HPASS_LOOP:
     setp.ge.u32 %p4, %r17, %r13;
@@ -348,42 +354,49 @@ HPASS_LOOP:
     @%p3 bra HPASS_WIDE;
     ld.global.u8 %rs1, [%rd11];
     cvt.u32.u16 %r19, %rs1;
+    @!%p5 bra HPASS_ADD;
+    shl.b32 %r24, %r19, 2;
+    shr.u32 %r25, %r19, 6;
+    @%p6 or.b32 %r24, %r24, %r25;
+    mov.b32 %r19, %r24;
     bra HPASS_ADD;
 HPASS_WIDE:
     ld.global.u16 %rs1, [%rd11];
     cvt.u32.u16 %r19, %rs1;
     shr.u32 %r19, %r19, %r11;
 HPASS_ADD:
-    cvt.rn.f32.u32 %f2, %r19;
-    mul.wide.u32 %rd12, %r17, 4;
+    mul.wide.u32 %rd12, %r17, 2;
     add.s64 %rd13, %rd9, %rd12;
-    ld.global.f32 %f3, [%rd13];
-    fma.rn.f32 %f1, %f3, %f2, %f1;
+    ld.global.s16 %rs2, [%rd13];
+    cvt.s32.s16 %r20, %rs2;
+    mad.lo.s32 %r23, %r20, %r19, %r23;
     add.u32 %r17, %r17, 1;
     bra HPASS_LOOP;
 HPASS_STORE:
-    selp.f32 %f4, 0f447FFE00, 0f437FFE00, %p3;
-    min.f32 %f1, %f1, %f4;
+    ld.param.u32 %r22, [p_shift];
+    shr.s32 %r23, %r23, %r22;
+    min.s32 %r23, %r23, 32767;
+    cvt.u16.u32 %rs1, %r23;
     ld.param.u64 %rd14, [p_dst];
     ld.param.u32 %r20, [p_dst_pitch];
     cvta.to.global.u64 %rd14, %rd14;
     mul.wide.u32 %rd15, %r5, %r20;
     add.s64 %rd16, %rd14, %rd15;
-    add.s64 %rd16, %rd16, %rd6;
-    st.global.f32 [%rd16], %f1;
+    mul.wide.u32 %rd17, %r4, 2;
+    add.s64 %rd16, %rd16, %rd17;
+    st.global.u16 [%rd16], %rs1;
 HPASS_DONE:
     ret;
 }
 
 .visible .entry vpass(
     .param .u64 p_src, .param .u32 p_src_pitch, .param .u32 p_src_h, .param .u64 p_dst, .param .u32 p_dst_pitch,
-    .param .u32 p_wide, .param .u32 p_out_shift, .param .f32 p_gain, .param .f32 p_max,
+    .param .u32 p_wide, .param .u32 p_out_shift, .param .u32 p_simd_rows,
     .param .u32 p_width, .param .u32 p_height, .param .u64 p_starts, .param .u64 p_weights, .param .u32 p_taps)
 {
-    .reg .pred %p<6>;
+    .reg .pred %p<10>;
     .reg .b16 %rs<3>;
-    .reg .b32 %r<24>;
-    .reg .f32 %f<8>;
+    .reg .b32 %r<28>;
     .reg .b64 %rd<20>;
 
     mov.u32 %r1, %ctaid.x;
@@ -409,16 +422,30 @@ HPASS_DONE:
     cvta.to.global.u64 %rd1, %rd1;
     cvta.to.global.u64 %rd2, %rd2;
     cvta.to.global.u64 %rd3, %rd3;
-    mul.wide.u32 %rd4, %r4, 4;
+    mul.wide.u32 %rd4, %r4, 2;
     add.s64 %rd5, %rd1, %rd4;
     mul.wide.u32 %rd6, %r5, 4;
     add.s64 %rd7, %rd2, %rd6;
     ld.global.s32 %r14, [%rd7];
     mul.lo.s32 %r15, %r5, %r13;
-    mul.wide.u32 %rd8, %r15, 4;
+    mul.wide.u32 %rd8, %r15, 2;
     add.s64 %rd9, %rd3, %rd8;
     sub.s32 %r16, %r9, 1;
-    mov.f32 %f1, 0f00000000;
+    ld.param.u32 %r22, [p_wide];
+    ld.param.u32 %r23, [p_simd_rows];
+    setp.ne.u32 %p5, %r22, 0;
+    // %p6: this row is swscale's SSE/AVX sum (8-bit, more than one tap,
+    // above the last rows), which starts from its rounding and adds each
+    // product's top 16 bits; otherwise the C code's sum from its rounding.
+    setp.eq.u32 %p7, %r22, 0;
+    setp.gt.and.u32 %p8, %r13, 1, %p7;
+    setp.lt.and.s32 %p6, %r5, %r23, %p8;
+    selp.u32 %r24, 65536, 262144, %p5;
+    sub.s32 %r25, %r13, 1;
+    shl.b32 %r25, %r25, 3;
+    add.s32 %r25, %r25, 64;
+    shr.s32 %r25, %r25, 4;
+    selp.u32 %r24, %r25, %r24, %p6;
     mov.u32 %r17, 0;
 VPASS_LOOP:
     setp.ge.u32 %p4, %r17, %r13;
@@ -428,31 +455,35 @@ VPASS_LOOP:
     min.s32 %r18, %r18, %r16;
     mul.wide.s32 %rd10, %r18, %r8;
     add.s64 %rd11, %rd5, %rd10;
-    ld.global.f32 %f2, [%rd11];
-    mul.wide.u32 %rd12, %r17, 4;
+    ld.global.s16 %rs1, [%rd11];
+    cvt.s32.s16 %r19, %rs1;
+    mul.wide.u32 %rd12, %r17, 2;
     add.s64 %rd13, %rd9, %rd12;
-    ld.global.f32 %f3, [%rd13];
-    fma.rn.f32 %f1, %f3, %f2, %f1;
+    ld.global.s16 %rs2, [%rd13];
+    cvt.s32.s16 %r20, %rs2;
+    mul.lo.s32 %r21, %r20, %r19;
+    @%p6 shr.s32 %r21, %r21, 16;
+    add.s32 %r24, %r24, %r21;
     add.u32 %r17, %r17, 1;
     bra VPASS_LOOP;
 VPASS_STORE:
-    ld.param.f32 %f4, [p_gain];
-    ld.param.f32 %f5, [p_max];
-    mul.rn.f32 %f1, %f1, %f4;
-    cvt.rni.f32.f32 %f1, %f1;
-    max.f32 %f1, %f1, 0f00000000;
-    min.f32 %f1, %f1, %f5;
-    cvt.rzi.u32.f32 %r19, %f1;
+    // 10-bit: >> 17; 8-bit C: >> 19; 8-bit SSE/AVX: the 16-bit sum >> 3.
+    @%p6 shl.b32 %r24, %r24, 16;
+    @%p6 shr.s32 %r24, %r24, 16;
+    selp.u32 %r25, 17, 19, %p5;
+    @%p6 mov.u32 %r25, 3;
+    shr.s32 %r19, %r24, %r25;
+    selp.u32 %r26, 1023, 255, %p5;
+    max.s32 %r19, %r19, 0;
+    min.s32 %r19, %r19, %r26;
     ld.param.u32 %r20, [p_out_shift];
     shl.b32 %r19, %r19, %r20;
     ld.param.u64 %rd14, [p_dst];
     ld.param.u32 %r21, [p_dst_pitch];
-    ld.param.u32 %r22, [p_wide];
     cvta.to.global.u64 %rd14, %rd14;
     mul.wide.u32 %rd15, %r5, %r21;
     add.s64 %rd16, %rd14, %rd15;
     cvt.u16.u32 %rs1, %r19;
-    setp.ne.u32 %p5, %r22, 0;
     @%p5 bra VPASS_WIDE;
     cvt.u64.u32 %rd17, %r4;
     add.s64 %rd18, %rd16, %rd17;
@@ -721,19 +752,22 @@ bool launch(Decoder *d, CUfunction kernel, CUdeviceptr src, unsigned src_pitch, 
 }
 
 // One plane through the two scaling passes: `src` (w x h samples, `step`
-// bytes apart in rows `pitch` bytes apart) to `dst` (ow x oh, packed).
+// bytes apart in rows `pitch` bytes apart) to `dst` (ow x oh, packed), 8-bit
+// samples widened first as `widen` says (scale_filter.h's Widen), `simd` the
+// plane's simd_rows.
 bool scale(Decoder *d, CUdeviceptr src, unsigned pitch, unsigned step, unsigned w, unsigned h, CUdeviceptr dst,
-           unsigned ow, unsigned oh, const Decoder::DeviceFilter &fh, const Decoder::DeviceFilter &fv, float gain) {
+           unsigned ow, unsigned oh, const Decoder::DeviceFilter &fh, const Decoder::DeviceFilter &fv, unsigned widen,
+           int simd) {
     const Params &p = d->params;
     unsigned wide = p.bit_depth > 8, in_shift = p.bit_depth > 8 ? 6 : 0;
     unsigned out_wide = wide_out(p), out_shift = p.bit_depth > 8 && p.shift == 0 ? 6 : 0;
-    float max = wide_out(p) ? 1023.0f : 255.0f;
-    unsigned scratch_pitch = ow * 4, out_pitch = ow * (out_wide ? 2 : 1);
+    unsigned row_shift = out_wide ? 9 : 7;  // to swscale's 15-bit intermediate
+    unsigned scratch_pitch = ow * 2, out_pitch = ow * (out_wide ? 2 : 1);
     CUdeviceptr scratch = d->scratch;
     void *h_args[] = {&src, &pitch, &step, &wide, &in_shift, &w, &scratch, &scratch_pitch, &ow, &h,
                       const_cast<CUdeviceptr *>(&fh.starts), const_cast<CUdeviceptr *>(&fh.weights),
-                      const_cast<unsigned *>(&fh.taps)};
-    void *v_args[] = {&scratch, &scratch_pitch, &h, &dst, &out_pitch, &out_wide, &out_shift, &gain, &max, &ow, &oh,
+                      const_cast<unsigned *>(&fh.taps), &widen, &row_shift};
+    void *v_args[] = {&scratch, &scratch_pitch, &h, &dst, &out_pitch, &out_wide, &out_shift, &simd, &ow, &oh,
                       const_cast<CUdeviceptr *>(&fv.starts), const_cast<CUdeviceptr *>(&fv.weights),
                       const_cast<unsigned *>(&fv.taps)};
     const Driver &cu = g_driver;
@@ -803,18 +837,19 @@ int CUDAAPI on_display(void *user, CUVIDPARSERDISPINFO *display) {
     const unsigned chroma_w = (p.crop_w + 1) / 2, chroma_h = (p.crop_h + 1) / 2;
     bool ok;
     if (is_scaled(p)) {
-        // Widened 8-bit: the filtered value times 4, as near FFmpeg's v << 2
-        // as a filtered value can be (full-range luma: to 1023 for 255).
-        const float luma_gain = p.widen == 2 ? 1023.0f / 255.0f : p.widen ? 4.0f : 1.0f;
-        const float chroma_gain = p.widen ? 4.0f : 1.0f;
+        // Widened 8-bit pictures are widened before they are scaled, as
+        // FFmpeg's format filter widens them in front of its scale filter.
+        const unsigned luma_widen = plane_widen(p, false), chroma_widen = plane_widen(p, true);
         const unsigned ow = d->out_w, oh = d->out_h, ocw = (ow + 1) / 2, och = (oh + 1) / 2;
-        ok = scale(d, luma, pitch, bps, p.crop_w, p.crop_h, dst, ow, oh, d->luma_h, d->luma_v, luma_gain);
+        ok = scale(d, luma, pitch, bps, p.crop_w, p.crop_h, dst, ow, oh, d->luma_h, d->luma_v, luma_widen,
+                   simd_rows(d->out_h, false));
         if (ok && !p.luma_only) {
             CUdeviceptr u = dst + d->luma_bytes, v = u + d->chroma_bytes;
+            const int simd = simd_rows(d->out_h, true);
             ok = scale(d, chroma, pitch, 2 * bps, chroma_w, chroma_h, u, ocw, och, d->chroma_h, d->chroma_v,
-                       chroma_gain)
+                       chroma_widen, simd)
                  && scale(d, chroma + bps, pitch, 2 * bps, chroma_w, chroma_h, v, ocw, och, d->chroma_h, d->chroma_v,
-                          chroma_gain);
+                          chroma_widen, simd);
         }
     } else if (p.widen) {
         ok = widen(d, luma, pitch, 1, dst, p.crop_w, p.crop_h, p.widen == 2);
@@ -914,6 +949,17 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         destroy(d);
         return nullptr;
     };
+    // The scaling filters: luma along and down, then chroma.
+    std::vector<Filter> filters;
+    if (is_scaled(p)) {
+        const int cw = (p.crop_w + 1) / 2, ch = (p.crop_h + 1) / 2;
+        const int ocw = (d->out_w + 1) / 2, och = (d->out_h + 1) / 2;
+        filters = {plane_filter(p.crop_w, d->out_w, p.scaler, false), plane_filter(p.crop_h, d->out_h, p.scaler, true),
+                   plane_filter(cw, ocw, p.scaler, false), plane_filter(ch, och, p.scaler, true)};
+        for (const Filter &f : filters) {
+            if (!f.taps) return give_up("so large a downscale is left to FFmpeg, which makes it in two steps");
+        }
+    }
     CUresult result = cu.cuDeviceGet(&d->device, p.device);
     if (result != CUDA_SUCCESS) return give_up("no CUDA device " + std::to_string(p.device) + ": " + cuda_error(result));
     // Waits for the GPU then sleep instead of spinning a CPU core, the
@@ -942,27 +988,22 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         if (result == CUDA_SUCCESS) result = cu.cuModuleGetFunction(&d->widen8, d->module, "widen8");
         if (result == CUDA_SUCCESS && is_scaled(p)) {
             step = "Preparing the scaling filters";
-            const int cw = (p.crop_w + 1) / 2, ch = (p.crop_h + 1) / 2;
-            const int ocw = (d->out_w + 1) / 2, och = (d->out_h + 1) / 2;
-            const Filter filters[4] = {
-                plane_filter(p.crop_w, d->out_w, p.scaler), plane_filter(p.crop_h, d->out_h, p.scaler),
-                plane_filter(cw, ocw, p.scaler), plane_filter(ch, och, p.scaler)};
             Decoder::DeviceFilter *targets[4] = {&d->luma_h, &d->luma_v, &d->chroma_h, &d->chroma_v};
             for (int i = 0; i < 4 && result == CUDA_SUCCESS; i++) {
                 const Filter &f = filters[i];
                 Decoder::DeviceFilter &t = *targets[i];
                 t.taps = static_cast<unsigned>(f.taps);
                 result = cu.cuMemAlloc(&t.starts, f.starts.size() * sizeof(int32_t));
-                if (result == CUDA_SUCCESS) result = cu.cuMemAlloc(&t.weights, f.weights.size() * sizeof(float));
+                if (result == CUDA_SUCCESS) result = cu.cuMemAlloc(&t.weights, f.weights.size() * sizeof(int16_t));
                 if (result == CUDA_SUCCESS)
                     result = cu.cuMemcpyHtoD(t.starts, f.starts.data(), f.starts.size() * sizeof(int32_t));
                 if (result == CUDA_SUCCESS)
-                    result = cu.cuMemcpyHtoD(t.weights, f.weights.data(), f.weights.size() * sizeof(float));
+                    result = cu.cuMemcpyHtoD(t.weights, f.weights.data(), f.weights.size() * sizeof(int16_t));
             }
-            // The rows between the passes: the widest plane's output width
-            // by its input height.
+            // The rows between the passes, swscale's 15-bit intermediate:
+            // the widest plane's output width by its input height.
             size_t rows = static_cast<size_t>(d->out_w) * p.crop_h;
-            if (result == CUDA_SUCCESS) result = cu.cuMemAlloc(&d->scratch, rows * sizeof(float));
+            if (result == CUDA_SUCCESS) result = cu.cuMemAlloc(&d->scratch, rows * sizeof(int16_t));
         }
         if (result == CUDA_SUCCESS) {
             step = "Allocating GPU memory for the decoded pictures";

@@ -19,7 +19,7 @@
 #include <cstring>
 #include <emmintrin.h>
 
-#include "scale_filter.h"
+#include "scale/scale_filter.h"
 
 #define NVF_API extern "C" __declspec(dllexport)
 
@@ -194,34 +194,41 @@ struct PlaneScaler {
     ScaleScratch scratch;
 };
 
-inline void prepare_scaler(const Params &p, PlaneScaler &s) {
+// False where a filter cannot be made here (so large a downscale that
+// swscale makes it in two steps): FFmpeg must scale the video.
+inline bool prepare_scaler(const Params &p, PlaneScaler &s) {
     const int ow = out_width(p), oh = out_height(p);
-    s.luma_h = plane_filter(p.crop_w, ow, p.scaler);
-    s.luma_v = plane_filter(p.crop_h, oh, p.scaler);
-    s.chroma_h = plane_filter((p.crop_w + 1) / 2, (ow + 1) / 2, p.scaler);
-    s.chroma_v = plane_filter((p.crop_h + 1) / 2, (oh + 1) / 2, p.scaler);
+    s.luma_h = plane_filter(p.crop_w, ow, p.scaler, false);
+    s.luma_v = plane_filter(p.crop_h, oh, p.scaler, true);
+    s.chroma_h = plane_filter((p.crop_w + 1) / 2, (ow + 1) / 2, p.scaler, false);
+    s.chroma_v = plane_filter((p.crop_h + 1) / 2, (oh + 1) / 2, p.scaler, true);
+    return s.luma_h.taps && s.luma_v.taps && s.chroma_h.taps && s.chroma_v.taps;
 }
 
-// convert_frame, scaled to the output size on the way. A widened 8-bit
-// picture is the filtered value times 4 (full-range luma: to 1023 for 255),
-// as NVIDIA's decoder here scales and widens.
+// How a plane's 8-bit samples are widened before they are scaled, as
+// FFmpeg's format filter widens them in front of its scale filter: shifted,
+// full-range luma (widen 2) with its top bits repeated.
+inline int plane_widen(const Params &p, bool chroma) {
+    return !p.widen ? WIDEN_NONE : p.widen == 2 && !chroma ? WIDEN_REPEAT : WIDEN_SHIFT;
+}
+
+// convert_frame, scaled to the output size on the way, as NVIDIA's decoder
+// here scales.
 inline void scale_frame(const Params &p, PlaneScaler &s, const uint8_t *y, const uint8_t *uv, size_t pitch, bool msb,
                         uint8_t *dst) {
     const bool wide = p.bit_depth > 8, out_wide = wide_out(p);
     const size_t bps = wide ? 2 : 1, out_bps = out_wide ? 2 : 1;
     const int in_shift = wide && msb ? 6 : 0, out_shift = wide && p.shift == 0 ? 6 : 0;
-    const float max = out_wide ? 1023.0f : 255.0f;
-    const float luma_gain = p.widen == 2 ? 1023.0f / 255.0f : p.widen ? 4.0f : 1.0f;
-    const float chroma_gain = p.widen ? 4.0f : 1.0f;
     const int ow = out_width(p), oh = out_height(p), ocw = (ow + 1) / 2, och = (oh + 1) / 2;
     const int cw = (p.crop_w + 1) / 2, ch = (p.crop_h + 1) / 2;
-    scale_plane(y + p.crop_y * pitch + p.crop_x * bps, pitch, bps, wide, in_shift, p.crop_w, p.crop_h, s.luma_h,
-                s.luma_v, dst, ow, oh, out_wide, luma_gain, max, out_shift, s.scratch);
+    scale_plane(y + p.crop_y * pitch + p.crop_x * bps, pitch, bps, wide, in_shift, plane_widen(p, false), p.crop_w,
+                p.crop_h, s.luma_h, s.luma_v, simd_rows(oh, false), dst, ow, oh, out_shift, s.scratch);
     if (p.luma_only) return;
     const uint8_t *chroma = uv + (p.crop_y / 2) * pitch + p.crop_x * bps;
     uint8_t *u = dst + static_cast<size_t>(ow) * oh * out_bps, *v = u + static_cast<size_t>(ocw) * och * out_bps;
-    scale_plane(chroma, pitch, 2 * bps, wide, in_shift, cw, ch, s.chroma_h, s.chroma_v, u, ocw, och, out_wide,
-                chroma_gain, max, out_shift, s.scratch);
-    scale_plane(chroma + bps, pitch, 2 * bps, wide, in_shift, cw, ch, s.chroma_h, s.chroma_v, v, ocw, och, out_wide,
-                chroma_gain, max, out_shift, s.scratch);
+    const int widen = plane_widen(p, true), simd = simd_rows(oh, true);
+    scale_plane(chroma, pitch, 2 * bps, wide, in_shift, widen, cw, ch, s.chroma_h, s.chroma_v, simd, u, ocw, och,
+                out_shift, s.scratch);
+    scale_plane(chroma + bps, pitch, 2 * bps, wide, in_shift, widen, cw, ch, s.chroma_h, s.chroma_v, simd, v, ocw,
+                och, out_shift, s.scratch);
 }

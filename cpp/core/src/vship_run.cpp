@@ -1346,15 +1346,6 @@ private:
                     throw GpuDecodeUnavailableError("its frames would be " + std::to_string(decode.frame_bytes()) +
                                                     " bytes, not " + std::to_string(video.layout.frame_bytes));
                 }
-                // NVIDIA's decoder takes a video only at its own size: one
-                // scaled stays FFmpeg's, whose scale filter the decoders'
-                // scaling matches only to within 1 (gpu_frames.h), so that
-                // its scores stay FFmpeg's sample for sample.
-                if (backend == "nvidia" && decode.scaled()) {
-                    const auto [width, height] = decode.output_size();
-                    throw GpuDecodeUnavailableError("it is scaled to " + std::to_string(width) + "x" +
-                                                    std::to_string(height) + ", which FFmpeg's scale filter does");
-                }
                 // NVIDIA's decoder on CUDA's first GPU, where FFmpeg's
                 // -hwaccel cuda decodes too: Vship's number is Vulkan's, a
                 // list in another order.

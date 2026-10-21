@@ -591,7 +591,11 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         d->extradata.assign(params->extradata, params->extradata + params->extradata_size);
     d->params.extradata = nullptr;
     d->info.frame_bytes = static_cast<long long>(frame_bytes(d->params));
-    if (is_scaled(d->params)) prepare_scaler(d->params, d->scaler);
+    if (is_scaled(d->params) && !prepare_scaler(d->params, d->scaler)) {
+        copy_text(error, error_size, "so large a downscale is left to FFmpeg, which makes it in two steps");
+        destroy(d);
+        return nullptr;
+    }
     std::string text;
     if (!open_session(vpl_codec(params->codec), &d->session, text)) {
         copy_text(error, error_size, text);

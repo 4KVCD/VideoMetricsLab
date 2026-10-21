@@ -7,10 +7,13 @@
 #include <chrono>
 #include <climits>
 #include <condition_variable>
+#include <cstdint>
+#include <cstring>
 #include <deque>
 #include <exception>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <numeric>
 #include <regex>
 #include <system_error>
@@ -26,6 +29,7 @@
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "scale_filter.h"
 
 namespace vml {
 
@@ -89,7 +93,7 @@ int depth_of(std::string_view pix_fmt) {
 }
 
 // The app's scaling algorithms, as the decoders' filters number them
-// (native/scale_filter.h).
+// (native/scale/scale_filter.h).
 int scaler_number(std::string_view algorithm) {
     if (algorithm == "bilinear") {
         return 0;
@@ -126,6 +130,117 @@ constexpr std::chrono::seconds feeder_timeout(30);
 std::atomic<int> stuck_closes{0};
 
 const app_log::Logger logger("vml.gpu_frames");
+
+// ------------------------------------------------------------------ scaling
+
+// The scale check's picture, and the sizes it is scaled to: up (the widest)
+// and down. All even, so their chroma planes stack whole.
+constexpr int check_width = 96, check_height = 64;
+constexpr std::array<std::pair<int, int>, 2> check_sizes{{{150, 100}, {52, 34}}};
+constexpr int stack_width = check_sizes[0].first;
+constexpr int stack_height = check_height + check_sizes[0].second + check_sizes[1].second;
+
+// Whether `ffmpeg`'s scale filter scales FFmpeg's own made-up 4:2:0 picture
+// at `depth` bits as the decoders' scaler does: the picture and both scaled
+// ones come in one frame from FFmpeg, one above the other, each padded to
+// the widest. `why` says how they differ.
+bool scale_check(const std::string& ffmpeg, const std::string& algorithm, int depth, std::string& why) {
+    const std::string format = depth > 8 ? "yuv420p10le" : "yuv420p";
+    const std::string top = std::to_string(1 << depth);  // every value, with hard steps between them
+    const auto size = [](int width, int height) { return std::to_string(width) + ":" + std::to_string(height); };
+    const auto [up_w, up_h] = check_sizes[0];
+    const auto [down_w, down_h] = check_sizes[1];
+    const std::string flags = ":flags=" + algorithm;
+    const std::string graph =
+        "color=c=black:s=" + std::to_string(check_width) + "x" + std::to_string(check_height) + ":r=1:d=1,format=" +
+        format + ",geq=lum='mod(X*X*7+Y*13+X*Y*3," + top + ")':cb='mod(X*29+Y*Y*5," + top + ")':cr='mod((X+Y)*(X+3)," +
+        top + ")',split=3[in][a][b];[a]scale=" + size(up_w, up_h) + flags + "[up];[b]scale=" + size(down_w, down_h) +
+        flags + "[down];[in]pad=" + size(stack_width, check_height) + "[in2];[down]pad=" +
+        size(stack_width, down_h) + "[down2];[in2][up][down2]vstack=3[out]";
+    // The picture as the bytes FFmpeg writes (run_program reads lines), read
+    // on a thread of its own, as run_program reads.
+    platform::ChildProcess child = platform::ChildProcess::start(
+        {ffmpeg, "-hide_banner", "-nostdin", "-v", "error", "-filter_complex", graph, "-map", "[out]", "-frames:v", "1",
+         "-f", "rawvideo", "-pix_fmt", format, "pipe:1"});
+    std::string made;
+    std::thread reader([&child, &made] {
+        std::array<char, 64 * 1024> chunk{};
+        while (const std::size_t read = child.read(chunk.data(), chunk.size())) {
+            made.append(chunk.data(), read);
+        }
+    });
+    if (!child.wait_for(std::chrono::seconds(30))) {
+        child.terminate();
+    }
+    const int exit_code = child.wait();
+    reader.join();
+    const std::size_t sample = depth > 8 ? 2 : 1;
+    const std::size_t luma = static_cast<std::size_t>(stack_width) * stack_height * sample;
+    if (exit_code != 0 || made.size() != luma * 3 / 2) {
+        why = "FFmpeg did not make the check's picture (" + std::to_string(made.size()) + " bytes, exit code " +
+              platform::exit_code_text(exit_code) + "): " + child.standard_error();
+        return false;
+    }
+    const auto* frame = reinterpret_cast<const std::uint8_t*>(made.data());
+    for (int plane = 0; plane < 3; ++plane) {
+        const bool chroma = plane > 0;
+        const int sub = chroma ? 1 : 0;
+        const std::size_t pitch = static_cast<std::size_t>(stack_width >> sub) * sample;
+        const std::uint8_t* start = frame + (plane == 0 ? 0 : luma + (plane - 1) * luma / 4);
+        const int width = check_width >> sub, height = check_height >> sub;
+        int row = height;
+        for (const auto& [out_w, out_h] : check_sizes) {
+            const int ow = (out_w + sub) >> sub, oh = (out_h + sub) >> sub;
+            const int scaler = scaler_number(algorithm);
+            const Filter along = plane_filter(width, ow, scaler, false), down = plane_filter(height, oh, scaler, true);
+            std::vector<std::uint8_t> ours(static_cast<std::size_t>(ow) * oh * sample);
+            ScaleScratch scratch;
+            scale_plane(start, pitch, sample, depth > 8, 0, WIDEN_NONE, width, height, along, down,
+                        simd_rows(out_h, chroma), ours.data(), ow, oh, 0, scratch);
+            for (int y = 0; y < oh; ++y) {
+                const std::uint8_t* theirs = start + static_cast<std::size_t>(row + y) * pitch;
+                if (std::memcmp(theirs, ours.data() + static_cast<std::size_t>(y) * ow * sample, ow * sample) != 0) {
+                    why = std::to_string(depth) + "-bit " + "YUV"[plane] + " plane scaled to " +
+                          std::to_string(out_w) + "x" + std::to_string(out_h) + ", from row " + std::to_string(y);
+                    return false;
+                }
+            }
+            row += oh;
+        }
+    }
+    return true;
+}
+
+// Whether `ffmpeg`'s scale filter gives the pictures the decoders give when
+// they scale with `algorithm` (native/scale/scale_filter.h: swscale's own
+// arithmetic, as FFmpeg 9's x86 builds run it). Another FFmpeg's may not,
+// say one built without its assembly or a later version whose scaler
+// changed; FFmpeg then scales. Found once for each FFmpeg and algorithm, at
+// 8 and 10 bits.
+bool scales_as_ffmpeg(const std::string& ffmpeg, const std::string& algorithm) {
+    static std::mutex mutex;
+    static std::map<std::pair<std::string, std::string>, bool> found;
+    const std::lock_guard<std::mutex> lock(mutex);
+    const auto key = std::pair(ffmpeg, algorithm);
+    if (const auto known = found.find(key); known != found.end()) {
+        return known->second;
+    }
+    std::string why;
+    bool same = false;
+    try {
+        same = scale_check(ffmpeg, algorithm, 8, why) && scale_check(ffmpeg, algorithm, 10, why);
+    } catch (const platform::ProcessError& error) {
+        why = error.what();
+    }
+    if (same) {
+        logger.info("The decoders scale as this FFmpeg's scale filter does (" + algorithm + ")");
+    } else {
+        logger.warning("This FFmpeg's scale filter scales differently from the decoders (" + algorithm + ": " + why +
+                       "), so it scales the videos the decoders would");
+    }
+    found.emplace(key, same);
+    return same;
+}
 
 // ------------------------------------------------------------------ binding
 
@@ -1149,6 +1264,9 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
     state.file_name = platform::path_text(info.path.filename());
     if (!decodes_codec(plan.codec, backend)) {
         throw GpuDecodeUnavailableError(plan.codec + " is not decoded by the " + std::string(backend) + " decoder");
+    }
+    if (plan.scaled() && !scales_as_ffmpeg(ffmpeg, plan.scaler)) {
+        throw GpuDecodeUnavailableError("this FFmpeg's scale filter scales differently from the decoders");
     }
     state.library = &load_decoder(backend);
     state.reader = std::make_unique<PacketReader>(ffmpeg, info.path, plan.codec);

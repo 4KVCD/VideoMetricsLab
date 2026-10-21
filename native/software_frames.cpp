@@ -214,19 +214,16 @@ void scale_planar(const Params &p, PlaneScaler &s, uint8_t *const plane[3], cons
     const bool wide = p.bit_depth > 8, out_wide = wide_out(p);
     const size_t bps = wide ? 2 : 1, out_bps = out_wide ? 2 : 1;
     const int out_shift = wide && p.shift == 0 ? 6 : 0;
-    const float max = out_wide ? 1023.0f : 255.0f;
-    const float luma_gain = p.widen == 2 ? 1023.0f / 255.0f : p.widen ? 4.0f : 1.0f;
-    const float chroma_gain = p.widen ? 4.0f : 1.0f;
     const int ow = out_width(p), oh = out_height(p), ocw = (ow + 1) / 2, och = (oh + 1) / 2;
     const int cw = (p.crop_w + 1) / 2, ch = (p.crop_h + 1) / 2;
-    scale_plane(plane[0] + p.crop_y * pitch[0] + p.crop_x * bps, pitch[0], bps, wide, 0, p.crop_w, p.crop_h,
-                s.luma_h, s.luma_v, dst, ow, oh, out_wide, luma_gain, max, out_shift, s.scratch);
+    scale_plane(plane[0] + p.crop_y * pitch[0] + p.crop_x * bps, pitch[0], bps, wide, 0, plane_widen(p, false),
+                p.crop_w, p.crop_h, s.luma_h, s.luma_v, simd_rows(oh, false), dst, ow, oh, out_shift, s.scratch);
     if (p.luma_only) return;
     uint8_t *u = dst + static_cast<size_t>(ow) * oh * out_bps, *v = u + static_cast<size_t>(ocw) * och * out_bps;
     for (int c = 1; c <= 2; c++) {
-        scale_plane(plane[c] + (p.crop_y / 2) * pitch[c] + (p.crop_x / 2) * bps, pitch[c], bps, wide, 0, cw, ch,
-                    s.chroma_h, s.chroma_v, c == 1 ? u : v, ocw, och, out_wide, chroma_gain, max, out_shift,
-                    s.scratch);
+        scale_plane(plane[c] + (p.crop_y / 2) * pitch[c] + (p.crop_x / 2) * bps, pitch[c], bps, wide, 0,
+                    plane_widen(p, true), cw, ch, s.chroma_h, s.chroma_v, simd_rows(oh, true), c == 1 ? u : v, ocw,
+                    och, out_shift, s.scratch);
     }
 }
 
@@ -602,7 +599,11 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     d->info.chroma_format = 1;
     d->info.progressive = 1;
     d->info.decode_surfaces = params->pool;
-    if (is_scaled(d->params)) prepare_scaler(d->params, d->scaler);
+    if (is_scaled(d->params) && !prepare_scaler(d->params, d->scaler)) {
+        copy_text(error, error_size, "so large a downscale is left to FFmpeg, which makes it in two steps");
+        destroy(d);
+        return nullptr;
+    }
     d->slots.resize(params->pool);
     for (int slot = 0; slot < params->pool; slot++) d->free_slots.push_back(slot);
     if (d->av1) {

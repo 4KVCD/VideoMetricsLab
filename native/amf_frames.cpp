@@ -982,7 +982,11 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         d->extradata.assign(params->extradata, params->extradata + params->extradata_size);
     d->params.extradata = nullptr;
     d->info.frame_bytes = static_cast<long long>(frame_bytes(d->params));
-    if (is_scaled(d->params)) prepare_scaler(d->params, d->scaler);
+    if (is_scaled(d->params) && !prepare_scaler(d->params, d->scaler)) {
+        copy_text(error, error_size, "so large a downscale is left to FFmpeg, which makes it in two steps");
+        destroy(d);
+        return nullptr;
+    }
     d->info.bit_depth = params->bit_depth;
     d->info.chroma_format = 1;
     d->info.display_right = params->width;

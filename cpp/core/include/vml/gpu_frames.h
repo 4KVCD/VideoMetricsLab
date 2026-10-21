@@ -21,8 +21,9 @@
 // decodes it in this process.
 //
 // The pictures are the same, sample for sample, as FFmpeg's decoding gives,
-// but for a picture scaled here: within 1 of FFmpeg's scale filter's, which
-// the Python app's user decided is the same comparison. The pictures that
+// and a picture scaled here as FFmpeg's scale filter gives it
+// (native/scale/scale_filter.h: swscale's arithmetic, as FFmpeg 9's x86 builds
+// run it). The pictures that
 // come out, and their timestamps, are checked against the packets that went
 // in (PictureChecks): a picture the decoder dropped or added fails the run,
 // and FFmpeg then decodes the videos. Whatever is not decoded here (a codec
