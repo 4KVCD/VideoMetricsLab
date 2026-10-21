@@ -230,23 +230,17 @@ QGroupBox* SettingsPanel::build_defaults_box() {
 QGroupBox* SettingsPanel::build_gpu_box() {
     auto* gpu_box = new QGroupBox(app::tr("GPU metrics"));
     auto* gpu_layout = new QVBoxLayout(gpu_box);
-    gpu_together =
-        new QCheckBox(app::tr("Always calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video"));
+    gpu_together = new QCheckBox(app::tr("Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video"));
     gpu_together->setToolTip(app::tr(
-        "Each video is decoded once for all its GPU metrics instead of once for each. Where the "
-        "GPU decodes the videos this gains little; where the CPU does -- 4K VVC, which no GPU "
-        "decodes -- it saves most of the decoding.\n\n"
-        "Very heavy on GPU memory at 4K: about 7.3 GB for all three at once, against at most "
-        "4.8 GB one at a time (CVVDP). A metric that fails in the shared pass, out of GPU memory "
-        "for example, is calculated again on its own.\n\nThe scores are the same either way. "
-        "Applies from the next run."));
+        "Each video is decoded once for all three instead of once for each. This is faster only on very powerful "
+        "GPUs, and needs a lot of GPU memory. A metric that fails in the shared pass, out of GPU memory for example, "
+        "is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run."));
     gpu_together->setChecked(settings_.gpu_metrics_together);
     connect(gpu_together, &QCheckBox::toggled, this, [this] { on_edited(); });
     gpu_layout->addWidget(gpu_together);
     auto* gpu_note = new QLabel(
-        app::tr("Unticked, the three are calculated together when the GPU has the memory for it as each video starts, "
-                "and one at a time otherwise. Together, each video is decoded once instead of once per metric: much "
-                "less CPU work for 4K VVC, and about 7.3 GB of GPU memory at 4K."));
+        app::tr("Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any "
+                "slower on most GPUs."));
     gpu_note->setWordWrap(true);
     theme::style(gpu_note, "color: {muted};");
     gpu_layout->addWidget(gpu_note);

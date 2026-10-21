@@ -238,7 +238,7 @@ MainWindow::MainWindow() {
     logger.info(std::string("Settings: parallel CPU metrics ") + (settings_.parallel_jobs > 1 ? "on" : "off") +
                 ", GPU decode " + (settings_.default_gpu_decode ? "on" : "off") + ", VMAF v0.6.1 and NEG on " +
                 (settings_.default_vmaf_on_gpu ? "GPU" : "CPU") + ", GPU metrics " +
-                (settings_.gpu_metrics_together ? "always in one pass" : "in one pass when the GPU has the memory") +
+                (settings_.gpu_metrics_together ? "in one pass" : "one at a time") +
                 ", saved results " + (settings_.use_cache ? "reused" : "not reused") + " (" +
                 (settings_.cache_dir.empty() ? std::string("default folder") : settings_.cache_dir) + ")");
     if (settings_.remember_window_size) {

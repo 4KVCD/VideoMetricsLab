@@ -2211,39 +2211,14 @@ private:
         return run_vship_pass(request_, plan, progress, hooks_.on_status, cancel_);
     }
 
-    // Whether the metrics share one pass, which decodes each video once for
-    // all of them rather than once each (most of the time of a 4K VVC video,
-    // which the CPU decodes): always when the settings say so (Settings >
-    // GPU metrics), and otherwise when the GPU has the memory for it now:
-    // 0.9 GB a megapixel of the larger video's pictures, and 1 GB to spare.
-    // (A pass of all three took 5.1 GB at 3840x1608, 0.83 GB a megapixel,
-    // against at most 3.3 GB one at a time: an RTX 5090, Vship's CUDA build,
-    // the GPU decoding.)
-    bool shared_pass() const {
-        if (together_ || keys_.size() < 2) {
-            return together_;
-        }
-        constexpr double gb_per_megapixel = 0.9;
-        constexpr double headroom_gb = 1.0;
-        const double megapixels =
-            std::max(static_cast<double>(request_.source.width) * request_.source.height,
-                     static_cast<double>(request_.distorted.width) * request_.distorted.height) /
-            1e6;
-        const auto needed = static_cast<unsigned long long>((gb_per_megapixel * megapixels + headroom_gb) * 1e9);
-        const std::optional<unsigned long long> available = platform::gpu_memory_available(device_.name);
-        const bool fits = available && *available >= needed;
-        logger.info("Vship: " + metric_labels(keys_, ", ") + (fits ? " in one pass" : " one at a time") + ": " +
-                    (available ? format_fixed(static_cast<double>(*available) / 1e9, 1) + " GB of GPU memory free"
-                               : std::string("the GPU's free memory is not known")) +
-                    ", one pass needs about " + format_fixed(static_cast<double>(needed) / 1e9, 1) + " GB");
-        return fits;
-    }
-
     // Scores the metrics in the passes vship_passes groups them into, then
-    // each metric that failed in a shared pass in a pass of its own.
+    // each metric that failed in a shared pass in a pass of its own. They
+    // share one pass only when Settings > GPU metrics says so: it decodes
+    // each video once for all of them, which is faster only on a very
+    // powerful GPU, and takes far more of the GPU's memory.
     PerceptualTaskOutput run_passes() {
         const std::vector<std::vector<std::string>> passes =
-            vship_passes(keys_, request_.options.n_subsample, shared_pass());
+            vship_passes(keys_, request_.options.n_subsample, together_);
         run_groups(passes, 0, static_cast<int>(passes.size()));
         std::vector<std::string> shared;
         for (const std::vector<std::string>& group : passes) {

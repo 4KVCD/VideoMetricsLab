@@ -181,8 +181,8 @@ using PerceptualRunner = std::function<PerceptualTaskOutput(const VmafJob& job, 
 // "Auto" libvmaf threads become an equal share of `cores` for each CPU lane.
 // A failed task leaves the video's other tasks to finish. `runner`
 // calculates FFmpeg's and VMAF's tasks, `perceptual` the perceptual ones,
-// the GPU's always in one pass when `gpu_metrics_together` (Settings > GPU
-// metrics), and otherwise in one pass when the GPU has the memory for it.
+// the GPU's in one pass when `gpu_metrics_together` (Settings > GPU
+// metrics), and otherwise one at a time.
 void run_jobs(const std::vector<VmafJob>& jobs, int parallel_jobs, const RunEvents& events, const TaskRunner& runner,
               const PerceptualRunner& perceptual, bool gpu_metrics_together, unsigned cores,
               const CancelToken& cancel);

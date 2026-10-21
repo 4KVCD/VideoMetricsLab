@@ -43,8 +43,8 @@ struct Settings {
 
     // How many videos to score at once (1 or 2).
     int parallel_jobs = 1;
-    // Calculate a video's GPU metrics in one Vship pass always; otherwise in
-    // one when the GPU has the memory for it, and one at a time when not.
+    // Calculate a video's GPU metrics in one Vship pass; otherwise one at a
+    // time.
     bool gpu_metrics_together = false;
     // Use a saved result instead of calculating again.
     bool use_cache = true;

@@ -27,9 +27,9 @@ class RunWorker : public QThread {
 
 public:
     // Runs `jobs`: the CPU's metrics of up to `parallel_jobs` videos at once,
-    // each video's GPU metrics always in one pass when `gpu_metrics_together`
-    // (otherwise in one pass when the GPU has the memory for it), with
-    // the FFmpeg `settings` find, which is checked as the run starts.
+    // each video's GPU metrics in one pass when `gpu_metrics_together`
+    // (otherwise one at a time), with the FFmpeg `settings` find, which is
+    // checked as the run starts.
     RunWorker(std::vector<VmafJob> jobs, int parallel_jobs, bool gpu_metrics_together, Settings settings,
               QObject* parent = nullptr);
     ~RunWorker() override;
