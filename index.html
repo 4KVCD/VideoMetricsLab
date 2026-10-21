@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VideoMetricsLab – video quality metrics on any GPU: VMAF, SSIMULACRA2, Butteraugli, PSNR, SSIM, XPSNR</title>
-<meta name="description" content="VideoMetricsLab is a free Windows app for measuring and comparing video quality: VMAF, VMAF v1, SSIMULACRA2, Butteraugli, ColorVideo VDP, PSNR, SSIM and XPSNR, accelerated on NVIDIA, AMD and Intel GPUs, with frame-exact A/B playback.">
+<meta name="description" content="VideoMetricsLab is a free app for Windows and macOS for measuring and comparing video quality: VMAF, VMAF v1, SSIMULACRA2, Butteraugli, ColorVideo VDP, PSNR, SSIM and XPSNR, accelerated on NVIDIA, AMD, Intel and Apple GPUs, with frame-exact A/B playback.">
 <meta name="google-site-verification" content="khz6kFVBMw_XA6MR3O0ZY50uRV8lDeD94mxHsrn5VeI">
 <link rel="canonical" href="https://4kvcd.github.io/VideoMetricsLab/">
 <meta property="og:type" content="website">
 <meta property="og:title" content="VideoMetricsLab – video quality metrics on any GPU">
-<meta property="og:description" content="Measure and compare video encodes: VMAF, VMAF v1, SSIMULACRA2, Butteraugli, ColorVideo VDP, PSNR, SSIM and XPSNR on NVIDIA, AMD and Intel GPUs.">
+<meta property="og:description" content="Measure and compare video encodes: VMAF, VMAF v1, SSIMULACRA2, Butteraugli, ColorVideo VDP, PSNR, SSIM and XPSNR on NVIDIA, AMD, Intel and Apple GPUs.">
 <meta property="og:url" content="https://4kvcd.github.io/VideoMetricsLab/">
 <meta property="og:image" content="https://4kvcd.github.io/VideoMetricsLab/img/02-metric-graphs.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -19,14 +19,14 @@
   "@type": "SoftwareApplication",
   "name": "VideoMetricsLab",
   "applicationCategory": "MultimediaApplication",
-  "operatingSystem": "Windows 10, Windows 11",
-  "softwareVersion": "2.1",
+  "operatingSystem": "Windows 10, Windows 11, macOS 14.4",
+  "softwareVersion": "2.2",
   "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
   "license": "https://opensource.org/licenses/MIT",
   "url": "https://4kvcd.github.io/VideoMetricsLab/",
   "downloadUrl": "https://github.com/4KVCD/VideoMetricsLab/releases/latest",
   "codeRepository": "https://github.com/4KVCD/VideoMetricsLab",
-  "description": "A free Windows app for measuring and comparing video quality: VMAF, VMAF v1, SSIMULACRA2, Butteraugli, ColorVideo VDP, PSNR, SSIM and XPSNR, accelerated on NVIDIA, AMD and Intel GPUs."
+  "description": "A free app for Windows and macOS for measuring and comparing video quality: VMAF, VMAF v1, SSIMULACRA2, Butteraugli, ColorVideo VDP, PSNR, SSIM and XPSNR, accelerated on NVIDIA, AMD, Intel and Apple GPUs."
 }
 </script>
 <style>
@@ -69,25 +69,26 @@ footer { border-top: 1px solid var(--line); margin-top: 56px; padding-top: 16px;
 <h1>VideoMetricsLab</h1>
 <p class="lead">Video quality metrics on any GPU, and frame-exact A/B comparison of your encodes.</p>
 
-<p>VideoMetricsLab is a free Windows app for measuring and comparing video quality. Add a source and any number
-of encodes, and it calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli, ColorVideo VDP, PSNR, SSIM and XPSNR in
-one run, accelerated on NVIDIA, AMD and Intel GPUs. Per-frame graphs show exactly where each encode falls behind,
+<p>VideoMetricsLab is a free app for Windows and macOS for measuring and comparing video quality. Add a source
+and any number of encodes, and it calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli, ColorVideo VDP, PSNR, SSIM
+and XPSNR in one run, accelerated on NVIDIA, AMD, Intel and Apple GPUs. Per-frame graphs show exactly where each encode falls behind,
 and frame-exact playback switches instantly between the source and each encode, so you can see the differences
 the scores point to. It's built for anyone tuning encoders, comparing codecs or settings, or checking a release
 before it ships.</p>
 
 <div class="buttons">
-  <a class="button primary" href="https://github.com/4KVCD/VideoMetricsLab/releases/latest">Download for Windows</a>
+  <a class="button primary" href="https://github.com/4KVCD/VideoMetricsLab/releases/latest">Download for Windows or macOS</a>
   <a class="button" href="https://github.com/4KVCD/VideoMetricsLab">Source code on GitHub</a>
 </div>
-<p class="note">Windows 10 or 11 (x64). Needs FFmpeg 9 or newer with libvmaf, installed separately. Free and open
-source, under the MIT licence.</p>
+<p class="note">Windows 10 or 11 (x64), or macOS 14.4 or later on Apple silicon. Needs FFmpeg 9 or newer with
+libvmaf, installed separately. Free and open source, under the MIT licence.</p>
 
 <section class="news">
-<h2>New in v2.1</h2>
-<p>VideoMetricsLab is now a C++ app: a <strong>39 MB</strong> download instead of 87 MB, <strong>1.25x</strong>
-faster runs, and a window that opens <strong>3x</strong> faster and idles in a third of the memory. See the
-<a href="https://github.com/4KVCD/VideoMetricsLab/releases/tag/v2.1">release notes</a>.</p>
+<h2>New in v2.2</h2>
+<p>VideoMetricsLab now runs on macOS (Apple silicon), and SSIMULACRA2, Butteraugli and ColorVideo VDP use
+<a href="https://github.com/4KVCD/Vship-fast">Vship-fast</a>: Butteraugli <strong>1.75x-2.5x</strong>, ColorVideo
+VDP <strong>1.6x-2.4x</strong> and SSIMULACRA2 up to <strong>1.6x</strong> faster. See the
+<a href="https://github.com/4KVCD/VideoMetricsLab/releases/tag/v2.2">release notes</a>.</p>
 </section>
 
 <h2>Features</h2>
@@ -100,8 +101,8 @@ faster runs, and a window that opens <strong>3x</strong> faster and idles in a t
 
 <h3>Fast on any GPU</h3>
 <ul>
-<li>VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD and Intel GPUs with <a href="https://github.com/4KVCD/libvmaf-fast">libvmaf-fast</a>: VMAF v1 up to <strong>17x</strong> faster.</li>
-<li>SSIMULACRA2, Butteraugli and ColorVideo VDP on the GPU with Vship (CUDA, HIP or Vulkan); libjxl on the CPU when no GPU can be used, for SSIMULACRA2 and Butteraugli.</li>
+<li>VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD, Intel and Apple GPUs with <a href="https://github.com/4KVCD/libvmaf-fast">libvmaf-fast</a>: VMAF v1 up to <strong>17x</strong> faster.</li>
+<li>SSIMULACRA2, Butteraugli and ColorVideo VDP on any GPU with <a href="https://github.com/4KVCD/Vship-fast">Vship-fast</a> (Vulkan); libjxl on the CPU when no GPU can be used, for SSIMULACRA2 and Butteraugli.</li>
 <li>PSNR, SSIM and XPSNR <strong>2.7x-11x</strong> faster, calculated in the app.</li>
 <li>GPU video decoding, with software decoding for formats the GPU can't handle, such as VVC.</li>
 </ul>
