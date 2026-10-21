@@ -134,6 +134,9 @@ inline constexpr unsigned amd_pci_vendors[] = {0x1002, 0x1022};
 // (CUDA_VISIBLE_DEVICES and VK_LOADER_DRIVERS_DISABLE hide the others from
 // CUDA and Vulkan).
 std::vector<unsigned> gpu_vendor_ids();
+// Whether this system lists its GPUs in gpu_vendor_ids: Windows does; on
+// macOS and Linux the list is empty whatever GPU there is.
+bool lists_gpus();
 // DirectX's number for the GPU that Video Compare decodes and draws on: 0,
 // the first, unless VML_GPU_VENDOR names another maker's; nothing when it
 // names a maker with no GPU here (as with no GPU, none to draw on).

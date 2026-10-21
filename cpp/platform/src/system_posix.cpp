@@ -170,6 +170,8 @@ bool keep_system_awake(bool /*awake*/) { return false; }
 
 std::vector<unsigned> gpu_vendor_ids() { return {}; }
 
+bool lists_gpus() { return false; }
+
 std::optional<unsigned> first_gpu_adapter() { return 0; }
 
 std::optional<unsigned long long> gpu_memory_available(std::string_view /*name*/) { return std::nullopt; }

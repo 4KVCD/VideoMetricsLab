@@ -303,6 +303,8 @@ std::vector<unsigned> gpu_vendor_ids() {
     return vendors;
 }
 
+bool lists_gpus() { return true; }
+
 std::optional<unsigned> first_gpu_adapter() {
     if (!named_vendor_ids()) {
         return 0;

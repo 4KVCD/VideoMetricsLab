@@ -97,6 +97,12 @@ void log_tools(const ToolsStatus& status, const std::vector<GpuVendor>& gpus) {
             main_logger.warning("FFmpeg: " + problem);
         }
     }
+    // Only where the system lists its GPUs: on macOS and Linux the list is
+    // empty whatever the GPU, which is not "none detected"; the GPU metrics'
+    // own lines name the GPU there.
+    if (!platform::lists_gpus()) {
+        return;
+    }
     std::vector<std::string_view> names;
     for (const GpuVendor vendor : gpus) {
         names.push_back(vendor_label(vendor));
