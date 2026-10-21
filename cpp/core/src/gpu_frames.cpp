@@ -143,7 +143,11 @@ constexpr int stack_height = check_height + check_sizes[0].second + check_sizes[
 // Whether `ffmpeg`'s scale filter scales FFmpeg's own made-up 4:2:0 picture
 // at `depth` bits as the decoders' scaler does: the picture and both scaled
 // ones come in one frame from FFmpeg, one above the other, each padded to
-// the widest. `why` says how they differ.
+// the widest. The picture is left-sited, as H.264's and HEVC's are by
+// default: FFmpeg 9's scale filter scales chroma centred whatever the siting
+// (it sets each picture's to its in_chroma_loc option, unspecified), as the
+// decoders do, while an FFmpeg that kept the siting would scale it otherwise
+// and fail. `why` says how they differ.
 bool scale_check(const std::string& ffmpeg, const std::string& algorithm, int depth, std::string& why) {
     const std::string format = depth > 8 ? "yuv420p10le" : "yuv420p";
     const std::string top = std::to_string(1 << depth);  // every value, with hard steps between them
@@ -154,9 +158,9 @@ bool scale_check(const std::string& ffmpeg, const std::string& algorithm, int de
     const std::string graph =
         "color=c=black:s=" + std::to_string(check_width) + "x" + std::to_string(check_height) + ":r=1:d=1,format=" +
         format + ",geq=lum='mod(X*X*7+Y*13+X*Y*3," + top + ")':cb='mod(X*29+Y*Y*5," + top + ")':cr='mod((X+Y)*(X+3)," +
-        top + ")',split=3[in][a][b];[a]scale=" + size(up_w, up_h) + flags + "[up];[b]scale=" + size(down_w, down_h) +
-        flags + "[down];[in]pad=" + size(stack_width, check_height) + "[in2];[down]pad=" +
-        size(stack_width, down_h) + "[down2];[in2][up][down2]vstack=3[out]";
+        top + ")',setparams=chroma_location=left,split=3[in][a][b];[a]scale=" + size(up_w, up_h) + flags +
+        "[up];[b]scale=" + size(down_w, down_h) + flags + "[down];[in]pad=" + size(stack_width, check_height) +
+        "[in2];[down]pad=" + size(stack_width, down_h) + "[down2];[in2][up][down2]vstack=3[out]";
     // The picture as the bytes FFmpeg writes (run_program reads lines), read
     // on a thread of its own, as run_program reads.
     platform::ChildProcess child = platform::ChildProcess::start(
