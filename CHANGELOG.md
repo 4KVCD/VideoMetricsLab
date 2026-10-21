@@ -2,44 +2,45 @@
 
 ## v2.2
 
-v2.2 adds a macOS version for Apple silicon and makes SSIMULACRA2, Butteraugli
-and CVVDP faster with Vship-fast.
+v2.2 adds a macOS version for Apple silicon, and with Vship-fast makes
+SSIMULACRA2, Butteraugli and CVVDP on the GPU faster and as accurate as
+libjxl and pycvvdp.
 
 ### Metric performance
 
+- SSIMULACRA2, Butteraugli and CVVDP on the GPU now give the same scores as
+  libjxl and pycvvdp for the same pictures: Butteraugli identical,
+  SSIMULACRA2 within 0.0000001 and CVVDP to 5 decimals.
 - SSIMULACRA2, Butteraugli and CVVDP now use
   [Vship-fast](https://github.com/4KVCD/Vship-fast): Butteraugli
   **1.75x-2.5x**, CVVDP **1.6x-2.4x** and SSIMULACRA2 up to **1.6x** faster
   than Vship's Vulkan build.
-- SSIMULACRA2, Butteraugli and CVVDP on the GPU are now as accurate as their
-  CPU reference tools, libjxl and pycvvdp.
 
 ### New features
 
 - Added a macOS version for Apple silicon (macOS 14.4 or later), with GPU
   metrics and Video Compare playback on the Mac's GPU.
-- Added an app icon.
-- Video Compare now shows its keys (S, ←/→ and Space) in large type on its
-  black screen.
+- Command line: a video without colour tags now takes the other video's, so a
+  .y4m encode of an HDR10 source is read as HDR10.
 - Command line: added `--fps` to compare raw video streams (.264, .265, .266,
   .obu and others), and `--size` and `--pix-fmt` (with `--fps`) for raw .yuv
   files.
-- Command line: a video without colour tags now takes the other video's, so a
-  .y4m encode of an HDR10 source is read as HDR10.
+- Video Compare now shows its keys (S, ←/→ and Space) in large type on its
+  black screen.
+- Added an app icon.
 
 ### Other changes
 
+- SSIMULACRA2, Butteraugli and CVVDP scores saved on the GPU by earlier
+  versions are calculated again.
+- SSIMULACRA2, Butteraugli and CVVDP are now calculated one at a time, which
+  needs less GPU memory; Settings > GPU metrics can still put them in one
+  pass, which is faster only on very powerful GPUs.
 - Removed the GPU backend setting: the GPU metrics now always use Vulkan
   (VMAF v0.6.1 and VMAF NEG use CUDA on an NVIDIA GPU where Vulkan can't run
   them).
 - Removed the GPU/CPU choice for SSIMULACRA2 and Butteraugli: they now run on
   the GPU when one can be used, and on the CPU otherwise.
-- SSIMULACRA2, Butteraugli and CVVDP are now calculated one at a time, which
-  needs less GPU memory; Settings > GPU metrics can still put them in one
-  pass, which is faster only on very powerful GPUs.
-- SSIMULACRA2, Butteraugli and CVVDP on the GPU now compute as libjxl and
-  pycvvdp do, so scores saved on the GPU by earlier versions are calculated
-  again.
 - Command line: removed `--ssimulacra2-on` and `--butteraugli-on`; `--cpu`
   still calculates both on the CPU.
 - Command line: a metric that falls back from the GPU to the CPU now gets a
@@ -53,38 +54,38 @@ and CVVDP faster with Vship-fast.
 
 - Fixed wrong VMAF, PSNR, SSIM and XPSNR scores when the test video's colour
   range or colour matrix differs from the reference's.
-- Fixed SSIMULACRA2, Butteraugli and CVVDP reading the two videos with
-  different colour matrices when one or both had no colour tags, such as a
-  540p encode of an untagged 720p source.
-- Fixed SSIMULACRA2, Butteraugli and CVVDP on the GPU reading the two videos'
-  colours half a pixel apart when only one gave its chroma siting, such as a
-  .y4m reference made from an .mkv.
-- Fixed SSIMULACRA2, Butteraugli and CVVDP on the GPU reading full-range
-  greyscale videos with too little contrast.
 - Fixed scores of a test video at another resolution than the reference
   (such as a 1080p encode of a 4K source) changing slightly with Use GPU
   decoding.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP reading the two videos with
+  different colour matrices when one or both had no colour tags, such as a
+  540p encode of an untagged 720p source.
 - Fixed VMAF, PSNR, SSIM and XPSNR scores of a full-range 8-bit video against
   a 10-bit one changing with Use GPU decoding.
 - Fixed SSIMULACRA2, Butteraugli and CVVDP scoring a test video of another
   shape than the reference (such as a 1440x1080 encode of a 4K source)
   stretched, instead of refusing it as VMAF does.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP on the GPU reading the two videos'
+  colours half a pixel apart when only one gave its chroma siting, such as a
+  .y4m reference made from an .mkv.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP on the GPU reading full-range
+  greyscale videos with too little contrast.
+- Command line: fixed CVVDP failing, and VMAF, SSIMULACRA2 and Butteraugli
+  falling back to the CPU, when the videos were given as relative paths.
 - Fixed changing a VMAF model removing the video's other scores too.
 - Fixed cancelling the custom VMAF model file dialog switching the video to
   the Auto model and removing its scores.
-- Fixed the duration limit, frame subsample and threads boxes applying a value
-  digit by digit as it was typed.
 - Fixed videos still showing scores after Clear saved results being skipped by
   the next run.
-- Fixed Metric Graphs' exported PNG drawing its title and table too small on
-  high-DPI screens.
-- Command line: fixed CVVDP failing, and VMAF, SSIMULACRA2 and Butteraugli
-  falling back to the CPU, when the videos were given as relative paths.
 - Command line: fixed very large `--threads` or `--subsample` values hanging
   the run.
+- Fixed the duration limit, frame subsample and threads boxes applying a value
+  digit by digit as it was typed.
 - Command line: fixed a missing `--model` file being found only when VMAF
   failed during the run.
 - Command line: fixed CSV write failures not being shown with `-q`.
+- Fixed Metric Graphs' exported PNG drawing its title and table too small on
+  high-DPI screens.
 
 ## v2.1
 
@@ -112,59 +113,59 @@ port](docs/CPP_PORT.md) has the details and measurements.
 ### New features
 
 - Added film grain synthesis for VVC encodes in Video Compare.
-- Added a colour picker for each video's line in Metric Graphs and Bitrate
-  Viewer.
-- Command line: added `--frames N` to compare only the first N frames, for a
-  short encode of a longer reference.
 - Command line: added `--colour` for videos without colour tags, such as
   HDR10 in .y4m files, and a warning when colours are guessed.
+- Command line: added `--frames N` to compare only the first N frames, for a
+  short encode of a longer reference.
 - Command line: added `--cvvdp-display` to choose the display CVVDP models;
   repeat it to score on several displays.
+- Added a colour picker for each video's line in Metric Graphs and Bitrate
+  Viewer.
 
 ### Other changes
 
 - Every metric now pairs the two videos' frames by frame number, on the CPU
   and the GPU alike.
-- Video Compare now plays videos with FFmpeg instead of GStreamer.
 - GPU VMAF now uses
   [libvmaf-fast v1.1](https://github.com/4KVCD/libvmaf-fast/releases/tag/libvmaf-fast-v1.1).
+- Video Compare now plays videos with FFmpeg instead of GStreamer.
 
 ### Bug fixes
 
+- Fixed a saved VMAF score being shown with the wrong model.
+- Fixed the CVVDP display editor changing values that were not edited.
+- Fixed the command line sometimes losing a video's metrics from its table
+  and JSON.
+- Fixed long runs using too much memory: up to 2.1 GB with VMAF on the CPU and
+  770 MB with VMAF on the GPU over 3 hours at 60 fps.
 - Fixed a crash when closing the window with a path typed in the reference
   box.
 - Fixed a possible crash of VMAF v1 on the GPU when libvmaf failed to start.
 - Fixed SSIMULACRA2 and Butteraugli on the CPU sometimes failing to read a
   frame.
-- Fixed long runs using too much memory: up to 2.1 GB with VMAF on the CPU and
-  770 MB with VMAF on the GPU over 3 hours at 60 fps.
+- Fixed "frames compared" being one frame short with some duration limits.
 - Fixed runs that crashed or were ended in Task Manager leaving temporary
   files behind, up to 1.4 GB for a 4K run.
-- Fixed the command line sometimes losing a video's metrics from its table
-  and JSON.
-- Fixed a saved VMAF score being shown with the wrong model.
-- Fixed "frames compared" being one frame short with some duration limits.
-- Fixed Video Compare jumping to the first test video when scores arrived.
-- Fixed Video Compare showing the Videos tab for seconds at the first switch
-  after black bars were found.
-- Fixed Video Compare playing no frames of a test video decoded in the
-  background that had fallen behind.
+- Fixed loading a saved run keeping the old reference's resolution tests, and
+  a loaded resolution test showing the reference's details.
 - Fixed Video Compare keeping old black bars and still frames after the
   reference or the scaling changed.
 - Fixed Video Compare cropping a second test video with the first one's black
   bars.
+- Fixed Video Compare playing no frames of a test video decoded in the
+  background that had fallen behind.
 - Fixed Video Compare keeping each finished test video's decoder until the
   window closed.
-- Fixed loading a saved run keeping the old reference's resolution tests, and
-  a loaded resolution test showing the reference's details.
-- Fixed the CVVDP display editor changing values that were not edited.
-- Fixed a video's colour changing between Metric Graphs and Bitrate Viewer, or
-  after it was removed and added again.
+- Fixed Video Compare jumping to the first test video when scores arrived.
+- Fixed Video Compare showing the Videos tab for seconds at the first switch
+  after black bars were found.
 - Fixed the Settings tab's rows overlapping on high-DPI screens or in a small
   window; tabs now scroll instead (#6).
 - Fixed a failed graph export or settings save not being reported.
 - Fixed FFmpeg showing as not usable when its folder held a folder named
   ffmpeg.exe.
+- Fixed a video's colour changing between Metric Graphs and Bitrate Viewer, or
+  after it was removed and added again.
 - Fixed texts that stayed in English in Video Compare, Metric Graphs, Bitrate
   Viewer, the run line and the CVVDP display editor.
 
