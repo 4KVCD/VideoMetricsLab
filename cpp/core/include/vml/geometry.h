@@ -47,6 +47,14 @@ std::pair<int, int> sar_fraction(const std::string& sar);
 // The shape of the picture as displayed, after cropping.
 double display_aspect_ratio(const VideoInfo& info, const std::optional<CropBox>& crop = std::nullopt);
 
+// Why two videos cannot be compared because their pictures are different
+// shapes after cropping, or nothing: scaling one to the other would stretch
+// it, and the score would look like any other while meaning nothing. Every
+// metric refuses such a pair.
+std::optional<std::string> shape_problem(const VideoInfo& source, const VideoInfo& distorted,
+                                         const std::optional<CropBox>& source_crop,
+                                         const std::optional<CropBox>& distorted_crop);
+
 // Why two videos cannot be compared (their timelines do not match), or
 // nothing.
 std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, double duration_limit);

@@ -53,22 +53,27 @@ void validate_pair(const VideoInfo& source, const VideoInfo& distorted, double d
 
 CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& distorted,
                        CropMode crop_mode, const CancelToken& cancel, const StatusCallback& on_status) {
-    if (crop_mode == CropMode::none) {
-        return {std::nullopt, std::nullopt};
+    CropPair crops{std::nullopt, std::nullopt};
+    if (crop_mode != CropMode::none) {
+        if (on_status) {
+            // Worded as for FFmpeg's metrics, because a video's tasks share
+            // one detection (crop_detect waits for the other task's answer),
+            // and their parts of the run line sit side by side.
+            on_status({"Detecting black bars in source and distorted\xE2\x80\xA6"});
+        }
+        // Black bars are detected from samples across the whole file, not
+        // only the part compared: a short duration limit may fall entirely in
+        // a dark intro, which must not decide the crop. Decoded in software,
+        // as the Python app's perceptual metrics detect them.
+        const auto [source_box, distorted_box] =
+            detect_pair(ffmpeg, source, distorted, cancel, std::nullopt, std::nullopt);
+        crops = common_picture(source, distorted, source_box, distorted_box);
     }
-    if (on_status) {
-        // Worded as for FFmpeg's metrics, because a video's tasks share one
-        // detection (crop_detect waits for the other task's answer), and
-        // their parts of the run line sit side by side.
-        on_status({"Detecting black bars in source and distorted\xE2\x80\xA6"});
+    // As FFmpeg's metrics refuse them (validate_display_geometry).
+    if (const std::optional<std::string> problem = shape_problem(source, distorted, crops.first, crops.second)) {
+        throw PerceptualRunError(*problem);
     }
-    // Black bars are detected from samples across the whole file, not only
-    // the part compared: a short duration limit may fall entirely in a dark
-    // intro, which must not decide the crop. Decoded in software, as the
-    // Python app's perceptual metrics detect them.
-    const auto [source_box, distorted_box] =
-        detect_pair(ffmpeg, source, distorted, cancel, std::nullopt, std::nullopt);
-    return common_picture(source, distorted, source_box, distorted_box);
+    return crops;
 }
 
 }  // namespace vml

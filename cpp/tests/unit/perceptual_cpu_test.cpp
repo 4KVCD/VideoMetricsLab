@@ -498,6 +498,20 @@ TEST(PerceptualRouting, CancellingDoesNotStartTheCpu) {
     EXPECT_TRUE(routed.cpu.empty());
 }
 
+// Two pictures of different shapes are refused, as FFmpeg's metrics refuse
+// them (they were scored stretched), black bars kept or not; one rounded to
+// an even size still compares.
+TEST(PerceptualRouting, PicturesOfDifferentShapesAreRefused) {
+    const VideoInfo source = plain_video("source.mkv");
+    VideoInfo squeezed = plain_video("test.mkv");
+    squeezed.width = 1440;
+    EXPECT_THROW(resolve_crops("ffmpeg", source, squeezed, CropMode::none, CancelToken(), nullptr),
+                 PerceptualRunError);
+    VideoInfo rounded = plain_video("test.mkv");
+    rounded.width = 1918;
+    EXPECT_NO_THROW(resolve_crops("ffmpeg", source, rounded, CropMode::none, CancelToken(), nullptr));
+}
+
 // The bundled tool is the one built for this system: the repository's
 // resources have Windows' ssimulacra2.exe, which macOS found first and could
 // not run ("Permission denied").

@@ -114,7 +114,8 @@ void validate_pair(const VideoInfo& source, const VideoInfo& distorted, double d
 // The black-bar crops of the source and the test video, or none when black
 // bars are kept (`crop_mode`). Sends a status first, worded as for FFmpeg's
 // metrics, because a video's tasks share one detection. Throws
-// CropDetectError and Cancelled.
+// PerceptualRunError when the two pictures are different shapes after
+// cropping (geometry.h's shape_problem), CropDetectError and Cancelled.
 CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& distorted,
                        CropMode crop_mode, const CancelToken& cancel, const StatusCallback& on_status);
 

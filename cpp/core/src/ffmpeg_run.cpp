@@ -1510,27 +1510,9 @@ void validate_video_pair(const VideoInfo& source, const VideoInfo& distorted, co
 
 void validate_display_geometry(const VideoInfo& source, const VideoInfo& distorted,
                                const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop) {
-    const double source_shape = display_aspect_ratio(source, source_crop);
-    const double distorted_shape = display_aspect_ratio(distorted, distorted_crop);
-    if (source_shape <= 0 || distorted_shape <= 0) {
-        return;  // nothing meaningful to compare
+    if (const std::optional<std::string> problem = shape_problem(source, distorted, source_crop, distorted_crop)) {
+        throw VmafRunError(*problem);
     }
-    // Wide enough for the rounding even sizes force (1918x1080 against
-    // 1920x1080), far tighter than a real mismatch.
-    if (std::abs(source_shape - distorted_shape) <= 0.01 * std::max(source_shape, distorted_shape)) {
-        return;
-    }
-    const auto describe = [](const VideoInfo& info, const std::optional<CropBox>& crop, double shape) {
-        const std::string size = crop ? std::to_string(crop->w) + "x" + std::to_string(crop->h) + " (cropped)"
-                                      : std::to_string(info.width) + "x" + std::to_string(info.height);
-        return size + ", " + format_fixed(shape, 3) + ":1";
-    };
-    throw VmafRunError("The two videos are different shapes after cropping: source " +
-                       describe(source, source_crop, source_shape) + " versus distorted " +
-                       describe(distorted, distorted_crop, distorted_shape) +
-                       ". Scoring them would stretch one to fit the other and the result would be meaningless. If "
-                       "one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before "
-                       "comparison.");
 }
 
 long long estimate_total_frames(const VideoInfo& reference, const VmafOptions& options, const VideoInfo* other) {
