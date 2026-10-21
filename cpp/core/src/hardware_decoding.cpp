@@ -238,6 +238,9 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
     if (!downloads_from_gpu(pix_fmt, width, height)) {
         return std::nullopt;
     }
+    if (mac == MacGpuDecoding::deep) {
+        mac = bit_depth(pix_fmt) > 8 ? MacGpuDecoding::on : MacGpuDecoding::off;
+    }
     std::optional<std::string> hwaccel = pick_hwaccel(capabilities, vendor, codec, mac);
     // Intel's, AMD's and Apple's GPUs do not decode H.264 deeper than 8 bits
     // (FFmpeg then decodes it in software and the download fails); NVIDIA's

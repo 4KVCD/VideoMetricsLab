@@ -68,25 +68,33 @@ std::vector<GpuVendor> detected_gpu_vendors();
 // 4:2:0 at 8 or 10 bits, and an even width and height.
 bool downloads_from_gpu(const std::string& pix_fmt, int width, int height);
 
-// Whether a caller decodes on a Mac's GPU (FFmpeg's -hwaccel videotoolbox),
-// where VideoToolbox decodes the video. Every scoring route does: the Vship
-// pass, the libvmaf routes (VMAF, VMAF NEG, VMAF v1, PSNR, SSIM, XPSNR), the
-// resolution test and black-bar detection, whose scores and crops were
-// checked identical to software decoding. Playback's FFmpeg fallback does
-// not: on a Mac FFmpeg has no Vulkan device for its libplacebo modes, so only
-// its CPU mode runs, which decodes in software, and VideoToolbox would only
-// add an attempt that fails. Video Compare's own player decodes on the GPU.
-enum class MacGpuDecoding { off, on };
+// Which videos a caller decodes on a Mac's GPU (FFmpeg's -hwaccel
+// videotoolbox), where VideoToolbox decodes the video; scores and crops were
+// checked identical to software decoding. Through FFmpeg, VideoToolbox
+// decodes one picture after another: on an M1 Pro an 8-bit video comes at
+// 160-250 pictures a second at 1080p whatever the codec, where the CPU's
+// cores decode H.264 at about 1000, while 10-bit HEVC comes faster than the
+// CPU decodes it (about 460 against 280).
+// - on: every video the GPU decodes. The Vship pass, whose metrics are
+//   slower than that anyway, and which so saves the CPU.
+// - deep: only a video deeper than 8 bits. The libvmaf routes (VMAF, VMAF
+//   NEG, VMAF v1, PSNR, SSIM, XPSNR), the resolution test and black-bar
+//   detection, whose pace the decoding sets.
+// - off: none. Playback's FFmpeg fallback: on a Mac FFmpeg has no Vulkan
+//   device for its libplacebo modes, so only its CPU mode runs, which decodes
+//   in software, and VideoToolbox would only add an attempt that fails.
+//   Video Compare's own player decodes on the GPU.
+enum class MacGpuDecoding { off, deep, on };
 
 // The -hwaccel to start a video with, or nothing for software decoding.
 std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                        const std::string& codec, const std::string& pix_fmt, int width, int height,
-                                       MacGpuDecoding mac = MacGpuDecoding::on);
+                                       MacGpuDecoding mac = MacGpuDecoding::deep);
 
 // The plan for a comparison of two videos.
 HardwareDecoding plan_hardware_decoding(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                         const VideoInfo& source, const VideoInfo& distorted,
-                                        MacGpuDecoding mac = MacGpuDecoding::on);
+                                        MacGpuDecoding mac = MacGpuDecoding::deep);
 
 // The -hwaccel options for one video (FFmpeg reads them as options of the
 // next -i): NVIDIA's decoding on one thread, frames kept on the GPU (in

@@ -2216,10 +2216,12 @@ private:
     }
 
     PerceptualTaskOutput run_pass(const std::vector<std::string>& keys, const ProgressCallback& progress) const {
+        // On a Mac every video VideoToolbox decodes, 8-bit ones too: the
+        // pass is slower than its decoding (MacGpuDecoding).
         const PassPlan plan{keys, device_, source_crop_, distorted_crop_,
                             request_.options.gpu_decode
                                 ? plan_hardware_decoding(request_.environment.decoding, request_.options.gpu_vendor,
-                                                         request_.source, request_.distorted)
+                                                         request_.source, request_.distorted, MacGpuDecoding::on)
                                 : HardwareDecoding{}};
         return run_vship_pass(request_, plan, progress, hooks_.on_status, cancel_);
     }
