@@ -8,13 +8,13 @@ libjxl and pycvvdp.
 
 ### Metric performance
 
-- SSIMULACRA2, Butteraugli and CVVDP on the GPU now give the same scores as
-  libjxl and pycvvdp for the same pictures: Butteraugli identical,
-  SSIMULACRA2 within 0.0000001 and CVVDP to 5 decimals.
 - SSIMULACRA2, Butteraugli and CVVDP now use
   [Vship-fast](https://github.com/4KVCD/Vship-fast): Butteraugli
   **1.75x-2.5x**, CVVDP **1.6x-2.4x** and SSIMULACRA2 up to **1.6x** faster
   than Vship's Vulkan build.
+- SSIMULACRA2, Butteraugli and CVVDP on the GPU now give the same scores as
+  libjxl and pycvvdp for the same pictures: Butteraugli identical,
+  SSIMULACRA2 within 0.0000001 and CVVDP to 5 decimals.
 
 ### New features
 
