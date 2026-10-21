@@ -4,12 +4,11 @@ name: macOS package
 # scripts/build_release_macos.sh, runs both test suites, and uploads the
 # zipped bundle as an artifact. It runs when asked (Actions > macOS package >
 # Run workflow, once this file is on master: GitHub offers that only for a
-# workflow on the default branch), and on each push to macos-port while the
-# port is on that branch.
+# workflow on the default branch), and on each push to a release branch.
 on:
   workflow_dispatch:
   push:
-    branches: [macos-port]
+    branches: ['release/**']
 
 permissions:
   contents: read
