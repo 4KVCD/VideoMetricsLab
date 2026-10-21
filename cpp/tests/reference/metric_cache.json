@@ -747,7 +747,7 @@
     }
    },
    "infos": [],
-   "answers": false
+   "answers": true
   },
   {
    "key": "ssimulacra2",
@@ -817,7 +817,7 @@
      "color_transfer": "bt709"
     }
    ],
-   "answers": false
+   "answers": true
   },
   {
    "key": "ssimulacra2",
@@ -1341,14 +1341,13 @@
      {
       "key": "ssimulacra2",
       "provenance": {
-       "implementation": "ssimulacra2",
+       "implementation": "Vship/ssimulacra2",
        "implementation_version": "",
-       "compute_backend": "cpu",
-       "implementation_compatibility_id": "ssimulacra2-libjxl-cpu-v1",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "ssimulacra2-vship-gpu-v1",
        "parameters": {
-        "color_tags": "vship-5.1.1/2",
-        "coverage_step": 1,
-        "intermediate": "png/rgb48le"
+        "color_tags": "ffvship-5.1.1",
+        "coverage_step": 1
        }
       },
       "kind": "frame",
@@ -1369,12 +1368,53 @@
        "0x1.ab17e4b17e4b1p-3"
       ],
       "values": [
-       "0x1.3800000000000p+6",
-       "0x1.3e00000000000p+6",
-       "0x1.3500000000000p+6",
        "0x1.4000000000000p+6",
-       "0x1.3b00000000000p+6",
-       "0x1.3c00000000000p+6"
+       "0x1.4600000000000p+6",
+       "0x1.3d00000000000p+6",
+       "0x1.4800000000000p+6",
+       "0x1.4300000000000p+6",
+       "0x1.4400000000000p+6"
+      ]
+     },
+     {
+      "key": "cvvdp",
+      "provenance": {
+       "implementation": "Vship/cvvdp",
+       "implementation_version": "",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
+       "parameters": {
+        "color_tags": "ffvship-5.1.1",
+        "display": {
+         "ambient_lux": 250.0,
+         "contrast": 1000.0,
+         "diagonal_inches": 30.0,
+         "exposure": 1.0,
+         "hdr": false,
+         "peak_luminance": 200.0,
+         "reflectivity": 0.005,
+         "resolution": [
+          3840,
+          2160
+         ],
+         "viewing_distance_m": 0.7472
+        },
+        "resize_to_display": false
+       }
+      },
+      "kind": "sequence",
+      "score": "0x1.2800000000000p+3",
+      "frame": [
+       0,
+       24
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.004189374bc6ap+0"
+      ],
+      "values": [
+       "0x1.2000000000000p+3",
+       "0x1.3000000000000p+3"
       ]
      }
     ]
@@ -1596,7 +1636,37 @@
      },
      "resize_to_display": true
     },
-    "loaded": []
+    "loaded": [
+     {
+      "key": "cvvdp",
+      "provenance": {
+       "implementation": "Vship/cvvdp",
+       "implementation_version": "",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
+       "parameters": {
+        "color_tags": "ffvship-5.1.1",
+        "display": {
+         "ambient_lux": 250.0,
+         "contrast": 1000.0,
+         "diagonal_inches": 30.0,
+         "exposure": 1.0,
+         "hdr": false,
+         "peak_luminance": 200.0,
+         "reflectivity": 0.005,
+         "resolution": [
+          3840,
+          2160
+         ],
+         "viewing_distance_m": 0.7472
+        },
+        "resize_to_display": false
+       }
+      },
+      "kind": "sequence",
+      "score": "0x1.e000000000000p+2"
+     }
+    ]
    }
   ],
   "window_loads": [
@@ -1704,6 +1774,47 @@
       ]
      },
      {
+      "key": "cvvdp",
+      "provenance": {
+       "implementation": "Vship/cvvdp",
+       "implementation_version": "",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
+       "parameters": {
+        "color_tags": "ffvship-5.1.1",
+        "display": {
+         "ambient_lux": 250.0,
+         "contrast": 1000.0,
+         "diagonal_inches": 30.0,
+         "exposure": 1.0,
+         "hdr": false,
+         "peak_luminance": 200.0,
+         "reflectivity": 0.005,
+         "resolution": [
+          3840,
+          2160
+         ],
+         "viewing_distance_m": 0.7472
+        },
+        "resize_to_display": false
+       }
+      },
+      "kind": "sequence",
+      "score": "0x1.2800000000000p+3",
+      "frame": [
+       0,
+       24
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.004189374bc6ap+0"
+      ],
+      "values": [
+       "0x1.2000000000000p+3",
+       "0x1.3000000000000p+3"
+      ]
+     },
+     {
       "key": "vmaf_v1",
       "provenance": {
        "implementation": "libvmaf",
@@ -1776,14 +1887,13 @@
      {
       "key": "ssimulacra2",
       "provenance": {
-       "implementation": "ssimulacra2",
+       "implementation": "Vship/ssimulacra2",
        "implementation_version": "",
-       "compute_backend": "cpu",
-       "implementation_compatibility_id": "ssimulacra2-libjxl-cpu-v1",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "ssimulacra2-vship-gpu-v1",
        "parameters": {
-        "color_tags": "vship-5.1.1/2",
-        "coverage_step": 1,
-        "intermediate": "png/rgb48le"
+        "color_tags": "ffvship-5.1.1",
+        "coverage_step": 1
        }
       },
       "kind": "frame",
@@ -1804,34 +1914,55 @@
        "0x1.ab17e4b17e4b1p-3"
       ],
       "values": [
-       "0x1.3800000000000p+6",
-       "0x1.3e00000000000p+6",
-       "0x1.3500000000000p+6",
        "0x1.4000000000000p+6",
-       "0x1.3b00000000000p+6",
-       "0x1.3c00000000000p+6"
+       "0x1.4600000000000p+6",
+       "0x1.3d00000000000p+6",
+       "0x1.4800000000000p+6",
+       "0x1.4300000000000p+6",
+       "0x1.4400000000000p+6"
       ]
      }
     ],
     "other_cvvdp": {
      "parameters": {
       "display": {
-       "ambient_lux": 250.0,
-       "contrast": 1000.0,
-       "diagonal_inches": 30.0,
-       "exposure": 1.0,
-       "hdr": false,
-       "peak_luminance": 200.0,
-       "reflectivity": 0.005,
        "resolution": [
         3840,
         2160
        ],
-       "viewing_distance_m": 0.7472
+       "diagonal_inches": 30.0,
+       "viewing_distance_m": 0.7472,
+       "peak_luminance": 200.0,
+       "contrast": 1000.0,
+       "ambient_lux": 250.0,
+       "reflectivity": 0.005,
+       "exposure": 1.0,
+       "hdr": false
       },
       "resize_to_display": false
      },
-     "scores": []
+     "scores": [
+      {
+       "parameters": {
+        "display": {
+         "resolution": [
+          1920,
+          1080
+         ],
+         "diagonal_inches": 55.0,
+         "viewing_distance_m": 2.1,
+         "peak_luminance": 1000.0,
+         "contrast": 100000.0,
+         "ambient_lux": 10.0,
+         "reflectivity": 0.01,
+         "exposure": 1.0,
+         "hdr": true
+        },
+        "resize_to_display": true
+       },
+       "score": "0x1.e000000000000p+2"
+      }
+     ]
     }
    },
    {
@@ -2008,14 +2139,13 @@
      {
       "key": "ssimulacra2",
       "provenance": {
-       "implementation": "ssimulacra2",
+       "implementation": "Vship/ssimulacra2",
        "implementation_version": "",
-       "compute_backend": "cpu",
-       "implementation_compatibility_id": "ssimulacra2-libjxl-cpu-v1",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "ssimulacra2-vship-gpu-v1",
        "parameters": {
-        "color_tags": "vship-5.1.1/2",
-        "coverage_step": 1,
-        "intermediate": "png/rgb48le"
+        "color_tags": "ffvship-5.1.1",
+        "coverage_step": 1
        }
       },
       "kind": "frame",
@@ -2036,34 +2166,96 @@
        "0x1.ab17e4b17e4b1p-3"
       ],
       "values": [
-       "0x1.3800000000000p+6",
-       "0x1.3e00000000000p+6",
-       "0x1.3500000000000p+6",
        "0x1.4000000000000p+6",
-       "0x1.3b00000000000p+6",
-       "0x1.3c00000000000p+6"
+       "0x1.4600000000000p+6",
+       "0x1.3d00000000000p+6",
+       "0x1.4800000000000p+6",
+       "0x1.4300000000000p+6",
+       "0x1.4400000000000p+6"
+      ]
+     },
+     {
+      "key": "cvvdp",
+      "provenance": {
+       "implementation": "Vship/cvvdp",
+       "implementation_version": "",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
+       "parameters": {
+        "color_tags": "ffvship-5.1.1",
+        "display": {
+         "ambient_lux": 250.0,
+         "contrast": 1000.0,
+         "diagonal_inches": 30.0,
+         "exposure": 1.0,
+         "hdr": false,
+         "peak_luminance": 200.0,
+         "reflectivity": 0.005,
+         "resolution": [
+          3840,
+          2160
+         ],
+         "viewing_distance_m": 0.7472
+        },
+        "resize_to_display": false
+       }
+      },
+      "kind": "sequence",
+      "score": "0x1.2800000000000p+3",
+      "frame": [
+       0,
+       24
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.004189374bc6ap+0"
+      ],
+      "values": [
+       "0x1.2000000000000p+3",
+       "0x1.3000000000000p+3"
       ]
      }
     ],
     "other_cvvdp": {
      "parameters": {
       "display": {
-       "ambient_lux": 250.0,
-       "contrast": 1000.0,
-       "diagonal_inches": 30.0,
-       "exposure": 1.0,
-       "hdr": false,
-       "peak_luminance": 200.0,
-       "reflectivity": 0.005,
        "resolution": [
         3840,
         2160
        ],
-       "viewing_distance_m": 0.7472
+       "diagonal_inches": 30.0,
+       "viewing_distance_m": 0.7472,
+       "peak_luminance": 200.0,
+       "contrast": 1000.0,
+       "ambient_lux": 250.0,
+       "reflectivity": 0.005,
+       "exposure": 1.0,
+       "hdr": false
       },
       "resize_to_display": false
      },
-     "scores": []
+     "scores": [
+      {
+       "parameters": {
+        "display": {
+         "resolution": [
+          1920,
+          1080
+         ],
+         "diagonal_inches": 55.0,
+         "viewing_distance_m": 2.1,
+         "peak_luminance": 1000.0,
+         "contrast": 100000.0,
+         "ambient_lux": 10.0,
+         "reflectivity": 0.01,
+         "exposure": 1.0,
+         "hdr": true
+        },
+        "resize_to_display": true
+       },
+       "score": "0x1.e000000000000p+2"
+      }
+     ]
     }
    },
    {
@@ -2158,27 +2350,89 @@
        "0x1.6800000000000p+5",
        "0x1.7000000000000p+5"
       ]
+     },
+     {
+      "key": "cvvdp",
+      "provenance": {
+       "implementation": "Vship/cvvdp",
+       "implementation_version": "",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
+       "parameters": {
+        "color_tags": "ffvship-5.1.1",
+        "display": {
+         "ambient_lux": 250.0,
+         "contrast": 1000.0,
+         "diagonal_inches": 30.0,
+         "exposure": 1.0,
+         "hdr": false,
+         "peak_luminance": 200.0,
+         "reflectivity": 0.005,
+         "resolution": [
+          3840,
+          2160
+         ],
+         "viewing_distance_m": 0.7472
+        },
+        "resize_to_display": false
+       }
+      },
+      "kind": "sequence",
+      "score": "0x1.2800000000000p+3",
+      "frame": [
+       0,
+       24
+      ],
+      "time": [
+       "0x0.0p+0",
+       "0x1.004189374bc6ap+0"
+      ],
+      "values": [
+       "0x1.2000000000000p+3",
+       "0x1.3000000000000p+3"
+      ]
      }
     ],
     "other_cvvdp": {
      "parameters": {
       "display": {
-       "ambient_lux": 250.0,
-       "contrast": 1000.0,
-       "diagonal_inches": 30.0,
-       "exposure": 1.0,
-       "hdr": false,
-       "peak_luminance": 200.0,
-       "reflectivity": 0.005,
        "resolution": [
         3840,
         2160
        ],
-       "viewing_distance_m": 0.7472
+       "diagonal_inches": 30.0,
+       "viewing_distance_m": 0.7472,
+       "peak_luminance": 200.0,
+       "contrast": 1000.0,
+       "ambient_lux": 250.0,
+       "reflectivity": 0.005,
+       "exposure": 1.0,
+       "hdr": false
       },
       "resize_to_display": false
      },
-     "scores": []
+     "scores": [
+      {
+       "parameters": {
+        "display": {
+         "resolution": [
+          1920,
+          1080
+         ],
+         "diagonal_inches": 55.0,
+         "viewing_distance_m": 2.1,
+         "peak_luminance": 1000.0,
+         "contrast": 100000.0,
+         "ambient_lux": 10.0,
+         "reflectivity": 0.01,
+         "exposure": 1.0,
+         "hdr": true
+        },
+        "resize_to_display": true
+       },
+       "score": "0x1.e000000000000p+2"
+      }
+     ]
     }
    },
    {
@@ -2371,14 +2625,13 @@
      {
       "key": "ssimulacra2",
       "provenance": {
-       "implementation": "ssimulacra2",
+       "implementation": "Vship/ssimulacra2",
        "implementation_version": "",
-       "compute_backend": "cpu",
-       "implementation_compatibility_id": "ssimulacra2-libjxl-cpu-v1",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "ssimulacra2-vship-gpu-v1",
        "parameters": {
-        "color_tags": "vship-5.1.1/2",
-        "coverage_step": 1,
-        "intermediate": "png/rgb48le"
+        "color_tags": "ffvship-5.1.1",
+        "coverage_step": 1
        }
       },
       "kind": "frame",
@@ -2399,34 +2652,84 @@
        "0x1.ab17e4b17e4b1p-3"
       ],
       "values": [
-       "0x1.3800000000000p+6",
-       "0x1.3e00000000000p+6",
-       "0x1.3500000000000p+6",
        "0x1.4000000000000p+6",
-       "0x1.3b00000000000p+6",
-       "0x1.3c00000000000p+6"
+       "0x1.4600000000000p+6",
+       "0x1.3d00000000000p+6",
+       "0x1.4800000000000p+6",
+       "0x1.4300000000000p+6",
+       "0x1.4400000000000p+6"
       ]
+     },
+     {
+      "key": "cvvdp",
+      "provenance": {
+       "implementation": "Vship/cvvdp",
+       "implementation_version": "",
+       "compute_backend": "gpu",
+       "implementation_compatibility_id": "cvvdp-vship-gpu-v1",
+       "parameters": {
+        "color_tags": "ffvship-5.1.1",
+        "display": {
+         "ambient_lux": 250.0,
+         "contrast": 1000.0,
+         "diagonal_inches": 30.0,
+         "exposure": 1.0,
+         "hdr": false,
+         "peak_luminance": 200.0,
+         "reflectivity": 0.005,
+         "resolution": [
+          3840,
+          2160
+         ],
+         "viewing_distance_m": 0.7472
+        },
+        "resize_to_display": false
+       }
+      },
+      "kind": "sequence",
+      "score": "0x1.e000000000000p+2"
      }
     ],
     "other_cvvdp": {
      "parameters": {
       "display": {
-       "ambient_lux": 10.0,
-       "contrast": 100000.0,
-       "diagonal_inches": 55.0,
-       "exposure": 1.0,
-       "hdr": true,
-       "peak_luminance": 1000.0,
-       "reflectivity": 0.01,
        "resolution": [
         1920,
         1080
        ],
-       "viewing_distance_m": 2.1
+       "diagonal_inches": 55.0,
+       "viewing_distance_m": 2.1,
+       "peak_luminance": 1000.0,
+       "contrast": 100000.0,
+       "ambient_lux": 10.0,
+       "reflectivity": 0.01,
+       "exposure": 1.0,
+       "hdr": true
       },
       "resize_to_display": true
      },
-     "scores": []
+     "scores": [
+      {
+       "parameters": {
+        "display": {
+         "resolution": [
+          3840,
+          2160
+         ],
+         "diagonal_inches": 30.0,
+         "viewing_distance_m": 0.7472,
+         "peak_luminance": 200.0,
+         "contrast": 1000.0,
+         "ambient_lux": 250.0,
+         "reflectivity": 0.005,
+         "exposure": 1.0,
+         "hdr": false
+        },
+        "resize_to_display": false
+       },
+       "score": "0x1.2800000000000p+3"
+      }
+     ]
     }
    }
   ],
@@ -2454,13 +2757,11 @@
     ],
     "backends": {},
     "cvvdp": null,
-    "removed": 6,
+    "removed": 8,
     "left": [
      "context.json",
      "cvvdp_8c972bd4217003ad4040b7bb093b9e8cee47773723e2aa0fe4a4fdc7a5ea1166.npz",
-     "cvvdp_b16a7293ec667dc5bae894a10351fe0fcf4da4c40658d5abb8397191a5fa2f3b.npz",
-     "psnr_123329faf9b4fa0bc59895bf055f21cdbec6c92fb82ef270a915f138a645f43a.npz",
-     "ssimulacra2_5c7f8a14bfef2485aaef15ac87be1c672a47b2b70111951fe2fcd69eaad83ccc.npz"
+     "psnr_123329faf9b4fa0bc59895bf055f21cdbec6c92fb82ef270a915f138a645f43a.npz"
     ]
    },
    {
@@ -2513,7 +2814,7 @@
      "ssimulacra2": "cpu"
     },
     "cvvdp": null,
-    "removed": 1,
+    "removed": 2,
     "left": [
      "butteraugli_27850760876cf7e5600b13b31c703102c95abb025b437c8a96f1886f3a59f55b.npz",
      "context.json",
@@ -2521,7 +2822,6 @@
      "cvvdp_b16a7293ec667dc5bae894a10351fe0fcf4da4c40658d5abb8397191a5fa2f3b.npz",
      "psnr_06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83.npz",
      "psnr_123329faf9b4fa0bc59895bf055f21cdbec6c92fb82ef270a915f138a645f43a.npz",
-     "ssimulacra2_5c7f8a14bfef2485aaef15ac87be1c672a47b2b70111951fe2fcd69eaad83ccc.npz",
      "vmaf_0012615264fa558fb311fdab506bc62efabd8f67b8005637d1002dbe5b33dbf1.npz",
      "vmaf_58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca.npz",
      "xpsnr_a991719296a82a834bc1e8d9f9bc514e500aaf801e4daad31308a2f67e552f7c.npz"
@@ -2591,11 +2891,10 @@
      },
      "resize_to_display": true
     },
-    "removed": 0,
+    "removed": 1,
     "left": [
      "butteraugli_27850760876cf7e5600b13b31c703102c95abb025b437c8a96f1886f3a59f55b.npz",
      "context.json",
-     "cvvdp_8c972bd4217003ad4040b7bb093b9e8cee47773723e2aa0fe4a4fdc7a5ea1166.npz",
      "cvvdp_b16a7293ec667dc5bae894a10351fe0fcf4da4c40658d5abb8397191a5fa2f3b.npz",
      "psnr_06fd4de4bfa4bfe872b94297eaa368cd636eafc49f7e819e7f305c1b913d0c83.npz",
      "psnr_123329faf9b4fa0bc59895bf055f21cdbec6c92fb82ef270a915f138a645f43a.npz",

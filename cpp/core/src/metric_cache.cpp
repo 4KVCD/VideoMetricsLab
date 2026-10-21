@@ -5,6 +5,7 @@
 #include <cmath>
 #include <fstream>
 #include <random>
+#include <regex>
 #include <stdexcept>
 #include <system_error>
 #include <tuple>
@@ -21,6 +22,7 @@
 #include "vml/result_json.h"
 #include "vml/score_identity.h"
 #include "vml/sha256.h"
+#include "vml/vship.h"
 
 namespace vml {
 
@@ -35,6 +37,14 @@ constexpr const char* unversioned_compatibility = "unversioned";
 // The scaling algorithms of the older identity, which had one folder per
 // algorithm (recipe_directory).
 constexpr std::array<std::string_view, 4> legacy_scale_algorithms{"bicubic", "lanczos", "bilinear", "spline"};
+
+// The RGB pixel formats Vship scored wrongly without a transfer tag before
+// app version 1.2.2, and the transfer tags that count as none.
+const std::regex& old_vship_rgb() {
+    static const std::regex pattern(
+        "gbrp(?:(?:9|10|12|14|16)(?:le|be)?)?|rgb24|bgr24|rgba|bgra|argb|abgr|rgb0|bgr0|rgb48(?:le|be)|rgba64(?:le|be)");
+    return pattern;
+}
 
 using LoadedMetric = std::variant<FrameMetricResult, SequenceMetricResult>;
 
@@ -126,11 +136,9 @@ bool matrix_read_otherwise(const std::vector<ColourTags>& infos) {
     }
 }
 
-// Whether a saved score is known to be wrong and must be calculated again:
-// a CPU SSIMULACRA2 or Butteraugli score that predates the colour handling
-// the CPU's tools have now, one made before the pair was read with one colour
-// matrix, where that changes what is read. (Every GPU score made before
-// Vship-fast is refused by its id: score_identity.h.)
+// Whether a CPU SSIMULACRA2 or Butteraugli score predates the colour
+// handling the CPU's tools have now: one made before the pair was read with
+// one colour matrix only where that changes what is read.
 bool stale_cpu_score(const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {
     if (provenance.compute_backend != "cpu" ||
         (provenance.implementation != "ssimulacra2" && provenance.implementation != "butteraugli")) {
@@ -143,25 +151,97 @@ bool stale_cpu_score(const MetricProvenance& provenance, const std::vector<Colou
     return mapping != nlohmann::json(score_identity::cpu_colour_tags_unshared_matrix) || matrix_read_otherwise(infos);
 }
 
+// Whether a score's id is one of Vship 5.1's on the GPU (score_identity.h).
+bool vship51_id(const std::string& id) {
+    return id == score_identity::vship51_cvvdp || score_identity::vship51_gpu("ssimulacra2", id) ||
+           score_identity::vship51_gpu("butteraugli", id);
+}
+
+// Whether a video is gray tagged full range, which Vship 5.1 was sent
+// squeezed into the limited range.
+bool full_range_gray(const ColourTags& info) {
+    static const std::regex gray("gray(?:(?:9|10|12|14|16)(?:le|be)?)?");
+    const std::string range = ascii_lower(python_strip(info.color_range));
+    return std::regex_match(ascii_lower(python_strip(info.pix_fmt)), gray) &&
+           (range == "pc" || range == "jpeg" || range == "full");
+}
+
+// Whether a saved score is known to be wrong and must be calculated again:
+// a stale CPU score, or a Vship 5.1 GPU score of a pair a later fix reads
+// otherwise. That is a pair with a full-range gray video (full_range_gray);
+// and, for a score that predates the fix, one whose videos are read with
+// one colour matrix where that changes what Vship reads
+// (matrix_read_otherwise), one with a video without chroma siting read with
+// the other's where that changes what it reads (chroma_location_shared), or,
+// from app version 1.2 or 1.2.1, one with an RGB video without a transfer
+// tag. Vship-fast's scores are never stale.
+bool stale_score(const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {
+    if (stale_cpu_score(provenance, infos)) {
+        return true;
+    }
+    if (provenance.compute_backend != "gpu" || !vship51_id(provenance.implementation_compatibility_id)) {
+        return false;
+    }
+    if (std::any_of(infos.begin(), infos.end(), full_range_gray)) {
+        return true;
+    }
+    const nlohmann::json mapping = parameter(provenance, "color_tags");
+    if (mapping == nlohmann::json(score_identity::vship_colour_tags)) {
+        return false;
+    }
+    if (matrix_read_otherwise(infos)) {
+        return true;
+    }
+    if (mapping == nlohmann::json(score_identity::vship_colour_tags_unshared_matrix)) {
+        return false;
+    }
+    if (infos.size() == 2 && chroma_location_shared(infos[0].chroma_location, infos[1].chroma_location)) {
+        return true;
+    }
+    if (mapping == nlohmann::json(score_identity::vship_colour_tags_unshared_siting)) {
+        return false;
+    }
+    return std::any_of(infos.begin(), infos.end(), [](const ColourTags& info) {
+        const std::string transfer = ascii_lower(python_strip(info.color_transfer));
+        return std::regex_match(ascii_lower(python_strip(info.pix_fmt)), old_vship_rgb()) &&
+               is_untagged_tag(transfer);
+    });
+}
+
 bool is_auto_perceptual(const MetricRequestSpec& spec) {
     return spec.backend_id == "perceptual" && spec.implementation_compatibility_id.ends_with(score_identity::gpu_or_cpu_suffix);
 }
 
 // Whether a saved perceptual score's compatibility id answers a request
-// that does not fix where the metric is calculated: Vship-fast's on the
-// GPU, or libjxl's on the CPU, whose id may have a version inside. Vship
-// 5.1's GPU scores ("ssimulacra2-vship-gpu-v1", and the older
-// "ssimulacra2-vship-5.1.0-gpu-v1") are calculated again.
+// that does not fix where the metric is calculated: Vship-fast's or Vship
+// 5.1's on the GPU, or libjxl's on the CPU, whose id may have a version
+// inside.
 bool auto_perceptual_compatible(const MetricRequestSpec& spec, const std::string& value) {
     const std::string& key = spec.key;
-    return value == score_identity::vship_gpu(key) || value == score_identity::libjxl_cpu(key) ||
+    return value == score_identity::vship_gpu(key) || score_identity::vship51_gpu(key, value) ||
+           value == score_identity::libjxl_cpu(key) ||
            (value.starts_with(key + "-libjxl-") && value.ends_with("-cpu-v1"));
+}
+
+// The request a Vship 5.1 CVVDP score is saved under, for the request
+// Vship-fast's would be.
+MetricRequestSpec vship51_cvvdp_spec(const MetricRequestSpec& spec) {
+    MetricRequestSpec old = spec;
+    old.implementation_compatibility_id = std::string(score_identity::vship51_cvvdp);
+    return old;
+}
+
+bool is_cvvdp(const MetricRequestSpec& spec) {
+    return spec.implementation_compatibility_id == score_identity::cvvdp;
 }
 
 bool compatible(const MetricRequestSpec& spec, const MetricProvenance& provenance) {
     const std::string& compatibility = provenance.implementation_compatibility_id;
     if (is_auto_perceptual(spec)) {
         return auto_perceptual_compatible(spec, compatibility);
+    }
+    if (is_cvvdp(spec) && compatibility == score_identity::vship51_cvvdp) {
+        return true;
     }
     if (compatibility == unversioned_compatibility) {
         return spec.implementation_compatibility_id == score_identity::libvmaf;
@@ -218,10 +298,11 @@ std::string metadata(const std::string& key, const char* kind, const MetricReque
 }
 
 // The request a perceptual score is saved under: the implementation that
-// made it, so that a CPU score never passes for a Vship GPU one.
+// made it, so that a CPU score never passes for a Vship GPU one, nor Vship
+// 5.1's CVVDP for Vship-fast's.
 MetricRequestSpec stored_spec(const MetricRequestSpec& spec, const MetricProvenance& provenance) {
     MetricRequestSpec stored = spec;
-    if (is_auto_perceptual(spec)) {
+    if (is_auto_perceptual(spec) || (is_cvvdp(spec) && compatible(spec, provenance))) {
         stored.implementation_compatibility_id = provenance.implementation_compatibility_id;
     }
     return stored;
@@ -306,8 +387,8 @@ std::vector<ColourTags> context_colour_tags(const std::filesystem::path& directo
                 return value.is_null() ? std::string() : python_str(value);
             };
             const nlohmann::json height = info.value("height", nlohmann::json());
-            infos.push_back({text("pix_fmt"), text("color_transfer"), text("color_space"),
-                             height.is_number_integer() ? height.get<int>() : 0});
+            infos.push_back({text("pix_fmt"), text("color_transfer"), text("chroma_location"), text("color_space"),
+                             text("color_range"), height.is_number_integer() ? height.get<int>() : 0});
         }
     }
     return infos;
@@ -458,7 +539,7 @@ std::vector<std::filesystem::path> score_files(const std::filesystem::path& dire
 
 // The saved scores that answer a perceptual request which does not fix
 // where the metric is calculated, each with the request carrying its
-// implementation: GPU scores first.
+// implementation: Vship-fast's first, then Vship 5.1's, then the CPU's.
 std::vector<std::pair<std::filesystem::path, MetricRequestSpec>> auto_perceptual_candidates(
     const std::filesystem::path& directory, const MetricRequestSpec& spec) {
     std::vector<std::pair<int, std::pair<std::filesystem::path, MetricRequestSpec>>> ranked;
@@ -483,7 +564,8 @@ std::vector<std::pair<std::filesystem::path, MetricRequestSpec>> auto_perceptual
             if (request != concrete.identity()) {
                 continue;
             }
-            ranked.push_back({value.find("-vship-") != std::string::npos ? 0 : 1, {path, concrete}});
+            const int rank = value == score_identity::vship_gpu(spec.key) ? 0 : vship51_id(value) ? 1 : 2;
+            ranked.push_back({rank, {path, concrete}});
         } catch (const nlohmann::json::exception&) {
             continue;
         }
@@ -679,14 +761,18 @@ std::vector<std::pair<std::filesystem::path, MetricRequestSpec>> old_v1_scores(c
 
 // The whole-video scores saved for `spec`'s metric with other parameters but
 // otherwise the same request, each with those parameters
-// (load_other_parameters): CVVDP's for other displays.
+// (load_other_parameters): CVVDP's for other displays, Vship 5.1's for a
+// display Vship-fast has none for.
 std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::filesystem::path& directory,
                                                                 const MetricRequestSpec& spec) {
     const nlohmann::json wanted = spec.identity();
     const nlohmann::json rest = without(wanted, {"parameters"});
+    const nlohmann::json vship51_rest =
+        is_cvvdp(spec) ? without(vship51_cvvdp_spec(spec).identity(), {"parameters"}) : rest;
     const std::vector<std::filesystem::path> paths = score_files(directory, spec.key);
     const std::vector<ColourTags> infos = paths.empty() ? std::vector<ColourTags>() : context_colour_tags(directory);
     std::vector<std::pair<nlohmann::json, double>> found;
+    std::vector<std::pair<nlohmann::json, double>> vship51;
     for (const std::filesystem::path& path : paths) {
         try {
             const auto score = read_score(path);
@@ -695,14 +781,16 @@ std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::files
             }
             const auto& [metadata, arrays] = *score;
             const nlohmann::json request = metadata.value("request", nlohmann::json::object());
+            const nlohmann::json request_rest = without(request, {"parameters"});
             if (!current_format(metadata) || metadata.value("key", nlohmann::json()) != spec.key ||
-                metadata.value("kind", nlohmann::json()) != "sequence" || without(request, {"parameters"}) != rest ||
+                metadata.value("kind", nlohmann::json()) != "sequence" ||
+                (request_rest != rest && request_rest != vship51_rest) ||
                 request.value("parameters", nlohmann::json()) == wanted.at("parameters")) {
                 continue;
             }
             if (const nlohmann::json made = metadata.value("provenance", nlohmann::json()); made.is_object()) {
                 const std::optional<MetricProvenance> provenance = provenance_from(made);
-                if (!provenance || stale_cpu_score(*provenance, infos)) {
+                if (!provenance || stale_score(*provenance, infos)) {
                     continue;
                 }
             }
@@ -713,10 +801,15 @@ std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::files
                 continue;
             }
             if (std::isfinite(value->front())) {
-                found.emplace_back(parameters, value->front());
+                (request_rest == rest ? found : vship51).emplace_back(parameters, value->front());
             }
         } catch (const nlohmann::json::exception&) {
             continue;
+        }
+    }
+    for (auto& old : vship51) {
+        if (std::none_of(found.begin(), found.end(), [&old](const auto& kept) { return kept.first == old.first; })) {
+            found.push_back(std::move(old));
         }
     }
     return found;
@@ -735,7 +828,7 @@ std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, 
         if (!infos) {
             infos = context_colour_tags(directory);
         }
-        return stale_cpu_score(provenance, *infos);
+        return stale_score(provenance, *infos);
     };
     if (is_auto_perceptual(spec)) {
         for (const auto& [path, concrete] : auto_perceptual_candidates(directory, spec)) {
@@ -750,6 +843,10 @@ std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, 
         return std::nullopt;
     }
     std::optional<LoadedMetric> result = load_metric_file(metric_path(directory, spec), spec);
+    if (!result && is_cvvdp(spec)) {
+        const MetricRequestSpec vship51 = vship51_cvvdp_spec(spec);
+        result = load_metric_file(metric_path(directory, vship51), vship51);
+    }
     if (result && stale(*result)) {
         return std::nullopt;
     }
@@ -847,13 +944,14 @@ std::filesystem::path recipe_directory(const std::filesystem::path& base, const 
 }
 
 std::vector<ColourTags> colour_tags(const VideoInfo& source, const VideoInfo& distorted) {
-    return {{source.pix_fmt, source.color_transfer, source.color_space, source.height},
-            {distorted.pix_fmt, distorted.color_transfer, distorted.color_space,
-             distorted.height}};
+    return {{source.pix_fmt, source.color_transfer, source.chroma_location, source.color_space, source.color_range,
+             source.height},
+            {distorted.pix_fmt, distorted.color_transfer, distorted.chroma_location, distorted.color_space,
+             distorted.color_range, distorted.height}};
 }
 
 bool answers(const MetricRequestSpec& spec, const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {
-    return compatible(spec, provenance) && !stale_cpu_score(provenance, infos);
+    return compatible(spec, provenance) && !stale_score(provenance, infos);
 }
 
 bool made_as_chosen(const std::string& key, const std::optional<std::string>& choice, const std::string& produced,
@@ -1081,6 +1179,8 @@ int clear_metrics(const std::filesystem::path& base, const std::filesystem::path
             for (const auto& [path, concrete] : old_v1_scores(directory, spec)) {
                 remove(path);
             }
+        } else if (is_cvvdp(spec)) {
+            remove(metric_path(directory, vship51_cvvdp_spec(spec)));
         }
         remove(metric_path(directory, spec));
     }

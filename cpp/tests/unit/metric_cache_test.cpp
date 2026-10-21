@@ -179,7 +179,7 @@ TEST(MetricCache, AnswersAsThePythonApp) {
     for (const nlohmann::json& item : reference.at("answers")) {
         std::vector<ColourTags> infos;
         for (const nlohmann::json& info : item.at("infos")) {
-            infos.push_back({info.at("pix_fmt"), info.at("color_transfer"), {}, 0});  // no matrix given
+            infos.push_back({info.at("pix_fmt"), info.at("color_transfer"), {}, {}, {}, 0});  // no siting, matrix, range
         }
         EXPECT_EQ(answers(*request.metric(item.at("key")), test::provenance_from(item.at("provenance")), infos),
                   item.at("answers").get<bool>())
@@ -203,25 +203,42 @@ TEST(MetricCache, AnswersAsThePythonApp) {
     }
 }
 
-// A GPU score of Vship 5.1 is calculated again, Vship-fast's kept. A CPU
-// score saved before an untagged pair was read with one colour matrix is
-// calculated again for a pair whose heights gave the videos different
-// guesses, and kept for the rest.
-TEST(MetricCache, OldVshipScoresAndCpuScoresReadWithTwoGuessedMatricesAreCalculatedAgain) {
+// A GPU score of Vship 5.1 (v2.1's) is kept, but for a pair a later colour
+// fix reads otherwise: with two guessed matrices or its chroma apart, for a
+// score made before those fixes, or with a full-range gray video.
+// Vship-fast's scores are kept. A CPU score saved before an untagged pair
+// was read with one colour matrix is calculated again for a pair whose
+// heights gave the videos different guesses, and kept for the rest.
+TEST(MetricCache, OldScoresAreKeptButForAPairALaterColourFixReadsOtherwise) {
     const AnalysisRequest request = analysis_request(VmafOptions{}, {"ssimulacra2"}, {}, CvvdpSettings{});
     const MetricRequestSpec& spec = *request.metric("ssimulacra2");
-    const std::vector<ColourTags> guessed_apart{{"yuv420p", "", "", 720}, {"yuv420p", "", "", 540}};
-    const std::vector<ColourTags> guessed_alike{{"yuv420p", "", "", 1080}, {"yuv420p", "", "", 720}};
-    const std::vector<ColourTags> one_tagged{{"yuv420p", "", "bt709", 720}, {"yuv420p", "", "", 540}};
-    const std::vector<ColourTags> tagged{{"yuv420p", "", "bt709", 720}, {"yuv420p", "", "bt470bg", 540}};
-    const std::map<std::string, std::string> gpu_parameters{
-        {"coverage_step", "1"}, {"color_tags", nlohmann::json(score_identity::vship_colour_tags).dump()}};
-    EXPECT_FALSE(answers(spec, {"Vship/ssimulacra2", "Vship 5.1.2", "gpu", "ssimulacra2-vship-gpu-v1", gpu_parameters},
-                         tagged));
-    EXPECT_TRUE(answers(spec,
-                        {"Vship/ssimulacra2", "Vship-fast 5.1.2", "gpu", score_identity::vship_gpu("ssimulacra2"),
-                         gpu_parameters},
-                        guessed_apart));
+    const std::vector<ColourTags> guessed_apart{{"yuv420p", "", "", "", "", 720}, {"yuv420p", "", "", "", "", 540}};
+    const std::vector<ColourTags> guessed_alike{{"yuv420p", "", "", "", "", 1080}, {"yuv420p", "", "", "", "", 720}};
+    const std::vector<ColourTags> one_tagged{{"yuv420p", "", "", "bt709", "", 720}, {"yuv420p", "", "", "", "", 540}};
+    const std::vector<ColourTags> tagged{{"yuv420p", "", "", "bt709", "", 720}, {"yuv420p", "", "", "bt470bg", "", 540}};
+    const std::vector<ColourTags> siting_apart{{"yuv420p", "bt709", "center", "bt709", "", 1080},
+                                               {"yuv420p", "bt709", "", "bt709", "", 1080}};
+    const std::vector<ColourTags> siting_left{{"yuv420p", "bt709", "left", "bt709", "", 1080},
+                                              {"yuv420p", "bt709", "", "bt709", "", 1080}};
+    const std::vector<ColourTags> full_gray{{"yuv420p", "bt709", "", "bt709", "tv", 720},
+                                            {"gray", "bt709", "", "bt709", "pc", 720}};
+    const std::vector<ColourTags> limited_gray{{"yuv420p", "bt709", "", "bt709", "tv", 720},
+                                               {"gray", "bt709", "", "bt709", "tv", 720}};
+    MetricProvenance gpu{"Vship/ssimulacra2", "Vship 5.1.2", "gpu", "ssimulacra2-vship-gpu-v1",
+                         {{"coverage_step", "1"}, {"color_tags", "\"ffvship-5.1.1\""}}};
+    for (const auto& pair : {tagged, guessed_alike, siting_left, limited_gray}) {
+        EXPECT_TRUE(answers(spec, gpu, pair)) << pair[1].pix_fmt;
+    }
+    for (const auto& pair : {guessed_apart, one_tagged, siting_apart, full_gray}) {
+        EXPECT_FALSE(answers(spec, gpu, pair)) << pair[1].pix_fmt;
+    }
+    gpu.parameters["color_tags"] = nlohmann::json(score_identity::vship_colour_tags).dump();
+    EXPECT_TRUE(answers(spec, gpu, guessed_apart));
+    EXPECT_TRUE(answers(spec, gpu, siting_apart));
+    EXPECT_FALSE(answers(spec, gpu, full_gray));
+    const MetricProvenance fast{"Vship/ssimulacra2", "Vship-fast 5.1.2", "gpu",
+                                score_identity::vship_gpu("ssimulacra2"), gpu.parameters};
+    EXPECT_TRUE(answers(spec, fast, full_gray));
     MetricProvenance cpu{"ssimulacra2", "libjxl 0.11", "cpu", "ssimulacra2-libjxl-cpu-v1",
                          {{"coverage_step", "1"}, {"color_tags", "\"vship-5.1.1/2\""}}};
     EXPECT_FALSE(answers(spec, cpu, guessed_apart));

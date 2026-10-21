@@ -45,13 +45,15 @@ std::string metric_identity_hash(const MetricRequestSpec& spec);
 std::filesystem::path recipe_directory(const std::filesystem::path& base, const std::filesystem::path& source,
                                        const std::filesystem::path& distorted, const ComparisonRecipe& recipe);
 
-// What the rule against known-wrong CPU SSIMULACRA2 and Butteraugli scores
-// reads of a video: its pixel format, transfer tag, colour matrix and height
-// (video_infos).
+// What the rules against known-wrong saved SSIMULACRA2, Butteraugli and
+// CVVDP scores read of a video: its pixel format, transfer tag, chroma
+// siting, colour matrix, range and height (video_infos).
 struct ColourTags {
     std::string pix_fmt;
     std::string color_transfer;
+    std::string chroma_location;
     std::string color_space;
+    std::string color_range;
     int height = 0;
 };
 std::vector<ColourTags> colour_tags(const VideoInfo& source, const VideoInfo& distorted);

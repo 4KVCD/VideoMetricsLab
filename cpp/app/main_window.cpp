@@ -2475,7 +2475,8 @@ std::vector<std::string> MainWindow::reusable_metric_keys(const RowData& row_dat
     std::vector<ColourTags> infos;
     for (const std::optional<VideoInfo>* info : {&source_info_, &row_data.video_info}) {
         if (*info) {
-            infos.push_back({(*info)->pix_fmt, (*info)->color_transfer, (*info)->color_space, (*info)->height});
+            infos.push_back({(*info)->pix_fmt, (*info)->color_transfer, (*info)->chroma_location,
+                             (*info)->color_space, (*info)->color_range, (*info)->height});
         }
     }
     return reusable_keys(row_data.completed_run->result,
