@@ -136,7 +136,7 @@ std::string libvmaf_stage(const VmafOptions& options, const std::string& log_nam
 // The hardware decoders that hand frames over in system memory themselves
 // when no output format is given (QSV's still hands over its surfaces).
 bool decoder_downloads(const std::optional<std::string>& hwaccel) {
-    return hwaccel == "cuda" || hwaccel == "d3d11va";
+    return hwaccel == "cuda" || hwaccel == "d3d11va" || hwaccel == "videotoolbox";
 }
 
 // The -hwaccel options for one input of a run with several graphs: where the

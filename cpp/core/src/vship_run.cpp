@@ -2225,12 +2225,10 @@ private:
     }
 
     PerceptualTaskOutput run_pass(const std::vector<std::string>& keys, const ProgressCallback& progress) const {
-        // The pass decodes on a Mac's GPU too (MacGpuDecoding): its scores
-        // were checked byte-identical to software decoding.
         const PassPlan plan{keys, device_, source_crop_, distorted_crop_,
                             request_.options.gpu_decode
                                 ? plan_hardware_decoding(request_.environment.decoding, request_.options.gpu_vendor,
-                                                         request_.source, request_.distorted, MacGpuDecoding::on)
+                                                         request_.source, request_.distorted)
                                 : HardwareDecoding{}};
         return run_vship_pass(request_, plan, progress, hooks_.on_status, cancel_);
     }

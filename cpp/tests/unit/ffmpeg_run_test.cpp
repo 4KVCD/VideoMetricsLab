@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <map>
@@ -165,6 +166,19 @@ TEST(FfmpegRun, BuildsThePythonAppsCommandsForVmafOnTheGpu) {
         EXPECT_EQ(commands, item["commands"].get<std::vector<std::vector<std::string>>>());
     }
     set_pairing("");
+}
+
+// A Mac's GPU decoder hands its frames over in system memory itself, so a
+// run with several graphs decodes each picture once and leaves the download
+// to it; one graph keeps the frames on the GPU for its own hwdownload.
+TEST(FfmpegRun, AMacsGpuDecoderDownloadsItselfForSeveralGraphs) {
+    const HardwareDecoding mac{"videotoolbox", "videotoolbox"};
+    const std::vector<std::string> several =
+        build_ffmpeg_command("ffmpeg", "test.mp4", "ref.mp4", "[0:v]null[a]\n[1:v]null[b]", mac, 0);
+    EXPECT_EQ(std::count(several.begin(), several.end(), "-hwaccel_output_format"), 0);
+    EXPECT_EQ(std::count(several.begin(), several.end(), "videotoolbox"), 2);
+    const std::vector<std::string> one = build_ffmpeg_command("ffmpeg", "test.mp4", "ref.mp4", "[0:v]null", mac, 0);
+    EXPECT_EQ(std::count(one.begin(), one.end(), "videotoolbox_vld"), 2);
 }
 
 TEST(FfmpegRun, ReadsLibvmafsLogAsThePythonAppDoes) {

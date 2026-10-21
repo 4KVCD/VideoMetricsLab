@@ -68,22 +68,25 @@ std::vector<GpuVendor> detected_gpu_vendors();
 // 4:2:0 at 8 or 10 bits, and an even width and height.
 bool downloads_from_gpu(const std::string& pix_fmt, int width, int height);
 
-// Whether a caller decodes on a Mac's GPU (FFmpeg's -hwaccel videotoolbox).
-// Only the Vship pass does: its scores were checked byte-identical to
-// software decoding, the frames downloaded as NV12/P010 and split as on
-// Windows. The libvmaf routes, black-bar detection and playback have not
-// been, so they decode in software on a Mac.
+// Whether a caller decodes on a Mac's GPU (FFmpeg's -hwaccel videotoolbox),
+// where VideoToolbox decodes the video. Every scoring route does: the Vship
+// pass, the libvmaf routes (VMAF, VMAF NEG, VMAF v1, PSNR, SSIM, XPSNR), the
+// resolution test and black-bar detection, whose scores and crops were
+// checked identical to software decoding. Playback's FFmpeg fallback does
+// not: on a Mac FFmpeg has no Vulkan device for its libplacebo modes, so only
+// its CPU mode runs, which decodes in software, and VideoToolbox would only
+// add an attempt that fails. Video Compare's own player decodes on the GPU.
 enum class MacGpuDecoding { off, on };
 
 // The -hwaccel to start a video with, or nothing for software decoding.
 std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                        const std::string& codec, const std::string& pix_fmt, int width, int height,
-                                       MacGpuDecoding mac = MacGpuDecoding::off);
+                                       MacGpuDecoding mac = MacGpuDecoding::on);
 
 // The plan for a comparison of two videos.
 HardwareDecoding plan_hardware_decoding(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                         const VideoInfo& source, const VideoInfo& distorted,
-                                        MacGpuDecoding mac = MacGpuDecoding::off);
+                                        MacGpuDecoding mac = MacGpuDecoding::on);
 
 // The -hwaccel options for one video (FFmpeg reads them as options of the
 // next -i): NVIDIA's decoding on one thread, frames kept on the GPU (in

@@ -170,7 +170,8 @@ void StreamDecodeWorker::run() {
     const HardwareDecoding plan = plan_ ? *plan_
                                         : plan_hardware_decoding(DecodingCapabilities::remembered(ffmpeg_),
                                                                  GpuVendor::automatic, comparison_.source_info,
-                                                                 comparison_.distorted_info);
+                                                                 comparison_.distorted_info,
+                                                                 MacGpuDecoding::off);  // see MacGpuDecoding
     const std::optional<std::string>& accel = side_ == FrameSide::source ? plan.source : plan.distorted;
     std::vector<QString> errors;
     long long next_frame = start_frame_;

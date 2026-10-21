@@ -97,9 +97,10 @@ TEST(Decisions, GpuDecodingIsChosenAsThePythonAppChoosesIt) {
     }
 }
 
-// A Mac's GPU decodes a video for a caller that allows it (the Vship pass)
-// where FFmpeg has VideoToolbox and the GPU decodes the codec, in the 4:2:0
-// 8- or 10-bit pictures at an even size the download takes; not otherwise.
+// A Mac's GPU decodes a video for a caller that allows it (every scoring
+// route; not playback's FFmpeg fallback) where FFmpeg has VideoToolbox and
+// the GPU decodes the codec, in the 4:2:0 8- or 10-bit pictures at an even
+// size the download takes; not otherwise.
 TEST(Decisions, AMacsGpuDecodesWhereTheCallerAllowsIt) {
     DecodingCapabilities mac;
     mac.hwaccels = {"videotoolbox"};
@@ -110,6 +111,7 @@ TEST(Decisions, AMacsGpuDecodesWhereTheCallerAllowsIt) {
     };
     EXPECT_EQ(pick("hevc", "yuv420p10le", 1920, MacGpuDecoding::on), "videotoolbox");
     EXPECT_EQ(pick("h264", "yuv420p", 1920, MacGpuDecoding::on), "videotoolbox");
+    EXPECT_EQ(pick_decode(mac, GpuVendor::automatic, "hevc", "yuv420p", 1920, 1080), "videotoolbox");  // by default
     EXPECT_EQ(pick("hevc", "yuv420p", 1920, MacGpuDecoding::off), std::nullopt);
     EXPECT_EQ(pick("hevc", "yuv420p", 1920, MacGpuDecoding::on, GpuVendor::none), std::nullopt);
     EXPECT_EQ(pick("vp9", "yuv420p", 1920, MacGpuDecoding::on), std::nullopt);   // not this GPU's
