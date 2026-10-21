@@ -27,7 +27,7 @@
 # Needs git, curl, CMake, Ninja and the Command Line Tools' clang.
 set -euo pipefail
 
-vship_commit="77edf23ce21bb3161b20cf2db10a997f7b5b21cc"              # Vship-fast perf-metrics, 2026-10-20 (as Windows')
+vship_commit="2a937ebaa1ae18718596a047c1e4947caf858c8e"              # Vship-fast perf-metrics, 2026-10-21 (as Windows')
 vulkan_headers_commit="3c65a01745e4a1134d32b9c2c456472212dba16d"     # 2026-09-25 (as Windows')
 vulkan_loader_commit="fa218055ff4948b159f31d43f800c808a13d51df"      # vulkan-sdk-1.4.363.0
 moltenvk_version="v1.4.2"

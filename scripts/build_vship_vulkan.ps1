@@ -11,7 +11,7 @@
 #
 # Needs git, g++ on PATH and a Vulkan driver (vulkan-1.dll is linked by name).
 param(
-    [string]$VshipCommit = '77edf23ce21bb3161b20cf2db10a997f7b5b21cc',          # Vship-fast perf-metrics, 2026-10-20
+    [string]$VshipCommit = '2a937ebaa1ae18718596a047c1e4947caf858c8e',          # Vship-fast perf-metrics, 2026-10-21
     [string]$VulkanHeadersCommit = '3c65a01745e4a1134d32b9c2c456472212dba16d',  # 2026-09-25
     [string]$WorkDirectory = (Join-Path $env:TEMP 'vship-vulkan-build')
 )
