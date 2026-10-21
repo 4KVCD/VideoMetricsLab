@@ -32,6 +32,9 @@ and CVVDP faster with Vship-fast.
   them).
 - Removed the GPU/CPU choice for SSIMULACRA2 and Butteraugli: they now run on
   the GPU when one can be used, and on the CPU otherwise.
+- SSIMULACRA2, Butteraugli and CVVDP are now calculated one at a time, which
+  needs less GPU memory; Settings > GPU metrics can still put them in one
+  pass, which is faster only on very powerful GPUs.
 - SSIMULACRA2, Butteraugli and CVVDP on the GPU now compute as libjxl and
   pycvvdp do, so scores saved on the GPU by earlier versions are calculated
   again.
@@ -56,6 +59,14 @@ and CVVDP faster with Vship-fast.
   .y4m reference made from an .mkv.
 - Fixed SSIMULACRA2, Butteraugli and CVVDP on the GPU reading full-range
   greyscale videos with too little contrast.
+- Fixed scores of a test video at another resolution than the reference
+  (such as a 1080p encode of a 4K source) changing slightly with Use GPU
+  decoding.
+- Fixed VMAF, PSNR, SSIM and XPSNR scores of a full-range 8-bit video against
+  a 10-bit one changing with Use GPU decoding.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP scoring a test video of another
+  shape than the reference (such as a 1440x1080 encode of a 4K source)
+  stretched, instead of refusing it as VMAF does.
 - Fixed changing a VMAF model removing the video's other scores too.
 - Fixed cancelling the custom VMAF model file dialog switching the video to
   the Auto model and removing its scores.

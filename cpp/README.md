@@ -39,9 +39,9 @@ last release, but where a change made on purpose says why. It runs before
 a release and in a round of bug checking, not for each change. With
 `--seed-app` another `vml-cli` saves the scores first: the last release's,
 say, so that the new build reads the scores that release saved. A video
-the app decodes itself and scales is, by design, not exactly what FFmpeg's
-scale filter gives (`plan_decode` in `core/src/gpu_frames.cpp`); the
-`...-scaled-by-ffmpeg` cases cover FFmpeg's route too.
+the app decodes itself and scales is what FFmpeg's scale filter gives,
+sample for sample (`native/scale/scale_filter.h`); the `...-by-ffmpeg`
+cases cover FFmpeg's route too.
 
     python cpp\tests\golden\golden.py run --out before --app <the last release>\vml-cli.exe
     python cpp\tests\golden\golden.py run --out after --app cpp\build\windows\cli\Release\vml-cli.exe
