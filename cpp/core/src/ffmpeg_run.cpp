@@ -198,6 +198,13 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
     const bool upscale_distorted = sizes_differ && options.scale_direction == ScaleDirection::distorted_to_source;
     const std::string analysis_format = analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt});
     const std::vector<std::string> numbering = pairing_filters(frame_rate(distorted));
+    // A GPU decoder's 8-bit picture (NV12) widened to a deeper analysis
+    // format is made planar first: FFmpeg widens NV12 with a plain shift, but
+    // a planar picture, as its software decoding gives it, with full-range
+    // luma's top bits repeated, as the app's own decoders widen (widen_to).
+    const auto planar_first = [&analysis_format](const std::optional<std::string>& hwaccel, const VideoInfo& info) {
+        return hwaccel.has_value() && bit_depth(info.pix_fmt) <= 8 && bit_depth(analysis_format) > 8;
+    };
     VideoChains chains;
 
     if (decoding.distorted && !(split && decoder_downloads(decoding.distorted))) {
@@ -208,6 +215,9 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
     }
     if (distorted_crop && !distorted_crop->is_noop(distorted.width, distorted.height)) {
         chains.test.push_back(distorted_crop->as_filter());
+    }
+    if (planar_first(decoding.distorted, distorted)) {
+        chains.test.emplace_back("format=yuv420p");
     }
     chains.test.push_back("format=" + analysis_format);
     if (distorted.full_range() != source.full_range()) {
@@ -229,6 +239,9 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
     }
     if (source_crop && !source_crop->is_noop(source.width, source.height)) {
         chains.source.push_back(source_crop->as_filter());
+    }
+    if (planar_first(decoding.source, source)) {
+        chains.source.emplace_back("format=yuv420p");
     }
     chains.source.push_back("format=" + analysis_format);
     if (sizes_differ && !upscale_distorted) {
