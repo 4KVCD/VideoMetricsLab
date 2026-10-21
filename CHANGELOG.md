@@ -11,6 +11,8 @@ and CVVDP faster with Vship-fast.
   [Vship-fast](https://github.com/4KVCD/Vship-fast): Butteraugli
   **1.75x-2.5x**, CVVDP **1.6x-2.4x** and SSIMULACRA2 up to **1.6x** faster
   than Vship's Vulkan build.
+- SSIMULACRA2, Butteraugli and CVVDP on the GPU are now as accurate as their
+  CPU reference tools, libjxl and pycvvdp.
 
 ### New features
 
