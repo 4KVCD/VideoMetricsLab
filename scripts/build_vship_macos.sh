@@ -91,7 +91,10 @@ cmake -S "$work/Vulkan-Loader" -B "$work/loader" -G Ninja -DCMAKE_BUILD_TYPE=Rel
     > "$work/loader.log" || { tail -30 "$work/loader.log" >&2; exit 1; }
 cmake --build "$work/loader" > "$work/loader-build.log" || { tail -30 "$work/loader-build.log" >&2; exit 1; }
 
-rm -rf "$vulkan_out" "$vship51_out"
+# Only the dylib of vship51: Windows' libvship.dll, committed, shares the
+# folder.
+rm -rf "$vulkan_out"
+rm -f "$vship51_out/libvship.dylib"
 mkdir -p "$vulkan_out/licenses" "$vship_out" "$vship51_out"
 cp "$(find "$work/loader/loader" -name 'libvulkan.1.*.dylib' -type f | head -1)" "$vulkan_out/libvulkan.1.dylib"
 install_name_tool -id @rpath/libvulkan.1.dylib "$vulkan_out/libvulkan.1.dylib" 2>/dev/null
