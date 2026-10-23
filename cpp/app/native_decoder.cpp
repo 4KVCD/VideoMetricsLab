@@ -798,6 +798,8 @@ public:
 private:
     bool open();
     void make_seek();
+    bool seek_from(std::int64_t time_ns);
+    bool seek_further_back();
     std::int64_t counted_time_ns(std::int64_t number) const;
     bool take_frames(QString& failure);
     std::optional<std::int64_t> frame_time();
@@ -829,6 +831,11 @@ private:
     std::int64_t keep_from_ns_ = std::numeric_limits<std::int64_t>::min();
     std::int64_t last_given_ns_ = -1;
     bool at_end_ = false;
+    // The frame (its time from the first frame) the last seek is to reach,
+    // until the first frame decoded after it shows that it does
+    // (seek_further_back); and the time that seek started from.
+    std::optional<std::int64_t> seek_check_ns_;
+    std::int64_t seek_from_ns_ = 0;
     // A stream with no timestamps (a raw H.264, HEVC or VVC stream, as
     // VVenC writes them): its frames are counted from its start instead, at
     // the comparison's frame rate, as FFmpeg's command line counts them; this
@@ -939,9 +946,8 @@ void FfmpegNativeVideo::Session::make_seek() {
     const std::int64_t target_ns = static_cast<std::int64_t>(*wanted) * 1'000'000;
     bool sought = true;
     if (!counted_) {
-        const std::int64_t stamp =
-            av_rescale_q(*origin_ns_ + target_ns, AVRational{1, 1'000'000'000}, decoding_->time_base);
-        sought = av_seek_frame(decoding_->format, decoding_->stream, stamp, AVSEEK_FLAG_BACKWARD) >= 0;
+        sought = seek_from(target_ns);
+        seek_check_ns_ = target_ns;
         decoding_->flush();
         decoding_->draining = false;
         at_end_ = false;
@@ -966,6 +972,37 @@ void FfmpegNativeVideo::Session::make_seek() {
     if (at_end_) {
         video_.ended_ = true;  // sought past the end of a counted stream already decoded to it
     }
+}
+
+// Seeks to the keyframe before `time_ns` (from the first frame). False when
+// FFmpeg cannot seek.
+bool FfmpegNativeVideo::Session::seek_from(std::int64_t time_ns) {
+    seek_from_ns_ = time_ns;
+    const std::int64_t stamp = av_rescale_q(*origin_ns_ + time_ns, AVRational{1, 1'000'000'000}, decoding_->time_base);
+    return av_seek_frame(decoding_->format, decoding_->stream, stamp, AVSEEK_FLAG_BACKWARD) >= 0;
+}
+
+// The first frame decoded after a seek came after the frame it was for: an
+// MP4's or MOV's demuxer chooses the keyframe by its decoding time, and with
+// an open GOP that can be a keyframe shown after the frame, whose leading
+// frames (the frame among them) cannot be decoded from it. VVenC's random
+// access (an open GOP of 32 frames) decodes each keyframe 36 frames before it
+// is shown, and a seek to any of the 30 or 31 frames before one showed the
+// keyframe instead. Seeks again, from 1 s before the frame, then 2 s, 4 s and
+// so on. False once a seek from the start came after the frame too (it is
+// not in the video).
+bool FfmpegNativeVideo::Session::seek_further_back() {
+    if (seek_from_ns_ <= 0) {
+        return false;
+    }
+    const std::int64_t back_ns = std::max<std::int64_t>(1'000'000'000, 2 * (*seek_check_ns_ - seek_from_ns_));
+    if (!seek_from(std::max<std::int64_t>(0, *seek_check_ns_ - back_ns))) {
+        return false;
+    }
+    decoding_->flush();
+    decoding_->draining = false;
+    at_end_ = false;
+    return true;
 }
 
 // The time of a counted stream's frame `number` (ns).
@@ -1003,6 +1040,15 @@ bool FfmpegNativeVideo::Session::take_frames(QString& failure) {
         if (!time) {
             video_.fail(QStringLiteral("Video frame has no usable presentation timestamp"));
             return false;
+        }
+        if (seek_check_ns_) {
+            // The first frame after a seek: after the frame sought, that
+            // frame could not be decoded from where the seek landed.
+            if (*time - *origin_ns_ > *seek_check_ns_ + decoding_->frame_ns / 2 && seek_further_back()) {
+                decoding_->unref_frame();
+                continue;
+            }
+            seek_check_ns_.reset();
         }
         if (grain_left_to_ffmpeg()) {
             decoding_->unref_frame();
@@ -1088,9 +1134,8 @@ bool FfmpegNativeVideo::Session::decode_on_in_software() {
         }
     } else if (origin_ns_ && last_given_ns_ >= 0) {
         const std::int64_t next_ns = last_given_ns_ + decoding_->frame_ns / 2;
-        av_seek_frame(decoding_->format, decoding_->stream,
-                      av_rescale_q(*origin_ns_ + next_ns, AVRational{1, 1'000'000'000}, decoding_->time_base),
-                      AVSEEK_FLAG_BACKWARD);
+        seek_from(next_ns);
+        seek_check_ns_ = last_given_ns_ + decoding_->frame_ns;  // the next frame
         keep_from_ns_ = next_ns;
     }
     return true;

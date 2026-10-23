@@ -228,7 +228,8 @@ std::optional<StreamDecodeWorker::Attempt> StreamDecodeWorker::try_decoding(Play
     Attempt attempt;
     try {
         platform::ChildProcess process = platform::ChildProcess::start(
-            build_playback_command(ffmpeg_, comparison_, side_, next_frame, colors_, plan, maximum_, processing),
+            build_playback_command(ffmpeg_, comparison_, side_, next_frame, colors_, plan, maximum_, processing,
+                                   keyframe_lead(ffmpeg_, frame_input_path(comparison_, side_), cancel_)),
             options);
         const CancelToken::Attached attached = cancel_.attach(process);
         if (!read_frames(process, processing, next_frame, errors, attempt)) {

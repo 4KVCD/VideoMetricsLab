@@ -90,6 +90,32 @@ const VideoInfo& frame_video_info(const FrameComparison& comparison, FrameSide s
 // a frame early so that seeking lands on the frame and not the next.
 double seek_seconds(const VideoInfo& info, long long frame, double fps);
 
+// How much earlier than they are shown the video's keyframes are decoded, at
+// most (s): the largest gap between a packet's presentation and decoding
+// times among the video's first 200 packets, read (not decoded) by `ffmpeg`.
+// An MP4's or MOV's seek finds keyframes by their decoding time, so -ss can
+// land this much late (seek_point). Kept for each file once found; 0
+// where FFmpeg cannot read the packets. Throws Cancelled once `cancel` ends
+// it.
+double keyframe_lead(const std::string& ffmpeg, const std::filesystem::path& path,
+                     const CancelToken& cancel = CancelToken());
+
+// Where a command starts, to give the frames from `seconds` (seek_seconds)
+// on of a video whose keyframes are decoded up to `lead` seconds before they
+// are shown (keyframe_lead): the time for -ss, and how long after it the
+// frames to give start (a trim filter's start, first in the filters, by the
+// frames' times: before a filter that numbers them anew) where -ss must
+// seek earlier.
+struct SeekPoint {
+    double seek = 0.0;
+    double skip = 0.0;
+};
+SeekPoint seek_point(double seconds, double lead);
+
+// The trim filter that drops the frames before `start` (SeekPoint::skip), or
+// nothing for none.
+std::optional<std::string> trim_filter(const SeekPoint& start);
+
 // The HDR family a video's transfer tag declares ("HDR10 / PQ", "HLG"), or
 // nothing: never guessed from the bit depth.
 std::optional<std::string> hdr_kind(const VideoInfo& info);
@@ -105,11 +131,12 @@ std::string frame_filter(const FrameComparison& comparison, FrameSide side, cons
                          std::optional<Size> output_size = std::nullopt);
 
 // The FFmpeg command that writes frame `frame` of `side` as a PNG to its
-// standard output. Throws FrameExtractError when the video has no usable
-// frame rate, std::invalid_argument for a negative frame.
+// standard output, its keyframes decoded `lead` seconds before they are
+// shown (keyframe_lead). Throws FrameExtractError when the video has no
+// usable frame rate, std::invalid_argument for a negative frame.
 std::vector<std::string> build_frame_command(const std::string& ffmpeg, const FrameComparison& comparison,
                                              FrameSide side, long long frame,
-                                             const PreviewColorSettings& colors = {});
+                                             const PreviewColorSettings& colors = {}, double lead = 0.0);
 
 // Frame `frame` of `side` as PNG bytes. Throws FrameExtractError (a missing
 // file, FFmpeg's error, no frame there), and Cancelled once `cancel` ends it.

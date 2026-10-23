@@ -14,6 +14,7 @@
 #include "reference.h"
 #include "test_videos.h"
 #include "vml/platform/system.h"
+#include "vml/video_playback.h"
 
 namespace vml {
 namespace {
@@ -123,6 +124,36 @@ TEST(FrameExtract, PreparesFramesAsThePythonAppDoes) {
     } catch (const FrameExtractError& error) {
         EXPECT_EQ(error.what(), reference.at("no_frame_rate").get<std::string>());
     }
+}
+
+// A video whose keyframes are decoded long before they are shown (VVenC's
+// random access in an MP4: 1.2 s) is sought that much earlier, the frames
+// before the one asked for trimmed by their times, before any filter that
+// numbers them anew; near its start, from the start. A short lead, which
+// FFmpeg's own allowance covers, leaves the command as it was.
+TEST(FrameExtract, SeeksEarlierWhereKeyframesAreDecodedLongBeforeShown) {
+    FrameComparison comparison;
+    comparison.source_info.path = "source.mp4";
+    comparison.source_info.width = 1920;
+    comparison.source_info.height = 1080;
+    comparison.distorted_info = comparison.source_info;
+    comparison.fps = 30000.0 / 1001.0;
+    const auto argument = [](const std::vector<std::string>& command, const std::string& name) {
+        return *(std::find(command.begin(), command.end(), name) + 1);
+    };
+    const std::vector<std::string> plain = build_frame_command("<ffmpeg>", comparison, FrameSide::source, 460);
+    EXPECT_EQ(build_frame_command("<ffmpeg>", comparison, FrameSide::source, 460, {}, 0.08), plain);
+    const std::vector<std::string> early = build_frame_command("<ffmpeg>", comparison, FrameSide::source, 460, {}, 1.2012);
+    EXPECT_EQ(argument(plain, "-ss"), "15.344495833");
+    EXPECT_EQ(argument(early, "-ss"), "14.143295833");
+    EXPECT_EQ(argument(early, "-vf"), "trim=start=1.201200000," + argument(plain, "-vf"));
+    const std::vector<std::string> start = build_frame_command("<ffmpeg>", comparison, FrameSide::source, 10, {}, 1.2012);
+    EXPECT_EQ(argument(start, "-ss"), "0.000000000");
+    EXPECT_EQ(argument(start, "-vf").substr(0, 23), "trim=start=0.329495833,");
+    const std::vector<std::string> playback = build_playback_command(
+        "<ffmpeg>", comparison, FrameSide::source, 460, {}, {}, std::nullopt, PlaybackProcessing::cpu, 1.2012);
+    EXPECT_EQ(argument(playback, "-ss"), "14.143295833");
+    EXPECT_NE(argument(playback, "-filter_complex").find("[in0]trim=start=1.201200000,"), std::string::npos);
 }
 
 }  // namespace

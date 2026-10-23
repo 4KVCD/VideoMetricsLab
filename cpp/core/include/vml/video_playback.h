@@ -56,11 +56,13 @@ std::vector<PlaybackProcessing> playback_modes(const std::optional<std::string>&
 // The command decoding `side` of `comparison` from `start_frame` on, at
 // playback_dimensions(comparison, maximum), into 8-bit RGBA on standard
 // output, a frame at a time at the comparison's rate. `plan` says which
-// hardware decoder each side uses.
+// hardware decoder each side uses; `lead` is how much earlier than they are
+// shown the video's keyframes are decoded (keyframe_lead).
 std::vector<std::string> build_playback_command(const std::string& ffmpeg, const FrameComparison& comparison,
                                                 FrameSide side, long long start_frame,
                                                 const PreviewColorSettings& colors, const HardwareDecoding& plan,
-                                                std::optional<Size> maximum, PlaybackProcessing processing);
+                                                std::optional<Size> maximum, PlaybackProcessing processing,
+                                                double lead = 0.0);
 
 // The ffplay beside `ffmpeg`, or nothing if there is none.
 std::optional<std::filesystem::path> ffplay_beside(const std::string& ffmpeg);

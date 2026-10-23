@@ -102,7 +102,8 @@ std::vector<PlaybackProcessing> playback_modes(const std::optional<std::string>&
 std::vector<std::string> build_playback_command(const std::string& ffmpeg, const FrameComparison& comparison,
                                                 FrameSide side, long long start_frame,
                                                 const PreviewColorSettings& colors, const HardwareDecoding& plan,
-                                                std::optional<Size> maximum, PlaybackProcessing processing) {
+                                                std::optional<Size> maximum, PlaybackProcessing processing,
+                                                double lead) {
     const double fps = comparison.fps;
     if (fps <= 0 || start_frame < 0) {
         throw std::invalid_argument("invalid playback frame rate or start frame");
@@ -123,7 +124,8 @@ std::vector<std::string> build_playback_command(const std::string& ffmpeg, const
         accel.reset();
     }
     const VideoInfo& info = frame_video_info(comparison, side);
-    command.insert(command.end(), {"-ss", format_fixed(seek_seconds(info, start_frame, fps), 9)});
+    const SeekPoint start = seek_point(seek_seconds(info, start_frame, fps), lead);
+    command.insert(command.end(), {"-ss", format_fixed(start.seek, 9)});
     const std::vector<std::string> accel_args = hwaccel_args(accel);
     command.insert(command.end(), accel_args.begin(), accel_args.end());
     if (interop && accel == "cuda") {
@@ -133,6 +135,9 @@ std::vector<std::string> build_playback_command(const std::string& ffmpeg, const
 
     const std::optional<CropBox>& crop = side == FrameSide::source ? comparison.source_crop : comparison.distorted_crop;
     std::vector<std::string> ops;
+    if (const std::optional<std::string> trim = trim_filter(start)) {
+        ops.push_back(*trim);  // before fps and setpts, which number the frames anew
+    }
     if (gpu) {
         // Only missing HDR descriptions are filled in; a transfer declared
         // SDR is never overwritten.

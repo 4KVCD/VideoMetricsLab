@@ -2,7 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <mutex>
 #include <set>
+#include <sstream>
 
 #include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
@@ -125,6 +128,86 @@ double seek_seconds(const VideoInfo& info, long long frame, double fps) {
     return std::max(0.0, info.start_offset + (static_cast<double>(frame) - 0.125) / fps);
 }
 
+double keyframe_lead(const std::string& ffmpeg, const std::filesystem::path& path, const CancelToken& cancel) {
+    // Kept by the file's path, size and time: a file written again is read again.
+    std::error_code error;
+    const std::string key = platform::path_text(path) + '|' + std::to_string(std::filesystem::file_size(path, error)) +
+                            '|' + std::to_string(std::filesystem::last_write_time(path, error).time_since_epoch().count());
+    static std::mutex mutex;
+    static std::map<std::string, double> leads;
+    {
+        const std::lock_guard lock(mutex);
+        if (const auto found = leads.find(key); found != leads.end()) {
+            return found->second;
+        }
+    }
+    // FFmpeg's framecrc lists each packet copied as "stream, dts, pts, ...",
+    // in the time base its "#tb 0: N/D" line gives.
+    platform::ChildProcess process = platform::ChildProcess::start(
+        {ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", input_path(path), "-map",
+         "0:" + std::string(video_stream), "-c", "copy", "-frames:v", "200", "-f", "framecrc", "-"});
+    std::string listing;
+    {
+        const CancelToken::Attached attached = cancel.attach(process);
+        std::vector<char> buffer(1 << 16);
+        while (const std::size_t count = process.read(buffer.data(), buffer.size())) {
+            listing.append(buffer.data(), count);
+        }
+        process.wait();
+    }
+    cancel.throw_if_cancelled();
+    double time_base = 0.0;
+    long long ticks = 0;
+    std::istringstream lines(listing);
+    for (std::string line; std::getline(lines, line);) {
+        const std::string_view text(line);
+        if (text.starts_with("#tb 0:")) {
+            const std::string_view rate = text.substr(6);
+            const std::size_t slash = rate.find('/');
+            const std::optional<long long> numerator = python_int(rate.substr(0, slash));
+            const std::optional<long long> denominator =
+                slash == std::string_view::npos ? std::nullopt : python_int(rate.substr(slash + 1));
+            if (numerator && denominator && *denominator > 0) {
+                time_base = static_cast<double>(*numerator) / static_cast<double>(*denominator);
+            }
+        } else if (text.starts_with("0,")) {
+            const std::size_t dts_end = text.find(',', 2);
+            const std::size_t pts_end = dts_end == std::string_view::npos ? dts_end : text.find(',', dts_end + 1);
+            if (pts_end != std::string_view::npos) {
+                const std::optional<long long> dts = python_int(text.substr(2, dts_end - 2));
+                const std::optional<long long> pts = python_int(text.substr(dts_end + 1, pts_end - dts_end - 1));
+                if (dts && pts) {
+                    ticks = std::max(ticks, *pts - *dts);
+                }
+            }
+        }
+    }
+    // A file FFmpeg cannot read this way (0) is not read again either.
+    const double lead = static_cast<double>(ticks) * time_base;
+    const std::lock_guard lock(mutex);
+    leads.emplace(key, lead);
+    return lead;
+}
+
+SeekPoint seek_point(double seconds, double lead) {
+    // FFmpeg's command line already seeks a video with B-frames 3/23 s
+    // (0.13 s) earlier, enough for a lead up to 0.1 s. A longer one (VVenC's
+    // random access, an open GOP of 32 frames: 1.2 s) lands -ss on the
+    // keyframe after the frame, whose leading frames, the frame among them,
+    // cannot be decoded from it: this seeks that much earlier, and the trim
+    // filter drops the frames before the frame.
+    constexpr double allowance = 0.1;
+    const double early = lead > allowance ? std::min(seconds, lead) : 0.0;
+    return {seconds - early, early};
+}
+
+std::optional<std::string> trim_filter(const SeekPoint& start) {
+    if (start.skip <= 0.0) {
+        return std::nullopt;
+    }
+    return "trim=start=" + format_fixed(start.skip, 9);
+}
+
 std::optional<std::string> hdr_kind(const VideoInfo& info) {
     const std::string transfer = ascii_lower(python_strip(info.color_transfer));
     if (transfer == "smpte2084" || transfer == "smpte-st-2084") {
@@ -202,20 +285,24 @@ std::string frame_filter(const FrameComparison& comparison, FrameSide side, cons
 }
 
 std::vector<std::string> build_frame_command(const std::string& ffmpeg, const FrameComparison& comparison,
-                                             FrameSide side, long long frame, const PreviewColorSettings& colors) {
+                                             FrameSide side, long long frame, const PreviewColorSettings& colors,
+                                             double lead) {
     if (frame < 0) {
         throw std::invalid_argument("frame number must be non-negative");
     }
     if (comparison.fps <= 0) {
         throw FrameExtractError("This video has no usable frame rate.");
     }
-    const double timestamp = seek_seconds(frame_video_info(comparison, side), frame, comparison.fps);
+    const SeekPoint start = seek_point(seek_seconds(frame_video_info(comparison, side), frame, comparison.fps), lead);
+    std::string filters = frame_filter(comparison, side, colors);
+    if (const std::optional<std::string> trim = trim_filter(start)) {
+        filters = *trim + "," + filters;
+    }
     std::error_code error;
     const std::filesystem::path input = std::filesystem::weakly_canonical(frame_input_path(comparison, side), error);
-    return {ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-ss", format_fixed(timestamp, 9), "-i",
+    return {ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-ss", format_fixed(start.seek, 9), "-i",
             platform::path_text(error ? frame_input_path(comparison, side) : input), "-map",
-            "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", frame_filter(comparison, side, colors),
-            "-frames:v", "1", "-f", "image2pipe",
+            "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", filters, "-frames:v", "1", "-f", "image2pipe",
             // Stored, not compressed: the same pixels, 25 MB for 4K rather
             // than 2-8, but written 85-340 ms sooner and read in 27 ms rather
             // than 64-104.
@@ -230,8 +317,8 @@ std::string extract_frame_png(const std::string& ffmpeg, const FrameComparison& 
         throw FrameExtractError("Video file is missing: " + platform::path_text(path));
     }
     cancel.throw_if_cancelled();
-    platform::ChildProcess process =
-        platform::ChildProcess::start(build_frame_command(ffmpeg, comparison, side, frame, colors));
+    platform::ChildProcess process = platform::ChildProcess::start(
+        build_frame_command(ffmpeg, comparison, side, frame, colors, keyframe_lead(ffmpeg, path, cancel)));
     std::string png;
     int exit_code = 0;
     {
