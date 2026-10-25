@@ -206,8 +206,10 @@ skips the dialog and sets the exit code instead, which is how
 metric is calculated.
 
 A broken package is not obvious from the outside: a library that fails to
-load makes the app fall back to something slower without a word. The
-self-test is what shows it.
+load makes the app fall back to something slower. A run notes the fallback
+where it can tell a failure from a PC without that GPU (a GPU check that
+crashed, errored or scored wrongly, or Vship-fast replaced by stock Vship
+5.1.2), but not for every library. The self-test is what shows it.
 
 ## Releasing
 

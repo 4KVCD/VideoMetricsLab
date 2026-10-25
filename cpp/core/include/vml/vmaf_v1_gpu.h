@@ -204,6 +204,9 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
 struct V1Probe {
     bool available = false;
     std::string text;
+    // The check crashed, failed with an error or gave wrong values, rather
+    // than finding no GPU that calculates VMAF v1.
+    bool failed = false;
 };
 
 // The check of the GPU, in this process: the Vulkan check of the shaders
@@ -223,7 +226,9 @@ bool v1_probe_ready();
 // Whether a run's VMAF v1 is calculated with the GPU: `model` (its
 // "path=<file>", or empty while Auto is not yet resolved) is a VMAF v1 model,
 // `size`, where known, leaves SpEED blocks to score, and the GPU passed its
-// check.
-bool v1_on_gpu(const std::string& model, std::optional<std::pair<int, int>> size);
+// check. Where that check failed (V1Probe::failed), why goes to
+// `check_failure`, where given.
+bool v1_on_gpu(const std::string& model, std::optional<std::pair<int, int>> size,
+               std::string* check_failure = nullptr);
 
 }  // namespace vml

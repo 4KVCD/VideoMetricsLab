@@ -51,6 +51,9 @@ struct MetricTask {
     // "ffmpeg", gpu_vmaf_task, perceptual_task or perceptual_cpu_task
     std::string backend;
     std::vector<std::string> metric_keys;  // in the registry's order
+    // Why metrics of the GPU's are here, on the CPU: a check of the GPU
+    // failed (scores_on_gpu). Said as the task starts, as a GPU failure is.
+    std::vector<std::string> fallbacks{};
 
     // Whether it waits in the GPU's queue rather than the CPU's.
     bool on_gpu() const { return backend == gpu_vmaf_task || backend == perceptual_task; }

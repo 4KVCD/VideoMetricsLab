@@ -65,15 +65,17 @@ std::vector<std::vector<std::string>> vship_passes(const std::vector<std::string
 
 // The steps run_perceptual_task takes a task's metrics through, each a
 // function, so that the tests can stand in for them (the Python app's tests
-// replace the same functions): finding the GPU Vship uses, finding the
-// black bars, Vship-fast's passes on that GPU, the same passes on stock
-// Vship 5.1.2 (none where it is not bundled), and the CPU's tools with the
-// black bars already found, if they were.
+// replace the same functions): finding the GPU Vship uses, and whether a GPU
+// check failed where none was found (none: it did not), finding the black
+// bars, Vship-fast's passes on that GPU, the same passes on stock Vship
+// 5.1.2 (none where it is not bundled), and the CPU's tools with the black
+// bars already found, if they were.
 struct PerceptualRoutes {
     using GpuRoute = std::function<PerceptualTaskOutput(const PerceptualRequest&, const std::vector<std::string>& keys,
                                                         const VshipDevice&, const CropPair&, bool together,
                                                         const PerceptualHooks&, const CancelToken&)>;
     std::function<std::pair<std::optional<VshipDevice>, std::string>()> find_gpu;
+    std::function<bool()> gpu_check_failed;
     std::function<CropPair(const PerceptualRequest&, const StatusCallback&, const CancelToken&)> find_crops;
     GpuRoute run_gpu;
     GpuRoute run_vship51;

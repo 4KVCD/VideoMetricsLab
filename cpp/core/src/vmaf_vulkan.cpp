@@ -482,7 +482,8 @@ VulkanProbe probe_vulkan() {
             const int bits = i == 0 ? 8 : 10;
             if (vulkan_probe_sums(device->index, bits) != probe_digests[i]) {
                 return {false, std::nullopt,
-                        device->name + "'s driver calculates VMAF wrongly (" + std::to_string(bits) + "-bit self-test)"};
+                        device->name + "'s driver calculates VMAF wrongly (" + std::to_string(bits) + "-bit self-test)",
+                        true};
             }
         }
         return {true, device->index, "Vulkan on " + device->name};

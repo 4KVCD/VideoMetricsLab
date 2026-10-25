@@ -303,6 +303,7 @@ const VshipLibrary& kept_library(const std::function<platform::DynamicLibrary()>
 struct ProbeState {
     std::mutex mutex;  // held for the whole of a probe
     std::optional<std::pair<std::optional<VshipDevice>, std::string>> probed;
+    bool failed = false;  // no GPU, as a check crashed or failed (vship_check_failed)
     std::chrono::steady_clock::time_point probed_at;
     // The last finished probe's result, under a lock of its own that a probe
     // in progress does not hold (known_vship_device).
@@ -357,16 +358,19 @@ std::optional<GpuVendor> vendor_from(const std::string& text) {
 // is Intel's). Any failure is an answer, no GPU, as VMAF's and VMAF v1's
 // probes take one: one that escaped would leave the probe unasked, and a
 // run that waits for it (MainWindow::wait_for_gpu_checks) asking again for
-// good. With `vship51`, stock Vship 5.1.2's.
-std::pair<std::optional<VshipDevice>, std::string> probe_isolated(bool vship51) {
+// good. With `vship51`, stock Vship 5.1.2's. `failed` is set when the probe
+// crashed or failed rather than answering.
+std::pair<std::optional<VshipDevice>, std::string> probe_isolated(bool vship51, bool& failed) {
     try {
         const nlohmann::json result =
             run_isolated("vship-probe", vship51 ? "Vship 5.1.2's GPU probe" : "Vship's GPU probe",
                          {{"vship51", vship51}}, {}, CancelToken());
         return {vship_device_from(result.at("device")), result.at("reason").get<std::string>()};
     } catch (const IsolatedCrashError& error) {
+        failed = true;
         return {std::nullopt, error.what()};
     } catch (const std::exception& error) {
+        failed = true;
         return {std::nullopt, std::string("the GPU probe failed: ") + error.what()};
     }
 }
@@ -593,19 +597,22 @@ std::pair<std::optional<VshipDevice>, std::string> detect_vship_device() {
     ProbeState& state = probe_state();
     const std::lock_guard lock(state.mutex);
     if (!state.probed) {
-        state.probed = isolation_program() ? probe_isolated(false) : probe_vship_device();
+        bool failed = false;
+        state.probed = isolation_program() ? probe_isolated(false, failed) : probe_vship_device();
         if (!state.probed->first && isolation_program() && vship51_bundled()) {
             // Vship-fast compiles every shader as it starts on a GPU: one of
             // its own that the driver refuses, or crashes on, leaves it no
             // GPU where stock Vship 5.1.2 may have one. Its reason stays the
             // answer if 5.1.2 finds none either.
-            std::pair<std::optional<VshipDevice>, std::string> stock = probe_isolated(true);
+            std::pair<std::optional<VshipDevice>, std::string> stock = probe_isolated(true, failed);
             if (stock.first) {
                 app_log::write(app_log::Level::warning, "vml.perceptual_vship",
                                "Vship-fast can use no GPU (" + state.probed->second + "); Vship 5.1.2 can");
+                stock.first->fast_failure = state.probed->second;
                 state.probed = std::move(stock);
             }
         }
+        state.failed = failed && !state.probed->first;
         state.probed_at = std::chrono::steady_clock::now();
         const auto& [device, reason] = *state.probed;
         if (device) {
@@ -621,6 +628,12 @@ std::pair<std::optional<VshipDevice>, std::string> detect_vship_device() {
         }
     }
     return *state.probed;
+}
+
+bool vship_check_failed() {
+    ProbeState& state = probe_state();
+    const std::lock_guard lock(state.mutex);
+    return state.probed && state.failed;
 }
 
 void on_vship_probe_finished(std::function<void()> callback) {

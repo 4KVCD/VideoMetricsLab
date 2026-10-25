@@ -529,6 +529,9 @@ bool JobRun::run_task(std::size_t task) {
     }
     const std::string half = task_name(task);
     logger.info(name() + ": " + half + " started");
+    for (const std::string& note : job_.tasks[task].fallbacks) {
+        report_status(task, {note, StatusKind::gpu_vmaf_failed});
+    }
     const auto began = std::chrono::steady_clock::now();
     std::optional<ComparisonResult> output;
     std::optional<PerceptualTaskOutput> perceptual;
@@ -982,6 +985,25 @@ void Scheduler::drain_queue(Pool pool) {
     }
 }
 
+// What the CPU's task says of the metrics a failed check of the GPU sent it
+// (`failures`, each metric's key and why): a note for each reason, with its
+// metrics.
+std::vector<std::string> fallback_notes(const std::vector<std::pair<std::string, std::string>>& failures) {
+    std::vector<std::pair<std::string, std::vector<std::string>>> by_reason;
+    for (const auto& [key, why] : failures) {
+        const auto same = std::find_if(by_reason.begin(), by_reason.end(),
+                                       [&why](const auto& reason) { return reason.first == why; });
+        (same != by_reason.end() ? same->second : by_reason.emplace_back(why, std::vector<std::string>{}).second)
+            .push_back(key);
+    }
+    std::vector<std::string> notes;
+    for (const auto& [why, keys] : by_reason) {
+        notes.push_back("The GPU check failed (" + why + "); calculating " + metric_labels(keys, " and ") +
+                        " on the CPU\xE2\x80\xA6");
+    }
+    return notes;
+}
+
 }  // namespace
 
 std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
@@ -1003,6 +1025,7 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     const bool neg = contains(keys, "vmaf_neg");
     const bool v1 = contains(keys, "vmaf_v1");
     GpuModels on_gpu;
+    std::vector<std::pair<std::string, std::string>> check_failures;  // (key, why) of scores_on_gpu
     // A resolution test's VMAF is FFmpeg's: its test video is made in
     // FFmpeg's filter graph, from the source.
     if ((vmaf || neg || v1) && !options.resample_test) {
@@ -1015,9 +1038,10 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
         }
         on_gpu = scores_on_gpu(vmaf, neg, options.model, options.vmaf_on_gpu,
                                bit_depth(analysis_pix_fmt({source.pix_fmt, test.pix_fmt})), size, v1,
-                               options.model_v1);
+                               options.model_v1, &check_failures);
     }
     MetricTask ffmpeg{"ffmpeg", {}};
+    ffmpeg.fallbacks = fallback_notes(check_failures);
     MetricTask gpu{std::string(gpu_vmaf_task), {}};
     // SSIMULACRA2 and Butteraugli chosen for the CPU make a task of their own,
     // in the CPU's queue: in Vship's task they would be calculated after its

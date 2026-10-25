@@ -277,6 +277,7 @@ struct VulkanProbe {
     bool available = false;
     std::optional<int> device;
     std::string text;
+    bool failed = false;  // the GPU's self-test gave wrong sums, rather than no GPU being found
 };
 
 // Scores the probe's frames at 8 and 10 bits on the GPU to score on (the

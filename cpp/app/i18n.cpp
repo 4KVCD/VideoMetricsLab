@@ -297,7 +297,9 @@ const char* const templates[] = {
     "{metrics} failed on the GPU; calculating it on the CPU…",
     "Vship GPU unavailable ({reason}); using CPU reference metrics…",
     "Vship-fast failed ({error}); calculating {metrics} with Vship 5.1.2…",
+    "Vship-fast could not use the GPU ({reason}); calculating {metrics} with Vship 5.1.2…",
     "Vship GPU compute failed ({error}); using CPU reference metrics…",
+    "The GPU check failed ({reason}); calculating {metrics} on the CPU…",
     "Waiting for the GPU: another video's GPU pass is running…",
     // --- why a video or a metric failed
     "{metrics} failed: {error}",

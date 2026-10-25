@@ -274,6 +274,7 @@ void MainWindow::begin_run(const std::vector<int>& checked, std::vector<std::sha
     job_line_text_.clear();
     job_line_shape_.clear();
     job_lines_due_.clear();
+    job_fallbacks_.clear();
     for (ElidedLabel* line : job_progress_labels_) {
         line->setVisible(false);
         line->clear_text();
@@ -668,7 +669,8 @@ QString MainWindow::run_end_message() const {
     // How the run ended and how long it took, such as "Finished in 2:29:51:
     // 1 video failed, 1 with some metrics failed (hover over their names for
     // why)." A video with some metrics failed and the rest scored is counted
-    // apart from a failed video.
+    // apart from a failed video, and one scored whole with a GPU fallback
+    // apart from both.
     const std::optional<double> elapsed = run_elapsed();
     const QString took = elapsed ? QString::fromStdString(format_hms(*elapsed)) : QString();
     if (run_was_cancelled_) {
@@ -681,11 +683,16 @@ QString MainWindow::run_end_message() const {
     if (run_partial_count_ > 0) {
         issues.append(app::tr("{count} with some metrics failed", {{"count", run_partial_count_}}));
     }
+    const int fallbacks = fallback_count();
+    if (fallbacks > 0) {
+        issues.append(app::tr("{count} with a GPU fallback", {{"count", fallbacks}}));
+    }
     if (issues.isEmpty()) {
         return elapsed ? app::tr("Done in {time}.", {{"time", took}}) : app::tr("Done.");
     }
-    const QString why = run_failed_count_ + run_partial_count_ == 1 ? app::tr("hover over its name for why")
-                                                                    : app::tr("hover over their names for why");
+    const QString why = run_failed_count_ + run_partial_count_ + fallbacks == 1
+                            ? app::tr("hover over its name for why")
+                            : app::tr("hover over their names for why");
     const QString listed = issues.join(app::tr(", "));
     if (!elapsed) {
         return app::tr("Finished: {issues} ({why}).", {{"issues", listed}, {"why", why}});
@@ -766,6 +773,7 @@ void MainWindow::on_task_progress(int index, std::vector<TaskSnapshot> tasks) {
     if (finished_jobs_.contains(index)) {
         return;  // the video is over; its line is gone
     }
+    note_fallbacks(index, tasks);
     pause_free_rates(index, tasks);
     LineShape shape = line_shape(tasks);
     job_task_progress_[index] = std::move(tasks);
@@ -777,6 +785,48 @@ void MainWindow::on_task_progress(int index, std::vector<TaskSnapshot> tasks) {
     } else {
         job_lines_due_.insert(index);
     }
+}
+
+void MainWindow::note_fallbacks(int index, const std::vector<TaskSnapshot>& tasks) {
+    // A task's status saying that a GPU route failed and its metrics went
+    // elsewhere, kept for the video's row: its line shows it only until the
+    // next step. Kept as the engine says it, and translated once, for the
+    // row: the same status comes with every progress report until the next.
+    for (const TaskSnapshot& task : tasks) {
+        if (!is_gpu_fallback(task.step.kind)) {
+            continue;
+        }
+        std::string note = fallback_note(task.step.text);
+        std::vector<std::string>& notes = job_fallbacks_[index];
+        if (std::find(notes.begin(), notes.end(), note) == notes.end()) {
+            notes.push_back(std::move(note));
+        }
+    }
+}
+
+QString MainWindow::with_fallbacks(int index, const QString& detail) const {
+    // A finished video's row detail, with its GPU fallbacks after it.
+    const auto notes = job_fallbacks_.find(index);
+    if (notes == job_fallbacks_.end()) {
+        return detail;
+    }
+    QStringList lines{app::tr("GPU fallbacks:")};
+    for (const std::string& note : notes->second) {
+        lines.append("• " + tr_message(QString::fromStdString(note)));
+    }
+    return (detail.isEmpty() ? QString() : detail + "\n\n") + lines.join("\n");
+}
+
+int MainWindow::fallback_count() const {
+    // The videos with a GPU fallback and every score, whose rows show it, for
+    // the run's end message: one that failed, wholly or partly, is counted as
+    // that, and its row names the fallback too.
+    return static_cast<int>(std::count_if(job_fallbacks_.begin(), job_fallbacks_.end(), [this](const auto& notes) {
+        const RowData* row_data = job_rows_[static_cast<std::size_t>(notes.first)].get();
+        const std::optional<RowState> state = row_data->analysis_status;
+        return row_index_of(row_data) && state != RowState::failed && state != RowState::partly_failed &&
+               !(state && finished_not_shown(*state));
+    }));
 }
 
 void MainWindow::on_run_tick() {
@@ -884,7 +934,7 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
         set_row_info(*row, result.distorted_info);  // its Scaling cell, with the crops the run used
     }
     if (final) {
-        row_data.status_detail = scores_detail(run->result);
+        row_data.status_detail = with_fallbacks(index, scores_detail(run->result));
     }
     set_row_metrics(*row);
     // Straight onto the graph: a finished video is a line, and waiting for a
@@ -974,7 +1024,8 @@ void MainWindow::on_job_partially_failed(int index, const ComparisonResult& resu
     for (const auto& [key, why] : failures) {
         row_data.metric_failures[key] = QString::fromStdString(why);
     }
-    set_row_status(*row, RowState::partly_failed, stderr_tail.isEmpty() ? message : message + "\n\n" + stderr_tail);
+    set_row_status(*row, RowState::partly_failed,
+                   with_fallbacks(index, stderr_tail.isEmpty() ? message : message + "\n\n" + stderr_tail));
     set_row_metrics(*row);
 }
 
@@ -986,7 +1037,8 @@ void MainWindow::on_job_failed(int index, const QString& message, const QString&
         return;  // the row was removed during the run
     }
     rows_[static_cast<std::size_t>(*row)]->metric_failures.clear();  // the video's reason is every metric's
-    set_row_status(*row, RowState::failed, stderr_tail.isEmpty() ? message : message + "\n\n" + stderr_tail);
+    set_row_status(*row, RowState::failed,
+                   with_fallbacks(index, stderr_tail.isEmpty() ? message : message + "\n\n" + stderr_tail));
     set_row_metrics(*row);
 }
 

@@ -91,8 +91,9 @@ const std::vector<std::string> backend_order{"vulkan", "cuda"};
 
 // The Vulkan probe, in a process of its own where a program to run it is
 // set (the Python app's run_isolated(vmaf_vulkan.probe)): a driver that
-// crashes on the probe ends that process, and the GPU is taken as unable.
-VulkanProbe probe_vulkan_apart() {
+// crashes on the probe ends that process, and the GPU is taken as unable,
+// with `crashed` set.
+VulkanProbe probe_vulkan_apart(bool& crashed) {
     if (!isolation_program()) {
         return probe_vulkan();
     }
@@ -105,15 +106,17 @@ VulkanProbe probe_vulkan_apart() {
             probe.device = result.at("device").get<int>();
         }
         result.at("text").get_to(probe.text);
+        probe.failed = result.value("failed", false);
         return probe;
     } catch (const IsolatedCrashError& error) {
+        crashed = true;
         return {false, std::nullopt, error.what()};
     }
 }
 
 // libvmaf's CUDA probe, in a process of its own where a program to run it is
-// set (the Python app's run_isolated(probe)).
-CudaProbe probe_cuda_apart() {
+// set (the Python app's run_isolated(probe)); `crashed` as for Vulkan's.
+CudaProbe probe_cuda_apart(bool& crashed) {
     if (!isolation_program()) {
         return probe_cuda();
     }
@@ -122,12 +125,14 @@ CudaProbe probe_cuda_apart() {
             run_isolated("cuda-probe", "libvmaf's GPU probe", nlohmann::json::object(), {}, CancelToken());
         return {result.at("available").get<bool>(), result.at("text").get<std::string>()};
     } catch (const IsolatedCrashError& error) {
+        crashed = true;
         return {false, error.what()};
     }
 }
 
 GpuVmafBackend probe_backends() {
     std::string reasons;
+    bool failed = false;  // a probe crashed, threw or scored wrongly
     const auto add_reason = [&reasons](const std::string& reason) {
         reasons += (reasons.empty() ? "" : "; ") + reason;
     };
@@ -141,24 +146,26 @@ GpuVmafBackend probe_backends() {
                     add_reason("no NVIDIA GPU");
                     continue;
                 }
-                const CudaProbe probe = probe_cuda_apart();
+                const CudaProbe probe = probe_cuda_apart(failed);
                 if (probe.available) {
                     return {"cuda", std::nullopt, probe.text + " with CUDA"};
                 }
                 add_reason("CUDA: " + probe.text);
                 continue;
             }
-            const VulkanProbe probe = probe_vulkan_apart();
+            const VulkanProbe probe = probe_vulkan_apart(failed);
             if (probe.available) {
                 return {"vulkan", probe.device, probe.text};
             }
             add_reason("Vulkan: " + probe.text);
+            failed = failed || probe.failed;
         } catch (const std::exception& error) {
             logger.warning("The " + backend + " VMAF probe failed: " + error.what());
             add_reason(backend + ": the GPU probe failed: " + error.what());
+            failed = true;
         }
     }
-    return {"", std::nullopt, reasons};
+    return {"", std::nullopt, reasons, failed};
 }
 
 }  // namespace
@@ -216,7 +223,7 @@ void forget_failed_gpu_vmaf_probe() {
 
 GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model, bool enabled,
                         int bit_depth, std::optional<std::pair<int, int>> size, bool compute_vmaf_v1,
-                        const std::string& model_v1) {
+                        const std::string& model_v1, std::vector<std::pair<std::string, std::string>>* check_failures) {
     // Deeper than 10 bits, or at an odd size, the frame pairs could not
     // cross FFmpeg's overlay, which the Python app can pair them with.
     if (!enabled || bit_depth > 10 || (size && ((size->first & 1) != 0 || (size->second & 1) != 0))) {
@@ -224,12 +231,28 @@ GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::str
     }
     GpuModels models = gpu_models(compute_vmaf, compute_vmaf_neg, model, compute_vmaf_v1, model_v1);
     const auto is_v1 = [](const auto& entry) { return entry.first == "vmaf_v1"; };
-    if (std::any_of(models.begin(), models.end(), is_v1) && !v1_on_gpu(model_v1, size)) {
+    const auto left_out = [check_failures](const std::string& key, const std::string& why) {
+        if (check_failures != nullptr) {
+            check_failures->emplace_back(key, why);
+        }
+    };
+    std::string v1_failure;
+    if (std::any_of(models.begin(), models.end(), is_v1) && !v1_on_gpu(model_v1, size, &v1_failure)) {
         std::erase_if(models, is_v1);
+        if (!v1_failure.empty()) {
+            left_out("vmaf_v1", v1_failure);
+        }
     }
     // VMAF v1 runs on Vulkan whatever scores VMAF v0.6.1 and NEG.
-    if (!std::all_of(models.begin(), models.end(), is_v1) && gpu_vmaf_backend().backend.empty()) {
-        std::erase_if(models, [&](const auto& entry) { return !is_v1(entry); });
+    if (!std::all_of(models.begin(), models.end(), is_v1)) {
+        if (const GpuVmafBackend backend = gpu_vmaf_backend(); backend.backend.empty()) {
+            for (const auto& entry : models) {
+                if (backend.check_failed && !is_v1(entry)) {
+                    left_out(entry.first, backend.text);
+                }
+            }
+            std::erase_if(models, [&](const auto& entry) { return !is_v1(entry); });
+        }
     }
     return models;
 }

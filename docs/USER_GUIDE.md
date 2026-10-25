@@ -203,9 +203,12 @@ $run.videos[0].metrics.vmaf.score
 
 `compare --help` lists the same with examples. The last column of each
 video's table says where a score was calculated: a metric asked for on the
-GPU is calculated on the CPU where no GPU can, and when one fails on the GPU
-during the run and the CPU calculates it, a note says so and why (in the
-JSON too, with the video's other notes).
+GPU is calculated on the CPU where no GPU can. When a GPU metric falls back,
+to the CPU or from Vship-fast to stock Vship 5.1.2, because it failed on the
+GPU during the run or because the GPU's check crashed, failed or scored
+wrongly, a note says so and why (in the JSON too, with the video's other
+notes). The app lists the same under **GPU fallbacks** in the tooltip of the
+video's name.
 
 Progress is written to the error stream and results to the output stream, so
 `--json -` can be piped. The exit code is 0 when every video got every metric

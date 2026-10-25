@@ -49,11 +49,26 @@ enum class StatusKind {
     starting,         // FFmpeg is starting: nothing to show as a step
     gpu_pass,         // one of several GPU metric passes begins
     gpu_wait,         // waiting for another video's GPU pass to end
-    gpu_vmaf_failed,  // VMAF on the GPU failed; the CPU takes over
-    // Perceptual metrics (SSIMULACRA2, Butteraugli) failed on the GPU; the
-    // CPU takes over within the same task.
+    // VMAF on the GPU failed, or its check did (MetricTask::fallbacks); the
+    // CPU takes over.
+    gpu_vmaf_failed,
+    // Perceptual metrics (SSIMULACRA2, Butteraugli, CVVDP) failed on the GPU,
+    // or Vship's check did: stock Vship 5.1.2 or the CPU takes over within
+    // the same task.
     gpu_perceptual_failed,
 };
+
+// Whether a status says that a GPU route failed (or its check did) and its
+// metrics went elsewhere: to the CPU, or to stock Vship 5.1.2. Each such is a
+// note of the video's (fallback_note), in the command line's output and on
+// the window's row.
+inline bool is_gpu_fallback(StatusKind kind) {
+    return kind == StatusKind::gpu_vmaf_failed || kind == StatusKind::gpu_perceptual_failed;
+}
+
+// A fallback's status text as a note: without the "…" it ends with, as the
+// step is over by the time the note is read.
+std::string fallback_note(const std::string& status_text);
 
 // A run's status, as the Python app words it.
 struct RunStatus {

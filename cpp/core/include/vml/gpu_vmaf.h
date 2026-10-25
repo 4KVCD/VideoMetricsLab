@@ -47,6 +47,9 @@ struct GpuVmafBackend {
     std::string backend;
     std::optional<int> device;  // Vulkan's number for the GPU
     std::string text;           // what scores it ("Vulkan on ..."), or why the GPU does not
+    // With no backend: a check crashed, failed with an error or scored
+    // wrongly, rather than finding no GPU that scores VMAF.
+    bool check_failed = false;
 };
 
 // The GPU's answer, found once and kept. Each backend is checked in a
@@ -69,9 +72,12 @@ void forget_failed_gpu_vmaf_probe();
 // known), or no GPU that scores VMAF here (gpu_vmaf_backend). VMAF v1 is
 // included where the GPU calculates it (vmaf_v1_gpu.h's v1_on_gpu). What
 // the GPU does not score is left out, and FFmpeg's libvmaf calculates it.
+// Each metric left out because a check of the GPU failed (crashed, or gave
+// an error or wrong scores) goes to `check_failures` with why, where given.
 GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model, bool enabled,
                         int bit_depth, std::optional<std::pair<int, int>> size, bool compute_vmaf_v1 = false,
-                        const std::string& model_v1 = "");
+                        const std::string& model_v1 = "",
+                        std::vector<std::pair<std::string, std::string>>* check_failures = nullptr);
 
 // What a run scores outside FFmpeg, and how (the Python app's _GpuPlan):
 // VMAF, NEG and VMAF v1 on the GPU, or PSNR, SSIM and XPSNR with libvmaf's

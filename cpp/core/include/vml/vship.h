@@ -227,6 +227,10 @@ struct VshipDevice {
     // Found by stock Vship 5.1.2's probe, where Vship-fast could use no GPU:
     // the metrics run on 5.1.2.
     bool vship51 = false;
+    // Why Vship-fast could use no GPU, where `vship51`: for the run's note
+    // that its metrics fell back to 5.1.2. Kept in the process that probed,
+    // not in vship_device_json.
+    std::string fast_failure{};
 };
 
 // The build `device` was found by, as the app shows it: "Vship-fast 5.1.2"
@@ -264,6 +268,10 @@ std::optional<VshipDevice> vship_device_from(const nlohmann::json& text);
 // is none. Where Vship-fast can use none (it compiles every shader as it
 // starts on a GPU), stock Vship 5.1.2 is tried in a process of its own too.
 std::pair<std::optional<VshipDevice>, std::string> detect_vship_device();
+// Whether detect_vship_device's answer of no GPU came from a check that
+// crashed or failed with an error, rather than one that found no GPU Vship
+// can use: the metrics then fall back to the CPU, and the run says so.
+bool vship_check_failed();
 
 // What the last probe to finish found, at once: never waiting for a probe in
 // progress, which takes seconds (one starts with the app, and a run probes

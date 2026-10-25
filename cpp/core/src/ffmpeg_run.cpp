@@ -1485,6 +1485,12 @@ std::string resolve_run_models(VmafOptions& options, int width, int height) {
 
 }  // namespace
 
+std::string fallback_note(const std::string& status_text) {
+    constexpr std::string_view ellipsis = "\xE2\x80\xA6";
+    return status_text.ends_with(ellipsis) ? status_text.substr(0, status_text.size() - ellipsis.size())
+                                           : status_text;
+}
+
 RunStatus decoding_status(const std::string& brief, const HardwareDecoding& decoding, StatusKind kind,
                           std::string_view ending) {
     return {brief + " (GPU decode: " + decoding.describe() + ")" + std::string(ending), kind, brief, decoding};

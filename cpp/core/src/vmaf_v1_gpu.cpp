@@ -1312,7 +1312,7 @@ V1Probe probe_v1() {
     try {
         const VulkanProbe vulkan = probe_vulkan();
         if (!vulkan.available) {
-            return {false, vulkan.text};
+            return {false, vulkan.text, vulkan.failed};
         }
         for (const auto& [model, bits] : probe_models) {
             const std::filesystem::path path = resource_folder() / "models" / platform::path_from_text(model);
@@ -1337,7 +1337,8 @@ V1Probe probe_v1() {
                 // Bit for bit: the same doubles, NaN for NaN.
                 if (mine.size() != theirs.size() ||
                     (!mine.empty() && std::memcmp(mine.data(), theirs.data(), mine.size() * sizeof(double)) != 0)) {
-                    return {false, "the GPU calculates VMAF v1 wrongly (" + std::to_string(bits) + "-bit self-test)"};
+                    return {false, "the GPU calculates VMAF v1 wrongly (" + std::to_string(bits) + "-bit self-test)",
+                            true};
                 }
             }
         }
@@ -1372,13 +1373,14 @@ V1Probe v1_available() {
             } else {
                 const nlohmann::json result = run_isolated("vmaf-v1-probe", "the GPU VMAF v1 probe",
                                                            nlohmann::json::object(), {}, CancelToken());
-                probed = V1Probe{result.at("available").get<bool>(), result.at("text").get<std::string>()};
+                probed = V1Probe{result.at("available").get<bool>(), result.at("text").get<std::string>(),
+                                 result.value("failed", false)};
             }
         } catch (const IsolatedCrashError& error) {
-            probed = V1Probe{false, error.what()};
+            probed = V1Probe{false, error.what(), true};
         } catch (const std::exception& error) {
             logger.warning(std::string("The GPU VMAF v1 probe failed: ") + error.what());
-            probed = V1Probe{false, std::string("the GPU probe failed: ") + error.what()};
+            probed = V1Probe{false, std::string("the GPU probe failed: ") + error.what(), true};
         }
         logger.info(std::string("VMAF v1 with the GPU") + (probed->available ? "" : " unavailable") + ": " +
                     probed->text);
@@ -1386,7 +1388,7 @@ V1Probe v1_available() {
     return *probed;
 }
 
-bool v1_on_gpu(const std::string& model, std::optional<std::pair<int, int>> size) {
+bool v1_on_gpu(const std::string& model, std::optional<std::pair<int, int>> size, std::string* check_failure) {
     Options speed = Options::object();
     if (!model.empty()) {
         const std::string_view file = model_file_of(model).value_or(model);
@@ -1399,7 +1401,11 @@ bool v1_on_gpu(const std::string& model, std::optional<std::pair<int, int>> size
     if (size && speed_too_small(speed, size->first, size->second)) {
         return false;
     }
-    return v1_available().available;
+    const V1Probe probe = v1_available();
+    if (!probe.available && probe.failed && check_failure != nullptr) {
+        *check_failure = probe.text;
+    }
+    return probe.available;
 }
 
 }  // namespace vml

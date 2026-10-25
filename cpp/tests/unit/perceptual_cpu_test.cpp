@@ -286,6 +286,7 @@ struct Routed {
     std::optional<CropPair> cpu_crops;
     std::vector<std::string> events;  // progress reports and the CPU's announcements
     std::vector<std::string> statuses;
+    std::vector<StatusKind> kinds;  // the statuses' kinds
 };
 
 // Routes whose GPU is `device` (none: "no supported GPU"), and whose GPU and
@@ -332,7 +333,10 @@ PerceptualHooks recording_hooks(Routed& routed) {
         routed.events.push_back(std::to_string(current) + "/" + std::to_string(total) + " at " +
                                 std::to_string(static_cast<int>(fps)));
     };
-    hooks.on_status = [&routed](const RunStatus& status) { routed.statuses.push_back(status.text); };
+    hooks.on_status = [&routed](const RunStatus& status) {
+        routed.statuses.push_back(status.text);
+        routed.kinds.push_back(status.kind);
+    };
     hooks.on_cpu = [&routed](const std::vector<std::string>& keys) {
         std::string joined;
         for (const std::string& key : keys) {
@@ -359,10 +363,10 @@ const VshipDevice test_gpu{"cuda", "test GPU", 0, "5.1.2", GpuVendor::nvidia};
 
 // Without a GPU Vship can use, SSIMULACRA2 goes to the CPU, and CVVDP,
 // which runs on the GPU only, fails with the reason; alone, CVVDP fails the
-// task.
+// task. Said as a GPU fallback only where the GPU's check failed.
 TEST(PerceptualRouting, WithoutAGpuCvvdpFailsAndTheOthersRunOnTheCpu) {
     Routed routed;
-    const PerceptualRoutes routes = stand_in_routes(
+    PerceptualRoutes routes = stand_in_routes(
         routed, std::nullopt, [](const auto&, const auto&) -> PerceptualTaskOutput { throw std::logic_error("GPU"); },
         [](const auto&, const auto&) { return scored("ssimulacra2", 80.0f, "cpu"); });
     const PerceptualRequest request = routed_request();
@@ -375,7 +379,13 @@ TEST(PerceptualRouting, WithoutAGpuCvvdpFailsAndTheOthersRunOnTheCpu) {
               "CVVDP needs a GPU that Vship can use, and could not use one: no supported GPU");
     EXPECT_EQ(routed.statuses,
               (std::vector<std::string>{"Vship GPU unavailable (no supported GPU); using CPU reference metrics\xE2\x80\xA6"}));
+    EXPECT_EQ(routed.kinds, (std::vector<StatusKind>{StatusKind::step}));
     EXPECT_EQ(routed.events, (std::vector<std::string>{"cpu: ssimulacra2"}));
+
+    routes.gpu_check_failed = [] { return true; };
+    Routed failed_check;
+    run_perceptual_task(request, {"ssimulacra2"}, false, recording_hooks(failed_check), CancelToken(), routes);
+    EXPECT_EQ(failed_check.kinds, (std::vector<StatusKind>{StatusKind::gpu_perceptual_failed}));
 
     try {
         run_perceptual_task(request, {"cvvdp"}, false, recording_hooks(routed), CancelToken(), routes);
@@ -465,9 +475,9 @@ TEST(PerceptualRouting, AMetricThatFailedOnTheGpuMovesToVship51ThenToTheCpuAtAny
 
 // When Vship-fast's task fails, stock Vship 5.1.2 calculates its metrics
 // again where it is bundled; where it is not, fails too, or is what failed
-// (on a GPU only 5.1.2 found), the CPU calculates what it can, however long
-// the video, and CVVDP fails with the GPU's reason, which does not blame the
-// GPU.
+// (on a GPU only 5.1.2 found, which is said), the CPU calculates what it
+// can, however long the video, and CVVDP fails with the GPU's reason, which
+// does not blame the GPU.
 TEST(PerceptualRouting, AFailedGpuTaskMovesToVship51ThenToTheCpuAtAnyLength) {
     const auto frame_rates = [](const auto&, const auto&) -> PerceptualTaskOutput {
         throw PerceptualRunError("the frame rates differ");
@@ -488,10 +498,19 @@ TEST(PerceptualRouting, AFailedGpuTaskMovesToVship51ThenToTheCpuAtAnyLength) {
         }
         VshipDevice gpu = test_gpu;
         gpu.vship51 = vship51 == "found the GPU";
+        if (gpu.vship51) {
+            gpu.fast_failure = "a shader failed";
+        }
         const PerceptualRoutes routes = stand_in_routes(routed, gpu, frame_rates, on_cpu, stock);
         const PerceptualTaskOutput output = run_perceptual_task(routed_request(7200.0), {"ssimulacra2", "cvvdp"}, false,
                                                                 recording_hooks(routed), CancelToken(), routes);
         EXPECT_EQ(routed.vship51.empty(), vship51 == "not bundled" || vship51 == "found the GPU");
+        if (gpu.vship51) {
+            // Vship-fast's failed check is said first, as a GPU fallback.
+            EXPECT_EQ(routed.statuses.front(), "Vship-fast could not use the GPU (a shader failed); calculating "
+                                               "SSIMULACRA2 and CVVDP with Vship 5.1.2\xE2\x80\xA6");
+            EXPECT_EQ(routed.kinds.front(), StatusKind::gpu_perceptual_failed);
+        }
         if (!routed.vship51.empty()) {
             EXPECT_EQ(routed.vship51, (std::vector<std::string>{"ssimulacra2", "cvvdp"}));
             EXPECT_EQ(routed.statuses.front(), "Vship-fast failed (the frame rates differ); calculating SSIMULACRA2 "

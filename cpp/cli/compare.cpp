@@ -738,20 +738,18 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
             progress.message(target.label() + ": the scores could not be saved (" + error.what() + ")");
         }
     };
-    // A metric that fell back from the GPU to the CPU, as its task's status
-    // says: a note, so that the results (and the JSON) say where it was
-    // calculated and why, not the CPU column alone. A video's tasks report
-    // on their lanes' threads.
+    // A metric that fell back from the GPU, to the CPU or to stock Vship
+    // 5.1.2, as its task's status says: a note, so that the results (and the
+    // JSON) say where it was calculated and why, not the CPU column alone. A
+    // video's tasks report on their lanes' threads.
     std::mutex noting;
     const auto note_fallback = [&](std::size_t index, const RunStatus& step) {
-        if (step.kind != StatusKind::gpu_vmaf_failed && step.kind != StatusKind::gpu_perceptual_failed) {
+        if (!is_gpu_fallback(step.kind)) {
             return;
         }
         // The status as it is, less its "...": it names the metrics or the
         // pass, and why, where it knows.
-        constexpr std::string_view ellipsis = "\xE2\x80\xA6";
-        std::string note = step.text.ends_with(ellipsis) ? step.text.substr(0, step.text.size() - ellipsis.size())
-                                                         : step.text;
+        std::string note = fallback_note(step.text);
         if (note.find(" (") == std::string::npos) {
             note += " (the log, -v, says why)";
         }

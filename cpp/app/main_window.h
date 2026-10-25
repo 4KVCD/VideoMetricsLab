@@ -428,6 +428,9 @@ private:
     QString run_summary(int running, int total) const;
     void pause_free_rates(int index, std::vector<TaskSnapshot>& tasks);
     void on_task_progress(int index, std::vector<TaskSnapshot> tasks);
+    void note_fallbacks(int index, const std::vector<TaskSnapshot>& tasks);
+    QString with_fallbacks(int index, const QString& detail) const;
+    int fallback_count() const;
     void on_run_tick();
     void render_job_progress(int index);
     std::optional<int> row_index_of(const RowData* row_data) const;
@@ -528,6 +531,10 @@ private:
     std::map<int, int> job_line_slot_;
     std::map<int, LineShape> job_line_shape_;
     std::set<int> job_lines_due_;
+    // Each video's GPU fallbacks (a GPU route that failed, and where its
+    // metrics went instead), as the engine says them (fallback_note): on its
+    // row once it is over, and counted in the run's end message.
+    std::map<int, std::vector<std::string>> job_fallbacks_;
     // Each running task's recent progress on the run's clock, by job, task
     // and pass: (seconds, frames done).
     std::map<std::tuple<int, std::string, long long>, std::deque<std::pair<double, long long>>> rate_samples_;

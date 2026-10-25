@@ -320,10 +320,11 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
             const VulkanProbe probe = probe_vulkan();
             result = {{"available", probe.available},
                       {"device", probe.device ? nlohmann::json(*probe.device) : nlohmann::json(nullptr)},
-                      {"text", probe.text}};
+                      {"text", probe.text},
+                      {"failed", probe.failed}};
         } else if (task == "vmaf-v1-probe") {
             const V1Probe probe = probe_v1();
-            result = {{"available", probe.available}, {"text", probe.text}};
+            result = {{"available", probe.available}, {"text", probe.text}, {"failed", probe.failed}};
         } else if (task == "cuda-probe") {
             const CudaProbe probe = probe_cuda();
             result = {{"available", probe.available}, {"text", probe.text}};

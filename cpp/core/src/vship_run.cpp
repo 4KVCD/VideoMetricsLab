@@ -2466,6 +2466,13 @@ public:
             return without_gpu(reason);
         }
         device_ = *device;
+        if (device_->vship51 && !device_->fast_failure.empty() && hooks_.on_status) {
+            // Vship-fast failed its check on this GPU, where stock Vship
+            // 5.1.2 passed: a fallback, slower, said as the GPU's failures are.
+            hooks_.on_status({"Vship-fast could not use the GPU (" + device_->fast_failure + "); calculating " +
+                                  metric_labels(gpu_, " and ") + " with Vship 5.1.2\xE2\x80\xA6",
+                              StatusKind::gpu_perceptual_failed});
+        }
         const CropPair crops = routes_.find_crops(request_, hooks_.on_status, cancel_);
         PerceptualTaskOutput gpu_output;
         try {
@@ -2538,11 +2545,15 @@ private:
         return messages;
     }
 
-    // Calculates on the CPU what can be, when no usable GPU was found.
+    // Calculates on the CPU what can be, when no usable GPU was found: a
+    // fallback, said as the GPU's failures are, where a check of the GPU
+    // failed rather than finding none.
     PerceptualTaskOutput without_gpu(const std::string& reason) {
         const PerceptualFailures failures = gpu_only_.empty() ? PerceptualFailures{} : gpu_only_failed(reason, true);
         if (hooks_.on_status) {
-            hooks_.on_status({"Vship GPU unavailable (" + reason + "); using CPU reference metrics\xE2\x80\xA6"});
+            const bool failed = routes_.gpu_check_failed && routes_.gpu_check_failed();
+            hooks_.on_status({"Vship GPU unavailable (" + reason + "); using CPU reference metrics\xE2\x80\xA6",
+                              failed ? StatusKind::gpu_perceptual_failed : StatusKind::step});
         }
         return on_cpu(retryable_, failures, std::nullopt);
     }
@@ -2791,6 +2802,7 @@ PerceptualRoutes app_perceptual_routes() {
         forget_failed_vship_probe();
         return detect_vship_device();
     };
+    routes.gpu_check_failed = vship_check_failed;
     routes.find_crops = [](const PerceptualRequest& request, const StatusCallback& on_status,
                            const CancelToken& cancel) {
         return resolve_crops(request.environment.ffmpeg, request.source, request.distorted, request.options.crop_mode,
