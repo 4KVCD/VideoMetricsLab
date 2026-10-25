@@ -15,8 +15,9 @@
 
 namespace vml::cli {
 
-// A video's metrics, each as the reports give it: its score, and for a
-// per-frame metric the statistics the Metric Graphs tab shows.
+// A video's metrics, each as the reports give it: its score, and the
+// statistics the Metric Graphs tab shows (results_summary.h's
+// metric_summary).
 using Summaries = std::map<std::string, nlohmann::ordered_json>;
 
 // Each video's summaries of the metrics it asked for that were scored:
@@ -32,7 +33,8 @@ std::string video_status(const TestVideo& video, bool cancelled);
 std::string results_table(const VideoInfo& source, const std::vector<TestVideo>& videos,
                           const std::vector<Summaries>& summaries, bool cancelled);
 
-// The run as --json writes it.
+// The run as --json writes it, in the shape of results_summary.h, which the
+// window's Export results saves too.
 nlohmann::ordered_json results_document(const VideoInfo& source, const std::vector<TestVideo>& videos,
                                         const std::vector<Summaries>& summaries, bool cancelled);
 

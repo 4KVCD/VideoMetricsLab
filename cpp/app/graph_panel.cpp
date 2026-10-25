@@ -8,6 +8,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QMenu>
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
@@ -28,6 +29,7 @@
 #include "chart.h"
 #include "file_writes.h"
 #include "i18n.h"
+#include "results_export.h"
 #include "series_colors.h"
 #include "theme.h"
 #include "widgets.h"
@@ -884,6 +886,9 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     stats_table_->horizontalHeader()->setSectionsClickable(true);
     connect(stats_table_->horizontalHeader(), &QHeaderView::sectionClicked, this,
             [this](int column) { on_stats_header_clicked(column); });
+    stats_table_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(stats_table_, &QWidget::customContextMenuRequested, this,
+            [this](const QPoint& position) { show_stats_menu(position); });
     top_layout->addWidget(stats_table_, 1);
     root->addWidget(top);
 
@@ -1700,6 +1705,25 @@ void GraphPanel::on_export_csv() {
     status_label_->setText(ntr("Exporting {count} CSV file to {directory}...",
                                "Exporting {count} CSV files to {directory}...",
                                static_cast<long long>(entries_.size()), {{"directory", folder}}));
+}
+
+void GraphPanel::show_stats_menu(const QPoint& position) {
+    // The statistics' right-click menu: Export results, the window's, which
+    // has every metric's statistics, not only those of the metric on show.
+    QMenu menu(this);
+    const ExportActions exports = add_export_actions(menu, !entries_.empty());
+    if (const std::optional<ResultsFormat> format =
+            chosen_format(exports, menu.exec(stats_table_->viewport()->mapToGlobal(position)))) {
+        emit results_export_requested(*format);
+    }
+}
+
+std::vector<GraphPanel::Run> GraphPanel::runs() const {
+    std::vector<Run> runs;
+    for (const auto& [id, entry] : entries_) {
+        runs.push_back({entry.result, entry.label, entry.identity});
+    }
+    return runs;
 }
 
 void GraphPanel::on_file_writes_idle() {

@@ -601,6 +601,8 @@ void MainWindow::build_ui() {
         settings_.graph_metric = key.toStdString();  // the metric chosen, shown again next time
         save_settings();
     });
+    connect(graph_panel_, &GraphPanel::results_export_requested, this,
+            [this](ResultsFormat format) { export_results(format); });
     tabs_->addTab(new ScrollingPage(graph_panel_), app::tr("Metric Graphs"));
     frame_compare_panel_ = new FrameComparePanel([this] { return tools_status_.ffmpeg.path; },
                                                  preview_color_mode_from(settings_.frame_preview_color_mode),

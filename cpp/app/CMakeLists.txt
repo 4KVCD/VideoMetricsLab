@@ -30,6 +30,7 @@ add_library(vml_app STATIC
     options_panel.cpp
     playback_worker.cpp
     probe_worker.cpp
+    results_export.cpp
     row_state.cpp
     run_worker.cpp
     self_test.cpp

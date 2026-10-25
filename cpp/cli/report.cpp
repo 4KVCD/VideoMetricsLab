@@ -1,7 +1,6 @@
 #include "report.h"
 
 #include <algorithm>
-#include <cmath>
 #include <set>
 
 #include "vml/export_csv.h"
@@ -9,7 +8,7 @@
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
-#include "vml/stats.h"
+#include "vml/results_summary.h"
 #include "vml/time_format.h"
 
 namespace vml::cli {
@@ -29,84 +28,6 @@ std::string right_justified(const std::string& text, std::size_t width) {
 }
 
 std::string name_of(const std::filesystem::path& path) { return platform::path_text(path.filename()); }
-
-// JSON has no infinity: a metric's "identical" is the string, and no score
-// (or NaN) is null.
-Json json_number(const std::optional<double>& value) {
-    if (!value || std::isnan(*value)) {
-        return nullptr;
-    }
-    if (std::isinf(*value)) {
-        return *value > 0 ? "inf" : "-inf";
-    }
-    return *value;
-}
-
-// A summary number back as a number ("inf" is text in the JSON).
-std::optional<double> value_of(const Json& number) {
-    if (number.is_string()) {
-        return python_float(number.get<std::string>());
-    }
-    if (number.is_null()) {
-        return std::nullopt;
-    }
-    return number.get<double>();
-}
-
-// One metric of a result: its score and how many frames it covers, and for
-// a per-frame metric the statistics the Metric Graphs tab shows; nothing if
-// it has none.
-std::optional<Json> metric_summary(const ComparisonResult& result, const std::string& key) {
-    const MetricDefinition& definition = metric_definition(key);
-    if (const SequenceMetricResult* sequence = result.metric_results.sequence(key)) {
-        // A whole-video score (CVVDP's) is of every frame compared: it is not
-        // calculated on a subsample.
-        return Json{{"score", json_number(sequence->score)},
-                    {"frames", result.compared_frame_count},
-                    {"computed_on", sequence->provenance.compute_backend},
-                    {"implementation", sequence->provenance.implementation},
-                    {"version", sequence->provenance.implementation_version}};
-    }
-    const FrameMetricResult* metric = result.metric_results.frame(key);
-    if (metric == nullptr || metric->values.empty()) {
-        return std::nullopt;
-    }
-    const std::vector<double> values(metric->values.begin(), metric->values.end());
-    const ScoreStats stats = compute_stats(values, {}, definition.aggregation, definition.direction);
-    // The worst frames are the low ones, or for Butteraugli the high ones.
-    const std::string worst = definition.direction == MetricDirection::lower_is_better ? "high" : "low";
-    return Json{{"score", json_number(metric->aggregate())},
-                {"frames", stats.count},
-                {"median", json_number(stats.median)},
-                {"stdev", json_number(stats.stdev)},
-                {"min", json_number(stats.minimum)},
-                {"max", json_number(stats.maximum)},
-                {"worst_is", worst},
-                {"worst_10_percent", json_number(stats.worst_10_percent)},
-                {"worst_5_percent", json_number(stats.worst_5_percent)},
-                {"worst_1_percent", json_number(stats.worst_1_percent)},
-                {"worst_0.1_percent", json_number(stats.worst_0_1_percent)},
-                {"computed_on", metric->provenance.compute_backend},
-                {"implementation", metric->provenance.implementation},
-                {"version", metric->provenance.implementation_version}};
-}
-
-Json crop_json(const std::optional<CropBox>& box) {
-    if (!box) {
-        return nullptr;
-    }
-    return Json{{"x", box->x}, {"y", box->y}, {"width", box->w}, {"height", box->h}};
-}
-
-// A video's media information as --json writes it.
-void add_media(Json& entry, const VideoInfo& info) {
-    entry["width"] = info.width;
-    entry["height"] = info.height;
-    entry["fps"] = info.fps;
-    entry["codec"] = info.codec_name;
-    entry["pixel_format"] = info.pix_fmt;
-    entry["duration"] = info.duration;
-}
 
 // A video's media information on one line.
 std::string media_text(const VideoInfo& info) {
@@ -162,7 +83,7 @@ void add_other_display_rows(const TestVideo& video, std::vector<std::vector<std:
             continue;
         }
         rows.push_back({std::string(definition.label) + " (" + other.display + ")",
-                        definition.format_value(value_of(summary->at("score"))), "", "", "", "",
+                        definition.format_value(summary_number(summary->at("score"))), "", "", "", "",
                         ascii_upper(summary->at("computed_on").get<std::string>())});
     }
 }
@@ -223,7 +144,7 @@ void add_summary(std::vector<std::string>& lines, const std::vector<TestVideo>& 
             const auto summary = summaries[i].find(key);
             cells.push_back(summary == summaries[i].end()
                                 ? ""
-                                : metric_definition(key).format_value(value_of(summary->second.at("score"))));
+                                : metric_definition(key).format_value(summary_number(summary->second.at("score"))));
         }
         rows.push_back(cells);
     }
@@ -313,7 +234,7 @@ std::string results_table(const VideoInfo& source, const std::vector<TestVideo>&
             const Json& summary = found->second;
             const MetricDefinition& definition = metric_definition(key);
             const auto show = [&definition, &summary](const char* field) {
-                return definition.format_value(value_of(summary.at(field)));
+                return definition.format_value(summary_number(summary.at(field)));
             };
             const std::string on = ascii_upper(summary.at("computed_on").get<std::string>());
             if (definition.kind != MetricKind::frame) {  // one score for the video
@@ -350,11 +271,15 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
                       const std::vector<Summaries>& summaries, bool cancelled) {
     Json reference{{"path", platform::path_text(source.path)}};
     add_media(reference, source);
-    Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"format", 1}, {"cancelled", cancelled},
-                  {"reference", reference}, {"videos", Json::array()}};
+    Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"format", results_format},
+                  {"cancelled", cancelled}, {"reference", reference}, {"videos", Json::array()}};
     for (std::size_t v = 0; v < videos.size(); ++v) {
         const TestVideo& video = videos[v];
-        Json entry{{"path", platform::path_text(video.path)}, {"status", video_status(video, cancelled)}};
+        // Each video names its reference too, as the window's export does,
+        // whose videos can have different ones.
+        Json entry{{"path", platform::path_text(video.path)},
+                   {"reference", platform::path_text(source.path)},
+                   {"status", video_status(video, cancelled)}};
         if (video.info) {
             add_media(entry, *video.info);
         }

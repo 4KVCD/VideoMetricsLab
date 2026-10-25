@@ -252,9 +252,16 @@ has them, and `--colour` gives them otherwise.
 
 ## Saved results and caches
 
-Save portable results as `.metrics.json` or export CSV. Cached results are reused
-when files and relevant settings match. A compatible subset can load as
-partially calculated; request calculation to fill missing metrics.
+Save portable results as `.metrics.json` or export CSV. For the scores alone,
+right-click the Videos table or the statistics table on Metric Graphs and
+choose **Export results as CSV** or **as JSON**: either gives the same file,
+every video's score and statistics for each metric (those of every metric,
+not only the one Metric Graphs shows), in the shape the command line's
+`--json` writes.
+
+Cached results are reused when files and relevant settings match. A
+compatible subset can load as partially calculated; request calculation to
+fill missing metrics.
 
 Settings and the default cache are under `~/.videometricslab/`. Back up that
 folder before maintenance; changing checkout should not require clearing it.

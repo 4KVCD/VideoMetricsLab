@@ -26,6 +26,7 @@ add_executable(vml_tests
     unit/perceptual_cpu_test.cpp
     unit/process_test.cpp
     unit/python_json_test.cpp
+    unit/results_summary_test.cpp
     unit/run_file_test.cpp
     unit/run_line_test.cpp
     unit/settings_test.cpp

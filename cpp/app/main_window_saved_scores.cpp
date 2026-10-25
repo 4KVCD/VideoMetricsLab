@@ -1,7 +1,8 @@
 // The window's saved scores (the Python app's MainWindow, its "persistent
 // result cache" part): each row's scores looked up off the window's thread
 // when it is added or the reference changes, a run's saved as it finishes,
-// and Recalculate, which forgets a row's.
+// and the table's right-click menu: Recalculate, which forgets a row's, and
+// Export results.
 #include <QItemSelectionModel>
 #include <QMenu>
 
@@ -195,24 +196,26 @@ void MainWindow::on_other_displays_found(int generation, const OtherDisplaysFoun
 }
 
 void MainWindow::show_table_menu(const QPoint& position) {
-    // The table's right-click menu. None during a run: its entry forgets
-    // saved scores and puts rows back to calculate, which would fight the
-    // run using them.
-    if (run_active_) {
-        return;
-    }
+    // The table's right-click menu: Recalculate for the selected rows, but
+    // not during a run (it forgets saved scores and puts rows back to
+    // calculate, which would fight the run using them); and Export results,
+    // at any time.
     std::set<int> selected;
     for (const QModelIndex& index : distorted_table_->selectionModel()->selectedIndexes()) {
         selected.insert(index.row());
     }
-    if (selected.empty()) {
-        return;
-    }
     QMenu menu(this);
-    const QAction* recalculate =
-        menu.addAction(app::tr("Recalculate selected metrics (ignore cached/previous results)"));
-    if (menu.exec(distorted_table_->viewport()->mapToGlobal(position)) == recalculate) {
+    const QAction* recalculate = nullptr;
+    if (!run_active_ && !selected.empty()) {
+        recalculate = menu.addAction(app::tr("Recalculate selected metrics (ignore cached/previous results)"));
+        menu.addSeparator();
+    }
+    const ExportActions exports = add_export_actions(menu, !exported_runs().empty());
+    const QAction* chosen = menu.exec(distorted_table_->viewport()->mapToGlobal(position));
+    if (chosen != nullptr && chosen == recalculate) {
         recompute_rows(std::vector<int>(selected.begin(), selected.end()));
+    } else if (const std::optional<ResultsFormat> format = chosen_format(exports, chosen)) {
+        export_results(*format);
     }
 }
 

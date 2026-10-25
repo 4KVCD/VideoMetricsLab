@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "dialogs.h"
+#include "results_export.h"
 #include "vml/metrics.h"
 #include "vml/results.h"
 #include "vml/stats.h"
@@ -202,6 +203,8 @@ public:
     // Lists the lines in the order of `identities`, the Videos table's; lines
     // not among them (results added here) follow, in the order they came.
     void set_order(std::vector<std::string> identities);
+    // The lines' runs, in the table's order.
+    std::vector<Run> runs() const;
 
     // The metric to show when a run has it (Settings.graph_metric).
     void set_preferred_metric(const std::string& key);
@@ -223,6 +226,9 @@ public:
 signals:
     // The metric the user chose to look at.
     void metric_changed(const QString& key);
+    // Export results, chosen from the table's right-click menu: the window's
+    // export, the same from either table (results_export.h).
+    void results_export_requested(ResultsFormat format);
 
 private:
     friend class GraphPanelTest;  // the graph's tests (tests/app)
@@ -254,6 +260,7 @@ private:
     void on_add_saved_run();
     void on_export_png();
     void on_export_csv();
+    void show_stats_menu(const QPoint& position);
     void on_file_write_failed(const QString& description, const QString& error);
     void on_file_writes_idle();
 

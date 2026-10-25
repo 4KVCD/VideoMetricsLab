@@ -1,6 +1,6 @@
 // The window's saved runs: rows' results saved to files of their own, and a
 // saved run loaded into the table (the Python app's _on_save_selected and
-// _on_load_saved_run).
+// _on_load_saved_run); and Export results, the scores of every run shown.
 #include "main_window.h"
 
 #include <QItemSelectionModel>
@@ -257,6 +257,47 @@ void MainWindow::submit_save(const ComparisonResult& result, const std::filesyst
     save_button_->setEnabled(false);
     file_writes_->submit(QStringLiteral("save %1").arg(name_of(path)),
                          [result, path, label = label.toStdString()] { save_run(result, path, label); });
+}
+
+std::vector<ExportedRun> MainWindow::exported_runs() const {
+    // What Export results saves, from either table's menu: each test video
+    // with its scores, in the Videos tab's order, then each other run on
+    // Metric Graphs (a saved run added there, say) in the graph's order. A
+    // video's result so far, during its run, is not its scores yet.
+    const auto display_of = [this](const ComparisonResult& result, const std::string& preferred) {
+        // The preset of the display its CVVDP score was made for, as its
+        // provenance records it.
+        const SequenceMetricResult* cvvdp = result.metric_results.sequence("cvvdp");
+        const std::optional<CvvdpSettings> settings = cvvdp != nullptr ? cvvdp_display_of(*cvvdp) : std::nullopt;
+        const std::optional<CvvdpPreset> preset =
+            settings ? matching_cvvdp_preset(*settings, settings_.cvvdp_presets_json, preferred) : std::nullopt;
+        return preset ? preset->name : std::string();
+    };
+    std::vector<ExportedRun> runs;
+    std::set<std::string> listed;  // the rows' lines on the graph
+    for (const std::shared_ptr<RowData>& row_data : rows_) {
+        const std::shared_ptr<CompletedRun>& run = row_data->completed_run;
+        if (!run) {
+            continue;
+        }
+        listed.insert(run->graph_identity);
+        if (!run->partial) {
+            runs.push_back({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label,
+                            row_data->metric_failures, display_of(run->result, row_data->cvvdp_preset)});
+        }
+    }
+    for (const GraphPanel::Run& graphed : graph_panel_->runs()) {
+        if (!listed.contains(graphed.identity)) {
+            runs.push_back({graphed.result, graphed.label, {}, display_of(*graphed.result, "")});
+        }
+    }
+    return runs;
+}
+
+void MainWindow::export_results(ResultsFormat format) {
+    // Named after the reference, whose test videos the Videos tab scores.
+    const QString name = source_info_ ? text_of(source_info_->path.stem()) + "_results" : QStringLiteral("results");
+    save_results(dialogs_, export_document(source_info_, exported_runs()), name, format);
 }
 
 }  // namespace vml::app

@@ -37,6 +37,7 @@
 
 #include "dialogs.h"
 #include "probe_worker.h"
+#include "results_export.h"
 #include "row_state.h"
 #include "vml/analysis_request.h"
 #include "vml/cvvdp.h"
@@ -372,6 +373,8 @@ private:
     std::vector<std::shared_ptr<CompletedRun>> selected_runs() const;
     void on_save_selected();
     void submit_save(const ComparisonResult& result, const std::filesystem::path& path, const QString& label);
+    std::vector<ExportedRun> exported_runs() const;
+    void export_results(ResultsFormat format);
 
     // ------------------------------------------------------------ the scores
     std::vector<std::string> reusable_metric_keys(const RowData& row_data) const;
