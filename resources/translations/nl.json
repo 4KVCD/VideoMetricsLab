@@ -663,6 +663,7 @@
   "{metrics} in the app failed ({error}); calculating them with FFmpeg…": "{metrics} mislukt in de app ({error}); wordt met FFmpeg berekend…",
   "Decoding in the app failed ({error}); decoding through FFmpeg instead…": "Decoderen in de app mislukt ({error}); in plaats daarvan decoderen via FFmpeg…",
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "GPU-decodering mislukt ({error}); in plaats daarvan decoderen via FFmpeg…",
+  "Reading the videos failed ({error}); trying again…": "Lezen van de video's mislukt ({error}); opnieuw proberen…",
   "GPU metric {number}/{count}: {metrics}": "GPU-metriek {number}/{count}: {metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF op de GPU mislukt ({error}); wordt op de CPU berekend…",
   "VMAF compute:": "VMAF-berekening:",

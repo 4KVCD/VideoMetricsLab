@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstdio>
 #include <cstring>
 #include <deque>
 #include <fstream>
@@ -69,9 +70,20 @@ constexpr int ring_slots = static_cast<int>(lanes_per_metric) + 3;
 constexpr std::size_t frame_pipe_bytes = 64 * 1024 * 1024;
 constexpr int end_of_video = -1;
 constexpr std::string_view y4m_frame_marker = "FRAME\n";
+// How long an FFmpeg that ended partway through a frame is given to exit by
+// itself, as long as a frame's timestamp is waited for (Timestamps).
+constexpr std::chrono::seconds partial_frame_exit_wait(10);
 const std::vector<std::string> vship_metrics{"ssimulacra2", "butteraugli", "cvvdp"};
 
 std::string label_of(const std::string& key) { return std::string(metric_definition(key).label); }
+
+// An exit code as the log gives it: in hexadecimal too, as Windows' crash
+// codes are known (0xC0000005).
+std::string exit_code_for_log(int code) {
+    std::array<char, 16> hex{};
+    std::snprintf(hex.data(), hex.size(), "0x%08X", static_cast<unsigned>(code));
+    return platform::exit_code_text(code) + " (" + hex.data() + ")";
+}
 
 // Thrown only when pairing by timestamp: a subsampled pass whose source
 // frames do not line up with the test video's (VshipPass::check_lined_up),
@@ -395,7 +407,8 @@ public:
 private:
 
     // The reading thread: runs each FFmpeg command in turn (hardware decoding
-    // first) until one succeeds.
+    // first) until one succeeds. What fails here is the pass's input
+    // (VshipInputError).
     void run() {
         try {
             for (std::size_t attempt = 0; attempt < commands_.size(); ++attempt) {
@@ -414,10 +427,16 @@ private:
                     }
                     continue;
                 }
+                logger.error("Vship: FFmpeg failed while decoding the " + label_ + " (exit code " +
+                             exit_code_for_log(code) + ")");
                 throw VshipUnavailableError("FFmpeg failed while decoding the " + label_ + " for Vship" +
                                             (errors.empty() ? "." : ": " + errors));
             }
-        } catch (...) {  // handed to the scoring thread, never lost
+        } catch (const VshipInputError&) {  // handed to the scoring thread, never lost
+            filled_.put({end_of_video, std::current_exception()});
+        } catch (const std::exception& error) {
+            filled_.put({end_of_video, std::make_exception_ptr(VshipInputError(error.what()))});
+        } catch (...) {
             filled_.put({end_of_video, std::current_exception()});
         }
     }
@@ -458,6 +477,7 @@ private:
         }
         long long frames = 0;
         const bool y4m = std::find(command.begin(), command.end(), "yuv4mpegpipe") != command.end();
+        std::optional<std::string> cut;  // how much came of a frame FFmpeg ended partway through
         std::exception_ptr failure;
         try {
             bool reading = !y4m || y4m_header(*process);  // no header: FFmpeg wrote nothing, its code says why
@@ -467,7 +487,7 @@ private:
                     break;
                 }
                 process->gather(frame_bytes_ + (y4m ? y4m_frame_marker.size() : 0), stopping_);
-                if (y4m && !y4m_frame(*process)) {
+                if (y4m && !y4m_frame(*process, cut)) {
                     free_.put(slot);
                     break;
                 }
@@ -488,12 +508,20 @@ private:
                 }
                 free_.put(slot);
                 if (received > 0 || y4m) {  // a "FRAME" line with no frame after it
-                    throw VshipUnavailableError("FFmpeg ended partway through a " + label_ + " frame.");
+                    cut = std::to_string(received) + " of its " + std::to_string(frame_bytes_) + " bytes";
                 }
                 reading = false;
             }
         } catch (...) {
             failure = std::current_exception();
+            process->terminate();
+        }
+        // An FFmpeg that ended partway through a frame has closed its output.
+        // It is given a while to exit by itself, so that the exit code kept
+        // is its own, but not for ever: it could still be running.
+        bool still_running = false;
+        if (cut && !failure && !process->wait_for(partial_frame_exit_wait)) {
+            still_running = true;
             process->terminate();
         }
         const int code = process->wait();
@@ -509,7 +537,28 @@ private:
         if (failure) {
             std::rethrow_exception(failure);
         }
-        return {frames, code, std::string(python_strip(replace_invalid_utf8(errors)))};
+        errors = std::string(python_strip(replace_invalid_utf8(errors)));
+        if (cut) {
+            log_partial_frame(command, frames, *cut, still_running, code, process->output_error(), errors);
+            throw VshipInputError("FFmpeg ended partway through a " + label_ + " frame.");
+        }
+        return {frames, code, errors};
+    }
+
+    // Logs what is known of an FFmpeg that ended partway through a frame.
+    // The pass's own message stays the one the window has a translation for.
+    void log_partial_frame(const std::vector<std::string>& command, long long frames, const std::string& cut,
+                           bool still_running, int code, int output_error, const std::string& errors) const {
+        const bool hardware = std::find(command.begin(), command.end(), "-hwaccel") != command.end();
+        const std::string ended =
+            still_running ? "still running " + std::to_string(partial_frame_exit_wait.count()) + " s later, so ended"
+                          : "exit code " + exit_code_for_log(code);
+        const std::string output = output_error == 0 ? "FFmpeg closed its output"
+                                                     : "reading its output failed (system error " +
+                                                           std::to_string(output_error) + ")";
+        logger.error("Vship: FFmpeg ended partway through the " + label_ + "'s frame " + std::to_string(frames) +
+                     " (" + cut + "), decoding " + (hardware ? "on the GPU" : "in software") + "; " + output +
+                     "; " + ended + (errors.empty() ? "" : "; FFmpeg said: " + errors));
     }
 
     // Reads a YUV4MPEG stream's first line; false if there is no stream.
@@ -534,14 +583,19 @@ private:
         return false;
     }
 
-    // Reads the "FRAME" line before a frame; false at the stream's end.
-    bool y4m_frame(platform::ChildProcess& process) {
+    // Reads the "FRAME" line before a frame; false at the stream's end, with
+    // `cut` set if FFmpeg ended partway through the line.
+    bool y4m_frame(platform::ChildProcess& process, std::optional<std::string>& cut) {
         std::array<std::uint8_t, y4m_frame_marker.size()> marker{};
         const std::size_t received = read_exact(process, marker.data(), marker.size());
         if (received == 0) {
             return false;
         }
-        if (received != marker.size() || std::memcmp(marker.data(), y4m_frame_marker.data(), marker.size()) != 0) {
+        if (received < marker.size()) {
+            cut = std::to_string(received) + " of the " + std::to_string(marker.size()) + " bytes of its FRAME line";
+            return false;
+        }
+        if (std::memcmp(marker.data(), y4m_frame_marker.data(), marker.size()) != 0) {
             throw VshipUnavailableError("FFmpeg's " + label_ + " frames are not where they were expected.");
         }
         return true;
@@ -1228,10 +1282,23 @@ public:
             close();
             throw;
         } catch (const GpuDecodeFailedError&) {
-            close();  // made again with FFmpeg decoding (score_vship_pass)
+            close();  // made again with FFmpeg decoding (remade_vship_pass)
             throw;
         } catch (const FramesApartError&) {
-            close();  // made again with every source frame (score_vship_pass)
+            close();  // made again with every source frame (remade_vship_pass)
+            throw;
+        } catch (const VshipInputError& error) {
+            logger.error("Vship pass (" + metric_labels(plan_.keys, ", ") + ") failed: " + error.what());
+            // Made again the same way (remade_vship_pass), but not where a
+            // metric's lane failed too: then the GPU may be what failed (a
+            // reset ends FFmpeg's GPU decoding as well), and nothing is run
+            // on it again.
+            stop_lanes();
+            const bool lanes_failed = !lane_errors().empty();
+            close();
+            if (lanes_failed) {
+                throw VshipUnavailableError(error.what());
+            }
             throw;
         } catch (const VshipUnavailableError& error) {
             logger.error("Vship pass (" + metric_labels(plan_.keys, ", ") + ") failed: " + error.what());
@@ -2049,37 +2116,16 @@ PerceptualTaskOutput output_from(const nlohmann::json& result, const std::filesy
 }
 
 // One pass in this process (the Python app's _score_vship_pass), with the
-// videos that a decoder of the app's takes decoded here. If that decoding
-// fails after it has started (a damaged stream, pictures that do not match
-// the packets), the pass is made again with FFmpeg decoding. When pairing
-// by timestamp, a subsampled pass whose frames do not line up with the
-// source's (FramesApartError) is made again with every source frame.
+// videos that a decoder of the app's takes decoded here, made again where
+// that can give its scores (remade_vship_pass).
 PerceptualTaskOutput score_vship_pass(const PerceptualRequest& request, const PassPlan& plan,
                                       const ProgressCallback& on_progress, const StatusCallback& on_status,
                                       const CancelToken& cancel) {
-    bool native = true;
-    bool every_source_frame = false;
-    while (true) {
-        try {
+    return remade_vship_pass(
+        [&](bool native, bool every_source_frame) {
             return VshipPass(request, plan, native, every_source_frame, on_progress, on_status, cancel).run();
-        } catch (const GpuDecodeFailedError& error) {
-            if (!native) {
-                throw VshipUnavailableError(error.what());
-            }
-            logger.warning(std::string("Decoding in the Vship pass failed; decoding through FFmpeg instead: ") +
-                           error.what());
-            if (on_status) {
-                on_status({decoding_failed_status(error)});
-            }
-            native = false;
-        } catch (const FramesApartError& error) {
-            if (every_source_frame) {
-                throw VshipUnavailableError(error.what());
-            }
-            logger.info(std::string("Vship pass: ") + error.what() + "; it is made again with every source frame");
-            every_source_frame = true;
-        }
-    }
+        },
+        on_status, cancel);
 }
 
 // One pass, in a process of its own where a program to run it is set (the
@@ -2835,6 +2881,47 @@ PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const
                                          bool together, const PerceptualHooks& hooks, const CancelToken& cancel,
                                          const PerceptualRoutes& routes) {
     return MetricRouting(request, keys, together, hooks, cancel, routes).run();
+}
+
+PerceptualTaskOutput remade_vship_pass(
+    const std::function<PerceptualTaskOutput(bool native, bool every_source_frame)>& attempt,
+    const StatusCallback& on_status, const CancelToken& cancel) {
+    bool native = true;
+    bool every_source_frame = false;
+    bool input_retried = false;
+    while (true) {
+        try {
+            return attempt(native, every_source_frame);
+        } catch (const VshipInputError& error) {
+            // A failure of the input alone, such as an FFmpeg that ended
+            // partway through a frame, may not come again; stock Vship 5.1.2
+            // would read the same frames, and score them otherwise.
+            if (input_retried || cancel.cancelled()) {
+                throw;
+            }
+            logger.warning(std::string("Vship pass: ") + error.what() + " It is made again.");
+            if (on_status) {
+                on_status({"Reading the videos failed (" + std::string(error.what()) + "); trying again\xE2\x80\xA6"});
+            }
+            input_retried = true;
+        } catch (const GpuDecodeFailedError& error) {
+            if (!native) {
+                throw VshipUnavailableError(error.what());
+            }
+            logger.warning(std::string("Decoding in the Vship pass failed; decoding through FFmpeg instead: ") +
+                           error.what());
+            if (on_status) {
+                on_status({decoding_failed_status(error)});
+            }
+            native = false;
+        } catch (const FramesApartError& error) {
+            if (every_source_frame) {
+                throw VshipUnavailableError(error.what());
+            }
+            logger.info(std::string("Vship pass: ") + error.what() + "; it is made again with every source frame");
+            every_source_frame = true;
+        }
+    }
 }
 
 nlohmann::json vship_pass_task(const nlohmann::json& request, const std::filesystem::path& folder) {

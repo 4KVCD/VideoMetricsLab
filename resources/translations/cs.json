@@ -663,6 +663,7 @@
   "{metrics} in the app failed ({error}); calculating them with FFmpeg…": "{metrics} v aplikaci selhalo ({error}); počítá se pomocí FFmpeg…",
   "Decoding in the app failed ({error}); decoding through FFmpeg instead…": "Dekódování v aplikaci selhalo ({error}); dekóduje se místo toho přes FFmpeg…",
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "Dekódování na GPU selhalo ({error}); dekóduje se místo toho přes FFmpeg…",
+  "Reading the videos failed ({error}); trying again…": "Čtení videí selhalo ({error}); zkouší se to znovu…",
   "GPU metric {number}/{count}: {metrics}": "Metrika GPU {number}/{count}: {metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF na GPU selhalo ({error}); počítá se na CPU…",
   "VMAF compute:": "Výpočet VMAF:",

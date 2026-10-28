@@ -663,6 +663,7 @@
   "{metrics} in the app failed ({error}); calculating them with FFmpeg…": "Sikertelen az alkalmazásban: {metrics} ({error}); számítás FFmpeg-gel…",
   "Decoding in the app failed ({error}); decoding through FFmpeg instead…": "Az alkalmazáson belüli dekódolás sikertelen ({error}); dekódolás inkább FFmpeg-gel…",
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "A GPU-dekódolás sikertelen ({error}); dekódolás inkább FFmpeg-gel…",
+  "Reading the videos failed ({error}); trying again…": "A videók beolvasása sikertelen ({error}); újrapróbálás…",
   "GPU metric {number}/{count}: {metrics}": "GPU-metrika {number}/{count}: {metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "A VMAF sikertelen a GPU-n ({error}); számítás CPU-n…",
   "VMAF compute:": "VMAF számítása:",

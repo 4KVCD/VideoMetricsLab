@@ -663,6 +663,7 @@
   "{metrics} in the app failed ({error}); calculating them with FFmpeg…": "{metrics} не вдалося в застосунку ({error}); обчислення через FFmpeg…",
   "Decoding in the app failed ({error}); decoding through FFmpeg instead…": "Декодування в застосунку не вдалося ({error}); декодування через FFmpeg…",
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "Декодування на GPU не вдалося ({error}); декодування через FFmpeg…",
+  "Reading the videos failed ({error}); trying again…": "Помилка читання відео ({error}); повторна спроба…",
   "GPU metric {number}/{count}: {metrics}": "Метрика GPU {number}/{count}: {metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF на GPU не вдалося ({error}); обчислення на CPU…",
   "VMAF compute:": "Обчислення VMAF:",

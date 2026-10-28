@@ -207,8 +207,10 @@ GPU is calculated on the CPU where no GPU can. When a GPU metric falls back,
 to the CPU or from Vship-fast to stock Vship 5.1.2, because it failed on the
 GPU during the run or because the GPU's check crashed, failed or scored
 wrongly, a note says so and why (in the JSON too, with the video's other
-notes). The app lists the same under **GPU fallbacks** in the tooltip of the
-video's name.
+notes). A Vship pass whose FFmpeg fails to give it the videos' frames is
+first made once more on Vship-fast, with no note: only a second failure
+falls back. The app lists the fallbacks under **GPU fallbacks** in the
+tooltip of the video's name.
 
 Progress is written to the error stream and results to the output stream, so
 `--json -` can be piped. Piped or redirected, both are UTF-8 whatever the

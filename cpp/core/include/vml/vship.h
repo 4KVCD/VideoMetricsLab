@@ -38,6 +38,15 @@ public:
     using PerceptualRunError::PerceptualRunError;
 };
 
+// A pass's FFmpeg failed to give it a video's frames: it could not start,
+// ended with an error, or stopped partway through a frame. The pass is made
+// once more the same way (remade_vship_pass) before another Vship is
+// tried, which would read the same frames.
+class VshipInputError : public VshipUnavailableError {
+public:
+    using VshipUnavailableError::VshipUnavailableError;
+};
+
 // Every metric's GPU pass failed. The message is the first error's text, and
 // failures() holds each metric's own reason, so that no metric is reported
 // with another's (such as CVVDP given SSIMULACRA2's out-of-memory error).

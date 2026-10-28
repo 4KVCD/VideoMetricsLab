@@ -101,6 +101,11 @@ public:
     // program has closed it.
     std::size_t read(void* into, std::size_t bytes);
 
+    // Why standard output ended, once a read found its end: 0 when the
+    // program closed it, otherwise the system's error code for the read
+    // that failed while it was open (Windows' GetLastError, elsewhere errno).
+    int output_error() const;
+
     // Waits until `bytes` of standard output are waiting to be read, the
     // program has ended, or `stop` is set, so that one read takes a whole
     // frame: read as it comes, a 4K frame arrives in some 300 pieces, each

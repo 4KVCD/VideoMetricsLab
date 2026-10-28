@@ -543,6 +543,37 @@ TEST(PerceptualRouting, CancellingDoesNotStartTheCpu) {
     EXPECT_TRUE(routed.cpu.empty());
 }
 
+// A Vship pass whose FFmpeg failed to give it the frames is made once more
+// the same way, saying so; a second such failure, or another kind of
+// failure, is the pass's own, for the next Vship or the CPU.
+TEST(PerceptualRouting, APassWhoseInputFailedIsMadeOnceMore) {
+    std::vector<std::string> statuses;
+    const StatusCallback on_status = [&statuses](const RunStatus& status) { statuses.push_back(status.text); };
+    int attempts = 0;
+    // A pass that fails `failures` times with `error`, then gives its score.
+    const auto pass = [&attempts](int failures, const std::exception_ptr& error) {
+        return [&attempts, failures, error](bool, bool) {
+            if (++attempts <= failures) {
+                std::rethrow_exception(error);
+            }
+            return scored("cvvdp", 9.5f, "gpu");
+        };
+    };
+    const auto input_error = std::make_exception_ptr(VshipInputError("FFmpeg ended partway through a frame."));
+    const PerceptualTaskOutput output = remade_vship_pass(pass(1, input_error), on_status, CancelToken());
+    EXPECT_EQ(attempts, 2);
+    EXPECT_TRUE(output.metrics.has("cvvdp"));
+    EXPECT_EQ(statuses, (std::vector<std::string>{
+                            "Reading the videos failed (FFmpeg ended partway through a frame.); trying again\xE2\x80\xA6"}));
+    attempts = 0;
+    EXPECT_THROW(remade_vship_pass(pass(2, input_error), on_status, CancelToken()), VshipInputError);
+    EXPECT_EQ(attempts, 2);
+    attempts = 0;
+    const auto gpu_error = std::make_exception_ptr(VshipUnavailableError("Vship CVVDP failed"));
+    EXPECT_THROW(remade_vship_pass(pass(1, gpu_error), on_status, CancelToken()), VshipUnavailableError);
+    EXPECT_EQ(attempts, 1);
+}
+
 // Two pictures of different shapes are refused, as FFmpeg's metrics refuse
 // them (they were scored stretched), black bars kept or not; one rounded to
 // an even size still compares.

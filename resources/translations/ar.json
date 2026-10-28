@@ -663,6 +663,7 @@
   "{metrics} in the app failed ({error}); calculating them with FFmpeg…": "فشل {metrics} داخل التطبيق ({error})؛ يُحسب عبر FFmpeg…",
   "Decoding in the app failed ({error}); decoding through FFmpeg instead…": "فشل فك الترميز داخل التطبيق ({error})؛ يُفك الترميز عبر FFmpeg بدلًا من ذلك…",
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "فشل فك الترميز عبر GPU ({error})؛ يُفك الترميز عبر FFmpeg بدلًا من ذلك…",
+  "Reading the videos failed ({error}); trying again…": "فشلت قراءة الفيديوهات ({error})؛ تُعاد المحاولة…",
   "GPU metric {number}/{count}: {metrics}": "مقياس GPU {number}/{count}: {metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "فشل VMAF على GPU ({error})؛ يُحسب على المعالج…",
   "VMAF compute:": "حساب VMAF:",

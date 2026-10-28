@@ -111,6 +111,17 @@ PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const
                                          bool together, const PerceptualHooks& hooks, const CancelToken& cancel,
                                          const PerceptualRoutes& routes = app_perceptual_routes());
 
+// One Vship pass, made by `attempt` and made again where another try can
+// give its scores: with FFmpeg decoding after a decoder of the app's failed
+// partway (GpuDecodeFailedError), with every source frame after frames
+// paired by time came apart, and once more the same way after its FFmpeg
+// failed to give it a video's frames (VshipInputError), which another Vship
+// would read the same. `attempt` is told whether the app's decoders decode,
+// and whether the source gives every frame.
+PerceptualTaskOutput remade_vship_pass(
+    const std::function<PerceptualTaskOutput(bool native, bool every_source_frame)>& attempt,
+    const StatusCallback& on_status, const CancelToken& cancel);
+
 // The isolated "vship-pass" task's work (isolated.cpp): one pass, in this
 // process, from the request the parent wrote; the scores are left in
 // `folder`.

@@ -663,6 +663,7 @@
   "{metrics} in the app failed ({error}); calculating them with FFmpeg…": "アプリ内での {metrics} に失敗したため（{error}）、FFmpeg で計算中…",
   "Decoding in the app failed ({error}); decoding through FFmpeg instead…": "アプリ内でのデコードに失敗したため（{error}）、代わりに FFmpeg でデコード中…",
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "GPU デコードに失敗したため（{error}）、代わりに FFmpeg でデコード中…",
+  "Reading the videos failed ({error}); trying again…": "動画の読み込みに失敗したため（{error}）、再試行中…",
   "GPU metric {number}/{count}: {metrics}": "GPU メトリック {number}/{count}：{metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "GPU での VMAF に失敗しました（{error}）。CPU で計算中…",
   "VMAF compute:": "VMAF の計算:",

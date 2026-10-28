@@ -663,6 +663,7 @@
   "{metrics} in the app failed ({error}); calculating them with FFmpeg…": "{metrics} 在應用程式內失敗（{error}）；正在以 FFmpeg 計算…",
   "Decoding in the app failed ({error}); decoding through FFmpeg instead…": "應用程式內解碼失敗（{error}）；改為透過 FFmpeg 解碼…",
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "GPU 解碼失敗（{error}）；改為透過 FFmpeg 解碼…",
+  "Reading the videos failed ({error}); trying again…": "讀取影片失敗（{error}）；正在重試…",
   "GPU metric {number}/{count}: {metrics}": "GPU 指標 {number}/{count}：{metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF 在 GPU 上失敗（{error}）；正在 CPU 上計算…",
   "VMAF compute:": "VMAF 運算：",

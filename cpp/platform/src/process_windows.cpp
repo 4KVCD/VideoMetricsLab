@@ -188,6 +188,15 @@ struct ChildProcess::State {
     DWORD id = 0;
     std::string unread;  // read from the pipe, not yet given as lines
     bool output_ended = false;
+    int output_error = 0;  // output_error()
+    // Marks the output ended after a read that gave nothing (`succeeded`:
+    // ReadFile's answer). A pipe the program closed fails with
+    // ERROR_BROKEN_PIPE, which is no error here.
+    void end_output(BOOL succeeded) {
+        const DWORD error = succeeded ? ERROR_SUCCESS : GetLastError();
+        output_ended = true;
+        output_error = error == ERROR_BROKEN_PIPE ? 0 : static_cast<int>(error);
+    }
     // For gather's waits of a millisecond, as Python's time.sleep(0.001)
     // makes them: a plain Sleep(1) can last a whole 15.6 ms tick.
     Handle timer;
@@ -331,10 +340,11 @@ std::optional<std::string> ChildProcess::read_line() {
         }
         char buffer[4096];
         DWORD count = 0;
-        if (ReadFile(state_->output.get(), buffer, sizeof buffer, &count, nullptr) && count > 0) {
+        const BOOL succeeded = ReadFile(state_->output.get(), buffer, sizeof buffer, &count, nullptr);
+        if (succeeded && count > 0) {
             state_->unread.append(buffer, count);
         } else {
-            state_->output_ended = true;
+            state_->end_output(succeeded);
         }
     }
 }
@@ -354,12 +364,15 @@ std::size_t ChildProcess::read(void* into, std::size_t bytes) {
     }
     DWORD count = 0;
     const DWORD wanted = static_cast<DWORD>(std::min<std::size_t>(bytes, 1u << 30));
-    if (ReadFile(state_->output.get(), into, wanted, &count, nullptr) && count > 0) {
+    const BOOL succeeded = ReadFile(state_->output.get(), into, wanted, &count, nullptr);
+    if (succeeded && count > 0) {
         return count;
     }
-    state_->output_ended = true;
+    state_->end_output(succeeded);
     return 0;
 }
+
+int ChildProcess::output_error() const { return state_->output_error; }
 
 void ChildProcess::gather(std::size_t bytes, const std::atomic<bool>& stop) {
     if (!state_->unread.empty() || state_->output_ended) {

@@ -278,6 +278,7 @@ const char* const templates[] = {
     "{metrics} in the app failed ({error}); calculating them with FFmpeg…",
     "Decoding in the app failed ({error}); decoding through FFmpeg instead…",
     "GPU decoding failed ({error}); decoding through FFmpeg instead…",
+    "Reading the videos failed ({error}); trying again…",
     "GPU metric {number}/{count}: {metrics}",
     "VMAF on the GPU failed ({error}); calculating it on the CPU…",
     "GPU decode failed, retrying (GPU decode: {plan})…",

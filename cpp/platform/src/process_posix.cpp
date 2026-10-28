@@ -126,6 +126,7 @@ struct ChildProcess::State {
     Descriptor output;
     std::string unread;
     bool output_ended = false;
+    int output_error = 0;  // output_error()
 
     std::thread error_reader;
     std::mutex error_mutex;
@@ -310,6 +311,7 @@ std::optional<std::string> ChildProcess::read_line() {
             state_->unread.append(buffer, static_cast<std::size_t>(count));
         } else if (count == 0 || errno != EINTR) {
             state_->output_ended = true;
+            state_->output_error = count == 0 ? 0 : errno;
         }
     }
 }
@@ -331,10 +333,13 @@ std::size_t ChildProcess::read(void* into, std::size_t bytes) {
         }
         if (count == 0 || errno != EINTR) {
             state_->output_ended = true;
+            state_->output_error = count == 0 ? 0 : errno;
         }
     }
     return 0;
 }
+
+int ChildProcess::output_error() const { return state_->output_error; }
 
 void ChildProcess::gather(std::size_t bytes, const std::atomic<bool>& stop) {
     // Each read wakes the reading thread here too, but the Python app
