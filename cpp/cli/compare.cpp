@@ -779,7 +779,13 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
     events.result_updated = keep;
     events.job_finished = [&](std::size_t index, const ComparisonResult& result) {
         keep(index, result);
-        progress.finished(index, video(index).label() + ": done");
+        // A cancelled run also sends what a video had finished, which the
+        // tables and the JSON call cancelled. Judged by this job's own
+        // result: the jobs of its other displays run on their own threads.
+        const std::vector<std::string>& asked = video(index).metrics;
+        const bool whole = std::all_of(asked.begin(), asked.end(),
+                                       [&result](const std::string& key) { return result.has_metric(key); });
+        progress.finished(index, video(index).label() + (whole || !cancel.cancelled() ? ": done" : ": cancelled"));
     };
     events.job_failed = [&](std::size_t index, const std::string& message, const std::string& /*stderr_tail*/) {
         video(index).error = message;

@@ -147,6 +147,8 @@ struct RunEvents {
     // The state of each of the video's tasks (TaskSnapshot), in its tasks'
     // order, whenever one changes.
     std::function<void(std::size_t index, const std::vector<TaskSnapshot>& tasks)> task_progress;
+    // The video's result. Also sent, with the metrics that had finished, for
+    // a video a cancel stopped after some of them finished.
     std::function<void(std::size_t index, const ComparisonResult& result)> job_finished;
     // Why the video failed, and the end of the tool's error output.
     std::function<void(std::size_t index, const std::string& message, const std::string& stderr_tail)> job_failed;
