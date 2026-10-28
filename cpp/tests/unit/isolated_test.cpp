@@ -17,8 +17,8 @@ namespace vml {
 namespace {
 
 // The child's messages come back in order, then its result and the file it
-// left; what it throws is thrown here; a child that ends without a result
-// crashed, as the Python app words it; and Cancel ends the child.
+// left; an error the child reports is thrown here as that error, not as a
+// crash.
 TEST(Isolated, RunsWorkInAProcessOfItsOwn) {
     set_isolation_program(std::filesystem::path(VML_CLI));
     std::vector<nlohmann::json> messages;
@@ -41,17 +41,6 @@ TEST(Isolated, RunsWorkInAProcessOfItsOwn) {
     EXPECT_EQ(working_folder, platform::path_text(std::filesystem::current_path()));
 
     try {
-        run_isolated("test-crash", "the test", nlohmann::json::object(), {}, CancelToken());
-        ADD_FAILURE() << "no crash";
-    } catch (const IsolatedCrashError& error) {
-#ifdef _WIN32
-        EXPECT_STREQ(error.what(), "the test crashed (exit code 0xC0000005)");
-#else
-        EXPECT_STREQ(error.what(), "the test crashed (exit code 5)");  // an exit status keeps its low 8 bits
-#endif
-    }
-
-    try {
         run_isolated("no-such-task", "the test", nlohmann::json::object(), {}, CancelToken());
         ADD_FAILURE() << "no error";
     } catch (const IsolatedCrashError&) {
@@ -59,19 +48,12 @@ TEST(Isolated, RunsWorkInAProcessOfItsOwn) {
     } catch (const std::runtime_error& error) {
         EXPECT_STREQ(error.what(), "there is no task no-such-task");
     }
-
-    // Cancelled once the child says it is waiting: it would wait a minute.
-    CancelToken cancel;
-    EXPECT_THROW(run_isolated(
-                     "test-wait", "the test", nlohmann::json::object(),
-                     [&cancel](const nlohmann::json&) { cancel.cancel(); }, cancel),
-                 Cancelled);
     set_isolation_program(std::nullopt);
 }
 
-// A program the child started can still have a file in the child's folder
-// open for a moment after a Cancel has ended them both (FFmpeg, its
-// timestamps): the folder goes all the same.
+// Cancel ends the child and what it started. A program the child started
+// can still have a file in the child's folder open for a moment after that
+// (FFmpeg, its timestamps): the folder goes all the same.
 TEST(Isolated, ItsFolderGoesWhenAProgramItStartedHadAFileThereOpen) {
     set_isolation_program(std::filesystem::path(VML_CLI));
     std::filesystem::path folder;
@@ -104,6 +86,7 @@ TEST(Isolated, ACrashIsReportedInTheLogWithWhereItHappened) {
     EXPECT_NE(log.find("the test crashed"), std::string::npos) << log;
     EXPECT_NE(log.find("; its stack at the crash:"), std::string::npos) << log;
 #ifdef _WIN32
+    EXPECT_NE(log.find("the test crashed (exit code 0xC0000005); its stack at the crash:"), std::string::npos) << log;
     EXPECT_NE(log.find("Fatal exception 0xC0000005 at vml-cli.exe+0x"), std::string::npos) << log;
 #else
     EXPECT_NE(log.find("Aborted\nStack:\n"), std::string::npos) << log;

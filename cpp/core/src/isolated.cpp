@@ -347,9 +347,6 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
                 << request.value("file", "") << "\n"
                 << platform::path_text(std::filesystem::current_path());
             result = request;
-        } else if (task == "test-crash") {
-            // For the tests: ends as an access violation ends a process.
-            std::_Exit(static_cast<int>(0xC0000005u));
         } else if (task == "test-fault") {
             // For the tests: a real crash, which the process reports before
             // it ends: an access violation on Windows, an abort elsewhere
@@ -360,10 +357,6 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
 #else
             std::abort();
 #endif
-        } else if (task == "test-wait") {
-            // For the tests: waits to be cancelled.
-            send_isolated_message({{"waiting", true}});
-            std::this_thread::sleep_for(std::chrono::minutes(1));
         } else if (task == "test-hold") {
             // For the tests: a program this one starts holds a file in this
             // one's folder open, as FFmpeg holds its timestamps, and this
