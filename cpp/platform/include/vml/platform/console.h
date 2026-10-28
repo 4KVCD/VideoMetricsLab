@@ -26,7 +26,9 @@ bool is_terminal(Stream stream);
 std::vector<std::string> utf8_arguments(int argc, char** argv);
 
 // Calls `handler` (once per press, on another thread) on Ctrl+C, and on
-// Windows on Ctrl+Break and when the console window is closed.
+// Windows on Ctrl+Break and when the console window is closed. A closed
+// window's process is kept alive until it ends itself, which Windows allows
+// for some 5 s.
 void on_interrupt(std::function<void()> handler);
 
 }  // namespace vml::platform

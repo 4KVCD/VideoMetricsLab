@@ -21,6 +21,13 @@ BOOL WINAPI console_event(DWORD event) {
         if (interrupt_handler()) {
             interrupt_handler()();
         }
+        if (event == CTRL_CLOSE_EVENT) {
+            // Windows ends a closed console's process as soon as this returns,
+            // or some 5 s on (SPI_GETHUNGAPPTIMEOUT): this thread waits, so that
+            // the cancelled run writes its results as after Ctrl+C, and the
+            // process's own exit ends this thread.
+            Sleep(INFINITE);
+        }
         return TRUE;  // handled: the run ends itself, after its cleanup
     }
     return FALSE;

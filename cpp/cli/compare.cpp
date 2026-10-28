@@ -978,7 +978,8 @@ namespace {
 // check or ffprobe under way ends with it, as this process's job ends.
 // During the run (`running`), the run is cancelled and what finished is
 // reported; a second Ctrl+C (or SIGTERM) ends the command at once, for a
-// run whose cancel does not come back (a GPU driver that hangs). Set up
+// run whose cancel does not come back (a GPU driver that hangs). Closing the
+// console window (or End task on it) is a Ctrl+C. Set up
 // first: the checks and probes before the run can take a while (60 s for
 // ffprobe on a slow share). The handler outlives the command, so it shares
 // what it uses.

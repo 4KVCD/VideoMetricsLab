@@ -225,6 +225,7 @@ command (a raw stream without `--fps`, or a raw YUV file without `--size`,
 `--pix-fmt` and `--fps`, among them), when FFmpeg cannot be used or when
 there is no test video, and 130 after Ctrl+C.
 Ctrl+C stops the run as **Cancel** does; scores that had finished are saved.
+Closing the console window does the same on Windows' classic console.
 
 Unlike the app, the command line does not ask before a long SSIMULACRA2 or
 Butteraugli run on the CPU. Text is English whatever the app's language.
