@@ -21,7 +21,8 @@ namespace vml {
 namespace {
 
 // For each -hwaccel, the codecs it reliably decodes through FFmpeg's
-// generic hardware decoding.
+// generic hardware decoding. MPEG-2 and MPEG-4 Part 2 are decoded in
+// software all the same, VideoToolbox's too (gpu_decodes_exactly).
 const std::map<std::string, std::set<std::string>>& hwaccel_codecs() {
     static const std::map<std::string, std::set<std::string>> codecs{
         {"cuda", {"h264", "hevc", "vp8", "vp9", "mpeg2video", "mpeg4", "av1", "vc1"}},
@@ -232,10 +233,21 @@ bool downloads_from_gpu(const std::string& pix_fmt, int width, int height) {
            ((name.starts_with("yuv420p") || name.starts_with("yuvj420p")) && bit_depth(name) <= 10);
 }
 
+bool gpu_decodes_exactly(const std::string& codec) {
+    // Against FFmpeg's decode of a 3 Mb/s 1080p MPEG-2 encode with one
+    // keyframe in 243 frames, NVIDIA's decoder (RTX 5090) gave 63.8 dB PSNR
+    // at the keyframe and 37.2 dB at the last frame, Intel's (Core Ultra 9
+    // 285K) 64.4 dB at worst; NVIDIA's decode of an MPEG-4 Part 2 encode of
+    // the same video, 56.3 dB at worst. The other codecs' transforms are
+    // exact integer ones.
+    const std::string name = ascii_lower(codec);
+    return name != "mpeg2video" && name != "mpeg4";
+}
+
 std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                        const std::string& codec, const std::string& pix_fmt, int width, int height,
                                        MacGpuDecoding mac) {
-    if (!downloads_from_gpu(pix_fmt, width, height)) {
+    if (!downloads_from_gpu(pix_fmt, width, height) || !gpu_decodes_exactly(codec)) {
         return std::nullopt;
     }
     if (mac == MacGpuDecoding::deep) {

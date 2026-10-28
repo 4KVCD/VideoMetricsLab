@@ -78,7 +78,8 @@ previous build's output undeletable. The package therefore goes to
   in `licenses`).
 - **`software_frames.dll`**, the decoder for the videos FFmpeg would decode
   in software -- no GPU decoder takes them (VVC, AV1 on an older GPU, 10-bit
-  H.264) or GPU decoding is off -- so that their frames reach the GPU
+  H.264), the GPUs' decoders give other pictures than FFmpeg's (MPEG-2), or
+  GPU decoding is off -- so that their frames reach the GPU
   metrics and the app's PSNR, SSIM and XPSNR without FFmpeg's pipes, which
   carry 4K frames at 60-80 a second. Built from `native/software_frames.cpp`
   by `scripts/build_gpu_frames.ps1` with the GPU decoders below, against

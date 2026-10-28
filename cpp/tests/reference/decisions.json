@@ -384,7 +384,25 @@
     720,
     576
    ],
-   "hwaccel": "cuda"
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "nvidia"
+   ],
+   "vendor": "auto",
+   "codec": "mpeg4",
+   "pix_fmt": "yuv420p",
+   "size": [
+    720,
+    576
+   ],
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -528,7 +546,7 @@
     720,
     576
    ],
-   "hwaccel": "cuda"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -672,7 +690,7 @@
     720,
     576
    ],
-   "hwaccel": "qsv"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -816,7 +834,7 @@
     720,
     576
    ],
-   "hwaccel": "d3d11va"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -1112,82 +1130,6 @@
     720,
     576
    ],
-   "hwaccel": "qsv"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "nvidia",
-   "codec": "hevc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    3840,
-    2160
-   ],
-   "hwaccel": "cuda"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "nvidia",
-   "codec": "h264",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": "cuda"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "nvidia",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": "cuda"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "nvidia",
-   "codec": "av1",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    853,
-    479
-   ],
    "hwaccel": null
   },
   {
@@ -1198,681 +1140,6 @@
    ],
    "vendors": [
     "intel",
-    "amd"
-   ],
-   "vendor": "nvidia",
-   "codec": "vvc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "nvidia",
-   "codec": "HEVC",
-   "pix_fmt": "yuv422p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "nvidia",
-   "codec": "vp9",
-   "pix_fmt": "",
-   "size": [
-    0,
-    0
-   ],
-   "hwaccel": "cuda"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "nvidia",
-   "codec": "mpeg2video",
-   "pix_fmt": "yuv420p",
-   "size": [
-    720,
-    576
-   ],
-   "hwaccel": "cuda"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "intel",
-   "codec": "hevc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    3840,
-    2160
-   ],
-   "hwaccel": "qsv"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "intel",
-   "codec": "h264",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "intel",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": "qsv"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "intel",
-   "codec": "av1",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    853,
-    479
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "intel",
-   "codec": "vvc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "intel",
-   "codec": "HEVC",
-   "pix_fmt": "yuv422p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "intel",
-   "codec": "vp9",
-   "pix_fmt": "",
-   "size": [
-    0,
-    0
-   ],
-   "hwaccel": "qsv"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "intel",
-   "codec": "mpeg2video",
-   "pix_fmt": "yuv420p",
-   "size": [
-    720,
-    576
-   ],
-   "hwaccel": "qsv"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "amd",
-   "codec": "hevc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    3840,
-    2160
-   ],
-   "hwaccel": "d3d11va"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "amd",
-   "codec": "h264",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "amd",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": "d3d11va"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "amd",
-   "codec": "av1",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    853,
-    479
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "amd",
-   "codec": "vvc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "amd",
-   "codec": "HEVC",
-   "pix_fmt": "yuv422p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "amd",
-   "codec": "vp9",
-   "pix_fmt": "",
-   "size": [
-    0,
-    0
-   ],
-   "hwaccel": "d3d11va"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "amd",
-   "codec": "mpeg2video",
-   "pix_fmt": "yuv420p",
-   "size": [
-    720,
-    576
-   ],
-   "hwaccel": "d3d11va"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "hevc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    3840,
-    2160
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "h264",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "av1",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    853,
-    479
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "vvc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "HEVC",
-   "pix_fmt": "yuv422p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "vp9",
-   "pix_fmt": "",
-   "size": [
-    0,
-    0
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "mpeg2video",
-   "pix_fmt": "yuv420p",
-   "size": [
-    720,
-    576
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "amd"
-   ],
-   "vendor": "auto",
-   "codec": "hevc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    3840,
-    2160
-   ],
-   "hwaccel": "d3d11va"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "amd"
-   ],
-   "vendor": "auto",
-   "codec": "h264",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "amd"
-   ],
-   "vendor": "auto",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": "d3d11va"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "amd"
-   ],
-   "vendor": "auto",
-   "codec": "av1",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    853,
-    479
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "amd"
-   ],
-   "vendor": "auto",
-   "codec": "vvc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "amd"
-   ],
-   "vendor": "auto",
-   "codec": "HEVC",
-   "pix_fmt": "yuv422p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "amd"
-   ],
-   "vendor": "auto",
-   "codec": "vp9",
-   "pix_fmt": "",
-   "size": [
-    0,
-    0
-   ],
-   "hwaccel": "d3d11va"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
-    "amd"
-   ],
-   "vendor": "auto",
-   "codec": "mpeg2video",
-   "pix_fmt": "yuv420p",
-   "size": [
-    720,
-    576
-   ],
-   "hwaccel": "d3d11va"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [
     "amd"
    ],
    "vendor": "nvidia",
@@ -1891,6 +1158,757 @@
     "qsv"
    ],
    "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "h264",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": "cuda"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": "cuda"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "av1",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    853,
+    479
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "vvc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "HEVC",
+   "pix_fmt": "yuv422p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "vp9",
+   "pix_fmt": "",
+   "size": [
+    0,
+    0
+   ],
+   "hwaccel": "cuda"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "mpeg2video",
+   "pix_fmt": "yuv420p",
+   "size": [
+    720,
+    576
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "intel",
+   "codec": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    3840,
+    2160
+   ],
+   "hwaccel": "qsv"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "intel",
+   "codec": "h264",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "intel",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": "qsv"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "intel",
+   "codec": "av1",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    853,
+    479
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "intel",
+   "codec": "vvc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "intel",
+   "codec": "HEVC",
+   "pix_fmt": "yuv422p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "intel",
+   "codec": "vp9",
+   "pix_fmt": "",
+   "size": [
+    0,
+    0
+   ],
+   "hwaccel": "qsv"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "intel",
+   "codec": "mpeg2video",
+   "pix_fmt": "yuv420p",
+   "size": [
+    720,
+    576
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "amd",
+   "codec": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    3840,
+    2160
+   ],
+   "hwaccel": "d3d11va"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "amd",
+   "codec": "h264",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "amd",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": "d3d11va"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "amd",
+   "codec": "av1",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    853,
+    479
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "amd",
+   "codec": "vvc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "amd",
+   "codec": "HEVC",
+   "pix_fmt": "yuv422p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "amd",
+   "codec": "vp9",
+   "pix_fmt": "",
+   "size": [
+    0,
+    0
+   ],
+   "hwaccel": "d3d11va"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "amd",
+   "codec": "mpeg2video",
+   "pix_fmt": "yuv420p",
+   "size": [
+    720,
+    576
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "none",
+   "codec": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    3840,
+    2160
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "none",
+   "codec": "h264",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "none",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "none",
+   "codec": "av1",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    853,
+    479
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "none",
+   "codec": "vvc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "none",
+   "codec": "HEVC",
+   "pix_fmt": "yuv422p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "none",
+   "codec": "vp9",
+   "pix_fmt": "",
+   "size": [
+    0,
+    0
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "none",
+   "codec": "mpeg2video",
+   "pix_fmt": "yuv420p",
+   "size": [
+    720,
+    576
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    3840,
+    2160
+   ],
+   "hwaccel": "d3d11va"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "h264",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": "d3d11va"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "av1",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    853,
+    479
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "vvc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "HEVC",
+   "pix_fmt": "yuv422p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "vp9",
+   "pix_fmt": "",
+   "size": [
+    0,
+    0
+   ],
+   "hwaccel": "d3d11va"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "mpeg2video",
+   "pix_fmt": "yuv420p",
+   "size": [
+    720,
+    576
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    3840,
+    2160
+   ],
+   "hwaccel": "cuda"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [
     "amd"
    ],
    "vendor": "nvidia",
@@ -2008,7 +2026,7 @@
     720,
     576
    ],
-   "hwaccel": "cuda"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -2152,7 +2170,7 @@
     720,
     576
    ],
-   "hwaccel": "qsv"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -2296,7 +2314,7 @@
     720,
     576
    ],
-   "hwaccel": "d3d11va"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -2596,22 +2614,6 @@
    "vendor": "nvidia",
    "codec": "h264",
    "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": "cuda"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [],
-   "vendor": "nvidia",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
    "size": [
     1920,
     1080
@@ -2626,6 +2628,22 @@
    ],
    "vendors": [],
    "vendor": "nvidia",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": "cuda"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [],
+   "vendor": "nvidia",
    "codec": "av1",
    "pix_fmt": "yuv420p10le",
    "size": [
@@ -2696,7 +2714,7 @@
     720,
     576
    ],
-   "hwaccel": "cuda"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -2824,7 +2842,7 @@
     720,
     576
    ],
-   "hwaccel": "qsv"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -2851,54 +2869,6 @@
    "vendors": [],
    "vendor": "amd",
    "codec": "h264",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [],
-   "vendor": "amd",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": "d3d11va"
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [],
-   "vendor": "amd",
-   "codec": "av1",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    853,
-    479
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [],
-   "vendor": "amd",
-   "codec": "vvc",
    "pix_fmt": "yuv420p10le",
    "size": [
     1920,
@@ -2914,6 +2884,54 @@
    ],
    "vendors": [],
    "vendor": "amd",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": "d3d11va"
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [],
+   "vendor": "amd",
+   "codec": "av1",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    853,
+    479
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [],
+   "vendor": "amd",
+   "codec": "vvc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [],
+   "vendor": "amd",
    "codec": "HEVC",
    "pix_fmt": "yuv422p10le",
    "size": [
@@ -2952,7 +2970,7 @@
     720,
     576
    ],
-   "hwaccel": "d3d11va"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -2979,54 +2997,6 @@
    "vendors": [],
    "vendor": "none",
    "codec": "h264",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [],
-   "vendor": "none",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [],
-   "vendor": "none",
-   "codec": "av1",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    853,
-    479
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "cuda",
-    "d3d11va",
-    "qsv"
-   ],
-   "vendors": [],
-   "vendor": "none",
-   "codec": "vvc",
    "pix_fmt": "yuv420p10le",
    "size": [
     1920,
@@ -3042,6 +3012,54 @@
    ],
    "vendors": [],
    "vendor": "none",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [],
+   "vendor": "none",
+   "codec": "av1",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    853,
+    479
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [],
+   "vendor": "none",
+   "codec": "vvc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "cuda",
+    "d3d11va",
+    "qsv"
+   ],
+   "vendors": [],
+   "vendor": "none",
    "codec": "HEVC",
    "pix_fmt": "yuv422p10le",
    "size": [
@@ -3592,7 +3610,7 @@
     720,
     576
    ],
-   "hwaccel": "d3d11va"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -3856,7 +3874,7 @@
     720,
     576
    ],
-   "hwaccel": "d3d11va"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -4264,7 +4282,7 @@
     720,
     576
    ],
-   "hwaccel": "d3d11va"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -4293,57 +4311,6 @@
    ],
    "vendor": "none",
    "codec": "h264",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "d3d11va"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "d3d11va"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "av1",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    853,
-    479
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "d3d11va"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "vvc",
    "pix_fmt": "yuv420p10le",
    "size": [
     1920,
@@ -4360,6 +4327,57 @@
     "amd"
    ],
    "vendor": "none",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "none",
+   "codec": "av1",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    853,
+    479
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "none",
+   "codec": "vvc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "none",
    "codec": "HEVC",
    "pix_fmt": "yuv422p10le",
    "size": [
@@ -4528,7 +4546,7 @@
     720,
     576
    ],
-   "hwaccel": "d3d11va"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -4912,7 +4930,7 @@
     720,
     576
    ],
-   "hwaccel": "d3d11va"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -4939,54 +4957,6 @@
    ],
    "vendor": "none",
    "codec": "h264",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "d3d11va"
-   ],
-   "vendors": [
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "d3d11va"
-   ],
-   "vendors": [
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "av1",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    853,
-    479
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "d3d11va"
-   ],
-   "vendors": [
-    "amd"
-   ],
-   "vendor": "none",
-   "codec": "vvc",
    "pix_fmt": "yuv420p10le",
    "size": [
     1920,
@@ -5002,6 +4972,54 @@
     "amd"
    ],
    "vendor": "none",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "d3d11va"
+   ],
+   "vendors": [
+    "amd"
+   ],
+   "vendor": "none",
+   "codec": "av1",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    853,
+    479
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "d3d11va"
+   ],
+   "vendors": [
+    "amd"
+   ],
+   "vendor": "none",
+   "codec": "vvc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "d3d11va"
+   ],
+   "vendors": [
+    "amd"
+   ],
+   "vendor": "none",
    "codec": "HEVC",
    "pix_fmt": "yuv422p10le",
    "size": [
@@ -5488,7 +5506,7 @@
     720,
     576
    ],
-   "hwaccel": "d3d11va"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -5883,415 +5901,6 @@
     "nvidia"
    ],
    "vendor": "intel",
-   "codec": "hevc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    3840,
-    2160
-   ],
-   "hwaccel": "qsv"
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "intel",
-   "codec": "h264",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "intel",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": "qsv"
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "intel",
-   "codec": "av1",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    853,
-    479
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "intel",
-   "codec": "vvc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "intel",
-   "codec": "HEVC",
-   "pix_fmt": "yuv422p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "intel",
-   "codec": "vp9",
-   "pix_fmt": "",
-   "size": [
-    0,
-    0
-   ],
-   "hwaccel": "qsv"
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "intel",
-   "codec": "mpeg2video",
-   "pix_fmt": "yuv420p",
-   "size": [
-    720,
-    576
-   ],
-   "hwaccel": "qsv"
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "amd",
-   "codec": "hevc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    3840,
-    2160
-   ],
-   "hwaccel": "d3d11va"
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "amd",
-   "codec": "h264",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "amd",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": "d3d11va"
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "amd",
-   "codec": "av1",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    853,
-    479
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "amd",
-   "codec": "vvc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "amd",
-   "codec": "HEVC",
-   "pix_fmt": "yuv422p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "amd",
-   "codec": "vp9",
-   "pix_fmt": "",
-   "size": [
-    0,
-    0
-   ],
-   "hwaccel": "d3d11va"
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "amd",
-   "codec": "mpeg2video",
-   "pix_fmt": "yuv420p",
-   "size": [
-    720,
-    576
-   ],
-   "hwaccel": "d3d11va"
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "none",
-   "codec": "hevc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    3840,
-    2160
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "none",
-   "codec": "h264",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "none",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "none",
-   "codec": "av1",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    853,
-    479
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "none",
-   "codec": "vvc",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "none",
-   "codec": "HEVC",
-   "pix_fmt": "yuv422p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "none",
-   "codec": "vp9",
-   "pix_fmt": "",
-   "size": [
-    0,
-    0
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "nvidia"
-   ],
-   "vendor": "none",
-   "codec": "mpeg2video",
-   "pix_fmt": "yuv420p",
-   "size": [
-    720,
-    576
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [
-    "intel",
-    "amd"
-   ],
-   "vendor": "auto",
    "codec": "hevc",
    "pix_fmt": "yuv420p10le",
    "size": [
@@ -6306,10 +5915,9 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "auto",
+   "vendor": "intel",
    "codec": "h264",
    "pix_fmt": "yuv420p10le",
    "size": [
@@ -6324,10 +5932,9 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "auto",
+   "vendor": "intel",
    "codec": "h264",
    "pix_fmt": "yuv420p",
    "size": [
@@ -6342,10 +5949,9 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "auto",
+   "vendor": "intel",
    "codec": "av1",
    "pix_fmt": "yuv420p10le",
    "size": [
@@ -6360,10 +5966,9 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "auto",
+   "vendor": "intel",
    "codec": "vvc",
    "pix_fmt": "yuv420p10le",
    "size": [
@@ -6378,10 +5983,9 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "auto",
+   "vendor": "intel",
    "codec": "HEVC",
    "pix_fmt": "yuv422p10le",
    "size": [
@@ -6396,10 +6000,9 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "auto",
+   "vendor": "intel",
    "codec": "vp9",
    "pix_fmt": "",
    "size": [
@@ -6414,17 +6017,16 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "auto",
+   "vendor": "intel",
    "codec": "mpeg2video",
    "pix_fmt": "yuv420p",
    "size": [
     720,
     576
    ],
-   "hwaccel": "qsv"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -6432,10 +6034,145 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "nvidia",
+   "vendor": "amd",
+   "codec": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    3840,
+    2160
+   ],
+   "hwaccel": "d3d11va"
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "nvidia"
+   ],
+   "vendor": "amd",
+   "codec": "h264",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "nvidia"
+   ],
+   "vendor": "amd",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": "d3d11va"
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "nvidia"
+   ],
+   "vendor": "amd",
+   "codec": "av1",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    853,
+    479
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "nvidia"
+   ],
+   "vendor": "amd",
+   "codec": "vvc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "nvidia"
+   ],
+   "vendor": "amd",
+   "codec": "HEVC",
+   "pix_fmt": "yuv422p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "nvidia"
+   ],
+   "vendor": "amd",
+   "codec": "vp9",
+   "pix_fmt": "",
+   "size": [
+    0,
+    0
+   ],
+   "hwaccel": "d3d11va"
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "nvidia"
+   ],
+   "vendor": "amd",
+   "codec": "mpeg2video",
+   "pix_fmt": "yuv420p",
+   "size": [
+    720,
+    576
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "nvidia"
+   ],
+   "vendor": "none",
    "codec": "hevc",
    "pix_fmt": "yuv420p10le",
    "size": [
@@ -6450,10 +6187,9 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "nvidia",
+   "vendor": "none",
    "codec": "h264",
    "pix_fmt": "yuv420p10le",
    "size": [
@@ -6468,10 +6204,9 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "nvidia",
+   "vendor": "none",
    "codec": "h264",
    "pix_fmt": "yuv420p",
    "size": [
@@ -6486,10 +6221,9 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "nvidia",
+   "vendor": "none",
    "codec": "av1",
    "pix_fmt": "yuv420p10le",
    "size": [
@@ -6504,10 +6238,9 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "nvidia",
+   "vendor": "none",
    "codec": "vvc",
    "pix_fmt": "yuv420p10le",
    "size": [
@@ -6522,10 +6255,9 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "nvidia",
+   "vendor": "none",
    "codec": "HEVC",
    "pix_fmt": "yuv422p10le",
    "size": [
@@ -6540,10 +6272,9 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "nvidia",
+   "vendor": "none",
    "codec": "vp9",
    "pix_fmt": "",
    "size": [
@@ -6558,10 +6289,9 @@
     "d3d11va"
    ],
    "vendors": [
-    "intel",
-    "amd"
+    "nvidia"
    ],
-   "vendor": "nvidia",
+   "vendor": "none",
    "codec": "mpeg2video",
    "pix_fmt": "yuv420p",
    "size": [
@@ -6579,7 +6309,7 @@
     "intel",
     "amd"
    ],
-   "vendor": "intel",
+   "vendor": "auto",
    "codec": "hevc",
    "pix_fmt": "yuv420p10le",
    "size": [
@@ -6597,6 +6327,294 @@
     "intel",
     "amd"
    ],
+   "vendor": "auto",
+   "codec": "h264",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": "qsv"
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "av1",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    853,
+    479
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "vvc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "HEVC",
+   "pix_fmt": "yuv422p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "vp9",
+   "pix_fmt": "",
+   "size": [
+    0,
+    0
+   ],
+   "hwaccel": "qsv"
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "auto",
+   "codec": "mpeg2video",
+   "pix_fmt": "yuv420p",
+   "size": [
+    720,
+    576
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    3840,
+    2160
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "h264",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "av1",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    853,
+    479
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "vvc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "HEVC",
+   "pix_fmt": "yuv422p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "vp9",
+   "pix_fmt": "",
+   "size": [
+    0,
+    0
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "nvidia",
+   "codec": "mpeg2video",
+   "pix_fmt": "yuv420p",
+   "size": [
+    720,
+    576
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
+   "vendor": "intel",
+   "codec": "hevc",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    3840,
+    2160
+   ],
+   "hwaccel": "qsv"
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [
+    "intel",
+    "amd"
+   ],
    "vendor": "intel",
    "codec": "h264",
    "pix_fmt": "yuv420p10le",
@@ -6712,7 +6730,7 @@
     720,
     576
    ],
-   "hwaccel": "qsv"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -6856,7 +6874,7 @@
     720,
     576
    ],
-   "hwaccel": "d3d11va"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -7136,7 +7154,7 @@
     720,
     576
    ],
-   "hwaccel": "d3d11va"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -7408,7 +7426,7 @@
     720,
     576
    ],
-   "hwaccel": "qsv"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -7544,7 +7562,7 @@
     720,
     576
    ],
-   "hwaccel": "d3d11va"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -7934,36 +7952,6 @@
    "size": [
     3840,
     2160
-   ],
-   "hwaccel": "qsv"
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [],
-   "vendor": "intel",
-   "codec": "h264",
-   "pix_fmt": "yuv420p10le",
-   "size": [
-    1920,
-    1080
-   ],
-   "hwaccel": null
-  },
-  {
-   "hwaccels": [
-    "qsv",
-    "d3d11va"
-   ],
-   "vendors": [],
-   "vendor": "intel",
-   "codec": "h264",
-   "pix_fmt": "yuv420p",
-   "size": [
-    1920,
-    1080
    ],
    "hwaccel": "qsv"
   },
@@ -7974,6 +7962,36 @@
    ],
    "vendors": [],
    "vendor": "intel",
+   "codec": "h264",
+   "pix_fmt": "yuv420p10le",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": null
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [],
+   "vendor": "intel",
+   "codec": "h264",
+   "pix_fmt": "yuv420p",
+   "size": [
+    1920,
+    1080
+   ],
+   "hwaccel": "qsv"
+  },
+  {
+   "hwaccels": [
+    "qsv",
+    "d3d11va"
+   ],
+   "vendors": [],
+   "vendor": "intel",
    "codec": "av1",
    "pix_fmt": "yuv420p10le",
    "size": [
@@ -8040,7 +8058,7 @@
     720,
     576
    ],
-   "hwaccel": "qsv"
+   "hwaccel": null
   },
   {
    "hwaccels": [
@@ -8160,7 +8178,7 @@
     720,
     576
    ],
-   "hwaccel": "d3d11va"
+   "hwaccel": null
   },
   {
    "hwaccels": [

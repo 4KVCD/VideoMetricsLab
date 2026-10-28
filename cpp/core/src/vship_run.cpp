@@ -1418,6 +1418,9 @@ private:
             return "GPU decoding takes 4:2:0 at 8 or 10 bits and an even size, not " + info.pix_fmt + " at " +
                    std::to_string(info.width) + "x" + std::to_string(info.height);
         }
+        if (!gpu_decodes_exactly(info.codec_name)) {
+            return "the GPUs decode " + info.codec_name + " to other pictures than FFmpeg's";
+        }
         if (ascii_lower(info.codec_name) == "h264" && bit_depth(info.pix_fmt) > 8) {
             return "this GPU does not decode H.264 deeper than 8 bits";
         }

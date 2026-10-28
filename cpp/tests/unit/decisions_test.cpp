@@ -73,6 +73,8 @@ TEST(Decisions, PixelFormatsAreReadAsThePythonAppReadsThem) {
     }
 }
 
+// As the Python app chose, but for MPEG-2, which is decoded in software now
+// (gpu_decodes_exactly).
 TEST(Decisions, GpuDecodingIsChosenAsThePythonAppChoosesIt) {
     ASSERT_FALSE(decisions()["decode"].empty());
     for (const Json& item : decisions()["decode"]) {
@@ -105,7 +107,7 @@ TEST(Decisions, GpuDecodingIsChosenAsThePythonAppChoosesIt) {
 TEST(Decisions, AMacsGpuDecodesWhereTheCallerAllowsIt) {
     DecodingCapabilities mac;
     mac.hwaccels = {"videotoolbox"};
-    mac.videotoolbox_codecs = {"h264", "hevc"};
+    mac.videotoolbox_codecs = {"h264", "hevc", "mpeg2video"};
     const auto pick = [&mac](const std::string& codec, const std::string& pix_fmt, int width, MacGpuDecoding allowed,
                              GpuVendor vendor = GpuVendor::automatic) {
         return pick_decode(mac, vendor, codec, pix_fmt, width, 1080, allowed);
@@ -119,6 +121,7 @@ TEST(Decisions, AMacsGpuDecodesWhereTheCallerAllowsIt) {
     EXPECT_EQ(pick("hevc", "yuv420p", 1920, MacGpuDecoding::on, GpuVendor::none), std::nullopt);
     EXPECT_EQ(pick("vp9", "yuv420p", 1920, MacGpuDecoding::on), std::nullopt);   // not this GPU's
     EXPECT_EQ(pick("ffv1", "yuv420p", 1920, MacGpuDecoding::on), std::nullopt);
+    EXPECT_EQ(pick("mpeg2video", "yuv420p", 1920, MacGpuDecoding::on), std::nullopt);  // gpu_decodes_exactly
     EXPECT_EQ(pick("h264", "yuv420p10le", 1920, MacGpuDecoding::on), std::nullopt);  // 10-bit H.264
     EXPECT_EQ(pick("hevc", "yuv444p", 1920, MacGpuDecoding::on), std::nullopt);
     EXPECT_EQ(pick("hevc", "yuv420p", 1919, MacGpuDecoding::on), std::nullopt);

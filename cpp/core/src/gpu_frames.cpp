@@ -39,7 +39,8 @@ namespace {
 // cudaVideoCodec; for VVC and FFV1, which NVIDIA's decoder does not have,
 // the app's own), the bitstream filters that turn the container's packets
 // into what the decoder's parser reads, and whether the GPUs' decoders are
-// used for it (NVIDIA's would take VP9 and MPEG-2, but they are untried).
+// used for it (NVIDIA's would take VP9, but it is untried; MPEG-2 is decoded
+// in software, gpu_decodes_exactly).
 //
 // H.264, HEVC and VVC get Annex B start codes, with the parameter sets from
 // the stream's configuration before every keyframe (mp4toannexb adds them

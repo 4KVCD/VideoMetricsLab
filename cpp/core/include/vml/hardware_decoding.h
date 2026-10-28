@@ -68,6 +68,14 @@ std::vector<GpuVendor> detected_gpu_vendors();
 // 4:2:0 at 8 or 10 bits, and an even width and height.
 bool downloads_from_gpu(const std::string& pix_fmt, int width, int height);
 
+// Whether the GPUs' decoders decode `codec` (FFmpeg's name) to the pictures
+// FFmpeg's software decoder gives. Not MPEG-2 or MPEG-4 Part 2: their inverse
+// DCT is specified only to within an error (IEEE 1180), so each GPU maker's
+// decoder rounds it its own way, and the difference grows from one predicted
+// picture to the next until the next keyframe. Their scores would depend on
+// the GPU, so they are decoded in software.
+bool gpu_decodes_exactly(const std::string& codec);
+
 // Which videos a caller decodes on a Mac's GPU (FFmpeg's -hwaccel
 // videotoolbox), where VideoToolbox decodes the video; scores and crops were
 // checked identical to software decoding. Through FFmpeg, VideoToolbox
@@ -86,7 +94,8 @@ bool downloads_from_gpu(const std::string& pix_fmt, int width, int height);
 //   Video Compare's own player decodes on the GPU.
 enum class MacGpuDecoding { off, deep, on };
 
-// The -hwaccel to start a video with, or nothing for software decoding.
+// The -hwaccel to start a video with, or nothing for software decoding
+// (always for a codec gpu_decodes_exactly refuses).
 std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                        const std::string& codec, const std::string& pix_fmt, int width, int height,
                                        MacGpuDecoding mac = MacGpuDecoding::deep);

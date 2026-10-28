@@ -14,6 +14,7 @@
 #include "vml/app_log.h"
 #include "vml/colour.h"
 #include "vml/geometry.h"
+#include "vml/hardware_decoding.h"
 #include "vml/model_select.h"
 #include "vml/npz.h"
 #include "vml/platform/system.h"
@@ -33,6 +34,14 @@ constexpr const char* format_folder = "v2";
 
 // The id of a score saved before scores recorded their provenance.
 constexpr const char* unversioned_compatibility = "unversioned";
+
+// What a score's metadata carries when its pair has a video of a codec the
+// GPUs decode to other pictures than FFmpeg's (gpu_decodes_exactly), which
+// is decoded in software now: the version of that list. Such a pair's scores
+// saved without it, or with an older one, may have been made from a GPU's
+// pictures, and are calculated again. Raise it when a codec joins the list.
+constexpr const char* exact_decoding = "exact_decoding";
+constexpr int exact_decoding_version = 1;
 
 // The scaling algorithms of the older identity, which had one folder per
 // algorithm (recipe_directory).
@@ -283,18 +292,22 @@ void write_atomically(const std::filesystem::path& path, const std::string& byte
 // The metadata saved with a score: the cache format, the kind of score, the
 // request it answers and the score's provenance (without the library's
 // version, but for VMAF's, so that a library update leaves the others' saved
-// scores looking the same).
+// scores looking the same), and for a pair with an inexact codec, exact_decoding.
 std::string metadata(const std::string& key, const char* kind, const MetricRequestSpec& spec,
-                     const MetricProvenance& provenance) {
+                     const MetricProvenance& provenance, bool inexact_codec) {
     nlohmann::json made = provenance_to_dict(provenance);
     if (key != "vmaf") {
         made["implementation_version"] = "";
     }
-    return python_json_compact({{"format_version", metric_cache_format_version},
-                                {"kind", kind},
-                                {"key", key},
-                                {"request", spec.identity()},
-                                {"provenance", made}});
+    nlohmann::json data{{"format_version", metric_cache_format_version},
+                        {"kind", kind},
+                        {"key", key},
+                        {"request", spec.identity()},
+                        {"provenance", made}};
+    if (inexact_codec) {
+        data[exact_decoding] = exact_decoding_version;
+    }
+    return python_json_compact(data);
 }
 
 // The request a perceptual score is saved under: the implementation that
@@ -309,10 +322,11 @@ MetricRequestSpec stored_spec(const MetricRequestSpec& spec, const MetricProvena
 }
 
 void store_metric(const std::filesystem::path& directory, const FrameMetricResult& result,
-                  const MetricRequestSpec& spec) {
+                  const MetricRequestSpec& spec, bool inexact_codec) {
     const MetricRequestSpec stored = stored_spec(spec, result.provenance);
+    const std::string described = metadata(result.key, "frame", stored, result.provenance, inexact_codec);
     write_atomically(metric_path(directory, stored),
-                     npz_bytes({{"metadata", npy_text(metadata(result.key, "frame", stored, result.provenance))},
+                     npz_bytes({{"metadata", npy_text(described)},
                                 {"frame", npy_int32(result.frame)},
                                 {"time", npy_float64(result.time)},
                                 {"values", npy_float32(result.values)}}),
@@ -320,10 +334,10 @@ void store_metric(const std::filesystem::path& directory, const FrameMetricResul
 }
 
 void store_metric(const std::filesystem::path& directory, const SequenceMetricResult& result,
-                  const MetricRequestSpec& spec) {
+                  const MetricRequestSpec& spec, bool inexact_codec) {
     const MetricRequestSpec stored = stored_spec(spec, result.provenance);
     std::vector<std::pair<std::string, NpyArray>> arrays{
-        {"metadata", npy_text(metadata(result.key, "sequence", stored, result.provenance))},
+        {"metadata", npy_text(metadata(result.key, "sequence", stored, result.provenance, inexact_codec))},
         {"score", npy_float64_scalar(result.score)}};
     if (result.has_timeline()) {
         arrays.emplace_back("frame", npy_int32(result.frame));
@@ -371,16 +385,14 @@ std::optional<nlohmann::json> read_json(const std::filesystem::path& path) {
     return data;
 }
 
-// The two videos' colour tags as a comparison's context.json has them, if
-// it can be read.
-std::vector<ColourTags> context_colour_tags(const std::filesystem::path& directory) {
-    const std::optional<nlohmann::json> context = read_json(directory / "context.json");
+// The two videos' colour tags as a comparison's context.json has them.
+std::vector<ColourTags> context_colour_tags(const nlohmann::json& context) {
     std::vector<ColourTags> infos;
-    if (!context || !context->is_object()) {
+    if (!context.is_object()) {
         return infos;
     }
     for (const char* key : {"source_info", "distorted_info"}) {
-        const nlohmann::json info = context->value(key, nlohmann::json());
+        const nlohmann::json info = context.value(key, nlohmann::json());
         if (info.is_object()) {
             const auto text = [&info](const char* name) {
                 const nlohmann::json value = info.value(name, nlohmann::json());
@@ -392,6 +404,28 @@ std::vector<ColourTags> context_colour_tags(const std::filesystem::path& directo
         }
     }
     return infos;
+}
+
+// Whether a comparison's context.json gives a video of a codec the GPUs
+// decode inexactly, whose saved scores count only with exact_decoding.
+bool has_inexact_codec(const nlohmann::json& context) {
+    if (!context.is_object()) {
+        return false;
+    }
+    for (const char* key : {"source_info", "distorted_info"}) {
+        const nlohmann::json info = context.value(key, nlohmann::json());
+        const nlohmann::json codec = info.is_object() ? info.value("codec_name", nlohmann::json()) : nlohmann::json();
+        if (codec.is_string() && !gpu_decodes_exactly(codec.get<std::string>())) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Whether a saved score was made from the pictures its pair is decoded to
+// now: for a pair with an inexact codec, one with this exact_decoding.
+bool decoded_as_now(const nlohmann::json& metadata, bool inexact_codec) {
+    return !inexact_codec || metadata.value(exact_decoding, nlohmann::json()) == exact_decoding_version;
 }
 
 // A saved score's metadata, or nothing if the file cannot be read.
@@ -468,8 +502,11 @@ std::optional<std::tuple<std::vector<int>, std::vector<double>, std::vector<floa
 }
 
 // The score saved in `path` if it was saved for exactly `spec`
-// (_load_metric_file); nothing otherwise, or if the file cannot be read.
-std::optional<LoadedMetric> load_metric_file(const std::filesystem::path& path, const MetricRequestSpec& spec) {
+// (_load_metric_file), from the pictures the pair is decoded to now
+// (`inexact_codec`: has_inexact_codec); nothing otherwise, or if the file
+// cannot be read.
+std::optional<LoadedMetric> load_metric_file(const std::filesystem::path& path, const MetricRequestSpec& spec,
+                                             bool inexact_codec) {
     std::error_code error;
     if (!std::filesystem::is_regular_file(path, error)) {
         return std::nullopt;
@@ -480,7 +517,8 @@ std::optional<LoadedMetric> load_metric_file(const std::filesystem::path& path, 
             return std::nullopt;
         }
         const auto& [metadata, arrays] = *score;
-        if (!current_format(metadata) || metadata.value("key", nlohmann::json()) != spec.key ||
+        if (!current_format(metadata) || !decoded_as_now(metadata, inexact_codec) ||
+            metadata.value("key", nlohmann::json()) != spec.key ||
             metadata.value("request", nlohmann::json()) != spec.identity()) {
             return std::nullopt;
         }
@@ -770,7 +808,10 @@ std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::files
     const nlohmann::json vship51_rest =
         is_cvvdp(spec) ? without(vship51_cvvdp_spec(spec).identity(), {"parameters"}) : rest;
     const std::vector<std::filesystem::path> paths = score_files(directory, spec.key);
-    const std::vector<ColourTags> infos = paths.empty() ? std::vector<ColourTags>() : context_colour_tags(directory);
+    const nlohmann::json context =
+        paths.empty() ? nlohmann::json() : read_json(directory / "context.json").value_or(nlohmann::json());
+    const std::vector<ColourTags> infos = context_colour_tags(context);
+    const bool inexact_codec = has_inexact_codec(context);
     std::vector<std::pair<nlohmann::json, double>> found;
     std::vector<std::pair<nlohmann::json, double>> vship51;
     for (const std::filesystem::path& path : paths) {
@@ -782,7 +823,8 @@ std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::files
             const auto& [metadata, arrays] = *score;
             const nlohmann::json request = metadata.value("request", nlohmann::json::object());
             const nlohmann::json request_rest = without(request, {"parameters"});
-            if (!current_format(metadata) || metadata.value("key", nlohmann::json()) != spec.key ||
+            if (!current_format(metadata) || !decoded_as_now(metadata, inexact_codec) ||
+                metadata.value("key", nlohmann::json()) != spec.key ||
                 metadata.value("kind", nlohmann::json()) != "sequence" ||
                 (request_rest != rest && request_rest != vship51_rest) ||
                 request.value("parameters", nlohmann::json()) == wanted.at("parameters")) {
@@ -819,40 +861,35 @@ std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::files
 // user set a perceptual metric to be calculated: "cpu" accepts only a CPU
 // score; "gpu" prefers a Vship score and also accepts a CPU one, which is
 // what that choice makes on a PC without a suitable GPU. A score known to be
-// wrong is passed over.
+// wrong is passed over. `context` is the comparison's context.json.
 std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, const MetricRequestSpec& spec,
-                                        const std::string& backend) {
-    std::optional<std::vector<ColourTags>> infos;
-    const auto stale = [&](const LoadedMetric& metric) {
-        const MetricProvenance& provenance = provenance_of(metric);
-        if (!infos) {
-            infos = context_colour_tags(directory);
-        }
-        return stale_score(provenance, *infos);
-    };
+                                        const std::string& backend, const nlohmann::json& context) {
+    const std::vector<ColourTags> infos = context_colour_tags(context);
+    const bool inexact_codec = has_inexact_codec(context);
+    const auto stale = [&infos](const LoadedMetric& metric) { return stale_score(provenance_of(metric), infos); };
     if (is_auto_perceptual(spec)) {
         for (const auto& [path, concrete] : auto_perceptual_candidates(directory, spec)) {
             if (backend == "cpu" && concrete.implementation_compatibility_id.find("-vship-") != std::string::npos) {
                 continue;
             }
-            std::optional<LoadedMetric> result = load_metric_file(path, concrete);
+            std::optional<LoadedMetric> result = load_metric_file(path, concrete, inexact_codec);
             if (result && !stale(*result)) {
                 return result;
             }
         }
         return std::nullopt;
     }
-    std::optional<LoadedMetric> result = load_metric_file(metric_path(directory, spec), spec);
+    std::optional<LoadedMetric> result = load_metric_file(metric_path(directory, spec), spec, inexact_codec);
     if (!result && is_cvvdp(spec)) {
         const MetricRequestSpec vship51 = vship51_cvvdp_spec(spec);
-        result = load_metric_file(metric_path(directory, vship51), vship51);
+        result = load_metric_file(metric_path(directory, vship51), vship51, inexact_codec);
     }
     if (result && stale(*result)) {
         return std::nullopt;
     }
     if (!result && spec.key == "vmaf" && spec.backend_id == "ffmpeg") {
         for (const auto& [path, concrete] : vmaf_equivalents(directory, spec)) {
-            result = load_metric_file(path, concrete);
+            result = load_metric_file(path, concrete, inexact_codec);
             if (result) {
                 break;
             }
@@ -860,7 +897,7 @@ std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, 
     }
     if (!result && spec.key == "vmaf_v1" && spec.backend_id == "ffmpeg") {
         for (const auto& [path, concrete] : old_v1_scores(directory, spec)) {
-            std::optional<LoadedMetric> old = load_metric_file(path, concrete);
+            std::optional<LoadedMetric> old = load_metric_file(path, concrete, inexact_codec);
             if (old && std::holds_alternative<FrameMetricResult>(*old)) {
                 FrameMetricResult v1 = std::get<FrameMetricResult>(std::move(*old));
                 v1.key = "vmaf_v1";
@@ -1023,14 +1060,16 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
                            "'s, the request asks for " + spec.implementation_compatibility_id + "'s");
         return false;
     };
+    const bool inexact_codec =
+        !gpu_decodes_exactly(result.source_info.codec_name) || !gpu_decodes_exactly(result.distorted_info.codec_name);
     for (const MetricRequestSpec& spec : specs) {
         if (const FrameMetricResult* metric = result.metric_results.frame(spec.key)) {
             if (answers_request(spec, metric->provenance)) {
-                store_metric(directory, *metric, spec);
+                store_metric(directory, *metric, spec, inexact_codec);
             }
         } else if (const SequenceMetricResult* sequence = result.metric_results.sequence(spec.key)) {
             if (answers_request(spec, sequence->provenance)) {
-                store_metric(directory, *sequence, spec);
+                store_metric(directory, *sequence, spec, inexact_codec);
             }
         }
     }
@@ -1050,7 +1089,7 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
     const auto load = [&](const MetricRequestSpec& spec) {
         const auto backend = backends.find(spec.key);
         if (std::optional<LoadedMetric> metric =
-                load_metric(directory, spec, backend == backends.end() ? "gpu" : backend->second)) {
+                load_metric(directory, spec, backend == backends.end() ? "gpu" : backend->second, *context)) {
             std::visit([&results](auto&& loaded) { results.add(std::move(loaded)); }, std::move(*metric));
         }
     };

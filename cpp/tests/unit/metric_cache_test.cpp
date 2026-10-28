@@ -171,6 +171,37 @@ TEST(MetricCache, StoresAResultAsThePythonApp) {
     }
 }
 
+// A pair with an MPEG-2 or MPEG-4 Part 2 video, which the GPUs decode to
+// other pictures than FFmpeg's, loads the scores saved since such a video was
+// decoded in software, not those saved before (as an HEVC pair's are saved);
+// other pairs load every score.
+TEST(MetricCache, AnMpegPairsScoresSavedBeforeSoftwareDecodingAreCalculatedAgain) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult result = test::result_from(stored.at("result"));
+    // How many scores load when the test video was saved as `saved_as` and
+    // the comparison's context then says `now`.
+    const auto loaded_after = [&](const std::string& saved_as, const std::string& now) {
+        result.distorted_info.codec_name = saved_as;
+        const std::filesystem::path directory = store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4",
+                                                             request.recipe, result, "t", request.metrics);
+        nlohmann::json context = nlohmann::json::parse(*platform::read_file(directory / "context.json"));
+        context["distorted_info"]["codec_name"] = now;
+        touch(directory / "context.json", context.dump());
+        const auto loaded = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                        request.metrics, request.perceptual_backends);
+        return loaded ? loaded->first.metric_results.keys().size() : 0;
+    };
+    const std::size_t all = loaded_after("hevc", "hevc");
+    EXPECT_EQ(all, request.metrics.size());
+    EXPECT_EQ(loaded_after("hevc", "mpeg2video"), 0U);
+    EXPECT_EQ(loaded_after("mpeg2video", "mpeg2video"), all);
+    EXPECT_EQ(loaded_after("hevc", "mpeg4"), 0U);
+}
+
 // Which saved scores answer a request: made by a compatible implementation,
 // and not known to be wrong; and where a perceptual metric's score counts.
 TEST(MetricCache, AnswersAsThePythonApp) {
