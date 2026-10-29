@@ -174,6 +174,8 @@ bool lists_gpus() { return false; }
 
 std::optional<unsigned> first_gpu_adapter() { return 0; }
 
+std::optional<std::set<std::string>> d3d11va_codecs() { return std::nullopt; }
+
 std::optional<long long> modified_ns(const std::filesystem::path& file) {
     struct stat status {};
     if (stat(file.c_str(), &status) != 0) {

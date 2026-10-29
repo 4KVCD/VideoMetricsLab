@@ -3,9 +3,11 @@
 
 #include "text_windows.h"  // before <dxgi.h>: it sets <windows.h> up
 
+#include <d3d11.h>
 #include <dxgi.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <csignal>
 #include <cstdio>
@@ -310,6 +312,53 @@ std::optional<unsigned> first_gpu_adapter() {
     }
     const std::vector<std::pair<UINT, unsigned>> gpus = listed_gpus();
     return gpus.empty() ? std::nullopt : std::optional<unsigned>(gpus.front().first);
+}
+
+std::optional<std::set<std::string>> d3d11va_codecs() {
+    // The decoder profiles FFmpeg's D3D11VA decoders take for each codec
+    // (dxva_modes in libavcodec/dxva2.c), Intel's own H.264 one among them.
+    static constexpr GUID intel_h264 = {0x604f8e68, 0x4951, 0x4c54, {0x88, 0xfe, 0xab, 0xd2, 0x5c, 0x15, 0xb3, 0xd6}};
+    const std::array<std::pair<const GUID*, const char*>, 12> known{{
+        {&D3D11_DECODER_PROFILE_MPEG2_VLD, "mpeg2video"},
+        {&D3D11_DECODER_PROFILE_MPEG2and1_VLD, "mpeg2video"},
+        {&D3D11_DECODER_PROFILE_H264_VLD_FGT, "h264"},
+        {&D3D11_DECODER_PROFILE_H264_VLD_NOFGT, "h264"},
+        {&intel_h264, "h264"},
+        {&D3D11_DECODER_PROFILE_VC1_D2010, "vc1"},
+        {&D3D11_DECODER_PROFILE_VC1_VLD, "vc1"},
+        {&D3D11_DECODER_PROFILE_HEVC_VLD_MAIN10, "hevc"},
+        {&D3D11_DECODER_PROFILE_HEVC_VLD_MAIN, "hevc"},
+        {&D3D11_DECODER_PROFILE_VP9_VLD_PROFILE0, "vp9"},
+        {&D3D11_DECODER_PROFILE_VP9_VLD_10BIT_PROFILE2, "vp9"},
+        {&D3D11_DECODER_PROFILE_AV1_VLD_PROFILE0, "av1"},
+    }};
+    // A device on the default adapter with video support, as FFmpeg makes
+    // its own.
+    ID3D11Device* device = nullptr;
+    if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_VIDEO_SUPPORT, nullptr,
+                                 0, D3D11_SDK_VERSION, &device, nullptr, nullptr))) {
+        return std::nullopt;
+    }
+    ID3D11VideoDevice* video = nullptr;
+    const HRESULT asked = device->QueryInterface(__uuidof(ID3D11VideoDevice), reinterpret_cast<void**>(&video));
+    device->Release();
+    if (FAILED(asked)) {
+        return std::nullopt;
+    }
+    std::set<std::string> codecs;
+    for (UINT index = 0; index < video->GetVideoDecoderProfileCount(); ++index) {
+        GUID profile{};
+        if (FAILED(video->GetVideoDecoderProfile(index, &profile))) {
+            continue;
+        }
+        for (const auto& [ffmpeg_profile, codec] : known) {
+            if (profile == *ffmpeg_profile) {
+                codecs.insert(codec);
+            }
+        }
+    }
+    video->Release();
+    return codecs;
 }
 
 std::optional<long long> modified_ns(const std::filesystem::path& file) {

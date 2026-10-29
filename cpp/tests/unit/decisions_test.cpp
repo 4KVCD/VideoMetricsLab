@@ -131,6 +131,22 @@ TEST(Decisions, AMacsGpuDecodesWhereTheCallerAllowsIt) {
               (std::vector<std::string>{"-hwaccel", "videotoolbox", "-hwaccel_output_format", "videotoolbox_vld"}));
 }
 
+// D3D11VA, AMD's route, decodes a video only where the GPU offers a decoder
+// profile for its codec, as a Radeon 8060S offers none for VC-1: FFmpeg's
+// D3D11VA decoding would fail to start, and the run would retry it in
+// software. Where the profiles are not known, every codec D3D11VA decodes.
+TEST(Decisions, D3d11vaDecodesOnlyTheCodecsTheGpuHasADecoderFor) {
+    DecodingCapabilities pc;
+    pc.hwaccels = {"d3d11va"};
+    pc.vendors = {GpuVendor::amd};
+    EXPECT_EQ(pick_decode(pc, GpuVendor::amd, "vc1", "yuv420p", 1920, 1080), "d3d11va");  // not known
+    pc.d3d11va_codecs = std::set<std::string>{"h264", "hevc", "vp9", "av1"};
+    EXPECT_EQ(pick_decode(pc, GpuVendor::amd, "vc1", "yuv420p", 1920, 1080), std::nullopt);
+    EXPECT_EQ(pick_decode(pc, GpuVendor::automatic, "vc1", "yuv420p", 1920, 1080), std::nullopt);
+    EXPECT_EQ(pick_decode(pc, GpuVendor::amd, "h264", "yuv420p", 1920, 1080), "d3d11va");
+    EXPECT_EQ(pick_decode(pc, GpuVendor::automatic, "hevc", "yuv420p10le", 1920, 1080), "d3d11va");
+}
+
 TEST(Decisions, FrameRatesBecomeThePythonAppsFractions) {
     for (const Json& item : decisions()["fractions"]) {
         const double rate = *test::reference_number(item["value"]);

@@ -5,6 +5,7 @@
 #include <ctime>
 #include <filesystem>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -141,6 +142,12 @@ bool lists_gpus();
 // the first, unless VML_GPU_VENDOR names another maker's; nothing when it
 // names a maker with no GPU here (as with no GPU, none to draw on).
 std::optional<unsigned> first_gpu_adapter();
+// The codecs, as FFmpeg names them (h264, hevc, vp9, av1, vc1, mpeg2video),
+// for which the GPU that FFmpeg's D3D11VA decoding uses offers one of the
+// decoder profiles FFmpeg decodes them with: D3D11's default adapter, which
+// FFmpeg decodes on when no -hwaccel_device is given. Nothing where that
+// cannot be known: other systems, or no D3D11 video device.
+std::optional<std::set<std::string>> d3d11va_codecs();
 
 // When a file was last written, in nanoseconds since 1970 (Python's
 // st_mtime_ns), or nothing when it cannot be read.

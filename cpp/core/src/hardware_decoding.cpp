@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <future>
 #include <map>
 #include <mutex>
 #include <regex>
+#include <system_error>
 #include <utility>
 
 #include "vml/platform/process.h"
@@ -70,10 +72,14 @@ std::set<std::string> codecs_this_mac_decodes() {
     return codecs;
 }
 
-// Whether FFmpeg on this PC has `hwaccel` and it decodes `codec`.
+// Whether FFmpeg on this PC has `hwaccel` and it decodes `codec`; D3D11VA's
+// only where the GPU offers the codec's decoder profile, when that is known.
 bool decodes(const DecodingCapabilities& capabilities, const std::optional<std::string>& hwaccel,
              const std::string& codec) {
     if (!hwaccel || !capabilities.hwaccels.contains(*hwaccel)) {
+        return false;
+    }
+    if (*hwaccel == "d3d11va" && capabilities.d3d11va_codecs && !capabilities.d3d11va_codecs->contains(codec)) {
         return false;
     }
     const auto supported = hwaccel_codecs().find(*hwaccel);
@@ -156,6 +162,20 @@ std::string HardwareDecoding::describe() const {
 
 DecodingCapabilities DecodingCapabilities::detect(const std::string& ffmpeg) {
     DecodingCapabilities capabilities;
+    capabilities.vendors = detected_gpu_vendors();
+    // D3D11VA is AMD's route only. Its GPU's decoder profiles are asked while
+    // FFmpeg lists its -hwaccel methods, which takes longer: on a Ryzen AI
+    // Max+ 395, FFmpeg's list 0.21-0.24 s, the profiles 0.09-0.13 s. A check
+    // that cannot start or fails leaves them unknown, as on other systems.
+    std::future<std::optional<std::set<std::string>>> d3d11va;
+    if (std::find(capabilities.vendors.begin(), capabilities.vendors.end(), GpuVendor::amd) !=
+        capabilities.vendors.end()) {
+        try {
+            d3d11va = std::async(std::launch::async, platform::d3d11va_codecs);
+        } catch (const std::system_error&) {
+            // No thread for it: the profiles stay unknown.
+        }
+    }
     try {
         const platform::ProcessOutput output =
             platform::run_program({ffmpeg, "-hide_banner", "-hwaccels"}, std::chrono::seconds(15));
@@ -181,7 +201,17 @@ DecodingCapabilities DecodingCapabilities::detect(const std::string& ffmpeg) {
     } catch (const platform::ProcessError&) {
         // No FFmpeg to ask: no hardware decoding.
     }
-    capabilities.vendors = detected_gpu_vendors();
+    if (d3d11va.valid()) {
+        std::optional<std::set<std::string>> codecs;
+        try {
+            codecs = d3d11va.get();
+        } catch (const std::exception&) {
+            // The profiles stay unknown.
+        }
+        if (capabilities.hwaccels.contains("d3d11va")) {
+            capabilities.d3d11va_codecs = std::move(codecs);
+        }
+    }
     capabilities.videotoolbox_codecs = codecs_this_mac_decodes();
     return capabilities;
 }

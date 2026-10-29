@@ -44,12 +44,19 @@ struct HardwareDecoding {
 
 // What decides the choice on this PC: the -hwaccel methods its FFmpeg was
 // built with, the GPU makers DirectX lists (NVIDIA first, then Intel, then
-// AMD, the order "auto" tries them in), and on a Mac the codecs its GPU
-// decodes through VideoToolbox, as FFmpeg names them (h264, hevc, ...).
+// AMD, the order "auto" tries them in), on a Mac the codecs its GPU decodes
+// through VideoToolbox, as FFmpeg names them (h264, hevc, ...), and on
+// Windows the codecs D3D11VA can decode on its GPU.
 struct DecodingCapabilities {
     std::set<std::string> hwaccels;
     std::vector<GpuVendor> vendors;
     std::set<std::string> videotoolbox_codecs;
+    // The codecs for which the GPU FFmpeg's D3D11VA decoding uses offers a
+    // decoder profile (platform::d3d11va_codecs; a Radeon 8060S has none for
+    // VC-1 or MPEG-2). Without one, FFmpeg's D3D11VA decoding fails to start,
+    // and the run goes on only after its software retries. Nothing where it is
+    // not known: D3D11VA is then tried for every codec it decodes.
+    std::optional<std::set<std::string>> d3d11va_codecs;
 
     // Asks `ffmpeg` (-hwaccels) and the system.
     static DecodingCapabilities detect(const std::string& ffmpeg);
