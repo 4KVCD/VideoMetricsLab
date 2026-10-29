@@ -1406,6 +1406,15 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
             logger.info(state.file_name + ": decoded by AMF (" + error.what() + ")");
         }
     }
+    if (state.handover && backend == "amd" && state.handle == nullptr && plan.codec == "av1") {
+        // AMF's AV1 decoder, handing over, answers some packets (temporal
+        // units with hidden frames) with AMF_REPEAT, having taken part of
+        // them: neither going on nor submitting them again gives the right
+        // pictures (a Radeon 8060S: pictures missing, or VMAF 8-30 where it
+        // is 98). Into system memory it decodes them right.
+        logger.info(state.file_name + ": AMF decodes AV1 into system memory, not handing its pictures over");
+        state.handover = false;
+    }
     if (state.handover && backend != "nvidia" && state.handle == nullptr) {
         state.handle = state.open(*state.library, native_params(plan, device, pool, state.configuration, true), said);
         if (state.handle == nullptr) {

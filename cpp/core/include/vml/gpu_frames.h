@@ -289,8 +289,8 @@ private:
 // NVIDIA's decoder keeps its pictures on the GPU, for import_memory, pin,
 // copy_luma and the rest. With `handover`, AMD's does too where it can
 // (can_hand_over): through Windows' own decoder where that opens, and
-// otherwise through AMF. Where it cannot, it decodes without handing over,
-// and handover() says so.
+// otherwise through AMF (but AV1 not: AMF hands its pictures over wrongly).
+// Where it cannot, it decodes without handing over, and handover() says so.
 class GpuFrameStream {
 public:
     // Throws GpuDecodeUnavailableError when the decoder cannot start.
