@@ -1523,6 +1523,10 @@ const std::string& GpuFrameStream::backend() const { return state_->backend; }
 
 bool GpuFrameStream::handover() const { return state_->handover; }
 
+bool GpuFrameStream::shares_gpu_memory_with(const GpuFrameStream& other) const {
+    return handover() && other.handover() && state_->library == other.state_->library;
+}
+
 bool GpuFrameStream::pin(void* host, std::uint64_t size) {
     State& state = *state_;
     return state.handover && state.library->pin != nullptr && state.handle != nullptr &&

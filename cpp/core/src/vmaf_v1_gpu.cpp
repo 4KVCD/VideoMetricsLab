@@ -1259,10 +1259,14 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
     // The decoder's pictures stay on the GPU and reach the scorers without a
     // copy through the CPU. This works with NVIDIA's decoder, and with AMD's
     // when it hands over to Vulkan (not to libvmaf's CUDA code), when the
-    // same decoder decodes both videos.
+    // same decoder library decodes both videos: the scorers' memory is
+    // imported by the test video's, and the source's copies go into it.
     bool on_gpu = false;
-    if (test.handover() && reference.handover() && source_backend == test_backend &&
-        (test_backend == "nvidia" || plan.backend == "vulkan")) {
+    if (test.handover() && reference.handover() && !test.shares_gpu_memory_with(reference)) {
+        // Windows' own decoder for one video and AMF's for the other.
+        logger.info("VMAF v1 with the GPU: the frames go through system memory (the videos' decoders share no "
+                    "GPU memory)");
+    } else if (test.shares_gpu_memory_with(reference) && (test_backend == "nvidia" || plan.backend == "vulkan")) {
         try {
             scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.backend, device,
                            &test, pool > 4 && test.gives_textures() && reference.gives_textures());

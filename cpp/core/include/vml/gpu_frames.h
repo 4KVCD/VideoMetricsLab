@@ -271,6 +271,14 @@ public:
     // work): NVIDIA's always, AMD's when opened with handover where it can.
     bool handover() const;
 
+    // Whether this stream and `other` both hand over through the same
+    // decoder library, so that memory one imports or pins is the other's to
+    // copy into, and one timeline signals both streams' copies. NVIDIA's
+    // always are; two AMD streams need not be: each falls back from Windows'
+    // own decoder (mf_frames.dll) to AMF's (amf_frames.dll) on its own, and
+    // each library has a Vulkan device, and imports, of its own.
+    bool shares_gpu_memory_with(const GpuFrameStream& other) const;
+
     // Starts FFmpeg and the thread that feeds its packets to the decoder.
     void start();
 
@@ -351,7 +359,8 @@ public:
     // cannot share it. AMD's decoder imports into a Vulkan device of its own,
     // which must be `exporter`'s GPU and driver: without it, nothing is
     // imported. With AMD's decoder, memory one stream imports is copied into
-    // by every stream of the process that hands over.
+    // by every stream of the process that hands over through the same
+    // library (shares_gpu_memory_with).
     std::optional<std::pair<std::uint64_t, void*>> import_memory(void* handle, std::uint64_t size,
                                                                  const SharedDevice* exporter = nullptr);
 
@@ -362,7 +371,8 @@ public:
     // decoder that hands over copies pictures into it directly (otherwise the
     // driver copies them through memory of its own). False where it cannot;
     // downloads then work as before. With AMD's decoder, memory pinned by one
-    // stream is written into by every stream of the process that hands over.
+    // stream is written into by every stream of the process that hands over
+    // through the same library (shares_gpu_memory_with).
     bool pin(void* host, std::uint64_t size);
 
     // Undoes pin.
