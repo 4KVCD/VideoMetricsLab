@@ -1,6 +1,7 @@
 // The saved scores, held to the Python app's (reference/metric_cache.json,
 // and the comparison folder reference/metric_cache it saved): the names
-// requests and recipes are filed under, the files a stored result writes,
+// requests and recipes are filed under, the files a stored result writes
+// (with each score's version, which the Python app left blank but for VMAF's),
 // which scores answer a request, what requests load from the Python app's
 // files, and the VMAF model a loaded result has.
 #include "vml/metric_cache.h"
@@ -141,9 +142,20 @@ TEST(MetricCache, FilesRequestsAndRecipesAsThePythonApp) {
 }
 
 // Storing a result writes the Python app's context.json and score files:
-// the same names, the same metadata to the byte. A resolution test's keeps
-// its target, and comes back with it.
+// the same names, the same metadata to the byte but for each score's
+// version, which is kept (the Python app saved it blank but for VMAF's) and
+// comes back with the score. A resolution test's keeps its target, and comes
+// back with it.
 TEST(MetricCache, StoresAResultAsThePythonApp) {
+    const auto version_of = [](const MetricResultSet& set, const std::string& key) -> std::optional<std::string> {
+        if (const FrameMetricResult* frame = set.frame(key)) {
+            return frame->provenance.implementation_version;
+        }
+        if (const SequenceMetricResult* sequence = set.sequence(key)) {
+            return sequence->provenance.implementation_version;
+        }
+        return std::nullopt;
+    };
     for (const char* name : {"stored", "stored_resolution_test"}) {
         SCOPED_TRACE(name);
         const nlohmann::json stored = test::load_reference("metric_cache.json").at(name);
@@ -169,6 +181,9 @@ TEST(MetricCache, StoresAResultAsThePythonApp) {
                                         request.metrics, request.perceptual_backends);
         ASSERT_TRUE(loaded.has_value());
         EXPECT_EQ(loaded->first.resample_target, result.resample_target);
+        for (const std::string& key : result.metric_results.keys()) {
+            EXPECT_EQ(version_of(loaded->first.metric_results, key), version_of(result.metric_results, key)) << key;
+        }
     }
 }
 

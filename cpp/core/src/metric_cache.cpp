@@ -287,20 +287,16 @@ void write_atomically(const std::filesystem::path& path, const std::string& byte
 }
 
 // The metadata saved with a score: the cache format, the kind of score, the
-// request it answers and the score's provenance (without the library's
-// version, but for VMAF's, so that a library update leaves the others' saved
-// scores looking the same), and for a pair with an inexact codec, exact_decoding.
+// request it answers and the score's provenance (with the version that made
+// it, which the results name; no lookup reads it), and for a pair with an
+// inexact codec, exact_decoding.
 std::string metadata(const std::string& key, const char* kind, const MetricRequestSpec& spec,
                      const MetricProvenance& provenance, bool inexact_codec) {
-    nlohmann::json made = provenance_to_dict(provenance);
-    if (key != "vmaf") {
-        made["implementation_version"] = "";
-    }
     nlohmann::json data{{"format_version", metric_cache_format_version},
                         {"kind", kind},
                         {"key", key},
                         {"request", spec.identity()},
-                        {"provenance", made}};
+                        {"provenance", provenance_to_dict(provenance)}};
     if (inexact_codec) {
         data[exact_decoding] = exact_decoding_version;
     }
