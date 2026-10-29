@@ -74,15 +74,20 @@ bool VideoInfo::full_range() const {
 }
 
 std::vector<std::string> VideoInfo::input_options() const {
-    if (!timed_raw) {
-        return {};
-    }
     std::vector<std::string> options;
+    if (scaled_to) {
+        // Without it, FFmpeg would rebuild its filters at the size change,
+        // starting a metric's filter again, or its own scale.
+        options = {"-reinit_filter", "0"};
+    }
+    if (!timed_raw) {
+        return options;
+    }
     if (format_name == "rawvideo") {
         // Pictures and nothing else, of the size and format the command line
         // gave.
-        options = {"-f", "rawvideo", "-video_size", std::to_string(width) + "x" + std::to_string(height),
-                   "-pixel_format", pix_fmt};
+        options.insert(options.end(), {"-f", "rawvideo", "-video_size",
+                                       std::to_string(width) + "x" + std::to_string(height), "-pixel_format", pix_fmt});
     }
     // The rate as a double's shortest exact text: FFmpeg turns it back into
     // the fraction it came from (24000/1001 for 23.976023976023978).

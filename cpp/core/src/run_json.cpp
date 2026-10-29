@@ -5,7 +5,7 @@
 namespace vml {
 
 nlohmann::json video_json(const VideoInfo& info) {
-    return {{"path", platform::path_text(info.path)},
+    nlohmann::json text = {{"path", platform::path_text(info.path)},
             {"width", info.width},
             {"height", info.height},
             {"fps", info.fps},
@@ -26,6 +26,10 @@ nlohmann::json video_json(const VideoInfo& info) {
             {"format_name", info.format_name},
             {"start_offset", info.start_offset},
             {"timed_raw", info.timed_raw}};
+    if (info.scaled_to) {  // only where set, so that other videos' text stays as it was
+        text["scaled_to"] = {info.scaled_to->first, info.scaled_to->second};
+    }
+    return text;
 }
 
 VideoInfo video_from(const nlohmann::json& text) {
@@ -51,6 +55,9 @@ VideoInfo video_from(const nlohmann::json& text) {
     text.at("format_name").get_to(info.format_name);
     text.at("start_offset").get_to(info.start_offset);
     text.at("timed_raw").get_to(info.timed_raw);
+    if (const auto scaled = text.find("scaled_to"); scaled != text.end()) {
+        info.scaled_to = std::pair(scaled->at(0).get<int>(), scaled->at(1).get<int>());
+    }
     return info;
 }
 

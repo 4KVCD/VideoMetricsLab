@@ -4,12 +4,14 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
 #include <fstream>
 #include <limits>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <regex>
 #include <set>
@@ -33,6 +35,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/run_json.h"
+#include "vml/size_changes.h"
 #include "vml/temp_files.h"
 #include "vml/time_format.h"
 #include "vml/vmaf_cuda.h"
@@ -213,7 +216,10 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
         chains.test.emplace_back("hwdownload");
         chains.test.push_back("format=" + hw_native_format(distorted.pix_fmt));
     }
-    if (distorted_crop && !distorted_crop->is_noop(distorted.width, distorted.height)) {
+    if (const std::optional<std::string> scale = size_change_scale(distorted, options.scale_algorithm)) {
+        chains.test.push_back(*scale);
+    }
+    if (distorted_crop && !distorted_crop->is_noop(distorted.frame_size().first, distorted.frame_size().second)) {
         chains.test.push_back(distorted_crop->as_filter());
     }
     if (planar_first(decoding.distorted, distorted)) {
@@ -237,7 +243,10 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
         chains.source.emplace_back("hwdownload");
         chains.source.push_back("format=" + hw_native_format(source.pix_fmt));
     }
-    if (source_crop && !source_crop->is_noop(source.width, source.height)) {
+    if (const std::optional<std::string> scale = size_change_scale(source, options.scale_algorithm)) {
+        chains.source.push_back(*scale);
+    }
+    if (source_crop && !source_crop->is_noop(source.frame_size().first, source.frame_size().second)) {
         chains.source.push_back(source_crop->as_filter());
     }
     if (planar_first(decoding.source, source)) {
@@ -307,16 +316,29 @@ private:
     double last_fps_ = 0.0;
 };
 
-// Runs one FFmpeg command, reporting its progress. Throws Cancelled.
+// The options of an FFmpeg run in `folder` whose error output is watched for
+// FFmpeg rebuilding its filters (a video's size changed: size_changes.h),
+// which sets `rebuilt`.
+platform::ProcessOptions watched_options(const std::filesystem::path& folder,
+                                         const std::shared_ptr<std::atomic<bool>>& rebuilt) {
+    platform::ProcessOptions options{folder};
+    options.on_error_line = rebuild_watcher(rebuilt);
+    return options;
+}
+
+// Runs one FFmpeg command, reporting its progress. Throws Cancelled, and
+// VideoSizeChanged when FFmpeg rebuilt its filters (it is ended then: what it
+// scores after is not the run's).
 FfmpegOutcome run_ffmpeg(const std::vector<std::string>& command, long long total_frames,
                          const ProgressCallback& on_progress, const CancelToken& cancel,
                          const std::filesystem::path& folder) {
     cancel.throw_if_cancelled();  // not one more FFmpeg after a Cancel
-    platform::ChildProcess ffmpeg = platform::ChildProcess::start(command, platform::ProcessOptions{folder});
+    const auto rebuilt = std::make_shared<std::atomic<bool>>(false);
+    platform::ChildProcess ffmpeg = platform::ChildProcess::start(command, watched_options(folder, rebuilt));
     const CancelToken::Attached attached = cancel.attach(ffmpeg);
     ProgressLines progress;
     while (const std::optional<std::string> line = ffmpeg.read_line()) {
-        if (cancel.cancelled()) {
+        if (cancel.cancelled() || *rebuilt) {
             ffmpeg.terminate();
             break;
         }
@@ -324,21 +346,33 @@ FfmpegOutcome run_ffmpeg(const std::vector<std::string>& command, long long tota
     }
     const int code = ffmpeg.wait();
     cancel.throw_if_cancelled();
-    return FfmpegOutcome{code, ffmpeg.standard_error()};
+    std::string errors = ffmpeg.standard_error();  // waits for the error output's end, and so its lines
+    if (*rebuilt) {
+        throw VideoSizeChanged();
+    }
+    return FfmpegOutcome{code, std::move(errors)};
 }
 
 // Runs the two FFmpegs of VMAF on the GPU side by side, as run_ffmpeg runs
 // one: the first reports the progress, and one that fails ends the other.
 // Returns the outcome of the first to fail, or the first's. Throws
-// Cancelled, and platform::ProcessError when one cannot start.
-FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& commands, long long total_frames,
+// Cancelled, platform::ProcessError when one cannot start, and
+// VideoSizeChanged when one rebuilt its filters, naming its video of
+// `videos`, the one each command decodes (both are ended then).
+FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& commands,
+                              const std::vector<std::filesystem::path>& videos, long long total_frames,
                               const ProgressCallback& on_progress, const CancelToken& cancel,
                               const std::filesystem::path& folder) {
     cancel.throw_if_cancelled();
+    std::vector<std::shared_ptr<std::atomic<bool>>> rebuilt;
     std::vector<platform::ChildProcess> processes;
     for (const std::vector<std::string>& command : commands) {
-        processes.push_back(platform::ChildProcess::start(command, platform::ProcessOptions{folder}));
+        rebuilt.push_back(std::make_shared<std::atomic<bool>>(false));
+        processes.push_back(platform::ChildProcess::start(command, watched_options(folder, rebuilt.back())));
     }
+    const auto any_rebuilt = [&rebuilt] {
+        return std::any_of(rebuilt.begin(), rebuilt.end(), [](const auto& flag) { return flag->load(); });
+    };
     // Attached once all are in place: the vector moves them as it grows.
     std::vector<CancelToken::Attached> attached;
     for (platform::ChildProcess& process : processes) {
@@ -381,7 +415,7 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
         std::unique_lock lock(mutex);
         while (std::find(done.begin(), done.end(), 0) != done.end()) {
             changed.wait_for(lock, std::chrono::milliseconds(100));
-            if (cancel.cancelled() || first_failed) {
+            if (cancel.cancelled() || first_failed || any_rebuilt()) {
                 for (std::size_t index = 0; index < processes.size(); ++index) {
                     if (done[index] == 0 && ended_here[index] == 0) {
                         processes[index].terminate();
@@ -395,6 +429,11 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
         reader.join();
     }
     cancel.throw_if_cancelled();
+    for (std::size_t index = 0; index < processes.size(); ++index) {
+        if (*rebuilt[index]) {
+            throw VideoSizeChanged(videos.at(index));
+        }
+    }
     return outcomes[first_failed.value_or(0)];
 }
 
@@ -871,7 +910,8 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
             for (const std::vector<std::string>& command : commands) {
                 logger.info("FFmpeg: " + python_list2cmdline(command));
             }
-            outcome = run_ffmpeg_pair(commands, total_frames, on_progress, cancel, folder.path());
+            outcome = run_ffmpeg_pair(commands, {distorted.path, source.path}, total_frames, on_progress, cancel,
+                                      folder.path());
         } catch (const platform::ProcessError& error) {
             abandon();
             throw VmafRunError(std::string("FFmpeg could not be started: ") + error.what());
@@ -957,7 +997,10 @@ ParsedScores score_plan(const RunEnvironment& environment, const VideoInfo& sour
                         long long total_frames, const HardwareDecoding& decoding,
                         const ProgressCallback& on_progress, const StatusCallback& on_status,
                         const CancelToken& cancel) {
-    const std::optional<std::pair<std::string, std::string>> decoders = decoders_here(decoding);
+    // A video whose size changes is decoded by FFmpeg, which scales each of
+    // its frames (size_changes.h); the app's decoders read one size.
+    const std::optional<std::pair<std::string, std::string>> decoders =
+        source.scaled_to || distorted.scaled_to ? std::nullopt : decoders_here(decoding);
     const auto cuda_takes = [](const std::string& decoder) {
         return decoder == "nvidia" || decoder == software_decoder;
     };
@@ -1032,7 +1075,8 @@ bool xpsnr_in_app(int width, int height, int bit_depth) {
 bool decoded_in_app(const VideoInfo& source, const VideoInfo& distorted, const std::optional<CropBox>& source_crop,
                     const std::optional<CropBox>& distorted_crop, std::pair<int, int> size,
                     const std::string& scale_algorithm, const HardwareDecoding& decoding, const std::string& ffmpeg) {
-    const std::optional<std::pair<std::string, std::string>> decoders = decoders_here(decoding);
+    const std::optional<std::pair<std::string, std::string>> decoders =
+        source.scaled_to || distorted.scaled_to ? std::nullopt : decoders_here(decoding);  // as score_plan
     if (!decoders || !decodes_codec(ascii_lower(source.codec_name), decoders->first) ||
         !decodes_codec(ascii_lower(distorted.codec_name), decoders->second) ||
         source.full_range() != distorted.full_range()) {  // as require_same_range
@@ -1284,6 +1328,8 @@ std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const 
                                 fps, total_frames, decoding, on_progress, on_status, cancel);
     } catch (const Cancelled&) {
         throw;
+    } catch (const VideoSizeChanged&) {
+        throw;  // the run is made again, the video marked (run_vmaf)
     } catch (const std::exception& error) {
         logger.error(std::string("VMAF on the GPU failed; calculating it on the CPU: ") + error.what());
         if (on_status) {
@@ -1447,6 +1493,9 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
     } catch (const Cancelled&) {
         xpsnr.reset();  // stopped and waited for
         throw;
+    } catch (const VideoSizeChanged&) {
+        xpsnr.reset();
+        throw;  // the run is made again, the video marked (run_vmaf)
     } catch (const std::exception& error) {
         xpsnr.reset();
         logger.error(metric_names(plan) + " in the app failed; FFmpeg calculates them: " + error.what());
@@ -1767,7 +1816,8 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> run_crops(const RunEnv
         on_status({"Detecting black bars in source and distorted..."});
     }
     const auto [source_box, distorted_box] =
-        detect_pair(environment.ffmpeg, source, distorted, cancel, decoding.source, decoding.distorted);
+        detect_pair(environment.ffmpeg, source, distorted, cancel, decoding.source, decoding.distorted,
+                    options.scale_algorithm);
     return common_picture(source, distorted, source_box, distorted_box);
 }
 
@@ -1832,12 +1882,12 @@ MetricProvenance run_provenance(const std::string& key, const std::string& model
     return provenance;
 }
 
-}  // namespace
-
-ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
-                          VmafOptions options, const ProgressCallback& on_progress, const StatusCallback& on_status,
-                          const CancelToken& cancel,
-                          const std::optional<std::filesystem::path>& result_distorted_path) {
+// run_vmaf's run of the pair as it is marked (size_changes.h). Throws
+// VideoSizeChanged when FFmpeg rebuilt its filters for one of them.
+ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
+                               VmafOptions options, const ProgressCallback& on_progress,
+                               const StatusCallback& on_status, const CancelToken& cancel,
+                               const std::optional<std::filesystem::path>& result_distorted_path) {
     validate_video_pair(source, distorted, options);
     // The decode plan comes before black-bar detection, so the detection
     // decodes the way the run will.
@@ -1929,7 +1979,35 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
     return result;
 }
 
-ComparisonResult run_resample_test(const RunEnvironment& environment, const VideoInfo& source, VmafOptions options,
+}  // namespace
+
+ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
+                          VmafOptions options, const ProgressCallback& on_progress, const StatusCallback& on_status,
+                          const CancelToken& cancel,
+                          const std::optional<std::filesystem::path>& result_distorted_path) {
+    VideoInfo scored_source = source;
+    VideoInfo scored_test = distorted;
+    SizeChangeMarks marks(scored_source, scored_test);
+    while (true) {
+        try {
+            ComparisonResult result = run_vmaf_once(environment, scored_source, scored_test, options, on_progress,
+                                                    on_status, cancel, result_distorted_path);
+            marks.finished();
+            return result;
+        } catch (const VideoSizeChanged& changed) {
+            cancel.throw_if_cancelled();  // not made again after a Cancel
+            if (!marks.after(changed, options.scale_algorithm)) {
+                throw VmafRunError(size_change_unfixed);
+            }
+        }
+    }
+}
+
+namespace {
+
+// run_resample_test's run. Throws VideoSizeChanged when FFmpeg rebuilt its
+// filters (size_changes.h).
+ComparisonResult resample_test_run(const RunEnvironment& environment, const VideoInfo& source, VmafOptions options,
                                    const ProgressCallback& on_progress, const StatusCallback& on_status,
                                    const CancelToken& cancel) {
     if (!options.resample_test) {
@@ -1946,7 +2024,7 @@ ComparisonResult run_resample_test(const RunEnvironment& environment, const Vide
         if (on_status) {
             on_status({"Detecting black bars in source..."});
         }
-        source_crop = detect_crop(environment.ffmpeg, source, cancel, decoding.source);
+        source_crop = detect_crop(environment.ffmpeg, source, cancel, decoding.source, options.scale_algorithm);
     }
     // The comparison is at the source's own size, the downscale being undone
     // before it: Auto's VMAF models come from that.
@@ -1995,6 +2073,20 @@ ComparisonResult run_resample_test(const RunEnvironment& environment, const Vide
                               current_ffmpeg_provenance(key, environment.ffmpeg_version, std::move(parameters))});
     }
     return result;
+}
+
+}  // namespace
+
+ComparisonResult run_resample_test(const RunEnvironment& environment, const VideoInfo& source, VmafOptions options,
+                                   const ProgressCallback& on_progress, const StatusCallback& on_status,
+                                   const CancelToken& cancel) {
+    try {
+        return resample_test_run(environment, source, std::move(options), on_progress, on_status, cancel);
+    } catch (const VideoSizeChanged&) {
+        // Its frames are scaled down and up again at the size they come in.
+        throw VmafRunError("The video's picture size changes partway through; a resolution round-trip test needs "
+                           "a video of one size.");
+    }
 }
 
 }  // namespace vml

@@ -295,11 +295,15 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
 
 HardwareDecoding plan_hardware_decoding(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                         const VideoInfo& source, const VideoInfo& distorted, MacGpuDecoding mac) {
-    return HardwareDecoding{
-        pick_decode(capabilities, vendor, source.codec_name, source.pix_fmt, source.width, source.height, mac),
-        pick_decode(capabilities, vendor, distorted.codec_name, distorted.pix_fmt, distorted.width, distorted.height,
-                    mac),
+    // A video whose size changes (VideoInfo::scaled_to) is decoded in
+    // software: FFmpeg rebuilds its filters for a GPU decoder's surfaces of a
+    // new size whatever it is told (-reinit_filter 0).
+    const auto pick = [&](const VideoInfo& video) {
+        return video.scaled_to ? std::nullopt
+                               : pick_decode(capabilities, vendor, video.codec_name, video.pix_fmt, video.width,
+                                             video.height, mac);
     };
+    return HardwareDecoding{pick(source), pick(distorted)};
 }
 
 std::vector<std::string> hwaccel_args(const std::optional<std::string>& hwaccel) {

@@ -24,6 +24,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/result_json.h"
+#include "vml/size_changes.h"
 #include "vml/time_format.h"
 #include "vml/vship.h"
 
@@ -812,6 +813,9 @@ std::optional<ComparisonResult> JobRun::merged() const {
             result->distorted_crop = perceptual->distorted_crop;
             result->source_info = job_.source_info;
             result->distorted_info = job_.distorted_info;
+            // As the task scored them: a video whose size changes at the size
+            // its crop is in (size_changes.h).
+            mark_size_changes(result->source_info, result->distorted_info);
             result->scale_direction = options_.scale_direction;
             result->scale_algorithm = options_.scale_algorithm;
             result->compared_frame_count = perceptual->compared_frame_count;

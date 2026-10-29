@@ -16,8 +16,20 @@ namespace vml {
 using Size = std::pair<int, int>;  // width, height
 
 // The size of the picture that reaches the comparison: the crop's, or the
-// whole video's.
+// whole video's (its frames' size, VideoInfo::frame_size).
 Size content_size(const VideoInfo& info, const std::optional<CropBox>& crop);
+
+// For a video whose size changes partway through (VideoInfo::scaled_to), the
+// filters that come first in its chain, before its crop: every frame scaled
+// to that size with `scale_algorithm`, in its own pixel format. Nothing for
+// any other video.
+std::optional<std::string> size_change_scale(const VideoInfo& info, const std::string& scale_algorithm);
+
+// A video whose size changes as the viewers show it, at its own (probed)
+// size, as decoded, and its crop, made in the pixels it was scored at
+// (scaled_to), brought back to that size on even samples. Any other video
+// and crop as they are.
+std::pair<VideoInfo, std::optional<CropBox>> at_own_size(const VideoInfo& info, const std::optional<CropBox>& crop);
 
 // The size frames are compared at: one video is scaled to the other's size
 // (which one, by `scale_direction`) after their crops.

@@ -6,6 +6,7 @@
 #include <mutex>
 #include <set>
 #include <sstream>
+#include <tuple>
 
 #include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
@@ -91,10 +92,10 @@ std::string PreviewColorSettings::cache_token() const {
 
 FrameComparison FrameComparison::from_result(const ComparisonResult& result) {
     FrameComparison comparison;
-    comparison.source_info = result.source_info;
-    comparison.distorted_info = result.distorted_info;
-    comparison.source_crop = result.source_crop;
-    comparison.distorted_crop = result.distorted_crop;
+    // A video scored scaled to one size (size_changes.h) is shown as decoded.
+    std::tie(comparison.source_info, comparison.source_crop) = at_own_size(result.source_info, result.source_crop);
+    std::tie(comparison.distorted_info, comparison.distorted_crop) =
+        at_own_size(result.distorted_info, result.distorted_crop);
     comparison.scale_direction = result.scale_direction;
     comparison.scale_algorithm = result.scale_algorithm;
     comparison.resample_target = result.resample_target;

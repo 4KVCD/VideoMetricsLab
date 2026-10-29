@@ -36,6 +36,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/run_json.h"
+#include "vml/size_changes.h"
 #include "vml/threads.h"
 #include "vml/score_identity.h"
 #include "vml/temp_files.h"
@@ -347,15 +348,17 @@ std::vector<std::string> with_timestamps(std::vector<std::string> command, const
 // decoding fails before giving a frame, the same pictures are decoded in
 // software instead (the next command), and `on_software` is called first.
 // With `timestamps`, each frame's timestamp is read too, for pairing by
-// timestamp, from a file FFmpeg writes in `scratch_folder`.
+// timestamp, from a file FFmpeg writes in `scratch_folder`. `video` is the
+// file it decodes, which a VideoSizeChanged names.
 class FrameStream : public FrameRing {
 public:
     FrameStream(const VshipLibrary& library, std::size_t frame_bytes, std::vector<std::vector<std::string>> commands,
-                std::string label, std::optional<InterleavedChroma> split, std::function<void()> on_software,
-                int gpu_id, bool timestamps, std::filesystem::path scratch_folder)
+                std::filesystem::path video, std::string label, std::optional<InterleavedChroma> split,
+                std::function<void()> on_software, int gpu_id, bool timestamps, std::filesystem::path scratch_folder)
         : FrameRing(library, frame_bytes, gpu_id),
           frame_bytes_(frame_bytes),
           commands_(std::move(commands)),
+          video_(std::move(video)),
           label_(std::move(label)),
           split_(split),
           on_software_(std::move(on_software)),
@@ -416,6 +419,8 @@ private:
             }
         } catch (const VshipInputError&) {  // handed to the scoring thread, never lost
             filled_.put({end_of_video, std::current_exception()});
+        } catch (const VideoSizeChanged&) {  // the pass is made again, the video scaled first
+            filled_.put({end_of_video, std::current_exception()});
         } catch (const std::exception& error) {
             filled_.put({end_of_video, std::make_exception_ptr(VshipInputError(error.what()))});
         } catch (...) {
@@ -440,6 +445,11 @@ private:
                                                         const std::filesystem::path* stamps_path) {
         platform::ProcessOptions options;
         options.output_pipe_bytes = platform::frame_pipe_bytes;
+        // FFmpeg rebuilding its filters partway (the video's size changed:
+        // size_changes.h) stops the reading: what it sends after is not what
+        // the pass scores.
+        const auto rebuilt = std::make_shared<std::atomic<bool>>(false);
+        options.on_error_line = rebuild_watcher(rebuilt);
         std::optional<platform::ChildProcess> process;
         try {
             process.emplace(platform::ChildProcess::start(command, options));
@@ -463,7 +473,7 @@ private:
         std::exception_ptr failure;
         try {
             bool reading = !y4m || y4m_header(*process);  // no header: FFmpeg wrote nothing, its code says why
-            while (reading && !stopping_) {
+            while (reading && !stopping_ && !*rebuilt) {
                 const int slot = free_.get();
                 if (slot == end_of_video) {
                     break;
@@ -497,6 +507,9 @@ private:
             failure = std::current_exception();
             process->terminate();
         }
+        if (*rebuilt) {
+            process->terminate();
+        }
         // An FFmpeg that ended partway through a frame has closed its output.
         // It is given a while to exit by itself, so that the exit code kept
         // is its own, but not for ever: it could still be running.
@@ -507,13 +520,16 @@ private:
         }
         const int code = process->wait();
         // The end of FFmpeg's error output, as the Python app keeps it.
-        std::string errors = process->standard_error();
+        std::string errors = error_lines_of(process->standard_error());
         if (errors.size() > 2000) {
             errors.erase(0, errors.size() - 2000);
         }
         {
             const std::lock_guard lock(process_mutex_);
             process_ = nullptr;
+        }
+        if (*rebuilt) {  // every line read: standard_error waited for the output's end
+            throw VideoSizeChanged(video_);
         }
         if (failure) {
             std::rethrow_exception(failure);
@@ -619,6 +635,7 @@ private:
 
     std::size_t frame_bytes_;
     std::vector<std::vector<std::string>> commands_;
+    std::filesystem::path video_;
     std::string label_;
     std::optional<InterleavedChroma> split_;
     std::function<void()> on_software_;
@@ -1268,6 +1285,9 @@ public:
         } catch (const FramesApartError&) {
             close();  // made again with every source frame (remade_vship_pass)
             throw;
+        } catch (const VideoSizeChanged&) {
+            close();  // made again with the video scaled first (run_perceptual_task)
+            throw;
         } catch (const VshipInputError& error) {
             logger.error("Vship pass (" + metric_labels(plan_.keys, ", ") + ") failed: " + error.what());
             // Made again the same way (remade_vship_pass), but not where a
@@ -1422,14 +1442,15 @@ private:
     }
 
     // One video's frame stream: decoded in this process where it can be, by
-    // the decoder FFmpeg would use, else by FFmpeg. Pairing by timestamp,
-    // only the test video is cut at the limit, and the source may give every
-    // frame.
+    // the decoder FFmpeg would use, else by FFmpeg, as a video whose size
+    // changes always is (its frames are scaled to one size first,
+    // size_changes.h). Pairing by timestamp, only the test video is cut at
+    // the limit, and the source may give every frame.
     std::unique_ptr<FrameRing> open_stream(const VideoPlan& video) {
         const bool cut = video.side == "distorted" || !by_time_;
         const int every = video.side == "source" && every_source_frame_ ? 1 : step_;
         bool said = false;  // native_decoder logs which decoder the video has
-        if (native_) {
+        if (native_ && !video.info.scaled_to) {
             if (const std::optional<std::string> backend = decoded_here(video.hwaccel)) {
                 said = true;
                 if (std::unique_ptr<GpuFrameStream> decoder = native_decoder(video, *backend)) {
@@ -1452,7 +1473,8 @@ private:
         const std::string pixel_format = video.passthrough ? video.passthrough->second : video.image.pixel_format;
         const std::string side = video.side;
         return std::make_unique<FrameStream>(library_, video.layout.frame_bytes,
-                                             ffmpeg_commands(video, pixel_format, every, cut), video.label, split,
+                                             ffmpeg_commands(video, pixel_format, every, cut), video.info.path,
+                                             video.label, split,
                                              [this, side] { decoded_in_software(side); }, plan_.device.gpu_id,
                                              by_time_, plan_.scratch_folder);
     }
@@ -1461,6 +1483,9 @@ private:
     std::string software_decoding_reason(const VideoInfo& info) const {
         if (!request_.options.gpu_decode) {
             return "GPU decoding is off";
+        }
+        if (info.scaled_to) {
+            return "its picture size changes partway through";
         }
         if (!downloads_from_gpu(info.pix_fmt, info.width, info.height)) {
             return "GPU decoding takes 4:2:0 at 8 or 10 bits and an even size, not " + info.pix_fmt + " at " +
@@ -1493,8 +1518,8 @@ private:
                                    request_.options.scale_algorithm, accel,
                                    by_time_ ? std::nullopt : std::optional(numbering_rate_),
                                    video.colour.colorFamily == 0 && video.colour.range == 1);
-            std::vector<std::string> command{request_.environment.ffmpeg, "-hide_banner", "-loglevel", "error",
-                                             "-nostdin"};
+            std::vector<std::string> command{request_.environment.ffmpeg, "-hide_banner", "-loglevel",
+                                             watched_log_level, "-nostats", "-nostdin"};
             const std::vector<std::string> decode = hwaccel_args(accel);
             command.insert(command.end(), decode.begin(), decode.end());
             const std::vector<std::string> input = video.info.input_options();
@@ -2152,6 +2177,8 @@ PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const Pass
         throw VshipUnavailableError("Vship GPU calculation failed: " + std::string(error.what()));
     } catch (const Cancelled&) {
         throw;
+    } catch (const VideoSizeChanged&) {
+        throw;  // the child's, kept by run_isolated
     } catch (const std::runtime_error& error) {
         throw VshipUnavailableError(error.what());  // the child's own error, as its message
     }
@@ -2258,6 +2285,8 @@ private:
         } catch (const Cancelled&) {
             throw;
         } catch (const ComparisonCutShortError&) {
+            throw;
+        } catch (const VideoSizeChanged&) {
             throw;
         } catch (const VshipPassesFailedError& error) {
             // The others failed too. Each keeps its own reason.
@@ -2383,6 +2412,8 @@ private:
                 // A video that ends early is cut short for every metric: the
                 // file's fault, the same in each pass and on the CPU.
                 throw;
+            } catch (const VideoSizeChanged&) {
+                throw;  // every pass is made again, the video scaled first (run_perceptual_task)
             } catch (const std::exception& error) {
                 if (cancel_.cancelled()) {
                     throw Cancelled();
@@ -2517,6 +2548,8 @@ public:
             // stock Vship or on the CPU: it would stop as short, after hours
             // instead of the GPU's minutes.
             throw;
+        } catch (const VideoSizeChanged&) {
+            throw;  // the task is made again, the video scaled first (run_perceptual_task)
         } catch (const std::exception& error) {
             if (cancel_.cancelled()) {
                 throw Cancelled();
@@ -2630,6 +2663,8 @@ private:
             throw;
         } catch (const ComparisonCutShortError&) {
             throw;
+        } catch (const VideoSizeChanged&) {
+            throw;
         } catch (const std::exception& again) {
             if (cancel_.cancelled()) {
                 throw Cancelled();
@@ -2693,6 +2728,8 @@ private:
         } catch (const Cancelled&) {
             throw;
         } catch (const ComparisonCutShortError&) {
+            throw;
+        } catch (const VideoSizeChanged&) {
             throw;
         } catch (const std::exception& error) {
             if (cancel_.cancelled()) {
@@ -2770,6 +2807,8 @@ private:
             cpu_output = run_on_cpu(cpu_keys, crops);
         } catch (const Cancelled&) {
             throw;
+        } catch (const VideoSizeChanged&) {
+            throw;  // the whole task is made again, the video scaled first
         } catch (const std::exception& error) {
             if (cancel_.cancelled()) {
                 throw Cancelled();
@@ -2839,7 +2878,7 @@ PerceptualRoutes app_perceptual_routes() {
     routes.find_crops = [](const PerceptualRequest& request, const StatusCallback& on_status,
                            const CancelToken& cancel) {
         return resolve_crops(request.environment.ffmpeg, request.source, request.distorted, request.options.crop_mode,
-                             cancel, on_status);
+                             request.options.scale_algorithm, cancel, on_status);
     };
     routes.run_gpu = [](const PerceptualRequest& request, const std::vector<std::string>& keys,
                         const VshipDevice& device, const CropPair& crops, bool together, const PerceptualHooks& hooks,
@@ -2864,7 +2903,20 @@ PerceptualRoutes app_perceptual_routes() {
 PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const std::vector<std::string>& keys,
                                          bool together, const PerceptualHooks& hooks, const CancelToken& cancel,
                                          const PerceptualRoutes& routes) {
-    return MetricRouting(request, keys, together, hooks, cancel, routes).run();
+    PerceptualRequest scored = request;
+    SizeChangeMarks marks(scored.source, scored.distorted);
+    while (true) {
+        try {
+            PerceptualTaskOutput output = MetricRouting(scored, keys, together, hooks, cancel, routes).run();
+            marks.finished();
+            return output;
+        } catch (const VideoSizeChanged& changed) {
+            cancel.throw_if_cancelled();  // not made again after a Cancel
+            if (!marks.after(changed, scored.options.scale_algorithm)) {
+                throw PerceptualRunError(size_change_unfixed);
+            }
+        }
+    }
 }
 
 PerceptualTaskOutput remade_vship_pass(

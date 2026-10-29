@@ -156,5 +156,26 @@ TEST(FrameExtract, SeeksEarlierWhereKeyframesAreDecodedLongBeforeShown) {
     EXPECT_NE(argument(playback, "-filter_complex").find("[in0]trim=start=1.201200000,"), std::string::npos);
 }
 
+// A test video scored scaled to one size because its size changes (a 720p
+// start, scored at the 1080p source's size) is shown as decoded: its crop,
+// in the 1920x1080 pixels it was scored at, in its own 1280x720 ones.
+TEST(FrameExtract, ShowsAVideoScoredAtAnotherSizeAsDecoded) {
+    ComparisonResult result;
+    result.source_info.width = 1920;
+    result.source_info.height = 1080;
+    result.distorted_info.width = 1280;
+    result.distorted_info.height = 720;
+    result.distorted_info.scaled_to = std::pair(1920, 1080);
+    result.source_crop = CropBox{1920, 596, 0, 242};
+    result.distorted_crop = CropBox{1920, 596, 0, 242};
+    FrameComparison shown = FrameComparison::from_result(result);
+    EXPECT_FALSE(shown.distorted_info.scaled_to.has_value());
+    EXPECT_EQ(shown.distorted_crop, (CropBox{1280, 396, 0, 162}));
+    EXPECT_EQ(shown.source_crop, result.source_crop);
+    result.distorted_crop = CropBox{1920, 1080, 0, 0};
+    shown = FrameComparison::from_result(result);
+    EXPECT_TRUE(shown.distorted_crop->is_noop(1280, 720));
+}
+
 }  // namespace
 }  // namespace vml

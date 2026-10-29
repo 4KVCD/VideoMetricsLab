@@ -107,9 +107,11 @@ PerceptualRoutes app_perceptual_routes();
 // CVVDP runs on the GPU only, and fails with its own reason. A metric that
 // fails while others finish is in the output's failures. `hooks.on_cpu`
 // gets the metrics the CPU is about to calculate, just before it starts;
-// the progress after it is the CPU's own, from 0. Throws Cancelled,
-// ComparisonCutShortError (a video ends long before its stated length),
-// PerceptualRunError, and CropDetectError.
+// the progress after it is the CPU's own, from 0. A video whose picture
+// size changes partway through is scored at one size: the task is made
+// again with it marked when FFmpeg rebuilds its filters (size_changes.h).
+// Throws Cancelled, ComparisonCutShortError (a video ends long before its
+// stated length), PerceptualRunError, and CropDetectError.
 PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const std::vector<std::string>& keys,
                                          bool together, const PerceptualHooks& hooks, const CancelToken& cancel,
                                          const PerceptualRoutes& routes = app_perceptual_routes());

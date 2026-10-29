@@ -44,20 +44,25 @@ void forget_crop_answers();
 
 // The box that cuts the video's black bars. `hwaccel` is the decoder the
 // run will use for this video (only how fast the answer comes depends on
-// it). Throws CropDetectError when it cannot be found, and Cancelled.
+// it). A video whose size changes (VideoInfo::scaled_to) is sampled scaled
+// with `scale_algorithm`, as the run scales it, and its box is not kept.
+// Throws CropDetectError when it cannot be found, Cancelled, and
+// VideoSizeChanged (size_changes.h) when FFmpeg rebuilt its filters partway
+// through a sample.
 CropBox detect_crop(const std::string& ffmpeg, const VideoInfo& info, const CancelToken& cancel,
-                    const std::optional<std::string>& hwaccel);
+                    const std::optional<std::string>& hwaccel, const std::string& scale_algorithm);
 
 // Both videos' boxes, detected at the same time.
 std::pair<CropBox, CropBox> detect_pair(const std::string& ffmpeg, const VideoInfo& source,
                                         const VideoInfo& distorted, const CancelToken& cancel,
                                         const std::optional<std::string>& source_hwaccel,
-                                        const std::optional<std::string>& distorted_hwaccel);
+                                        const std::optional<std::string>& distorted_hwaccel,
+                                        const std::string& scale_algorithm);
 
 // The two videos' boxes, made to cover the same picture where the two show
 // the same picture at one size or two (an encode's soft bar edge can put its
 // box a row from the source's): the boxes' overlap, in each video's own
-// pixels, on even samples. Boxes that agree, or that are not the same
+// pixels (as scaled_to, where set), on even samples. Boxes that agree, or that are not the same
 // picture, are kept.
 std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const VideoInfo& source,
                                                                          const VideoInfo& distorted,

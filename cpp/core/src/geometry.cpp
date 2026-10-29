@@ -63,7 +63,35 @@ std::string codec_label(const std::string& codec) {
 }
 
 Size content_size(const VideoInfo& info, const std::optional<CropBox>& crop) {
-    return crop ? Size{crop->w, crop->h} : Size{info.width, info.height};
+    return crop ? Size{crop->w, crop->h} : info.frame_size();
+}
+
+std::optional<std::string> size_change_scale(const VideoInfo& info, const std::string& scale_algorithm) {
+    if (!info.scaled_to) {
+        return std::nullopt;
+    }
+    // In the video's own pixel format: the conversion to the analysis format
+    // stays where it is for every video, after the crop.
+    return "scale=" + std::to_string(info.scaled_to->first) + ":" + std::to_string(info.scaled_to->second) +
+           ":flags=" + scale_algorithm + ",format=" + info.pix_fmt;
+}
+
+std::pair<VideoInfo, std::optional<CropBox>> at_own_size(const VideoInfo& info, const std::optional<CropBox>& crop) {
+    VideoInfo own = info;
+    own.scaled_to.reset();
+    if (!info.scaled_to || !crop || info.scaled_to->first <= 0 || info.scaled_to->second <= 0) {
+        return {own, crop};
+    }
+    // Each edge at its place in the video's own pixels, the nearest even one.
+    const auto edge = [](int at, int own_length, int scaled_length) {
+        return 2 * static_cast<int>(std::lround(static_cast<double>(at) * own_length / scaled_length / 2));
+    };
+    const auto [scaled_width, scaled_height] = *info.scaled_to;
+    const int left = edge(crop->x, info.width, scaled_width);
+    const int top = edge(crop->y, info.height, scaled_height);
+    const int right = std::min(info.width, edge(crop->x + crop->w, info.width, scaled_width));
+    const int bottom = std::min(info.height, edge(crop->y + crop->h, info.height, scaled_height));
+    return {own, CropBox{std::max(2, right - left), std::max(2, bottom - top), left, top}};
 }
 
 Size compared_dimensions(const VideoInfo& source, const VideoInfo& distorted, ScaleDirection scale_direction,
@@ -129,7 +157,8 @@ std::optional<std::string> shape_problem(const VideoInfo& source, const VideoInf
     }
     const auto describe = [](const VideoInfo& info, const std::optional<CropBox>& crop, double shape) {
         const std::string size = crop ? std::to_string(crop->w) + "x" + std::to_string(crop->h) + " (cropped)"
-                                      : std::to_string(info.width) + "x" + std::to_string(info.height);
+                                      : std::to_string(info.frame_size().first) + "x" +
+                                            std::to_string(info.frame_size().second);
         return size + ", " + format_fixed(shape, 3) + ":1";
     };
     return "The two videos are different shapes after cropping: source " +

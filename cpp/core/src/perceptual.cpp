@@ -52,7 +52,8 @@ void validate_pair(const VideoInfo& source, const VideoInfo& distorted, double d
 }
 
 CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& distorted,
-                       CropMode crop_mode, const CancelToken& cancel, const StatusCallback& on_status) {
+                       CropMode crop_mode, const std::string& scale_algorithm, const CancelToken& cancel,
+                       const StatusCallback& on_status) {
     CropPair crops{std::nullopt, std::nullopt};
     if (crop_mode != CropMode::none) {
         if (on_status) {
@@ -66,7 +67,7 @@ CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const
         // a dark intro, which must not decide the crop. Decoded in software,
         // as the Python app's perceptual metrics detect them.
         const auto [source_box, distorted_box] =
-            detect_pair(ffmpeg, source, distorted, cancel, std::nullopt, std::nullopt);
+            detect_pair(ffmpeg, source, distorted, cancel, std::nullopt, std::nullopt, scale_algorithm);
         crops = common_picture(source, distorted, source_box, distorted_box);
     }
     // As FFmpeg's metrics refuse them (validate_display_geometry).

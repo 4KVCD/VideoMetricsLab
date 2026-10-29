@@ -112,11 +112,14 @@ double compared_seconds(const VideoInfo& source, const VideoInfo& distorted, dou
 void validate_pair(const VideoInfo& source, const VideoInfo& distorted, double duration_limit);
 
 // The black-bar crops of the source and the test video, or none when black
-// bars are kept (`crop_mode`). Sends a status first, worded as for FFmpeg's
-// metrics, because a video's tasks share one detection. Throws
+// bars are kept (`crop_mode`), a video whose size changes sampled scaled
+// with `scale_algorithm` (detect_crop). Sends a status first, worded as for
+// FFmpeg's metrics, because a video's tasks share one detection. Throws
 // PerceptualRunError when the two pictures are different shapes after
-// cropping (geometry.h's shape_problem), CropDetectError and Cancelled.
+// cropping (geometry.h's shape_problem), CropDetectError, VideoSizeChanged
+// and Cancelled.
 CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& distorted,
-                       CropMode crop_mode, const CancelToken& cancel, const StatusCallback& on_status);
+                       CropMode crop_mode, const std::string& scale_algorithm, const CancelToken& cancel,
+                       const StatusCallback& on_status);
 
 }  // namespace vml

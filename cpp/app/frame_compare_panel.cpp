@@ -323,7 +323,7 @@ CropDetectWorker::CropDetectWorker(std::string ffmpeg, VideoInfo source, VideoIn
 
 std::optional<CropBox> CropDetectWorker::detect(const VideoInfo& info) {
     try {
-        return detect_crop(ffmpeg_, info, cancel_, std::nullopt);
+        return detect_crop(ffmpeg_, info, cancel_, std::nullopt, "");  // no scaler: never scaled_to here
     } catch (const Cancelled&) {
         throw;
     } catch (const std::exception&) {

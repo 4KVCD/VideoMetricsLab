@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace vml {
@@ -85,7 +86,15 @@ struct VideoInfo {
     // one given, and its frame count, length and bitrate come from its
     // counted frames.
     bool timed_raw = false;
+    // Set for a video whose picture size changes partway through (FFmpeg
+    // rebuilt its filters for it): the size every one of its frames is
+    // scaled to first, so that the whole video is scored at one size
+    // (size_changes.h). Nothing for any other video.
+    std::optional<std::pair<int, int>> scaled_to;
 
+    // Its frames' size as they reach the comparison's filters: scaled_to,
+    // or its own.
+    std::pair<int, int> frame_size() const { return scaled_to.value_or(std::pair(width, height)); }
     // The frame count ffprobe reports, or else duration times fps.
     long long estimated_frame_count() const;
     // A bare elementary stream (a .hevc or .264 file) or raw pictures (a
@@ -98,8 +107,10 @@ struct VideoInfo {
     bool full_range() const;
     // FFmpeg's options before the video's -i: a timed raw stream's frame
     // rate (-framerate), so that FFmpeg's times for its frames are right,
-    // after a raw YUV file's format, picture size and pixel format. Nothing
-    // for any other video.
+    // after a raw YUV file's format, picture size and pixel format; and for
+    // one scaled_to a size, -reinit_filter 0, so that FFmpeg keeps its
+    // filters (and their scale) as the size changes. Nothing for any other
+    // video.
     std::vector<std::string> input_options() const;
     // Whether the nominal and the average frame rate differ by more than
     // rounding.

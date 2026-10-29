@@ -32,7 +32,7 @@ std::optional<CropBox> crop_from_dict(const nlohmann::json& data) {
 }
 
 nlohmann::ordered_json video_info_to_dict(const VideoInfo& info) {
-    return {{"path", python_path_text(info.path)},
+    nlohmann::ordered_json dict = {{"path", python_path_text(info.path)},
             {"width", info.width},
             {"height", info.height},
             {"fps", info.fps},
@@ -50,6 +50,10 @@ nlohmann::ordered_json video_info_to_dict(const VideoInfo& info) {
             {"color_transfer", info.color_transfer},
             {"color_primaries", info.color_primaries},
             {"chroma_location", info.chroma_location}};
+    if (info.scaled_to) {  // only where set: every other video's dict stays as the Python app wrote it
+        dict["scaled_to"] = {info.scaled_to->first, info.scaled_to->second};
+    }
+    return dict;
 }
 
 VideoInfo video_info_from_dict(const nlohmann::json& data) {
@@ -72,6 +76,9 @@ VideoInfo video_info_from_dict(const nlohmann::json& data) {
     info.color_transfer = data.value("color_transfer", std::string());
     info.color_primaries = data.value("color_primaries", std::string());
     info.chroma_location = data.value("chroma_location", std::string());
+    if (const auto scaled = data.find("scaled_to"); scaled != data.end() && scaled->is_array() && scaled->size() == 2) {
+        info.scaled_to = std::pair(scaled->at(0).get<int>(), scaled->at(1).get<int>());
+    }
     return info;
 }
 

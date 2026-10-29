@@ -27,6 +27,7 @@
 #include "vml/frame_sync.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
+#include "vml/size_changes.h"
 #include "vml/vship_run.h"
 
 namespace vml {
@@ -597,6 +598,72 @@ TEST(PerceptualRouting, APassWhoseInputFailedIsMadeOnceMore) {
     EXPECT_EQ(attempts, 1);
 }
 
+// A task that FFmpeg's rebuilt filters stop (a video's picture size changes
+// partway through) is made again with the video the stop names scaled, the
+// test video to the source's width at its own shape, the source to its own
+// size. Where none is named, the test video is tried, then the source alone,
+// then both, and a fourth stop fails the task, without another route scoring
+// it. A video found to change in a task that finished is scaled from the
+// start of its later tasks.
+TEST(PerceptualRouting, AVideoWhoseSizeChangesIsScoredAtOneSize) {
+    using Scaled = std::optional<std::pair<int, int>>;
+    std::vector<std::pair<Scaled, Scaled>> asked;  // each GPU run's source and test video, as marked
+    int stops = 0;
+    std::optional<std::filesystem::path> named;  // the video each stop names
+    Routed routed;
+    PerceptualRoutes routes = stand_in_routes(
+        routed, test_gpu, nullptr, [](const auto&, const auto&) { return scored("ssimulacra2", 80.0f, "cpu"); });
+    routes.run_gpu = [&asked, &stops, &named](const PerceptualRequest& request, const std::vector<std::string>&,
+                                              const VshipDevice&, const CropPair&, bool, const PerceptualHooks&,
+                                              const CancelToken&) {
+        asked.emplace_back(request.source.scaled_to, request.distorted.scaled_to);
+        if (static_cast<int>(asked.size()) <= stops) {
+            throw VideoSizeChanged(named);
+        }
+        return scored("ssimulacra2", 70.0f, "gpu");
+    };
+    // Each case with videos of its own: the videos found to change are this
+    // process's.
+    const auto task = [&](const std::string& name, int stopped, bool source_named = false) {
+        PerceptualRequest request = routed_request();
+        request.source.path = name + "-source.mkv";
+        request.distorted.path = name + "-test.mkv";
+        request.distorted.width = 1280;
+        request.distorted.height = 534;
+        asked.clear();
+        stops = stopped;
+        named = source_named ? std::optional(request.source.path) : std::nullopt;
+        return run_perceptual_task(request, {"ssimulacra2"}, false, recording_hooks(routed), CancelToken(), routes);
+    };
+    const Scaled test_size = std::pair(1920, 802);  // 534 * 1920 / 1280 = 801, made even
+    const Scaled source_size = std::pair(1920, 1080);
+    EXPECT_TRUE(task("once", 1).metrics.has("ssimulacra2"));
+    EXPECT_EQ(asked, (std::vector<std::pair<Scaled, Scaled>>{{std::nullopt, std::nullopt}, {std::nullopt, test_size}}));
+    task("once", 0);
+    EXPECT_EQ(asked, (std::vector<std::pair<Scaled, Scaled>>{{std::nullopt, test_size}}));
+    task("twice", 2);
+    EXPECT_EQ(asked, (std::vector<std::pair<Scaled, Scaled>>{
+                         {std::nullopt, std::nullopt}, {std::nullopt, test_size}, {source_size, std::nullopt}}));
+    task("twice", 0);  // the source, which changes, alone
+    EXPECT_EQ(asked, (std::vector<std::pair<Scaled, Scaled>>{{source_size, std::nullopt}}));
+    task("named", 1, true);
+    EXPECT_EQ(asked,
+              (std::vector<std::pair<Scaled, Scaled>>{{std::nullopt, std::nullopt}, {source_size, std::nullopt}}));
+    try {
+        task("always", 4);
+        ADD_FAILURE() << "a task stopped with both videos scaled did not fail";
+    } catch (const PerceptualRunError& error) {
+        EXPECT_EQ(std::string(error.what()), size_change_unfixed);
+    }
+    EXPECT_EQ(asked, (std::vector<std::pair<Scaled, Scaled>>{{std::nullopt, std::nullopt},
+                                                            {std::nullopt, test_size},
+                                                            {source_size, std::nullopt},
+                                                            {source_size, test_size}}));
+    task("always", 0);  // nothing noted by a task that failed
+    EXPECT_EQ(asked, (std::vector<std::pair<Scaled, Scaled>>{{std::nullopt, std::nullopt}}));
+    EXPECT_TRUE(routed.cpu.empty());
+}
+
 // Two pictures of different shapes are refused, as FFmpeg's metrics refuse
 // them (they were scored stretched), black bars kept or not; one rounded to
 // an even size still compares.
@@ -604,11 +671,11 @@ TEST(PerceptualRouting, PicturesOfDifferentShapesAreRefused) {
     const VideoInfo source = plain_video("source.mkv");
     VideoInfo squeezed = plain_video("test.mkv");
     squeezed.width = 1440;
-    EXPECT_THROW(resolve_crops("ffmpeg", source, squeezed, CropMode::none, CancelToken(), nullptr),
+    EXPECT_THROW(resolve_crops("ffmpeg", source, squeezed, CropMode::none, "bicubic", CancelToken(), nullptr),
                  PerceptualRunError);
     VideoInfo rounded = plain_video("test.mkv");
     rounded.width = 1918;
-    EXPECT_NO_THROW(resolve_crops("ffmpeg", source, rounded, CropMode::none, CancelToken(), nullptr));
+    EXPECT_NO_THROW(resolve_crops("ffmpeg", source, rounded, CropMode::none, "bicubic", CancelToken(), nullptr));
 }
 
 // The bundled tool is the one built for this system: the repository's

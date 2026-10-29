@@ -107,7 +107,8 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
                                        const std::string& codec, const std::string& pix_fmt, int width, int height,
                                        MacGpuDecoding mac = MacGpuDecoding::deep);
 
-// The plan for a comparison of two videos.
+// The plan for a comparison of two videos: software decoding for a video
+// whose size changes (VideoInfo::scaled_to).
 HardwareDecoding plan_hardware_decoding(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                         const VideoInfo& source, const VideoInfo& distorted,
                                         MacGpuDecoding mac = MacGpuDecoding::deep);

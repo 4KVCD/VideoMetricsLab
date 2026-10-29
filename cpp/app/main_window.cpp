@@ -1673,15 +1673,18 @@ QString MainWindow::crop_detail(const QString& label, const VideoInfo& info, con
     if (!crop) {
         return app::tr("{label}: not checked for black bars; no crop was applied.", {{"label", label}});
     }
-    if (crop->is_noop(info.width, info.height)) {
+    // In the pixels it was compared at: a video whose size changes is scaled
+    // to one size first (VideoInfo::scaled_to).
+    const auto [width, height] = info.frame_size();
+    if (crop->is_noop(width, height)) {
         return app::tr("{label}: no black bars. Compared in full at {size}.",
-                       {{"label", label}, {"size", size_text(info.width, info.height)}});
+                       {{"label", label}, {"size", size_text(width, height)}});
     }
     QStringList sides;
     for (const auto& [side, pixels] : {std::pair{N_("top {pixels} px"), std::max(0, crop->y)},
-                                       std::pair{N_("bottom {pixels} px"), std::max(0, info.height - crop->y - crop->h)},
+                                       std::pair{N_("bottom {pixels} px"), std::max(0, height - crop->y - crop->h)},
                                        std::pair{N_("left {pixels} px"), std::max(0, crop->x)},
-                                       std::pair{N_("right {pixels} px"), std::max(0, info.width - crop->x - crop->w)}}) {
+                                       std::pair{N_("right {pixels} px"), std::max(0, width - crop->x - crop->w)}}) {
         if (pixels != 0) {
             sides.append(app::tr(side, {{"pixels", pixels}}));
         }
@@ -1690,7 +1693,7 @@ QString MainWindow::crop_detail(const QString& label, const VideoInfo& info, con
                    {{"label", label},
                     {"sides", sides.join(", ")},
                     {"cropped", size_text(crop->w, crop->h)},
-                    {"full", size_text(info.width, info.height)}});
+                    {"full", size_text(width, height)}});
 }
 
 void MainWindow::set_row_black_bars(int row, bool probe_failed) {
@@ -1736,8 +1739,8 @@ void MainWindow::set_row_black_bars(int row, bool probe_failed) {
     if (!resample) {
         tooltip = crop_detail(app::tr("Test video"), result.distorted_info, result.distorted_crop) + "\n\n" + tooltip;
     }
-    show(subject_crop->is_noop(subject_info.width, subject_info.height) ? app::tr("No") : app::tr("Yes"), tooltip,
-         false);
+    const auto [width, height] = subject_info.frame_size();  // as compared (crop_detail)
+    show(subject_crop->is_noop(width, height) ? app::tr("No") : app::tr("Yes"), tooltip, false);
 }
 
 std::pair<QString, QString> MainWindow::resize_mismatch(int row) const {

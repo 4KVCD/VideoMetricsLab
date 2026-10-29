@@ -912,7 +912,10 @@ std::string vship_filter_chain(const VideoInfo& info, const std::optional<CropBo
         // scores do not depend on which decoder made them.
         operations.push_back("hwdownload,format=" + hw_native_format(info.pix_fmt));
     }
-    if (crop && !crop->is_noop(info.width, info.height)) {
+    if (const std::optional<std::string> scale = size_change_scale(info, algorithm)) {
+        operations.push_back(*scale);  // every frame of a video whose size changes, first (size_changes.h)
+    }
+    if (crop && !crop->is_noop(info.frame_size().first, info.frame_size().second)) {
         operations.push_back(crop->as_filter());
     }
     if (content_size(info, crop) != target_size) {

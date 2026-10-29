@@ -206,9 +206,12 @@ nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem
 // metrics and the GPU can score them (scores_on_gpu); PSNR, SSIM and XPSNR
 // in the app when they are its only metrics; with FFmpeg's metric filters
 // otherwise or when that fails. The GPU's and the app's parts run in a process of their
-// own where a program to run them is set (isolated.h). Throws VmafRunError
-// when the run fails, and Cancelled. `result_distorted_path` is the path
-// the result carries for the test video (by default, its own).
+// own where a program to run them is set (isolated.h). A video whose
+// picture size changes partway through is scored at one size: the run is
+// made again with it marked when FFmpeg rebuilds its filters
+// (size_changes.h). Throws VmafRunError when the run fails, and Cancelled.
+// `result_distorted_path` is the path the result carries for the test video
+// (by default, its own).
 ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                           VmafOptions options, const ProgressCallback& on_progress, const StatusCallback& on_status,
                           const CancelToken& cancel,

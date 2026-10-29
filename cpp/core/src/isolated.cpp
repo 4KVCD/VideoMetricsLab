@@ -17,6 +17,7 @@
 #include "vml/platform/pipe.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
+#include "vml/size_changes.h"
 #include "vml/temp_files.h"
 #include "vml/vmaf_cuda.h"
 #include "vml/vship.h"
@@ -136,9 +137,13 @@ public:
     // on_message throws, the child ended first.
     void run();
 
-    // Its result, or its error, once it said either.
+    // Its result, or its error, once it said either, and whether the error
+    // was a video's size changing (VideoSizeChanged, which the parent's run
+    // answers by making the run again), with the video where it was known.
     std::optional<nlohmann::json> result;
     std::optional<std::string> failure;
+    bool size_changed = false;
+    std::optional<std::filesystem::path> changed_video;
     // Whether Cancel ended it, and whether it was ended for not ending by
     // itself once it had answered.
     bool stopped = false;
@@ -216,6 +221,10 @@ void ChildConversation::take(const std::string& text) {
         result = message["result"];
     } else if (message.is_object() && message.contains("error")) {
         failure = message["error"].is_string() ? message["error"].get<std::string>() : message["error"].dump();
+        size_changed = message.value("size_changed", false);
+        if (const auto video = message.find("changed_video"); video != message.end() && video->is_string()) {
+            changed_video = platform::path_from_text(video->get<std::string>());
+        }
     } else if (message.is_object() && message.contains("log") && message["log"].is_object()) {
         const nlohmann::json& line = message["log"];
         app_log::write(line.value("level", static_cast<int>(app_log::Level::info)),
@@ -289,6 +298,9 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
         throw Cancelled();
     }
     if (conversation.failure) {
+        if (conversation.size_changed) {
+            throw VideoSizeChanged(*conversation.failure, conversation.changed_video);
+        }
         throw std::runtime_error(*conversation.failure);
     }
     if (!conversation.result) {
@@ -394,6 +406,13 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
             throw std::invalid_argument("there is no task " + std::string(task));
         }
         send_isolated_message({{"result", result}});
+    } catch (const VideoSizeChanged& error) {
+        nlohmann::json message = {{"error", error.what()}, {"size_changed", true}};
+        if (error.video()) {
+            message["changed_video"] = platform::path_text(*error.video());
+        }
+        send_isolated_message(message);
+        exit_code = 1;
     } catch (const std::exception& error) {
         send_isolated_message({{"error", error.what()}});
         exit_code = 1;

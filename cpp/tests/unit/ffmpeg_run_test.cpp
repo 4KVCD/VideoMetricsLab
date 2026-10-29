@@ -14,6 +14,7 @@
 #include "vml/frame_sync.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/platform/system.h"
+#include "vml/size_changes.h"
 
 namespace vml {
 namespace {
@@ -221,6 +222,33 @@ TEST(FfmpegRun, ARunCutShortIsRefused) {
               "Only 500 of the 1000 frames expected could be compared: one of the videos ends after 0:00:20.8, "
               "though its file says it is longer. It may have been cut short: an encode that stopped early, or a "
               "copy that did not finish.");
+}
+
+// FFmpeg 9.0.1's word that it rebuilt its filters as a video's size changed,
+// and its error output at watched_log_level cut back to the lines
+// "-loglevel error" shows for the same failure, without their levels; a line
+// with no level goes with the message before it, and is kept before any.
+TEST(SizeChanges, ReadsFfmpegsLines) {
+    EXPECT_TRUE(filters_rebuilt("[vf#0:0 @ 0000017c52a6b5c0] [info] Reconfiguring filter graph because video "
+                                "parameters changed to yuv420p10le(tv, unknown), 1280x720, unspecified alpha"));
+    EXPECT_FALSE(filters_rebuilt("[info] Stream mapping:"));
+    const std::string written =
+        "no level first\n"
+        "[info] Input #0, lavfi, from 'testsrc2=size=64x64:rate=1:duration=1':\n"
+        "[info]     description     : a value of two\n"
+        "                     lines\n"
+        "[info]   Duration: N/A, start: 0.000000, bitrate: N/A\n"
+        "[in#0 @ 000002755dd61c00] [error] Error opening input: No such file or directory\n"
+        "[swscaler @ 000002755dd62000] [warning] deprecated pixel format used, make sure you did set range correctly\n"
+        "[error] Error opening input file E:\\nonexistent.mkv.\n"
+        "[fatal] Error opening input files: No such file or directory\n"
+        "no level\n"
+        "[info] frame=    1 fps=0.0 q=-0.0 Lsize=N/A time=00:00:01.00 bitrate=N/A speed= 235x\n";
+    EXPECT_EQ(error_lines_of(written), "no level first\n"
+                                       "[in#0 @ 000002755dd61c00] Error opening input: No such file or directory\n"
+                                       "Error opening input file E:\\nonexistent.mkv.\n"
+                                       "Error opening input files: No such file or directory\n"
+                                       "no level\n");
 }
 
 }  // namespace

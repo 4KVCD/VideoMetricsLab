@@ -13,6 +13,7 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <set>
 #include <stdexcept>
@@ -31,6 +32,7 @@
 #include "vml/python_text.h"
 #include "vml/stats.h"
 #include "vml/score_identity.h"
+#include "vml/size_changes.h"
 #include "vml/temp_files.h"
 
 namespace vml {
@@ -163,21 +165,28 @@ std::string tool_version(const std::filesystem::path& executable) {
 
 // The crop filter that removes a video's black bars, if there are any.
 std::vector<std::string> crop_filter(const std::optional<CropBox>& crop, const VideoInfo& info) {
-    if (!crop || crop->is_noop(info.width, info.height)) {
+    if (!crop || crop->is_noop(info.frame_size().first, info.frame_size().second)) {
         return {};
     }
     return {crop->as_filter()};
 }
 
 // The filters that crop a video's black bars, and scale it to `target`
-// when it is scaled. It is scaled in its own pixel format, as Vship's
+// when it is scaled; a video whose size changes is scaled to one size first
+// (size_changes.h). It is scaled in its own pixel format, as Vship's
 // pictures are, and converted to RGB only after its colour tags are set
 // (to_rgb): left to make the RGB itself, the scale filter would do so
 // before the tags are set, and convert an untagged HD source with BT.601's
 // matrix instead of BT.709's.
 std::vector<std::string> prepare(const std::optional<CropBox>& crop, const VideoInfo& info,
                                  const std::optional<Size>& target, const std::string& scale_algorithm) {
-    std::vector<std::string> filters = crop_filter(crop, info);
+    std::vector<std::string> filters;
+    if (const std::optional<std::string> scale = size_change_scale(info, scale_algorithm)) {
+        filters.push_back(*scale);
+    }
+    for (std::string& filter : crop_filter(crop, info)) {
+        filters.push_back(std::move(filter));
+    }
     if (target) {
         filters.push_back("scale=" + std::to_string(target->first) + ":" + std::to_string(target->second) +
                           ":flags=" + scale_algorithm);
@@ -524,7 +533,7 @@ public:
           backlog_(std::max(2, backlog)),
           stop_(stop),
           cancel_(cancel),
-          ffmpeg_(platform::ChildProcess::start(command)),
+          ffmpeg_(platform::ChildProcess::start(command, watched(rebuilt_))),
           attached_(cancel.attach(ffmpeg_)),
           regulator_([this] { regulate(); }) {}
 
@@ -544,7 +553,9 @@ public:
 
     // The next pair once both its pictures are whole and FFmpeg has let go
     // of them; nothing once the shorter video has ended, or when `stop` is
-    // set. Throws Cancelled, and PerceptualRunError when FFmpeg fails.
+    // set. Throws Cancelled, PerceptualRunError when FFmpeg fails, and
+    // VideoSizeChanged when it rebuilt its filters (size_changes.h): its
+    // pictures from then on are not what the task scores.
     std::optional<Pair> next() {
         if (ended_) {
             return std::nullopt;
@@ -556,6 +567,9 @@ public:
             if (stop_) {
                 return std::nullopt;
             }
+            if (*rebuilt_) {
+                throw VideoSizeChanged();
+            }
             if (ffmpeg_.wait_for(std::chrono::milliseconds(0))) {
                 if (complete(index_)) {
                     break;  // written just before FFmpeg ended
@@ -563,6 +577,10 @@ public:
                 // Ended by the run's Cancel since the check above, it was
                 // stopped, not failed.
                 cancel_.throw_if_cancelled();
+                static_cast<void>(ffmpeg_.standard_error());  // waits for the error output's end, and so its lines
+                if (*rebuilt_) {
+                    throw VideoSizeChanged();
+                }
                 if (ffmpeg_.wait() != 0) {
                     throw failure("FFmpeg could not prepare lossless perceptual-metric frames.");
                 }
@@ -575,11 +593,33 @@ public:
             throttle(false);  // the caller is waiting, so FFmpeg must run
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
+        if (*rebuilt_) {
+            throw VideoSizeChanged();
+        }
         ++index_;
         return found;
     }
 
+    // After a pair's tool failed: whether FFmpeg had rebuilt its filters, and
+    // so the failure was a pair of pictures of two sizes, made as FFmpeg's
+    // word of it was on its way. FFmpeg is ended first, its pictures no
+    // longer wanted, so that all it wrote has been read.
+    bool rebuilt_before_failure() {
+        ffmpeg_.terminate();
+        ffmpeg_.wait();
+        static_cast<void>(ffmpeg_.standard_error());  // waits for the error output's end, and so its lines
+        return *rebuilt_;
+    }
+
 private:
+    // The options of an FFmpeg watched for rebuilding its filters, which
+    // sets `rebuilt`.
+    static platform::ProcessOptions watched(const std::shared_ptr<std::atomic<bool>>& rebuilt) {
+        platform::ProcessOptions options;
+        options.on_error_line = rebuild_watcher(rebuilt);
+        return options;
+    }
+
     Pair pair(long long number) const {
         const std::string digits = std::to_string(number);
         const std::string name = std::string(digits.size() < 8 ? 8 - digits.size() : 0, '0') + digits + ".png";
@@ -645,16 +685,17 @@ private:
         }
     }
 
-    // A PerceptualRunError with `message` and the end of FFmpeg's error
-    // output.
+    // A PerceptualRunError with `message` and the end of FFmpeg's errors.
     PerceptualRunError failure(const std::string& message) {
-        return PerceptualRunError(message, last_characters(python_strip(as_text(ffmpeg_.standard_error())), 2000));
+        const std::string errors = error_lines_of(ffmpeg_.standard_error());
+        return PerceptualRunError(message, last_characters(python_strip(as_text(errors)), 2000));
     }
 
     std::filesystem::path folder_;
     int backlog_;
     const std::atomic<bool>& stop_;
     const CancelToken& cancel_;
+    std::shared_ptr<std::atomic<bool>> rebuilt_ = std::make_shared<std::atomic<bool>>(false);  // before ffmpeg_
     platform::ChildProcess ffmpeg_;
     CancelToken::Attached attached_;  // after ffmpeg_, so that it goes first
     long long index_ = 1;  // the number of the next pair
@@ -887,7 +928,9 @@ std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const Vide
                                            const std::optional<CropBox>& source_crop,
                                            const std::optional<CropBox>& distorted_crop, int step,
                                            const std::filesystem::path& folder) {
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-y"};
+    // At watched_log_level: PngPairs reads FFmpeg's word that it rebuilt its filters.
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", watched_log_level,
+                                     "-nostats", "-y"};
     for (const VideoInfo* video : {&distorted, &source}) {
         const std::vector<std::string> input = video->input_options();
         command.insert(command.end(), input.begin(), input.end());
@@ -1031,6 +1074,9 @@ std::vector<std::vector<double>> CpuScoringPool::score_all(PngPairs& pairs, int 
         thread.join();
     }
     if (scores_.failure) {
+        if (pairs.rebuilt_before_failure()) {
+            throw VideoSizeChanged();  // the task is made again, the video scaled first
+        }
         std::rethrow_exception(scores_.failure);
     }
     return std::move(scores_.by_pair);
@@ -1173,7 +1219,8 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
     const int step = common_step(request, keys);
     const auto [source_crop, distorted_crop] =
         crops ? *crops
-              : resolve_crops(request.environment.ffmpeg, source, distorted, options.crop_mode, cancel, on_status);
+              : resolve_crops(request.environment.ffmpeg, source, distorted, options.crop_mode,
+                              options.scale_algorithm, cancel, on_status);
     const long long expected = expected_frames(source, distorted, options.duration_limit);
     const long long total_units = std::max(1LL, (expected + step - 1) / step) * step;
     if (on_status) {

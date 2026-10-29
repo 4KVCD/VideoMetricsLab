@@ -43,6 +43,7 @@ add_library(vml_core
     src/run_line.cpp
     src/settings.cpp
     src/sha256.cpp
+    src/size_changes.cpp
     src/soundtrack_clock.cpp
     src/stats.cpp
     src/temp_files.cpp
