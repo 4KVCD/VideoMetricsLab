@@ -63,10 +63,12 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
                             const IsolatedFiles& on_files = {});
 
 // The token the GPU probes' children run under (Vship's, VMAF on the GPU's,
-// VMAF v1's): cancelled once, by stop_gpu_probes() as the window's app ends,
-// which ends the probes still running instead of waiting seconds for them
-// (Qt waits for its pool's threads as the app ends), and makes later probes
-// throw Cancelled. A cancelled probe is no answer: nothing is kept of it.
+// VMAF v1's) outside a run (inside one, a probe asked for again runs under
+// the run's own token): cancelled once, by stop_gpu_probes() as the
+// window's app ends, which ends the probes still running instead of waiting
+// seconds for them (Qt waits for its pool's threads as the app ends), and
+// makes later probes throw Cancelled. A cancelled probe is no answer:
+// nothing is kept of it.
 const CancelToken& gpu_probes_token();
 void stop_gpu_probes();
 

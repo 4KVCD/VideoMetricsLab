@@ -29,6 +29,7 @@
 #include "vml/geometry.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
+#include "vml/isolated.h"
 #include "vml/job_runner.h"
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
@@ -397,13 +398,13 @@ std::vector<std::future<void>> start_gpu_checks(const CompareArguments& argument
     std::vector<std::future<void>> checks;
     if (asked("cvvdp") || (!arguments.cpu && (asked("ssimulacra2") || asked("butteraugli")))) {
         checks.push_back(std::async(std::launch::async,
-                                    [build = vship_build(arguments, settings)] { detect_vship_device(build); }));
+                                    [build = vship_build(arguments, settings)] { detect_vship_device(build, gpu_probes_token()); }));
     }
     if (vmaf_on_gpu && (asked("vmaf") || asked("vmaf_neg"))) {
-        checks.push_back(std::async(std::launch::async, [] { gpu_vmaf_backend(); }));
+        checks.push_back(std::async(std::launch::async, [] { gpu_vmaf_backend(gpu_probes_token()); }));
     }
     if (vmaf_on_gpu && asked("vmaf_v1")) {
-        checks.push_back(std::async(std::launch::async, [] { v1_available(); }));
+        checks.push_back(std::async(std::launch::async, [] { v1_available(gpu_probes_token()); }));
     }
     return checks;
 }
@@ -859,7 +860,7 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         // Vship-fast's probe, started with the run (start_gpu_checks),
         // answered first: where only 5.1.2 found a GPU, the request asks for
         // 5.1.2's scores (vship_build_in_use), which is what is calculated.
-        detect_vship_device(VshipBuild::fast);
+        detect_vship_device(VshipBuild::fast, gpu_probes_token());
     }
     video.request = analysis_request(video.options, video.metrics, chosen, cvvdp);
     std::optional<ComparisonResult> saved;
@@ -877,7 +878,7 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         // that answer.
         const VshipBuild build = video.options.vship_build;
         kept = reusable(*saved, video.request.metrics, chosen,
-                        [build](const std::string&) { return detect_vship_device(build).first.has_value(); },
+                        [build](const std::string&) { return detect_vship_device(build, gpu_probes_token()).first.has_value(); },
                         colour_tags(source, *video.info));
     }
     if (std::all_of(video.metrics.begin(), video.metrics.end(), [&kept](const std::string& key) { return kept.has(key); })) {
@@ -1020,7 +1021,9 @@ namespace {
 // nothing more, as the Python app's KeyboardInterrupt ends it. An FFmpeg
 // check or ffprobe under way ends with it, as this process's job ends.
 // During the run (`running`), the run is cancelled and what finished is
-// reported; a second Ctrl+C (or SIGTERM) ends the command at once, for a
+// reported, and the GPU checks started with the command are ended (a task
+// of the run may be waiting for one: nothing after the run asks for one);
+// a second Ctrl+C (or SIGTERM) ends the command at once, for a
 // run whose cancel does not come back (a GPU driver that hangs). Closing the
 // console window (or End task on it) is a Ctrl+C. Set up
 // first: the checks and probes before the run can take a while (60 s for
@@ -1036,6 +1039,7 @@ void cancel_on_interrupt(CancelToken cancel, const std::shared_ptr<Progress>& pr
         progress->message("Cancelling...");
         app_log::write(app_log::Level::info, "vml.job_runner", "Run: cancel requested");
         cancel.cancel();
+        stop_gpu_probes();
     });
 }
 
@@ -1179,7 +1183,7 @@ void ComparisonPlanner::leave_out_cvvdp_if_unable(TestVideo& video) const {
     }
     const char* reason = arguments_.subsample > 1
                              ? "CVVDP needs every frame: it is not calculated with --subsample above 1"
-                         : !detect_vship_device(vship_build(arguments_, settings_)).first
+                         : !detect_vship_device(vship_build(arguments_, settings_), gpu_probes_token()).first
                              ? "CVVDP is calculated on the GPU only, and no GPU that Vship can use was found"
                              : nullptr;
     if (reason != nullptr) {

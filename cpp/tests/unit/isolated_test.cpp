@@ -11,7 +11,10 @@
 
 #include "test_videos.h"
 #include "vml/app_log.h"
+#include "vml/gpu_vmaf.h"
 #include "vml/platform/system.h"
+#include "vml/vmaf_v1_gpu.h"
+#include "vml/vship.h"
 
 namespace vml {
 namespace {
@@ -69,6 +72,23 @@ TEST(Isolated, ItsFolderGoesWhenAProgramItStartedHadAFileThereOpen) {
     set_isolation_program(std::nullopt);
     ASSERT_FALSE(folder.empty());
     EXPECT_FALSE(std::filesystem::exists(folder));
+}
+
+// Each GPU check runs under the token it is given (inside a run, the run's):
+// cancelled, it throws Cancelled and keeps no answer, so a later caller asks
+// again.
+TEST(Isolated, AGpuCheckUnderACancelledTokenThrowsAndKeepsNoAnswer) {
+    set_isolation_program(std::filesystem::path(VML_CLI));
+    CancelToken run;
+    run.cancel();
+    EXPECT_THROW(gpu_vmaf_backend(run), Cancelled);
+    EXPECT_FALSE(gpu_vmaf_probe_ready());
+    EXPECT_THROW(detect_vship_device(VshipBuild::fast, run), Cancelled);
+    EXPECT_FALSE(vship_probe_ready(VshipBuild::fast));
+    EXPECT_FALSE(known_vship_device(VshipBuild::fast).has_value());
+    EXPECT_THROW(v1_available(run), Cancelled);
+    EXPECT_FALSE(v1_probe_ready());
+    set_isolation_program(std::nullopt);
 }
 
 // A real crash of the child: the app's log says where it happened, from the

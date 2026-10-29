@@ -217,8 +217,8 @@ struct V1Probe {
 V1Probe probe_v1();
 
 // probe_v1's answer, found once, in a process of its own where a program to
-// run it is set (isolated.h).
-V1Probe v1_available();
+// run it is set (isolated.h), under `cancel` (as gpu_vmaf_backend's).
+V1Probe v1_available(const CancelToken& cancel);
 // Whether v1_available would answer now, without probing or waiting for a
 // probe in progress.
 bool v1_probe_ready();
@@ -227,8 +227,8 @@ bool v1_probe_ready();
 // "path=<file>", or empty while Auto is not yet resolved) is a VMAF v1 model,
 // `size`, where known, leaves SpEED blocks to score, and the GPU passed its
 // check. Where that check failed (V1Probe::failed), why goes to
-// `check_failure`, where given.
-bool v1_on_gpu(const std::string& model, std::optional<std::pair<int, int>> size,
+// `check_failure`, where given. The check runs under `cancel`.
+bool v1_on_gpu(const std::string& model, std::optional<std::pair<int, int>> size, const CancelToken& cancel,
                std::string* check_failure = nullptr);
 
 }  // namespace vml

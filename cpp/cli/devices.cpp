@@ -7,6 +7,7 @@
 
 #include "arguments.h"
 #include "vml/ffmpeg_run.h"
+#include "vml/isolated.h"
 #include "vml/libvmaf.h"
 #include "vml/metrics.h"
 #include "vml/platform/console.h"
@@ -69,13 +70,13 @@ int devices() {
     const VshipBuild build = default_vship_build(settings.default_vship_build);
     const VshipBuild other = build == VshipBuild::fast ? VshipBuild::stock : VshipBuild::fast;
     std::future<std::pair<std::optional<VshipDevice>, std::string>> vship_check =
-        std::async(std::launch::async, [build] { return detect_vship_device(build); });
+        std::async(std::launch::async, [build] { return detect_vship_device(build, gpu_probes_token()); });
     std::future<std::pair<std::optional<VshipDevice>, std::string>> other_check;
     if (vship51_bundled()) {
-        other_check = std::async(std::launch::async, [other] { return detect_vship_device(other); });
+        other_check = std::async(std::launch::async, [other] { return detect_vship_device(other, gpu_probes_token()); });
     }
-    std::future<GpuVmafBackend> vmaf_check = std::async(std::launch::async, [] { return gpu_vmaf_backend(); });
-    std::future<V1Probe> v1_check = std::async(std::launch::async, [] { return v1_available(); });
+    std::future<GpuVmafBackend> vmaf_check = std::async(std::launch::async, [] { return gpu_vmaf_backend(gpu_probes_token()); });
+    std::future<V1Probe> v1_check = std::async(std::launch::async, [] { return v1_available(gpu_probes_token()); });
     DeviceFindings found;
     found.tools = check_tools(settings);
     const auto [vship, no_vship] = vship_check.get();

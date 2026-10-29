@@ -31,6 +31,7 @@
 #include "vml/ffmpeg_run.h"
 #include "vml/geometry.h"
 #include "vml/gpu_vmaf.h"
+#include "vml/isolated.h"
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
@@ -376,11 +377,11 @@ bool MainWindow::wait_for_gpu_checks(const std::vector<int>& checked) {
         });
         gpu_check_watcher_->setFuture(QtConcurrent::run([v1, builds] {
             for (const VshipBuild build : builds) {
-                detect_vship_device(build);
+                detect_vship_device(build, gpu_probes_token());
             }
-            gpu_vmaf_backend();
+            gpu_vmaf_backend(gpu_probes_token());
             if (v1) {
-                v1_available();
+                v1_available(gpu_probes_token());
             }
         }));
     }

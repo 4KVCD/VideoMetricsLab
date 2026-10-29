@@ -54,8 +54,10 @@ struct GpuVmafBackend {
 
 // The GPU's answer, found once and kept. Each backend is checked in a
 // process of its own where a program to run it is set (isolated.h), as the
-// Python app checks it.
-GpuVmafBackend gpu_vmaf_backend();
+// Python app checks it, under `cancel`: a run's own token inside a run (its
+// Cancel ends a check it asks for again), gpu_probes_token() elsewhere. A
+// check cancelled throws Cancelled and keeps no answer.
+GpuVmafBackend gpu_vmaf_backend(const CancelToken& cancel);
 // Whether gpu_vmaf_backend would answer now, without probing or waiting for a
 // probe in progress.
 bool gpu_vmaf_probe_ready();
@@ -74,9 +76,10 @@ void forget_failed_gpu_vmaf_probe();
 // the GPU does not score is left out, and FFmpeg's libvmaf calculates it.
 // Each metric left out because a check of the GPU failed (crashed, or gave
 // an error or wrong scores) goes to `check_failures` with why, where given.
+// The checks it asks for run under `cancel` (gpu_vmaf_backend).
 GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::string& model, bool enabled,
-                        int bit_depth, std::optional<std::pair<int, int>> size, bool compute_vmaf_v1 = false,
-                        const std::string& model_v1 = "",
+                        int bit_depth, std::optional<std::pair<int, int>> size, const CancelToken& cancel,
+                        bool compute_vmaf_v1 = false, const std::string& model_v1 = "",
                         std::vector<std::pair<std::string, std::string>>* check_failures = nullptr);
 
 // What a run scores outside FFmpeg, and how (the Python app's _GpuPlan):

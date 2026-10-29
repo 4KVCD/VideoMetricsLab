@@ -18,6 +18,7 @@
 #include "vml/geometry.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
+#include "vml/isolated.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
@@ -1041,9 +1042,12 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
         if (options.crop_mode == CropMode::none) {
             size = analysis_dimensions(source, test, options);
         }
+        // Planned before the run, whose checks of the GPU have answered (the
+        // window waits for them, the command line asks as it starts): none
+        // of the run's to cancel.
         on_gpu = scores_on_gpu(vmaf, neg, options.model, options.vmaf_on_gpu,
-                               bit_depth(analysis_pix_fmt({source.pix_fmt, test.pix_fmt})), size, v1,
-                               options.model_v1, &check_failures);
+                               bit_depth(analysis_pix_fmt({source.pix_fmt, test.pix_fmt})), size, gpu_probes_token(),
+                               v1, options.model_v1, &check_failures);
     }
     MetricTask ffmpeg{"ffmpeg", {}};
     ffmpeg.fallbacks = fallback_notes(check_failures);

@@ -195,7 +195,7 @@ void check_gpu_metrics(SelfTestReport& report) {
         builds.push_back(VshipBuild::stock);
     }
     for (const VshipBuild build : builds) {
-        const auto [vship_device, vship_reason] = detect_vship_device(build);
+        const auto [vship_device, vship_reason] = detect_vship_device(build, gpu_probes_token());
         if (vship_device) {
             report.ok(vship_build_name(*vship_device) + " GPU metrics (Vulkan: " + vship_device->name + ")");
         } else {
@@ -204,13 +204,13 @@ void check_gpu_metrics(SelfTestReport& report) {
         }
     }
 
-    const GpuVmafBackend vmaf = gpu_vmaf_backend();
+    const GpuVmafBackend vmaf = gpu_vmaf_backend(gpu_probes_token());
     if (!vmaf.backend.empty()) {
         report.ok("VMAF on the GPU (" + vmaf.text + ")");
     } else {
         report.warn("VMAF on the GPU unavailable; FFmpeg's libvmaf is used (" + vmaf.text + ")");
     }
-    const V1Probe v1 = v1_available();
+    const V1Probe v1 = v1_available(gpu_probes_token());
     if (v1.available) {
         report.ok("VMAF v1 with the GPU (" + v1.text + ")");
     } else {

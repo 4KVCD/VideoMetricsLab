@@ -22,6 +22,7 @@
 #include "widgets.h"
 #include "window_helpers.h"
 #include "vml/cvvdp.h"
+#include "vml/isolated.h"
 #include "vml/metrics.h"
 #include "vml/vship.h"
 
@@ -172,7 +173,7 @@ void MainWindow::on_panel_field_edited(const QString& field) {
     if (field == "vship_build" && !vship_probe_ready(panel.vship_build)) {
         // Its GPU check, for the rows to say what it can calculate: a build
         // other than the default is checked only when a row chooses it.
-        (void)QtConcurrent::run([build = panel.vship_build] { detect_vship_device(build); });
+        (void)QtConcurrent::run([build = panel.vship_build] { detect_vship_device(build, gpu_probes_token()); });
     }
     // Which GPU, how many threads, and how frames are scaled change how a
     // comparison is made, not what it is (the recipe's identity): its scores

@@ -281,6 +281,7 @@ PerceptualTaskOutput scored(const std::string& key, float value, const std::stri
 struct Routed {
     bool probed = false;
     std::optional<VshipBuild> build;  // the build whose GPU was asked for
+    std::optional<CancelToken> probe_cancel;  // what the GPU was asked for under
     std::vector<std::string> gpu;
     std::vector<std::string> vship51;  // what stock Vship 5.1.2 was asked for
     std::vector<std::string> cpu;
@@ -299,9 +300,10 @@ PerceptualRoutes stand_in_routes(
     std::function<PerceptualTaskOutput(const std::vector<std::string>&, const ProgressCallback&)> on_cpu,
     std::function<PerceptualTaskOutput(const std::vector<std::string>&)> on_vship51 = {}) {
     PerceptualRoutes routes;
-    routes.find_gpu = [&routed, device](VshipBuild build) {
+    routes.find_gpu = [&routed, device](VshipBuild build, const CancelToken& cancel) {
         routed.probed = true;
         routed.build = build;
+        routed.probe_cancel = cancel;
         return std::pair(device, std::string(device ? "" : "no supported GPU"));
     };
     routes.find_crops = [](const PerceptualRequest&, const StatusCallback&, const CancelToken&) { return CropPair{}; };
@@ -396,6 +398,21 @@ TEST(PerceptualRouting, WithoutAGpuCvvdpFailsAndTheOthersRunOnTheCpu) {
         EXPECT_EQ(std::string(error.what()),
                   "CVVDP needs a GPU that Vship can use, and could not use one: no supported GPU");
     }
+}
+
+// The GPU is asked for under the run's own token, so that the run's Cancel
+// ends a check of the GPU asked for again inside the run (a copy of a token
+// shares its Cancel).
+TEST(PerceptualRouting, TheGpuIsAskedForUnderTheRunsToken) {
+    Routed routed;
+    const PerceptualRoutes routes = stand_in_routes(
+        routed, test_gpu, [](const auto&, const auto&) { return scored("ssimulacra2", 91.0f, "gpu"); },
+        [](const auto&, const auto&) -> PerceptualTaskOutput { throw std::logic_error("CPU"); });
+    const CancelToken run;
+    run_perceptual_task(routed_request(), {"ssimulacra2"}, false, recording_hooks(routed), run, routes);
+    ASSERT_TRUE(routed.probe_cancel.has_value());
+    routed.probe_cancel->cancel();
+    EXPECT_TRUE(run.cancelled());
 }
 
 // Each metric runs where it is set to, the CPU's with the black bars the GPU

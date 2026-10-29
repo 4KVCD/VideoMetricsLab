@@ -104,11 +104,11 @@ TEST(GpuVmaf, ScoresOnTheGpuWhatThePythonAppDoes) {
     EXPECT_TRUE(gpu_models(false, false, "version=vmaf_v0.6.1").empty());
 
     const std::string model = "version=vmaf_v0.6.1";
-    EXPECT_TRUE(scores_on_gpu(true, true, model, false, 8, std::pair(1920, 1080)).empty());
-    EXPECT_TRUE(scores_on_gpu(true, true, model, true, 12, std::pair(1920, 1080)).empty());
-    EXPECT_TRUE(scores_on_gpu(true, true, model, true, 10, std::pair(1919, 1080)).empty());
-    EXPECT_TRUE(scores_on_gpu(true, true, model, true, 10, std::pair(1920, 1079)).empty());
-    EXPECT_TRUE(scores_on_gpu(true, true, "path=C:/models/mine.json", true, 8, std::nullopt).empty());
+    EXPECT_TRUE(scores_on_gpu(true, true, model, false, 8, std::pair(1920, 1080), CancelToken()).empty());
+    EXPECT_TRUE(scores_on_gpu(true, true, model, true, 12, std::pair(1920, 1080), CancelToken()).empty());
+    EXPECT_TRUE(scores_on_gpu(true, true, model, true, 10, std::pair(1919, 1080), CancelToken()).empty());
+    EXPECT_TRUE(scores_on_gpu(true, true, model, true, 10, std::pair(1920, 1079), CancelToken()).empty());
+    EXPECT_TRUE(scores_on_gpu(true, true, "path=C:/models/mine.json", true, 8, std::nullopt, CancelToken()).empty());
 }
 
 }  // namespace

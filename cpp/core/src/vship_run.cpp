@@ -2494,7 +2494,7 @@ public:
         // The video's Vship build: stock Vship 5.1.2's device runs every
         // metric on 5.1.2, as one only 5.1.2 found for Vship-fast does, and
         // has nothing to fall back to but the CPU.
-        const auto [device, reason] = routes_.find_gpu(request_.options.vship_build);
+        const auto [device, reason] = routes_.find_gpu(request_.options.vship_build, cancel_);
         if (!device) {
             return without_gpu(reason);
         }
@@ -2831,9 +2831,9 @@ private:
 
 PerceptualRoutes app_perceptual_routes() {
     PerceptualRoutes routes;
-    routes.find_gpu = [](VshipBuild build) {
+    routes.find_gpu = [](VshipBuild build, const CancelToken& cancel) {
         forget_failed_vship_probe();
-        return detect_vship_device(build);
+        return detect_vship_device(build, cancel);
     };
     routes.gpu_check_failed = vship_check_failed;
     routes.find_crops = [](const PerceptualRequest& request, const StatusCallback& on_status,

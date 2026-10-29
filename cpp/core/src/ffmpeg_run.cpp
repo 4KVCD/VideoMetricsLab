@@ -1775,8 +1775,11 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> run_crops(const RunEnv
 // `width` x `height`). VMAF is scored on the GPU only when VMAF, NEG and
 // VMAF v1 are all the run scores: the command line puts them in a run of
 // their own, apart from FFmpeg's other metrics. None when one is calculated
-// on the CPU: FFmpeg's libvmaf calculates them all together.
-GpuModels models_on_gpu(const VmafOptions& options, const std::string& model, int depth, int width, int height) {
+// on the CPU: FFmpeg's libvmaf calculates them all together. A check of the
+// GPU it asks for again (forget_failed_gpu_vmaf_probe) runs under the run's
+// `cancel`.
+GpuModels models_on_gpu(const VmafOptions& options, const std::string& model, int depth, int width, int height,
+                        const CancelToken& cancel) {
     const std::vector<std::string> requested = options.requested_metrics();
     if (!std::all_of(requested.begin(), requested.end(), [](const std::string& key) {
             return key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1";
@@ -1784,7 +1787,7 @@ GpuModels models_on_gpu(const VmafOptions& options, const std::string& model, in
         return {};
     }
     GpuModels gpu = scores_on_gpu(options.compute_vmaf, options.compute_vmaf_neg, model, options.vmaf_on_gpu, depth,
-                                  std::pair(width, height), options.compute_vmaf_v1, options.model_v1);
+                                  std::pair(width, height), cancel, options.compute_vmaf_v1, options.model_v1);
     if (gpu.size() != requested.size()) {
         gpu.clear();
     }
@@ -1852,7 +1855,7 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
     const long long total_frames = estimate_total_frames(distorted, options, &source);
 
     const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
-    const GpuModels gpu = models_on_gpu(options, model, depth, width, height);
+    const GpuModels gpu = models_on_gpu(options, model, depth, width, height, cancel);
     std::optional<ParsedScores> scores;
     std::set<std::string, std::less<>> gpu_keys;
     std::string gpu_backend = "cuda";
@@ -1862,7 +1865,7 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
         // Vulkan, on the best GPU unless the engine scores VMAF v0.6.1 here;
         // alone, where neither scores it, it goes as with CUDA (the Python
         // app's default backend).
-        const GpuVmafBackend backend = gpu_vmaf_backend();
+        const GpuVmafBackend backend = gpu_vmaf_backend(cancel);
         GpuPlan plan{gpu, width, height, depth};
         plan.backend = backend.backend == "vulkan" ? "vulkan" : "cuda";
         plan.device = backend.backend == "vulkan" && backend.device ? *backend.device : -1;

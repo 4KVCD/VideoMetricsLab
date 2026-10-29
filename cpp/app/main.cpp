@@ -236,10 +236,10 @@ int main(int argc, char** argv) {
     // use; VMAF v1's (1.75 s on its own) too, when it is calculated by
     // default on the GPU.
     (void)QtConcurrent::run(
-        [build = default_vship_build(settings.default_vship_build)] { detect_vship_device(build); });
-    (void)QtConcurrent::run([] { gpu_vmaf_backend(); });
+        [build = default_vship_build(settings.default_vship_build)] { detect_vship_device(build, gpu_probes_token()); });
+    (void)QtConcurrent::run([] { gpu_vmaf_backend(gpu_probes_token()); });
     if (settings.default_compute_vmaf_v1 && settings.default_vmaf_on_gpu) {
-        (void)QtConcurrent::run([] { v1_available(); });
+        (void)QtConcurrent::run([] { v1_available(gpu_probes_token()); });
     }
 
     app::MainWindow window;

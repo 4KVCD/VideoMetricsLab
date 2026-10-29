@@ -25,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "vml/cancel.h"
 #include "vml/frame_sync.h"
 #include "vml/perceptual.h"
 #include "vml/platform/library.h"
@@ -282,8 +283,10 @@ std::optional<VshipDevice> vship_device_from(const nlohmann::json& text);
 // there would end the run), and kept; or a reason the user can read for why
 // there is none. Where Vship-fast can use none (it compiles every shader as
 // it starts on a GPU), stock Vship 5.1.2's answer is Vship-fast's, a device
-// with `vship51`, if it finds one.
-std::pair<std::optional<VshipDevice>, std::string> detect_vship_device(VshipBuild build);
+// with `vship51`, if it finds one. The check runs under `cancel`: a run's own
+// token inside a run, gpu_probes_token() elsewhere; cancelled, it throws
+// Cancelled and keeps no answer.
+std::pair<std::optional<VshipDevice>, std::string> detect_vship_device(VshipBuild build, const CancelToken& cancel);
 // Whether detect_vship_device's answer of no GPU came from a check that
 // crashed or failed with an error, rather than one that found no GPU Vship
 // can use: the metrics then fall back to the CPU, and the run says so.

@@ -1363,7 +1363,7 @@ bool v1_probe_ready() {
     return lock.owns_lock() && v1_probed.has_value();
 }
 
-V1Probe v1_available() {
+V1Probe v1_available(const CancelToken& cancel) {
     std::optional<V1Probe>& probed = v1_probed;
     const std::lock_guard lock(v1_probe_mutex);
     if (!probed) {
@@ -1371,15 +1371,15 @@ V1Probe v1_available() {
             if (!isolation_program()) {
                 probed = probe_v1();
             } else {
-                const nlohmann::json result = run_isolated("vmaf-v1-probe", "the GPU VMAF v1 probe",
-                                                           nlohmann::json::object(), {}, gpu_probes_token());
+                const nlohmann::json result =
+                    run_isolated("vmaf-v1-probe", "the GPU VMAF v1 probe", nlohmann::json::object(), {}, cancel);
                 probed = V1Probe{result.at("available").get<bool>(), result.at("text").get<std::string>(),
                                  result.value("failed", false)};
             }
         } catch (const IsolatedCrashError& error) {
             probed = V1Probe{false, error.what(), true};
         } catch (const Cancelled&) {
-            throw;  // stopped as the app ends (stop_gpu_probes): no answer, nothing kept
+            throw;  // the run's Cancel, or the app ending (stop_gpu_probes): no answer, nothing kept
         } catch (const std::exception& error) {
             logger.warning(std::string("The GPU VMAF v1 probe failed: ") + error.what());
             probed = V1Probe{false, std::string("the GPU probe failed: ") + error.what(), true};
@@ -1390,7 +1390,8 @@ V1Probe v1_available() {
     return *probed;
 }
 
-bool v1_on_gpu(const std::string& model, std::optional<std::pair<int, int>> size, std::string* check_failure) {
+bool v1_on_gpu(const std::string& model, std::optional<std::pair<int, int>> size, const CancelToken& cancel,
+               std::string* check_failure) {
     Options speed = Options::object();
     if (!model.empty()) {
         const std::string_view file = model_file_of(model).value_or(model);
@@ -1403,7 +1404,7 @@ bool v1_on_gpu(const std::string& model, std::optional<std::pair<int, int>> size
     if (size && speed_too_small(speed, size->first, size->second)) {
         return false;
     }
-    const V1Probe probe = v1_available();
+    const V1Probe probe = v1_available(cancel);
     if (!probe.available && probe.failed && check_failure != nullptr) {
         *check_failure = probe.text;
     }
