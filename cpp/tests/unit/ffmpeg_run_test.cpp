@@ -28,9 +28,13 @@ void set_pairing(const std::string& value) {
 #endif
 }
 
+// A video at the root of the drive: a command names its videos by their full
+// paths (input_path), which for a name that does not exist checks every
+// folder above it, so a relative name would make the tests as slow as the
+// folder they run in is deep.
 VideoInfo video(const char* name, int width, int height, const char* pix_fmt, double fps) {
     VideoInfo info;
-    info.path = name;
+    info.path = std::filesystem::path("/") / name;
     info.width = width;
     info.height = height;
     info.pix_fmt = pix_fmt;
