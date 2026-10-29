@@ -177,6 +177,20 @@ struct Decoder {
     std::vector<Texture> textures;
     handover::Slots vk;
 
+    // The part of the decoder's pictures it shows (shown_area), as the
+    // output type set says: kept as the decoder sets its type until the first
+    // picture comes out (`delivered`); from then on it is the video's, and a
+    // stream change that shows another part is a change of size partway
+    // through. Only the decoding thread touches them.
+    struct Shown {
+        int x = 0, y = 0, width = 0, height = 0;
+        bool operator==(const Shown &other) const {
+            return x == other.x && y == other.y && width == other.width && height == other.height;
+        }
+    };
+    Shown shown;
+    bool delivered = false;
+
     std::mutex mutex;
     std::condition_variable changed;
     std::vector<IMFSample *> slots;
@@ -443,6 +457,25 @@ bool deliver(Decoder *d, IMFSample *sample) {
     return confirm(d, false);
 }
 
+// The part of an output type's pictures that is shown: its minimum display
+// aperture, else its geometric aperture, else its whole frame (Media
+// Foundation's order). Its frame size alone is the coded one, which may be
+// larger (1920x1088 for 1080p).
+Decoder::Shown shown_area(IMFMediaType *type) {
+    MFVideoArea area{};
+    UINT32 size = 0;
+    for (const GUID &aperture : {MF_MT_MINIMUM_DISPLAY_APERTURE, MF_MT_GEOMETRIC_APERTURE}) {
+        if (SUCCEEDED(type->GetBlob(aperture, reinterpret_cast<UINT8 *>(&area), sizeof area, &size))
+            && size == sizeof area) {
+            return {area.OffsetX.value, area.OffsetY.value, static_cast<int>(area.Area.cx),
+                    static_cast<int>(area.Area.cy)};
+        }
+    }
+    UINT32 width = 0, height = 0;
+    MFGetAttributeSize(type, MF_MT_FRAME_SIZE, &width, &height);
+    return {0, 0, static_cast<int>(width), static_cast<int>(height)};
+}
+
 bool set_output_type(Decoder *d) {
     const GUID wanted = d->params.bit_depth > 8 ? MFVideoFormat_P010 : MFVideoFormat_NV12;
     for (DWORD i = 0;; ++i) {
@@ -455,6 +488,19 @@ bool set_output_type(Decoder *d) {
         GUID subtype{};
         type->GetGUID(MF_MT_SUBTYPE, &subtype);
         if (subtype == wanted) {
+            const Decoder::Shown area = shown_area(type);
+            if (d->delivered && !(area == d->shown)) {
+                // Read at the first size, the pictures would be cut or padded.
+                char text[192];
+                snprintf(text, sizeof text,
+                         "the video's picture size changes partway through (%dx%d at %d,%d -> %dx%d at %d,%d)",
+                         d->shown.width, d->shown.height, d->shown.x, d->shown.y, area.width, area.height, area.x,
+                         area.y);
+                type->Release();
+                d->fail(text);
+                return false;
+            }
+            d->shown = area;
             hr = d->mft->SetOutputType(0, type, 0);
             type->Release();
             if (FAILED(hr)) {
@@ -484,6 +530,20 @@ bool pull(Decoder *d) {
             if (out.pSample) out.pSample->Release();
             d->fail(hr_text("the GPU's decoder failed", hr));
             return false;
+        }
+        if (out.pSample && !d->delivered) {
+            // The pictures are read from their top left (the app's crop is
+            // from there): a decoder that shows a part further in is left to
+            // the FFmpeg path, as NVIDIA's is.
+            if (d->shown.x != 0 || d->shown.y != 0) {
+                char text[160];
+                snprintf(text, sizeof text, "the decoder shows its pictures from %d,%d, not from their top left",
+                         d->shown.x, d->shown.y);
+                out.pSample->Release();
+                d->fail(text);
+                return false;
+            }
+            d->delivered = true;
         }
         if (out.pSample && !deliver(d, out.pSample)) return false;
     }
@@ -705,6 +765,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
                 type->Release();
         }
         if (first) {
+            d->shown = shown_area(first);
             ok = SUCCEEDED(d->mft->SetOutputType(0, first, 0));
             first->Release();
             if (!ok) text = "the decoder's output could not be set";
