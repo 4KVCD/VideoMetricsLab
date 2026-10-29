@@ -65,17 +65,18 @@ std::vector<std::vector<std::string>> vship_passes(const std::vector<std::string
 
 // The steps run_perceptual_task takes a task's metrics through, each a
 // function, so that the tests can stand in for them (the Python app's tests
-// replace the same functions): finding the GPU Vship uses, and whether a GPU
-// check failed where none was found (none: it did not), finding the black
-// bars, Vship-fast's passes on that GPU, the same passes on stock Vship
-// 5.1.2 (none where it is not bundled), and the CPU's tools with the black
-// bars already found, if they were.
+// replace the same functions): finding the GPU a Vship build uses, and
+// whether its GPU check failed where none was found (none: it did not),
+// finding the black bars, Vship's passes on that GPU (Vship-fast's, or
+// 5.1.2's on a device with `vship51`), the same passes on stock Vship 5.1.2
+// after Vship-fast failed (none where it is not bundled), and the CPU's tools
+// with the black bars already found, if they were.
 struct PerceptualRoutes {
     using GpuRoute = std::function<PerceptualTaskOutput(const PerceptualRequest&, const std::vector<std::string>& keys,
                                                         const VshipDevice&, const CropPair&, bool together,
                                                         const PerceptualHooks&, const CancelToken&)>;
-    std::function<std::pair<std::optional<VshipDevice>, std::string>()> find_gpu;
-    std::function<bool()> gpu_check_failed;
+    std::function<std::pair<std::optional<VshipDevice>, std::string>(VshipBuild)> find_gpu;
+    std::function<bool(VshipBuild)> gpu_check_failed;
     std::function<CropPair(const PerceptualRequest&, const StatusCallback&, const CancelToken&)> find_crops;
     GpuRoute run_gpu;
     GpuRoute run_vship51;
@@ -92,12 +93,13 @@ struct PerceptualRoutes {
 PerceptualRoutes app_perceptual_routes();
 
 // Calculates `keys` (SSIMULACRA2, Butteraugli, CVVDP) where each is set to
-// run (the Python app's apply_vship_cpu_fallback): on the GPU through
-// Vship-fast, each in a pass of its own, or with `together` in one pass; or
-// on the CPU. What Vship-fast fails on the GPU is calculated again with
-// stock Vship 5.1.2 where it is bundled, but a metric refused for the size
-// compared at (size_refusal); on a GPU only 5.1.2 found
-// (VshipDevice::vship51) every metric runs on 5.1.2. A metric moves from
+// run (the Python app's apply_vship_cpu_fallback): on the GPU through the
+// request's Vship build, each in a pass of its own, or with `together` in
+// one pass; or on the CPU. What Vship-fast fails on the GPU is calculated
+// again with stock Vship 5.1.2 where it is bundled, but a metric refused for
+// the size compared at (size_refusal); with stock Vship 5.1.2 chosen, or on
+// a GPU only 5.1.2 found (VshipDevice::vship51), every metric runs on 5.1.2,
+// and never on Vship-fast. A metric moves from
 // the GPU to the CPU where the GPU cannot calculate it, whatever the
 // video's length: without a GPU Vship can use, and after it failed on the
 // GPU with both builds.

@@ -330,6 +330,12 @@ double duration_limit(const CompareArguments& arguments, const VideoInfo& test) 
     return (static_cast<double>(*arguments.frames) - 0.5) / test.fps;
 }
 
+// The Vship build SSIMULACRA2, Butteraugli and CVVDP run on: --vship's, or
+// the one the window gives new videos.
+VshipBuild vship_build(const CompareArguments& arguments, const Settings& settings) {
+    return arguments.vship ? vship_build_from(*arguments.vship) : default_vship_build(settings.default_vship_build);
+}
+
 // The options the window's row would hold for these choices, for the test
 // video `test`.
 VmafOptions row_options(const CompareArguments& arguments, const Settings& settings,
@@ -338,6 +344,7 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
     VmafOptions options;
     options.gpu_decode = settings.default_gpu_decode && !arguments.no_gpu_decode;
     options.vmaf_on_gpu = vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu;
+    options.vship_build = vship_build(arguments, settings);
     options.n_threads = arguments.threads.value_or(0);
     options.n_subsample = arguments.subsample;
     options.scale_algorithm = arguments.scaler;
@@ -389,7 +396,8 @@ std::vector<std::future<void>> start_gpu_checks(const CompareArguments& argument
     const bool vmaf_on_gpu = vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu;
     std::vector<std::future<void>> checks;
     if (asked("cvvdp") || (!arguments.cpu && (asked("ssimulacra2") || asked("butteraugli")))) {
-        checks.push_back(std::async(std::launch::async, [] { detect_vship_device(); }));
+        checks.push_back(std::async(std::launch::async,
+                                    [build = vship_build(arguments, settings)] { detect_vship_device(build); }));
     }
     if (vmaf_on_gpu && (asked("vmaf") || asked("vmaf_neg"))) {
         checks.push_back(std::async(std::launch::async, [] { gpu_vmaf_backend(); }));
@@ -839,6 +847,20 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
     // The request the window makes for a row: what the saved scores are
     // looked up and saved under, so that the two apps find each other's.
     const std::map<std::string, std::string> chosen(backends.begin(), backends.end());
+    const auto asks = [&video](std::string_view key) {
+        return std::find(video.metrics.begin(), video.metrics.end(), key) != video.metrics.end();
+    };
+    const auto on_gpu = [&asks, &chosen](const char* key) {
+        const auto backend = chosen.find(key);
+        return asks(key) && (backend == chosen.end() || backend->second == "gpu");
+    };
+    if (video.options.vship_build == VshipBuild::fast && vship51_bundled() &&
+        (asks("cvvdp") || on_gpu("ssimulacra2") || on_gpu("butteraugli"))) {
+        // Vship-fast's probe, started with the run (start_gpu_checks),
+        // answered first: where only 5.1.2 found a GPU, the request asks for
+        // 5.1.2's scores (vship_build_in_use), which is what is calculated.
+        detect_vship_device(VshipBuild::fast);
+    }
     video.request = analysis_request(video.options, video.metrics, chosen, cvvdp);
     std::optional<ComparisonResult> saved;
     if (use_saved) {
@@ -850,10 +872,12 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
     // The saved scores the run keeps, by the window's rule.
     MetricResultSet kept;
     if (saved) {
-        // A metric set to the GPU keeps a CPU score only without a GPU Vship
-        // can use; the probe runs only if a score needs that answer.
+        // A metric set to the GPU keeps a CPU score only without a GPU the
+        // video's Vship build can use; the probe runs only if a score needs
+        // that answer.
+        const VshipBuild build = video.options.vship_build;
         kept = reusable(*saved, video.request.metrics, chosen,
-                        [](const std::string&) { return detect_vship_device().first.has_value(); },
+                        [build](const std::string&) { return detect_vship_device(build).first.has_value(); },
                         colour_tags(source, *video.info));
     }
     if (std::all_of(video.metrics.begin(), video.metrics.end(), [&kept](const std::string& key) { return kept.has(key); })) {
@@ -1147,14 +1171,15 @@ std::vector<TestVideo*> ComparisonPlanner::job_targets() {
 }
 
 // CVVDP left out of `video`'s metrics, with a note why, where it cannot be
-// calculated: with --subsample above 1, or with no GPU Vship can use.
+// calculated: with --subsample above 1, or with no GPU the run's Vship build
+// can use.
 void ComparisonPlanner::leave_out_cvvdp_if_unable(TestVideo& video) const {
     if (std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") == video.metrics.end()) {
         return;
     }
     const char* reason = arguments_.subsample > 1
                              ? "CVVDP needs every frame: it is not calculated with --subsample above 1"
-                         : !detect_vship_device().first
+                         : !detect_vship_device(vship_build(arguments_, settings_)).first
                              ? "CVVDP is calculated on the GPU only, and no GPU that Vship can use was found"
                              : nullptr;
     if (reason != nullptr) {
@@ -1359,6 +1384,10 @@ int compare(const CompareArguments& arguments) {
     const std::vector<std::string> asked = arguments.metrics.value_or(default_metrics(settings));
     if (const std::optional<std::string> wrong = model_file_wrong(arguments, asked)) {
         print_error(*wrong);
+        return exit_usage;
+    }
+    if (arguments.vship && vship_build_from(*arguments.vship) == VshipBuild::stock && !vship51_bundled()) {
+        print_error("--vship vship: stock Vship 5.1.2 is not bundled with this package.");
         return exit_usage;
     }
     if (const std::optional<std::string> missing = not_yet(arguments, settings, asked)) {

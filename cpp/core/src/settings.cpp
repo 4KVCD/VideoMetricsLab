@@ -41,6 +41,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"default_compute_butteraugli", &Settings::default_compute_butteraugli},
         {"default_compute_cvvdp", &Settings::default_compute_cvvdp},
         {"default_vmaf_on_gpu", &Settings::default_vmaf_on_gpu},
+        {"default_vship_build", &Settings::default_vship_build},
         {"graph_metric", &Settings::graph_metric},
         {"parallel_jobs", &Settings::parallel_jobs},
         {"gpu_metrics_together", &Settings::gpu_metrics_together},
@@ -212,6 +213,7 @@ std::string Settings::text() const {
     data["default_compute_butteraugli"] = default_compute_butteraugli;
     data["default_compute_cvvdp"] = default_compute_cvvdp;
     data["default_vmaf_on_gpu"] = default_vmaf_on_gpu;
+    data["default_vship_build"] = default_vship_build;
     data["graph_metric"] = graph_metric;
     data["parallel_jobs"] = parallel_jobs;
     data["gpu_metrics_together"] = gpu_metrics_together;

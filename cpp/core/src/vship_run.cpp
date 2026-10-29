@@ -2510,7 +2510,10 @@ public:
         if (gpu_.empty()) {
             return on_cpu(cpu_, {}, std::nullopt);
         }
-        const auto [device, reason] = routes_.find_gpu();
+        // The video's Vship build: stock Vship 5.1.2's device runs every
+        // metric on 5.1.2, as one only 5.1.2 found for Vship-fast does, and
+        // has nothing to fall back to but the CPU.
+        const auto [device, reason] = routes_.find_gpu(request_.options.vship_build);
         if (!device) {
             return without_gpu(reason);
         }
@@ -2600,7 +2603,7 @@ private:
     PerceptualTaskOutput without_gpu(const std::string& reason) {
         const PerceptualFailures failures = gpu_only_.empty() ? PerceptualFailures{} : gpu_only_failed(reason, true);
         if (hooks_.on_status) {
-            const bool failed = routes_.gpu_check_failed && routes_.gpu_check_failed();
+            const bool failed = routes_.gpu_check_failed && routes_.gpu_check_failed(request_.options.vship_build);
             hooks_.on_status({"Vship GPU unavailable (" + reason + "); using CPU reference metrics\xE2\x80\xA6",
                               failed ? StatusKind::gpu_perceptual_failed : StatusKind::step});
         }
@@ -2847,9 +2850,9 @@ private:
 
 PerceptualRoutes app_perceptual_routes() {
     PerceptualRoutes routes;
-    routes.find_gpu = [] {
+    routes.find_gpu = [](VshipBuild build) {
         forget_failed_vship_probe();
-        return detect_vship_device();
+        return detect_vship_device(build);
     };
     routes.gpu_check_failed = vship_check_failed;
     routes.find_crops = [](const PerceptualRequest& request, const StatusCallback& on_status,

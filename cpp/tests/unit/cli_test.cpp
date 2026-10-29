@@ -53,6 +53,7 @@ Json values_of(const Arguments& parsed) {
         {"subsample", a.subsample},
         {"threads", either(a.threads)},
         {"vmaf_on", either(a.vmaf_on)},
+        {"vship", either(a.vship)},
         {"cpu", a.cpu},
         {"no_gpu_decode", a.no_gpu_decode},
         {"parallel", either(a.parallel)},

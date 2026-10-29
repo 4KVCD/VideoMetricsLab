@@ -29,6 +29,16 @@ bool VmafOptions::*bool_option(std::string_view name) {
 
 }  // namespace
 
+std::string_view vship_build_value(VshipBuild build) { return build == VshipBuild::stock ? "vship" : "vship-fast"; }
+
+VshipBuild vship_build_from(std::string_view value) {
+    return value == vship_build_value(VshipBuild::stock) ? VshipBuild::stock : VshipBuild::fast;
+}
+
+std::string_view vship_build_label(VshipBuild build) {
+    return build == VshipBuild::stock ? "Vship 5.1.2" : "Vship-fast";
+}
+
 std::filesystem::path synthetic_scale_direction_variant_path(const std::filesystem::path& distorted,
                                                              ScaleDirection direction) {
     std::filesystem::path name = distorted.stem();

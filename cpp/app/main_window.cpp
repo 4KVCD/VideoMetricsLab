@@ -72,6 +72,7 @@
 #include "vml/metrics.h"
 #include "vml/python_text.h"
 #include "vml/platform/system.h"
+#include "vml/score_identity.h"
 #include "vml/time_format.h"
 #include "vml/vship.h"
 #include "widgets.h"
@@ -238,7 +239,8 @@ MainWindow::MainWindow() {
     logger.info(std::string("Settings: parallel CPU metrics ") + (settings_.parallel_jobs > 1 ? "on" : "off") +
                 ", GPU decode " + (settings_.default_gpu_decode ? "on" : "off") + ", VMAF v0.6.1 and NEG on " +
                 (settings_.default_vmaf_on_gpu ? "GPU" : "CPU") + ", GPU metrics " +
-                (settings_.gpu_metrics_together ? "in one pass" : "one at a time") +
+                (settings_.gpu_metrics_together ? "in one pass" : "one at a time") + " with " +
+                std::string(vship_build_label(default_vship_build(settings_.default_vship_build))) +
                 ", saved results " + (settings_.use_cache ? "reused" : "not reused") + " (" +
                 (settings_.cache_dir.empty() ? std::string("default folder") : settings_.cache_dir) + ")");
     if (settings_.remember_window_size) {
@@ -295,7 +297,7 @@ MainWindow::MainWindow() {
     // app (window_helpers.h), and are brought up to date when it finishes:
     // asked for before the first row, so that none misses it.
     on_vship_probe_finished([this] {
-        QMetaObject::invokeMethod(this, [this] { refresh_metric_cells(); }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, [this] { on_vship_checked(); }, Qt::QueuedConnection);
     });
     restore_open_videos();
     on_table_selection_changed();
@@ -887,6 +889,7 @@ VmafOptions MainWindow::options_from_settings() const {
     VmafOptions options;
     options.gpu_decode = settings_.default_gpu_decode;
     options.vmaf_on_gpu = settings_.default_vmaf_on_gpu;
+    options.vship_build = default_vship_build(settings_.default_vship_build);
     options.extra_features = settings_.default_extra_features();
     options.compute_xpsnr = settings_.default_compute_xpsnr;
     options.compute_vmaf = settings_.default_compute_vmaf;
@@ -1475,6 +1478,30 @@ void MainWindow::refresh_metric_cells() {
     schedule_best_worst();
 }
 
+void MainWindow::on_vship_checked() {
+    // A Vship probe finished: the rows say what can be calculated now. Where
+    // Vship-fast turns out to use no GPU and 5.1.2 one, the rows set to
+    // Vship-fast look their saved scores up again, as 5.1.2's
+    // (vship_build_in_use): a lookup made before the probe asked for
+    // Vship-fast's. Not during a run, whose rows take its scores; the next
+    // probe to finish tries again.
+    refresh_metric_cells();
+    const bool vship51_in_use = vship_build_in_use(VshipBuild::fast) == VshipBuild::stock;
+    if (vship51_in_use && !vship51_in_use_) {
+        if (run_active_) {
+            return;
+        }
+        std::vector<int> rows;
+        for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
+            if (rows_[static_cast<std::size_t>(row)]->options.vship_build == VshipBuild::fast) {
+                rows.push_back(row);
+            }
+        }
+        reload_saved_scores(rows);
+    }
+    vship51_in_use_ = vship51_in_use;
+}
+
 void MainWindow::set_row_metrics(int row) {
     // Each metric cell shows its score, or a tick box for calculating it. A
     // metric that has been measured shows only the number: there is no
@@ -1522,20 +1549,30 @@ void MainWindow::show_score_cell(QTableWidgetItem& item, const RowData& row_data
     item.setData(Qt::CheckStateRole, QVariant());
     const MetricDefinition& definition = metric_definition(metric.key);
     const FrameMetricResult* frame_metric = run.result.metric_results.frame(metric.key);
+    const SequenceMetricResult* sequence_metric = run.result.metric_results.sequence(metric.key);
     QString text = qt_text(definition.format_value(score));
-    const bool other_scale = frame_metric != nullptr && !backend_matches(metric.key, frame_metric->provenance);
+    const bool other_scale =
+        frame_metric != nullptr && !backend_matches(row_data, metric.key, frame_metric->provenance);
+    const MetricProvenance* provenance = frame_metric != nullptr      ? &frame_metric->provenance
+                                         : sequence_metric != nullptr ? &sequence_metric->provenance
+                                                                      : nullptr;
+    const std::optional<VshipBuild> other_build =
+        provenance != nullptr ? other_vship_build(row_data, *provenance) : std::nullopt;
     if (other_scale) {
         // Visible without hovering: a score from the other
         // implementation is on a different scale from the rest.
         text += " (" + QString::fromStdString(frame_metric->provenance.compute_backend).toUpper() + ")";
+    } else if (other_build) {
+        text += *other_build == VshipBuild::stock ? " (Vship)" : " (Vship-fast)";
     }
     item.setText(text);
-    // Compared with the others' unless on another scale.
-    item.setData(score_role, other_scale ? QVariant() : QVariant(score));
+    // Compared with the others' unless on another scale or by another build.
+    item.setData(score_role, other_scale || other_build ? QVariant() : QVariant(score));
+    const QString build_note = other_build ? other_vship_build_note(row_data, *other_build) : QString();
     item.setToolTip(definition.kind == MetricKind::sequence
-                        ? cvvdp_note(row_data)
+                        ? cvvdp_note(row_data) + build_note
                         : app::tr("Mean of calculated frame scores.") + identical_frames_note(run, metric.column) +
-                              (other_scale ? other_scale_note() : QString()));
+                              (other_scale ? other_scale_note() : build_note));
     QFont font;
     font.setBold(true);
     item.setFont(font);
@@ -2317,7 +2354,11 @@ std::optional<QString> MainWindow::metric_unavailable_reason(const RowData& row_
             return app::tr("CVVDP judges each frame together with the frames before it, so it needs every frame: it is "
                            "not available while libvmaf frame subsample is above 1.");
         }
-        if (!vship_available()) {
+        if (!vship_available(row_data.options.vship_build)) {
+            if (row_data.options.vship_build == VshipBuild::stock && vship_available(VshipBuild::fast)) {
+                return app::tr("CVVDP is calculated on the GPU only, and no GPU that Vship 5.1.2 can use was found; "
+                               "with Vship compute set to GPU - Vship-fast it can be calculated.");
+            }
             return app::tr("CVVDP is calculated on the GPU only, and no GPU that Vship can use was found.");
         }
     }
@@ -2505,7 +2546,9 @@ std::vector<std::string> MainWindow::reusable_metric_keys(const RowData& row_dat
                          analysis_request(row_data.options, requested_metrics(row_data), automatic_perceptual_backends,
                                           row_data.cvvdp)
                              .metrics,
-                         automatic_perceptual_backends, [](const std::string&) { return vship_available(); }, infos);
+                         automatic_perceptual_backends,
+                         [build = row_data.options.vship_build](const std::string&) { return vship_available(build); },
+                         infos);
 }
 
 MetricResultSet MainWindow::reusable_results(const RowData& row_data) const {
@@ -2534,14 +2577,35 @@ bool MainWindow::has_requested_results(const RowData& row_data) const {
     });
 }
 
-bool MainWindow::backend_matches(const std::string& key, const MetricProvenance& provenance) {
+bool MainWindow::backend_matches(const RowData& row_data, const std::string& key, const MetricProvenance& provenance) {
     // Whether a score was made where its metric is calculated now
     // (metric_cache.h's made_as_chosen): SSIMULACRA2 and Butteraugli on the
-    // GPU where one can. The other metrics' always are.
+    // GPU where the row's Vship build can use one. The other metrics' always
+    // are.
     const auto choice = automatic_perceptual_backends.find(key);
+    const VshipBuild build = row_data.options.vship_build;
     return made_as_chosen(key,
                           choice == automatic_perceptual_backends.end() ? std::nullopt : std::optional(choice->second),
-                          provenance.compute_backend, [](const std::string&) { return vship_available(); });
+                          provenance.compute_backend, [build](const std::string&) { return vship_available(build); });
+}
+
+std::optional<VshipBuild> MainWindow::other_vship_build(const RowData& row_data, const MetricProvenance& provenance) {
+    // The Vship build that made a GPU score of Vship's, where it is not the
+    // one that calculates for the row (vship_build_in_use): Vship 5.1.2's
+    // after Vship-fast failed. Their scores differ slightly.
+    const std::string& id = provenance.implementation_compatibility_id;
+    const std::optional<VshipBuild> made = score_identity::is_vship51_id(id)      ? std::optional(VshipBuild::stock)
+                                           : score_identity::is_vship_fast_id(id) ? std::optional(VshipBuild::fast)
+                                                                                  : std::nullopt;
+    return made != vship_build_in_use(row_data.options.vship_build) ? made : std::nullopt;
+}
+
+QString MainWindow::other_vship_build_note(const RowData& row_data, VshipBuild made) {
+    // The tooltip's word on such a score, marked with its build in the cell.
+    return app::tr("\n\nCalculated by {build}, not this video's {chosen}, whose scores differ slightly, so the next "
+                   "run calculates it again with {chosen}.",
+                   {{"build", qt_text(vship_build_label(made))},
+                    {"chosen", qt_text(vship_build_label(vship_build_in_use(row_data.options.vship_build)))}});
 }
 
 QString MainWindow::other_scale_note() {

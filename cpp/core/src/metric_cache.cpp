@@ -160,12 +160,6 @@ bool stale_cpu_score(const MetricProvenance& provenance, const std::vector<Colou
     return mapping != nlohmann::json(score_identity::cpu_colour_tags_unshared_matrix) || matrix_read_otherwise(infos);
 }
 
-// Whether a score's id is one of Vship 5.1's on the GPU (score_identity.h).
-bool vship51_id(const std::string& id) {
-    return id == score_identity::vship51_cvvdp || score_identity::is_vship51_gpu("ssimulacra2", id) ||
-           score_identity::is_vship51_gpu("butteraugli", id);
-}
-
 // Whether a video is gray tagged full range, which Vship 5.1 was sent
 // squeezed into the limited range.
 bool full_range_gray(const ColourTags& info) {
@@ -188,7 +182,8 @@ bool stale_score(const MetricProvenance& provenance, const std::vector<ColourTag
     if (stale_cpu_score(provenance, infos)) {
         return true;
     }
-    if (provenance.compute_backend != "gpu" || !vship51_id(provenance.implementation_compatibility_id)) {
+    if (provenance.compute_backend != "gpu" ||
+        !score_identity::is_vship51_id(provenance.implementation_compatibility_id)) {
         return false;
     }
     if (std::any_of(infos.begin(), infos.end(), full_range_gray)) {
@@ -217,40 +212,30 @@ bool stale_score(const MetricProvenance& provenance, const std::vector<ColourTag
     });
 }
 
+// Whether a request is a SSIMULACRA2 or Butteraugli one that does not fix
+// where the metric is calculated: on the GPU by its Vship build, or on the
+// CPU (score_identity.h).
 bool is_auto_perceptual(const MetricRequestSpec& spec) {
-    return spec.backend_id == "perceptual" && spec.implementation_compatibility_id.ends_with(score_identity::gpu_or_cpu_suffix);
+    const std::string& id = spec.implementation_compatibility_id;
+    return spec.backend_id == "perceptual" &&
+           (id.ends_with(score_identity::gpu_or_cpu_suffix) || id.ends_with(score_identity::vship51_gpu_or_cpu_suffix));
 }
 
-// Whether a saved perceptual score's compatibility id answers a request
-// that does not fix where the metric is calculated: Vship-fast's or Vship
-// 5.1's on the GPU, or libjxl's on the CPU, whose id may have a version
-// inside.
+// Whether a saved perceptual score's compatibility id answers such a
+// request: the request's Vship build's on the GPU, or libjxl's on the CPU,
+// whose id may have a version inside.
 bool auto_perceptual_compatible(const MetricRequestSpec& spec, const std::string& value) {
     const std::string& key = spec.key;
-    return value == score_identity::vship_gpu(key) || score_identity::is_vship51_gpu(key, value) ||
+    const bool vship51 = spec.implementation_compatibility_id.ends_with(score_identity::vship51_gpu_or_cpu_suffix);
+    return (vship51 ? score_identity::is_vship51_gpu(key, value) : value == score_identity::vship_gpu(key)) ||
            value == score_identity::libjxl_cpu(key) ||
            (value.starts_with(key + "-libjxl-") && value.ends_with("-cpu-v1"));
-}
-
-// The request a Vship 5.1 CVVDP score is saved under, for the request
-// Vship-fast's would be.
-MetricRequestSpec vship51_cvvdp_spec(const MetricRequestSpec& spec) {
-    MetricRequestSpec old = spec;
-    old.implementation_compatibility_id = std::string(score_identity::vship51_cvvdp);
-    return old;
-}
-
-bool is_cvvdp(const MetricRequestSpec& spec) {
-    return spec.implementation_compatibility_id == score_identity::cvvdp;
 }
 
 bool compatible(const MetricRequestSpec& spec, const MetricProvenance& provenance) {
     const std::string& compatibility = provenance.implementation_compatibility_id;
     if (is_auto_perceptual(spec)) {
         return auto_perceptual_compatible(spec, compatibility);
-    }
-    if (is_cvvdp(spec) && compatibility == score_identity::vship51_cvvdp) {
-        return true;
     }
     if (compatibility == unversioned_compatibility) {
         return spec.implementation_compatibility_id == score_identity::libvmaf;
@@ -311,11 +296,12 @@ std::string metadata(const std::string& key, const char* kind, const MetricReque
 }
 
 // The request a perceptual score is saved under: the implementation that
-// made it, so that a CPU score never passes for a Vship GPU one, nor Vship
-// 5.1's CVVDP for Vship-fast's.
+// made it, so that a CPU score never passes for a Vship GPU one, nor one
+// Vship build's for the other's. A score the run's other build made (Vship
+// 5.1.2 standing in for Vship-fast) is so kept for that build's requests.
 MetricRequestSpec stored_spec(const MetricRequestSpec& spec, const MetricProvenance& provenance) {
     MetricRequestSpec stored = spec;
-    if (is_auto_perceptual(spec) || (is_cvvdp(spec) && compatible(spec, provenance))) {
+    if (spec.backend_id == "perceptual") {
         stored.implementation_compatibility_id = provenance.implementation_compatibility_id;
     }
     return stored;
@@ -577,7 +563,7 @@ std::vector<std::filesystem::path> score_files(const std::filesystem::path& dire
 
 // The saved scores that answer a perceptual request which does not fix
 // where the metric is calculated, each with the request carrying its
-// implementation: Vship-fast's first, then Vship 5.1's, then the CPU's.
+// implementation: the request's Vship build's first, then the CPU's.
 std::vector<std::pair<std::filesystem::path, MetricRequestSpec>> auto_perceptual_candidates(
     const std::filesystem::path& directory, const MetricRequestSpec& spec) {
     std::vector<std::pair<int, std::pair<std::filesystem::path, MetricRequestSpec>>> ranked;
@@ -602,7 +588,7 @@ std::vector<std::pair<std::filesystem::path, MetricRequestSpec>> auto_perceptual
             if (request != concrete.identity()) {
                 continue;
             }
-            const int rank = value == score_identity::vship_gpu(spec.key) ? 0 : vship51_id(value) ? 1 : 2;
+            const int rank = value.find("-vship-") != std::string::npos ? 0 : 1;
             ranked.push_back({rank, {path, concrete}});
         } catch (const nlohmann::json::exception&) {
             continue;
@@ -799,21 +785,18 @@ std::vector<std::pair<std::filesystem::path, MetricRequestSpec>> old_v1_scores(c
 
 // The whole-video scores saved for `spec`'s metric with other parameters but
 // otherwise the same request, each with those parameters
-// (load_other_parameters): CVVDP's for other displays, Vship 5.1's for a
-// display Vship-fast has none for.
+// (load_other_parameters): CVVDP's for other displays, by the same Vship
+// build.
 std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::filesystem::path& directory,
                                                                 const MetricRequestSpec& spec) {
     const nlohmann::json wanted = spec.identity();
     const nlohmann::json rest = without(wanted, {"parameters"});
-    const nlohmann::json vship51_rest =
-        is_cvvdp(spec) ? without(vship51_cvvdp_spec(spec).identity(), {"parameters"}) : rest;
     const std::vector<std::filesystem::path> paths = score_files(directory, spec.key);
     const nlohmann::json context =
         paths.empty() ? nlohmann::json() : read_json(directory / "context.json").value_or(nlohmann::json());
     const std::vector<ColourTags> infos = context_colour_tags(context);
     const bool inexact_codec = has_inexact_codec(context);
     std::vector<std::pair<nlohmann::json, double>> found;
-    std::vector<std::pair<nlohmann::json, double>> vship51;
     for (const std::filesystem::path& path : paths) {
         try {
             const auto score = read_score(path);
@@ -826,7 +809,7 @@ std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::files
             if (!current_format(metadata) || !decoded_as_now(metadata, inexact_codec) ||
                 metadata.value("key", nlohmann::json()) != spec.key ||
                 metadata.value("kind", nlohmann::json()) != "sequence" ||
-                (request_rest != rest && request_rest != vship51_rest) ||
+                request_rest != rest ||
                 request.value("parameters", nlohmann::json()) == wanted.at("parameters")) {
                 continue;
             }
@@ -843,15 +826,10 @@ std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::files
                 continue;
             }
             if (std::isfinite(value->front())) {
-                (request_rest == rest ? found : vship51).emplace_back(parameters, value->front());
+                found.emplace_back(parameters, value->front());
             }
         } catch (const nlohmann::json::exception&) {
             continue;
-        }
-    }
-    for (auto& old : vship51) {
-        if (std::none_of(found.begin(), found.end(), [&old](const auto& kept) { return kept.first == old.first; })) {
-            found.push_back(std::move(old));
         }
     }
     return found;
@@ -859,9 +837,10 @@ std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::files
 
 // One saved metric score (load_metric), or nothing. `backend` is where the
 // user set a perceptual metric to be calculated: "cpu" accepts only a CPU
-// score; "gpu" prefers a Vship score and also accepts a CPU one, which is
-// what that choice makes on a PC without a suitable GPU. A score known to be
-// wrong is passed over. `context` is the comparison's context.json.
+// score; "gpu" prefers the request's Vship build's score and also accepts a
+// CPU one, which is what that choice makes on a PC without a suitable GPU. A
+// score known to be wrong is passed over. `context` is the comparison's
+// context.json.
 std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, const MetricRequestSpec& spec,
                                         const std::string& backend, const nlohmann::json& context) {
     const std::vector<ColourTags> infos = context_colour_tags(context);
@@ -880,10 +859,6 @@ std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, 
         return std::nullopt;
     }
     std::optional<LoadedMetric> result = load_metric_file(metric_path(directory, spec), spec, inexact_codec);
-    if (!result && is_cvvdp(spec)) {
-        const MetricRequestSpec vship51 = vship51_cvvdp_spec(spec);
-        result = load_metric_file(metric_path(directory, vship51), vship51, inexact_codec);
-    }
     if (result && stale(*result)) {
         return std::nullopt;
     }
@@ -1050,9 +1025,11 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
     const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
     write_atomically(directory / "context.json", python_json_compact(context_json(result, label, recipe)), ".tmp");
     // A score saved under a request it does not answer would answer it from
-    // then on: loading checks the saved request, not the score.
+    // then on: loading checks the saved request, not the score. A perceptual
+    // score is saved under its own implementation's id (stored_spec), which
+    // answers only requests that take that implementation's scores.
     const auto answers_request = [](const MetricRequestSpec& spec, const MetricProvenance& provenance) {
-        if (compatible(spec, provenance)) {
+        if (spec.backend_id == "perceptual" || compatible(spec, provenance)) {
             return true;
         }
         app_log::write(app_log::Level::warning, "vml.metric_cache",
@@ -1218,8 +1195,6 @@ int clear_metrics(const std::filesystem::path& base, const std::filesystem::path
             for (const auto& [path, concrete] : old_v1_scores(directory, spec)) {
                 remove(path);
             }
-        } else if (is_cvvdp(spec)) {
-            remove(metric_path(directory, vship51_cvvdp_spec(spec)));
         }
         remove(metric_path(directory, spec));
     }

@@ -52,15 +52,17 @@ inline bool same_file(const std::filesystem::path& a, const std::filesystem::pat
     return same_path(resolved(a), resolved(b));
 }
 
-// Whether a GPU Vship can use is here (SSIMULACRA2 and Butteraugli set to the
-// GPU, and CVVDP, run on it), as the last GPU check to finish found. The
-// window never waits for a check: one starts with the app
-// and takes seconds, and a run checks again after a failed one. Until the
-// first has finished, a GPU is taken to be there, and the rows are brought up
-// to date when it finishes (MainWindow::refresh_metric_cells); a run waits
-// for it, off the window's thread (MainWindow::wait_for_gpu_checks).
-inline bool vship_available() {
-    const auto known = known_vship_device();
+// Whether a GPU that Vship's `build` can use is here (SSIMULACRA2 and
+// Butteraugli set to the GPU, and CVVDP, run on it), as the last GPU check of
+// that build to finish found. The window never waits for a check: the app's
+// default build's starts with the app and takes seconds, the other's starts
+// with the first run that needs it, and a run checks again after a failed
+// one. Until the first has finished, a GPU is taken to be there, and the rows
+// are brought up to date when it finishes (MainWindow::refresh_metric_cells);
+// a run waits for it, off the window's thread
+// (MainWindow::wait_for_gpu_checks).
+inline bool vship_available(VshipBuild build) {
+    const auto known = known_vship_device(build);
     return !known || known->first.has_value();
 }
 

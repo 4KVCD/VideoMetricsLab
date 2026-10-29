@@ -24,6 +24,7 @@
 #include "vml/python_text.h"
 #include "vml/result_json.h"
 #include "vml/time_format.h"
+#include "vml/vship.h"
 
 namespace vml {
 
@@ -377,6 +378,10 @@ std::string JobRun::describe() const {
                            ", GPU decode " + (options.gpu_decode ? "on" : "off");
     for (const auto& [key, backend] : job_.perceptual_backends) {
         settings += ", " + std::string(metric_definition(key).label) + " on " + ascii_upper(backend);
+    }
+    settings += ", Vship build " + std::string(vship_build_label(options.vship_build));
+    if (const VshipBuild in_use = vship_build_in_use(options.vship_build); in_use != options.vship_build) {
+        settings += " (" + std::string(vship_build_label(in_use)) + " in use)";
     }
     settings += ", CVVDP display " + job_.cvvdp.display.describe();
     std::string text = name() + ":\n  test   " + platform::path_text(job_.distorted_info.path) + " (" +

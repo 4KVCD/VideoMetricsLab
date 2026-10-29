@@ -84,6 +84,7 @@ public:
     QCheckBox* default_gpu = nullptr;
     std::map<std::string, QCheckBox*> default_metrics;  // by metric key
     QComboBox* cvvdp_default = nullptr;
+    QComboBox* vship_build_default = nullptr;  // none where stock Vship 5.1.2 is not bundled
     QCheckBox* gpu_together = nullptr;
     QComboBox* decoded_videos = nullptr;
     QComboBox* language = nullptr;

@@ -37,6 +37,7 @@
 #include "vml/cvvdp.h"
 #include "vml/metric_cache.h"
 #include "vml/platform/system.h"
+#include "vml/vship.h"
 
 // The panel's text is app::tr's: inside a Q_OBJECT class, tr() is Qt's.
 namespace vml::app {
@@ -227,6 +228,25 @@ QGroupBox* SettingsPanel::build_defaults_box() {
 QGroupBox* SettingsPanel::build_gpu_box() {
     auto* gpu_box = new QGroupBox(app::tr("GPU metrics"));
     auto* gpu_layout = new QVBoxLayout(gpu_box);
+    if (vship51_bundled()) {
+        // The entries' data: Settings' default_vship_build values.
+        auto* build_row = new QHBoxLayout;
+        build_row->addWidget(new QLabel(app::tr("New videos use:")));
+        vship_build_default = new QComboBox;
+        vship_build_default->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        vship_build_default->addItem("GPU - Vship-fast", QString::fromUtf8(vship_build_value(VshipBuild::fast)));
+        vship_build_default->addItem("GPU - Vship", QString::fromUtf8(vship_build_value(VshipBuild::stock)));
+        vship_build_default->setCurrentIndex(
+            default_vship_build(settings_.default_vship_build) == VshipBuild::stock ? 1 : 0);
+        vship_build_default->setToolTip(app::tr(
+            "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command "
+            "line without --vship: Vship-fast, the app's own build, or stock Vship 5.1.2. Each video's own is set in "
+            "the Options panel (Vship compute)."));
+        connect(vship_build_default, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
+        build_row->addWidget(vship_build_default);
+        build_row->addStretch(1);
+        gpu_layout->addLayout(build_row);
+    }
     gpu_together = new QCheckBox(app::tr("Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video"));
     gpu_together->setToolTip(app::tr(
         "Each video is decoded once for all three instead of once for each. This is faster only on very powerful "
@@ -526,6 +546,9 @@ void SettingsPanel::read_controls() {
     settings_.language = language->currentData().toString().toStdString();
     settings_.theme = theme->currentData().toString().toStdString();
     settings_.gpu_metrics_together = gpu_together->isChecked();
+    if (vship_build_default != nullptr) {
+        settings_.default_vship_build = vship_build_default->currentData().toString().toStdString();
+    }
 }
 
 void SettingsPanel::apply_global_changes(const Settings& before) {

@@ -300,6 +300,7 @@ const VshipLibrary& kept_library(const std::function<platform::DynamicLibrary()>
 
 // ----------------------------------------------------- the probe's state
 
+// One Vship build's probe (detect_vship_device).
 struct ProbeState {
     std::mutex mutex;  // held for the whole of a probe
     std::optional<std::pair<std::optional<VshipDevice>, std::string>> probed;
@@ -309,16 +310,27 @@ struct ProbeState {
     // in progress does not hold (known_vship_device).
     std::mutex known_mutex;
     std::optional<std::pair<std::optional<VshipDevice>, std::string>> known;
-    std::function<void()> on_finished;  // under known_mutex
+};
+
+// Who is told as either build's probe finishes (on_vship_probe_finished).
+struct ProbeListener {
+    std::mutex mutex;
+    std::function<void()> on_finished;
 };
 
 // How long a probe that found no GPU is kept before a run probes again
 // (forget_failed_vship_probe).
 constexpr std::chrono::seconds failed_probe_retry{60};
 
-ProbeState& probe_state() {
-    static ProbeState state;
-    return state;
+ProbeState& probe_state(VshipBuild build) {
+    static ProbeState fast;
+    static ProbeState stock;
+    return build == VshipBuild::stock ? stock : fast;
+}
+
+ProbeListener& probe_listener() {
+    static ProbeListener listener;
+    return listener;
 }
 
 std::string vendor_text(const std::optional<GpuVendor>& vendor) {
@@ -465,6 +477,11 @@ bool vship51_bundled() {
     return vship_bundled && std::filesystem::is_regular_file(vship_library_path(true), missing);
 }
 
+VshipBuild default_vship_build(std::string_view setting) {
+    const VshipBuild chosen = vship_build_from(setting);
+    return chosen == VshipBuild::stock && !vship51_bundled() ? VshipBuild::fast : chosen;
+}
+
 const VshipLibrary& vship_library(bool vship51) {
     try {
         return kept_library([vship51] { return platform::DynamicLibrary(vship_library_path(vship51)); }, vship51);
@@ -591,25 +608,29 @@ nlohmann::json vship_probe_result(const std::pair<std::optional<VshipDevice>, st
     return {{"device", probed.first ? vship_device_json(*probed.first) : nlohmann::json()}, {"reason", probed.second}};
 }
 
-std::pair<std::optional<VshipDevice>, std::string> detect_vship_device() {
-    // One probe serves the whole process: callers that arrive while it runs
-    // wait for it rather than starting their own.
-    ProbeState& state = probe_state();
+std::pair<std::optional<VshipDevice>, std::string> detect_vship_device(VshipBuild build) {
+    // One probe of each build serves the whole process: callers that arrive
+    // while it runs wait for it rather than starting their own.
+    ProbeState& state = probe_state(build);
     const std::lock_guard lock(state.mutex);
     if (!state.probed) {
+        const bool vship51 = build == VshipBuild::stock;
         bool failed = false;
-        state.probed = isolation_program() ? probe_isolated(false, failed) : probe_vship_device();
-        if (!state.probed->first && isolation_program() && vship51_bundled()) {
+        state.probed = isolation_program() ? probe_isolated(vship51, failed) : probe_vship_device(vship51);
+        if (!vship51 && !state.probed->first && isolation_program() && vship51_bundled()) {
             // Vship-fast compiles every shader as it starts on a GPU: one of
             // its own that the driver refuses, or crashes on, leaves it no
             // GPU where stock Vship 5.1.2 may have one. Its reason stays the
-            // answer if 5.1.2 finds none either.
-            std::pair<std::optional<VshipDevice>, std::string> stock = probe_isolated(true, failed);
+            // answer if 5.1.2 finds none either. 5.1.2's own probe answers,
+            // so that it runs once for both builds.
+            std::pair<std::optional<VshipDevice>, std::string> stock = detect_vship_device(VshipBuild::stock);
             if (stock.first) {
                 app_log::write(app_log::Level::warning, "vml.perceptual_vship",
                                "Vship-fast can use no GPU (" + state.probed->second + "); Vship 5.1.2 can");
                 stock.first->fast_failure = state.probed->second;
                 state.probed = std::move(stock);
+            } else {
+                failed = failed || vship_check_failed(VshipBuild::stock);
             }
         }
         state.failed = failed && !state.probed->first;
@@ -619,48 +640,65 @@ std::pair<std::optional<VshipDevice>, std::string> detect_vship_device() {
             app_log::write(app_log::Level::info, "vml.perceptual_vship",
                            vship_build_name(*device) + " (Vulkan) GPU: " + device->name);
         } else {
-            app_log::write(app_log::Level::warning, "vml.perceptual_vship", "Vship GPU unavailable: " + reason);
+            app_log::write(app_log::Level::warning, "vml.perceptual_vship",
+                           std::string(vship51 ? "Vship 5.1.2" : "Vship-fast") + " GPU unavailable: " + reason);
         }
-        const std::lock_guard known_lock(state.known_mutex);
-        state.known = state.probed;
-        if (state.on_finished) {
-            state.on_finished();
+        {
+            const std::lock_guard known_lock(state.known_mutex);
+            state.known = state.probed;
+        }
+        ProbeListener& listener = probe_listener();
+        const std::lock_guard listener_lock(listener.mutex);
+        if (listener.on_finished) {
+            listener.on_finished();
         }
     }
     return *state.probed;
 }
 
-bool vship_check_failed() {
-    ProbeState& state = probe_state();
+bool vship_check_failed(VshipBuild build) {
+    ProbeState& state = probe_state(build);
     const std::lock_guard lock(state.mutex);
     return state.probed && state.failed;
 }
 
 void on_vship_probe_finished(std::function<void()> callback) {
-    ProbeState& state = probe_state();
-    const std::lock_guard lock(state.known_mutex);
-    state.on_finished = std::move(callback);
+    ProbeListener& listener = probe_listener();
+    const std::lock_guard lock(listener.mutex);
+    listener.on_finished = std::move(callback);
 }
 
-std::optional<std::pair<std::optional<VshipDevice>, std::string>> known_vship_device() {
-    ProbeState& state = probe_state();
+std::optional<std::pair<std::optional<VshipDevice>, std::string>> known_vship_device(VshipBuild build) {
+    ProbeState& state = probe_state(build);
     const std::lock_guard lock(state.known_mutex);
     return state.known;
 }
 
-bool vship_probe_ready() {
-    ProbeState& state = probe_state();
+bool vship_probe_ready(VshipBuild build) {
+    ProbeState& state = probe_state(build);
     const std::unique_lock lock(state.mutex, std::try_to_lock);
     return lock.owns_lock() && state.probed.has_value();
 }
 
 void forget_failed_vship_probe() {
-    ProbeState& state = probe_state();
-    const std::lock_guard lock(state.mutex);
-    if (state.probed && !state.probed->first &&
-        std::chrono::steady_clock::now() - state.probed_at >= failed_probe_retry) {
-        state.probed.reset();
+    for (const VshipBuild build : {VshipBuild::fast, VshipBuild::stock}) {
+        ProbeState& state = probe_state(build);
+        const std::lock_guard lock(state.mutex);
+        if (state.probed && !state.probed->first &&
+            std::chrono::steady_clock::now() - state.probed_at >= failed_probe_retry) {
+            state.probed.reset();
+        }
     }
+}
+
+VshipBuild vship_build_in_use(VshipBuild chosen) {
+    if (chosen == VshipBuild::fast) {
+        const auto known = known_vship_device(VshipBuild::fast);
+        if (known && known->first && known->first->vship51) {
+            return VshipBuild::stock;
+        }
+    }
+    return chosen;
 }
 
 // ------------------------------------------------------------- frame layouts

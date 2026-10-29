@@ -39,6 +39,19 @@ on the CPU is marked "(CPU)" and the next run calculates it again on the GPU.
 These metrics are opt-in and do not add processing to runs where they are
 unchecked.
 
+Each video's Performance > Vship compute chooses the Vship: GPU - Vship-fast,
+or GPU - Vship, stock Vship 5.1.2 (upstream's release). Settings > GPU metrics
+sets the one newly added videos start with, and the command line's default.
+The two give slightly different scores, and each one's are saved apart:
+switching a video shows the other one's saved scores, or calculates them on
+the next run. Where Vship-fast fails on the GPU, Vship 5.1.2 calculates its
+metrics instead, and such a score is marked "(Vship)" and calculated again
+with Vship-fast on the next run. On a PC whose GPU Vship-fast cannot use at
+all but Vship 5.1.2 can, a Vship-fast video's scores are Vship 5.1.2's, kept
+and reused as its own. A video set to GPU - Vship never uses
+Vship-fast: where Vship 5.1.2 fails, SSIMULACRA2 and Butteraugli are
+calculated on the CPU, and CVVDP is not.
+
 VMAF v0.6.1 and VMAF NEG are calculated on the GPU too, with a Vulkan version
 of libvmaf's calculation on any GPU (NVIDIA's, AMD's and Intel's). An NVIDIA
 GPU (GeForce GTX 16 and RTX 20 series or newer) whose Vulkan cannot calculate
@@ -195,6 +208,7 @@ $run.videos[0].metrics.vmaf.score
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
 | `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only): VMAF as with `--vmaf-on cpu`, and SSIMULACRA2 and Butteraugli with libjxl rather than on the GPU. |
 | `--vmaf-on` `gpu\|cpu` | Where VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated. Left out: as the app's Options panel was last set. |
+| `--vship` `vship-fast\|vship` | The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: Vship-fast, or stock Vship 5.1.2, whose scores differ slightly and are saved apart. Left out: as Settings > GPU metrics sets it. |
 | `--no-gpu-decode` | Decode the videos on the CPU. |
 | `--threads N` | libvmaf threads. Left out: automatic. |
 | `--parallel 1\|2` | Videos calculated at once on the CPU. |

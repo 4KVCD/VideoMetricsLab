@@ -98,6 +98,7 @@ public:
     QCheckBox* gpu_checkbox = nullptr;
     QComboBox* gpu_vendor_combo = nullptr;
     QComboBox* vmaf_backend_combo = nullptr;
+    QComboBox* vship_build_combo = nullptr;
     QSpinBox* threads_spin = nullptr;
 
 signals:

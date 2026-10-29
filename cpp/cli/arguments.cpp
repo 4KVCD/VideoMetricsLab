@@ -32,7 +32,8 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--pix-fmt FORMAT] [--cvvdp-display PRESET]
                                    [--subsample N] [--threads N]
                                    [--vmaf-on {gpu,cpu}]
-                                   [--cpu] [--no-gpu-decode] [--parallel N]
+                                   [--vship {vship-fast,vship}] [--cpu]
+                                   [--no-gpu-decode] [--parallel N]
                                    [--recalculate] [--csv FOLDER]
                                    [--json FILE] [-q] [-v]
                                    REFERENCE TEST [TEST ...]
@@ -137,6 +138,11 @@ options:
   --threads N           libvmaf threads (default: automatic)
   --vmaf-on {gpu,cpu}   where VMAF v0.6.1, VMAF NEG and VMAF v1 is calculated
                         (default: the app's)
+  --vship {vship-fast,vship}
+                        the Vship build that calculates SSIMULACRA2,
+                        Butteraugli and CVVDP on the GPU: vship-fast, or vship
+                        (stock Vship 5.1.2), whose scores differ slightly and
+                        are saved apart (default: the app's)
   --cpu                 calculate on the CPU every metric that can be (CVVDP
                         is GPU only): VMAF as with --vmaf-on cpu, and
                         SSIMULACRA2 and Butteraugli with libjxl's tools rather
@@ -752,6 +758,8 @@ Parser compare_parser(CompareArguments& parsed) {
                [&parsed](const std::string& value) { parsed.subsample = int_up_to(value, 60); }),
         option({"--threads"}, [&parsed](const std::string& value) { parsed.threads = int_up_to(value, 128); }),
         option({"--vmaf-on"}, [&parsed](const std::string& value) { parsed.vmaf_on = choice(value, {"gpu", "cpu"}); }),
+        option({"--vship"},
+               [&parsed](const std::string& value) { parsed.vship = choice(value, {"vship-fast", "vship"}); }),
         flag({"--cpu"}, parsed.cpu),
         flag({"--no-gpu-decode"}, parsed.no_gpu_decode),
         option({"--parallel"},

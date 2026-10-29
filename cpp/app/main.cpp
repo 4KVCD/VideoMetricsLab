@@ -232,9 +232,11 @@ int main(int argc, char** argv) {
     // The first probes load Vship and start the GPU's driver, which takes
     // seconds; started now, they are usually done before a run is asked for.
     // The window never waits for them (window_helpers.h), but a run does
-    // (MainWindow::wait_for_gpu_checks). VMAF v1's (1.75 s on its own) too,
-    // when it is calculated by default on the GPU.
-    (void)QtConcurrent::run([] { detect_vship_device(); });
+    // (MainWindow::wait_for_gpu_checks). Vship's for the build new videos
+    // use; VMAF v1's (1.75 s on its own) too, when it is calculated by
+    // default on the GPU.
+    (void)QtConcurrent::run(
+        [build = default_vship_build(settings.default_vship_build)] { detect_vship_device(build); });
     (void)QtConcurrent::run([] { gpu_vmaf_backend(); });
     if (settings.default_compute_vmaf_v1 && settings.default_vmaf_on_gpu) {
         (void)QtConcurrent::run([] { v1_available(); });

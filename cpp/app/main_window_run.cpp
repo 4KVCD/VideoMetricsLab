@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <utility>
 #include <variant>
 
@@ -345,17 +346,21 @@ bool MainWindow::confirm_skipping(const std::vector<std::pair<std::shared_ptr<Ro
 }
 
 bool MainWindow::wait_for_gpu_checks(const std::vector<int>& checked) {
-    // The GPU checks the run's plan reads (which metrics the GPU takes: Vship,
-    // VMAF on the GPU, and VMAF v1's when a row has it on the GPU), waited
-    // for off the window's thread. They start with the app, but take seconds,
-    // and waited for on it, a run asked for before they were done would hold
-    // the window still until they were.
+    // The GPU checks the run's plan reads (which metrics the GPU takes: the
+    // rows' Vship builds', VMAF on the GPU, and VMAF v1's when a row has it
+    // on the GPU), waited for off the window's thread. The app's default
+    // build's and VMAF's start with the app, but take seconds, and waited for
+    // on it, a run asked for before they were done would hold the window
+    // still until they were.
     bool v1 = false;
+    std::set<VshipBuild> builds;
     for (const int row : checked) {
         const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
         v1 = v1 || (row_data.options.vmaf_on_gpu && contains(requested_metrics(row_data), "vmaf_v1"));
+        builds.insert(row_data.options.vship_build);
     }
-    if (vship_probe_ready() && gpu_vmaf_probe_ready() && (!v1 || v1_probe_ready())) {
+    if (std::all_of(builds.begin(), builds.end(), vship_probe_ready) && gpu_vmaf_probe_ready() &&
+        (!v1 || v1_probe_ready())) {
         return false;
     }
     if (gpu_check_watcher_ == nullptr) {
@@ -369,8 +374,10 @@ bool MainWindow::wait_for_gpu_checks(const std::vector<int>& checked) {
             stop_waiting_for_gpu_checks();
             on_run_clicked();
         });
-        gpu_check_watcher_->setFuture(QtConcurrent::run([v1] {
-            detect_vship_device();
+        gpu_check_watcher_->setFuture(QtConcurrent::run([v1, builds] {
+            for (const VshipBuild build : builds) {
+                detect_vship_device(build);
+            }
             gpu_vmaf_backend();
             if (v1) {
                 v1_available();
@@ -396,11 +403,10 @@ void MainWindow::stop_waiting_for_gpu_checks() {
 
 bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<RowData>>& job_rows) {
     // Asks before SSIMULACRA2 or Butteraugli on the CPU for a video over ten
-    // minutes: where Vship can use no GPU. The CPU tools score one pair of
-    // still images at a time, 1-2 s per tool for a 4K pair, which is days for
-    // a film. Only metrics this run will calculate count.
+    // minutes: where the video's Vship build can use no GPU. The CPU tools
+    // score one pair of still images at a time, 1-2 s per tool for a 4K pair,
+    // which is days for a film. Only metrics this run will calculate count.
     QStringList lines;
-    std::optional<bool> gpu_missing;  // asked once, and only if needed
     for (const std::shared_ptr<RowData>& row_data : job_rows) {
         if (!row_data->video_info) {
             continue;
@@ -416,14 +422,8 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
                 cpu_metrics.append(qt_text(metric_definition(key).label));
             }
         }
-        if (cpu_keys.empty()) {
-            continue;
-        }
-        if (!gpu_missing) {
-            gpu_missing = !vship_available();
-        }
-        if (!*gpu_missing) {
-            return true;  // on the GPU, every video's
+        if (cpu_keys.empty() || vship_available(row_data->options.vship_build)) {
+            continue;  // on the GPU
         }
         double seconds = std::min(info.duration, source_info_->duration);
         if (row_data->options.duration_limit > 0) {

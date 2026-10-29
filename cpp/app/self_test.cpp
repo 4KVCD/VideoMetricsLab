@@ -188,13 +188,20 @@ void check_isolation(SelfTestReport& report) {
     }
 }
 
-// Vship's metrics, VMAF and VMAF v1 on the GPU.
+// Vship's metrics (with each bundled build), VMAF and VMAF v1 on the GPU.
 void check_gpu_metrics(SelfTestReport& report) {
-    const auto [vship_device, vship_reason] = detect_vship_device();
-    if (vship_device) {
-        report.ok(vship_build_name(*vship_device) + " GPU metrics (Vulkan: " + vship_device->name + ")");
-    } else {
-        report.warn("Vship GPU metrics unavailable; CPU fallback is enabled (" + vship_reason + ")");
+    std::vector<VshipBuild> builds{VshipBuild::fast};
+    if (vship51_bundled()) {
+        builds.push_back(VshipBuild::stock);
+    }
+    for (const VshipBuild build : builds) {
+        const auto [vship_device, vship_reason] = detect_vship_device(build);
+        if (vship_device) {
+            report.ok(vship_build_name(*vship_device) + " GPU metrics (Vulkan: " + vship_device->name + ")");
+        } else {
+            report.warn(std::string(vship_build_label(build)) + " GPU metrics unavailable; CPU fallback is enabled (" +
+                        vship_reason + ")");
+        }
     }
 
     const GpuVmafBackend vmaf = gpu_vmaf_backend();

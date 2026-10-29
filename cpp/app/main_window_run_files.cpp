@@ -9,7 +9,9 @@
 #include <QPushButton>
 #include <QTableWidgetItem>
 
+#include <algorithm>
 #include <set>
+#include <string_view>
 
 #include "file_writes.h"
 #include "formatting.h"
@@ -18,7 +20,9 @@
 #include "vml/export_csv.h"
 #include "vml/model_select.h"
 #include "vml/run_file.h"
+#include "vml/score_identity.h"
 #include "vml/time_format.h"
+#include "vml/vship.h"
 #include "widgets.h"
 #include "window_helpers.h"
 
@@ -95,6 +99,25 @@ void take_run_options(VmafOptions& options, const ComparisonResult& result) {
     options.scale_direction = result.scale_direction;
     options.scale_algorithm = result.scale_algorithm;
     options.resample_test = result.resample_target;
+    // The Vship build of its GPU scores: Vship-fast where one is Vship-fast's
+    // (one of Vship 5.1.2's beside it was a fallback's, and is marked), else
+    // Vship 5.1.2 where one is its and it is bundled, but where Vship-fast's
+    // metrics run on 5.1.2 here (vship_build_in_use) anyway; with none, the
+    // row's own.
+    std::vector<std::string> ids;
+    for (const std::string& key : result.metric_results.keys()) {
+        const FrameMetricResult* frame = result.metric_results.frame(key);
+        const SequenceMetricResult* sequence = result.metric_results.sequence(key);
+        ids.push_back(frame != nullptr ? frame->provenance.implementation_compatibility_id
+                                       : sequence->provenance.implementation_compatibility_id);
+    }
+    const auto any = [&ids](bool (*made_by)(std::string_view)) { return std::any_of(ids.begin(), ids.end(), made_by); };
+    if (any(score_identity::is_vship_fast_id)) {
+        options.vship_build = VshipBuild::fast;
+    } else if (any(score_identity::is_vship51_id) && vship51_bundled() &&
+               vship_build_in_use(VshipBuild::fast) == VshipBuild::fast) {
+        options.vship_build = VshipBuild::stock;
+    }
 }
 
 }  // namespace

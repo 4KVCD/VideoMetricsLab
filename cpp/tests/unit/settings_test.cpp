@@ -35,6 +35,7 @@ const std::map<std::string, std::function<Json(const Settings&)>>& settings_by_k
         {"default_compute_butteraugli", [](const Settings& s) { return Json(s.default_compute_butteraugli); }},
         {"default_compute_cvvdp", [](const Settings& s) { return Json(s.default_compute_cvvdp); }},
         {"default_vmaf_on_gpu", [](const Settings& s) { return Json(s.default_vmaf_on_gpu); }},
+        {"default_vship_build", [](const Settings& s) { return Json(s.default_vship_build); }},
         {"graph_metric", [](const Settings& s) { return Json(s.graph_metric); }},
         {"parallel_jobs", [](const Settings& s) { return Json(s.parallel_jobs); }},
         {"gpu_metrics_together", [](const Settings& s) { return Json(s.gpu_metrics_together); }},

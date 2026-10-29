@@ -73,8 +73,10 @@ struct AnalysisRequest {
 
 // The request for the metrics `metric_keys` of a comparison made with
 // `options` (analysis_request_from_vmaf_options), with CVVDP modelling
-// `cvvdp`'s display. Throws std::invalid_argument for a metric with no way
-// to calculate it.
+// `cvvdp`'s display. Its Vship metrics ask for the scores of the build that
+// calculates here (vship_build_in_use), which can depend on Vship-fast's
+// finished probe. Throws std::invalid_argument for a metric with no way to
+// calculate it.
 AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<std::string>& metric_keys,
                                  const std::map<std::string, std::string>& perceptual_backends,
                                  const CvvdpSettings& cvvdp);

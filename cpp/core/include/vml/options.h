@@ -39,6 +39,19 @@ const std::vector<ResampleTarget>& resample_target_choices();
 std::filesystem::path synthetic_scale_direction_variant_path(const std::filesystem::path& distorted,
                                                              ScaleDirection direction);
 
+// Which of the two bundled Vship builds calculates SSIMULACRA2, Butteraugli
+// and CVVDP on the GPU: Vship-fast, which computes as libjxl and pycvvdp do,
+// or stock Vship 5.1.2. Their scores differ slightly, and each build's are
+// saved and reused apart.
+enum class VshipBuild { fast, stock };
+
+// A build as settings, run files and the command line name it: "vship-fast"
+// or "vship"; and back, any other text being Vship-fast.
+std::string_view vship_build_value(VshipBuild build);
+VshipBuild vship_build_from(std::string_view value);
+// A build's name for the log: "Vship-fast" or "Vship 5.1.2".
+std::string_view vship_build_label(VshipBuild build);
+
 struct VmafOptions {
     std::string model = "version=vmaf_v0.6.1";  // the FFmpeg model= value a run uses
     // What the user chose, from which `model` is worked out.
@@ -64,6 +77,7 @@ struct VmafOptions {
     GpuVendor gpu_vendor = GpuVendor::automatic;
     // VMAF v0.6.1, NEG and v1 on the GPU when a GPU can score them.
     bool vmaf_on_gpu = true;
+    VshipBuild vship_build = VshipBuild::fast;
     CropMode crop_mode = CropMode::automatic;
     // When set, a resolution test (ResampleTarget) instead of a comparison
     // of two files.

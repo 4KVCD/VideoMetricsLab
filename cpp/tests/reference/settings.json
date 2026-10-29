@@ -2,7 +2,7 @@
  "cases": [
   {
    "name": "good",
-   "file": "{\"ffmpeg_dir\": \"D:/tools/ffmpeg\", \"default_compute_xpsnr\": false, \"parallel_jobs\": 2, \"gpu_backend\": \"vulkan\", \"hidden_metrics\": [\"psnr\", \"ssim\"], \"cvvdp_presets\": [{\"name\": \"Mine\", \"settings\": {\"display\": {\"z\": 1, \"a\": 2}}}], \"cvvdp_default_preset\": \"Mine\", \"window_width\": 1600, \"remembered_reference\": \"D:/vid\\u00e9os/r\\u00e9f\\u00e9rence \\u52d5\\u753b.mkv\", \"remembered_tests\": [\"a.mkv\", \"b.mkv\"]}",
+   "file": "{\"ffmpeg_dir\": \"D:/tools/ffmpeg\", \"default_compute_xpsnr\": false, \"default_vship_build\": \"vship\", \"parallel_jobs\": 2, \"gpu_backend\": \"vulkan\", \"hidden_metrics\": [\"psnr\", \"ssim\"], \"cvvdp_presets\": [{\"name\": \"Mine\", \"settings\": {\"display\": {\"z\": 1, \"a\": 2}}}], \"cvvdp_default_preset\": \"Mine\", \"window_width\": 1600, \"remembered_reference\": \"D:/vid\\u00e9os/r\\u00e9f\\u00e9rence \\u52d5\\u753b.mkv\", \"remembered_tests\": [\"a.mkv\", \"b.mkv\"]}",
    "expected": {
     "ffmpeg_dir": "D:/tools/ffmpeg",
     "cache_dir": "",
@@ -18,6 +18,7 @@
     "default_compute_butteraugli": true,
     "default_compute_cvvdp": true,
     "default_vmaf_on_gpu": true,
+    "default_vship_build": "vship",
     "graph_metric": "vmaf",
     "parallel_jobs": 2,
     "gpu_metrics_together": false,
@@ -47,7 +48,7 @@
     "cvvdp_presets": "[{\"name\":\"Mine\",\"settings\":{\"display\":{\"z\":1,\"a\":2}}}]",
     "cvvdp_default_preset": "Mine"
    },
-   "saved": "{\n  \"ffmpeg_dir\": \"D:/tools/ffmpeg\",\n  \"cache_dir\": \"\",\n  \"export_dir\": \"\",\n  \"default_gpu_decode\": true,\n  \"default_compute_psnr\": true,\n  \"default_compute_ssim\": true,\n  \"default_compute_xpsnr\": false,\n  \"default_compute_vmaf\": true,\n  \"default_compute_vmaf_neg\": true,\n  \"default_compute_vmaf_v1\": true,\n  \"default_compute_ssimulacra2\": true,\n  \"default_compute_butteraugli\": true,\n  \"default_compute_cvvdp\": true,\n  \"default_vmaf_on_gpu\": true,\n  \"graph_metric\": \"vmaf\",\n  \"parallel_jobs\": 2,\n  \"gpu_metrics_together\": false,\n  \"use_cache\": true,\n  \"check_for_updates\": true,\n  \"skipped_update_version\": \"\",\n  \"language\": \"\",\n  \"theme\": \"\",\n  \"remember_window_size\": true,\n  \"window_width\": 1600,\n  \"window_height\": 800,\n  \"last_reference_dir\": \"\",\n  \"last_test_dir\": \"\",\n  \"remember_videos\": false,\n  \"remembered_reference\": \"D:/vid\\u00e9os/r\\u00e9f\\u00e9rence \\u52d5\\u753b.mkv\",\n  \"remembered_tests\": [\n    \"a.mkv\",\n    \"b.mkv\"\n  ],\n  \"highlight_best_worst\": false,\n  \"frame_preview_color_mode\": \"display_aware\",\n  \"compare_decoded_videos\": 3,\n  \"hidden_metrics\": [\n    \"psnr\",\n    \"ssim\"\n  ],\n  \"cvvdp_presets\": [\n    {\n      \"name\": \"Mine\",\n      \"settings\": {\n        \"display\": {\n          \"z\": 1,\n          \"a\": 2\n        }\n      }\n    }\n  ],\n  \"cvvdp_default_preset\": \"Mine\"\n}"
+   "saved": "{\n  \"ffmpeg_dir\": \"D:/tools/ffmpeg\",\n  \"cache_dir\": \"\",\n  \"export_dir\": \"\",\n  \"default_gpu_decode\": true,\n  \"default_compute_psnr\": true,\n  \"default_compute_ssim\": true,\n  \"default_compute_xpsnr\": false,\n  \"default_compute_vmaf\": true,\n  \"default_compute_vmaf_neg\": true,\n  \"default_compute_vmaf_v1\": true,\n  \"default_compute_ssimulacra2\": true,\n  \"default_compute_butteraugli\": true,\n  \"default_compute_cvvdp\": true,\n  \"default_vmaf_on_gpu\": true,\n  \"default_vship_build\": \"vship\",\n  \"graph_metric\": \"vmaf\",\n  \"parallel_jobs\": 2,\n  \"gpu_metrics_together\": false,\n  \"use_cache\": true,\n  \"check_for_updates\": true,\n  \"skipped_update_version\": \"\",\n  \"language\": \"\",\n  \"theme\": \"\",\n  \"remember_window_size\": true,\n  \"window_width\": 1600,\n  \"window_height\": 800,\n  \"last_reference_dir\": \"\",\n  \"last_test_dir\": \"\",\n  \"remember_videos\": false,\n  \"remembered_reference\": \"D:/vid\\u00e9os/r\\u00e9f\\u00e9rence \\u52d5\\u753b.mkv\",\n  \"remembered_tests\": [\n    \"a.mkv\",\n    \"b.mkv\"\n  ],\n  \"highlight_best_worst\": false,\n  \"frame_preview_color_mode\": \"display_aware\",\n  \"compare_decoded_videos\": 3,\n  \"hidden_metrics\": [\n    \"psnr\",\n    \"ssim\"\n  ],\n  \"cvvdp_presets\": [\n    {\n      \"name\": \"Mine\",\n      \"settings\": {\n        \"display\": {\n          \"z\": 1,\n          \"a\": 2\n        }\n      }\n    }\n  ],\n  \"cvvdp_default_preset\": \"Mine\"\n}"
   },
   {
    "name": "wrong types",
@@ -67,6 +68,7 @@
     "default_compute_butteraugli": true,
     "default_compute_cvvdp": true,
     "default_vmaf_on_gpu": false,
+    "default_vship_build": "vship-fast",
     "graph_metric": "vmaf",
     "parallel_jobs": null,
     "gpu_metrics_together": false,
@@ -110,6 +112,7 @@
     "default_compute_butteraugli": true,
     "default_compute_cvvdp": true,
     "default_vmaf_on_gpu": true,
+    "default_vship_build": "vship-fast",
     "graph_metric": "vmaf",
     "parallel_jobs": null,
     "gpu_metrics_together": false,
@@ -153,6 +156,7 @@
     "default_compute_butteraugli": true,
     "default_compute_cvvdp": true,
     "default_vmaf_on_gpu": true,
+    "default_vship_build": "vship-fast",
     "graph_metric": "vmaf",
     "parallel_jobs": null,
     "gpu_metrics_together": false,
@@ -196,6 +200,7 @@
     "default_compute_butteraugli": true,
     "default_compute_cvvdp": true,
     "default_vmaf_on_gpu": true,
+    "default_vship_build": "vship-fast",
     "graph_metric": "vmaf",
     "parallel_jobs": null,
     "gpu_metrics_together": false,
@@ -239,6 +244,7 @@
     "default_compute_butteraugli": true,
     "default_compute_cvvdp": true,
     "default_vmaf_on_gpu": true,
+    "default_vship_build": "vship-fast",
     "graph_metric": "vmaf",
     "parallel_jobs": null,
     "gpu_metrics_together": false,

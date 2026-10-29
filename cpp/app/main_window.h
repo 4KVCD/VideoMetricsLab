@@ -393,8 +393,10 @@ private:
     std::vector<std::string> reusable_metric_keys(const RowData& row_data) const;
     MetricResultSet reusable_results(const RowData& row_data) const;
     bool has_requested_results(const RowData& row_data) const;
-    static bool backend_matches(const std::string& key, const MetricProvenance& provenance);
+    static bool backend_matches(const RowData& row_data, const std::string& key, const MetricProvenance& provenance);
     static QString other_scale_note();
+    static std::optional<VshipBuild> other_vship_build(const RowData& row_data, const MetricProvenance& provenance);
+    static QString other_vship_build_note(const RowData& row_data, VshipBuild made);
     static std::optional<double> score_of(CompletedRun& run, int column);
     static QString identical_frames_note(CompletedRun& run, int column);
     QString cvvdp_note(const RowData& row_data) const;
@@ -424,6 +426,7 @@ private:
     bool wait_for_gpu_checks(const std::vector<int>& checked);
     void stop_waiting_for_gpu_checks();
     void refresh_metric_cells();
+    void on_vship_checked();
     void set_run_ui_active(bool active);
     int parallel_jobs() const;
     void on_parallel_jobs_changed(bool on);
@@ -475,6 +478,9 @@ private:
     QString reading_text_;        // the status line's "Reading..." while it shows
     bool run_active_ = false;
     bool closing_ = false;
+    // Whether Vship-fast's metrics were last found to run on 5.1.2 here
+    // (on_vship_checked).
+    bool vship51_in_use_ = false;
     // The window, for the thread that looks for the videos open last time
     // (restore_open_videos), which may outlive it: nullptr once it is gone.
     struct OpenVideosLookup {

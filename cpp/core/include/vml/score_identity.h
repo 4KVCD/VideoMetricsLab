@@ -19,22 +19,21 @@ inline constexpr std::string_view libvmaf = "ffmpeg-libvmaf-v1";
 // was weighted by the test video's.)
 inline constexpr std::string_view xpsnr = "ffmpeg-xpsnr-v2";
 
-// The Vship scores' ids are version 2 since the app calculates them with
-// Vship-fast, which computes as libjxl and pycvvdp do. A version 1 score,
-// Vship 5.1's, is still read: it differs from Vship-fast's only a little,
-// and a saved score is not calculated again for that. It is, for a pair
-// whose colours a later fix reads otherwise (stale_score in
-// metric_cache.cpp).
+// The Vship scores' ids are version 2 for Vship-fast's, which computes as
+// libjxl and pycvvdp do, and version 1 for Vship 5.1's (stock Vship 5.1.2's
+// now, and the app's own before Vship-fast). A video's row is set to one of
+// the two builds (VshipBuild) and reads only that build's saved scores: they
+// differ slightly. A version 1 score is calculated again for a pair whose
+// colours a later fix reads otherwise (stale_score in metric_cache.cpp).
 
-// CVVDP, which only Vship calculates, on the GPU; Vship 5.1's.
+// CVVDP, which only Vship calculates, on the GPU: Vship-fast's, Vship 5.1's.
 inline constexpr std::string_view cvvdp = "cvvdp-vship-gpu-v2";
 inline constexpr std::string_view vship51_cvvdp = "cvvdp-vship-gpu-v1";
 
 // SSIMULACRA2 or Butteraugli (`key`): calculated by Vship on the GPU, by
-// libjxl's tools on the CPU, and the request that takes a score from either.
-// Vship 5.1's GPU ids are "<key>-vship-gpu-v1" (the fallback's, stock Vship
-// 5.1.2's, too), and before that had its version inside
-// ("<key>-vship-5.1.0-gpu-v1").
+// libjxl's tools on the CPU, and the requests that take a score from either,
+// one per Vship build. Vship 5.1's GPU ids are "<key>-vship-gpu-v1", and
+// before that had its version inside ("<key>-vship-5.1.0-gpu-v1").
 inline std::string vship_gpu(std::string_view key) { return std::string(key) + "-vship-gpu-v2"; }
 inline std::string vship51_gpu(std::string_view key) { return std::string(key) + "-vship-gpu-v1"; }
 inline bool is_vship51_gpu(std::string_view key, std::string_view id) {
@@ -44,6 +43,19 @@ inline bool is_vship51_gpu(std::string_view key, std::string_view id) {
 inline std::string libjxl_cpu(std::string_view key) { return std::string(key) + "-libjxl-cpu-v1"; }
 inline constexpr std::string_view gpu_or_cpu_suffix = "-auto-or-libjxl-cpu-v1";
 inline std::string gpu_or_cpu(std::string_view key) { return std::string(key) + std::string(gpu_or_cpu_suffix); }
+inline constexpr std::string_view vship51_gpu_or_cpu_suffix = "-vship51-or-libjxl-cpu-v1";
+inline std::string vship51_gpu_or_cpu(std::string_view key) {
+    return std::string(key) + std::string(vship51_gpu_or_cpu_suffix);
+}
+
+// Whether a score's id is one of Vship 5.1's on the GPU.
+inline bool is_vship51_id(std::string_view id) {
+    return id == vship51_cvvdp || is_vship51_gpu("ssimulacra2", id) || is_vship51_gpu("butteraugli", id);
+}
+// Whether a score's id is one of Vship-fast's.
+inline bool is_vship_fast_id(std::string_view id) {
+    return id == cvvdp || id == vship_gpu("ssimulacra2") || id == vship_gpu("butteraugli");
+}
 
 // How the videos' colour tags were read, as a score records it. A Vship GPU
 // score: as Vship 5.1.1's FFVship reads them; "/2" marks the version that

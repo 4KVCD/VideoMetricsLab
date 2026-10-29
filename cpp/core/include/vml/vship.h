@@ -21,6 +21,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -212,12 +213,17 @@ struct VshipLibrary {
 };
 
 // Where Vship's Vulkan build is: Vship-fast's, or with `vship51` stock Vship
-// 5.1.2's, which the GPU metrics fall back to when Vship-fast fails
-// (MetricRouting in vship_run.cpp). A package may bundle only Vship-fast.
+// 5.1.2's, which a video can be set to (VshipBuild::stock), and which
+// Vship-fast's metrics fall back to when Vship-fast fails (MetricRouting in
+// vship_run.cpp). A package may bundle only Vship-fast.
 std::filesystem::path vship_library_path(bool vship51 = false);
 
 // Whether stock Vship 5.1.2 is bundled.
 bool vship51_bundled();
+
+// The Vship build new videos use, by Settings' default_vship_build
+// (vship_build_from): Vship-fast where stock Vship 5.1.2 is not bundled.
+VshipBuild default_vship_build(std::string_view setting);
 
 // The Vulkan the app bundles on macOS (tools/vulkan): Khronos' loader, with
 // MoltenVK as its driver, which Vship's and the Vulkan VMAF's builds there are
@@ -271,35 +277,44 @@ nlohmann::json vship_probe_result(const std::pair<std::optional<VshipDevice>, st
 nlohmann::json vship_device_json(const VshipDevice& device);
 std::optional<VshipDevice> vship_device_from(const nlohmann::json& text);
 
-// The GPU for Vship, checked once in a process of its own where a program to
-// run it is set (loading Vship starts the GPU driver, and a crash there
-// would end the run), and kept; or a reason the user can read for why there
-// is none. Where Vship-fast can use none (it compiles every shader as it
-// starts on a GPU), stock Vship 5.1.2 is tried in a process of its own too.
-std::pair<std::optional<VshipDevice>, std::string> detect_vship_device();
+// The GPU for `build` of Vship, checked once in a process of its own where a
+// program to run it is set (loading Vship starts the GPU driver, and a crash
+// there would end the run), and kept; or a reason the user can read for why
+// there is none. Where Vship-fast can use none (it compiles every shader as
+// it starts on a GPU), stock Vship 5.1.2's answer is Vship-fast's, a device
+// with `vship51`, if it finds one.
+std::pair<std::optional<VshipDevice>, std::string> detect_vship_device(VshipBuild build);
 // Whether detect_vship_device's answer of no GPU came from a check that
 // crashed or failed with an error, rather than one that found no GPU Vship
 // can use: the metrics then fall back to the CPU, and the run says so.
-bool vship_check_failed();
+bool vship_check_failed(VshipBuild build);
 
-// What the last probe to finish found, at once: never waiting for a probe in
-// progress, which takes seconds (one starts with the app, and a run probes
-// again after a failed one). Nothing before the first has finished. For the
-// window's thread, which must not stop for a probe.
-std::optional<std::pair<std::optional<VshipDevice>, std::string>> known_vship_device();
+// What the last probe of `build` to finish found, at once: never waiting for
+// a probe in progress, which takes seconds (one starts with the app, and a
+// run probes again after a failed one). Nothing before the first has
+// finished. For the window's thread, which must not stop for a probe.
+std::optional<std::pair<std::optional<VshipDevice>, std::string>> known_vship_device(VshipBuild build);
 // Whether detect_vship_device would answer now, without probing or waiting
 // for a probe.
-bool vship_probe_ready();
-// Calls `callback` each time a probe finishes, on the thread that ran it,
-// with known_vship_device up to date; nothing for none. It is not called
-// once this returns, so that its owner can go: it must be quick.
+bool vship_probe_ready(VshipBuild build);
+// Calls `callback` each time a probe of either build finishes, on the thread
+// that ran it, with known_vship_device up to date; nothing for none. It is
+// not called once this returns, so that its owner can go: it must be quick.
 void on_vship_probe_finished(std::function<void()> callback);
 
-// Forgets a probe that found no GPU a minute or more ago, so that the next
-// run probes again: the failure may have been temporary (a driver being
-// updated or restarted, a GPU briefly unavailable), and without this every
-// GPU metric of a long run would go to the CPU.
+// Forgets a probe of either build that found no GPU a minute or more ago, so
+// that the next run probes again: the failure may have been temporary (a
+// driver being updated or restarted, a GPU briefly unavailable), and without
+// this every GPU metric of a long run would go to the CPU.
 void forget_failed_vship_probe();
+
+// The build that calculates for a video set to `chosen`: stock Vship 5.1.2
+// for Vship-fast where Vship-fast's finished probe found only 5.1.2 a GPU
+// (its device has `vship51`), as its metrics then run on 5.1.2; else
+// `chosen`. Never waits for a probe: until Vship-fast's has finished,
+// `chosen`. It turns to 5.1.2 at most once in a process (a probe that found a
+// GPU is kept).
+VshipBuild vship_build_in_use(VshipBuild chosen);
 
 // The planar layout FFmpeg sends a video's frames in (`pixel_format`), and
 // how Vship reads it. `family` is 1 for RGB, whose planes are all full size

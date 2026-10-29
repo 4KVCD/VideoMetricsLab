@@ -35,6 +35,7 @@ struct CompareArguments {
     int subsample = 1;
     std::optional<int> threads;
     std::optional<std::string> vmaf_on;
+    std::optional<std::string> vship;  // "vship-fast" or "vship" (vship_build_value)
     bool cpu = false;
     bool no_gpu_decode = false;
     std::optional<int> parallel;

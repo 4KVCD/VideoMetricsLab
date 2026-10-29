@@ -8,6 +8,7 @@
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
 #include "vml/score_identity.h"
+#include "vml/vship.h"
 
 namespace vml {
 
@@ -89,15 +90,20 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
                 throw std::invalid_argument("No executable backend is registered for metric '" + key + "'");
             }
             spec.backend_id = std::string(definition.backend_id);
+            // Each Vship build's scores apart (score_identity.h), by the build
+            // that calculates here: 5.1.2's where Vship-fast can use no GPU.
+            const bool vship51 = vship_build_in_use(options.vship_build) == VshipBuild::stock;
             if (key == "cvvdp") {
                 // GPU only (Vship), and every frame: the display and whether
                 // frames fill it are part of what the score means.
                 spec.parameters = cvvdp.parameters();
                 spec.coverage = FrameCoverage{"full", 1};
-                spec.implementation_compatibility_id = std::string(score_identity::cvvdp);
+                spec.implementation_compatibility_id =
+                    std::string(vship51 ? score_identity::vship51_cvvdp : score_identity::cvvdp);
             } else {
                 spec.coverage = FrameCoverage{subsampled ? "sampled" : "full", options.n_subsample};
-                spec.implementation_compatibility_id = score_identity::gpu_or_cpu(key);
+                spec.implementation_compatibility_id =
+                    vship51 ? score_identity::vship51_gpu_or_cpu(key) : score_identity::gpu_or_cpu(key);
             }
             request.metrics.push_back(std::move(spec));
             continue;

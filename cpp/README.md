@@ -79,7 +79,8 @@ PSNR, SSIM and XPSNR beside them (`--vmaf-on cpu` or `--cpu`); scores VMAF,
 NEG and v1 on the GPU, the app's default, with Vulkan or, where Vulkan
 cannot, with libvmaf's CUDA code on an NVIDIA GPU; scores PSNR, SSIM and XPSNR in the app, with its libvmaf's own
 extractors, as the Python app does; scores SSIMULACRA2, Butteraugli and
-CVVDP on the GPU with Vship-fast's Vulkan build, in a pass each or (Settings > GPU metrics) in
+CVVDP on the GPU with Vship-fast's Vulkan build or, with `--vship vship` or
+Settings > GPU metrics' choice, stock Vship 5.1.2's, in a pass each or (Settings > GPU metrics) in
 one, CVVDP on the display Settings chooses (Automatic unless it names a
 preset: the HDR display for an HDR reference, the SDR one otherwise) or on
 each `--cvvdp-display`; and scores SSIMULACRA2 and Butteraugli on the CPU with

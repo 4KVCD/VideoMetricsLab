@@ -4,6 +4,7 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QMessageBox>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
 #include <functional>
@@ -22,6 +23,7 @@
 #include "window_helpers.h"
 #include "vml/cvvdp.h"
 #include "vml/metrics.h"
+#include "vml/vship.h"
 
 // The window's text is app::tr's, as in main_window.cpp.
 namespace vml::app {
@@ -156,6 +158,8 @@ void MainWindow::on_panel_field_edited(const QString& field) {
             target.n_threads = panel.n_threads;
         } else if (field == "vmaf_on_gpu") {
             target.vmaf_on_gpu = panel.vmaf_on_gpu;
+        } else if (field == "vship_build") {
+            target.vship_build = panel.vship_build;
         }
         return !(target == before);
     };
@@ -164,6 +168,11 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         // The last choice is what the next session starts with.
         settings_.default_vmaf_on_gpu = panel.vmaf_on_gpu;
         save_settings();
+    }
+    if (field == "vship_build" && !vship_probe_ready(panel.vship_build)) {
+        // Its GPU check, for the rows to say what it can calculate: a build
+        // other than the default is checked only when a row chooses it.
+        (void)QtConcurrent::run([build = panel.vship_build] { detect_vship_device(build); });
     }
     // Which GPU, how many threads, and how frames are scaled change how a
     // comparison is made, not what it is (the recipe's identity): its scores
@@ -177,12 +186,16 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         }
     }
     const std::vector<int> changed = execution_only ? std::vector<int>() : applied;
-    if (field == "model" || field == "model_v1") {
-        // A model decides its own VMAF column's score only: the rest stay.
+    if (field == "model" || field == "model_v1" || field == "vship_build") {
+        // A model decides its own VMAF column's score only, and the Vship
+        // build Vship's metrics' scores: the rest stay.
+        const std::vector<std::string> decided = field == "model"      ? std::vector<std::string>{"vmaf"}
+                                                 : field == "model_v1" ? std::vector<std::string>{"vmaf_v1"}
+                                                 : std::vector<std::string>{"ssimulacra2", "butteraugli", "cvvdp"};
         std::vector<int> without_scores;
         for (const int row : changed) {
             if (rows_[static_cast<std::size_t>(row)]->completed_run) {
-                drop_metric_results(row, {field == "model" ? "vmaf" : "vmaf_v1"});
+                drop_metric_results(row, decided);
             } else {
                 without_scores.push_back(row);
             }

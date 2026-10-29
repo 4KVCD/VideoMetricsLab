@@ -74,9 +74,10 @@ to the row, source and settings it was calculated for.
 The C++ app reads and writes the Python app's files, so a user's saved
 scores, saved runs and settings carry over from earlier versions, and either
 app opens the other's. (SSIMULACRA2, Butteraugli and CVVDP scores saved on
-the GPU by earlier versions, with Vship 5.1, are kept though Vship-fast's
-differ a little; those of a pair a later colour fix reads otherwise are
-calculated again: score_identity.h.)
+the GPU by earlier versions, with Vship 5.1, are kept for videos set to stock
+Vship 5.1.2, as that build's own; videos set to Vship-fast, whose scores
+differ a little, calculate theirs. Those of a pair a later colour fix reads
+otherwise are calculated again: score_identity.h.)
 
 Saved runs are `.metrics.json` files (format v2, `run_file.h`): each metric
 serialized on its own, with its kind, its frame or time axis where it has

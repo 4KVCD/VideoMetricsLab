@@ -36,6 +36,12 @@ std::vector<std::string> device_lines(const DeviceFindings& found) {
             lines.push_back(std::string(metric_definition(key).label) + ": CPU (libjxl)");
         }
     }
+    if (found.other_vship) {
+        const auto& [device, reason] = *found.other_vship;
+        lines.push_back("With --vship " + std::string(vship_build_value(found.other_build)) + ": " +
+                        (device ? "GPU: " + device->name + " (" + vship_build_name(*device) + ", Vulkan)"
+                                : "not available (" + reason + ")"));
+    }
     if (!found.vmaf.backend.empty()) {
         lines.push_back("VMAF v0.6.1, VMAF NEG: GPU (" +
                         (found.vmaf.backend == "cuda" ? std::string("libvmaf CUDA")
@@ -58,8 +64,16 @@ int devices() {
     const Settings settings = Settings::load();
     // The GPU checks together rather than one after another: each starts a
     // process of its own (Vship's takes 1.8 s, VMAF's and VMAF v1's 0.5 s).
+    // The metrics' lines are for the app's Vship build; the other bundled
+    // build is checked for a line of its own.
+    const VshipBuild build = default_vship_build(settings.default_vship_build);
+    const VshipBuild other = build == VshipBuild::fast ? VshipBuild::stock : VshipBuild::fast;
     std::future<std::pair<std::optional<VshipDevice>, std::string>> vship_check =
-        std::async(std::launch::async, [] { return detect_vship_device(); });
+        std::async(std::launch::async, [build] { return detect_vship_device(build); });
+    std::future<std::pair<std::optional<VshipDevice>, std::string>> other_check;
+    if (vship51_bundled()) {
+        other_check = std::async(std::launch::async, [other] { return detect_vship_device(other); });
+    }
     std::future<GpuVmafBackend> vmaf_check = std::async(std::launch::async, [] { return gpu_vmaf_backend(); });
     std::future<V1Probe> v1_check = std::async(std::launch::async, [] { return v1_available(); });
     DeviceFindings found;
@@ -67,6 +81,10 @@ int devices() {
     const auto [vship, no_vship] = vship_check.get();
     found.vship = vship;
     found.no_vship = no_vship;
+    if (other_check.valid()) {
+        found.other_vship = other_check.get();
+        found.other_build = other;
+    }
     found.vmaf = vmaf_check.get();
     found.v1 = v1_check.get();
     found.cpu_metrics_in_app = cpu_metrics_in_app();

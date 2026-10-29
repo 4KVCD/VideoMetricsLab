@@ -17,8 +17,12 @@ namespace vml::cli {
 // What the command finds on this PC.
 struct DeviceFindings {
     ToolsStatus tools;
-    std::optional<VshipDevice> vship;  // the GPU Vship uses, if there is one
+    std::optional<VshipDevice> vship;  // the GPU the app's Vship build uses, if there is one
     std::string no_vship;              // why there is none
+    // Where both Vship builds are bundled, the other one's (--vship
+    // `other_build`) check: its GPU, or why it has none.
+    std::optional<std::pair<std::optional<VshipDevice>, std::string>> other_vship;
+    VshipBuild other_build = VshipBuild::stock;
     GpuVmafBackend vmaf;
     V1Probe v1;
     bool cpu_metrics_in_app = false;  // PSNR, SSIM and XPSNR scored by the app's libvmaf
