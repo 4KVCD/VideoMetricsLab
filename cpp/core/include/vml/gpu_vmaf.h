@@ -193,6 +193,10 @@ public:
     // Stops reading, even while waiting for FFmpeg.
     void stop();
 
+    // Whether stop() came while the pipe was still being read: the app then
+    // closed it, and an FFmpeg still writing into it fails because of that.
+    bool stopped_while_reading() const;
+
     // Waits for the reading thread to end, and throws its error, if any.
     void join();
 
@@ -229,6 +233,12 @@ public:
     // (the caller then retries or gives up), a video's frames cut short by
     // that included. Throws LibvmafError when the scoring failed.
     std::optional<PairScores> finish(bool ffmpeg_succeeded);
+
+    // Whether the app closed the pipe of output_args's first FFmpeg (0, the
+    // test video's) or second (1) while it could still write into it, as it
+    // does to both once one video's frames stop
+    // (StreamReader::stopped_while_reading).
+    bool closed_pipe_of(std::size_t output) const;
 
 private:
     void feed();

@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <fstream>
+#include <future>
 #include <string>
 #include <thread>
 #include <vector>
@@ -90,6 +91,36 @@ TEST(GpuVmaf, AStreamThatIsNotFfmpegsIsAnError) {
         EXPECT_EQ(read_error(reader), message);
         reader.stop();
     }
+}
+
+// A pipe stopped while FFmpeg could still write into it was closed by the
+// app, whose closing then fails that FFmpeg; one whose FFmpeg had finished
+// was not (run_ffmpeg_pair takes the cause of a failure by it).
+TEST(GpuVmaf, KnowsWhichPipesTheAppClosed) {
+    StreamReader finished("finished", 12);
+    finished.start();
+    write_to(finished.path(), stream_of(1)).join();
+    finished.ffmpeg_ended();
+    EXPECT_EQ(read_error(finished), "");  // read to its end
+    finished.stop();
+    EXPECT_FALSE(finished.stopped_while_reading());
+
+    StreamReader writing("writing", 12);
+    writing.start();
+    std::promise<void> closed;
+    std::thread writer([path = writing.path(), done = closed.get_future()] {
+        std::ofstream pipe(path, std::ios::binary);
+        const std::string frame = stream_of(1);
+        pipe.write(frame.data(), static_cast<std::streamsize>(frame.size()));
+        pipe.flush();
+        done.wait();  // holds the pipe open, as an FFmpeg still decoding does
+    });
+    EXPECT_NE(writing.pull(), nullptr);  // the frame written: the pipe is being read
+    writing.stop();
+    EXPECT_TRUE(writing.stopped_while_reading());
+    closed.set_value();
+    writer.join();
+    EXPECT_NO_THROW(writing.join());
 }
 
 // VMAF and NEG go to the GPU with the app's own models; a custom model keeps

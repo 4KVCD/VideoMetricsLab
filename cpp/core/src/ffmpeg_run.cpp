@@ -356,12 +356,14 @@ FfmpegOutcome run_ffmpeg(const std::vector<std::string>& command, long long tota
 
 // Runs the two FFmpegs of VMAF on the GPU side by side, as run_ffmpeg runs
 // one: the first reports the progress, and one that fails ends the other.
-// Returns the outcome of the first to fail, or the first's. Throws
-// Cancelled, platform::ProcessError when one cannot start, and
-// VideoSizeChanged when one rebuilt its filters, naming its video of
+// Returns the outcome of the first to fail of those whose pipe the app did
+// not close (`closed_by_app`, by command), else of the first to fail, or the
+// first's. Throws Cancelled, platform::ProcessError when one cannot start,
+// and VideoSizeChanged when one rebuilt its filters, naming its video of
 // `videos`, the one each command decodes (both are ended then).
 FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& commands,
-                              const std::vector<std::filesystem::path>& videos, long long total_frames,
+                              const std::vector<std::filesystem::path>& videos,
+                              const std::function<bool(std::size_t)>& closed_by_app, long long total_frames,
                               const ProgressCallback& on_progress, const CancelToken& cancel,
                               const std::filesystem::path& folder) {
     cancel.throw_if_cancelled();
@@ -384,9 +386,11 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
     std::vector<char> ended_here(processes.size(), 0);  // ended because of the other, or Cancel
     std::mutex mutex;
     std::condition_variable changed;
-    // The first FFmpeg to fail: the cause. The other may fail after it on its
-    // own (its pipe closed as the scoring stopped) before it is ended here.
-    std::optional<std::size_t> first_failed;
+    // The FFmpegs that failed, in the order they did. The first is the
+    // cause, unless the app closed its pipe: once one video's frames stop,
+    // the app closes both, and the other FFmpeg can fail of that before the
+    // one that stopped them has ended.
+    std::vector<std::size_t> failed;
     std::vector<std::thread> readers;
     for (std::size_t index = 0; index < processes.size(); ++index) {
         readers.emplace_back([&, index] {
@@ -403,8 +407,8 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
                 const std::lock_guard lock(mutex);
                 outcomes[index] = FfmpegOutcome{code, std::move(errors), index};
                 done[index] = 1;
-                if (code != 0 && !first_failed) {
-                    first_failed = index;
+                if (code != 0) {
+                    failed.push_back(index);
                 }
             }
             changed.notify_all();
@@ -416,7 +420,7 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
         std::unique_lock lock(mutex);
         while (std::find(done.begin(), done.end(), 0) != done.end()) {
             changed.wait_for(lock, std::chrono::milliseconds(100));
-            if (cancel.cancelled() || first_failed || any_rebuilt()) {
+            if (cancel.cancelled() || !failed.empty() || any_rebuilt()) {
                 for (std::size_t index = 0; index < processes.size(); ++index) {
                     if (done[index] == 0 && ended_here[index] == 0) {
                         processes[index].terminate();
@@ -435,7 +439,9 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
             throw VideoSizeChanged(videos.at(index));
         }
     }
-    return outcomes[first_failed.value_or(0)];
+    const auto cause = std::find_if(failed.begin(), failed.end(),
+                                    [&closed_by_app](std::size_t index) { return !closed_by_app(index); });
+    return outcomes[cause != failed.end() ? *cause : failed.empty() ? 0 : failed.front()];
 }
 
 // The last `count` lines of `text`.
@@ -454,8 +460,6 @@ std::string last_lines(const std::string& text, std::size_t count) {
 
 const app_log::Logger logger("vml.vmaf_runner");
 
-// An FFmpeg that failed, in the log: its exit code, the decode plan, whether
-// another plan is tried, and the end of its error output.
 // Says that an FFmpeg of a pair ended because a write into the app's pipe
 // failed (refused_frame_write), and that its attempt is made again. The
 // pair's first command decodes the test video (build_stream_commands).
@@ -472,6 +476,8 @@ void report_refused_write(const FfmpegOutcome& outcome, const HardwareDecoding& 
     }
 }
 
+// An FFmpeg that failed, in the log: its exit code, the decode plan, whether
+// another plan is tried, and the end of its error output.
 void log_failed_attempt(const FfmpegOutcome& outcome, const HardwareDecoding& plan, bool retrying) {
     logger.warning("FFmpeg exited with code " + platform::exit_code_text(outcome.exit_code) + " (GPU decode: " +
                    plan.describe() + ")" + (retrying ? "; retrying" : "") + ". Last output:\n" +
@@ -934,8 +940,9 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
             for (const std::vector<std::string>& command : commands) {
                 logger.info("FFmpeg: " + python_list2cmdline(command));
             }
-            outcome = run_ffmpeg_pair(commands, {distorted.path, source.path}, total_frames, on_progress, cancel,
-                                      folder.path());
+            outcome = run_ffmpeg_pair(commands, {distorted.path, source.path},
+                                      [&attempt](std::size_t command) { return attempt.closed_pipe_of(command); },
+                                      total_frames, on_progress, cancel, folder.path());
         } catch (const platform::ProcessError& error) {
             abandon();
             throw VmafRunError(std::string("FFmpeg could not be started: ") + error.what());

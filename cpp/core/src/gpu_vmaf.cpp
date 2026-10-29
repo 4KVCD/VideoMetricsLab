@@ -349,6 +349,7 @@ struct StreamReader::State {
     std::atomic<bool> writer_gone{false};
     std::atomic<bool> connected{false};  // FFmpeg opened the pipe (or ffmpeg_ended did)
     std::atomic<bool> finished{false};   // the reading thread has ended
+    std::atomic<bool> stopped_while_reading{false};
     std::exception_ptr error;            // set before the final nullptr in pixels
     std::thread thread;
 
@@ -604,10 +605,15 @@ void StreamReader::ffmpeg_ended() {
 }
 
 void StreamReader::stop() {
+    if (!state_->finished) {
+        state_->stopped_while_reading = true;
+    }
     state_->stopped = true;
     state_->free.put(nullptr);
     ffmpeg_ended();
 }
+
+bool StreamReader::stopped_while_reading() const { return state_->stopped_while_reading; }
 
 void StreamReader::join() {
     State& s = *state_;
@@ -779,6 +785,10 @@ std::optional<PairScores> GpuAttempt::finish(bool ffmpeg_succeeded) {
         throw LibvmafError("GPU VMAF failed: " + message_of(s.error));
     }
     return ffmpeg_succeeded ? std::move(s.result) : std::nullopt;
+}
+
+bool GpuAttempt::closed_pipe_of(std::size_t output) const {
+    return (output == 0 ? state_->distorted : state_->reference)->stopped_while_reading();
 }
 
 namespace {
