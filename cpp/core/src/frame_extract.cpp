@@ -133,7 +133,7 @@ double keyframe_lead(const std::string& ffmpeg, const std::filesystem::path& pat
     // Kept by the file's path, size and time: a file written again is read again.
     std::error_code error;
     const std::string key = platform::path_text(path) + '|' + std::to_string(std::filesystem::file_size(path, error)) +
-                            '|' + std::to_string(std::filesystem::last_write_time(path, error).time_since_epoch().count());
+                            '|' + std::to_string(platform::modified_ns(path).value_or(0));
     static std::mutex mutex;
     static std::map<std::string, double> leads;
     {

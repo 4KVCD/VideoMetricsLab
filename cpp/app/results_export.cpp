@@ -36,8 +36,8 @@ Json run_entry(const ExportedRun& run) {
     }
     entry["compared_frames"] = result.compared_frame_count;
     entry["vmaf_model"] = result.model;
-    entry["reference_crop"] = crop_json(result.source_crop);
-    entry["test_crop"] = crop_json(result.distorted_crop);
+    entry["reference_crop"] = summary_crop_json(result.source_crop);
+    entry["test_crop"] = summary_crop_json(result.distorted_crop);
     Json scored = Json::object();  // in the app's order
     for (const MetricDefinition& metric : metrics()) {
         const std::string key(metric.key);

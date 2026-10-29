@@ -35,8 +35,8 @@ std::optional<double> summary_number(const nlohmann::ordered_json& number);
 // if the result has none of the metric.
 std::optional<nlohmann::ordered_json> metric_summary(const ComparisonResult& result, const std::string& key);
 
-// A crop as the JSON has it, or null for none.
-nlohmann::ordered_json crop_json(const std::optional<CropBox>& box);
+// A crop as the summary's JSON has it (x, y, width, height), or null for none.
+nlohmann::ordered_json summary_crop_json(const std::optional<CropBox>& box);
 
 // A video's media information, added to its entry.
 void add_media(nlohmann::ordered_json& entry, const VideoInfo& info);

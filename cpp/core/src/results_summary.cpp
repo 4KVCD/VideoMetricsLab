@@ -124,7 +124,7 @@ std::optional<Json> metric_summary(const ComparisonResult& result, const std::st
     return summary;
 }
 
-Json crop_json(const std::optional<CropBox>& box) {
+Json summary_crop_json(const std::optional<CropBox>& box) {
     if (!box) {
         return nullptr;
     }
