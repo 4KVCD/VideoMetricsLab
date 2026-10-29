@@ -286,12 +286,40 @@ TEST_F(PlaybackTest, BothVideosArePlacedByTheSharedZoom) {
     EXPECT_DOUBLE_EQ(taller->height, 32 / ratio);
 }
 
-namespace {
-
-}  // namespace
-
-namespace {
-
-}  // namespace
+// A video played through FFmpeg comes in whole frames, however much bigger
+// than the pipe they come through, each numbered as FFmpeg wrote it. FFmpeg
+// here is a stand-in that writes numbered frames, each filled with its number.
+TEST_F(PlaybackTest, FramesBiggerThanThePipeComeWhole) {
+    constexpr int side = 1450;  // RGBA: 8.41 MB a frame, more than platform::frame_pipe_bytes
+    FrameComparison comparison = series(1).front();
+    comparison.source_info.width = comparison.source_info.height = side;
+    comparison.distorted_info.width = comparison.distorted_info.height = side;
+    const test::ScopedVariable bytes("VML_TEST_FRAME_BYTES", std::to_string(side * side * 4));
+    const test::ScopedVariable fps("VML_TEST_FPS", "24");
+    const test::ScopedVariable playback("VML_TEST_PLAYBACK", "software=2:0:0:");
+    StreamDecodeWorker worker(VML_TEST_CHILD, comparison, FrameSide::source, 100, {},
+                              HardwareDecoding{std::nullopt, std::nullopt}, std::nullopt);
+    std::vector<PlaybackFrame> frames;
+    const auto take = [&] {
+        for (PlaybackFrame& frame : worker.drain_through(LLONG_MAX)) {
+            frames.push_back(std::move(frame));
+        }
+    };
+    worker.start();
+    ASSERT_TRUE(wait_until([&] {
+        take();
+        return worker.isFinished();
+    }));
+    take();
+    ASSERT_EQ(frames.size(), 2U);
+    for (std::size_t index = 0; index < frames.size(); ++index) {
+        const auto number = static_cast<long long>(100 + index);
+        EXPECT_EQ(frames[index].number, number);
+        const std::vector<unsigned char>& pixels = *frames[index].pixels;
+        EXPECT_EQ(std::count(pixels.begin(), pixels.end(), static_cast<unsigned char>(number % 251)),
+                  static_cast<std::ptrdiff_t>(pixels.size()));
+    }
+    EXPECT_TRUE(worker.ended());
+}
 
 }  // namespace vml::app

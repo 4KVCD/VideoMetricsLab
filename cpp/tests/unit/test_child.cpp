@@ -6,6 +6,9 @@
 //     vml_test_child sleep         sleeps for a minute
 //     vml_test_child warn N        "warning i of N" on N lines of standard
 //                                  error, then "the last line"
+//     vml_test_child data N        N bytes on standard output, byte i being
+//                                  i modulo 251, in writes of 32 KiB as
+//                                  FFmpeg's
 //
 // With the environment variable VML_TEST_TOOL set, it stands in for
 // libjxl's tools instead, started as the app starts them (REFERENCE TEST,
@@ -267,6 +270,20 @@ int run(const std::vector<std::string>& arguments) {
             std::fwrite(line.data(), 1, line.size(), stderr);
         }
         std::fputs("the last line\n", stderr);
+        return 0;
+    }
+    if (arguments.size() >= 3 && arguments[1] == "data") {
+        const auto count = static_cast<std::size_t>(std::atoll(arguments[2].c_str()));
+        std::vector<char> piece(32 * 1024);
+        for (std::size_t written = 0; written < count;) {
+            const std::size_t size = (std::min)(piece.size(), count - written);  // (): windows.h's min
+            for (std::size_t i = 0; i < size; ++i) {
+                piece[i] = static_cast<char>((written + i) % 251);
+            }
+            std::fwrite(piece.data(), 1, size, stdout);
+            std::fflush(stdout);
+            written += size;
+        }
         return 0;
     }
     return 1;

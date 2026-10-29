@@ -43,10 +43,6 @@ constexpr const char* neg_model = "vmaf_v0.6.1neg";
 
 // How many frames each reader may hold ready before the feeder takes them.
 constexpr std::size_t read_ahead = 3;
-// How much each named pipe holds: a 4K frame at 16 bits is 25 MB.
-constexpr std::size_t pipe_bytes = 64 * 1024 * 1024;
-
-
 
 // A queue of frame buffers between two threads. nullptr in it says that no
 // more will come.
@@ -70,22 +66,20 @@ bool frames_cut(const std::exception_ptr& error) {
     }
 }
 
-// Fills `size` bytes at `into` from the pipe. False at the stream's end
-// before the first byte; throws FramesCutError when it ends inside them.
-bool read_exactly(platform::InboundPipe& pipe, std::uint8_t* into, std::size_t size) {
-    std::size_t filled = 0;
-    while (filled < size) {
-        const std::size_t got = pipe.read(into + filled, size - filled);
-        if (got == 0) {
-            if (filled != 0) {
-                throw FramesCutError("FFmpeg's frames ended inside one (" + std::to_string(filled) + " of " +
-                                     std::to_string(size) + " bytes)");
-            }
-            return false;
-        }
-        filled += got;
+// Fills `size` bytes at `into` from the pipe, in a few large reads
+// (read_full). False at the stream's end before the first byte; throws
+// FramesCutError when it ends inside them.
+bool read_exactly(platform::InboundPipe& pipe, std::uint8_t* into, std::size_t size, const std::atomic<bool>& stop,
+                  const std::atomic<bool>& writer_gone) {
+    const std::size_t filled = pipe.read_full(into, size, stop, writer_gone);
+    if (filled == size) {
+        return true;
     }
-    return true;
+    if (filled != 0) {
+        throw FramesCutError("FFmpeg's frames ended inside one (" + std::to_string(filled) + " of " +
+                             std::to_string(size) + " bytes)");
+    }
+    return false;
 }
 
 struct Probe {
@@ -331,7 +325,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> timed_gpu_output_a
 
 struct StreamReader::State {
     State(std::string_view name, std::size_t frame_bytes, bool timed)
-        : name(name), pipe(name, pipe_bytes), frame_bytes(frame_bytes), buffers(read_ahead + 1) {
+        : name(name), pipe(name, platform::frame_pipe_bytes), frame_bytes(frame_bytes), buffers(read_ahead + 1) {
         for (std::vector<std::uint8_t>& buffer : buffers) {
             buffer.resize(frame_bytes);
             free.put(&buffer);
@@ -514,7 +508,7 @@ void StreamReader::read_frames() {
             // for each frame a "FRAME\n" line and the frame's planes, packed.
             std::string header;
             std::uint8_t byte = 0;
-            while (byte != '\n' && header.size() < 1024 && read_exactly(s.pipe, &byte, 1)) {
+            while (byte != '\n' && header.size() < 1024 && s.pipe.read(&byte, 1) == 1) {
                 header += static_cast<char>(byte);
             }
             if (!header.empty() && !header.starts_with("YUV4MPEG2 ")) {
@@ -522,11 +516,7 @@ void StreamReader::read_frames() {
             }
             std::array<std::uint8_t, 6> marker{};
             while (!header.empty() && !s.stopped) {
-                // Each frame is left to gather in the pipe and taken in one
-                // read: read as it arrived, a 4K frame would come in hundreds
-                // of pieces.
-                s.pipe.gather(marker.size() + s.frame_bytes, s.stopped, s.writer_gone);
-                if (!read_exactly(s.pipe, marker.data(), marker.size())) {
+                if (!read_exactly(s.pipe, marker.data(), marker.size(), s.stopped, s.writer_gone)) {
                     break;
                 }
                 if (std::memcmp(marker.data(), "FRAME\n", marker.size()) != 0) {
@@ -536,7 +526,7 @@ void StreamReader::read_frames() {
                 if (buffer == nullptr) {
                     break;
                 }
-                if (!read_exactly(s.pipe, buffer->data(), buffer->size())) {
+                if (!read_exactly(s.pipe, buffer->data(), buffer->size(), s.stopped, s.writer_gone)) {
                     throw FramesCutError("FFmpeg's frames ended after a frame's start");
                 }
                 s.pixels.put(buffer);
@@ -545,9 +535,8 @@ void StreamReader::read_frames() {
             // still writes is read and dropped, so that it can finish.
             std::vector<std::uint8_t> spare(4 * 1024 * 1024);
             while (!s.stopped) {
-                s.pipe.gather(spare.size(), s.stopped, s.writer_gone);
                 try {
-                    if (!read_exactly(s.pipe, spare.data(), spare.size())) {
+                    if (!read_exactly(s.pipe, spare.data(), spare.size(), s.stopped, s.writer_gone)) {
                         break;
                     }
                 } catch (const LibvmafError&) {

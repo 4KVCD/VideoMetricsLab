@@ -200,6 +200,7 @@ struct ChildProcess::State {
     // For gather's waits of a millisecond, as Python's time.sleep(0.001)
     // makes them: a plain Sleep(1) can last a whole 15.6 ms tick.
     Handle timer;
+    DWORD output_pipe_bytes = 0;  // what the output pipe holds, asked by gather once
     // The processes suspend() has suspended, each once, in that order. The
     // handles keep their ids from going to other processes meanwhile.
     // `holds` counts the suspend() calls not yet let go; `hold_mutex` guards
@@ -378,11 +379,11 @@ void ChildProcess::gather(std::size_t bytes, const std::atomic<bool>& stop) {
     if (!state_->unread.empty() || state_->output_ended) {
         return;
     }
-    DWORD held = 0;
-    if (!GetNamedPipeInfo(state_->output.get(), nullptr, nullptr, &held, nullptr)) {
+    if (state_->output_pipe_bytes == 0 &&
+        !GetNamedPipeInfo(state_->output.get(), nullptr, nullptr, &state_->output_pipe_bytes, nullptr)) {
         return;
     }
-    const std::size_t wanted = std::min<std::size_t>(bytes, held / 2);
+    const std::size_t wanted = std::min<std::size_t>(bytes, state_->output_pipe_bytes / 2);
     if (!state_->timer) {
         state_->timer.reset(
             CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS));

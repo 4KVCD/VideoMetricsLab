@@ -2,9 +2,24 @@
 #include "vml/platform/process.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <thread>
 
 namespace vml::platform {
+
+std::size_t ChildProcess::read_full(void* into, std::size_t bytes, const std::atomic<bool>& stop) {
+    auto* const start = static_cast<std::uint8_t*>(into);
+    std::size_t filled = 0;
+    while (filled < bytes) {
+        gather(bytes - filled, stop);
+        const std::size_t got = read(start + filled, bytes - filled);
+        if (got == 0) {
+            break;
+        }
+        filled += got;
+    }
+    return filled;
+}
 
 std::string error_tail(const std::string& kept) {
     if (kept.size() <= error_tail_bytes) {

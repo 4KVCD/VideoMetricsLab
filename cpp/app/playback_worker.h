@@ -10,6 +10,7 @@
 #include <QString>
 #include <QThread>
 
+#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <memory>
@@ -118,6 +119,7 @@ private:
     std::optional<HardwareDecoding> plan_;
     std::optional<Size> maximum_;
     CancelToken cancel_;
+    std::atomic<bool> stopping_{false};  // set by cancel(), for the reads' gathers
 
     mutable std::mutex mutex_;
     std::condition_variable changed_;

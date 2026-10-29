@@ -5,6 +5,7 @@
 #include <string_view>
 #include <utility>
 
+#include "vml/platform/pipe.h"
 #include "vml/platform/process.h"
 #include "vml/python_text.h"
 
@@ -16,11 +17,6 @@ namespace {
 // into: a worker's frames are at most three queued, three in the view's
 // history and one being read, so a few spares keep them all in use.
 constexpr std::size_t spare_frames = 4;
-
-// FFmpeg's pipe to the worker, large enough for whole frames: through a
-// small pipe, 4K RGBA came at 30 frames a second, through this, at 72 (the
-// Python app's proc.FRAME_PIPE_BYTES).
-constexpr std::size_t frame_pipe_bytes = 64 * 1024 * 1024;
 
 // How each way of decoding is described once its first frame comes.
 QString way_of(PlaybackProcessing processing) {
@@ -88,6 +84,7 @@ void StreamDecodeWorker::cancel() {
         const std::lock_guard lock(mutex_);
         cancelled_ = true;
     }
+    stopping_ = true;
     changed_.notify_all();
     cancel_.cancel();  // ends FFmpeg
 }
@@ -223,7 +220,7 @@ std::optional<StreamDecodeWorker::Attempt> StreamDecodeWorker::try_decoding(Play
     // The end of FFmpeg's error output, its last 30 lines.
     const auto tail = std::make_shared<LineTail>(30);
     platform::ProcessOptions options;
-    options.output_pipe_bytes = frame_pipe_bytes;
+    options.output_pipe_bytes = platform::frame_pipe_bytes;
     options.on_error_line = [tail](std::string_view line) { tail->add(line); };
     Attempt attempt;
     try {
@@ -256,16 +253,9 @@ std::optional<StreamDecodeWorker::Attempt> StreamDecodeWorker::try_decoding(Play
 bool StreamDecodeWorker::read_frames(platform::ChildProcess& process, PlaybackProcessing processing,
                                      long long& next_frame, const std::vector<QString>& errors, Attempt& attempt) {
     while (!cancelled()) {
-        // The large pipe holds a whole frame: a read or two each.
+        // A few large reads a frame (read_full), straight into its pixels.
         FramePixels pixels = buffer();
-        std::size_t read = 0;
-        while (read < frame_bytes_) {
-            const std::size_t got = process.read(pixels->data() + read, frame_bytes_ - read);
-            if (got == 0) {
-                break;
-            }
-            read += got;
-        }
+        const std::size_t read = process.read_full(pixels->data(), frame_bytes_, stopping_);
         if (read != frame_bytes_) {
             if (read > 0) {
                 attempt.error = QStringLiteral("Decoder returned a truncated frame.");

@@ -31,6 +31,7 @@
 #include "vml/metrics.h"
 #include "vml/number_format.h"
 #include "vml/perceptual_cpu.h"
+#include "vml/platform/pipe.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -64,10 +65,6 @@ constexpr std::size_t lanes_per_metric = 2;
 // one being filled, so that decoding, transfer and GPU work overlap. A 4K
 // 10-bit frame is 25 MB of pinned memory, so this is 250 MB for a 4K pair.
 constexpr int ring_slots = static_cast<int>(lanes_per_metric) + 3;
-// The size of the pipe between FFmpeg and this process. Windows' default is
-// a few kilobytes, which holds a raw 4K stream near 55 fps however fast the
-// decoder is; with 64 MB, one 4K 10-bit HEVC stream comes at 107 fps.
-constexpr std::size_t frame_pipe_bytes = 64 * 1024 * 1024;
 constexpr int end_of_video = -1;
 constexpr std::string_view y4m_frame_marker = "FRAME\n";
 // How long an FFmpeg that ended partway through a frame is given to exit by
@@ -132,21 +129,6 @@ private:
     void* address_ = nullptr;
     int gpu_id_;
 };
-
-// Fills `size` bytes at `into` from the program's standard output, and
-// returns how many it read: fewer only at its end. Read straight into the
-// pinned memory, with no copy between.
-std::size_t read_exact(platform::ChildProcess& process, std::uint8_t* into, std::size_t size) {
-    std::size_t filled = 0;
-    while (filled < size) {
-        const std::size_t got = process.read(into + filled, size - filled);
-        if (got == 0) {
-            break;
-        }
-        filled += got;
-    }
-    return filled;
-}
 
 // How a hardware-decoded frame crosses the pipe as it was downloaded (NV12,
 // P010): a luma plane of `luma` bytes, then U and V interleaved, `plane`
@@ -457,7 +439,7 @@ private:
     std::tuple<long long, int, std::string> decode_with(const std::vector<std::string>& command,
                                                         const std::filesystem::path* stamps_path) {
         platform::ProcessOptions options;
-        options.output_pipe_bytes = frame_pipe_bytes;
+        options.output_pipe_bytes = platform::frame_pipe_bytes;
         std::optional<platform::ChildProcess> process;
         try {
             process.emplace(platform::ChildProcess::start(command, options));
@@ -486,7 +468,6 @@ private:
                 if (slot == end_of_video) {
                     break;
                 }
-                process->gather(frame_bytes_ + (y4m ? y4m_frame_marker.size() : 0), stopping_);
                 if (y4m && !y4m_frame(*process, cut)) {
                     free_.put(slot);
                     break;
@@ -587,7 +568,7 @@ private:
     // `cut` set if FFmpeg ended partway through the line.
     bool y4m_frame(platform::ChildProcess& process, std::optional<std::string>& cut) {
         std::array<std::uint8_t, y4m_frame_marker.size()> marker{};
-        const std::size_t received = read_exact(process, marker.data(), marker.size());
+        const std::size_t received = process.read_full(marker.data(), marker.size(), stopping_);
         if (received == 0) {
             return false;
         }
@@ -601,20 +582,20 @@ private:
         return true;
     }
 
-    // Reads one frame into `slot`, and returns the number of bytes read. A
-    // frame sent as NV12 or P010 has its luma read straight into the slot,
-    // and its U and V pairs into staging memory, from which they are split
-    // into the slot's U and V planes.
+    // Reads one frame into `slot`, straight into its pinned memory, and
+    // returns the number of bytes read. A frame sent as NV12 or P010 has its
+    // luma read straight into the slot, and its U and V pairs into staging
+    // memory, from which they are split into the slot's U and V planes.
     std::size_t fill(platform::ChildProcess& process, int slot) {
         std::uint8_t* frame = buffers_[static_cast<std::size_t>(slot)]->data();
         if (!split_) {
-            return read_exact(process, frame, frame_bytes_);
+            return process.read_full(frame, frame_bytes_, stopping_);
         }
-        const std::size_t received = read_exact(process, frame, split_->luma);
+        const std::size_t received = process.read_full(frame, split_->luma, stopping_);
         if (received < split_->luma) {
             return received;
         }
-        const std::size_t chroma = read_exact(process, staging_.data(), staging_.size());
+        const std::size_t chroma = process.read_full(staging_.data(), staging_.size(), stopping_);
         if (chroma == staging_.size()) {
             std::uint8_t* u = frame + split_->luma;
             std::uint8_t* v = u + split_->plane;

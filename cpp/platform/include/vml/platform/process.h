@@ -53,8 +53,9 @@ struct ProcessOptions {
     std::filesystem::path working_directory;
     // How much the pipe of the program's standard output holds before the
     // program waits for this process to read it; 0 is the system's size.
-    // On Linux it is asked for and may be cut to the system's limit; macOS
-    // keeps its own size.
+    // On Linux it is asked for, and a size past the system's limit
+    // (/proc/sys/fs/pipe-max-size, 1 MiB unless raised) is refused, which
+    // leaves the system's size; macOS keeps its own size.
     std::size_t output_pipe_bytes = 0;
     // Called with each line of the program's standard error as it comes,
     // without its line ending, on the thread that reads it. Its end is kept
@@ -107,13 +108,19 @@ public:
     int output_error() const;
 
     // Waits until `bytes` of standard output are waiting to be read, the
-    // program has ended, or `stop` is set, so that one read takes a whole
-    // frame: read as it comes, a 4K frame arrives in some 300 pieces, each
+    // program has ended, or `stop` is set, so that one read takes them at
+    // once: read as it comes, a 4K frame arrives in some 300 pieces, each
     // waking the reading thread (6 ms of CPU per frame, against 4). It never
     // waits for more than half of what the pipe holds, or a program waiting
     // for room in a full pipe would be waited for in turn. Only on Windows,
     // as the Python app gathers; elsewhere it returns at once.
     void gather(std::size_t bytes, const std::atomic<bool>& stop);
+
+    // Fills `bytes` at `into` from standard output, gathering before each
+    // read: a frame comes in a few large reads, however much bigger than the
+    // pipe it is, and straight into `into`. How many were read: fewer only
+    // once the program has closed it.
+    std::size_t read_full(void* into, std::size_t bytes, const std::atomic<bool>& stop);
 
     // Waits for the program to end, and returns its exit code.
     int wait();

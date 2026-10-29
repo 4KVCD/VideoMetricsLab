@@ -2,7 +2,9 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -58,6 +60,24 @@ TEST(Process, KeepsTheEndOfALongErrorOutput) {
 
 TEST(Process, AProgramThatIsNotThereCannotBeStarted) {
     EXPECT_THROW(ChildProcess::start({"vml-no-such-program-anywhere"}), ProcessError);
+}
+
+// A frame much bigger than the pipe it comes through is read whole, byte for
+// byte, as FFmpeg writes it, and the end of the stream after it.
+TEST(Process, ReadsAFrameBiggerThanItsPipeWhole) {
+    constexpr std::size_t frame = 3'000'000;
+    ProcessOptions options;
+    options.output_pipe_bytes = 1024 * 1024;
+    ChildProcess process = ChildProcess::start({VML_TEST_CHILD, "data", std::to_string(frame)}, options);
+    const std::atomic<bool> stop{false};
+    std::vector<std::uint8_t> data(frame + 1);  // one more than comes: read_full stops at the end
+    ASSERT_EQ(process.read_full(data.data(), data.size(), stop), frame);
+    std::size_t wrong = 0;
+    for (std::size_t i = 0; i < frame; ++i) {
+        wrong += data[i] != i % 251 ? 1 : 0;
+    }
+    EXPECT_EQ(wrong, 0u);
+    EXPECT_EQ(process.wait(), 0);
 }
 
 // A program gets its own three handles and none of the app's others. Given

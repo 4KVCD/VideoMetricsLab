@@ -19,6 +19,15 @@ public:
     using std::runtime_error::runtime_error;
 };
 
+// How much a pipe that brings an FFmpeg's decoded frames holds (this one's,
+// or a ChildProcess's standard output). On Windows what waits in a pipe is
+// the writer's nonpaged memory, and a busy PC refuses FFmpeg's writes now
+// and then (ERROR_NO_SYSTEM_RESOURCES, FFmpeg's "Invalid argument"
+// mid-frame): with whole frames waiting in 64 MB pipes, far more often than
+// with 8 MB. Read with read_full, which takes each half-pipe as it comes,
+// 8 MB takes a 4K 10-bit stream at least as fast as 64 MB did.
+inline constexpr std::size_t frame_pipe_bytes = 8 * 1024 * 1024;
+
 class InboundPipe {
 public:
     // A new pipe, its path unique to this process and ending in `name`.
@@ -37,15 +46,21 @@ public:
     // Throws PipeError.
     void connect();
 
-    // Waits until `bytes` are in the pipe (or as many as it holds), until
+    // Waits until `bytes` are in the pipe (or half of what it holds), until
     // `writer_gone` says no more will come, or until `stop` is set, so that
-    // a frame is taken in one read instead of in the pieces it arrives in.
+    // a read takes them at once instead of in the pieces they arrive in.
     // Elsewhere than on Windows a FIFO holds too little for that, and this
     // returns at once.
     void gather(std::size_t bytes, const std::atomic<bool>& stop, const std::atomic<bool>& writer_gone);
 
     // Reads up to `bytes` into `into`: how many were read, 0 at the end.
     std::size_t read(void* into, std::size_t bytes);
+
+    // Fills `bytes` at `into`, gathering before each read: a frame comes in
+    // a few large reads, however much bigger than the pipe it is. How many
+    // were read: fewer only at the end.
+    std::size_t read_full(void* into, std::size_t bytes, const std::atomic<bool>& stop,
+                          const std::atomic<bool>& writer_gone);
 
     // Closes this end of the pipe, once the reading is over: a writer still
     // writing then fails, instead of waiting for room that would never come.

@@ -1,7 +1,7 @@
 # vml_platform: what differs between the systems (processes, pipes, loading
 # libraries, the PATH, the GPUs), behind headers that are the same on all of
 # them.
-add_library(vml_platform src/process.cpp src/system.cpp)
+add_library(vml_platform src/pipe.cpp src/process.cpp src/system.cpp)
 if(WIN32)
     target_sources(vml_platform PRIVATE
         src/console_windows.cpp src/library_windows.cpp src/pipe_windows.cpp src/process_windows.cpp
