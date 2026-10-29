@@ -295,6 +295,7 @@ std::vector<HardwareDecoding> fallback_ladder(const HardwareDecoding& plan) {
 struct FfmpegOutcome {
     int exit_code = 0;
     std::string errors;
+    std::size_t command = 0;  // which of the run's commands it is
 };
 
 // FFmpeg's -progress output, which writes each update as key=value lines:
@@ -400,7 +401,7 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
             std::string errors = ffmpeg.standard_error();
             {
                 const std::lock_guard lock(mutex);
-                outcomes[index] = FfmpegOutcome{code, std::move(errors)};
+                outcomes[index] = FfmpegOutcome{code, std::move(errors), index};
                 done[index] = 1;
                 if (code != 0 && !first_failed) {
                     first_failed = index;
@@ -455,6 +456,22 @@ const app_log::Logger logger("vml.vmaf_runner");
 
 // An FFmpeg that failed, in the log: its exit code, the decode plan, whether
 // another plan is tried, and the end of its error output.
+// Says that an FFmpeg of a pair ended because a write into the app's pipe
+// failed (refused_frame_write), and that its attempt is made again. The
+// pair's first command decodes the test video (build_stream_commands).
+void report_refused_write(const FfmpegOutcome& outcome, const HardwareDecoding& plan,
+                          const StatusCallback& on_status) {
+    const std::string side = outcome.command == 0 ? "test video" : "reference";
+    logger.warning("FFmpeg ended partway through a " + side + " frame: a write into the app's pipe failed (GPU "
+                   "decode: " + plan.describe() + "); decoding the same way again. Last output:\n" +
+                   last_lines(outcome.errors, 8));
+    if (on_status) {
+        // Worded as Vship's retry (remade_vship_pass), which the window translates.
+        on_status({"Reading the videos failed (FFmpeg ended partway through a " + side +
+                   " frame.); trying again\xE2\x80\xA6"});
+    }
+}
+
 void log_failed_attempt(const FfmpegOutcome& outcome, const HardwareDecoding& plan, bool retrying) {
     logger.warning("FFmpeg exited with code " + platform::exit_code_text(outcome.exit_code) + " (GPU decode: " +
                    plan.describe() + ")" + (retrying ? "; retrying" : "") + ". Last output:\n" +
@@ -885,13 +902,20 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
     const std::vector<HardwareDecoding> ladder = fallback_ladder(decoding);
     std::optional<PairScores> scored;
     FfmpegOutcome outcome;
-    for (std::size_t attempt_number = 0; attempt_number < ladder.size(); ++attempt_number) {
+    std::size_t attempt_number = 0;
+    // A write into the app's pipe that Windows refused is made again once a
+    // run, with the same decoding: it may not happen again, and the next
+    // plan would decode on the CPU for nothing.
+    bool refusal_retried = false;
+    bool same_again = false;  // this attempt is the last one's plan again
+    while (attempt_number < ladder.size()) {
         const HardwareDecoding& decode = ladder[attempt_number];
-        if (on_status) {
+        if (on_status && !same_again) {
             on_status(attempt_number == 0
                           ? decoding_status("Running ffmpeg, " + doing(plan), decode, StatusKind::starting)
                           : decoding_status("GPU decode failed, retrying", decode));
         }
+        same_again = false;
         // Each attempt has its own scorer and pipes: a failed attempt's
         // cannot be used again.
         GpuAttempt attempt(plan, options.n_subsample);
@@ -925,7 +949,14 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
         if (outcome.exit_code == 0) {
             break;
         }
+        if (!refusal_retried && refused_frame_write(outcome.exit_code, outcome.errors)) {
+            refusal_retried = true;
+            same_again = true;
+            report_refused_write(outcome, decode, on_status);
+            continue;
+        }
         log_failed_attempt(outcome, decode, attempt_number + 1 < ladder.size());
+        ++attempt_number;
     }
     if (outcome.exit_code != 0) {
         throw VmafRunError("ffmpeg exited with code " + platform::exit_code_text(outcome.exit_code),
@@ -1594,6 +1625,18 @@ long long estimate_total_frames(const VideoInfo& reference, const VmafOptions& o
         frames = std::min(frames, kept.value_or(0));
     }
     return frames;
+}
+
+bool refused_frame_write(int exit_code, std::string_view ffmpeg_errors) {
+    // EINVAL as ChildProcess::wait gives FFmpeg's exit code on Windows
+    // (0xFFFFFFEA): a write that Windows refused for want of resources
+    // (ERROR_NO_SYSTEM_RESOURCES, 1450) reaches FFmpeg as EINVAL.
+    constexpr int einval_exit_code = -22;
+    // What FFmpeg writes as it closes an output whose writes failed (each of
+    // the 39 refused writes logged under load had both lines).
+    return exit_code == einval_exit_code &&
+           (ffmpeg_errors.find("Error writing trailer: Invalid argument") != std::string_view::npos ||
+            ffmpeg_errors.find("Error closing file: Invalid argument") != std::string_view::npos);
 }
 
 std::optional<std::string> short_comparison(long long expected, long long compared, double fps, int step) {

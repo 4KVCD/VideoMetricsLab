@@ -224,6 +224,30 @@ TEST(FfmpegRun, ARunCutShortIsRefused) {
               "copy that did not finish.");
 }
 
+// An FFmpeg whose write into the app's frame pipe Windows refused (its lines
+// as FFmpeg 9.0.1 wrote them under load), told from FFmpeg failing otherwise
+// with the same code, or with the muxer's lines alone, and from a crash.
+TEST(FfmpegRun, TellsARefusedFrameWriteFromOtherFailures) {
+    const std::string refused =
+        "[vost#0:0/wrapped_avframe @ 000002bb317dc040] Error submitting a packet to the muxer: Invalid argument\n"
+        "    Last message repeated 1 times\n"
+        "[out#0/yuv4mpegpipe @ 000002bb246d0380] Error muxing a packet\n"
+        "[out#0/yuv4mpegpipe @ 000002bb246d0380] Task finished with error code: -22 (Invalid argument)\n"
+        "[out#0/yuv4mpegpipe @ 000002bb246d0380] Terminating thread with return code -22 (Invalid argument)\n"
+        "[out#0/yuv4mpegpipe @ 000002bb246d0380] Error writing trailer: Invalid argument\n"
+        "[out#0/yuv4mpegpipe @ 000002bb246d0380] Error closing file: Invalid argument\n";
+    EXPECT_TRUE(refused_frame_write(-22, refused));
+    EXPECT_FALSE(refused_frame_write(static_cast<int>(0xC0000005), refused));
+    EXPECT_FALSE(refused_frame_write(1, refused));
+    EXPECT_FALSE(refused_frame_write(
+        -22, "[vost#0:0/wrapped_avframe @ 000002bb317dc040] Error submitting a packet to the muxer: Invalid argument\n"
+             "[out#0/yuv4mpegpipe @ 000002bb246d0380] Error muxing a packet\n"
+             "[out#0/yuv4mpegpipe @ 000002bb246d0380] Task finished with error code: -22 (Invalid argument)\n"));
+    EXPECT_FALSE(refused_frame_write(-22, "[Parsed_scale_0 @ 0000021c] Impossible to convert between the formats "
+                                          "supported by the filter 'graph 0 input from stream 0:0' and the filter "
+                                          "'auto_scale_0'\n"));
+}
+
 // FFmpeg 9.0.1's word that it rebuilt its filters as a video's size changed,
 // and its error output at watched_log_level cut back to the lines
 // "-loglevel error" shows for the same failure, without their levels; a line

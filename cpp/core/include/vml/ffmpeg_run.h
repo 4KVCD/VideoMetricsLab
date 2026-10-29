@@ -125,6 +125,12 @@ long long estimate_total_frames(const VideoInfo& reference, const VmafOptions& o
 // was cut short), or nothing.
 std::optional<std::string> short_comparison(long long expected, long long compared, double fps, int step);
 
+// Whether an FFmpeg that wrote frames into a pipe of the app's ended because
+// a write into it failed (Windows refuses writes into a full pipe under heavy
+// load): its exit code, -22, and its output's word that writing had failed,
+// in its error output.
+bool refused_frame_write(int exit_code, std::string_view ffmpeg_errors);
+
 // Whether the app may score PSNR, SSIM and XPSNR itself: its libvmaf is
 // bundled, and the environment variable VML_CPU_METRICS does not send them
 // to FFmpeg ("ffmpeg").
