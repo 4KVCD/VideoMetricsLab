@@ -890,15 +890,25 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
         return score_decoded_cuda(source, distorted, plans, plan, n_subsample, duration_limit, total_frames,
                                   decoders, ffmpeg, ffprobe, on_progress, cancel);
     }
-    GpuFrameStream test(distorted, plans[0], 0, 4, test_backend, ffmpeg, ffprobe);
-    GpuFrameStream reference(source, plans[1], 0, 4, source_backend, ffmpeg, ffprobe);
+    // AMD's decoder hands its pictures over on the GPU where neither video is
+    // scaled or widened for the other (can_hand_over); NVIDIA's always does.
+    const bool hand_over = can_hand_over(plans[0], test_backend) && can_hand_over(plans[1], source_backend);
+    GpuFrameStream test(distorted, plans[0], 0, 4, test_backend, ffmpeg, ffprobe, hand_over);
+    GpuFrameStream reference(source, plans[1], 0, 4, source_backend, ffmpeg, ffprobe, hand_over);
     // Declared after the streams so that it goes first: it holds on to the
     // decoder's memory.
     std::optional<VulkanScorer> scorer;
-    // The planes stay on the GPU when the decoder and Vulkan share memory,
-    // which needs NVIDIA's decoder for both videos.
+    // The planes stay on the GPU when the decoders and Vulkan share memory:
+    // one decoder library for both videos, NVIDIA's or AMD's handing over
+    // (the scorer's memory is imported by the test video's decoder, and the
+    // source's copies go into it).
     bool shared = false;
-    if (source_backend == "nvidia" && test_backend == "nvidia") {
+    if (test.handover() && reference.handover() && !test.shares_gpu_memory_with(reference)) {
+        // Windows' own decoder for one video and AMF's for the other.
+        app_log::write(app_log::Level::info, "vml.vmaf_vulkan",
+                       "VMAF with Vulkan: the frames go through system memory (the videos' decoders share no GPU "
+                       "memory)");
+    } else if (test.shares_gpu_memory_with(reference)) {
         try {
             scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.device, &test);
             shared = true;
