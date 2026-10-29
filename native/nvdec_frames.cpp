@@ -629,10 +629,18 @@ int CUDAAPI on_sequence(void *user, CUVIDEOFORMAT *format) {
     int depth = format->bit_depth_luma_minus8 + 8;
     if (d->decoder) {
         // A new sequence header: the same format carries on; any change of
-        // size or depth mid-stream is the FFmpeg path's to handle.
+        // size or depth mid-stream is the FFmpeg path's to handle. The size
+        // shown counts too: a new crop with the same coded size changes the
+        // pictures FFmpeg gives, though not the decoder's; and what the first
+        // sequence was checked for below (progressive, chroma as deep as luma).
         if (static_cast<int>(format->coded_width) != d->info.coded_width
             || static_cast<int>(format->coded_height) != d->info.coded_height
-            || depth != d->info.bit_depth || format->chroma_format != d->info.chroma_format) {
+            || depth != d->info.bit_depth || format->chroma_format != d->info.chroma_format
+            || format->bit_depth_chroma_minus8 != format->bit_depth_luma_minus8
+            || static_cast<int>(format->progressive_sequence) != static_cast<int>(d->info.progressive)
+            || format->display_area.left != d->info.display_left || format->display_area.top != d->info.display_top
+            || format->display_area.right != d->info.display_right
+            || format->display_area.bottom != d->info.display_bottom) {
             d->fail("the video's format changes partway through");
             return 0;
         }
