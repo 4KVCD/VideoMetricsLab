@@ -12,6 +12,7 @@ nlohmann::json video_json(const VideoInfo& info) {
             {"duration", info.duration},
             {"nb_frames", info.nb_frames},
             {"codec_name", info.codec_name},
+            {"profile", info.profile},
             {"sar", info.sar},
             {"pix_fmt", info.pix_fmt},
             {"bit_rate", info.bit_rate},
@@ -41,6 +42,7 @@ VideoInfo video_from(const nlohmann::json& text) {
     text.at("duration").get_to(info.duration);
     text.at("nb_frames").get_to(info.nb_frames);
     text.at("codec_name").get_to(info.codec_name);
+    info.profile = text.value("profile", std::string());
     text.at("sar").get_to(info.sar);
     text.at("pix_fmt").get_to(info.pix_fmt);
     text.at("bit_rate").get_to(info.bit_rate);

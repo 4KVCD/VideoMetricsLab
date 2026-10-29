@@ -293,15 +293,56 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
     return hwaccel;
 }
 
+bool h264_444_profile(const VideoInfo& video) {
+    return ascii_lower(video.codec_name) == "h264" && video.profile.find("4:4:4") != std::string::npos;
+}
+
+std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
+                                       const VideoInfo& video, MacGpuDecoding mac) {
+    std::optional<std::string> hwaccel =
+        pick_decode(capabilities, vendor, video.codec_name, video.pix_fmt, video.width, video.height, mac);
+    // No profile is a video not probed (a saved result's, which Video Compare
+    // can play): its H.264 may be lossless too.
+    const bool unknown_h264 = ascii_lower(video.codec_name) == "h264" && video.profile.empty();
+    if (hwaccel && (h264_444_profile(video) || unknown_h264) && hwaccel != "cuda" && hwaccel != "videotoolbox") {
+        return std::nullopt;
+    }
+    return hwaccel;
+}
+
+std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode) {
+    if (!gpu_decode) {
+        return "GPU decoding is off";
+    }
+    if (info.scaled_to) {
+        return "its picture size changes partway through";
+    }
+    if (!downloads_from_gpu(info.pix_fmt, info.width, info.height)) {
+        return "GPU decoding takes 4:2:0 at 8 or 10 bits and an even size, not " + info.pix_fmt + " at " +
+               std::to_string(info.width) + "x" + std::to_string(info.height);
+    }
+    if (!gpu_decodes_exactly(info.codec_name)) {
+        return "the GPUs decode " + info.codec_name + " to other pictures than FFmpeg's";
+    }
+    if (ascii_lower(info.codec_name) == "h264" && bit_depth(info.pix_fmt) > 8) {
+        return "this GPU does not decode H.264 deeper than 8 bits";
+    }
+    if (h264_444_profile(info)) {
+        return "this GPU does not decode H.264's " + info.profile + " profile exactly";
+    }
+    if (ascii_lower(info.codec_name) == "h264" && info.profile.empty()) {
+        return "its H.264 profile is not known, and this GPU does not decode every one exactly";
+    }
+    return "no GPU decoder here for " + info.codec_name;
+}
+
 HardwareDecoding plan_hardware_decoding(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                         const VideoInfo& source, const VideoInfo& distorted, MacGpuDecoding mac) {
     // A video whose size changes (VideoInfo::scaled_to) is decoded in
     // software: FFmpeg rebuilds its filters for a GPU decoder's surfaces of a
     // new size whatever it is told (-reinit_filter 0).
     const auto pick = [&](const VideoInfo& video) {
-        return video.scaled_to ? std::nullopt
-                               : pick_decode(capabilities, vendor, video.codec_name, video.pix_fmt, video.width,
-                                             video.height, mac);
+        return video.scaled_to ? std::nullopt : pick_decode(capabilities, vendor, video, mac);
     };
     return HardwareDecoding{pick(source), pick(distorted)};
 }

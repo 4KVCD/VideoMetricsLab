@@ -62,12 +62,14 @@ std::counting_semaphore<2> decoder_slots(2);
 // How many files' answers to remember (a bound against an extreme session).
 constexpr std::size_t remembered_answers = 512;
 // Raised when the detection itself changes what it finds, so that older
-// answers in the store are ignored.
-constexpr int store_version = 1;
+// answers in the store are ignored. 2: Intel's GPU decoded lossless H.264
+// to other pixels before (pick_decode).
+constexpr int store_version = 2;
 
 // What an answer depends on: which bytes are in the file, and which stretch
-// of it is sampled (not how it was decoded: the GPU and the CPU give the
-// same pixels). The Python app's key, so both apps read each other's store.
+// of it is sampled (not how it was decoded: the GPUs that decode a video
+// give the pixels the CPU does, pick_decode). The Python app's key, so both
+// apps read each other's store.
 struct AnswerKey {
     std::string path;
     long long size = 0;

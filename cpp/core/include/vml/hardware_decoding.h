@@ -107,8 +107,27 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
                                        const std::string& codec, const std::string& pix_fmt, int width, int height,
                                        MacGpuDecoding mac = MacGpuDecoding::deep);
 
-// The plan for a comparison of two videos: software decoding for a video
-// whose size changes (VideoInfo::scaled_to).
+// Whether `video` is H.264 in a 4:4:4 profile ("High 4:4:4 Predictive",
+// "High 4:4:4", "High 4:4:4 Intra", "CAVLC 4:4:4"), which may hold lossless
+// pictures (x264's -qp 0 writes them so, in 4:2:0 too).
+bool h264_444_profile(const VideoInfo& video);
+
+// The -hwaccel for `video`, as pick_decode gives it for its codec, format and
+// size, but only a GPU's decoder that decodes its profile exactly: H.264 in
+// a 4:4:4 profile only NVIDIA's (cuda) and Apple's (videotoolbox), each
+// checked bit-exact against software. Intel's (qsv) turns lossless 4:2:0
+// H.264 into other pictures with no error (a 285K's: VMAF 10.90 for 94.34);
+// FFmpeg's D3D11VA refuses that profile. H.264 of no known profile (a video
+// not probed) is taken as 4:4:4.
+std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
+                                       const VideoInfo& video, MacGpuDecoding mac = MacGpuDecoding::deep);
+
+// Why `info` is decoded in software, for the log: GPU decoding is off (not
+// `gpu_decode`), or what pick_decode refuses in it.
+std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode);
+
+// The plan for a comparison of two videos (pick_decode for each): software
+// decoding for a video whose size changes (VideoInfo::scaled_to).
 HardwareDecoding plan_hardware_decoding(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                         const VideoInfo& source, const VideoInfo& distorted,
                                         MacGpuDecoding mac = MacGpuDecoding::deep);

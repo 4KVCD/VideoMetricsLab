@@ -2059,8 +2059,7 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
     // One file: there is no test video to plan GPU decoding for.
     HardwareDecoding decoding;
     if (options.gpu_decode) {
-        decoding.source = pick_decode(environment.decoding, options.gpu_vendor, source.codec_name, source.pix_fmt,
-                                      source.width, source.height);
+        decoding.source = pick_decode(environment.decoding, options.gpu_vendor, source);
     }
     std::optional<CropBox> source_crop;
     if (options.crop_mode == CropMode::automatic) {

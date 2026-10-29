@@ -1464,7 +1464,9 @@ private:
         if (!said) {
             logger.info("Vship: the " + video.label + " is decoded by FFmpeg " +
                         (video.hwaccel ? "on the GPU (-hwaccel " + *video.hwaccel + ")"
-                                       : "in software (" + software_decoding_reason(video.info) + ")"));
+                                       : "in software (" +
+                                             software_decoding_reason(video.info, request_.options.gpu_decode) +
+                                             ")"));
         }
         std::optional<InterleavedChroma> split;
         if (video.passthrough) {
@@ -1479,26 +1481,6 @@ private:
                                              by_time_, plan_.scratch_folder);
     }
 
-    // Why FFmpeg decodes a video in software, for the log.
-    std::string software_decoding_reason(const VideoInfo& info) const {
-        if (!request_.options.gpu_decode) {
-            return "GPU decoding is off";
-        }
-        if (info.scaled_to) {
-            return "its picture size changes partway through";
-        }
-        if (!downloads_from_gpu(info.pix_fmt, info.width, info.height)) {
-            return "GPU decoding takes 4:2:0 at 8 or 10 bits and an even size, not " + info.pix_fmt + " at " +
-                   std::to_string(info.width) + "x" + std::to_string(info.height);
-        }
-        if (!gpu_decodes_exactly(info.codec_name)) {
-            return "the GPUs decode " + info.codec_name + " to other pictures than FFmpeg's";
-        }
-        if (ascii_lower(info.codec_name) == "h264" && bit_depth(info.pix_fmt) > 8) {
-            return "this GPU does not decode H.264 deeper than 8 bits";
-        }
-        return "no GPU decoder here for " + info.codec_name;
-    }
 
     // The FFmpeg commands to try for one video, keeping every `every`-th
     // frame, cut at the duration limit when `cut`: with hardware decoding

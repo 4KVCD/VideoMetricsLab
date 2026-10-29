@@ -312,6 +312,7 @@ VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_v
     info.width = integer_member(*video, "width");
     info.height = integer_member(*video, "height");
     info.codec_name = string_member(*video, "codec_name", "unknown");
+    info.profile = string_member(*video, "profile");
     info.sar = first_truthy(*video, {"sample_aspect_ratio"}, "1:1");
     info.pix_fmt = string_member(*video, "pix_fmt");
     info.color_range = string_member(*video, "color_range");

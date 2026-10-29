@@ -59,6 +59,9 @@ struct VideoInfo {
     double duration = 0.0;
     long long nb_frames = 0;
     std::string codec_name;
+    // The codec's profile as ffprobe names it ("High", "High 4:4:4
+    // Predictive"); empty where it gives none.
+    std::string profile;
     std::string sar = "1:1";
     std::string pix_fmt;
     long long bit_rate = 0;  // bits per second, 0 if unknown

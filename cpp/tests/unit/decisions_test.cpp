@@ -147,6 +147,43 @@ TEST(Decisions, D3d11vaDecodesOnlyTheCodecsTheGpuHasADecoderFor) {
     EXPECT_EQ(pick_decode(pc, GpuVendor::automatic, "hevc", "yuv420p10le", 1920, 1080), "d3d11va");
 }
 
+// H.264 in a 4:4:4 profile (x264's lossless -qp 0 writes "High 4:4:4
+// Predictive", in 4:2:0 too) is decoded on the GPU only by NVIDIA's and
+// Apple's decoders, both checked bit-exact; Intel's gave other pictures, and
+// FFmpeg's D3D11VA refuses the profile. Other H.264 as before, and 10-bit
+// lossless on NVIDIA's.
+TEST(Decisions, H264In444ProfilesIsGpuDecodedOnlyWhereItIsExact) {
+    DecodingCapabilities pc;
+    pc.hwaccels = {"cuda", "qsv", "d3d11va"};
+    VideoInfo video;
+    video.codec_name = "h264";
+    video.pix_fmt = "yuv420p";
+    video.width = 1920;
+    video.height = 1080;
+    video.profile = "High 4:4:4 Predictive";
+    EXPECT_EQ(pick_decode(pc, GpuVendor::nvidia, video), "cuda");
+    for (const char* profile : {"High 4:4:4 Predictive", "High 4:4:4", "High 4:4:4 Intra", "CAVLC 4:4:4"}) {
+        video.profile = profile;
+        EXPECT_EQ(pick_decode(pc, GpuVendor::intel, video), std::nullopt) << profile;
+        EXPECT_EQ(pick_decode(pc, GpuVendor::amd, video), std::nullopt) << profile;
+    }
+    EXPECT_EQ(software_decoding_reason(video, true), "this GPU does not decode H.264's CAVLC 4:4:4 profile exactly");
+    video.profile = "High";
+    EXPECT_EQ(pick_decode(pc, GpuVendor::intel, video), "qsv");
+    EXPECT_EQ(pick_decode(pc, GpuVendor::amd, video), "d3d11va");
+    video.profile.clear();  // not probed: taken as 4:4:4
+    EXPECT_EQ(pick_decode(pc, GpuVendor::intel, video), std::nullopt);
+    EXPECT_EQ(pick_decode(pc, GpuVendor::nvidia, video), "cuda");
+    video.profile = "High 4:4:4 Predictive";
+    video.pix_fmt = "yuv420p10le";
+    EXPECT_EQ(pick_decode(pc, GpuVendor::nvidia, video), "cuda");
+    DecodingCapabilities mac;
+    mac.hwaccels = {"videotoolbox"};
+    mac.videotoolbox_codecs = {"h264"};
+    video.pix_fmt = "yuv420p";
+    EXPECT_EQ(pick_decode(mac, GpuVendor::automatic, video, MacGpuDecoding::on), "videotoolbox");
+}
+
 TEST(Decisions, FrameRatesBecomeThePythonAppsFractions) {
     for (const Json& item : decisions()["fractions"]) {
         const double rate = *test::reference_number(item["value"]);
