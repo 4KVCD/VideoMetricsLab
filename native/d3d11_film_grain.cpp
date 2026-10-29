@@ -2,10 +2,10 @@
 //
 // A VVC encode can describe its film grain in H.274 SEI messages instead of
 // coding it; the player is meant to synthesize the grain again on each
-// decoded frame. GStreamer's VVC decoder does not, so this module does. It
-// draws the grain on a decoded frame's planes in place, on GStreamer's D3D11
-// device, right after the frame is uploaded and before it is cropped, scaled
-// or shown.
+// decoded frame. FFmpeg's VVC decoder gives each frame's grain message
+// instead of drawing it, so this module draws it: on a decoded frame's planes
+// in place, on the app's D3D11 device, right after the frame is uploaded and
+// before it is cropped, scaled or shown.
 //
 // The synthesis is H.274's frequency filtering model, as SMPTE RDD 5 defines
 // it, and it reproduces FFmpeg's implementation (libavcodec/h274.c) exactly,
@@ -40,17 +40,13 @@
 //      which is then copied over the plane: a decoded frame's textures
 //      cannot be written by a compute shader directly.
 //
-// The Python app's frames come from GStreamer's VVC decoder (avdec_h266) via
-// d3d11upload: one texture per plane, R8 or R16, holding the codes in their
-// low bits (the I420 format and its 10- and 12-bit forms). The C++ app's
-// come from FFmpeg's VVC decoder, which gives each frame's grain message
-// instead of drawing it: it uploads the planes so, draws the grain on them
-// (vmaf_grain_apply_planes) and copies them into the NV12 or P010 texture it
+// The app uploads a decoded frame's planes, one texture per plane, R8 or R16
+// holding the codes in their low bits; draws the grain on them
+// (vmaf_grain_apply_planes); and copies them into the NV12 or P010 texture it
 // shows (vmaf_grain_pack).
 //
-// The caller holds the device's lock (gst_d3d11_device_lock in the Python
-// app) during every call, because this draws on the device's immediate
-// context, as the decoders and the app's presenter do.
+// The caller holds the device's lock during every call, because this draws on
+// the device's immediate context, as the decoders and the app's presenter do.
 #include <windows.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>
@@ -493,7 +489,7 @@ static HRESULT upload_block_offsets(GrainDrawer* d) {
     return S_OK;
 }
 
-// Leaves the compute stage as GStreamer expects to find it: nothing bound.
+// Leaves the compute stage as the presenter expects to find it: nothing bound.
 static void unbind_compute_stage(ID3D11DeviceContext* context) {
     ID3D11ShaderResourceView* no_views[4] = {};
     ID3D11UnorderedAccessView* no_targets[1] = {};
@@ -597,50 +593,6 @@ static int draw_planes(GrainDrawer* d, ID3D11Texture2D* const* textures, const U
     return 0;
 }
 
-// The parts of GStreamer's API this needs, found in the copies of its DLLs
-// that the process has already loaded.
-struct GstMapInfo {
-    void* memory;
-    int flags;
-    unsigned char* data;
-    size_t size;
-    size_t maxsize;
-    void* user_data[4];
-    void* reserved[4];
-};
-static const int GST_MAP_READ = 1, GST_MAP_WRITE = 2;
-static const int GST_MAP_D3D11 = (1 << 16) << 1;  // GST_MAP_FLAG_LAST << 1
-typedef unsigned (*BufferMemoryCount)(void*);
-typedef void* (*BufferPeekMemory)(void*, unsigned);
-typedef int (*MemoryMap)(void*, GstMapInfo*, int);
-typedef void (*MemoryUnmap)(void*, GstMapInfo*);
-typedef int (*IsD3D11Memory)(void*);
-typedef unsigned (*SubresourceIndex)(void*);
-
-struct GstApi {
-    BufferMemoryCount memory_count = nullptr;
-    BufferPeekMemory peek_memory = nullptr;
-    MemoryMap map = nullptr;
-    MemoryUnmap unmap = nullptr;
-    IsD3D11Memory is_d3d11_memory = nullptr;
-    SubresourceIndex subresource_index = nullptr;
-};
-
-static bool find_gstreamer(GstApi* api) {
-    HMODULE core = GetModuleHandleW(L"gstreamer-1.0-0.dll");
-    HMODULE d3d11 = GetModuleHandleW(L"gstd3d11-1.0-0.dll");
-    if (!core || !d3d11)
-        return false;
-    api->memory_count = (BufferMemoryCount)(void*)GetProcAddress(core, "gst_buffer_n_memory");
-    api->peek_memory = (BufferPeekMemory)(void*)GetProcAddress(core, "gst_buffer_peek_memory");
-    api->map = (MemoryMap)(void*)GetProcAddress(core, "gst_memory_map");
-    api->unmap = (MemoryUnmap)(void*)GetProcAddress(core, "gst_memory_unmap");
-    api->is_d3d11_memory = (IsD3D11Memory)(void*)GetProcAddress(d3d11, "gst_is_d3d11_memory");
-    api->subresource_index = (SubresourceIndex)(void*)GetProcAddress(d3d11, "gst_d3d11_memory_get_subresource_index");
-    return api->memory_count && api->peek_memory && api->map && api->unmap && api->is_d3d11_memory &&
-           api->subresource_index;
-}
-
 // Builds the pattern database and compiles the shaders ahead of the first
 // drawer, so that opening a comparison does not wait for them. Returns 0 on
 // success.
@@ -649,7 +601,7 @@ extern "C" __declspec(dllexport) int vmaf_grain_prepare() {
     return SUCCEEDED(compile_shaders(nullptr, nullptr)) ? 0 : -1;
 }
 
-// Creates a grain drawer on `device` (GStreamer's ID3D11Device). Returns null on failure.
+// Creates a grain drawer on `device`, the app's D3D11 device. Returns null on failure.
 extern "C" __declspec(dllexport) void* vmaf_grain_create(ID3D11Device* device) {
     return device ? create_drawer(device) : nullptr;
 }
@@ -659,82 +611,22 @@ extern "C" __declspec(dllexport) const char* vmaf_grain_error(void* drawer) {
     return drawer ? ((GrainDrawer*)drawer)->error.c_str() : "";
 }
 
-// Draws the grain of `params` on the planes of `buffer` (a GstBuffer of D3D11
-// memory, one texture per plane), in place. Returns 0 on success, or a
-// negative number on failure (the frame may then be partly grained), with
-// vmaf_grain_error saying why.
-extern "C" __declspec(dllexport) int vmaf_grain_apply(void* drawer, void* buffer, const GrainParams* params) {
-    GrainDrawer* d = (GrainDrawer*)drawer;
-    if (!d || !buffer || !params)
-        return -1;
-    d->error.clear();
-    GstApi gst;
-    if (!find_gstreamer(&gst)) {
-        d->error = "GStreamer's D3D11 library is not loaded";
-        return -1;
-    }
-    const unsigned count = gst.memory_count(buffer);
-    if (count < 1 || count > 3) {
-        d->error = "a frame of " + std::to_string(count) + " textures";
-        return -2;
-    }
-    GstMapInfo maps[3] = {};
-    bool mapped[3] = {};
-    ID3D11Texture2D* textures[3] = {};
-    UINT subresources[3] = {};
-    int result = 0;
-    for (unsigned c = 0; c < count && result == 0; c++) {
-        if (params->plane[c].intervals == 0)
-            continue;
-        void* memory = gst.peek_memory(buffer, c);
-        if (!memory || !gst.is_d3d11_memory(memory)) {
-            d->error = "a plane not in D3D11 memory";
-            result = -2;
-            break;
-        }
-        // Mapped for the GPU, to read and write. A frame uploaded from the CPU
-        // is copied into its texture here, and GStreamer then knows that the
-        // texture is newer than its CPU copy.
-        if (!gst.map(memory, &maps[c], GST_MAP_READ | GST_MAP_WRITE | GST_MAP_D3D11)) {
-            d->error = "could not map a plane for the GPU";
-            result = -2;
-            break;
-        }
-        mapped[c] = true;
-        if (FAILED(((ID3D11Resource*)maps[c].data)->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&textures[c]))) {
-            d->error = "a plane that is not a 2D texture";
-            result = -2;
-            break;
-        }
-        subresources[c] = gst.subresource_index(memory);
-    }
-    if (result == 0)
-        result = draw_planes(d, textures, subresources, (int)count, params);
-    for (unsigned c = 0; c < 3; c++) {
-        if (textures[c])
-            textures[c]->Release();
-        if (mapped[c])
-            gst.unmap(maps[c].memory, &maps[c]);
-    }
-    return result;
-}
-
 // Frees a grain drawer.
 extern "C" __declspec(dllexport) void vmaf_grain_destroy(void* drawer) {
     if (drawer)
         destroy_drawer((GrainDrawer*)drawer);
 }
 
-// The C++ app's frames are not GStreamer's: they come decoded in system
-// memory (FFmpeg's VVC decoder) and are shown from NV12 or P010 textures.
-// It uploads a frame's planes into textures of its own, one per plane (R8,
-// or R16 with the codes in their low bits, as GStreamer's I420 frames hold
-// them), draws the grain on them with vmaf_grain_apply_planes, and copies
-// them into the texture it shows with vmaf_grain_pack. The caller holds
-// the device's lock during both.
+// The app's frames come decoded in system memory (FFmpeg's VVC decoder) and
+// are shown from NV12 or P010 textures. It uploads a frame's planes into
+// textures of its own, one per plane (R8, or R16 with the codes in their low
+// bits), draws the grain on them with vmaf_grain_apply_planes, and copies
+// them into the texture it shows with vmaf_grain_pack. The caller holds the
+// device's lock during both.
 
 // Draws the grain of `params` on `planes` (each one's slice `subresources[c]`),
-// in place. Returns as vmaf_grain_apply does.
+// in place. Returns 0 on success, or a negative number on failure (the frame
+// may then be partly grained), with vmaf_grain_error saying why.
 extern "C" __declspec(dllexport) int vmaf_grain_apply_planes(void* drawer, ID3D11Texture2D* const* planes,
                                                              const UINT* subresources, int count,
                                                              const GrainParams* params) {
@@ -927,7 +819,7 @@ extern "C" __declspec(dllexport) int vmaf_grain_pack(void* drawer, ID3D11Texture
 // Draws the grain of `params` on planes held in memory (8-bit samples, or
 // 16-bit ones above 8 bits), on a device of its own: the GPU, or Windows'
 // software renderer if `software` is set or there is no GPU. For the tests
-// and the checks against FFmpeg; playback uses vmaf_grain_apply.
+// and the checks against FFmpeg; playback uses vmaf_grain_apply_planes.
 extern "C" __declspec(dllexport) int vmaf_grain_planes(const void* const* in, void* const* out, int count,
                                                        const GrainParams* params, int software) {
     if (count < 1 || count > 3 || !params)
@@ -955,7 +847,7 @@ extern "C" __declspec(dllexport) int vmaf_grain_planes(const void* const* in, vo
             result = -1;
             break;
         }
-        // Made as d3d11upload makes its planes: for sampling and rendering.
+        // Made as the app makes its planes: for sampling and rendering.
         D3D11_TEXTURE2D_DESC desc = {};
         desc.Width = (UINT)plane.width;
         desc.Height = (UINT)plane.height;
