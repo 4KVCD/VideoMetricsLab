@@ -29,6 +29,10 @@ QString bitrate_note(const VideoInfo& info);
 // as they wrote it. The name itself stays the identifier.
 QString preset_label(const CvvdpPreset& preset);
 
+// The CVVDP display choice that follows the reference (automatic_cvvdp_preset),
+// as the Settings and Options lists show it.
+QString automatic_cvvdp_label();
+
 // A display in one line, for tooltips, in the window's language (the Python
 // app's display_description): '30" 3840x2160 SDR, 200 nits, 250 lux, 0.75 m
 // (2.0 x screen height)'. CvvdpDisplay::describe() gives it in English, for

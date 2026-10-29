@@ -37,6 +37,8 @@ QString preset_label(const CvvdpPreset& preset) {
     return preset.builtin ? tr(name) : name;
 }
 
+QString automatic_cvvdp_label() { return tr("Automatic (SDR or HDR, as the reference is)"); }
+
 QString display_description(const CvvdpDisplay& display) {
     // The resolution as CvvdpDisplay::describe() writes it: a whole number
     // as one, a hand-edited fraction ("3840.5") as it is.

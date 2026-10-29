@@ -365,7 +365,7 @@ void OptionsPanel::show_vmaf_backend(bool on_gpu) {
 }
 
 void OptionsPanel::show_cvvdp(const std::vector<CvvdpSettings>& selected, const std::string& preferred,
-                              const std::string& user_presets_json) {
+                              const std::string& user_presets_json, bool automatic) {
     const CvvdpSettings& settings = selected.front();
     std::set<std::string> displays;
     std::set<bool> resizes;
@@ -379,6 +379,12 @@ void OptionsPanel::show_cvvdp(const std::vector<CvvdpSettings>& selected, const 
     {
         const QSignalBlocker blocked(cvvdp_preset_combo);
         cvvdp_preset_combo->clear();
+        // An empty name, which no preset has.
+        cvvdp_preset_combo->addItem(automatic_cvvdp_label(), QString(""));
+        cvvdp_preset_combo->setItemData(
+            0, app::tr("The SDR or the HDR display, as the reference video is: the official tool's 'standard_4k' or "
+                       "'standard_hdr_pq'."),
+            Qt::ToolTipRole);
         for (const CvvdpPreset& preset : cvvdp_presets(user_presets_json)) {
             cvvdp_preset_combo->addItem(preset_label(preset), QString::fromStdString(preset.name));
             cvvdp_preset_combo->setItemData(cvvdp_preset_combo->count() - 1,
@@ -389,7 +395,9 @@ void OptionsPanel::show_cvvdp(const std::vector<CvvdpSettings>& selected, const 
         if (!mixed_display) {
             match = matching_cvvdp_preset(settings, user_presets_json, preferred);
         }
-        if (mixed_display) {
+        if (automatic && !mixed_display) {
+            cvvdp_preset_combo->setCurrentIndex(0);
+        } else if (mixed_display) {
             cvvdp_preset_combo->addItem(app::tr("Mixed (the selected videos use different displays)"), QVariant());
             cvvdp_preset_combo->setCurrentIndex(cvvdp_preset_combo->count() - 1);
         } else if (!match) {
@@ -399,10 +407,14 @@ void OptionsPanel::show_cvvdp(const std::vector<CvvdpSettings>& selected, const 
             cvvdp_preset_combo->setCurrentIndex(cvvdp_preset_combo->findData(QString::fromStdString(match->name)));
         }
     }
-    cvvdp_delete_button->setEnabled(match && !match->builtin);
-    cvvdp_display_label->setText(
-        mixed_display ? app::tr("The selected videos use different displays; choosing a preset sets them all.")
-                      : display_description(settings.display));
+    cvvdp_delete_button->setEnabled(!automatic && match && !match->builtin);
+    QString description = mixed_display ? app::tr("The selected videos use different displays; choosing a preset "
+                                                  "sets them all.")
+                                        : display_description(settings.display);
+    if (automatic && !mixed_display && match) {
+        description = preset_label(*match) + ": " + description;
+    }
+    cvvdp_display_label->setText(description);
     const QSignalBlocker blocked(cvvdp_resize_check);
     cvvdp_resize_check->setTristate(mixed_resize);
     cvvdp_resize_check->setCheckState(mixed_resize                 ? Qt::PartiallyChecked

@@ -250,7 +250,6 @@ MainWindow::MainWindow() {
     // selected rows' settings, and there is no one global setting.
     default_options_ = options_from_settings();
     default_extra_metric_keys_ = extra_metrics_from_settings();
-    default_cvvdp_ = cvvdp_from_settings();
     for (const std::string& key : settings_.hidden_metrics) {
         if (std::any_of(metric_columns().begin(), metric_columns().end(),
                         [&key](const MetricColumn& item) { return key == item.key; })) {
@@ -910,7 +909,6 @@ void MainWindow::on_default_settings_changed() {
     use_crop_store();  // the saved results' folder may have changed
     default_options_ = options_from_settings();
     default_extra_metric_keys_ = extra_metrics_from_settings();
-    default_cvvdp_ = cvvdp_from_settings();
 }
 
 // ------------------------------------------------------------ the update check
@@ -993,17 +991,33 @@ void MainWindow::offer_update(const Release& release) {
     box->open();
 }
 
-CvvdpSettings MainWindow::cvvdp_from_settings() const {
-    // The preset chosen in Settings, or the built-in default if that preset
-    // is gone or unset. A preset is a display; scaling to fill it is each
-    // video's own choice and starts off.
-    std::optional<CvvdpPreset> preset;
-    if (!settings_.cvvdp_default_preset.empty()) {
-        preset = cvvdp_preset_named(settings_.cvvdp_default_preset, settings_.cvvdp_presets_json);
+bool MainWindow::cvvdp_default_automatic() const {
+    return !cvvdp_preset_named(settings_.cvvdp_default_preset, settings_.cvvdp_presets_json);
+}
+
+CvvdpPreset MainWindow::new_row_cvvdp_preset() const {
+    if (std::optional<CvvdpPreset> chosen =
+            cvvdp_preset_named(settings_.cvvdp_default_preset, settings_.cvvdp_presets_json)) {
+        return *chosen;
     }
-    CvvdpSettings settings;
-    settings.display = (preset ? preset->settings : builtin_cvvdp_presets().front().settings).display;
-    return settings;
+    return automatic_cvvdp_preset(source_info_ ? &*source_info_ : nullptr);
+}
+
+void MainWindow::follow_reference_cvvdp() {
+    // The display only: scaling to fill it is each row's own choice. The
+    // preset's name too, so that a user's preset with the same display does
+    // not stand for it (in the score's tooltip and the exported results).
+    const CvvdpPreset& preset = automatic_cvvdp_preset(source_info_ ? &*source_info_ : nullptr);
+    for (const std::shared_ptr<RowData>& row_data : rows_) {
+        if (row_data->cvvdp_automatic) {
+            row_data->cvvdp.display = preset.settings.display;
+            row_data->cvvdp_preset = preset.name;
+        }
+    }
+    // The Options panel shows the display: a selected row's may have changed.
+    if (!panel_target_rows_.empty()) {
+        write_panel_options(rows_[static_cast<std::size_t>(panel_target_rows_.front())]->options);
+    }
 }
 
 // ------------------------------------------------------- FFmpeg's presence
@@ -1275,6 +1289,8 @@ void MainWindow::check_rows_against_new_source(const std::filesystem::path& path
     // video is only compared with it, so a resolution test cannot outlive a
     // change of reference.
     const std::vector<QString> dropped = remove_rows_owned_by_the_previous_source();
+    // Before the saved scores are looked up: they are found by the display.
+    follow_reference_cvvdp();
     // Scores belong to a pair of videos: a new reference takes away every
     // score measured against another, which would otherwise stand in the
     // table as the new pair's, and keep a run from calculating it, and the
@@ -1439,8 +1455,12 @@ int MainWindow::add_table_row(const std::filesystem::path& path) {
     row_data->path = path;
     row_data->options = default_options_;
     row_data->extra_metric_keys = default_extra_metric_keys_;
-    row_data->cvvdp = default_cvvdp_;
-    row_data->cvvdp_preset = settings_.cvvdp_default_preset;
+    // A preset is a display; scaling to fill it is each row's own choice and
+    // starts off.
+    const CvvdpPreset preset = new_row_cvvdp_preset();
+    row_data->cvvdp.display = preset.settings.display;
+    row_data->cvvdp_preset = preset.name;
+    row_data->cvvdp_automatic = cvvdp_default_automatic();
     rows_.push_back(row_data);
     set_row_metrics(row);
     return row;

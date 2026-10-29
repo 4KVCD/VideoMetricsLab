@@ -68,7 +68,8 @@ struct Settings {
     std::vector<std::string> hidden_metrics;
     // The CVVDP presets the user saved, as JSON text of their list
     // ([{"name": ..., "settings": ...}]), and the preset new videos start
-    // with ("" is the built-in default).
+    // with: "", or a name no preset has, is Automatic (automatic_cvvdp_preset:
+    // the SDR or HDR display, as the reference is).
     std::string cvvdp_presets_json = "[]";
     std::string cvvdp_default_preset;
 

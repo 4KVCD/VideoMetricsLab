@@ -58,8 +58,9 @@ public:
     // GPU, whatever the video is set to.
     void show_vmaf_backend(bool on_gpu);
     // Shows the selected videos' CVVDP settings: the preset they match (or
-    // "Custom"), the display in one line, and the resize box. `preferred` is
-    // the preset the first one was given, to tell apart presets with the
+    // "Custom"), or "Automatic" when their displays all follow the reference
+    // (`automatic`), the display in one line, and the resize box. `preferred`
+    // is the preset the first one was given, to tell apart presets with the
     // same display; `user_presets_json` the user's own (Settings').
     //
     // Videos that differ show as "Mixed" in the dropdown and a partly ticked
@@ -67,7 +68,7 @@ public:
     // already has, or clicking the box, would then do nothing for the other
     // videos, or set them the wrong way round.
     void show_cvvdp(const std::vector<CvvdpSettings>& selected, const std::string& preferred,
-                    const std::string& user_presets_json);
+                    const std::string& user_presets_json, bool automatic);
 
     // The options the controls show. The metrics are not in the panel, so
     // the window gives them, from the table's column headings.

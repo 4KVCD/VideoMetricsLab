@@ -160,6 +160,10 @@ struct RowData {
     // The CVVDP preset the row was given, if any: only tells apart presets
     // with the same display.
     std::string cvvdp_preset;
+    // Whether the row's display follows the reference, SDR or HDR (the
+    // Automatic default: automatic_cvvdp_preset), until it is given a
+    // display of its own.
+    bool cvvdp_automatic = false;
     std::optional<RowState> analysis_status;
     // An FFmpeg error, or how many frames a loaded result holds: shown on
     // the file name, the one cell about the whole row.
@@ -227,7 +231,15 @@ private:
     // ---------------------------------------------------------- the settings
     VmafOptions options_from_settings() const;
     std::set<std::string> extra_metrics_from_settings() const;
-    CvvdpSettings cvvdp_from_settings() const;
+    // Whether Settings' CVVDP default is Automatic: no preset chosen, or the
+    // one chosen gone.
+    bool cvvdp_default_automatic() const;
+    // The preset a new row starts with: Settings' default, or with Automatic
+    // the reference's display (the SDR one before a reference is chosen).
+    CvvdpPreset new_row_cvvdp_preset() const;
+    // Gives every row whose display follows the reference (cvvdp_automatic)
+    // the display of the reference now chosen.
+    void follow_reference_cvvdp();
     // Takes the Settings tab's defaults for newly added videos. Rows already
     // in the table keep what they were given.
     void on_default_settings_changed();
@@ -349,7 +361,8 @@ private:
     void add_opposite_scale_direction_rows(const std::vector<int>& rows);
     void apply_cvvdp(const std::function<CvvdpSettings(const CvvdpSettings&)>& change,
                      const std::optional<std::vector<int>>& rows = std::nullopt,
-                     const std::optional<std::string>& preset_name = std::nullopt);
+                     const std::optional<std::string>& preset_name = std::nullopt,
+                     std::optional<bool> automatic = std::nullopt);
     void on_cvvdp_preset_chosen(int index);
     void on_cvvdp_resize_toggled(bool checked);
     std::set<std::string> cvvdp_preset_names() const;
@@ -480,7 +493,6 @@ private:
     // in the Options panel.
     VmafOptions default_options_;
     std::set<std::string> default_extra_metric_keys_;
-    CvvdpSettings default_cvvdp_;
     std::set<std::string> hidden_metrics_;
 
     // The Options panel, the rows it edits (the selected ones, top to

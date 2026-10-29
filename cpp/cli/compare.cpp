@@ -404,16 +404,18 @@ std::vector<std::future<void>> start_gpu_checks(const CompareArguments& argument
 using CvvdpDisplayChoice = std::pair<std::string, CvvdpSettings>;
 
 // The CVVDP displays to score on: those --cvvdp-display names, each once in
-// the order given, else the app's default. Throws std::invalid_argument for
-// a name that is no preset.
+// the order given, else the app's default; none for Automatic, the default
+// unless Settings name a preset, which gives each video its reference's
+// (display_for). Throws std::invalid_argument for a name that is no preset.
 std::vector<CvvdpDisplayChoice> cvvdp_displays(const CompareArguments& arguments, const Settings& settings) {
     // A preset is a display; scaling to fill it starts off, as for a video
     // added to the window.
     if (arguments.cvvdp_displays.empty()) {
-        const std::optional<CvvdpPreset> preset =
-            cvvdp_preset_named(settings.cvvdp_default_preset, settings.cvvdp_presets_json);
-        const CvvdpPreset& chosen = preset ? *preset : builtin_cvvdp_presets().front();
-        return {{chosen.name, CvvdpSettings{chosen.settings.display}}};
+        if (const std::optional<CvvdpPreset> preset =
+                cvvdp_preset_named(settings.cvvdp_default_preset, settings.cvvdp_presets_json)) {
+            return {{preset->name, CvvdpSettings{preset->settings.display}}};
+        }
+        return {};
     }
     std::vector<CvvdpDisplayChoice> displays;
     std::set<std::string> named;
@@ -435,19 +437,30 @@ std::vector<CvvdpDisplayChoice> cvvdp_displays(const CompareArguments& arguments
     return displays;
 }
 
-// The note for HDR video whose CVVDP modelled the app's default display,
-// which is SDR, or nothing.
+// The display a video's CVVDP models first: the first of `displays`, or with
+// none (Automatic) its reference's, SDR or HDR (automatic_cvvdp_preset).
+CvvdpDisplayChoice display_for(const std::vector<CvvdpDisplayChoice>& displays, const VideoInfo& reference) {
+    if (!displays.empty()) {
+        return displays.front();
+    }
+    const CvvdpPreset& preset = automatic_cvvdp_preset(&reference);
+    return {preset.name, CvvdpSettings{preset.settings.display}};
+}
+
+// The note for HDR video whose CVVDP modelled the SDR display chosen as the
+// app's default in Settings, or nothing.
 std::optional<std::string> sdr_display_note(const CompareArguments& arguments, const VideoInfo& source,
-                                            const TestVideo& video, const CvvdpDisplayChoice& display) {
-    const std::string transfer = ascii_lower(source.color_transfer);
+                                            const TestVideo& video, const std::vector<CvvdpDisplayChoice>& displays) {
+    const std::optional<VideoColour> colour = colour_of(source);
     if (std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") == video.metrics.end() ||
-        !arguments.cvvdp_displays.empty() || display.second.display.hdr ||
-        (transfer != "smpte2084" && transfer != "arib-std-b67")) {
+        !arguments.cvvdp_displays.empty() || displays.empty() || displays.front().second.display.hdr || !colour ||
+        !colour->hdr()) {
         return std::nullopt;
     }
-    return "the video is HDR, and CVVDP modelled the app's default display, " + python_string_repr(display.first) +
-           ", which is SDR. --cvvdp-display " + python_string_repr("30-inch 4K HDR monitor, dim room") +
-           " (or another HDR preset) models an HDR one.";
+    return "the video is HDR, and CVVDP modelled the SDR display chosen as the app's default, " +
+           python_string_repr(displays.front().first) + ". --cvvdp-display " +
+           python_string_repr(std::string(hdr_cvvdp_preset)) +
+           " (or another HDR preset, or Automatic in the app's Settings) models an HDR one.";
 }
 
 // What a video added to the window starts with ticked, less the metrics its
@@ -1110,7 +1123,7 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
         return std::nullopt;
     }
     add_colour_notes(video);
-    if (const std::optional<std::string> note = sdr_display_note(arguments_, video.source, video, displays_.front())) {
+    if (const std::optional<std::string> note = sdr_display_note(arguments_, video.source, video, displays_)) {
         video.notes.push_back(*note);
     }
     try {
@@ -1185,12 +1198,15 @@ std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video) {
     VmafOptions options = video.options;
     options.model = video.options.compute_vmaf ? resolve_model(video.options, width, height) : "";
     const bool cvvdp = std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") != video.metrics.end();
+    // By the reference as it is read here: with the test video's tags where
+    // it has none, or --colour's.
+    const CvvdpDisplayChoice display = display_for(displays_, video.source);
     if (cvvdp) {
-        video.display = displays_.front().first;
+        video.display = display.first;
     }
     const std::size_t queued = jobs.size();
     if (std::optional<std::string> missing = queue(video, video.source, std::move(options), backends_,
-                                                   displays_.front().second, reads_saved(video), cache_folder_, jobs)) {
+                                                   display.second, reads_saved(video), cache_folder_, jobs)) {
         return missing;
     }
     if (jobs.size() > queued) {

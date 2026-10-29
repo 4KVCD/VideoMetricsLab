@@ -63,9 +63,6 @@ QString text_of(const std::filesystem::path& path) { return QString::fromStdStri
 
 QString text_of(const std::string& text) { return QString::fromStdString(text); }
 
-// The default CVVDP preset's name: the first built-in one's.
-const std::string& default_preset_name() { return builtin_cvvdp_presets().front().name; }
-
 }  // namespace
 
 SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::function<ToolsStatus()> tools,
@@ -216,9 +213,9 @@ QGroupBox* SettingsPanel::build_defaults_box() {
     cvvdp_row->addWidget(new QLabel(app::tr("CVVDP display:")));
     cvvdp_default = new QComboBox;
     cvvdp_default->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    cvvdp_default->setToolTip(app::tr("The display CVVDP models for newly added videos, whatever their format. "
-                                      "Saving a preset of your own in the Options panel makes it the default; "
-                                      "choose here to change that."));
+    cvvdp_default->setToolTip(app::tr("The display CVVDP models for newly added videos. Automatic: the SDR or the "
+                                      "HDR display, as the reference video is. Saving a preset of your own in the "
+                                      "Options panel makes it the default; choose here to change that."));
     fill_cvvdp_default_combo();
     connect(cvvdp_default, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
     cvvdp_row->addWidget(cvvdp_default);
@@ -398,12 +395,12 @@ void SettingsPanel::refresh_status() {
 void SettingsPanel::fill_cvvdp_default_combo() {
     const QSignalBlocker blocker(cvvdp_default);
     cvvdp_default->clear();
+    cvvdp_default->addItem(automatic_cvvdp_label(), QString(""));  // saved as "", which no preset is called
     for (const CvvdpPreset& preset : cvvdp_presets(settings_.cvvdp_presets_json)) {
         cvvdp_default->addItem(preset_label(preset), text_of(preset.name));
     }
-    const std::string& chosen =
-        settings_.cvvdp_default_preset.empty() ? default_preset_name() : settings_.cvvdp_default_preset;
-    cvvdp_default->setCurrentIndex(std::max(0, cvvdp_default->findData(text_of(chosen))));
+    // A preset that is gone is Automatic, as the window takes it.
+    cvvdp_default->setCurrentIndex(std::max(0, cvvdp_default->findData(text_of(settings_.cvvdp_default_preset))));
 }
 
 void SettingsPanel::show_ffmpeg_folder(const QString& directory) { ffmpeg_edit->setText(directory); }
@@ -516,8 +513,7 @@ void SettingsPanel::read_controls() {
     for (const auto& [key, box] : default_metrics) {
         *settings_.default_compute(key) = box->isChecked();
     }
-    const std::string chosen = cvvdp_default->currentData().toString().toStdString();
-    settings_.cvvdp_default_preset = chosen == default_preset_name() ? std::string() : chosen;
+    settings_.cvvdp_default_preset = cvvdp_default->currentData().toString().toStdString();
     settings_.compare_decoded_videos = decoded_videos->currentData().toInt();
     settings_.remember_window_size = remember_size->isChecked();
     settings_.remember_videos = remember_videos->isChecked();

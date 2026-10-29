@@ -81,14 +81,23 @@ void MainWindow::write_panel_options(const VmafOptions& options) {
                                                                     : default_metric_ticked(metric.column));
     }
     std::vector<CvvdpSettings> displays;
+    bool automatic = !panel_target_rows_.empty();
     for (const int row : panel_target_rows_) {
-        displays.push_back(rows_[static_cast<std::size_t>(row)]->cvvdp);
+        const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        displays.push_back(row_data.cvvdp);
+        automatic = automatic && row_data.cvvdp_automatic;
     }
+    std::string preferred = first != nullptr ? first->cvvdp_preset : std::string();
     if (displays.empty()) {
-        displays.push_back(default_cvvdp_);
+        // No video selected: what a new one starts with.
+        const CvvdpPreset preset = new_row_cvvdp_preset();
+        CvvdpSettings settings;
+        settings.display = preset.settings.display;
+        displays.push_back(settings);
+        preferred = preset.name;
+        automatic = cvvdp_default_automatic();
     }
-    options_panel_->show_cvvdp(displays, first != nullptr ? first->cvvdp_preset : settings_.cvvdp_default_preset,
-                               settings_.cvvdp_presets_json);
+    options_panel_->show_cvvdp(displays, preferred, settings_.cvvdp_presets_json, automatic);
     syncing_panel_ = false;
 }
 
@@ -281,6 +290,7 @@ void MainWindow::add_opposite_scale_direction_rows(const std::vector<int>& rows)
         companion.extra_metric_keys = original->extra_metric_keys;
         companion.cvvdp = original->cvvdp;
         companion.cvvdp_preset = original->cvvdp_preset;
+        companion.cvvdp_automatic = original->cvvdp_automatic;
         companion.scale_direction_pinned = true;
         // The companion decodes the same file as the row it came from; only
         // the scale direction differs, which the saved scores tell apart
@@ -311,18 +321,23 @@ void MainWindow::add_opposite_scale_direction_rows(const std::vector<int>& rows)
 // --------------------------------------------------------------- CVVDP's display
 
 void MainWindow::apply_cvvdp(const std::function<CvvdpSettings(const CvvdpSettings&)>& change,
-                             const std::optional<std::vector<int>>& rows, const std::optional<std::string>& preset_name) {
+                             const std::optional<std::vector<int>>& rows, const std::optional<std::string>& preset_name,
+                             std::optional<bool> automatic) {
     // Gives the selected rows (or `rows`) new CVVDP settings, `change(old)`,
-    // and `preset_name` as the preset they were given. Only CVVDP's score
-    // depends on them: a row keeps every other score, loses a CVVDP score
-    // made for the old settings, and gets back one saved for the new ones,
-    // if there is one.
+    // and `preset_name` as the preset they were given; with `automatic`,
+    // whether their display follows the reference from now on. Only CVVDP's
+    // score depends on them: a row keeps every other score, loses a CVVDP
+    // score made for the old settings, and gets back one saved for the new
+    // ones, if there is one.
     if (syncing_panel_ || run_active_) {
         return;
     }
     std::vector<int> changed;
     for (const int row : rows ? *rows : panel_target_rows_) {
         RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        if (automatic) {
+            row_data.cvvdp_automatic = *automatic;
+        }
         const CvvdpSettings settings = change(row_data.cvvdp);
         if (preset_name && *preset_name != row_data.cvvdp_preset) {
             row_data.cvvdp_preset = *preset_name;
@@ -352,15 +367,20 @@ void MainWindow::on_cvvdp_preset_chosen(int index) {
     if (!name.isValid()) {
         return;  // "Mixed" or "Custom", which are no preset
     }
-    if (const std::optional<CvvdpPreset> preset =
-            cvvdp_preset_named(name.toString().toStdString(), settings_.cvvdp_presets_json)) {
+    // "Automatic" (an empty name, which no preset has): the display follows
+    // the reference again.
+    const bool automatic = name.toString().isEmpty();
+    const std::optional<CvvdpPreset> preset =
+        automatic ? std::optional(automatic_cvvdp_preset(source_info_ ? &*source_info_ : nullptr))
+                  : cvvdp_preset_named(name.toString().toStdString(), settings_.cvvdp_presets_json);
+    if (preset) {
         apply_cvvdp(
             [&preset](const CvvdpSettings& old) {
                 CvvdpSettings settings = old;
                 settings.display = preset->settings.display;
                 return settings;
             },
-            std::nullopt, preset->name);
+            std::nullopt, preset->name, automatic);
     }
 }
 
@@ -415,11 +435,13 @@ void MainWindow::on_cvvdp_edit_display() {
     }
     if (dialog.action == "apply") {
         const CvvdpDisplay display = dialog.display();
-        apply_cvvdp([&display](const CvvdpSettings& old) {
-            CvvdpSettings changed = old;
-            changed.display = display;
-            return changed;
-        });
+        apply_cvvdp(
+            [&display](const CvvdpSettings& old) {
+                CvvdpSettings changed = old;
+                changed.display = display;
+                return changed;
+            },
+            std::nullopt, std::nullopt, false);
         return;
     }
     save_cvvdp_preset(dialog, settings, dialog.action == "save" ? own : std::nullopt);
@@ -465,7 +487,6 @@ void MainWindow::save_cvvdp_preset(const CvvdpDisplayDialog& dialog, const Cvvdp
     if (!replacing || settings_.cvvdp_default_preset == *replacing) {
         settings_.cvvdp_default_preset = name;
     }
-    default_cvvdp_ = cvvdp_from_settings();
     const std::optional<std::string> error = settings_.save();
     settings_panel_->fill_cvvdp_default_combo();
     const auto with_saved_display = [&saved](const CvvdpSettings& old) {
@@ -474,7 +495,7 @@ void MainWindow::save_cvvdp_preset(const CvvdpDisplayDialog& dialog, const Cvvdp
         return changed;
     };
     if (apply_to_rows) {
-        apply_cvvdp(with_saved_display, std::nullopt, name);
+        apply_cvvdp(with_saved_display, std::nullopt, name, false);
     }
     if (!others.empty()) {
         if (saved.identity() == settings.display.identity()) {
@@ -533,9 +554,8 @@ void MainWindow::on_cvvdp_delete_preset() {
     }
     settings_.cvvdp_presets_json = without_user_preset(settings_.cvvdp_presets_json, name);
     if (settings_.cvvdp_default_preset == name) {
-        settings_.cvvdp_default_preset.clear();
+        settings_.cvvdp_default_preset.clear();  // Automatic
     }
-    default_cvvdp_ = cvvdp_from_settings();
     const std::optional<std::string> error = settings_.save();
     settings_panel_->fill_cvvdp_default_combo();
     if (!panel_target_rows_.empty()) {

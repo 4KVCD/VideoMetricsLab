@@ -80,8 +80,9 @@ NEG and v1 on the GPU, the app's default, with Vulkan or, where Vulkan
 cannot, with libvmaf's CUDA code on an NVIDIA GPU; scores PSNR, SSIM and XPSNR in the app, with its libvmaf's own
 extractors, as the Python app does; scores SSIMULACRA2, Butteraugli and
 CVVDP on the GPU with Vship-fast's Vulkan build, in a pass each or (Settings > GPU metrics) in
-one, CVVDP on the display preset Settings chooses or on each
-`--cvvdp-display`; and scores SSIMULACRA2 and Butteraugli on the CPU with
+one, CVVDP on the display Settings chooses (Automatic unless it names a
+preset: the HDR display for an HDR reference, the SDR one otherwise) or on
+each `--cvvdp-display`; and scores SSIMULACRA2 and Butteraugli on the CPU with
 libjxl's tools with `--cpu`, or where the GPU cannot: without a GPU
 Vship can use, or after their GPU pass failed in a comparison up to ten
 minutes long. FFmpeg writes each frame pair as 16-bit PNG pictures, held a

@@ -16,8 +16,11 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
+
+#include "vml/video.h"
 
 namespace vml {
 
@@ -95,8 +98,20 @@ struct CvvdpPreset {
     std::string description;
 };
 
-// The built-in presets, the first of them the default for every video.
+// The built-in presets, the first of them the official tool's default
+// display (standard_4k).
 const std::vector<CvvdpPreset>& builtin_cvvdp_presets();
+
+// The built-in SDR and HDR displays the Automatic default chooses between.
+inline constexpr std::string_view sdr_cvvdp_preset = "30-inch 4K monitor, office";
+inline constexpr std::string_view hdr_cvvdp_preset = "30-inch 4K HDR monitor, dim room";
+
+// The display the Automatic default gives a comparison with `reference`: the
+// HDR one (official standard_hdr_pq, which HLG uses too) when the reference
+// is HDR as Vship reads it (colour_of: PQ, HLG or ST 428, an untagged
+// transfer guessed from the matrix), the SDR one (standard_4k) otherwise or
+// without a reference.
+const CvvdpPreset& automatic_cvvdp_preset(const VideoInfo* reference);
 
 // The built-in presets, then the user's, from Settings' cvvdp_presets (the
 // JSON text of its list). A saved preset CVVDP cannot model, or written in a

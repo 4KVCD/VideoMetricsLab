@@ -4,6 +4,7 @@
 #include <cmath>
 #include <stdexcept>
 
+#include "vml/colour.h"
 #include "vml/number_format.h"
 #include "vml/python_json.h"
 #include "vml/python_text.h"
@@ -272,6 +273,18 @@ std::optional<CvvdpPreset> cvvdp_preset_named(const std::string& name, const std
         }
     }
     return std::nullopt;
+}
+
+const CvvdpPreset& automatic_cvvdp_preset(const VideoInfo* reference) {
+    const std::optional<VideoColour> colour = reference != nullptr ? colour_of(*reference) : std::nullopt;
+    const std::string_view name = colour && colour->hdr() ? hdr_cvvdp_preset : sdr_cvvdp_preset;
+    const std::vector<CvvdpPreset>& presets = builtin_cvvdp_presets();
+    const auto found =
+        std::find_if(presets.begin(), presets.end(), [name](const CvvdpPreset& preset) { return preset.name == name; });
+    if (found == presets.end()) {
+        throw std::logic_error("no built-in CVVDP preset is called " + std::string(name));
+    }
+    return *found;
 }
 
 std::string with_user_preset(const std::string& user_presets_json, const std::string& name,

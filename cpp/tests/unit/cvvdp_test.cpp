@@ -125,5 +125,30 @@ TEST(Cvvdp, SizesAndPoolsAsThePythonApp) {
     }
 }
 
+// Automatic gives an HDR reference the HDR display, as Vship reads its
+// transfer: tagged PQ or HLG, or untagged with a BT.2020 matrix (read as PQ);
+// SDR, an untagged 1080p video, or no reference at all get the SDR one.
+TEST(Cvvdp, AutomaticFollowsTheReferencesTransfer) {
+    const auto video = [](const std::string& transfer, const std::string& matrix) {
+        VideoInfo info;
+        info.pix_fmt = "yuv420p10le";
+        info.height = 2160;
+        info.color_transfer = transfer;
+        info.color_space = matrix;
+        return info;
+    };
+    for (const auto& [transfer, matrix] : {std::pair<std::string, std::string>{"smpte2084", "bt2020nc"},
+                                           {"arib-std-b67", "bt2020nc"}, {"", "bt2020nc"}}) {
+        const VideoInfo info = video(transfer, matrix);
+        EXPECT_EQ(automatic_cvvdp_preset(&info).name, hdr_cvvdp_preset) << transfer << " " << matrix;
+    }
+    for (const auto& [transfer, matrix] : {std::pair<std::string, std::string>{"bt709", "bt709"}, {"", ""}}) {
+        const VideoInfo info = video(transfer, matrix);
+        EXPECT_EQ(automatic_cvvdp_preset(&info).name, sdr_cvvdp_preset) << transfer << " " << matrix;
+    }
+    EXPECT_EQ(automatic_cvvdp_preset(nullptr).name, sdr_cvvdp_preset);
+    EXPECT_TRUE(automatic_cvvdp_preset(nullptr).builtin);
+}
+
 }  // namespace
 }  // namespace vml

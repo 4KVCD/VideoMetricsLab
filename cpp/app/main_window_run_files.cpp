@@ -159,6 +159,7 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
         row_data.extra_metric_keys.insert("cvvdp");
         if (const std::optional<CvvdpSettings> display = cvvdp_display_of(*cvvdp)) {
             row_data.cvvdp = *display;
+            row_data.cvvdp_automatic = false;  // the run's display, whatever the reference
         }
     }
     if (result.resample_target) {
