@@ -52,16 +52,34 @@ constexpr std::size_t pipe_bytes = 64 * 1024 * 1024;
 // more will come.
 using BufferQueue = Channel<std::vector<std::uint8_t>*>;
 
+// A video's frames that end inside one: its FFmpeg stopped writing mid-frame,
+// as one that fails does, or one ended because the other failed
+// (run_ffmpeg_pair). FFmpeg's failure, then, not the scoring's.
+class FramesCutError : public LibvmafError {
+public:
+    using LibvmafError::LibvmafError;
+};
+
+bool frames_cut(const std::exception_ptr& error) {
+    try {
+        std::rethrow_exception(error);
+    } catch (const FramesCutError&) {
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 // Fills `size` bytes at `into` from the pipe. False at the stream's end
-// before the first byte; throws LibvmafError when it ends inside them.
+// before the first byte; throws FramesCutError when it ends inside them.
 bool read_exactly(platform::InboundPipe& pipe, std::uint8_t* into, std::size_t size) {
     std::size_t filled = 0;
     while (filled < size) {
         const std::size_t got = pipe.read(into + filled, size - filled);
         if (got == 0) {
             if (filled != 0) {
-                throw LibvmafError("FFmpeg's frames ended inside one (" + std::to_string(filled) + " of " +
-                                   std::to_string(size) + " bytes)");
+                throw FramesCutError("FFmpeg's frames ended inside one (" + std::to_string(filled) + " of " +
+                                     std::to_string(size) + " bytes)");
             }
             return false;
         }
@@ -313,7 +331,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> timed_gpu_output_a
 
 struct StreamReader::State {
     State(std::string_view name, std::size_t frame_bytes, bool timed)
-        : pipe(name, pipe_bytes), frame_bytes(frame_bytes), buffers(read_ahead + 1) {
+        : name(name), pipe(name, pipe_bytes), frame_bytes(frame_bytes), buffers(read_ahead + 1) {
         for (std::vector<std::uint8_t>& buffer : buffers) {
             buffer.resize(frame_bytes);
             free.put(&buffer);
@@ -323,6 +341,7 @@ struct StreamReader::State {
         }
     }
 
+    std::string name;  // what the pipe's path ends in: "distorted", "reference"
     platform::InboundPipe pipe;
     std::size_t frame_bytes;
     // The frame being paired and those read ahead.
@@ -463,7 +482,7 @@ std::optional<StreamReader::TimedFrame> StreamReader::pull_timed() {
     if (s.stamps.empty()) {
         lock.unlock();
         release(frame);
-        throw LibvmafError("FFmpeg gave a frame without its timestamp");
+        throw FramesCutError("FFmpeg gave a frame without its timestamp");  // its listing ended early
     }
     const long long pts = s.stamps.front();
     s.stamps.pop_front();
@@ -518,7 +537,7 @@ void StreamReader::read_frames() {
                     break;
                 }
                 if (!read_exactly(s.pipe, buffer->data(), buffer->size())) {
-                    throw LibvmafError("FFmpeg's frames ended after a frame's start");
+                    throw FramesCutError("FFmpeg's frames ended after a frame's start");
                 }
                 s.pixels.put(buffer);
             }
@@ -536,6 +555,11 @@ void StreamReader::read_frames() {
                 }
             }
         }
+    } catch (const FramesCutError& error) {
+        // Which video's FFmpeg stopped mid-frame, for the log: the run
+        // reports the FFmpeg that failed.
+        logger.info("The " + s.name + " pipe: " + error.what());
+        s.error = std::current_exception();
     } catch (...) {
         s.error = std::current_exception();
     }
@@ -757,7 +781,9 @@ std::optional<PairScores> GpuAttempt::finish(bool ffmpeg_succeeded) {
         s.feeder.join();
     }
     s.scorer.reset();  // its GPU memory, before anything else runs
-    if (s.error) {
+    // Frames cut short where FFmpeg failed are that failure, which the
+    // caller reports and tries another decode plan for.
+    if (s.error && !(frames_cut(s.error) && !ffmpeg_succeeded)) {
         throw LibvmafError("GPU VMAF failed: " + message_of(s.error));
     }
     return ffmpeg_succeeded ? std::move(s.result) : std::nullopt;

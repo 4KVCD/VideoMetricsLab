@@ -223,8 +223,8 @@ public:
     std::pair<std::vector<std::string>, std::vector<std::string>> output_args(double duration_limit) const;
 
     // Call once FFmpeg has ended: the scores, or nothing when FFmpeg failed
-    // (the caller then retries or gives up). Throws LibvmafError when the
-    // scoring failed.
+    // (the caller then retries or gives up), a video's frames cut short by
+    // that included. Throws LibvmafError when the scoring failed.
     std::optional<PairScores> finish(bool ffmpeg_succeeded);
 
 private:

@@ -329,8 +329,8 @@ FfmpegOutcome run_ffmpeg(const std::vector<std::string>& command, long long tota
 
 // Runs the two FFmpegs of VMAF on the GPU side by side, as run_ffmpeg runs
 // one: the first reports the progress, and one that fails ends the other.
-// Returns the failed one's outcome, or the first's. Throws Cancelled, and
-// platform::ProcessError when one cannot start.
+// Returns the outcome of the first to fail, or the first's. Throws
+// Cancelled, and platform::ProcessError when one cannot start.
 FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& commands, long long total_frames,
                               const ProgressCallback& on_progress, const CancelToken& cancel,
                               const std::filesystem::path& folder) {
@@ -349,7 +349,9 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
     std::vector<char> ended_here(processes.size(), 0);  // ended because of the other, or Cancel
     std::mutex mutex;
     std::condition_variable changed;
-    bool failed = false;
+    // The first FFmpeg to fail: the cause. The other may fail after it on its
+    // own (its pipe closed as the scoring stopped) before it is ended here.
+    std::optional<std::size_t> first_failed;
     std::vector<std::thread> readers;
     for (std::size_t index = 0; index < processes.size(); ++index) {
         readers.emplace_back([&, index] {
@@ -366,7 +368,9 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
                 const std::lock_guard lock(mutex);
                 outcomes[index] = FfmpegOutcome{code, std::move(errors)};
                 done[index] = 1;
-                failed = failed || code != 0;
+                if (code != 0 && !first_failed) {
+                    first_failed = index;
+                }
             }
             changed.notify_all();
         });
@@ -377,7 +381,7 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
         std::unique_lock lock(mutex);
         while (std::find(done.begin(), done.end(), 0) != done.end()) {
             changed.wait_for(lock, std::chrono::milliseconds(100));
-            if (cancel.cancelled() || failed) {
+            if (cancel.cancelled() || first_failed) {
                 for (std::size_t index = 0; index < processes.size(); ++index) {
                     if (done[index] == 0 && ended_here[index] == 0) {
                         processes[index].terminate();
@@ -391,12 +395,7 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
         reader.join();
     }
     cancel.throw_if_cancelled();
-    for (std::size_t index = 0; index < outcomes.size(); ++index) {
-        if (outcomes[index].exit_code != 0 && ended_here[index] == 0) {
-            return outcomes[index];
-        }
-    }
-    return outcomes[0];
+    return outcomes[first_failed.value_or(0)];
 }
 
 // The last `count` lines of `text`.
