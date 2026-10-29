@@ -30,7 +30,7 @@
    "to_source": false,
    "algorithm": "bicubic",
    "by_time": false,
-   "graph": "[0:V:0]settb=AVTB,setpts=N*1001000000/24000,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1001000000/24000,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference]"
+   "graph": "[0:V:0]settb=AVTB,setpts=N*1001000000/24000,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1001000000/24000,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
    "name": "4K source scaled to the test video's 1080p, every third",
@@ -62,7 +62,7 @@
    "to_source": false,
    "algorithm": "lanczos",
    "by_time": false,
-   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),scale=1920:1080:flags=lanczos,format=yuv420p10le,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference]"
+   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),scale=1920:1080:flags=lanczos,format=yuv420p10le,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
    "name": "the test video scaled to the 4K source",
@@ -94,7 +94,7 @@
    "to_source": true,
    "algorithm": "bicubic",
    "by_time": false,
-   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,scale=3840:2160:flags=bicubic,format=yuv420p,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference]"
+   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,scale=3840:2160:flags=bicubic,format=yuv420p,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
    "name": "black bars cropped from both",
@@ -136,7 +136,7 @@
    "to_source": false,
    "algorithm": "bicubic",
    "by_time": false,
-   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),crop=1920:804:0:138,setparams=colorspace=bt2020nc:range=tv,scale,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),crop=3840:1608:0:276,scale=1920:804:flags=bicubic,format=yuv420p,setparams=colorspace=bt2020nc:range=tv,scale,format=rgb48le[reference]"
+   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),crop=1920:804:0:138,setparams=colorspace=bt2020nc:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),crop=3840:1608:0:276,scale=1920:804:flags=bicubic,format=yuv420p,setparams=colorspace=bt2020nc:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
    "name": "a crop that keeps it all",
@@ -173,7 +173,7 @@
    "to_source": false,
    "algorithm": "bicubic",
    "by_time": false,
-   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference]"
+   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
    "name": "full-range yuvj beside HD",
@@ -205,7 +205,7 @@
    "to_source": false,
    "algorithm": "bicubic",
    "by_time": false,
-   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt470bg:range=tv,scale,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,scale=1920:1080:flags=bicubic,format=yuvj420p,setparams=colorspace=bt470bg:range=pc,scale,format=rgb48le[reference]"
+   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt470bg:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,scale=1920:1080:flags=bicubic,format=yuvj420p,setparams=colorspace=bt470bg:range=pc,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
    "name": "planar RGB and an unknown matrix",
@@ -237,7 +237,7 @@
    "to_source": false,
    "algorithm": "bicubic",
    "by_time": false,
-   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,scale,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,scale,format=rgb48le[reference]"
+   "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
    "name": "by timestamp, blended",
@@ -269,7 +269,7 @@
    "to_source": false,
    "algorithm": "bicubic",
    "by_time": true,
-   "graph": "[0:V:0]setpts=PTS-STARTPTS,split=2[test_frames][test_times];[test_times]crop=2:2:0:0,scale,format=yuv420p10le,pad=1920:1080,lut=c0=0:c1=0:c2=0:c3=0[clock];[1:V:0]format=yuv420p10le,setpts=PTS-STARTPTS[source_frames];[clock][source_frames]blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest,setparams=range=tv:color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc:chroma_location=topleft,setparams=colorspace=bt2020nc:range=tv,scale,format=rgb48le[reference];[test_frames]setparams=colorspace=bt2020nc:range=tv,scale,format=rgb48le[distorted]"
+   "graph": "[0:V:0]setpts=PTS-STARTPTS,split=2[test_frames][test_times];[test_times]crop=2:2:0:0,scale,format=yuv420p10le,pad=1920:1080,lut=c0=0:c1=0:c2=0:c3=0[clock];[1:V:0]format=yuv420p10le,setpts=PTS-STARTPTS[source_frames];[clock][source_frames]blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest,setparams=range=tv:color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc:chroma_location=topleft,setparams=colorspace=bt2020nc:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference];[test_frames]setparams=colorspace=bt2020nc:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted]"
   },
   {
    "name": "by timestamp, odd-sized, every third",
@@ -301,7 +301,7 @@
    "to_source": false,
    "algorithm": "bicubic",
    "by_time": true,
-   "graph": "[0:V:0]setpts=PTS-STARTPTS,split=2[test_frames][test_times];[test_times]crop=2:2:0:0,scale,format=yuv420p,pad=854:480,crop=853:480:0:0:exact=1,lut=c0=0:c1=0:c2=0:c3=0[clock];[1:V:0]scale=853:480:flags=bicubic,format=yuv420p,setpts=PTS-STARTPTS[source_frames];[clock][source_frames]blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest,setparams=range=unknown:color_primaries=unknown:color_trc=unknown:colorspace=bt709:chroma_location=unspecified,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference];[test_frames]select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted]"
+   "graph": "[0:V:0]setpts=PTS-STARTPTS,split=2[test_frames][test_times];[test_times]crop=2:2:0:0,scale,format=yuv420p,pad=854:480,crop=853:480:0:0:exact=1,lut=c0=0:c1=0:c2=0:c3=0[clock];[1:V:0]scale=853:480:flags=bicubic,format=yuv420p,setpts=PTS-STARTPTS[source_frames];[clock][source_frames]blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest,setparams=range=unknown:color_primaries=unknown:color_trc=unknown:colorspace=bt709:chroma_location=unspecified,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference];[test_frames]select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted]"
   },
   {
    "name": "by timestamp, scaled to the source and cropped",
@@ -338,7 +338,7 @@
    "to_source": true,
    "algorithm": "bilinear",
    "by_time": true,
-   "graph": "[0:V:0]scale=3840:1600:flags=bilinear,format=yuv420p,setpts=PTS-STARTPTS,split=2[test_frames][test_times];[test_times]crop=2:2:0:0,scale,format=yuv420p10le,pad=3840:1600,lut=c0=0:c1=0:c2=0:c3=0[clock];[1:V:0]crop=3840:1600:0:280,format=yuv420p10le,setpts=PTS-STARTPTS[source_frames];[clock][source_frames]blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest,setparams=range=unknown:color_primaries=unknown:color_trc=unknown:colorspace=bt709:chroma_location=unspecified,select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference];[test_frames]select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted]"
+   "graph": "[0:V:0]scale=3840:1600:flags=bilinear,format=yuv420p,setpts=PTS-STARTPTS,split=2[test_frames][test_times];[test_times]crop=2:2:0:0,scale,format=yuv420p10le,pad=3840:1600,lut=c0=0:c1=0:c2=0:c3=0[clock];[1:V:0]crop=3840:1600:0:280,format=yuv420p10le,setpts=PTS-STARTPTS[source_frames];[clock][source_frames]blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest,setparams=range=unknown:color_primaries=unknown:color_trc=unknown:colorspace=bt709:chroma_location=unspecified,select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference];[test_frames]select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted]"
   },
   {
    "name": "by timestamp, an NV12 source by position",
@@ -370,7 +370,7 @@
    "to_source": false,
    "algorithm": "bicubic",
    "by_time": true,
-   "graph": "[0:V:0]select=not(mod(n\\,2)),setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted];[1:V:0]select=not(mod(n\\,2)),setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference]"
+   "graph": "[0:V:0]select=not(mod(n\\,2)),setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]select=not(mod(n\\,2)),setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
    "name": "by timestamp, a siting setparams has no name for",
@@ -402,7 +402,7 @@
    "to_source": false,
    "algorithm": "bicubic",
    "by_time": true,
-   "graph": "[0:V:0]setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted];[1:V:0]setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference]"
+   "graph": "[0:V:0]setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
    "name": "by timestamp, a full-range yuvj source by position",
@@ -434,7 +434,7 @@
    "to_source": false,
    "algorithm": "bicubic",
    "by_time": true,
-   "graph": "[0:V:0]setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted];[1:V:0]setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=pc,scale,format=rgb48le[reference]"
+   "graph": "[0:V:0]setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=pc,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   }
  ],
  "commands": [
@@ -453,7 +453,7 @@
     "-i",
     "<source>",
     "-filter_complex",
-    "[0:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference]",
+    "[0:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]",
     "-map",
     "[distorted]",
     "-fps_mode",
@@ -489,7 +489,7 @@
     "-i",
     "<source>",
     "-filter_complex",
-    "[0:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference]",
+    "[0:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]",
     "-map",
     "[distorted]",
     "-enc_time_base",
@@ -533,7 +533,7 @@
     "-i",
     "<source>",
     "-filter_complex",
-    "[0:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference]",
+    "[0:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]",
     "-map",
     "[distorted]",
     "-enc_time_base",
@@ -577,7 +577,7 @@
     "-i",
     "<source>",
     "-filter_complex",
-    "[0:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale,format=rgb48le[reference]",
+    "[0:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]",
     "-map",
     "[distorted]",
     "-enc_time_base",

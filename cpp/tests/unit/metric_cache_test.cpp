@@ -244,9 +244,10 @@ TEST(MetricCache, AnswersAsThePythonApp) {
 // matrices or its chroma apart, for a score made before those fixes, or with
 // a full-range gray video. Vship-fast's scores are kept for a video set to
 // Vship-fast; neither build's answers the other's. A CPU score saved before
-// an untagged pair was read with one colour matrix is calculated again for a
-// pair whose heights gave the videos different guesses, and kept for the
-// rest, whichever the build.
+// 8-bit videos were converted to RGB precisely is calculated again for a
+// pair with an 8-bit video; one saved before an untagged pair was read with
+// one colour matrix, for a pair whose heights gave the videos different
+// guesses; the rest are kept, whichever the build.
 TEST(MetricCache, OldScoresAreKeptButForAPairALaterColourFixReadsOtherwise) {
     VmafOptions vship51;
     vship51.vship_build = VshipBuild::stock;
@@ -289,14 +290,25 @@ TEST(MetricCache, OldScoresAreKeptButForAPairALaterColourFixReadsOtherwise) {
     EXPECT_FALSE(answers(*fast_request.metric("cvvdp"), cvvdp51, tagged));
     EXPECT_TRUE(answers(*request.metric("cvvdp"), cvvdp51, tagged));
     EXPECT_FALSE(answers(*request.metric("cvvdp"), fast_cvvdp, tagged));
+    // The same pairs in 10 bits, where the CPU's RGB did not change.
+    const auto ten_bit = [](std::vector<ColourTags> pair) {
+        for (ColourTags& info : pair) {
+            info.pix_fmt = "yuv420p10le";
+        }
+        return pair;
+    };
     MetricProvenance cpu{"ssimulacra2", "libjxl 0.11", "cpu", "ssimulacra2-libjxl-cpu-v1",
                          {{"coverage_step", "1"}, {"color_tags", "\"vship-5.1.1/2\""}}};
     for (const MetricRequestSpec* asked : {&spec, &fast_spec}) {
-        EXPECT_FALSE(answers(*asked, cpu, guessed_apart));
-        EXPECT_FALSE(answers(*asked, cpu, one_tagged));
-        EXPECT_TRUE(answers(*asked, cpu, guessed_alike));
-        EXPECT_TRUE(answers(*asked, cpu, tagged));
+        EXPECT_FALSE(answers(*asked, cpu, ten_bit(guessed_apart)));
+        EXPECT_FALSE(answers(*asked, cpu, ten_bit(one_tagged)));
+        EXPECT_TRUE(answers(*asked, cpu, ten_bit(guessed_alike)));
+        EXPECT_TRUE(answers(*asked, cpu, ten_bit(tagged)));
+        EXPECT_FALSE(answers(*asked, cpu, tagged));  // 8-bit
     }
+    cpu.parameters["color_tags"] = nlohmann::json(score_identity::cpu_colour_tags_8_bit_rgb).dump();
+    EXPECT_TRUE(answers(spec, cpu, ten_bit(guessed_apart)));
+    EXPECT_FALSE(answers(spec, cpu, guessed_alike));  // 8-bit
     cpu.parameters["color_tags"] = nlohmann::json(score_identity::cpu_colour_tags).dump();
     EXPECT_TRUE(answers(spec, cpu, guessed_apart));
 }

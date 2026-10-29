@@ -146,8 +146,11 @@ bool matrix_read_otherwise(const std::vector<ColourTags>& infos) {
 }
 
 // Whether a CPU SSIMULACRA2 or Butteraugli score predates the colour
-// handling the CPU's tools have now: one made before the pair was read with
-// one colour matrix only where that changes what is read.
+// handling the CPU's tools have now: one made before 8-bit videos were
+// converted to RGB precisely, for a pair with an 8-bit video (or a format
+// not known: FFmpeg's 8-bit 4:2:0 and 4:2:2 ones changed); one made before
+// the pair was read with one colour matrix only where that changes what is
+// read.
 bool stale_cpu_score(const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {
     if (provenance.compute_backend != "cpu" ||
         (provenance.implementation != "ssimulacra2" && provenance.implementation != "butteraugli")) {
@@ -155,6 +158,15 @@ bool stale_cpu_score(const MetricProvenance& provenance, const std::vector<Colou
     }
     const nlohmann::json mapping = parameter(provenance, "color_tags");
     if (mapping == nlohmann::json(score_identity::cpu_colour_tags)) {
+        return false;
+    }
+    const bool eight_bit = infos.size() != 2 || std::any_of(infos.begin(), infos.end(), [](const ColourTags& info) {
+                               return bit_depth(info.pix_fmt) <= 8;
+                           });
+    if (eight_bit) {
+        return true;
+    }
+    if (mapping == nlohmann::json(score_identity::cpu_colour_tags_8_bit_rgb)) {
         return false;
     }
     return mapping != nlohmann::json(score_identity::cpu_colour_tags_unshared_matrix) || matrix_read_otherwise(infos);

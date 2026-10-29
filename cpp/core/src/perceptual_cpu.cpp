@@ -190,7 +190,11 @@ std::vector<std::string> prepare(const std::optional<CropBox>& crop, const Video
 // reads it with (colour.h). For an untagged video FFmpeg would choose
 // BT.601's matrix, where Vship takes an HD video as BT.709. The scale filter
 // converts it here, after the tags are set, rather than wherever FFmpeg's
-// format negotiation would put a conversion.
+// format negotiation would put a conversion. accurate_rnd keeps an 8-bit
+// 4:2:0 or 4:2:2 video off swscale's table converter, which works in 8 bits
+// and comes out about 2 steps of 255 too dark: with it, the same picture
+// gives the same RGB in 8 bits as in 10 (and a deeper video's is unchanged),
+// so a pair of an 8-bit and a 10-bit video is not scored for that offset.
 std::vector<std::string> to_rgb(const VideoInfo& info) {
     std::vector<std::string> filters;
     if (const std::optional<VideoColour> colour = colour_of(info)) {
@@ -199,7 +203,7 @@ std::vector<std::string> to_rgb(const VideoInfo& info) {
                               ":range=" + (colour->full_range ? "pc" : "tv"));
         }
     }
-    filters.push_back("scale");
+    filters.push_back("scale=flags=bicubic+accurate_rnd");
     filters.push_back("format=rgb48le");
     return filters;
 }

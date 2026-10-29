@@ -65,10 +65,16 @@ inline bool is_vship_fast_id(std::string_view id) {
 // the version that converts a scaled video to RGB after its tags are set.
 // "/3", both: the version that reads a video without a colour matrix with
 // the other's, or both untagged with the reference's guess
-// (with_shared_matrix in colour.h). A score of an older mapping is
-// calculated again where it would differ (stale_score in metric_cache.cpp).
+// (with_shared_matrix in colour.h). "/4", CPU: the version that converts an
+// 8-bit video to RGB as precisely as a deeper one (to_rgb in
+// perceptual_cpu.cpp). A score of an older mapping is calculated again
+// where it would differ (stale_score in metric_cache.cpp).
 inline constexpr std::string_view vship_colour_tags = "ffvship-5.1.1/3";
-inline constexpr std::string_view cpu_colour_tags = "vship-5.1.1/3";
+inline constexpr std::string_view cpu_colour_tags = "vship-5.1.1/4";
+// The CPU mapping before "/4", whose scores differ only for a pair with an
+// 8-bit video: FFmpeg converted 4:2:0 and 4:2:2 ones to RGB in 8 bits, about
+// 2 steps of 255 too dark.
+inline constexpr std::string_view cpu_colour_tags_8_bit_rgb = "vship-5.1.1/3";
 // The mappings before "/3", whose scores differ only for a pair whose
 // videos' matrices with_shared_matrix reads otherwise (matrix_shared).
 inline constexpr std::string_view vship_colour_tags_unshared_matrix = "ffvship-5.1.1/2";

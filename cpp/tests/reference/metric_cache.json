@@ -763,8 +763,42 @@
      "color_tags": "vship-5.1.1/2"
     }
    },
-   "infos": [],
+   "infos": [
+    {
+     "pix_fmt": "yuv420p10le",
+     "color_transfer": ""
+    },
+    {
+     "pix_fmt": "yuv420p10le",
+     "color_transfer": ""
+    }
+   ],
    "answers": true
+  },
+  {
+   "key": "ssimulacra2",
+   "provenance": {
+    "implementation": "ssimulacra2",
+    "implementation_version": "libjxl 0.11.1",
+    "compute_backend": "cpu",
+    "implementation_compatibility_id": "ssimulacra2-libjxl-cpu-v1",
+    "parameters": {
+     "intermediate": "png/rgb48le",
+     "coverage_step": 1,
+     "color_tags": "vship-5.1.1/2"
+    }
+   },
+   "infos": [
+    {
+     "pix_fmt": "yuv420p",
+     "color_transfer": ""
+    },
+    {
+     "pix_fmt": "yuv420p",
+     "color_transfer": ""
+    }
+   ],
+   "answers": false
   },
   {
    "key": "ssimulacra2",
@@ -1081,7 +1115,7 @@
       "parameters": {
        "intermediate": "png/rgb48le",
        "coverage_step": 1,
-       "color_tags": "vship-5.1.1/2"
+       "color_tags": "vship-5.1.1/4"
       }
      },
      "kind": "frame",
@@ -1106,7 +1140,7 @@
       "compute_backend": "cpu",
       "implementation_compatibility_id": "butteraugli-libjxl-cpu-v1",
       "parameters": {
-       "color_tags": "vship-5.1.1/2"
+       "color_tags": "vship-5.1.1/4"
       }
      },
      "kind": "frame",
@@ -1567,47 +1601,7 @@
      "ssimulacra2": "cpu"
     },
     "cvvdp": null,
-    "loaded": [
-     {
-      "key": "ssimulacra2",
-      "provenance": {
-       "implementation": "ssimulacra2",
-       "implementation_version": "",
-       "compute_backend": "cpu",
-       "implementation_compatibility_id": "ssimulacra2-libjxl-cpu-v1",
-       "parameters": {
-        "color_tags": "vship-5.1.1/2",
-        "coverage_step": 1,
-        "intermediate": "png/rgb48le"
-       }
-      },
-      "kind": "frame",
-      "frame": [
-       0,
-       1,
-       2,
-       3,
-       4,
-       5
-      ],
-      "time": [
-       "0x0.0p+0",
-       "0x1.55acb6f46508ep-5",
-       "0x1.55acb6f46508ep-4",
-       "0x1.004189374bc6ap-3",
-       "0x1.55acb6f46508ep-3",
-       "0x1.ab17e4b17e4b1p-3"
-      ],
-      "values": [
-       "0x1.3800000000000p+6",
-       "0x1.3e00000000000p+6",
-       "0x1.3500000000000p+6",
-       "0x1.4000000000000p+6",
-       "0x1.3b00000000000p+6",
-       "0x1.3c00000000000p+6"
-      ]
-     }
-    ]
+    "loaded": []
    },
    {
     "name": "subsampled",
@@ -1887,45 +1881,6 @@
        "0x1.6600000000000p+5",
        "0x1.6800000000000p+5",
        "0x1.7000000000000p+5"
-      ]
-     },
-     {
-      "key": "ssimulacra2",
-      "provenance": {
-       "implementation": "ssimulacra2",
-       "implementation_version": "",
-       "compute_backend": "cpu",
-       "implementation_compatibility_id": "ssimulacra2-libjxl-cpu-v1",
-       "parameters": {
-        "color_tags": "vship-5.1.1/2",
-        "coverage_step": 1,
-        "intermediate": "png/rgb48le"
-       }
-      },
-      "kind": "frame",
-      "frame": [
-       0,
-       1,
-       2,
-       3,
-       4,
-       5
-      ],
-      "time": [
-       "0x0.0p+0",
-       "0x1.55acb6f46508ep-5",
-       "0x1.55acb6f46508ep-4",
-       "0x1.004189374bc6ap-3",
-       "0x1.55acb6f46508ep-3",
-       "0x1.ab17e4b17e4b1p-3"
-      ],
-      "values": [
-       "0x1.3800000000000p+6",
-       "0x1.3e00000000000p+6",
-       "0x1.3500000000000p+6",
-       "0x1.4000000000000p+6",
-       "0x1.3b00000000000p+6",
-       "0x1.3c00000000000p+6"
       ]
      }
     ]
@@ -3169,45 +3124,6 @@
        "0x1.6600000000000p+5",
        "0x1.6800000000000p+5",
        "0x1.7000000000000p+5"
-      ]
-     },
-     {
-      "key": "ssimulacra2",
-      "provenance": {
-       "implementation": "ssimulacra2",
-       "implementation_version": "",
-       "compute_backend": "cpu",
-       "implementation_compatibility_id": "ssimulacra2-libjxl-cpu-v1",
-       "parameters": {
-        "color_tags": "vship-5.1.1/2",
-        "coverage_step": 1,
-        "intermediate": "png/rgb48le"
-       }
-      },
-      "kind": "frame",
-      "frame": [
-       0,
-       1,
-       2,
-       3,
-       4,
-       5
-      ],
-      "time": [
-       "0x0.0p+0",
-       "0x1.55acb6f46508ep-5",
-       "0x1.55acb6f46508ep-4",
-       "0x1.004189374bc6ap-3",
-       "0x1.55acb6f46508ep-3",
-       "0x1.ab17e4b17e4b1p-3"
-      ],
-      "values": [
-       "0x1.3800000000000p+6",
-       "0x1.3e00000000000p+6",
-       "0x1.3500000000000p+6",
-       "0x1.4000000000000p+6",
-       "0x1.3b00000000000p+6",
-       "0x1.3c00000000000p+6"
       ]
      }
     ],
