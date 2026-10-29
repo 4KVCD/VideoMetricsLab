@@ -28,11 +28,11 @@
 //      in a grain pattern and a random sign, from a pseudo-random sequence
 //      seeded by the frame's picture order count. Each block's numbers
 //      depend on the block before it, so they are worked out on the CPU
-//      (compute_block_offsets) and uploaded.
+//      (h274::block_offsets, h274/grain_synthesis.h) and uploaded.
 //   2. The "classify" shader works out, for each 8x8 block, which of the
 //      message's intensity intervals its average brightness falls in (if
 //      any). The interval says how strong the block's grain is and which of
-//      13 x 13 grain patterns it uses (built once, build_pattern_database).
+//      13 x 13 grain patterns it uses (built once, h274::build_pattern_database).
 //   3. The "draw" shader works out each sample's grain from its block's
 //      interval, pattern and position; smooths each block's left edge with
 //      the block before it (RDD 5's deblocking); adds the grain to the
@@ -57,8 +57,7 @@
 #include <new>
 #include <string>
 #include <vector>
-#include "h274/grain_params.h"
-#include "h274/h274_tables.h"
+#include "h274/grain_synthesis.h"
 
 // The constant buffer both shaders read, describing one plane.
 struct alignas(16) ShaderConstants {
@@ -220,78 +219,11 @@ static HRESULT compile_shaders(ID3DBlob** classify, ID3DBlob** draw) {
     return S_OK;
 }
 
-// RDD 5's pseudo-random number generator: a 31-bit linear feedback shift
-// register (primitive polynomial x^31 + x^3 + 1).
-static void advance_random(uint32_t* state) {
-    const uint32_t x = *state;
-    *state = (x << 1) | ((1u ^ (x >> 2) ^ (x >> 30)) & 1u);
-}
-
-// The size of the pattern database texture: 13 x 13 patterns of 64x64 samples.
-static const int PATTERN_SIZE = 64;
-static const int CUTOFF_COUNT = 13;
-static const int DATABASE_SIZE = CUTOFF_COUNT * PATTERN_SIZE;
-
-// Builds RDD 5's 13 x 13 grain patterns, one for each pair of horizontal and
-// vertical cutoff frequencies. Each pattern is Gaussian noise in the
-// frequencies up to its cutoffs, taken through RDD 5's 64-point inverse
-// transform; the horizontal edges of each 8x8 block are then attenuated.
-// Pattern (h, v) is stored at x = 64 h, y = 64 v of a single texture.
-static std::vector<int8_t> build_pattern_database() {
-    // RDD 5's integer transform matrix, worked out from its formula.
-    const double pi = 3.14159265358979323846;
-    int transform[64][64];
-    for (int y = 0; y < 64; y++)
-        for (int k = 0; k < 64; k++)
-            transform[y][k] = k == 0 ? 32 : (int)std::lround(32 * std::sqrt(2.0) * std::cos(pi * (2 * y + 1) * k / 128));
-
-    std::vector<int8_t> database(DATABASE_SIZE * DATABASE_SIZE, 0);
-    int8_t coefficients[64][64];  // [vertical frequency][horizontal frequency]
-    int16_t half_transformed[64][64];
-    for (int h = 0; h < CUTOFF_COUNT; h++) {
-        for (int v = 0; v < CUTOFF_COUNT; v++) {
-            const int last_horizontal = ((h + 3) << 2) - 1, last_vertical = ((v + 3) << 2) - 1;
-            uint32_t random = h274_seeds[h + v * 13];
-            std::memset(coefficients, 0, sizeof coefficients);
-            for (int l = 0; l <= last_vertical; l++) {
-                for (int k = 0; k <= last_horizontal; k += 4) {
-                    const uint32_t start = random % 2048;
-                    for (int i = 0; i < 4; i++)
-                        coefficients[l][k + i] = h274_gaussian[(start + i) % 2048];
-                    advance_random(&random);
-                }
-            }
-            coefficients[0][0] = 0;  // no constant offset
-            for (int y = 0; y < 64; y++) {
-                for (int x = 0; x <= last_vertical; x++) {
-                    int32_t sum = 0;
-                    for (int p = 0; p <= last_horizontal; p++)
-                        sum += transform[y][p] * coefficients[x][p];
-                    half_transformed[y][x] = (int16_t)((sum + 128) >> 8);
-                }
-            }
-            for (int y = 0; y < 64; y++) {
-                for (int x = 0; x < 64; x++) {
-                    int32_t sum = 0;
-                    for (int p = 0; p <= last_vertical; p++)
-                        sum += half_transformed[x][p] * transform[y][p];
-                    int value = (sum + 128) >> 8;
-                    value = value < -127 ? -127 : value > 127 ? 127 : value;
-                    if ((y & 7) == 0 || (y & 7) == 7)
-                        value = (value * h274_deblock[v]) >> 7;
-                    database[(size_t)(v * PATTERN_SIZE + y) * DATABASE_SIZE + h * PATTERN_SIZE + x] = (int8_t)value;
-                }
-            }
-        }
-    }
-    return database;
-}
-
 // The database is the same for every device, so it is built once per process.
 static const std::vector<int8_t>& pattern_database() {
     static std::once_flag built;
     static std::vector<int8_t> database;
-    std::call_once(built, [] { database = build_pattern_database(); });
+    std::call_once(built, [] { database = h274::build_pattern_database(); });
     return database;
 }
 
@@ -433,13 +365,13 @@ static GrainDrawer* create_drawer(ID3D11Device* device) {
     }
     if (SUCCEEDED(hr)) {
         D3D11_TEXTURE2D_DESC desc = {};
-        desc.Width = desc.Height = DATABASE_SIZE;
+        desc.Width = desc.Height = h274::database_size;
         desc.MipLevels = desc.ArraySize = 1;
         desc.Format = DXGI_FORMAT_R8_SINT;
         desc.SampleDesc.Count = 1;
         desc.Usage = D3D11_USAGE_IMMUTABLE;
         desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-        D3D11_SUBRESOURCE_DATA data = {pattern_database().data(), DATABASE_SIZE, 0};
+        D3D11_SUBRESOURCE_DATA data = {pattern_database().data(), h274::database_size, 0};
         hr = device->CreateTexture2D(&desc, &data, &d->patterns);
         if (SUCCEEDED(hr))
             hr = device->CreateShaderResourceView(d->patterns, nullptr, &d->patterns_srv);
@@ -449,21 +381,6 @@ static GrainDrawer* create_drawer(ID3D11Device* device) {
         return nullptr;
     }
     return d;
-}
-
-// Works out each 16x16 block's place in the pattern and its sign, in raster
-// order, as x | y << 8 | sign << 16 (FFmpeg's ff_h274_apply_film_grain).
-static void compute_block_offsets(std::vector<uint32_t>& offsets, int poc, int component, UINT blocks_across,
-                                  UINT blocks_down) {
-    static const int color_offset[3] = {0, 85, 170};
-    uint32_t random = h274_seeds[(poc + color_offset[component]) & 0xFF];
-    offsets.resize((size_t)blocks_across * blocks_down);
-    for (uint32_t& offset : offsets) {
-        const uint32_t x = ((random >> 16) % 52) & 0xFFFC;
-        const uint32_t y = ((random & 0xFFFF) % 56) & 0xFFF8;
-        offset = x | y << 8 | (random & 1) << 16;
-        advance_random(&random);
-    }
 }
 
 static HRESULT upload_block_offsets(GrainDrawer* d) {
@@ -543,7 +460,7 @@ static HRESULT draw_plane(GrainDrawer* d, int c, ID3D11Texture2D* texture, UINT 
     const UINT blocks8_across = (width + 7) / 8, blocks8_down = (height + 7) / 8;
     const UINT blocks16_across = (width + 15) / 16, blocks16_down = (height + 15) / 16;
 
-    compute_block_offsets(d->offsets_on_cpu, params->poc, c, blocks16_across, blocks16_down);
+    h274::block_offsets(d->offsets_on_cpu, params->poc, c, (int)blocks16_across, (int)blocks16_down);
     HRESULT hr = upload_block_offsets(d);
     if (SUCCEEDED(hr))
         hr = ensure_texture(d->device, &d->block_interval, blocks8_across, blocks8_down, DXGI_FORMAT_R16_UINT, true);
