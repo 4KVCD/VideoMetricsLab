@@ -104,6 +104,67 @@ TEST(GpuFrames, CopiesThePacketsWithThePythonAppsCommand) {
     }
 }
 
+// An HEVC packet in Annex B: each unit (type, layer) after a 00 00 01 start
+// code, with its two header bytes and a byte of payload.
+std::vector<std::uint8_t> hevc_packet(const std::vector<std::pair<int, int>>& units) {
+    std::vector<std::uint8_t> packet;
+    for (const auto& [type, layer] : units) {
+        packet.insert(packet.end(), {0, 0, 1, static_cast<std::uint8_t>((type << 1) | (layer >> 5)),
+                                     static_cast<std::uint8_t>(((layer & 31) << 3) | 1), 0x80});
+    }
+    return packet;
+}
+
+constexpr int vps = 32, sps = 33, pps = 34, sei = 39, trail_r = 1, radl_n = 6, rasl_n = 8, rasl_r = 9, bla_w_lp = 16,
+              idr_w_radl = 19, cra = 21;
+
+// A stream copy cut at a CRA starts with the CRA's RASL pictures, which
+// FFmpeg's decoding drops: they are passed over, up to the first picture
+// that is neither RASL nor RADL, and only HEVC's.
+TEST(GpuFrames, PassesOverTheRaslPicturesOfTheCraAVideoStartsWith) {
+    using Verdict = LeadingPictures::Verdict;
+    LeadingPictures cut("hevc");
+    EXPECT_EQ(cut.take(hevc_packet({{vps, 0}, {sps, 0}, {pps, 0}, {sei, 0}, {cra, 0}})), Verdict::feed);
+    EXPECT_EQ(cut.take(hevc_packet({{sei, 0}})), Verdict::feed);  // no picture: decides nothing
+    EXPECT_EQ(cut.take(hevc_packet({{rasl_r, 0}})), Verdict::skip);
+    EXPECT_EQ(cut.take(hevc_packet({{radl_n, 0}})), Verdict::feed);
+    // A 4-byte start code (00 00 00 01) is a 00 00 01 one after a zero.
+    std::vector<std::uint8_t> long_start = hevc_packet({{rasl_n, 0}});
+    long_start.insert(long_start.begin(), 0);
+    EXPECT_EQ(cut.take(long_start), Verdict::skip);
+    // An enhancement layer's slice first: the base layer's picture decides.
+    EXPECT_EQ(cut.take(hevc_packet({{rasl_n, 1}, {trail_r, 0}})), Verdict::feed);
+    EXPECT_EQ(cut.take(hevc_packet({{rasl_n, 0}})), Verdict::feed);  // a later RASL picture is decoded
+    EXPECT_EQ(cut.skipped(), 2);
+
+    LeadingPictures bla("hevc");
+    EXPECT_EQ(bla.take(hevc_packet({{bla_w_lp, 0}})), Verdict::feed);
+    EXPECT_EQ(bla.take(hevc_packet({{rasl_n, 0}})), Verdict::skip);
+    // One with parameter sets, which FFmpeg's decoder would read, is refused.
+    EXPECT_EQ(bla.take(hevc_packet({{pps, 0}, {rasl_n, 0}})), Verdict::refuse);
+
+    LeadingPictures idr("hevc");  // an IDR picture has no RASL pictures
+    EXPECT_EQ(idr.take(hevc_packet({{idr_w_radl, 0}})), Verdict::feed);
+    EXPECT_EQ(idr.take(hevc_packet({{rasl_n, 0}})), Verdict::feed);
+
+    LeadingPictures h264("h264");  // other codecs' units are not HEVC's
+    EXPECT_EQ(h264.take(hevc_packet({{cra, 0}})), Verdict::feed);
+    EXPECT_EQ(h264.take(hevc_packet({{rasl_n, 0}})), Verdict::feed);
+    EXPECT_EQ(h264.skipped(), 0);
+}
+
+// FFmpeg's warnings that it changed timestamps as it copied the packets, but
+// not framecrc's note of a packet without any, which the reader handles.
+TEST(GpuFrames, TellsFfmpegsTimestampWarningsFromItsNoteOfNone) {
+    EXPECT_TRUE(warns_of_changed_timestamps(
+        "[out#1/framecrc @ 000001] Non-monotonic DTS; previous: 245, current: 0; changing to 246."));
+    EXPECT_TRUE(warns_of_changed_timestamps("Invalid timestamps stream=0, pts=7, dts=9"));
+    EXPECT_FALSE(warns_of_changed_timestamps(
+        "[framecrc @ 000001] Timestamps are unset in a packet for stream 0. This is deprecated and will stop "
+        "working in the future. Fix your code to set the timestamps properly"));
+    EXPECT_FALSE(warns_of_changed_timestamps("Stream #0:0: Video: hevc (Main 10), yuv420p10le"));
+}
+
 // Each video by its GPU's decoder or the software decoder, as the Python app
 // chooses. With the software decoder not bundled (or VML_SOFTWARE_DECODE
 // set to ffmpeg) everywhere, and bundled where it is.

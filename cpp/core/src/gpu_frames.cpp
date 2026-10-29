@@ -23,6 +23,7 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
 #include "vml/frame_sync_by_time.h"
+#include "vml/hevc.h"
 #include "vml/model_select.h"
 #include "vml/platform/library.h"
 #include "vml/platform/pipe.h"
@@ -52,13 +53,16 @@ namespace {
 // packets need nothing, and FFV1's configuration goes to its decoder
 // separately (configuration()).
 //
-// VVC's packets are given decode times that count up from far below any
-// presentation time (setts). Matroska stores presentation times only, and
-// FFmpeg's demuxer gives most of a VVC stream's packets decode times equal
-// to their presentation times, out of order, and the rest none. FFmpeg's
-// stream copy then "repairs" them by overwriting the presentation times,
-// but the packet listing needs those as they are. Nothing reads these
-// made-up decode times.
+// HEVC's and VVC's packets are given decode times that count up from far
+// below any presentation time (setts). Matroska stores presentation times
+// only, and FFmpeg's demuxer gives most of a VVC stream's packets decode
+// times equal to their presentation times, out of order, and the rest none;
+// an HEVC stream copy cut at an open-GOP random access point starts with
+// leading pictures that have no times at all. FFmpeg's stream copy then
+// "repairs" the times by overwriting the presentation times of the pictures
+// after them, but the packet listing needs those as they are. The decoders
+// are given presentation times only; the listing's check that decode times
+// go up (take_listing_line) always passes these made-up ones.
 struct Codec {
     std::string_view name;
     int number;
@@ -67,7 +71,7 @@ struct Codec {
 };
 constexpr Codec codecs[] = {
     {"h264", 4, "h264_mp4toannexb,dump_extra=freq=keyframe", true},
-    {"hevc", 8, "hevc_mp4toannexb,dump_extra=freq=keyframe", true},
+    {"hevc", 8, "hevc_mp4toannexb,dump_extra=freq=keyframe,setts=pts=PTS:dts=N-1000000000", true},
     {"av1", 11, "", true},
     {"vvc", 100, "vvc_mp4toannexb,dump_extra=freq=keyframe,setts=pts=PTS:dts=N-1000000000", false},
     {"vp9", 10, "", false},
@@ -540,15 +544,6 @@ long long listing_int(std::string_view text) {
     throw std::invalid_argument("invalid literal for int() with base 10: '" + std::string(text) + "'");
 }
 
-// FFmpeg's warnings that mean the timestamps it copied may not be the ones
-// its decoding would give a picture (it rewrites non-monotonic ones as it
-// muxes).
-const std::regex& timestamp_warning_pattern() {
-    static const std::regex pattern(R"(timestamp|\bdts\b|\bpts\b|monoton)",
-                                    std::regex::ECMAScript | std::regex::icase);
-    return pattern;
-}
-
 // An FFmpeg that copies the video's first video stream out of its
 // container. It writes the packets to its standard output (-f data), and
 // each packet's timestamp and size to a framecrc listing on a pipe served
@@ -558,7 +553,9 @@ class PacketReader {
 public:
     PacketReader(const std::string& ffmpeg, const std::filesystem::path& video, std::string_view codec)
         : listing_pipe_("gpu-frames", listing_pipe_bytes),
-          command_(packet_reader_command(ffmpeg, video, codec, listing_pipe_.path())) {}
+          command_(packet_reader_command(ffmpeg, video, codec, listing_pipe_.path())),
+          file_name_(platform::path_text(video.filename())),
+          leading_(codec) {}
 
     ~PacketReader() {
         close();
@@ -580,65 +577,31 @@ public:
         listing_thread_ = std::thread([this] { read_listing(); });
     }
 
-    // The next packet, in decode order: its bytes into `data`, its timestamp
-    // and its flags. False at the end, once FFmpeg has succeeded without
-    // rewriting any timestamp. Throws GpuDecodeFailedError.
+    // The next packet to decode, in decode order: its bytes into `data`, its
+    // timestamp and its flags. The leading pictures FFmpeg's decoding drops
+    // are passed over (LeadingPictures). False at the end, once FFmpeg has
+    // succeeded without rewriting any timestamp. Throws GpuDecodeFailedError.
     bool next(std::vector<std::uint8_t>& data, long long& pts, int& flags) {
-        std::optional<Listed> item;
-        {
-            std::unique_lock lock(mutex_);
-            while (listing_.empty() && !listing_ended_) {
-                if (!listed_.wait_for(lock, std::chrono::milliseconds(200),
-                                      [this] { return !listing_.empty() || listing_ended_; })) {
-                    // If FFmpeg ended without opening the listing's pipe, the
-                    // pipe is opened here, so that the wait for it ends.
-                    lock.unlock();
-                    if (ffmpeg_ && ffmpeg_->wait_for(std::chrono::milliseconds(0))) {
-                        platform::InboundPipe::touch(listing_pipe_.path());
-                    }
-                    lock.lock();
-                }
+        while (const std::optional<Listed> item = next_listed()) {
+            read_packet(*item, data);  // a packet passed over is read too, keeping the two outputs in step
+            if (passes_over(data)) {
+                continue;
             }
-            if (!listing_.empty()) {
-                item = listing_.front();
-                listing_.pop_front();
-            } else if (listing_error_) {
-                try {
-                    std::rethrow_exception(listing_error_);
-                } catch (const GpuDecodeFailedError&) {
-                    throw;
-                } catch (const std::exception& error) {
-                    throw GpuDecodeFailedError(std::string("reading FFmpeg's packet list failed: ") + error.what());
-                }
+            if (item->pts == no_pts) {
+                throw GpuDecodeFailedError("a packet has no timestamp");
             }
-        }
-        if (!item) {
-            return end_of_packets();
-        }
-        if (item->pts == no_pts) {
-            throw GpuDecodeFailedError("a packet has no timestamp");
-        }
-        if (first_ && !(item->flags & key_flag)) {
-            throw GpuDecodeFailedError("the video does not start with a keyframe");
-        }
-        if (const std::optional<std::string> warning = timestamp_warning()) {
-            throw GpuDecodeFailedError("FFmpeg rewrote the video's timestamps: " + *warning);
-        }
-        first_ = false;
-        if (item->size < 0 || item->size > INT_MAX) {
-            throw GpuDecodeFailedError("FFmpeg listed a packet of " + std::to_string(item->size) + " bytes");
-        }
-        data.resize(static_cast<std::size_t>(item->size));
-        for (std::size_t filled = 0; filled < data.size();) {
-            const std::size_t count = ffmpeg_->read(data.data() + filled, data.size() - filled);
-            if (count == 0) {
-                throw GpuDecodeFailedError("FFmpeg's packets ended before its packet list");
+            if (first_ && !(item->flags & key_flag)) {
+                throw GpuDecodeFailedError("the video does not start with a keyframe");
             }
-            filled += count;
+            if (const std::optional<std::string> warning = timestamp_warning()) {
+                throw GpuDecodeFailedError("FFmpeg rewrote the video's timestamps: " + *warning);
+            }
+            first_ = false;
+            pts = item->pts;
+            flags = item->flags;
+            return true;
         }
-        pts = item->pts;
-        flags = item->flags;
-        return true;
+        return end_of_packets();
     }
 
     // Ends FFmpeg, and with it the listing's thread; callable from another
@@ -679,6 +642,73 @@ private:
         long long size;
         int flags;
     };
+
+    // The listing's next packet, waited for; nothing at its end. Throws
+    // GpuDecodeFailedError when reading the listing failed.
+    std::optional<Listed> next_listed() {
+        std::unique_lock lock(mutex_);
+        while (listing_.empty() && !listing_ended_) {
+            if (!listed_.wait_for(lock, std::chrono::milliseconds(200),
+                                  [this] { return !listing_.empty() || listing_ended_; })) {
+                // If FFmpeg ended without opening the listing's pipe, the
+                // pipe is opened here, so that the wait for it ends.
+                lock.unlock();
+                if (ffmpeg_ && ffmpeg_->wait_for(std::chrono::milliseconds(0))) {
+                    platform::InboundPipe::touch(listing_pipe_.path());
+                }
+                lock.lock();
+            }
+        }
+        if (!listing_.empty()) {
+            const Listed item = listing_.front();
+            listing_.pop_front();
+            return item;
+        }
+        if (listing_error_) {
+            try {
+                std::rethrow_exception(listing_error_);
+            } catch (const GpuDecodeFailedError&) {
+                throw;
+            } catch (const std::exception& error) {
+                throw GpuDecodeFailedError(std::string("reading FFmpeg's packet list failed: ") + error.what());
+            }
+        }
+        return std::nullopt;
+    }
+
+    // Reads `item`'s bytes from FFmpeg's packets into `data`.
+    void read_packet(const Listed& item, std::vector<std::uint8_t>& data) {
+        if (item.size < 0 || item.size > INT_MAX) {
+            throw GpuDecodeFailedError("FFmpeg listed a packet of " + std::to_string(item.size) + " bytes");
+        }
+        data.resize(static_cast<std::size_t>(item.size));
+        for (std::size_t filled = 0; filled < data.size();) {
+            const std::size_t count = ffmpeg_->read(data.data() + filled, data.size() - filled);
+            if (count == 0) {
+                throw GpuDecodeFailedError("FFmpeg's packets ended before its packet list");
+            }
+            filled += count;
+        }
+    }
+
+    // Whether the packet `data` is one of the leading pictures FFmpeg's
+    // decoding drops, which are not decoded here either.
+    bool passes_over(const std::vector<std::uint8_t>& data) {
+        switch (leading_.take(data)) {
+            case LeadingPictures::Verdict::feed:
+                return false;
+            case LeadingPictures::Verdict::skip:
+                if (leading_.skipped() == 1) {
+                    logger.info(file_name_ +
+                                ": the RASL pictures after the random access picture it starts with are not "
+                                "decoded, as FFmpeg's decoding drops them");
+                }
+                return true;
+            case LeadingPictures::Verdict::refuse:
+                break;
+        }
+        throw GpuDecodeFailedError("a leading picture FFmpeg's decoding drops carries parameter sets");
+    }
 
     // The listing's thread: reads each packet's timestamp, size and flags,
     // and checks that the decode times go up.
@@ -750,6 +780,8 @@ private:
         // the previous one, and the presentation time with it). It is caught
         // here, with the packet, because FFmpeg's warning about it can come
         // only after a run that stopped early has already used the packet.
+        // Codecs copied with made-up decode times (setts: HEVC, VVC) never
+        // have one.
         const long long dts = listing_int(fields[1]);
         if (dts != no_pts) {
             if (last_dts && dts <= *last_dts) {
@@ -792,7 +824,7 @@ private:
         if (error_lines_.size() < 50) {
             error_lines_.push_back(line);
         }
-        if (!timestamp_warning_ && std::regex_search(line, timestamp_warning_pattern())) {
+        if (!timestamp_warning_ && warns_of_changed_timestamps(line)) {
             timestamp_warning_ = line;
         }
     }
@@ -846,6 +878,8 @@ private:
     std::vector<std::string> error_lines_;
     std::optional<std::string> timestamp_warning_;
     bool first_ = true;
+    std::string file_name_;  // for the log
+    LeadingPictures leading_;  // what of the video's start is passed over
     std::atomic<bool> closed_{false};
     // After what its error thread uses (note_error_line), so that it goes first.
     std::optional<platform::ChildProcess> ffmpeg_;
@@ -1156,6 +1190,60 @@ std::vector<std::string> packet_reader_command(const std::string& ffmpeg, const 
 int stuck_decoders() { return stuck_closes; }
 
 // ------------------------------------------------------------------ checks
+
+LeadingPictures::Verdict LeadingPictures::take(const std::vector<std::uint8_t>& packet) {
+    if (!open_) {
+        return Verdict::feed;  // past the leading pictures: nothing more is read of the packets
+    }
+    // The packet's picture (its first slice on the base layer, after the
+    // parameter sets, delimiter and SEI that may come first), and whether it
+    // carries parameter sets. Each unit follows a 00 00 01 start code.
+    std::optional<int> picture;
+    bool parameter_sets = false;
+    for (std::size_t at = 0; at + 4 < packet.size(); ++at) {
+        if (packet[at] != 0 || packet[at + 1] != 0 || packet[at + 2] != 1) {
+            continue;
+        }
+        const int type = hevc_unit::type_of(packet[at + 3]);
+        if (type >= hevc_unit::first_parameter_set && type <= hevc_unit::last_parameter_set) {
+            parameter_sets = true;
+        } else if (type <= hevc_unit::last_picture && !picture &&
+                   hevc_unit::layer_of(packet[at + 3], packet[at + 4]) == 0) {
+            picture = type;
+        }
+        at += 2;
+    }
+    if (!picture) {
+        return Verdict::feed;  // no picture in it: nothing to decide yet
+    }
+    if (first_) {
+        // Only a CRA or BLA picture can have RASL pictures after it.
+        first_ = false;
+        open_ = *picture == hevc_unit::cra ||
+                (*picture >= hevc_unit::first_random_access && *picture < hevc_unit::first_idr);
+        return Verdict::feed;
+    }
+    if (*picture == hevc_unit::rasl_n || *picture == hevc_unit::rasl_r) {
+        if (parameter_sets) {
+            return Verdict::refuse;
+        }
+        ++skipped_;
+        return Verdict::skip;
+    }
+    // A RADL picture is decoded and shown, and more leading pictures may
+    // follow it; any other ends them.
+    open_ = *picture == hevc_unit::radl_n || *picture == hevc_unit::radl_r;
+    return Verdict::feed;
+}
+
+bool warns_of_changed_timestamps(std::string_view line) {
+    static const std::regex warning(R"(timestamp|\bdts\b|\bpts\b|monoton)",
+                                    std::regex::ECMAScript | std::regex::icase);
+    // framecrc's note for each packet with no timestamps: the reader refuses
+    // such a packet itself, unless it passes it over.
+    return std::regex_search(line.begin(), line.end(), warning) &&
+           line.find("Timestamps are unset in a packet") == std::string_view::npos;
+}
 
 void PictureChecks::fed(long long pts, bool discard) {
     const std::lock_guard lock(mutex_);

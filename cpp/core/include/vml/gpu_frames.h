@@ -210,6 +210,42 @@ std::vector<std::string> packet_reader_command(const std::string& ffmpeg, const 
 // GPU run ends itself at once.
 int stuck_decoders();
 
+// The pictures at a video's start that FFmpeg's decoding drops, so that the
+// packet reader does not give them to the decoders either (which may decode
+// them, and could not be checked: their packets have no timestamps). An HEVC
+// stream that starts at a CRA or BLA picture (a stream copy cut at an
+// open-GOP random access point) can have RASL pictures after it, which refer
+// to pictures before the cut; FFmpeg's decoder drops them, and reads only the
+// parameter sets in their packets (H.265's NoRaslOutputFlag). They come
+// before the first picture that is neither RASL nor RADL, in decode order.
+// Only RASL pictures refer to them. Other codecs' packets are all fed.
+class LeadingPictures {
+public:
+    enum class Verdict { feed, skip, refuse };
+
+    explicit LeadingPictures(std::string_view codec) : open_(codec == "hevc") {}
+
+    // Decides the next packet (Annex B, in decode order): skip one of the
+    // first picture's RASL pictures; refuse one that carries parameter sets
+    // too, which FFmpeg's decoder would read (FFmpeg then decodes the video).
+    Verdict take(const std::vector<std::uint8_t>& packet);
+
+    // How many packets take() has said to skip.
+    int skipped() const { return skipped_; }
+
+private:
+    bool open_;  // still deciding: the video's first picture, or its leading pictures
+    bool first_ = true;
+    int skipped_ = 0;
+};
+
+// Whether a line of FFmpeg's error output while it copies a video's packets
+// warns that the timestamps it copied may not be the ones its decoding would
+// give a picture (it rewrites ones that do not go up as it muxes). Not the
+// note that a packet has none: the reader refuses such a packet itself,
+// unless it is one LeadingPictures skips.
+bool warns_of_changed_timestamps(std::string_view line);
+
 // The check of a decoder's pictures against the packets it was fed: they
 // must come out in timestamp order, each the next packet's (every packet
 // stamped earlier has had its picture), and at the end every packet must

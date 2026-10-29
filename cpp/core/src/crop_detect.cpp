@@ -27,6 +27,7 @@
 #include "vml/app_log.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/hardware_decoding.h"
+#include "vml/hevc.h"
 #include "vml/number_format.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
@@ -353,16 +354,6 @@ bool reads_from_a_byte(const VideoInfo& info) {
 // file's end.
 using ByteRange = std::pair<std::uintmax_t, std::uintmax_t>;
 
-// The HEVC NAL unit types (H.265 table 7-1) an HEVC stream's windows are
-// started by.
-namespace hevc_unit {
-constexpr int last_picture = 31;         // 0-31 hold pictures' slices
-constexpr int first_random_access = 16;  // 16-23: BLA, IDR and CRA pictures
-constexpr int last_random_access = 23;
-constexpr int first_parameter_set = 32;  // 32-34: VPS, SPS and PPS
-constexpr int last_parameter_set = 34;
-}  // namespace hevc_unit
-
 // Whether an HEVC unit that holds no picture ends the access unit before it
 // rather than starting the next (H.265 7.4.2.4.4): end of sequence or of
 // bitstream, filler data, suffix SEI, and the reserved and unspecified types
@@ -405,7 +396,7 @@ void walk_hevc_units(const std::filesystem::path& path, std::uintmax_t from, con
             const auto byte = [&buffer, at](std::size_t index) {
                 return static_cast<int>(static_cast<unsigned char>(buffer[at + index]));
             };
-            const HevcUnit unit{buffer_at + at, (byte(3) >> 1) & 0x3F, ((byte(3) & 1) << 5) | (byte(4) >> 3),
+            const HevcUnit unit{buffer_at + at, hevc_unit::type_of(byte(3)), hevc_unit::layer_of(byte(3), byte(4)),
                                 (byte(5) & 0x80) != 0};
             if (!visit(unit)) {
                 return;
