@@ -12,11 +12,13 @@
 #include <functional>
 #include <list>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <regex>
 #include <semaphore>
 #include <set>
 #include <sstream>
+#include <string_view>
 #include <system_error>
 #include <thread>
 #include <tuple>
@@ -541,19 +543,42 @@ std::vector<std::string> raw_windows_command(const std::string& ffmpeg, const Vi
     return command;
 }
 
+// What a detection command wrote: its exit code, the end of its error output
+// (for a failure's message), and every line the detection reads, whole
+// (cropdetect's boxes, and FFmpeg's word that it rebuilt its filters): a
+// pass of several windows writes more than the end that is kept
+// (error_tail_bytes), and would lose an early window's last box.
+struct DetectionOutput {
+    int code = 0;
+    std::string tail;
+    std::string lines;
+};
+
 // Runs one detection command to its end, holding a decoder slot, for at
-// most `limit` of running (paused time not counted). Returns its exit code
-// and error output.
-std::pair<int, std::string> launch_window(const std::vector<std::string>& command, const CancelToken& cancel,
-                                          std::chrono::seconds limit) {
+// most `limit` of running (paused time not counted).
+DetectionOutput launch_window(const std::vector<std::string>& command, const CancelToken& cancel,
+                              std::chrono::seconds limit) {
     while (!decoder_slots.try_acquire_for(100ms)) {
         cancel.throw_if_cancelled();
     }
     struct SlotRelease {
         ~SlotRelease() { decoder_slots.release(); }
     } release_slot;
+    struct Kept {
+        std::mutex mutex;
+        std::string lines;
+    };
+    const auto kept = std::make_shared<Kept>();
+    platform::ProcessOptions options;
+    options.on_error_line = [kept](std::string_view line) {
+        if (line.find("crop=") != std::string_view::npos ||
+            line.find("Reconfiguring filter graph") != std::string_view::npos) {
+            const std::lock_guard lock(kept->mutex);
+            kept->lines.append(line).push_back('\n');
+        }
+    };
     try {
-        platform::ChildProcess window = platform::ChildProcess::start(command);
+        platform::ChildProcess window = platform::ChildProcess::start(command, options);
         const CancelToken::Attached attached = cancel.attach(window);
         auto running = std::chrono::steady_clock::duration::zero();  // paused time not counted
         while (!window.wait_for(200ms)) {
@@ -569,18 +594,22 @@ std::pair<int, std::string> launch_window(const std::vector<std::string>& comman
                 throw CropDetectError("Crop detection timed out");
             }
         }
-        const int code = window.wait();
+        DetectionOutput output;
+        output.code = window.wait();
         cancel.throw_if_cancelled();
-        return {code, window.standard_error()};
+        output.tail = window.standard_error();  // waits for the error output's end, and so its lines
+        const std::lock_guard lock(kept->mutex);
+        output.lines = std::move(kept->lines);
+        return output;
     } catch (const platform::ProcessError& error) {
         throw CropDetectError(std::string("Could not run crop detection: ") + error.what());
     }
 }
 
 // Runs the detection command `command` makes for a decoder, the GPU's
-// (`hwaccel`) and else software, for at most `limit` each, and returns
-// FFmpeg's error output, where cropdetect writes its boxes. Throws
-// CropDetectError when it fails.
+// (`hwaccel`) and else software, for at most `limit` each, and returns the
+// lines of FFmpeg's error output the detection reads (DetectionOutput),
+// where cropdetect writes its boxes. Throws CropDetectError when it fails.
 std::string run_detection(const std::function<std::vector<std::string>(const std::optional<std::string>&)>& command,
                           const std::string& path, const CancelToken& cancel,
                           const std::optional<std::string>& hwaccel, std::chrono::seconds limit) {
@@ -589,24 +618,24 @@ std::string run_detection(const std::function<std::vector<std::string>(const std
     if (hwaccel) {
         attempts.emplace_back(std::nullopt);
     }
-    int code = 0;
-    std::string errors;
+    DetectionOutput output;
     for (const std::optional<std::string>& attempt : attempts) {
         try {
-            std::tie(code, errors) = launch_window(command(attempt), cancel, limit);
+            output = launch_window(command(attempt), cancel, limit);
         } catch (const CropDetectError& error) {
             throw CropDetectError(std::string(error.what()) + " (" + path + ")");
         }
         // A hardware attempt that fails is tried again in software; the
         // pixels, and so the box, are the same.
-        if (code == 0) {
+        if (output.code == 0) {
             break;
         }
     }
-    if (code != 0) {
+    if (output.code != 0) {
         // The last line of FFmpeg's error output (the output as a whole
         // stripped of spaces at both ends first, as Python strips it).
-        std::string tail = "ffmpeg exited with code " + platform::exit_code_text(code);
+        const std::string& errors = output.tail;
+        std::string tail = "ffmpeg exited with code " + platform::exit_code_text(output.code);
         const std::size_t first = errors.find_first_not_of(" \t\r\n\f\v");
         if (first != std::string::npos) {
             const std::string stripped = errors.substr(first, errors.find_last_not_of(" \t\r\n\f\v") - first + 1);
@@ -615,7 +644,7 @@ std::string run_detection(const std::function<std::vector<std::string>(const std
         }
         throw CropDetectError("Crop detection failed for " + path + ": " + tail);
     }
-    return errors;
+    return output.lines;
 }
 
 // A box cropdetect wrote, from its "crop=w:h:x:y".
@@ -634,6 +663,21 @@ std::optional<CropBox> last_box(const std::string& errors) {
         box = box_from(*match, 1);
     }
     return box;
+}
+
+// Each window's last box in a pass of several (cropdetect@w0, @w1...), as each
+// window's own cropdetect wrote it; nothing for a window that wrote none.
+std::vector<std::optional<CropBox>> boxes_by_window(const std::string& errors, std::size_t windows) {
+    static const std::regex crop(R"(\[cropdetect@w(\d+) @[^\]]*\][^\n]*?crop=(\d+):(\d+):(\d+):(\d+))");
+    std::vector<std::optional<CropBox>> boxes(windows);
+    for (auto match = std::sregex_iterator(errors.begin(), errors.end(), crop); match != std::sregex_iterator();
+         ++match) {
+        const std::size_t index = std::stoul((*match)[1].str());
+        if (index < boxes.size()) {
+            boxes[index] = box_from(*match, 2);
+        }
+    }
+    return boxes;
 }
 
 // Runs one window, on the GPU decoder and else in software, and returns the
@@ -723,22 +767,175 @@ std::vector<std::optional<CropBox>> run_raw_windows(const std::string& ffmpeg, c
     // VVC in software) stays well inside.
     const std::chrono::seconds limit = 60s + std::chrono::seconds(frames / 10);
     const std::string path = platform::path_text(info.path);
-    const std::string errors = run_detection(
-        [&](const std::optional<std::string>& attempt) {
-            return raw_windows_command(ffmpeg, info, windows, attempt, download_format);
-        },
-        path, cancel, hwaccel, limit);
-    // Each window's last box, as each window's own cropdetect wrote it.
-    static const std::regex crop(R"(\[cropdetect@w(\d+) @[^\]]*\][^\n]*?crop=(\d+):(\d+):(\d+):(\d+))");
-    std::vector<std::optional<CropBox>> boxes(windows.size());
-    for (auto match = std::sregex_iterator(errors.begin(), errors.end(), crop); match != std::sregex_iterator();
-         ++match) {
-        const std::size_t index = std::stoul((*match)[1].str());
-        if (index < boxes.size()) {
-            boxes[index] = box_from(*match, 2);
+    return boxes_by_window(run_detection(
+                               [&](const std::optional<std::string>& attempt) {
+                                   return raw_windows_command(ffmpeg, info, windows, attempt, download_format);
+                               },
+                               path, cancel, hwaccel, limit),
+                           windows.size());
+}
+
+// --------------------------------------------- overlapping windows, one pass
+
+// Runs of windows that overlap or touch, as indexes into `starts` (in order):
+// each run's frames can be decoded once for all its windows.
+std::vector<std::vector<std::size_t>> overlapping_runs(const std::vector<double>& starts, double window) {
+    std::vector<std::vector<std::size_t>> runs;
+    for (std::size_t i = 0; i < starts.size(); ++i) {
+        if (!runs.empty() && starts[i] <= starts[runs.back().back()] + window) {
+            runs.back().push_back(i);
+        } else {
+            runs.push_back({i});
         }
     }
-    return boxes;
+    return runs;
+}
+
+// Whether one pass gives each window exactly the frames its own pass
+// (window_command) gets: where FFmpeg's seek lands on a picture shown at or
+// before the window's start. Matroska and WebM seek by presentation time,
+// and an intra-only codec has a picture at every frame, in MP4/MOV or a raw
+// file. MP4 and MOV seek by decode time (an open-GOP picture after the start
+// can be where a window's own pass begins, missing frames one pass has), and
+// other formats' timestamp corrections (MPEG-TS, AVI) differ in a pass that
+// keeps the file's timestamps.
+bool merges_windows(const VideoInfo& info) {
+    static const std::set<std::string, std::less<>> intra_only{"ffv1", "prores", "dnxhd", "mjpeg", "rawvideo"};
+    const bool mov = info.format_name.starts_with("mov,mp4");
+    return info.format_name.find("matroska") != std::string::npos ||
+           ((mov || info.format_name == "rawvideo") && intra_only.contains(info.codec_name));
+}
+
+// The file's start time as FFmpeg gives it on its "  Duration: ..., start:
+// 0.000000" line (whole microseconds), from which its seek (-ss) counts: 0
+// for a file that has none (FFmpeg's seek then counts from 0, and it writes
+// no "start:"); nothing if FFmpeg could not read the file.
+std::optional<long long> file_start_microseconds(const std::string& ffmpeg, const VideoInfo& info,
+                                                 const CancelToken& cancel) {
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner"};
+    const std::vector<std::string> input = info.input_options();
+    command.insert(command.end(), input.begin(), input.end());
+    command.insert(command.end(), {"-i", platform::path_text(info.path)});
+    // The input's own line, two spaces in, kept as it comes: a metadata
+    // value naming a duration is further in, and a file with many streams or
+    // chapters writes more than the end of its error output that is kept.
+    struct Found {
+        std::mutex mutex;
+        std::optional<std::string> line;
+    };
+    const auto found = std::make_shared<Found>();
+    platform::ProcessOptions options;
+    options.on_error_line = [found](std::string_view line) {
+        if (line.starts_with("  Duration: ")) {
+            const std::lock_guard lock(found->mutex);
+            if (!found->line) {
+                found->line = std::string(line);
+            }
+        }
+    };
+    try {
+        // No output named: it says what it read, and ends.
+        platform::ChildProcess probe = platform::ChildProcess::start(command, options);
+        const CancelToken::Attached attached = cancel.attach(probe);
+        if (!probe.wait_for(30s)) {
+            probe.terminate();
+            probe.wait();
+            return std::nullopt;
+        }
+        cancel.throw_if_cancelled();
+        static_cast<void>(probe.standard_error());  // waits for the error output's end, and so its lines
+    } catch (const platform::ProcessError&) {
+        return std::nullopt;
+    }
+    const std::lock_guard lock(found->mutex);
+    if (!found->line) {
+        return std::nullopt;
+    }
+    static const std::regex start(R"(, start: (-?)(\d+)\.(\d{6}))");
+    std::smatch match;
+    if (!std::regex_search(*found->line, match, start)) {
+        return 0;
+    }
+    const long long magnitude = std::stoll(match[2].str()) * 1'000'000 + std::stoll(match[3].str());
+    return match[1].length() > 0 ? -magnitude : magnitude;
+}
+
+// Microseconds as seconds with six decimals, from whole numbers (no
+// rounding of a double between).
+std::string seconds_text(long long microseconds) {
+    const long long whole = microseconds / 1'000'000;
+    const long long part = microseconds % 1'000'000;
+    std::string digits = std::to_string(part);
+    return std::to_string(whole) + "." + std::string(6 - digits.size(), '0') + digits;
+}
+
+// One pass for the windows `run` (indexes into `starts`), each window seeing
+// exactly the frames its own pass (window_command) sees. The pass keeps the
+// file's timestamps (-copyts) from the first window's seek; each window's
+// branch trims from its own start (the file's start time `file_start` added,
+// as -ss counts from it), then its cropdetect, then a trim to the window's
+// length, so that its cropdetect also sees the frame past the end that its
+// own pass's -t drops after it. Each branch is an output of its own, so the
+// pass ends when the last window does.
+std::vector<std::string> merged_windows_command(const std::string& ffmpeg, const VideoInfo& info,
+                                                const std::vector<double>& starts,
+                                                const std::vector<std::size_t>& run, double window,
+                                                long long file_start, const std::optional<std::string>& hwaccel,
+                                                const std::string& download_format) {
+    std::string graph = "[0:" + std::string(video_stream) + "]" + download_filters(hwaccel, download_format) +
+                        "split=" + std::to_string(run.size());
+    for (std::size_t i = 0; i < run.size(); ++i) {
+        graph += "[s" + std::to_string(i) + "]";
+    }
+    for (std::size_t i = 0; i < run.size(); ++i) {
+        // The window's start in whole milliseconds, as its own pass's -ss.
+        std::string start = format_fixed(starts[run[i]], 3);
+        start.erase(std::remove(start.begin(), start.end(), '.'), start.end());
+        graph += ";[s" + std::to_string(i) + "]trim=start=" + seconds_text(std::stoll(start) * 1000 + file_start) +
+                 "," + cropdetect("w" + std::to_string(i)) + ",trim=duration=" + format_fixed(window, 3) + "[o" +
+                 std::to_string(i) + "]";
+    }
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-nostats"};
+    const std::vector<std::string> decoding = hwaccel_args(hwaccel);
+    command.insert(command.end(), decoding.begin(), decoding.end());
+    const std::vector<std::string> input = info.input_options();
+    command.insert(command.end(), input.begin(), input.end());
+    command.insert(command.end(), {"-copyts", "-ss", format_fixed(starts[run.front()], 3), "-i",
+                                   platform::path_text(info.path), "-filter_complex", graph});
+    for (std::size_t i = 0; i < run.size(); ++i) {
+        command.insert(command.end(), {"-map", "[o" + std::to_string(i) + "]", "-f", "null", "-"});
+    }
+    return command;
+}
+
+// Each window's box of `run` from one pass (merged_windows_command), or
+// nothing where the pass cannot stand for the windows' own passes: it failed
+// or timed out, or FFmpeg rebuilt its filters partway (the video changed size
+// or format), which starts the windows' cropdetects again.
+std::optional<std::vector<std::optional<CropBox>>> run_merged_windows(
+    const std::string& ffmpeg, const VideoInfo& info, const std::vector<double>& starts,
+    const std::vector<std::size_t>& run, double window, long long file_start, const CancelToken& cancel,
+    const std::optional<std::string>& hwaccel, const std::string& download_format) {
+    const std::string path = platform::path_text(info.path);
+    std::string errors;
+    try {
+        errors = run_detection(
+            [&](const std::optional<std::string>& attempt) {
+                return merged_windows_command(ffmpeg, info, starts, run, window, file_start, attempt,
+                                              download_format);
+            },
+            path, cancel, hwaccel, 60s * static_cast<long long>(run.size()));
+    } catch (const CropDetectError& error) {
+        logger.info("Black bars in " + platform::path_text(info.path.filename()) +
+                    ": windows sampled one by one, as one pass for them failed (" + error.what() + ")");
+        return std::nullopt;
+    }
+    if (errors.find("Reconfiguring filter graph") != std::string::npos) {
+        logger.info("Black bars in " + platform::path_text(info.path.filename()) +
+                    ": windows sampled one by one, as the video changes size or format");
+        return std::nullopt;
+    }
+    return boxes_by_window(errors, run.size());
 }
 
 // detect_crop's work, without the kept answers.
@@ -782,16 +979,45 @@ CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double
             }
         }
     } else {
-        // One window at a time: each is its own decoder, and five at once
-        // held 6.2 GB of GPU memory for a 4K source.
-        for (const double start : starts) {
-            try {
-                if (const std::optional<CropBox> box =
-                        run_single_window(ffmpeg, info, start, window, cancel, hwaccel, download_format)) {
-                    boxes.push_back(*box);
+        // One decoder at a time: five at once held 6.2 GB of GPU memory for a
+        // 4K source. Windows that overlap (a video under 17 s) are decoded in
+        // one pass where it sees each window's frames exactly, each frame
+        // once (a 6.4 s 4K video: 382 frames, not some 1240); the others,
+        // and those of a pass that failed, one by one.
+        std::vector<std::optional<CropBox>> found(starts.size());
+        std::vector<bool> sampled(starts.size(), false);
+        const std::vector<std::vector<std::size_t>> runs = overlapping_runs(starts, window);
+        const bool shared = std::any_of(runs.begin(), runs.end(), [](const auto& run) { return run.size() > 1; });
+        const std::optional<long long> file_start =
+            shared && merges_windows(info) ? file_start_microseconds(ffmpeg, info, cancel) : std::nullopt;
+        if (file_start && *file_start >= 0) {
+            for (const std::vector<std::size_t>& run : runs) {
+                if (run.size() < 2) {
+                    continue;
                 }
+                if (const auto run_boxes = run_merged_windows(ffmpeg, info, starts, run, window, *file_start, cancel,
+                                                              hwaccel, download_format)) {
+                    for (std::size_t i = 0; i < run.size(); ++i) {
+                        found[run[i]] = (*run_boxes)[i];
+                        sampled[run[i]] = true;
+                    }
+                }
+            }
+        }
+        for (std::size_t i = 0; i < starts.size(); ++i) {
+            if (sampled[i]) {
+                continue;
+            }
+            try {
+                found[i] = run_single_window(ffmpeg, info, starts[i], window, cancel, hwaccel, download_format);
             } catch (const CropDetectError& error) {
                 failures.emplace_back(error.what());
+            }
+        }
+        // In the windows' order: between equally good boxes, the first wins.
+        for (const std::optional<CropBox>& box : found) {
+            if (box) {
+                boxes.push_back(*box);
             }
         }
     }
