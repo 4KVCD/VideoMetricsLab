@@ -96,10 +96,14 @@ previous build's output undeletable. The package therefore goes to
   playback also reads videos and soundtracks and converts pictures and
   sound), for the software frame decoder and Video Compare: FFmpeg 9.0.2's
   libraries with only the decoders, parsers and demuxers the script lists
-  and Direct3D 11's video decoding, configured LGPL with nothing external,
-  built from FFmpeg's release source by `scripts/build_ffmpeg_decoders.ps1`
-  (MinGW-w64 GCC and NASM; the source is pinned by its SHA-256), which also
-  vendors the headers the decoders are compiled against. Beside them,
+  and Direct3D 11's video decoding, configured LGPL with one external
+  library: Fraunhofer HHI's VVC decoder VVdeC (its master, pinned by commit,
+  with 4KVCD's pull requests, `scripts/patches/vvdec`), linked in as the
+  decoder `libvvdec` (`scripts/patches/ffmpeg`), which the app asks for by
+  name (FFmpeg's own VVC decoder stays the default). Built from FFmpeg's
+  release source by `scripts/build_ffmpeg_decoders.ps1` (MinGW-w64 GCC,
+  NASM and CMake; the source is pinned by its SHA-256), which also vendors
+  the headers the decoders are compiled against. Beside them,
   **dav1d 1.5.4** (`dav1d.dll`, BSD), which decodes AV1 in software, as
   FFmpeg's libdav1d decoder does: built from VideoLAN's release source by
   `scripts/build_dav1d.ps1`. They are committed, as libvmaf-fast's DLLs are:

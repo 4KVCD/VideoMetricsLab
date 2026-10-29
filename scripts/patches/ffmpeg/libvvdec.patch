@@ -1,0 +1,55 @@
+--- a/configure
++++ b/configure
+@@ -226,6 +226,7 @@
+   --enable-libcdio         enable audio CD grabbing with libcdio [no]
+   --enable-libcodec2       enable codec2 en/decoding using libcodec2 [no]
+   --enable-libdav1d        enable AV1 decoding via libdav1d [no]
++  --enable-libvvdec        enable VVC decoding via libvvdec [no]
+   --enable-libdavs2        enable AVS2 decoding via libdavs2 [no]
+   --enable-libdc1394       enable IIDC-1394 grabbing using libdc1394
+                            and libraw1394 [no]
+@@ -2084,6 +2085,7 @@
+     libcodec2
+     libdav1d
+     libdc1394
++    libvvdec
+     libflite
+     libfontconfig
+     libfreetype
+@@ -3823,6 +3825,8 @@
+ libcodec2_encoder_deps="libcodec2"
+ libdav1d_decoder_deps="libdav1d"
+ libdav1d_decoder_select="itut_t35"
++libvvdec_decoder_deps="libvvdec"
++libvvdec_decoder_select="vvc_mp4toannexb_bsf"
+ libdavs2_decoder_deps="libdavs2"
+ libdavs2_decoder_select="avs2_parser"
+ libfdk_aac_decoder_deps="libfdk_aac"
+@@ -7332,6 +7336,7 @@
+ enabled libcaca           && require_pkg_config libcaca caca caca.h caca_create_canvas
+ enabled libcodec2         && require libcodec2 codec2/codec2.h codec2_create -lcodec2
+ enabled libdav1d          && require_pkg_config libdav1d "dav1d >= 1.0.0" "dav1d/dav1d.h" dav1d_version
++enabled libvvdec          && require_pkg_config libvvdec "libvvdec >= 3.0.0" "vvdec/vvdec.h" vvdec_get_version
+ enabled libdavs2          && require_pkg_config libdavs2 "davs2 >= 1.6.0" davs2.h davs2_decoder_open
+ enabled libdc1394         && require_pkg_config libdc1394 libdc1394-2 dc1394/dc1394.h dc1394_new
+ enabled libdrm            && check_pkg_config libdrm libdrm xf86drm.h drmGetVersion
+--- a/libavcodec/allcodecs.c
++++ b/libavcodec/allcodecs.c
+@@ -774,6 +774,7 @@
+ extern const FFCodec ff_libcodec2_encoder;
+ extern const FFCodec ff_libcodec2_decoder;
+ extern const FFCodec ff_libdav1d_decoder;
++extern const FFCodec ff_libvvdec_decoder;
+ extern const FFCodec ff_libdavs2_decoder;
+ extern const FFCodec ff_libfdk_aac_encoder;
+ extern const FFCodec ff_libfdk_aac_decoder;
+--- a/libavcodec/Makefile
++++ b/libavcodec/Makefile
+@@ -1172,6 +1172,7 @@
+ OBJS-$(CONFIG_LIBCODEC2_DECODER)          += libcodec2.o
+ OBJS-$(CONFIG_LIBCODEC2_ENCODER)          += libcodec2.o
+ OBJS-$(CONFIG_LIBDAV1D_DECODER)           += libdav1d.o av1_parse.o
++OBJS-$(CONFIG_LIBVVDEC_DECODER)           += libvvdec.o
+ OBJS-$(CONFIG_LIBDAVS2_DECODER)           += libdavs2.o
+ OBJS-$(CONFIG_LIBFDK_AAC_DECODER)         += libfdk-aacdec.o
+ OBJS-$(CONFIG_LIBFDK_AAC_ENCODER)         += libfdk-aacenc.o
