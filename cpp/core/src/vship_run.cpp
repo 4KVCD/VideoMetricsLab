@@ -24,6 +24,7 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
 #include "vml/frame_sync_by_time.h"
+#include "vml/geometry.h"
 #include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
@@ -1341,6 +1342,14 @@ private:
             video.hwaccel = source ? plan_.decoding.source : plan_.decoding.distorted;
             video.size = source ? source_size : distorted_size;
             video.passthrough = passthrough_format(video.info, video.hwaccel);
+            // NV12 only where FFmpeg does not scale the video: swscale scales
+            // 8-bit 4:2:0 into NV12 otherwise than into the planes every other
+            // decoding scales it into (other pictures, other scores). P010
+            // comes out of it the same as planes.
+            if (video.passthrough && video.passthrough->second == "nv12" &&
+                content_size(video.info, video.crop) != video.size) {
+                video.passthrough.reset();
+            }
             video.image = video.passthrough ? video.passthrough->first : vship_image_format(video.info);
             video.layout = video.image.frame_layout(video.size.first, video.size.second);
             VideoInfo described = video.info;
