@@ -111,7 +111,7 @@ VulkanProbe probe_vulkan_apart(bool& crashed) {
     }
     try {
         const nlohmann::json result =
-            run_isolated("vulkan-probe", "the Vulkan VMAF probe", nlohmann::json::object(), {}, CancelToken());
+            run_isolated("vulkan-probe", "the Vulkan VMAF probe", nlohmann::json::object(), {}, gpu_probes_token());
         VulkanProbe probe;
         result.at("available").get_to(probe.available);
         if (!result.at("device").is_null()) {
@@ -134,7 +134,7 @@ CudaProbe probe_cuda_apart(bool& crashed) {
     }
     try {
         const nlohmann::json result =
-            run_isolated("cuda-probe", "libvmaf's GPU probe", nlohmann::json::object(), {}, CancelToken());
+            run_isolated("cuda-probe", "libvmaf's GPU probe", nlohmann::json::object(), {}, gpu_probes_token());
         return {result.at("available").get<bool>(), result.at("text").get<std::string>()};
     } catch (const IsolatedCrashError& error) {
         crashed = true;
@@ -171,6 +171,8 @@ GpuVmafBackend probe_backends() {
             }
             add_reason("Vulkan: " + probe.text);
             failed = failed || probe.failed;
+        } catch (const Cancelled&) {
+            throw;  // stopped as the app ends (stop_gpu_probes): no answer, nothing kept
         } catch (const std::exception& error) {
             logger.warning("The " + backend + " VMAF probe failed: " + error.what());
             add_reason(backend + ": the GPU probe failed: " + error.what());

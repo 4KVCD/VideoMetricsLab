@@ -1372,12 +1372,14 @@ V1Probe v1_available() {
                 probed = probe_v1();
             } else {
                 const nlohmann::json result = run_isolated("vmaf-v1-probe", "the GPU VMAF v1 probe",
-                                                           nlohmann::json::object(), {}, CancelToken());
+                                                           nlohmann::json::object(), {}, gpu_probes_token());
                 probed = V1Probe{result.at("available").get<bool>(), result.at("text").get<std::string>(),
                                  result.value("failed", false)};
             }
         } catch (const IsolatedCrashError& error) {
             probed = V1Probe{false, error.what(), true};
+        } catch (const Cancelled&) {
+            throw;  // stopped as the app ends (stop_gpu_probes): no answer, nothing kept
         } catch (const std::exception& error) {
             logger.warning(std::string("The GPU VMAF v1 probe failed: ") + error.what());
             probed = V1Probe{false, std::string("the GPU probe failed: ") + error.what(), true};

@@ -248,5 +248,9 @@ int main(int argc, char** argv) {
     direct3d_warmup.reset();
 #endif
     window.check_for_updates();  // once, now, and at no other time
-    return QApplication::exec();
+    const int code = QApplication::exec();
+    // Qt waits for its pool's threads as the app ends: GPU probes still
+    // running (a driver's start, seconds) are ended instead of waited for.
+    stop_gpu_probes();
+    return code;
 }

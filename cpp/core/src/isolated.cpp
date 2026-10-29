@@ -245,6 +245,19 @@ void set_isolation_program(std::optional<std::filesystem::path> path) { program(
 
 std::optional<std::filesystem::path> isolation_program() { return program(); }
 
+namespace {
+
+CancelToken& gpu_probes() {
+    static CancelToken token;
+    return token;
+}
+
+}  // namespace
+
+const CancelToken& gpu_probes_token() { return gpu_probes(); }
+
+void stop_gpu_probes() { gpu_probes().cancel(); }
+
 nlohmann::json run_isolated(std::string_view task, std::string_view what, const nlohmann::json& request,
                             const std::function<void(const nlohmann::json&)>& on_message, const CancelToken& cancel,
                             const IsolatedFiles& on_files) {
