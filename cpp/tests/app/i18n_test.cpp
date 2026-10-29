@@ -1,5 +1,6 @@
-// The window's text as the Python app gives it, from the same catalogs
-// (reference/i18n.json, made by its vmaf_app/i18n.py).
+// The window's text in each language, held to reference/i18n.json: made by
+// the Python app's vmaf_app/i18n.py from the same catalogs, and kept since
+// as fixed data, changed by hand with a text (the Python app is gone).
 #include "i18n.h"
 
 #include <QCoreApplication>
