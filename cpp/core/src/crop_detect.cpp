@@ -30,6 +30,7 @@
 #include "vml/number_format.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
+#include "vml/python_text.h"
 
 namespace vml {
 
@@ -564,6 +565,8 @@ DetectionOutput launch_window(const std::vector<std::string>& command, const Can
     struct SlotRelease {
         ~SlotRelease() { decoder_slots.release(); }
     } release_slot;
+    cancel.throw_if_cancelled();  // cancelled as the slot came: nothing logged or started
+    logger.info("FFmpeg: " + python_list2cmdline(command));
     struct Kept {
         std::mutex mutex;
         std::string lines;
@@ -606,6 +609,18 @@ DetectionOutput launch_window(const std::vector<std::string>& command, const Can
     }
 }
 
+// The last line of FFmpeg's error output (the output as a whole stripped of
+// spaces at both ends first, as Python strips it); empty if it wrote none.
+std::string last_error_line(const std::string& errors) {
+    const std::size_t first = errors.find_first_not_of(" \t\r\n\f\v");
+    if (first == std::string::npos) {
+        return {};
+    }
+    const std::string stripped = errors.substr(first, errors.find_last_not_of(" \t\r\n\f\v") - first + 1);
+    const std::size_t line_break = stripped.find_last_of("\r\n");
+    return line_break == std::string::npos ? stripped : stripped.substr(line_break + 1);
+}
+
 // Runs the detection command `command` makes for a decoder, the GPU's
 // (`hwaccel`) and else software, for at most `limit` each, and returns the
 // lines of FFmpeg's error output the detection reads (DetectionOutput),
@@ -630,19 +645,19 @@ std::string run_detection(const std::function<std::vector<std::string>(const std
         if (output.code == 0) {
             break;
         }
+        if (attempt) {
+            // Info, not a warning: a GPU that cannot decode the video is
+            // expected, and the software pass that follows answers.
+            const std::string line = last_error_line(output.tail);
+            logger.info("Black bars in " + platform::path_text(platform::path_from_text(path).filename()) +
+                        ": FFmpeg exited with code " + platform::exit_code_text(output.code) + " decoding with " +
+                        *attempt + (line.empty() ? "" : " (" + line + ")") + "; sampling again in software");
+        }
     }
     if (output.code != 0) {
-        // The last line of FFmpeg's error output (the output as a whole
-        // stripped of spaces at both ends first, as Python strips it).
-        const std::string& errors = output.tail;
-        std::string tail = "ffmpeg exited with code " + platform::exit_code_text(output.code);
-        const std::size_t first = errors.find_first_not_of(" \t\r\n\f\v");
-        if (first != std::string::npos) {
-            const std::string stripped = errors.substr(first, errors.find_last_not_of(" \t\r\n\f\v") - first + 1);
-            const std::size_t line_break = stripped.find_last_of("\r\n");
-            tail = line_break == std::string::npos ? stripped : stripped.substr(line_break + 1);
-        }
-        throw CropDetectError("Crop detection failed for " + path + ": " + tail);
+        const std::string line = last_error_line(output.tail);
+        throw CropDetectError("Crop detection failed for " + path + ": " +
+                              (line.empty() ? "ffmpeg exited with code " + platform::exit_code_text(output.code) : line));
     }
     return output.lines;
 }
