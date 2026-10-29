@@ -69,9 +69,10 @@ previous build's output undeletable. The package therefore goes to
   an HDR display -- and presents them. Built from
   `native/d3d11_tonemap.cpp` by `scripts/build_d3d11_tonemap.ps1`.
 - **`d3d11_film_grain.dll`**, Video Compare's film grain for VVC videos: it
-  draws each frame's H.274 film grain on the GPU, as FFmpeg synthesizes it
-  for 8-bit video (the same pixels, but for the 8x8 blocks that a picture's
-  edge cuts off) and as JVET's VTM does for 10- and 12-bit. AV1's film grain
+  draws each frame's H.274 film grain on the GPU, SMPTE RDD 5's grain as
+  FFmpeg makes it, but worked out at the video's own depth and rounded, as
+  VVdeC does (FFmpeg rounds it down, which darkens the picture and shifts
+  its colours). AV1's film grain
   (and AFGS1's in VVC) is FFmpeg's. Built from
   `native/d3d11_film_grain.cpp` by `scripts/build_d3d11_film_grain.ps1`;
   its SMPTE RDD 5 tables come from VTM (`native/h274`, BSD licence, shipped

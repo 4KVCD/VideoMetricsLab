@@ -8,8 +8,16 @@
 // before it is cropped, scaled or shown.
 //
 // The synthesis is H.274's frequency filtering model, as SMPTE RDD 5 defines
-// it, and it reproduces FFmpeg's implementation (libavcodec/h274.c) exactly,
-// so 8-bit video gets the same pixels as FFmpeg gives, with two exceptions:
+// it: the pattern database, the blocks' random offsets, the intensity
+// intervals and the deblocking are FFmpeg's (libavcodec/h274.c), but the
+// grain is worked out at the video's own depth and rounded, as VVdeC does
+// (FilmGrainImpl.cpp), so that it averages zero. FFmpeg rounds it down,
+// which lowers every sample with grain by about half a code on average, luma
+// and chroma alike: a darker picture with a colour shift (0.59 codes on an
+// 8-bit VVenC --fga 1 encode, where VVdeC's grain averages 0.01). Rounded
+// down in 8-bit units and scaled up, as this drew 10-bit grain before, it
+// was 2.3 codes on a 10-bit --fga 2 encode of a 4K film, and coarser. So the
+// pixels differ slightly from FFmpeg's, and also:
 //   - FFmpeg keeps the grain in 8 bits, so an extremely strong grain, beyond
 //     +-127 codes, wraps around there; here it does not.
 //   - Where a plane's width or height is not a multiple of 8 (1080p video's
@@ -18,10 +26,9 @@
 //     reading whatever their frame buffer holds past the picture, which is
 //     not part of the video; here the samples past the edge repeat the edge.
 //     The grain of those blocks can differ.
-// FFmpeg does not synthesize grain above 8 bits; there this follows JVET's
-// reference software (VTM, SEIFilmGrainSynthesizer.cpp): block averages are
-// taken back to 8-bit codes, and the grain is shifted up to the video's bit
-// depth.
+// Above 8 bits, where FFmpeg draws no grain, block averages are taken back to
+// 8-bit codes, as JVET's reference software (VTM, SEIFilmGrainSynthesizer.cpp)
+// does.
 //
 // How the grain of one plane is made:
 //   1. The plane is cut into 16x16 blocks. Each block gets a random position
@@ -148,10 +155,13 @@ int4 block_grain_settings(int block_x, uint block_y) {
     return int4(1, scale, pattern_x, pattern_y);
 }
 
-// The grain of the sample at (x, y) in a block with these settings.
+// The grain of the sample at (x, y) in a block with these settings, in codes
+// of the video's depth, rounded (see the top of the file).
 int grain_at(int4 settings, uint x, uint y) {
     int pattern = patterns.Load(int3(settings.z + x, settings.w + y, 0));
-    return settings.x != 0 ? (settings.y * pattern) >> shift : 0;
+    uint grain_shift = shift - (depth - 8);
+    int rounding = 1 << (grain_shift - 1);
+    return settings.x != 0 ? (settings.y * pattern + rounding) >> grain_shift : 0;
 }
 
 groupshared int4 neighbourhood[3];   // the settings of the left block, this block and the right block
@@ -180,16 +190,15 @@ void main(uint3 block : SV_GroupID, uint3 sample : SV_GroupThreadID, uint thread
 
     // Deblocking: a block that has grain smooths its left edge with the
     // block before it, changing its own first column and the last column of
-    // the block before.
+    // the block before (rounded, as the grain is).
     int g = own;
     if (x == 0 && block.x > 0 && neighbourhood[1].x != 0)
-        g = (edge_grain[y][0] + 2 * own + block_grain[y][1]) >> 2;
+        g = (edge_grain[y][0] + 2 * own + block_grain[y][1] + 2) >> 2;
     else if (x == 7 && neighbourhood[2].x != 0)
-        g = (edge_grain[y][1] + 2 * own + block_grain[y][6]) >> 2;
+        g = (edge_grain[y][1] + 2 * own + block_grain[y][6] + 2) >> 2;
 
-    // The grain is made in 8-bit units, so it is scaled up to the video's depth.
     int code = (int)(picture.Load(int3(position, 0)) * sample_to_code + 0.5);
-    output[position] = clamp(code + g * (1 << (depth - 8)), 0, (1 << depth) - 1) / sample_to_code;
+    output[position] = clamp(code + g, 0, (1 << depth) - 1) / sample_to_code;
 }
 )";
 

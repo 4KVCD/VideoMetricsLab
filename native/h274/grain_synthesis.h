@@ -126,7 +126,8 @@ public:
           in_stride_(in_stride),
           plane_(plane),
           depth_(depth),
-          shift_(log2_scale_factor + 6),
+          shift_(log2_scale_factor + 6 - (depth - 8)),
+          rounding_(1 << (shift_ - 1)),
           offsets_(offsets),
           database_(database),
           blocks8_across_((plane.width + 7) / 8),
@@ -184,19 +185,19 @@ private:
         return grain;
     }
 
-    // The grain of the sample at (x, y) in a block with these settings.
+    // The grain of the sample at (x, y) in a block with these settings, in
+    // codes of the video's depth, rounded (d3d11_film_grain.cpp says why).
     int grain_at(const BlockGrain& block, int x, int y) const {
         if (!block.present)
             return 0;
         const int pattern = database_[(std::ptrdiff_t)(block.pattern_y + y) * database_size + block.pattern_x + x];
-        return (block.scale * pattern) >> shift_;
+        return (block.scale * pattern + rounding_) >> shift_;
     }
 
     // The draw shader, for one row of blocks.
     void draw_block_row(const std::vector<BlockGrain>& row, int block_y, Sample* out, std::ptrdiff_t out_stride) const {
         const BlockGrain none;
         const int max_code = (1 << depth_) - 1;
-        const int to_depth = 1 << (depth_ - 8);  // the grain is made in 8-bit units
         for (int y = 0; y < 8; y++) {
             const int position_y = block_y * 8 + y;
             if (position_y >= plane_.height)
@@ -213,13 +214,14 @@ private:
                         break;
                     // Deblocking: a block that has grain smooths its left
                     // edge with the block before it, changing its own first
-                    // column and the last column of the block before.
+                    // column and the last column of the block before
+                    // (rounded, as the grain is).
                     int g = grain_at(own, x, y);
                     if (x == 0 && block_x > 0 && own.present)
-                        g = (grain_at(left, 7, y) + 2 * g + grain_at(own, 1, y)) >> 2;
+                        g = (grain_at(left, 7, y) + 2 * g + grain_at(own, 1, y) + 2) >> 2;
                     else if (x == 7 && right.present)
-                        g = (grain_at(right, 0, y) + 2 * g + grain_at(own, 6, y)) >> 2;
-                    const int code = in_row[position_x] + g * to_depth;
+                        g = (grain_at(right, 0, y) + 2 * g + grain_at(own, 6, y) + 2) >> 2;
+                    const int code = in_row[position_x] + g;
                     out_row[position_x] = (Sample)(code < 0 ? 0 : code > max_code ? max_code : code);
                 }
             }
@@ -230,7 +232,8 @@ private:
     std::ptrdiff_t in_stride_;
     const GrainPlane& plane_;
     int depth_;
-    int shift_;
+    int shift_;             // the grain's scaling shift, less the bits the video has above 8
+    int rounding_;          // half of 1 << shift_
     const std::vector<uint32_t>& offsets_;
     const int8_t* database_;
     int blocks8_across_;
