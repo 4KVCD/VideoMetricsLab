@@ -4,7 +4,10 @@
 #include <cctype>
 #include <chrono>
 #include <filesystem>
+#include <future>
 #include <regex>
+#include <string>
+#include <utility>
 
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
@@ -161,19 +164,26 @@ std::vector<std::string> ToolsStatus::problems() const {
     return issues;
 }
 
+// How long `<tool> -version` may take. It takes tens of milliseconds, even
+// with every core busy, but on a PC busy with encodes and comparisons a
+// start of ffprobe has taken over 15 seconds. FFmpeg and ffprobe are checked
+// at once, so a tool that hangs holds up what waits for the check (the
+// window as it opens) no longer than the two checked in turn at 15 s did.
+constexpr std::chrono::seconds tool_check_timeout{30};
+
 ToolStatus check_tool(std::string_view name, const Settings& settings) {
     ToolStatus status;
     status.name = name;
     status.path = find_tool(name, settings);
     platform::ProcessOutput output;
     try {
-        output = platform::run_program({status.path, "-version"}, std::chrono::seconds(15));
+        output = platform::run_program({status.path, "-version"}, tool_check_timeout);
     } catch (const platform::ProcessError& error) {
         status.error = error.what();
         return status;
     }
     if (output.timed_out) {
-        status.error = "timed out after 15 seconds";
+        status.error = "timed out after " + std::to_string(tool_check_timeout.count()) + " seconds";
         return status;
     }
     if (output.exit_code != 0) {
@@ -188,7 +198,12 @@ ToolStatus check_tool(std::string_view name, const Settings& settings) {
 }
 
 ToolsStatus check_tools(const Settings& settings) {
-    return ToolsStatus{check_tool("ffmpeg", settings), check_tool("ffprobe", settings)};
+    // Both at once: the window waits for them as it opens, and each may take
+    // up to tool_check_timeout.
+    std::future<ToolStatus> ffprobe =
+        std::async(std::launch::async, [&settings] { return check_tool("ffprobe", settings); });
+    ToolStatus ffmpeg = check_tool("ffmpeg", settings);
+    return ToolsStatus{std::move(ffmpeg), ffprobe.get()};
 }
 
 }  // namespace vml
