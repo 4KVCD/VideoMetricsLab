@@ -53,5 +53,22 @@ TEST(RunFile, LoadsFilesAsThePythonApp) {
     }
 }
 
+// A video's H.264 profile is saved where it is known, and loads again:
+// without it, Intel's and AMD's GPUs leave the video to software decoding
+// (pick_decode). A video without one is saved as before.
+TEST(RunFile, KeepsTheVideosProfile) {
+    const nlohmann::json reference = test::load_reference("run_files.json");
+    ComparisonResult result = test::result_from(reference.at("saved").at(0).at("result"));
+    result.source_info.profile = "High";
+    result.distorted_info.profile.clear();
+    const std::string text = run_file_text(result, "");
+    const nlohmann::json saved = nlohmann::json::parse(text);
+    EXPECT_EQ(saved.at("source_info").at("profile"), "High");
+    EXPECT_FALSE(saved.at("distorted_info").contains("profile"));
+    const auto [loaded, label] = run_from_text(text);
+    EXPECT_EQ(loaded.source_info.profile, "High");
+    EXPECT_EQ(loaded.distorted_info.profile, "");
+}
+
 }  // namespace
 }  // namespace vml

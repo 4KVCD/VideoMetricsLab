@@ -112,6 +112,15 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
 // pictures (x264's -qp 0 writes them so, in 4:2:0 too).
 bool h264_444_profile(const VideoInfo& video);
 
+// Whether `video` is H.264 whose profile is not known: a video not probed
+// (one of a run saved before 2.3), which may be in a 4:4:4 profile.
+bool h264_profile_unknown(const VideoInfo& video);
+
+// Gives `saved`, a saved run's details of a video, the profile of `read`,
+// the same file's details read again, where it has none: true when it did.
+// Only the profile: the rest stays as the run measured it.
+bool take_read_profile(VideoInfo& saved, const VideoInfo& read);
+
 // The -hwaccel for `video`, as pick_decode gives it for its codec, format and
 // size, but only a GPU's decoder that decodes its profile exactly: H.264 in
 // a 4:4:4 profile only NVIDIA's (cuda) and Apple's (videotoolbox), each

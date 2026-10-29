@@ -18,6 +18,7 @@
 #include "graph_panel.h"
 #include "i18n.h"
 #include "vml/export_csv.h"
+#include "vml/hardware_decoding.h"
 #include "vml/model_select.h"
 #include "vml/run_file.h"
 #include "vml/score_identity.h"
@@ -200,6 +201,62 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
     row_data.status_detail = app::tr("Loaded from saved run");
     refresh_row_state(row);
     sync_frame_compare();
+    read_unknown_profiles();
+}
+
+void MainWindow::read_unknown_profiles() {
+    // A run saved before 2.3 has no profile in its videos' details, and
+    // pick_decode leaves H.264 of no known profile to software decoding on
+    // Intel's and AMD's GPUs: the files of the window's videos without one
+    // are read for theirs, off the window's thread. A file that cannot be
+    // read leaves its video as it is.
+    QStringList paths;
+    const auto add = [&paths](const VideoInfo& info) {
+        if (h264_profile_unknown(info) && !paths.contains(text_of(info.path))) {
+            paths.append(text_of(info.path));
+        }
+    };
+    if (source_info_) {
+        add(*source_info_);
+    }
+    for (const std::shared_ptr<RowData>& row_data : rows_) {
+        if (row_data->video_info) {
+            add(*row_data->video_info);
+        }
+    }
+    if (paths.isEmpty()) {
+        return;
+    }
+    auto* worker = new ProbeWorker(paths, find_tool("ffprobe", settings_), this);
+    probe_workers_.push_back(worker);
+    connect(worker, &ProbeWorker::probed, this, [this](const Probed& probed) { take_profile(probed); });
+    // As the rows' readers end: a "Reading..." shown while this one read is
+    // then taken down.
+    connect(worker, &ProbeWorker::finished_all, this, [this, worker] { on_probe_finished(worker); });
+    worker->start();
+}
+
+void MainWindow::take_profile(const Probed& probed) {
+    // A file's profile, just read, for the window's details of that file
+    // that have none: the reference's, its rows', and their results' (saved
+    // again with it).
+    if (!probed.info) {
+        return;
+    }
+    bool taken = source_info_ && take_read_profile(*source_info_, *probed.info);
+    for (const std::shared_ptr<RowData>& row_data : rows_) {
+        if (row_data->video_info) {
+            taken = take_read_profile(*row_data->video_info, *probed.info) || taken;
+        }
+        if (row_data->completed_run) {
+            ComparisonResult& result = row_data->completed_run->result;
+            taken = take_read_profile(result.source_info, *probed.info) || taken;
+            taken = take_read_profile(result.distorted_info, *probed.info) || taken;
+        }
+    }
+    if (taken) {
+        sync_frame_compare();  // Video Compare's copies of the details
+    }
 }
 
 void MainWindow::adopt_source_from_run(const ComparisonResult& result) {

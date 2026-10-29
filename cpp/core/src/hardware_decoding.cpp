@@ -297,14 +297,28 @@ bool h264_444_profile(const VideoInfo& video) {
     return ascii_lower(video.codec_name) == "h264" && video.profile.find("4:4:4") != std::string::npos;
 }
 
+bool h264_profile_unknown(const VideoInfo& video) {
+    return ascii_lower(video.codec_name) == "h264" && video.profile.empty();
+}
+
+bool take_read_profile(VideoInfo& saved, const VideoInfo& read) {
+    // Another codec is another file by now: nothing of it is taken.
+    if (!saved.profile.empty() || read.profile.empty() || saved.path != read.path ||
+        saved.codec_name != read.codec_name) {
+        return false;
+    }
+    saved.profile = read.profile;
+    return true;
+}
+
 std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                        const VideoInfo& video, MacGpuDecoding mac) {
     std::optional<std::string> hwaccel =
         pick_decode(capabilities, vendor, video.codec_name, video.pix_fmt, video.width, video.height, mac);
-    // No profile is a video not probed (a saved result's, which Video Compare
-    // can play): its H.264 may be lossless too.
-    const bool unknown_h264 = ascii_lower(video.codec_name) == "h264" && video.profile.empty();
-    if (hwaccel && (h264_444_profile(video) || unknown_h264) && hwaccel != "cuda" && hwaccel != "videotoolbox") {
+    // A video of no known profile may be lossless too (until the window has
+    // read the file of a run saved before 2.3).
+    if (hwaccel && (h264_444_profile(video) || h264_profile_unknown(video)) && hwaccel != "cuda" &&
+        hwaccel != "videotoolbox") {
         return std::nullopt;
     }
     return hwaccel;
@@ -324,14 +338,17 @@ std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode) {
     if (!gpu_decodes_exactly(info.codec_name)) {
         return "the GPUs decode " + info.codec_name + " to other pictures than FFmpeg's";
     }
+    // The rules pick_decode applies, not "this GPU": the reason holds as well
+    // where there is no GPU decoder at all.
     if (ascii_lower(info.codec_name) == "h264" && bit_depth(info.pix_fmt) > 8) {
-        return "this GPU does not decode H.264 deeper than 8 bits";
+        return "only NVIDIA's GPUs (the RTX 50 series) decode H.264 deeper than 8 bits";
     }
     if (h264_444_profile(info)) {
-        return "this GPU does not decode H.264's " + info.profile + " profile exactly";
+        return "only NVIDIA's and Apple's GPUs decode H.264's " + info.profile + " profile exactly";
     }
-    if (ascii_lower(info.codec_name) == "h264" && info.profile.empty()) {
-        return "its H.264 profile is not known, and this GPU does not decode every one exactly";
+    if (h264_profile_unknown(info)) {
+        return "its H.264 profile is not known (a run saved before 2.3) and may be a lossless 4:4:4 one, which only "
+               "NVIDIA's and Apple's GPUs decode exactly";
     }
     return "no GPU decoder here for " + info.codec_name;
 }

@@ -167,21 +167,55 @@ TEST(Decisions, H264In444ProfilesIsGpuDecodedOnlyWhereItIsExact) {
         EXPECT_EQ(pick_decode(pc, GpuVendor::intel, video), std::nullopt) << profile;
         EXPECT_EQ(pick_decode(pc, GpuVendor::amd, video), std::nullopt) << profile;
     }
-    EXPECT_EQ(software_decoding_reason(video, true), "this GPU does not decode H.264's CAVLC 4:4:4 profile exactly");
+    EXPECT_EQ(software_decoding_reason(video, true),
+              "only NVIDIA's and Apple's GPUs decode H.264's CAVLC 4:4:4 profile exactly");
     video.profile = "High";
     EXPECT_EQ(pick_decode(pc, GpuVendor::intel, video), "qsv");
     EXPECT_EQ(pick_decode(pc, GpuVendor::amd, video), "d3d11va");
     video.profile.clear();  // not probed: taken as 4:4:4
     EXPECT_EQ(pick_decode(pc, GpuVendor::intel, video), std::nullopt);
     EXPECT_EQ(pick_decode(pc, GpuVendor::nvidia, video), "cuda");
+    EXPECT_EQ(software_decoding_reason(video, true),
+              "its H.264 profile is not known (a run saved before 2.3) and may be a lossless 4:4:4 one, which only "
+              "NVIDIA's and Apple's GPUs decode exactly");
     video.profile = "High 4:4:4 Predictive";
     video.pix_fmt = "yuv420p10le";
     EXPECT_EQ(pick_decode(pc, GpuVendor::nvidia, video), "cuda");
+    EXPECT_EQ(software_decoding_reason(video, true),
+              "only NVIDIA's GPUs (the RTX 50 series) decode H.264 deeper than 8 bits");
     DecodingCapabilities mac;
     mac.hwaccels = {"videotoolbox"};
     mac.videotoolbox_codecs = {"h264"};
     video.pix_fmt = "yuv420p";
     EXPECT_EQ(pick_decode(mac, GpuVendor::automatic, video, MacGpuDecoding::on), "videotoolbox");
+}
+
+// A saved run's video without a profile takes the one its file is read with
+// again, and nothing else; one with a profile, or another file or codec,
+// keeps what it had.
+TEST(Decisions, ASavedVideoTakesOnlyTheProfileReadFromItsFile) {
+    VideoInfo saved;
+    saved.path = "E:/videos/source.mkv";
+    saved.codec_name = "h264";
+    saved.width = 1920;
+    VideoInfo read = saved;
+    read.profile = "High";
+    read.width = 3840;  // the file's details now: not taken
+    EXPECT_TRUE(take_read_profile(saved, read));
+    EXPECT_EQ(saved.profile, "High");
+    EXPECT_EQ(saved.width, 1920);
+    read.profile = "High 4:4:4 Predictive";
+    EXPECT_FALSE(take_read_profile(saved, read));  // it has one
+    EXPECT_EQ(saved.profile, "High");
+
+    saved.profile.clear();
+    VideoInfo other = read;
+    other.path = "E:/videos/test.mkv";
+    EXPECT_FALSE(take_read_profile(saved, other));
+    other = read;
+    other.codec_name = "hevc";
+    EXPECT_FALSE(take_read_profile(saved, other));
+    EXPECT_EQ(saved.profile, "");
 }
 
 TEST(Decisions, FrameRatesBecomeThePythonAppsFractions) {
