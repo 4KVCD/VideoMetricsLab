@@ -106,7 +106,10 @@ double fed_rate(const VideoInfo& info) {
 }  // namespace
 
 bool fed_to_ffmpeg(const VideoInfo& info) {
-    return only_the_app_adds(effective_film_grain(info)) || (feeding_all() && !feed_refusal(info));
+    if (only_the_app_decodes(info)) {
+        return true;  // refused where it cannot be fed: FFmpeg would score it wrongly, or not at all
+    }
+    return (decoded_by_the_app(info) || feeding_all()) && !feed_refusal(info);
 }
 
 std::optional<std::string> feed_refusal(const VideoInfo& info) {
@@ -255,12 +258,20 @@ void PictureFeed::finish() {
 
 PairFeeds::PairFeeds(const VideoInfo* source, const VideoInfo* distorted, const std::string& ffmpeg,
                      const std::string& ffprobe, const CancelToken& cancel) {
-    // Both refusals before either feeding starts.
+    // Both refusals before either feeding starts; a video the app decodes that
+    // cannot be fed is decoded by FFmpeg where FFmpeg can (app_decoders.h),
+    // and the log says why.
     for (const VideoInfo* info : {distorted, source}) {
-        if (info != nullptr && fed_to_ffmpeg(*info)) {
-            if (const std::optional<std::string> refusal = feed_refusal(*info)) {
-                throw FilmGrainRefusal(*refusal);
-            }
+        if (info == nullptr || !(decoded_by_the_app(*info) || fed_to_ffmpeg(*info))) {
+            continue;
+        }
+        const std::optional<std::string> refusal = feed_refusal(*info);
+        if (fed_to_ffmpeg(*info) && refusal) {
+            throw FilmGrainRefusal(*refusal);
+        }
+        if (refusal && decoded_by_the_app(*info)) {
+            logger.info(platform::path_text(info->path.filename()) + ": decoded by FFmpeg, not the app's decoder: " +
+                        *refusal);
         }
     }
     if (distorted != nullptr && fed_to_ffmpeg(*distorted)) {

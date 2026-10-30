@@ -1,5 +1,6 @@
 #include "vml/film_grain_scoring.h"
 
+#include "vml/app_decoders.h"
 #include "vml/film_grain_detect.h"
 #include "vml/geometry.h"
 #include "vml/hardware_decoding.h"
@@ -51,14 +52,24 @@ bool only_the_app_adds(const FilmGrainScoring& grain) {
     return grain.scoring == GrainScoring::with && (grain.kinds & (film_grain_h274 | film_grain_h274_model_1)) != 0;
 }
 
+bool decoded_by_the_app(const VideoInfo& info) {
+    return app_decoded_codec(ascii_lower(info.codec_name)) != nullptr || only_the_app_adds(effective_film_grain(info));
+}
+
+bool only_the_app_decodes(const VideoInfo& info) {
+    const AppDecodedCodec* codec = app_decoded_codec(ascii_lower(info.codec_name));
+    return (codec != nullptr && !codec->ffmpeg_decodes) || only_the_app_adds(effective_film_grain(info));
+}
+
 int decoder_film_grain(const FilmGrainScoring& grain) {
     return grain.scoring == GrainScoring::with ? 1 : grain.scoring == GrainScoring::without ? 0 : -1;
 }
 
 GrainDecoding video_grain_decoding(const VideoInfo& info) {
     const FilmGrainScoring grain = effective_film_grain(info);
-    return grain_decoding(ascii_lower(info.codec_name) == "vvc", decoder_film_grain(grain),
-                          static_cast<int>(grain.kinds));
+    GrainDecoding decoding = grain_decoding(ascii_lower(info.codec_name) == "vvc", decoder_film_grain(grain));
+    decoding.only_decoder_adds = only_the_app_adds(grain);
+    return decoding;
 }
 
 std::vector<std::string> picture_grain_options(const VideoInfo& info) {

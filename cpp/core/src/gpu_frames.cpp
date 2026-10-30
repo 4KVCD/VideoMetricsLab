@@ -1009,9 +1009,10 @@ DecodePlan plan_decode(const VideoInfo& info, const std::optional<CropBox>& crop
     }
     const FilmGrainScoring grain = effective_film_grain(info);
     const bool software_only = only_the_app_adds(grain);
-    if (info.is_raw_stream() && !software_only) {
+    if (info.is_raw_stream() && !decoded_by_the_app(info)) {
         // A raw stream's packets have no timestamps to check the pictures
-        // by, only their count (DecodePlan::untimed); FFmpeg decodes it.
+        // by, only their count (DecodePlan::untimed); FFmpeg decodes it,
+        // but VVC, which VVdeC decodes.
         throw GpuDecodeUnavailableError("a raw stream is decoded by FFmpeg");
     }
     const int depth = depth_of(ascii_lower(info.pix_fmt));
@@ -1145,7 +1146,8 @@ std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan
         return {false, "only the software decoder adds the H.274 film grain the video is scored with"};
     }
     if (backend == software_decoder && plan.scaled() && !plan.software_only) {
-        // On the caller's one thread it is slower than FFmpeg's scaling.
+        // On the caller's one thread it is slower than FFmpeg's scaling. (A
+        // VVC video is then fed to FFmpeg by VVdeC, unscaled: grain_feed.h.)
         return {false, "the software decoder does not scale; FFmpeg scales it"};
     }
     const DecoderLibrary* library = nullptr;

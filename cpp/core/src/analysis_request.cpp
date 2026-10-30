@@ -5,9 +5,12 @@
 #include <stdexcept>
 #include <system_error>
 
+#include "vml/app_decoders.h"
 #include "vml/film_grain_scoring.h"
+#include "vml/grain_feed.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
+#include "vml/python_text.h"
 #include "vml/score_identity.h"
 #include "vml/vship.h"
 
@@ -50,6 +53,9 @@ nlohmann::json ComparisonRecipe::identity() const {
     if (!film_grain.is_null()) {
         identity["film_grain"] = film_grain;
     }
+    if (!app_decoder.is_null()) {
+        identity["app_decoder"] = app_decoder;
+    }
     return identity;
 }
 
@@ -78,6 +84,20 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
             return grain ? nlohmann::json(*grain) : nlohmann::json(nullptr);
         };
         request.recipe.film_grain = {{"source", text(source_grain)}, {"distorted", text(distorted_grain)}};
+    }
+    // A video of a codec the app's own decoder decodes (app_decoders.h) records
+    // which decoder made its pictures: the app's, or FFmpeg's where the app
+    // cannot feed FFmpeg's routes. Scores from before, all FFmpeg's, are not
+    // taken, and one FFmpeg made is never taken for the app's.
+    const auto decoder = [](const VideoInfo& info) {
+        const AppDecodedCodec* codec = app_decoded_codec(ascii_lower(info.codec_name));
+        if (codec == nullptr) {
+            return nlohmann::json(nullptr);
+        }
+        return nlohmann::json(feed_refusal(info) ? codec->ffmpeg_identity : codec->identity);
+    };
+    if (!decoder(source).is_null() || !decoder(distorted).is_null()) {
+        request.recipe.app_decoder = {{"source", decoder(source)}, {"distorted", decoder(distorted)}};
     }
     request.perceptual_backends = automatic_perceptual_backends;
     for (const auto& [key, backend] : perceptual_backends) {

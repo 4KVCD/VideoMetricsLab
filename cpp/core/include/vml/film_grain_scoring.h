@@ -49,6 +49,17 @@ std::optional<bool> film_grain_default_choice(std::string_view setting);
 // it at 8 bits only, rounded down, and GPU decoders add none.
 bool only_the_app_adds(const FilmGrainScoring& grain);
 
+// Whether the app's own decoder makes `info`'s pictures wherever a route can
+// take them from it: a codec app_decoders.h lists (VVC, by VVdeC), or a video
+// whose grain only the app adds.
+bool decoded_by_the_app(const VideoInfo& info);
+
+// Whether nothing but the app's decoder may make them: a video whose grain
+// only the app adds, or a listed codec FFmpeg does not decode. A route its
+// pictures cannot reach from the app refuses the metric (FilmGrainRefusal);
+// any other video decoded_by_the_app is decoded by FFmpeg there instead.
+bool only_the_app_decodes(const VideoInfo& info);
+
 // `grain` as a decoder is told it (grain_decoding.h's `film_grain`): 1 added,
 // 0 left out, -1 as the decoder adds it by itself (none, or not known).
 int decoder_film_grain(const FilmGrainScoring& grain);

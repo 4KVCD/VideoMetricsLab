@@ -5,7 +5,9 @@
 #include <cmath>
 #include <string_view>
 
+#include "vml/app_decoders.h"
 #include "vml/film_grain_scoring.h"
+#include "vml/geometry.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -98,6 +100,10 @@ std::vector<std::string> VideoInfo::input_options() const {
 
 std::vector<std::string> VideoInfo::decode_options() const {
     std::vector<std::string> options = input_options();
+    if (const AppDecodedCodec* codec = app_decoded_codec(ascii_lower(codec_name)); codec && !codec->ffmpeg_decodes) {
+        throw FilmGrainRefusal("FFmpeg does not decode " + codec_label(ascii_lower(codec_name)) + ", only " +
+                               std::string(codec->decoder) + " in the app does, and here FFmpeg would decode it");
+    }
     const FilmGrainScoring grain = effective_film_grain(*this);
     if (grain.scoring == GrainScoring::without) {
         options.insert(options.end(), {"-export_side_data", "film_grain"});

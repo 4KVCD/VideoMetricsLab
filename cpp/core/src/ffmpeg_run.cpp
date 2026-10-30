@@ -1736,7 +1736,7 @@ bool shares_decode(const VideoInfo& source, const VideoInfo& test, const VmafOpt
         return true;
     }
     for (const VideoInfo* video : {&source, &test}) {
-        if (only_the_app_adds(effective_film_grain(*video))) {
+        if (decoded_by_the_app(*video)) {
             return true;
         }
     }

@@ -494,8 +494,8 @@ namespace {
 // `device` (`hardware`: Direct3D 11's, VideoToolbox's on macOS), or in
 // software (FFmpeg's decoders, dav1d for AV1); its reading stops when
 // `interrupt` says so. Its film grain is added or left out as `grain` says,
-// as the scores are made: a VVC video's H.274 grain added by VVdeC, in
-// software (`vvdec_missing` set where this FFmpeg has no VVdeC, its grain
+// as the scores are made: a VVC video by VVdeC, in software (`vvdec_missing`
+// set where this FFmpeg has no VVdeC and the H.274 grain only VVdeC adds is
 // then left out). Returns nothing, with `error` set, when it cannot.
 std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::path& path, NativeDevice& device,
                                                          bool hardware, const AVIOInterruptCB& interrupt,
@@ -571,10 +571,10 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::p
             decoding->codec_name = codec->name;
             // VVdeC decodes with every thread the CPU has (thread_count 0 below).
             av_dict_set_int(&options, "parse_delay", video_compare_parse_delay(std::thread::hardware_concurrency()), 0);
-        } else {
-            vvdec_missing = true;  // FFmpeg's own decoder, its grain (other or none) left out
+        } else if (grain.only_decoder_adds) {
+            vvdec_missing = true;  // FFmpeg's own decoder, the grain only VVdeC adds left out
             export_grain = true;
-        }
+        }  // else FFmpeg's own decoder, adding or leaving out its grain as the scores have it
     }
     decoding->codec = avcodec_alloc_context3(codec);
     if (decoding->codec == nullptr) {

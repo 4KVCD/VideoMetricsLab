@@ -1492,11 +1492,11 @@ private:
         const bool cut = video.side == "distorted" || !by_time_;
         const int every = video.side == "source" && every_source_frame_ ? 1 : step_;
         bool said = false;  // native_decoder logs which decoder the video has, or why none here
-        // A video only the app's decoder makes the pictures of stays with it
-        // when the pass is made again without decoding here (the other
-        // video's decoder failed): FFmpeg would only be fed the same
-        // decoder's pictures, through a pipe.
-        const bool only_here = only_the_app_adds(effective_film_grain(video.info));
+        // A video the app's decoder makes the pictures of (VVC, or grain only
+        // it adds) stays with it when the pass is made again without decoding
+        // here (the other video's decoder failed): FFmpeg would only be fed
+        // the same decoder's pictures, through a pipe.
+        const bool only_here = decoded_by_the_app(video.info);
         if ((native_ || only_here) && !video.info.scaled_to) {
             if (const std::optional<std::string> backend = decoded_here(video.hwaccel)) {
                 said = true;

@@ -7,11 +7,15 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <tuple>
 
 #include "grain_decoding.h"
+#include "test_videos.h"
 #include "vml/analysis_request.h"
+#include "vml/app_decoders.h"
 #include "vml/film_grain_detect.h"
+#include "vml/grain_feed.h"
 #include "vml/hardware_decoding.h"
 #include "vml/results_summary.h"
 #include "vml/score_identity.h"
@@ -96,7 +100,7 @@ TEST(FilmGrainScoring, EachVideoIsScoredWithOrWithoutItsGrainAsItCanBe) {
 }
 
 // The decoders the scores are made with and Video Compare's take one rule
-// (grain_decoding.h): VVdeC for VVC's H.274 added, FFmpeg's decoders told to
+// (grain_decoding.h): VVdeC for every VVC stream, FFmpeg's decoders told to
 // leave the grain out, dav1d's switch; and FFmpeg's pictures in the viewers
 // leave out what it would not add as the scores have it.
 TEST(FilmGrainScoring, EveryDecoderAddsOrLeavesOutTheGrainAsItIsScored) {
@@ -115,13 +119,13 @@ TEST(FilmGrainScoring, EveryDecoderAddsOrLeavesOutTheGrainAsItIsScored) {
     const Case cases[] = {
         {grain_video("vvc", "yuv420p10le", h274), "libvvdec", false, true, left_out},  // FFmpeg cannot add it
         {grain_video("vvc", "yuv420p10le", model_1), "libvvdec", false, true, left_out},
-        {grain_video("vvc", "yuv420p10le", h274, false), "", true, false, left_out},
-        {grain_video("vvc", "yuv420p10le", afgs1), "", false, true, {}},  // FFmpeg's vvc adds AFGS1
+        {grain_video("vvc", "yuv420p10le", h274, false), "libvvdec", true, false, left_out},
+        {grain_video("vvc", "yuv420p10le", afgs1), "libvvdec", false, true, {}},
         {grain_video("hevc", "yuv420p", h274), "", true, false, left_out},  // forced out
         {grain_video("av1", "yuv420p10le", av1), "", false, true, {}},
         {grain_video("av1", "yuv420p10le", av1, false), "", true, false, left_out},
-        {grain_video("vvc", "yuv420p10le", 0u), "", false, true, {}},
-        {grain_video("vvc", "yuv420p", std::nullopt), "", false, true, {}},  // not known: as decoders add it
+        {grain_video("vvc", "yuv420p10le", 0u), "libvvdec", false, true, {}},
+        {grain_video("vvc", "yuv420p", std::nullopt), "libvvdec", false, true, {}},  // not known: as VVdeC adds it
     };
     for (const Case& expected : cases) {
         SCOPED_TRACE(expected.info.codec_name + " " + std::to_string(expected.info.film_grain.value_or(99)));
@@ -204,15 +208,29 @@ TEST(FilmGrainScoring, GrainNoGpuDecoderAddsOrLeavesOutIsDecodedInSoftware) {
 
 // A comparison of videos with no grain keeps the identity its saved scores
 // were filed under; one with grain records each side's, so that its scores
-// with and without the grain are saved apart.
-TEST(FilmGrainScoring, SavedScoresAreFiledUnderEachSidesGrain) {
+// with and without the grain are saved apart; and one with a VVC video records
+// which decoder made its pictures (VVdeC, or FFmpeg's where the app cannot feed
+// FFmpeg's routes), so that scores of the other are never taken.
+TEST(FilmGrainScoring, SavedScoresAreFiledUnderEachSidesGrainAndDecoder) {
     const VideoInfo plain = grain_video("hevc", "yuv420p10le", 0u);
     const auto recipe = [](const VideoInfo& source, const VideoInfo& distorted) {
         return analysis_request(VmafOptions{}, {"psnr"}, {}, CvvdpSettings{}, source, distorted).recipe.identity();
     };
     const nlohmann::json before = recipe(VideoInfo{}, VideoInfo{});
     EXPECT_FALSE(before.contains("film_grain"));
-    EXPECT_EQ(recipe(plain, grain_video("vvc", "yuv420p10le", h274, false)), before);  // as every run scored it
+    EXPECT_FALSE(before.contains("app_decoder"));
+    EXPECT_EQ(recipe(plain, grain_video("hevc", "yuv420p10le", h274, false)), before);  // as every run scored it
+    const VideoInfo vvc = grain_video("vvc", "yuv420p10le", h274, false);
+    const std::string_view decoder = feed_refusal(vvc) ? score_identity::vvc_ffmpeg : score_identity::vvc_vvdec;
+    const nlohmann::json vvdec{{"source", nullptr}, {"distorted", std::string(decoder)}};
+    nlohmann::json vvc_without = recipe(plain, vvc);
+    EXPECT_EQ(vvc_without.at("app_decoder"), vvdec);
+    {
+        test::ScopedVariable by_time("VML_FRAME_PAIRING", "timestamp");  // FFmpeg's: not fed
+        EXPECT_EQ(recipe(plain, vvc).at("app_decoder").at("distorted"), std::string(score_identity::vvc_ffmpeg));
+    }
+    vvc_without.erase("app_decoder");
+    EXPECT_EQ(vvc_without, before);
     const nlohmann::json with = recipe(plain, grain_video("vvc", "yuv420p10le", h274));
     EXPECT_EQ(with.at("film_grain"),
               (nlohmann::json{{"source", nullptr}, {"distorted", std::string(score_identity::film_grain_h274)}}));
@@ -220,7 +238,32 @@ TEST(FilmGrainScoring, SavedScoresAreFiledUnderEachSidesGrain) {
               (nlohmann::json{{"source", std::string(score_identity::film_grain_left_out)}, {"distorted", nullptr}}));
     nlohmann::json without_grain = with;
     without_grain.erase("film_grain");
+    without_grain.erase("app_decoder");
     EXPECT_EQ(without_grain, before);  // nothing else changes
+}
+
+// VVdeC makes every VVC video's pictures wherever a route can take them from
+// the app; a video of another codec only where its H.274 grain is added.
+TEST(FilmGrainScoring, TheAppDecodesEveryVvcVideoAndGrainOnlyItAdds) {
+    EXPECT_TRUE(decoded_by_the_app(grain_video("vvc", "yuv420p10le", 0u)));
+    EXPECT_TRUE(decoded_by_the_app(grain_video("vvc", "yuv420p", std::nullopt)));
+    EXPECT_TRUE(decoded_by_the_app(grain_video("vvc", "yuv420p10le", h274, false)));
+    EXPECT_TRUE(decoded_by_the_app(grain_video("vvc", "yuv420p10le", afgs1)));
+    EXPECT_FALSE(decoded_by_the_app(grain_video("hevc", "yuv420p10le", 0u)));
+    EXPECT_FALSE(decoded_by_the_app(grain_video("av1", "yuv420p10le", av1)));
+    // FFmpeg may decode a VVC video where the app cannot feed a route; not one
+    // whose H.274 grain only the app adds.
+    EXPECT_FALSE(only_the_app_decodes(grain_video("vvc", "yuv420p10le", 0u)));
+    EXPECT_FALSE(only_the_app_decodes(grain_video("vvc", "yuv420p10le", h274, false)));
+    EXPECT_TRUE(only_the_app_decodes(grain_video("vvc", "yuv420p10le", h274)));
+    EXPECT_FALSE(only_the_app_decodes(grain_video("hevc", "yuv420p10le", 0u)));
+    for (const AppDecodedCodec& codec : app_decoded_codecs) {  // each decoder's scores filed apart
+        EXPECT_FALSE(codec.identity.empty() || codec.ffmpeg_identity.empty()) << codec.codec;
+        EXPECT_NE(codec.identity, codec.ffmpeg_identity) << codec.codec;
+    }
+    // Video Compare without VVdeC leaves out only the grain VVdeC alone adds.
+    EXPECT_TRUE(video_grain_decoding(grain_video("vvc", "yuv420p10le", h274)).only_decoder_adds);
+    EXPECT_FALSE(video_grain_decoding(grain_video("vvc", "yuv420p10le", afgs1)).only_decoder_adds);
 }
 
 }  // namespace

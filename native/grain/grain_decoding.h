@@ -18,16 +18,22 @@ struct GrainDecoding {
     bool export_grain = false;
     // dav1d adds AV1's grain (Dav1dSettings::apply_grain).
     bool apply_grain = true;
+    // The grain added is one only `decoder` adds (H.274's, by VVdeC): an
+    // FFmpeg without that decoder leaves it out rather than add it otherwise.
+    // Set by the app (film_grain_scoring.h's video_grain_decoding).
+    bool only_decoder_adds = false;
 };
 
 // The decoding of a video (`vvc`: a VVC stream) whose grain is `film_grain`:
 // 1 added, 0 left out, -1 as the decoder adds it by itself (the grain not
-// known); `kinds` is what the stream describes.
-inline GrainDecoding grain_decoding(bool vvc, int film_grain, int kinds) {
+// known).
+inline GrainDecoding grain_decoding(bool vvc, int film_grain) {
     GrainDecoding decoding;
-    if (vvc && film_grain == 1 && (kinds & (GRAIN_H274 | GRAIN_H274_MODEL_1)) != 0) {
-        // VVdeC adds H.274's grain, of either model at any depth; FFmpeg's vvc
-        // adds model 0 at 8 bits only, rounded down.
+    if (vvc) {
+        // VVdeC decodes every VVC stream. It adds H.274's
+        // grain, of either model at any depth, where FFmpeg's vvc adds model 0
+        // at 8 bits only, rounded down; and FFmpeg's vvc fails on streams
+        // VVdeC decodes (H.274 model 1 at 10 bits: "Invalid data found").
         decoding.decoder = "libvvdec";
     }
     decoding.export_grain = film_grain == 0;

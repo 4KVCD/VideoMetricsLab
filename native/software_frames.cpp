@@ -631,7 +631,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     }
     d->slots.resize(params->pool);
     for (int slot = 0; slot < params->pool; slot++) d->free_slots.push_back(slot);
-    const GrainDecoding grain = grain_decoding(params->codec == CODEC_VVC, params->film_grain, params->film_grain_kinds);
+    const GrainDecoding grain = grain_decoding(params->codec == CODEC_VVC, params->film_grain);
     if (d->av1) {
         Dav1dSettings settings{};
         g_dav1d.default_settings(&settings);

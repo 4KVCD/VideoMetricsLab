@@ -227,7 +227,9 @@ TEST(GpuFrames, DecodesTheVideosThePythonAppDecodesItself) {
 
 // A video scored with H.274's film grain, which only the software decoder
 // adds as it should, is decoded by it alone, which then also decodes it as
-// a raw stream and scales it: FFmpeg could not decode it instead.
+// a raw stream and scales it: FFmpeg could not decode it instead. Every VVC
+// video's raw stream is decoded by VVdeC too; another codec's is left to
+// FFmpeg, and so is scaling.
 TEST(GpuFrames, OnlyTheSoftwareDecoderAddsH274GrainAndThenDecodesRawStreamsAndScales) {
     VideoInfo info;
     info.path = "encode.266";
@@ -241,18 +243,32 @@ TEST(GpuFrames, OnlyTheSoftwareDecoderAddsH274GrainAndThenDecodesRawStreamsAndSc
     EXPECT_TRUE(raw.software_only);
     EXPECT_TRUE(raw.untimed);
     EXPECT_EQ(raw.film_grain, 1);
-    info.with_film_grain = false;  // FFmpeg decodes the raw stream, as before
-    EXPECT_THROW(plan_decode(info, std::nullopt), GpuDecodeUnavailableError);
+    info.with_film_grain = false;  // VVdeC decodes the raw stream still, the grain left out
+    const DecodePlan raw_without = plan_decode(info, std::nullopt);
+    EXPECT_FALSE(raw_without.software_only);
+    EXPECT_TRUE(raw_without.untimed);
+    EXPECT_EQ(raw_without.film_grain, 0);
     info.format_name = "matroska,webm";
     const std::string not_scaled = "the software decoder does not scale; FFmpeg scales it";
     const DecodePlan without = plan_decode(info, std::nullopt, 0, false, std::pair(1280, 720));
     EXPECT_FALSE(without.software_only || without.untimed);
-    EXPECT_EQ(without.film_grain, 0);
+    // Scaled by FFmpeg as before (VVdeC's pictures fed to it: grain_feed.h).
     EXPECT_EQ(decoder_supports(0, without, software_decoder).second, not_scaled);
     info.with_film_grain = true;
     EXPECT_NE(decoder_supports(0, plan_decode(info, std::nullopt, 0, false, std::pair(1280, 720)), software_decoder)
                   .second,
               not_scaled);
+    // HEVC: its raw stream decoded and its scaling made by FFmpeg.
+    VideoInfo hevc = info;
+    hevc.codec_name = "hevc";
+    hevc.film_grain.reset();
+    hevc.with_film_grain.reset();
+    EXPECT_EQ(decoder_supports(0, plan_decode(hevc, std::nullopt, 0, false, std::pair(1280, 720)), software_decoder)
+                  .second,
+              not_scaled);
+    hevc.path = "encode.hevc";
+    hevc.format_name = "hevc";
+    EXPECT_THROW(plan_decode(hevc, std::nullopt), GpuDecodeUnavailableError);
 }
 
 // The decoder's pictures must match the packets fed: in timestamp order,
