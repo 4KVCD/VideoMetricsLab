@@ -8,7 +8,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <span>
 #include <string>
 #include <utility>
@@ -53,6 +52,9 @@ public:
     // The bytes of the whole frame.
     std::size_t bytes() const { return bytes_; }
 
+    // The luma of such a frame at `frame`, or of its luma alone.
+    Plane luma(const std::uint8_t* frame) const { return Plane{frame, strides_[0]}; }
+
     // The planes of such a frame at `frame`.
     FramePlanes planes(const std::uint8_t* frame) const {
         return {Plane{frame + offsets_[0], strides_[0]}, Plane{frame + offsets_[1], strides_[1]},
@@ -64,18 +66,6 @@ private:
     std::array<std::ptrdiff_t, 3> strides_{};
     std::size_t bytes_ = 0;
 };
-
-// Copies `rows` rows of `row_bytes` from `plane` to `target`, rows packed.
-inline void pack_plane(Plane plane, std::size_t rows, std::size_t row_bytes, std::uint8_t* target) {
-    if (plane.stride == static_cast<std::ptrdiff_t>(row_bytes)) {
-        std::memcpy(target, plane.data, rows * row_bytes);
-        return;
-    }
-    for (std::size_t row = 0; row < rows; ++row) {
-        std::memcpy(target + row * row_bytes, plane.data + static_cast<std::ptrdiff_t>(row) * plane.stride,
-                    row_bytes);
-    }
-}
 
 class PairScorer {
 public:

@@ -15,13 +15,13 @@
 
 #include "vml/app_log.h"
 #include "vml/gpu_frames.h"
+#include "vml/host_frames.h"
 #include "vml/isolated.h"
 #include "vml/model_select.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/temp_files.h"
-#include "vml/threads.h"
 
 namespace vml {
 
@@ -768,6 +768,8 @@ void V1Scorer::add(std::span<const std::uint8_t> reference, std::span<const std:
     add_planes(s.packed.planes(reference.data()), s.packed.planes(distorted.data()));
 }
 
+bool V1Scorer::scores_next() const { return state_->count % state_->step == 0; }
+
 void V1Scorer::add_planes(const FramePlanes& reference, const FramePlanes& distorted) {
     State& s = *state_;
     const bool score = s.count % s.step == 0;
@@ -1154,6 +1156,13 @@ void MultiScorer::add_planes(const FramePlanes& reference, const FramePlanes& di
     }
 }
 
+bool MultiScorer::reads_next_distorted() const {
+    if (cuda_) {
+        return true;
+    }
+    return vulkan_ ? vulkan_->scores_next() : v1_->scores_next();
+}
+
 void MultiScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot) {
     // VMAF v0.6.1 and NEG read only the luma planes, copied on the GPU.
     const auto copy_reference = [&](std::uint64_t address, std::int64_t pitch) {
@@ -1197,55 +1206,6 @@ PairScores MultiScorer::finish() {
     }
     return result;
 }
-
-namespace {
-
-// A video's pictures for scorers that read them in system memory: where the
-// software decoder holds them (GpuFrameStream::gives_planes), or downloaded
-// into a buffer of this one's. For NVIDIA's decoder the buffer is
-// page-locked while this lives (GpuFrameStream::pin), and unlocked before it
-// and the stream go: the GPU then copies a frame into it by itself, where
-// into pageable memory the driver copies it again on the CPU (a 4K 10-bit
-// frame: 5.3 ms).
-class HostFrames {
-public:
-    HostFrames(GpuFrameStream& stream, const PackedFrame& packed) : stream_(stream), packed_(packed) {
-        if (stream.gives_planes()) {
-            return;
-        }
-        buffer_.resize(packed.bytes());
-        pinned_ = stream.backend() == "nvidia" && stream.pin(buffer_.data(), buffer_.size());
-    }
-    ~HostFrames() {
-        if (pinned_) {
-            stream_.unpin(buffer_.data());
-        }
-    }
-    HostFrames(const HostFrames&) = delete;
-    HostFrames& operator=(const HostFrames&) = delete;
-
-    // Whether the pictures are downloaded, rather than read where they are.
-    bool downloads() const { return !buffer_.empty(); }
-
-    // The planes of the slot's picture, downloaded first where it is not
-    // read in place. They are valid until the slot is given back, or the
-    // next take.
-    FramePlanes take(int slot) {
-        if (!downloads()) {
-            return stream_.slot_planes(slot);
-        }
-        stream_.download(slot, buffer_.data());
-        return packed_.planes(buffer_.data());
-    }
-
-private:
-    GpuFrameStream& stream_;
-    PackedFrame packed_;
-    std::vector<std::uint8_t> buffer_;
-    bool pinned_ = false;
-};
-
-}  // namespace
 
 PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                             const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
@@ -1328,24 +1288,19 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                     [&](const DecodePlan& decoded) { return decoded.frame_bytes() != scorer->frame_bytes(); })) {
         throw VmafV1Error("the decoders' frames are not the size the scorers take");
     }
-    // After the streams, so that they go first.
-    std::optional<HostFrames> source_frames;
-    std::optional<HostFrames> test_frames;
-    if (!on_gpu) {
-        const PackedFrame packed(plan.width, plan.height, plan.bit_depth);
-        source_frames.emplace(reference, packed);
-        test_frames.emplace(test, packed);
-    }
     // The CPU's metrics, which read the same frames' luma.
     std::optional<CpuScorer> beside;
     start_beside(beside, plan, n_subsample);
     if (beside && beside->frame_bytes() != scorer->frame_bytes()) {
         throw VmafV1Error("the CPU's metrics take frames of another size than the GPU's");
     }
-    // Last, so that it goes first: its jobs use what comes before.
-    std::optional<SideThread> side;
+    // The pictures through system memory, the software decoder's read where
+    // it holds them (a 4K 10-bit copy less per picture: 3.4 ms). Last, so
+    // that it goes first: it unlocks memory with the streams, and its side
+    // thread's jobs use the scorers.
+    std::optional<HostPairs> pairs;
     if (!on_gpu) {
-        side.emplace();
+        pairs.emplace(reference, plans[1], test, plans[0]);
     }
     test.start();
     reference.start();
@@ -1361,30 +1316,12 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                 scorer->add_decoded(reference, reference_slot, test, test_slot);
                 return;
             }
-            // The software decoder's pictures are read where it holds them
-            // (a 4K 10-bit copy less per picture: 3.4 ms). The others are
-            // downloaded, the two at the same time where the decoders allow
-            // (downloads_at_once), the source's on the side thread; and the
-            // CPU's metrics copy out their luma while the GPU's scorers take
-            // them: one after the other on this one thread they took 15.5 ms
-            // per 4K 10-bit pair.
-            FramePlanes source_planes;
-            FramePlanes test_planes;
-            const auto source_frame = [&] { source_planes = source_frames->take(reference_slot); };
-            const auto test_frame = [&] { test_planes = test_frames->take(test_slot); };
-            if (source_frames->downloads() && test_frames->downloads() &&
-                downloads_at_once(source_backend, test_backend)) {
-                side->both(source_frame, test_frame);
-            } else {
-                source_frame();
-                test_frame();
-            }
-            const auto gpu = [&] { scorer->add_planes(source_planes, test_planes); };
-            if (beside) {
-                side->both([&] { beside->add_planes(source_planes, test_planes); }, gpu);
-            } else {
-                gpu();
-            }
+            // The CPU's metrics copy out their luma while the GPU's scorers
+            // take the frames: one after the other on this one thread, with
+            // the downloads, they took 15.5 ms per 4K 10-bit pair. The test
+            // video's picture is taken only where something reads it.
+            pairs->score(reference_slot, test_slot, *scorer, beside ? &*beside : nullptr,
+                         beside || scorer->reads_next_distorted());
         },
         on_progress, cancel, releases);
     PairScores scores = scorer->finish();

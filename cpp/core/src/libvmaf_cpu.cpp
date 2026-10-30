@@ -210,8 +210,13 @@ void CpuScorer::add_planes(const FramePlanes& reference, const FramePlanes& dist
         library_.picture_unref(&reference_picture);
         throw;
     }
-    fill(reference_picture, reference[0]);
-    fill(distorted_picture, distorted[0]);
+    try {
+        // The two at the same time, the source's on the side thread.
+        side_.both([&] { fill(reference_picture, reference[0]); }, [&] { fill(distorted_picture, distorted[0]); });
+    } catch (...) {
+        give_back(reference_picture, distorted_picture);
+        throw;
+    }
     score(reference_picture, distorted_picture);
 }
 
@@ -247,19 +252,29 @@ void CpuScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFr
 
 void CpuScorer::download_both(VmafPicture& reference_picture, GpuFrameStream& reference, int reference_slot,
                               VmafPicture& distorted_picture, GpuFrameStream& test, int test_slot) {
-    if (!downloads_at_once(reference.backend(), test.backend())) {
-        download(reference_picture, reference, reference_slot, 0);
-        download(distorted_picture, test, test_slot, 1);
-        return;
+    const auto take_reference = [&] { download(reference_picture, reference, reference_slot, 0); };
+    const auto take_test = [&] { download(distorted_picture, test, test_slot, 1); };
+    if (downloads_at_once(reference.backend(), test.backend())) {
+        // The two decoders write their pictures at the same time, the
+        // source's on the side thread: one after the other they took about
+        // 3 ms each per 4K 10-bit pair, on the one thread that feeds the
+        // scorers.
+        side_.both(take_reference, take_test);
+    } else if (reference.gives_planes() || test.gives_planes()) {
+        // A picture copied from where the software decoder holds it calls
+        // only on that decoder, so it is copied on the side thread beside the
+        // other decoder's download, which stays on this thread, as it always
+        // was (Intel's and AMD's are not known to download from another).
+        if (reference.gives_planes()) {
+            side_.both(take_reference, take_test);
+        } else {
+            side_.both(take_test, take_reference);
+        }
+    } else {
+        take_reference();
+        take_test();
     }
-    // The two decoders write their pictures at the same time, the source's
-    // on the side thread: one after the other they took about 3 ms each per
-    // 4K 10-bit pair, on the one thread that feeds the scorers.
-    side_.both([&] { download(reference_picture, reference, reference_slot, 0); },
-               [&] { download(distorted_picture, test, test_slot, 1); });
 }
-
-void CpuScorer::copy_packed(Plane plane, std::uint8_t* target) const { pack_plane(plane, rows_, row_bytes_, target); }
 
 void CpuScorer::download(VmafPicture& picture, GpuFrameStream& stream, int slot, std::size_t which) {
     void* const address = picture.data[0];
@@ -272,6 +287,8 @@ void CpuScorer::download(VmafPicture& picture, GpuFrameStream& stream, int slot,
             }
         }
         stream.download_planes(slot, {address, nullptr, nullptr}, {static_cast<std::int64_t>(pitch), 0, 0});
+    } else if (stream.gives_planes()) {
+        fill(picture, stream.slot_planes(slot)[0]);  // one copy, whatever the picture's row spacing
     } else if (pitch == row_bytes_) {
         stream.download(slot, address);
     } else {

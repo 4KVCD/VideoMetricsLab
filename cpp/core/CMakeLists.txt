@@ -22,6 +22,7 @@ add_library(vml_core
     src/gpu_vmaf.cpp
     src/grain_feed.cpp
     src/hardware_decoding.cpp
+    src/host_frames.cpp
     src/isolated.cpp
     src/job_runner.cpp
     src/libvmaf.cpp

@@ -17,6 +17,7 @@
 #include "vml/frame_sync.h"
 #include "vml/frame_sync_by_time.h"
 #include "vml/gpu_frames.h"
+#include "vml/host_frames.h"
 #include "vml/isolated.h"
 #include "vml/libvmaf_cpu.h"
 #include "vml/number_format.h"
@@ -974,6 +975,19 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     // memory NVIDIA's decoder page-locked for it.
     std::optional<CpuScorer> beside;
     start_beside(beside, plan, n_subsample);
+    // Without the CPU's metrics, where neither video's picture needs a copy
+    // on the CPU of its own to reach the engine (the software decoder's read
+    // where it holds them, NVIDIA's downloaded by its GPU into page-locked
+    // memory), the engine copies them on its copy threads. Pictures of other
+    // decoders are written straight into the engine's memory instead. Last,
+    // so that it goes first: it unlocks memory with the streams.
+    const auto as_planes = [](const GpuFrameStream& stream) {
+        return stream.gives_planes() || stream.backend() == "nvidia";
+    };
+    std::optional<HostPairs> pairs;
+    if (!shared && !beside && as_planes(reference) && as_planes(test)) {
+        pairs.emplace(reference, plans[1], test, plans[0]);
+    }
     test.start();
     reference.start();
     score_frame_pairs(
@@ -981,12 +995,10 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
         [&](int test_slot, int reference_slot) {
             if (beside && !shared) {
                 // Each luma plane written out once, into the CPU's picture,
-                // and copied from there into the GPU's upload.
+                // and read from there by the engine.
                 beside->add_decoded(reference, reference_slot, test, test_slot,
                                     [&](Plane source_plane, Plane test_plane) {
-                                        scorer->add_decoded(
-                                            [&](std::uint8_t* plane) { beside->copy_packed(source_plane, plane); },
-                                            [&](std::uint8_t* plane) { beside->copy_packed(test_plane, plane); });
+                                        scorer->add_planes(FramePlanes{source_plane}, FramePlanes{test_plane});
                                     });
                 return;
             }
@@ -999,6 +1011,9 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                         reference.copy_luma(reference_slot, address, pitch);
                     },
                     [&](std::uint64_t address, std::int64_t pitch) { test.copy_luma(test_slot, address, pitch); });
+            } else if (pairs) {
+                // A frame that is not scored needs only the source's (motion).
+                pairs->score(reference_slot, test_slot, *scorer, nullptr, scorer->scores_next());
             } else {
                 scorer->add_decoded([&](std::uint8_t* plane) { reference.download(reference_slot, plane); },
                                     [&](std::uint8_t* plane) { test.download(test_slot, plane); });

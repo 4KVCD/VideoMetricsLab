@@ -113,6 +113,18 @@ std::uint64_t luma_address(const VmafPicture& picture) {
     return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(picture.data[0]));
 }
 
+// Copies `rows` rows of `row_bytes` from `plane` to `target`, rows packed.
+void pack_plane(Plane plane, std::size_t rows, std::size_t row_bytes, std::uint8_t* target) {
+    if (plane.stride == static_cast<std::ptrdiff_t>(row_bytes)) {
+        std::memcpy(target, plane.data, rows * row_bytes);
+        return;
+    }
+    for (std::size_t row = 0; row < rows; ++row) {
+        std::memcpy(target + row * row_bytes, plane.data + static_cast<std::ptrdiff_t>(row) * plane.stride,
+                    row_bytes);
+    }
+}
+
 }  // namespace
 
 // Copies frames' luma from system memory into libvmaf's pictures on the GPU,

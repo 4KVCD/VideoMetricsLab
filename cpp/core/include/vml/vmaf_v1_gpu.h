@@ -98,6 +98,11 @@ public:
     void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) override;
     void add_planes(const FramePlanes& reference, const FramePlanes& distorted) override;
 
+    // Whether the next pair given is scored (every n_subsample-th): the
+    // distorted frame of one that is not is not read (motion reads the
+    // source's alone), and may be given as no planes.
+    bool scores_next() const;
+
     // Scores one more pair held by the decoders, for a scorer made with
     // `shared`. The CPU copies none of it.
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
@@ -166,6 +171,11 @@ public:
     std::size_t frame_bytes() const override;
     void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) override;
     void add_planes(const FramePlanes& reference, const FramePlanes& distorted) override;
+
+    // Whether a scorer reads the next pair's distorted frame: only on a
+    // scored frame (every n_subsample-th), but libvmaf's CUDA code takes
+    // every one. One not read may be given as no planes.
+    bool reads_next_distorted() const;
 
     // Scores one more pair held by the decoders, without a copy through the
     // CPU (for scorers made with `shared`).

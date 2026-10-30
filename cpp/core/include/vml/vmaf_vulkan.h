@@ -213,6 +213,11 @@ public:
     void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) override;
     void add_planes(const FramePlanes& reference, const FramePlanes& distorted) override;
 
+    // Whether the next pair given is scored (every n_subsample-th): the
+    // distorted frame of one that is not is not read, and may be given as no
+    // planes.
+    bool scores_next() const { return count_ % step_ == 0; }
+
     // Scores one more pair that a decoder writes in itself: `reference` and
     // `distorted` are each called with the address to write a luma plane to,
     // its rows packed, and return once it is written. A frame that is not

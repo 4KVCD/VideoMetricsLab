@@ -80,22 +80,22 @@ public:
     // Scores one more pair held by the app's decoders, which decode luma
     // only. NVIDIA's decoder copies the luma into libvmaf's picture itself,
     // with the picture's row spacing, into memory it page-locks the first
-    // time each of the pool's pictures comes round. The others write it
-    // straight into the picture when the picture's rows are packed, as
-    // libvmaf lays them out at most widths (multiples of 32 samples), and
-    // otherwise into a buffer that is then copied in. Where the decoders
-    // allow (downloads_at_once), the two write at the same time, the
-    // source's from a thread of the scorer's.
+    // time each of the pool's pictures comes round. The software decoder's
+    // is copied in from where the decoder holds it (GpuFrameStream::
+    // slot_planes). The others write it straight into the picture when the
+    // picture's rows are packed, as libvmaf lays them out at most widths
+    // (multiples of 32 samples), and otherwise into a buffer that is then
+    // copied in. Where the decoders allow (downloads_at_once), or one of the
+    // two is copied from where the software decoder holds it, the two come
+    // at the same time, the source's on a thread of the scorer's.
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
 
     // add_decoded, giving `also` the pair's two luma planes (the source's,
     // then the test video's) before they are scored: another scorer of the
-    // same pair copies them (copy_packed) rather than having the decoders
-    // write them out again.
+    // same pair reads them (add_planes) rather than having the decoders write
+    // them out again.
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot,
                      const std::function<void(Plane, Plane)>& also);
-    // Copies `plane` to `target` with its rows packed (luma_bytes() in all).
-    void copy_packed(Plane plane, std::uint8_t* target) const;
 
     // The frames scored (every n_subsample-th) and each metric's scores, in
     // the order the metrics were given, rounded as the files the app reads
@@ -107,8 +107,7 @@ private:
     void give_back(VmafPicture& reference, VmafPicture& distorted);
     void score(VmafPicture& reference, VmafPicture& distorted);
     void download(VmafPicture& picture, GpuFrameStream& stream, int slot, std::size_t which);
-    // Both pictures of a pair, at the same time where the decoders allow
-    // (downloads_at_once).
+    // Both pictures of a pair, at the same time where add_decoded says.
     void download_both(VmafPicture& reference_picture, GpuFrameStream& reference, int reference_slot,
                        VmafPicture& distorted_picture, GpuFrameStream& test, int test_slot);
     // Copies a luma plane into the picture.
@@ -131,7 +130,7 @@ private:
     // A decoder's plane, written packed for a picture whose rows are padded:
     // the source's and the test video's.
     std::vector<std::uint8_t> staging_[2];
-    SideThread side_;  // downloads the source's picture beside the test video's
+    SideThread side_;  // takes in the source's picture beside the test video's
 };
 
 // Whether the bundled libvmaf-fast has the xpsnr extractor with the "psnr"
