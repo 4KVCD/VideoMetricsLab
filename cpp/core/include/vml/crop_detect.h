@@ -8,6 +8,8 @@
 // run one after another; the two videos of a comparison are detected at the
 // same time. The answer for a file is kept, in this process and between
 // sessions (black_bars.json beside the saved scores, the Python app's file).
+// A video of a codec the app's own decoder decodes (app_decoders.h: VVC, by
+// VVdeC) is sampled from that decoder's pictures (samples_through_the_app).
 #pragma once
 
 #include <filesystem>
@@ -51,6 +53,15 @@ void forget_crop_answers();
 // through a sample.
 CropBox detect_crop(const std::string& ffmpeg, const VideoInfo& info, const CancelToken& cancel,
                     const std::optional<std::string>& hwaccel, const std::string& scale_algorithm);
+
+// Whether a video's black bars are sampled from the pictures the app's own
+// decoder makes, fed to FFmpeg's cropdetect (grain_feed.h), rather than from
+// FFmpeg decoding the file: a codec app_decoders.h lists (FFmpeg's vvc fails
+// on VVenC's --fga 3 encodes at 10 bits, so their bars were not found). Not a
+// raw stream (sampled from bytes, not seeked to). A window the app cannot
+// feed is sampled by FFmpeg where FFmpeg decodes the codec, and fails where
+// it does not.
+bool samples_through_the_app(const VideoInfo& info);
 
 // Both videos' boxes, detected at the same time.
 std::pair<CropBox, CropBox> detect_pair(const std::string& ffmpeg, const VideoInfo& source,

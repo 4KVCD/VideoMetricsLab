@@ -248,22 +248,32 @@ int stuck_decoders();
 // to pictures before the cut; FFmpeg's decoder drops them, and reads only the
 // parameter sets in their packets (H.265's NoRaslOutputFlag). They come
 // before the first picture that is neither RASL nor RADL, in decode order.
-// Only RASL pictures refer to them. Other codecs' packets are all fed.
+// Only RASL pictures refer to them. A VVC stream that starts at a CRA picture
+// (VVenC's encodes are open-GOP: every seek starts at one) has them too, and
+// they may carry adaptation parameter sets later pictures use, so they are
+// given to VVdeC, which drops them as FFmpeg's decoding does (H.266's
+// NoOutputBeforeRecoveryFlag), marked to give no picture (hide); a VVC
+// stream that starts at a GDR picture is refused. Other codecs' packets are
+// all fed.
 class LeadingPictures {
 public:
-    enum class Verdict { feed, skip, refuse };
+    enum class Verdict { feed, skip, hide, refuse };
 
-    explicit LeadingPictures(std::string_view codec) : open_(codec == "hevc") {}
+    explicit LeadingPictures(std::string_view codec)
+        : vvc_(codec == "vvc"), open_(codec == "hevc" || codec == "vvc") {}
 
-    // Decides the next packet (Annex B, in decode order): skip one of the
-    // first picture's RASL pictures; refuse one that carries parameter sets
-    // too, which FFmpeg's decoder would read (FFmpeg then decodes the video).
+    // Decides the next packet (Annex B, in decode order): skip one of an HEVC
+    // stream's first picture's RASL pictures, hide one of a VVC stream's;
+    // refuse an HEVC one that carries parameter sets too, which FFmpeg's
+    // decoder would read, and a VVC stream's first GDR picture (FFmpeg then
+    // decodes the video).
     Verdict take(const std::vector<std::uint8_t>& packet);
 
-    // How many packets take() has said to skip.
+    // How many packets take() has said to skip or hide.
     int skipped() const { return skipped_; }
 
 private:
+    bool vvc_;
     bool open_;  // still deciding: the video's first picture, or its leading pictures
     bool first_ = true;
     int skipped_ = 0;
@@ -328,9 +338,13 @@ private:
 // Where it cannot, it decodes without handing over, and handover() says so.
 class GpuFrameStream {
 public:
-    // Throws GpuDecodeUnavailableError when the decoder cannot start.
+    // With `start` (seconds), the packets are read from there, as FFmpeg's
+    // -ss reads them: from the keyframe at or before it, timestamped from it
+    // (0 at `start`, the keyframe's below). Throws GpuDecodeUnavailableError
+    // when the decoder cannot start.
     GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, int device, int pool, std::string_view backend,
-                   const std::string& ffmpeg, const std::string& ffprobe, bool handover = false);
+                   const std::string& ffmpeg, const std::string& ffprobe, bool handover = false,
+                   std::optional<double> start = std::nullopt);
     ~GpuFrameStream();
     GpuFrameStream(const GpuFrameStream&) = delete;
     GpuFrameStream& operator=(const GpuFrameStream&) = delete;

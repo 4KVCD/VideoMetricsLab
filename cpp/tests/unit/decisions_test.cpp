@@ -10,6 +10,7 @@
 
 #include "reference.h"
 #include "vml/crop_detect.h"
+#include "vml/film_grain_detect.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
 #include "vml/hardware_decoding.h"
@@ -319,6 +320,25 @@ TEST(Decisions, BlackBarBoxesCoverTheSamePictureAsThePythonAppMakesThem) {
         EXPECT_EQ(shared_source, box(item["shared"][0])) << item.dump();
         EXPECT_EQ(shared_test, box(item["shared"][1])) << item.dump();
     }
+}
+
+// The black bars of a video whose codec the app's own decoder decodes
+// (app_decoders.h: VVC) are sampled from that decoder's pictures, grain or
+// not; every other video's as before, by FFmpeg, and so a raw stream's.
+TEST(Decisions, VideosTheAppDecodesAreSampledFromTheAppsDecoder) {
+    VideoInfo vvc;
+    vvc.codec_name = "vvc";
+    vvc.format_name = "matroska,webm";
+    vvc.pix_fmt = "yuv420p10le";
+    EXPECT_TRUE(samples_through_the_app(vvc));
+    vvc.film_grain = film_grain_h274_model_1;  // VVenC's --fga 3, which FFmpeg's vvc fails on
+    EXPECT_TRUE(samples_through_the_app(vvc));
+    VideoInfo other = vvc;
+    other.codec_name = "hevc";
+    EXPECT_FALSE(samples_through_the_app(other));
+    other = vvc;
+    other.format_name = "vvc";  // a raw stream, sampled from its bytes
+    EXPECT_FALSE(samples_through_the_app(other));
 }
 
 // A model= value with the resource folder written as "<resources>/", as

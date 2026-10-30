@@ -103,6 +103,24 @@ TEST(GrainFeed, WhatRawvideoCannotCarryAsTheFileIsIsNotFed) {
     EXPECT_TRUE(feed_refusal(scaled).has_value());
 }
 
+// A black-bar window's fed pictures are those FFmpeg's -ss and -t give
+// cropdetect: from the window's start (0; the keyframe's pictures before it,
+// stamped below 0, skipped) up to and including the first at or past its
+// length, which ends it.
+TEST(GrainFeed, AWindowFeedsThePicturesFfmpegsSeekAndDurationGive) {
+    using Take = WindowCut::Take;
+    const WindowCut cut(Rational{1, 1000}, 0.5);  // a 1 ms time base, a half-second window
+    EXPECT_EQ(cut.take(-42), Take::skip);
+    EXPECT_EQ(cut.take(-1), Take::skip);
+    EXPECT_EQ(cut.take(0), Take::feed);
+    EXPECT_EQ(cut.take(458), Take::feed);
+    EXPECT_EQ(cut.take(499), Take::feed);
+    EXPECT_EQ(cut.take(500), Take::feed_and_end);
+    const WindowCut film(Rational{1001, 24000}, 1.0);  // 23.976 fps frame numbers
+    EXPECT_EQ(film.take(23), Take::feed);               // 0.959 s
+    EXPECT_EQ(film.take(24), Take::feed_and_end);       // 1.001 s
+}
+
 // Each route's command has a fed video's input in its file's place, and no
 // GPU decoding for it; the other video's input and everything after are as
 // for the files.

@@ -24,9 +24,12 @@
 #include <tuple>
 #include <vector>
 
+#include "vml/app_decoders.h"
 #include "vml/app_log.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
+#include "vml/grain_feed.h"
 #include "vml/hardware_decoding.h"
 #include "vml/hevc.h"
 #include "vml/number_format.h"
@@ -553,17 +556,29 @@ struct DetectionOutput {
     std::string lines;
 };
 
-// Runs one detection command to its end, holding a decoder slot, for at
-// most `limit` of running (paused time not counted).
-DetectionOutput launch_window(const std::vector<std::string>& command, const CancelToken& cancel,
-                              std::chrono::seconds limit) {
-    while (!decoder_slots.try_acquire_for(100ms)) {
-        cancel.throw_if_cancelled();
+// A detection decoder slot (decoder_slots), held while this lives. Waiting
+// for one ends with a Cancel (Cancelled), and one that comes as the run is
+// cancelled is not kept.
+class DecoderSlot {
+public:
+    explicit DecoderSlot(const CancelToken& cancel) {
+        while (!decoder_slots.try_acquire_for(100ms)) {
+            cancel.throw_if_cancelled();
+        }
+        if (cancel.cancelled()) {
+            decoder_slots.release();
+            cancel.throw_if_cancelled();
+        }
     }
-    struct SlotRelease {
-        ~SlotRelease() { decoder_slots.release(); }
-    } release_slot;
-    cancel.throw_if_cancelled();  // cancelled as the slot came: nothing logged or started
+    ~DecoderSlot() { decoder_slots.release(); }
+    DecoderSlot(const DecoderSlot&) = delete;
+    DecoderSlot& operator=(const DecoderSlot&) = delete;
+};
+
+// Runs one detection command to its end, a decoder slot already held, for
+// at most `limit` of running (paused time not counted).
+DetectionOutput run_window(const std::vector<std::string>& command, const CancelToken& cancel,
+                           std::chrono::seconds limit) {
     logger.info("FFmpeg: " + python_list2cmdline(command));
     struct Kept {
         std::mutex mutex;
@@ -604,6 +619,14 @@ DetectionOutput launch_window(const std::vector<std::string>& command, const Can
     } catch (const platform::ProcessError& error) {
         throw CropDetectError(std::string("Could not run crop detection: ") + error.what());
     }
+}
+
+// Runs one detection command to its end, holding a decoder slot, for at
+// most `limit` of running (paused time not counted).
+DetectionOutput launch_window(const std::vector<std::string>& command, const CancelToken& cancel,
+                              std::chrono::seconds limit) {
+    const DecoderSlot slot(cancel);
+    return run_window(command, cancel, limit);
 }
 
 // The last line of FFmpeg's error output (the output as a whole stripped of
@@ -709,6 +732,58 @@ std::optional<CropBox> run_single_window(const std::string& ffmpeg, const VideoI
             return window_command(ffmpeg, path, info.input_options(), start, window, attempt, before);
         },
         path, cancel, hwaccel, 60s));
+}
+
+// One window sampled from the pictures the app's decoder makes
+// (samples_through_the_app): the window's pictures fed to FFmpeg's
+// cropdetect, as its own pass (window_command) would give them. The decoder
+// slot is held from the feeding's start, which decodes before FFmpeg reads,
+// to its end. Throws FilmGrainRefusal when the app could not feed the
+// window, CropDetectError when FFmpeg failed, and Cancelled.
+std::optional<CropBox> run_fed_window(const std::string& ffmpeg, const VideoInfo& info, double start,
+                                      double window, const CancelToken& cancel) {
+    const DecoderSlot slot(cancel);
+    // The coded pictures, without their grain, as FFmpeg's vvc gives a video
+    // deeper than 8 bits (it adds H.274's grain at 8 bits only): the boxes
+    // are the ones it would find. VVC's decoder asks ffprobe nothing
+    // (gpu_frames.cpp's configuration).
+    VideoInfo coded = info;
+    coded.with_film_grain = false;
+    PictureFeed feed(coded, ffmpeg, "", cancel, FeedWindow{start, window});
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner"};
+    command.insert(command.end(), feed.input_arguments().begin(), feed.input_arguments().end());
+    command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-vf", cropdetect(), "-f", "null", "-"});
+    const DetectionOutput output = run_window(command, cancel, 60s);
+    feed.finish();  // a window fed in part gives no box
+    if (output.code != 0) {
+        const std::string line = last_error_line(output.tail);
+        throw CropDetectError("Crop detection failed for " + platform::path_text(info.path) + ": " +
+                              (line.empty() ? "ffmpeg exited with code " + platform::exit_code_text(output.code)
+                                            : line));
+    }
+    return last_box(output.lines);
+}
+
+// A window sampled from the app's decoder (run_fed_window), or by FFmpeg as
+// any other video's where the app cannot feed it and FFmpeg decodes the codec
+// (app_decoders.h); else the window fails.
+std::optional<CropBox> run_window_through_the_app(const std::string& ffmpeg, const VideoInfo& info, double start,
+                                                  double window, const CancelToken& cancel,
+                                                  const std::optional<std::string>& hwaccel,
+                                                  const BeforeCropdetect& before) {
+    try {
+        return run_fed_window(ffmpeg, info, start, window, cancel);
+    } catch (const FilmGrainRefusal& refusal) {
+        const AppDecodedCodec* codec = app_decoded_codec(ascii_lower(info.codec_name));
+        if (codec != nullptr && !codec->ffmpeg_decodes) {
+            throw CropDetectError("Crop detection failed for " + platform::path_text(info.path) + ": " +
+                                  std::string(codec->decoder) + " could not decode it here, and FFmpeg does not (" +
+                                  refusal.what() + ")");
+        }
+        logger.info("Black bars in " + platform::path_text(info.path.filename()) + ": a window sampled by FFmpeg, " +
+                    "as the app's decoder could not feed it (" + refusal.what() + ")");
+    }
+    return run_single_window(ffmpeg, info, start, window, cancel, hwaccel, before);
 }
 
 // The boxes a raw stream's windows found, each started from a byte partway
@@ -998,8 +1073,17 @@ CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double
         // and those of a pass that failed, one by one.
         std::vector<std::optional<CropBox>> found(starts.size());
         std::vector<bool> sampled(starts.size(), false);
+        // A video the app's decoder samples has its windows one by one: each
+        // a feeding of its own.
+        const bool through_the_app = samples_through_the_app(info);
+        if (through_the_app) {
+            logger.info("Black bars in " + platform::path_text(info.path.filename()) + ": sampled with " +
+                        std::string(app_decoded_codec(ascii_lower(info.codec_name))->decoder) +
+                        ", the app's decoder of its codec");
+        }
         const std::vector<std::vector<std::size_t>> runs = overlapping_runs(starts, window);
-        const bool shared = std::any_of(runs.begin(), runs.end(), [](const auto& run) { return run.size() > 1; });
+        const bool shared = !through_the_app &&
+                            std::any_of(runs.begin(), runs.end(), [](const auto& run) { return run.size() > 1; });
         const std::optional<long long> file_start =
             shared && merges_windows(info) ? file_start_microseconds(ffmpeg, info, cancel) : std::nullopt;
         if (file_start && *file_start >= 0) {
@@ -1021,7 +1105,9 @@ CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double
                 continue;
             }
             try {
-                found[i] = run_single_window(ffmpeg, info, starts[i], window, cancel, hwaccel, before);
+                found[i] = through_the_app
+                               ? run_window_through_the_app(ffmpeg, info, starts[i], window, cancel, hwaccel, before)
+                               : run_single_window(ffmpeg, info, starts[i], window, cancel, hwaccel, before);
             } catch (const CropDetectError& error) {
                 failures.emplace_back(error.what());
             }
@@ -1070,6 +1156,10 @@ CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double
 }
 
 }  // namespace
+
+bool samples_through_the_app(const VideoInfo& info) {
+    return app_decoded_codec(ascii_lower(info.codec_name)) != nullptr && !info.is_raw_stream();
+}
 
 void set_crop_store(std::function<std::filesystem::path()> store) { answers().set_store(std::move(store)); }
 

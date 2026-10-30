@@ -184,6 +184,43 @@ TEST(GpuFrames, PassesOverTheRaslPicturesOfTheCraAVideoStartsWith) {
     EXPECT_EQ(h264.skipped(), 0);
 }
 
+// A VVC packet in Annex B: each unit (type, layer) after a 00 00 01 start
+// code, with its two header bytes (layer first, then type) and a payload byte.
+std::vector<std::uint8_t> vvc_packet(const std::vector<std::pair<int, int>>& units) {
+    std::vector<std::uint8_t> packet;
+    for (const auto& [type, layer] : units) {
+        packet.insert(packet.end(), {0, 0, 1, static_cast<std::uint8_t>(layer & 0x3f),
+                                     static_cast<std::uint8_t>((type << 3) | 1), 0x80});
+    }
+    return packet;
+}
+
+// A VVC stream started at a CRA picture (a seek into an open-GOP encode) has
+// its RASL pictures given to VVdeC, which drops them as FFmpeg's decoding does,
+// but may read their parameter sets: hidden, not passed over. One started at a
+// GDR picture is refused; an IDR picture has no RASL pictures.
+TEST(GpuFrames, HidesTheRaslPicturesOfTheCraAVvcStreamStartsWith) {
+    using Verdict = LeadingPictures::Verdict;
+    constexpr int vvc_sps = 15, vvc_aps = 17, vvc_sei = 23, vvc_radl = 2, vvc_rasl = 3, vvc_trail = 0, vvc_idr = 7,
+                  vvc_cra = 9, vvc_gdr = 10;
+    LeadingPictures seek("vvc");
+    EXPECT_EQ(seek.take(vvc_packet({{vvc_sps, 0}, {vvc_sei, 0}, {vvc_cra, 0}})), Verdict::feed);
+    EXPECT_EQ(seek.take(vvc_packet({{vvc_aps, 0}, {vvc_rasl, 0}})), Verdict::hide);  // its APS read by VVdeC
+    EXPECT_EQ(seek.take(vvc_packet({{vvc_radl, 0}})), Verdict::feed);
+    EXPECT_EQ(seek.take(vvc_packet({{vvc_rasl, 0}})), Verdict::hide);
+    EXPECT_EQ(seek.take(vvc_packet({{vvc_trail, 0}})), Verdict::feed);
+    EXPECT_EQ(seek.take(vvc_packet({{vvc_rasl, 0}})), Verdict::feed);  // a later RASL picture is shown
+    EXPECT_EQ(seek.skipped(), 2);
+    LeadingPictures enhancement("vvc");  // the base layer's slice decides
+    EXPECT_EQ(enhancement.take(vvc_packet({{vvc_cra, 0}})), Verdict::feed);
+    EXPECT_EQ(enhancement.take(vvc_packet({{vvc_rasl, 1}, {vvc_trail, 0}})), Verdict::feed);
+    LeadingPictures from_idr("vvc");
+    EXPECT_EQ(from_idr.take(vvc_packet({{vvc_idr, 0}})), Verdict::feed);
+    EXPECT_EQ(from_idr.take(vvc_packet({{vvc_rasl, 0}})), Verdict::feed);
+    LeadingPictures from_gdr("vvc");
+    EXPECT_EQ(from_gdr.take(vvc_packet({{vvc_gdr, 0}})), Verdict::refuse);
+}
+
 // FFmpeg's warnings that it changed timestamps as it copied the packets, but
 // not framecrc's note of a packet without any, which the reader handles.
 TEST(GpuFrames, TellsFfmpegsTimestampWarningsFromItsNoteOfNone) {

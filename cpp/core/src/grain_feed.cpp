@@ -1,6 +1,7 @@
 #include "vml/grain_feed.h"
 
 #include <array>
+#include <cmath>
 #include <condition_variable>
 #include <cstdint>
 #include <exception>
@@ -113,15 +114,19 @@ bool fed_to_ffmpeg(const VideoInfo& info) {
 }
 
 std::optional<std::string> feed_refusal(const VideoInfo& info) {
+    if (by_timestamp()) {
+        return "frames are paired by their timestamps (VML_FRAME_PAIRING), which pictures fed to FFmpeg do not carry";
+    }
+    return decoding_refusal(info);
+}
+
+std::optional<std::string> decoding_refusal(const VideoInfo& info) {
 #ifndef _WIN32
     static_cast<void>(info);
     return "the app decodes a video for FFmpeg on Windows only";
 #else
     if (info.scaled_to) {
         return "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow";
-    }
-    if (by_timestamp()) {
-        return "frames are paired by their timestamps (VML_FRAME_PAIRING), which pictures fed to FFmpeg do not carry";
     }
     if (!software_decoder_bundled()) {
         return "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)";
@@ -136,6 +141,19 @@ std::optional<std::string> feed_refusal(const VideoInfo& info) {
     }
     return std::nullopt;
 #endif
+}
+
+WindowCut::WindowCut(Rational time_base, double length)
+    : time_base_(time_base), length_ms_(std::llround(length * 1000)) {}
+
+WindowCut::Take WindowCut::take(long long pts) const {
+    if (pts < 0) {
+        return Take::skip;
+    }
+    // pts * numerator / denominator seconds against length_ms_ / 1000, in
+    // whole numbers.
+    const bool past_the_end = pts * time_base_.numerator * 1000 >= length_ms_ * time_base_.denominator;
+    return past_the_end ? Take::feed_and_end : Take::feed;
 }
 
 std::optional<std::vector<std::string>> feed_input_options(const VideoInfo& info) {
@@ -177,9 +195,9 @@ struct PictureFeed::State {
 };
 
 PictureFeed::PictureFeed(const VideoInfo& info, const std::string& ffmpeg, const std::string& ffprobe,
-                         const CancelToken& cancel)
+                         const CancelToken& cancel, const std::optional<FeedWindow>& window)
     : state_(std::make_unique<State>()) {
-    if (const std::optional<std::string> refusal = feed_refusal(info)) {
+    if (const std::optional<std::string> refusal = window ? decoding_refusal(info) : feed_refusal(info)) {
         throw FilmGrainRefusal(*refusal);
     }
     State& state = *state_;
@@ -187,8 +205,11 @@ PictureFeed::PictureFeed(const VideoInfo& info, const std::string& ffmpeg, const
     state.pipe_path = platform::OutboundPipe::unique_path("feed");
     state.arguments = *feed_input_options(info);
     state.arguments.insert(state.arguments.end(), {"-i", state.pipe_path});
-    const nlohmann::json request = {
+    nlohmann::json request = {
         {"video", video_json(info)}, {"pipe", state.pipe_path}, {"ffmpeg", ffmpeg}, {"ffprobe", ffprobe}};
+    if (window) {
+        request["window"] = {{"start", window->start}, {"length", window->length}};
+    }
     const auto say_ready = [&state] {
         const std::lock_guard lock(state.mutex);
         state.ready = true;
@@ -307,23 +328,41 @@ nlohmann::json picture_feed_task(const nlohmann::json& request, const std::funct
     if (const auto [supported, refusal] = decoder_supports(0, plan, software_decoder); !supported) {
         throw FilmGrainRefusal("the app's decoder does not decode it: " + refusal);
     }
+    std::optional<FeedWindow> window;
+    if (const auto found = request.find("window"); found != request.end()) {
+        window = FeedWindow{found->at("start").get<double>(), found->at("length").get<double>()};
+    }
     platform::OutboundPipe pipe(request.at("pipe").get<std::string>(), platform::frame_pipe_bytes);
     on_ready();
-    // Decoding starts while FFmpeg starts and opens its inputs.
+    // Decoding starts while FFmpeg starts and opens its inputs; a window's
+    // packets are read from its start, as FFmpeg's -ss reads them.
     GpuFrameStream stream(info, plan, 0, 4, software_decoder, request.at("ffmpeg").get<std::string>(),
-                          request.at("ffprobe").get<std::string>());
+                          request.at("ffprobe").get<std::string>(), false,
+                          window ? std::optional(window->start) : std::nullopt);
     stream.start();
     pipe.connect();
+    const CancelToken never;  // the parent ends this process to stop it
+    std::optional<WindowCut> cut;
+    if (window) {
+        cut.emplace(stream.time_base(never), window->length);
+    }
     std::vector<std::uint8_t> picture(plan.frame_bytes());
     long long frames = 0;
-    const CancelToken never;  // the parent ends this process to stop it
     while (const std::optional<GpuFrameStream::Picture> next = stream.next(never)) {
+        const WindowCut::Take take = cut ? cut->take(next->pts) : WindowCut::Take::feed;
+        if (take == WindowCut::Take::skip) {
+            stream.release(next->slot);
+            continue;
+        }
         stream.download(next->slot, picture.data());
         stream.release(next->slot);
         if (!pipe.write(picture.data(), picture.size())) {
             return {{"frames", frames}, {"reader_gone", true}};
         }
         ++frames;
+        if (take == WindowCut::Take::feed_and_end) {
+            break;
+        }
     }
     const bool read = pipe.finish();
     return {{"frames", frames}, {"reader_gone", !read}};

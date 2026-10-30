@@ -8,8 +8,9 @@
 // The decoder runs in a process of its own (isolated.h, task "grain-feed"),
 // as the app's other decoding for scores does: one that crashes ends that
 // process and fails the run, not the window. It makes the pipe, says so,
-// decodes the video from its start and writes each picture; FFmpeg is
-// started once the pipe is there.
+// decodes the video from its start (or a window of it: black-bar detection's
+// samples, FeedWindow) and writes each picture; FFmpeg is started once the
+// pipe is there.
 #pragma once
 
 #include <functional>
@@ -21,6 +22,7 @@
 #include <nlohmann/json.hpp>
 
 #include "vml/cancel.h"
+#include "vml/frame_sync.h"
 #include "vml/hardware_decoding.h"
 #include "vml/video.h"
 
@@ -38,6 +40,39 @@ bool fed_to_ffmpeg(const VideoInfo& info);
 // they can. FFmpeg's routes refuse the metric with it (FilmGrainRefusal).
 std::optional<std::string> feed_refusal(const VideoInfo& info);
 
+// feed_refusal's reasons that concern decoding the video's pictures, without
+// the run's frame pairing: what refuses a window of them (FeedWindow).
+std::optional<std::string> decoding_refusal(const VideoInfo& info);
+
+// A window of a video's pictures fed instead of the whole video: from `start`
+// seconds, as FFmpeg's -ss starts there (to the millisecond), `length`
+// seconds long, as its -t.
+struct FeedWindow {
+    double start = 0;
+    double length = 0;
+};
+
+// Which of a window's pictures are fed, as FFmpeg's -ss and -t give them to
+// what reads them (crop_detect.cpp's cropdetect, which sees the frame at or
+// past the end that -t drops after it): those stamped from the window's
+// start (0, its packets being read from there), the ones before it, from the
+// keyframe the reading starts at, skipped; up to and including the first at
+// or past its length, which ends it.
+class WindowCut {
+public:
+    // `length` in seconds, to the millisecond as FFmpeg's -t takes it; the
+    // pictures' timestamps in `time_base`.
+    WindowCut(Rational time_base, double length);
+
+    enum class Take { skip, feed, feed_and_end };
+    // The picture stamped `pts`, in order.
+    Take take(long long pts) const;
+
+private:
+    Rational time_base_;
+    long long length_ms_ = 0;
+};
+
 // The input options of a fed video's pictures, before "-i" and the pipe's
 // path: rawvideo of its size, format and frame rate, with its colour tags,
 // as FFmpeg's decoding of the file would give them. Nothing when a tag has no
@@ -50,11 +85,12 @@ std::optional<std::vector<std::string>> feed_input_options(const VideoInfo& info
 // reader never came is let go then.
 class PictureFeed {
 public:
-    // Starts the feeding process and waits for its pipe. Throws
-    // FilmGrainRefusal with feed_refusal's reason, Cancelled, and what the
-    // feeding process threw before its pipe was there.
+    // Starts the feeding process and waits for its pipe: the whole video, or
+    // `window` of it. Throws FilmGrainRefusal with feed_refusal's reason
+    // (decoding_refusal's for a window), Cancelled, and what the feeding
+    // process threw before its pipe was there.
     PictureFeed(const VideoInfo& info, const std::string& ffmpeg, const std::string& ffprobe,
-                const CancelToken& cancel);
+                const CancelToken& cancel, const std::optional<FeedWindow>& window = std::nullopt);
     ~PictureFeed();
     PictureFeed(const PictureFeed&) = delete;
     PictureFeed& operator=(const PictureFeed&) = delete;

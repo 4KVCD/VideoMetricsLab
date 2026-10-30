@@ -26,6 +26,7 @@
 #include "vml/frame_sync_by_time.h"
 #include "vml/hevc.h"
 #include "vml/model_select.h"
+#include "vml/number_format.h"
 #include "vml/platform/library.h"
 #include "vml/platform/pipe.h"
 #include "vml/platform/process.h"
@@ -119,8 +120,9 @@ bool is_scaler(std::string_view algorithm) {
 
 // What the decoder libraries answer (native/gpu_frames.h).
 constexpr int nvf_frame = 1, nvf_end = 0, nvf_aborted = -2, nvf_timeout = 2;
-// Packet flags (AV_PKT_FLAG_*).
-constexpr int key_flag = 0x1, discard_flag = 0x4;
+// Packet flags (AV_PKT_FLAG_*), and the reader's own: a packet the decoder
+// is given but makes no picture of (LeadingPictures' hide).
+constexpr int key_flag = 0x1, discard_flag = 0x4, no_picture_flag = 0x10000;
 // The timestamp FFmpeg writes for none (AV_NOPTS_VALUE).
 constexpr long long no_pts = std::numeric_limits<long long>::min();
 // How much the pipes of FFmpeg's packets and of its listing hold.
@@ -605,7 +607,8 @@ public:
     bool next(std::vector<std::uint8_t>& data, long long& pts, int& flags) {
         while (const std::optional<Listed> item = next_listed()) {
             read_packet(*item, data);  // a packet passed over is read too, keeping the two outputs in step
-            if (passes_over(data)) {
+            const LeadingPictures::Verdict verdict = leading_verdict(data);
+            if (verdict == LeadingPictures::Verdict::skip) {
                 continue;
             }
             const long long time = untimed_ ? untimed_time_ : item->pts;
@@ -626,6 +629,9 @@ public:
             first_ = false;
             pts = time;
             flags = item->flags;
+            if (verdict == LeadingPictures::Verdict::hide) {
+                flags |= no_picture_flag;  // decoded for what it carries; no picture expected of it
+            }
             return true;
         }
         return end_of_packets();
@@ -719,23 +725,23 @@ private:
         }
     }
 
-    // Whether the packet `data` is one of the leading pictures FFmpeg's
-    // decoding drops, which are not decoded here either.
-    bool passes_over(const std::vector<std::uint8_t>& data) {
-        switch (leading_.take(data)) {
-            case LeadingPictures::Verdict::feed:
-                return false;
-            case LeadingPictures::Verdict::skip:
-                if (leading_.skipped() == 1) {
-                    logger.info(file_name_ +
-                                ": the RASL pictures after the random access picture it starts with are not "
-                                "decoded, as FFmpeg's decoding drops them");
-                }
-                return true;
-            case LeadingPictures::Verdict::refuse:
-                break;
+    // What becomes of the packet `data` (LeadingPictures): fed, passed over
+    // as one of the leading pictures FFmpeg's decoding drops, or fed to give
+    // no picture (hide). Throws GpuDecodeFailedError for one it refuses.
+    LeadingPictures::Verdict leading_verdict(const std::vector<std::uint8_t>& data) {
+        const LeadingPictures::Verdict verdict = leading_.take(data);
+        if ((verdict == LeadingPictures::Verdict::skip || verdict == LeadingPictures::Verdict::hide) &&
+            leading_.skipped() == 1) {
+            logger.info(file_name_ + ": the RASL pictures after the random access picture it starts with are " +
+                        (verdict == LeadingPictures::Verdict::skip ? "not decoded" : "decoded but not shown") +
+                        ", as FFmpeg's decoding drops them");
         }
-        throw GpuDecodeFailedError("a leading picture FFmpeg's decoding drops carries parameter sets");
+        if (verdict == LeadingPictures::Verdict::refuse) {
+            throw GpuDecodeFailedError(
+                "a video starting at a picture whose leading pictures are not followed here (an HEVC RASL picture "
+                "with parameter sets, or a VVC gradual decoding refresh)");
+        }
+        return verdict;
     }
 
     // The listing's thread: reads each packet's timestamp, size and flags,
@@ -1247,9 +1253,57 @@ int stuck_decoders() { return stuck_closes; }
 
 // ------------------------------------------------------------------ checks
 
+namespace {
+
+// VVC's NAL unit types that LeadingPictures tells apart (H.266 Table 5), and
+// the last type of a picture's slice.
+namespace vvc_unit {
+constexpr int radl = 2, rasl = 3, cra = 9, gdr = 10, last_picture = 11;
+// A unit's type and layer, from its two header bytes.
+constexpr int type_of(std::uint8_t second) { return second >> 3; }
+constexpr int layer_of(std::uint8_t first) { return first & 0x3f; }
+}  // namespace vvc_unit
+
+// The type of a VVC packet's picture: its first slice on the base layer.
+std::optional<int> vvc_picture(const std::vector<std::uint8_t>& packet) {
+    for (std::size_t at = 0; at + 4 < packet.size(); ++at) {
+        if (packet[at] != 0 || packet[at + 1] != 0 || packet[at + 2] != 1) {
+            continue;
+        }
+        const int type = vvc_unit::type_of(packet[at + 4]);
+        if (type <= vvc_unit::last_picture && vvc_unit::layer_of(packet[at + 3]) == 0) {
+            return type;
+        }
+        at += 2;
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
 LeadingPictures::Verdict LeadingPictures::take(const std::vector<std::uint8_t>& packet) {
     if (!open_) {
         return Verdict::feed;  // past the leading pictures: nothing more is read of the packets
+    }
+    if (vvc_) {
+        const std::optional<int> picture = vvc_picture(packet);
+        if (!picture) {
+            return Verdict::feed;  // no picture in it: nothing to decide yet
+        }
+        if (first_) {
+            first_ = false;
+            if (*picture == vvc_unit::gdr) {
+                return Verdict::refuse;  // its pictures until the recovery point: not followed here
+            }
+            open_ = *picture == vvc_unit::cra;  // only a CRA picture can have RASL pictures after it
+            return Verdict::feed;
+        }
+        if (*picture == vvc_unit::rasl) {
+            ++skipped_;
+            return Verdict::hide;
+        }
+        open_ = *picture == vvc_unit::radl;  // shown; more leading pictures may follow it
+        return Verdict::feed;
     }
     // The packet's picture (its first slice on the base layer, after the
     // parameter sets, delimiter and SEI that may come first), and whether it
@@ -1413,7 +1467,9 @@ struct GpuFrameStream::State {
             long long pts = 0;
             int flags = 0;
             while (reader->next(data, pts, flags)) {
-                checks.fed(pts, (flags & discard_flag) != 0);
+                if (!(flags & no_picture_flag)) {
+                    checks.fed(pts, (flags & discard_flag) != 0);
+                }
                 if (library->push(decoder_handle, data.data(), static_cast<int>(data.size()), pts) != 0) {
                     return;  // a decoder error, or a close: next() reports it
                 }
@@ -1438,7 +1494,7 @@ struct GpuFrameStream::State {
 
 GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, int device, int pool,
                                std::string_view backend, const std::string& ffmpeg, const std::string& ffprobe,
-                               bool handover)
+                               bool handover, std::optional<double> start)
     : state_(std::make_shared<State>(backend)) {
     State& state = *state_;
     state.file_name = platform::path_text(info.path.filename());
@@ -1452,8 +1508,11 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
     state.lends_planes = can_lend_planes(plan, backend);
     state.untimed = plan.untimed;
     state.software_only = plan.software_only;
-    state.reader = std::make_unique<PacketReader>(
-        ffmpeg, info.path, plan.codec, plan.untimed ? info.input_options() : std::vector<std::string>(), plan.untimed);
+    std::vector<std::string> reader_options = plan.untimed ? info.input_options() : std::vector<std::string>();
+    if (start) {
+        reader_options.insert(reader_options.end(), {"-ss", format_fixed(*start, 3)});
+    }
+    state.reader = std::make_unique<PacketReader>(ffmpeg, info.path, plan.codec, reader_options, plan.untimed);
     state.configuration = configuration(ffprobe, info.path, plan.codec);
     state.handover = backend == "nvidia" || (handover && can_hand_over(plan, backend));
     std::string said;
