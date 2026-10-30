@@ -66,12 +66,6 @@ inline constexpr std::string_view film_grain_afgs1 = "afgs1-ffmpeg-v1";
 inline constexpr std::string_view film_grain_av1 = "av1-v1";
 inline constexpr std::string_view film_grain_left_out = "without";
 
-// A VVC video decoded by VVdeC, as every one is where its pictures can reach
-// the route: before, FFmpeg's own decoder decoded those not scored with
-// H.274's grain, and some wrongly. Where they cannot, FFmpeg's (vvc_ffmpeg).
-inline constexpr std::string_view vvc_vvdec = "vvdec-v1";
-inline constexpr std::string_view vvc_ffmpeg = "vvc-ffmpeg-v1";
-
 // How the videos' colour tags were read, as a score records it. A Vship GPU
 // score: as Vship 5.1.1's FFVship reads them; "/2" marks the version that
 // reads a video without chroma siting with the other video's

@@ -28,17 +28,14 @@ struct ComparisonRecipe {
     // "distorted": ..}, each film_grain_identity's text or null; null where
     // neither has one (film_grain_scoring.h).
     nlohmann::json film_grain = nullptr;
-    // The app's own decoder of each video whose codec it decodes
-    // (app_decoders.h): {"source": .., "distorted": ..}, its identity text or
-    // null; null where neither video is of such a codec.
-    nlohmann::json app_decoder = nullptr;
 
     // The settings that decide what the comparison is (identity_dict): the
     // scaling algorithm is not one (the Python app counts a comparison
     // scaled another way as the same one), and the manual crops, which the
-    // app no longer has, are null. The film grain and the app's decoder are in
-    // it only where they are not null, so that every other comparison keeps
-    // the identity it had.
+    // app no longer has, are null. The film grain is in it only where it is
+    // not null, so that every other comparison keeps the identity it had.
+    // Which decoder made a video's pictures is not in it: a VVC video's scores
+    // are the same ones whether VVdeC or FFmpeg decoded it.
     nlohmann::json identity() const;
 };
 
