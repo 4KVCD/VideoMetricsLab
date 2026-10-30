@@ -121,7 +121,7 @@ std::optional<QString> Dav1dVideo::unavailable() {
     return std::nullopt;
 }
 
-Dav1dVideo::Dav1dVideo(const AVCodecParameters& stream) : state_(std::make_unique<State>()) {
+Dav1dVideo::Dav1dVideo(const AVCodecParameters& stream, bool apply_grain) : state_(std::make_unique<State>()) {
     if (const std::optional<QString> problem = unavailable()) {
         throw std::runtime_error(problem->toStdString());
     }
@@ -137,11 +137,13 @@ Dav1dVideo::Dav1dVideo(const AVCodecParameters& stream) : state_(std::make_uniqu
     Dav1dSettings settings{};
     dav1d().default_settings(&settings);
     // As FFmpeg's libdav1d decoder sets it, and the software decoder: the
-    // operating point's highest spatial layer only, film grain applied; its
-    // own threads, as many as the CPU has. No log: there is no console.
+    // operating point's highest spatial layer only, film grain applied as
+    // the video is scored; its own threads, as many as the CPU has. No log:
+    // there is no console.
     settings.all_layers = 0;
     settings.n_threads = 0;
     settings.max_frame_delay = 0;
+    settings.apply_grain = apply_grain ? 1 : 0;
     settings.logger_callback = nullptr;
     if (dav1d().open(&state_->context, &settings) < 0) {
         throw std::runtime_error("dav1d could not start");

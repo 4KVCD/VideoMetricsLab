@@ -254,6 +254,7 @@ private:
         std::string timing;    // where its frames start, and the frame rate
         std::string colours;   // PreviewColorSettings::cache_token
         std::string filters;   // the crops, the scaling, the tone mapping
+        bool grain_left_out = false;  // its film grain (picture_grain_options)
         auto operator<=>(const CacheKey&) const = default;
     };
     // A pair's key for its black bars: the pair, and its two files (each

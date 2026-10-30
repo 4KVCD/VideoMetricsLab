@@ -11,6 +11,8 @@
 #include <cmath>
 #include <mutex>
 
+#include "i18n.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
 #include "vml/platform/system.h"
 #include "vml/video_playback.h"
@@ -1255,6 +1257,12 @@ void VideoCompareView::pool_status() {
     QString said = detail != details_.end() ? detail->second : QStringLiteral("GPU processing starting");
     if (!pool_reason_.isEmpty()) {
         said += QString::fromUtf8(" \xC2\xB7 SDR preview (native playback unavailable)");
+    }
+    // FFmpeg's pictures leave out H.274's grain where the scores have it, as
+    // only the native player adds it (picture_grain_options).
+    if (comparison_ && (only_the_app_adds(effective_film_grain(frame_video_info(*comparison_, FrameSide::source))) ||
+                        only_the_app_adds(effective_film_grain(frame_video_info(*comparison_, FrameSide::distorted))))) {
+        said += QString::fromUtf8(" \xC2\xB7 ") + QString::fromUtf8(N_("film grain not shown (FFmpeg playback)"));
     }
     status(QString::fromUtf8("%1 \xC2\xB7 %2/%3 streams \xC2\xB7 %4")
                .arg(wanted_playing_ ? QStringLiteral("Playing") : QStringLiteral("Paused"))

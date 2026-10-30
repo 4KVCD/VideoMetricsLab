@@ -51,6 +51,24 @@ bool only_the_app_adds(const FilmGrainScoring& grain) {
     return grain.scoring == GrainScoring::with && (grain.kinds & (film_grain_h274 | film_grain_h274_model_1)) != 0;
 }
 
+int decoder_film_grain(const FilmGrainScoring& grain) {
+    return grain.scoring == GrainScoring::with ? 1 : grain.scoring == GrainScoring::without ? 0 : -1;
+}
+
+GrainDecoding video_grain_decoding(const VideoInfo& info) {
+    const FilmGrainScoring grain = effective_film_grain(info);
+    return grain_decoding(ascii_lower(info.codec_name) == "vvc", decoder_film_grain(grain),
+                          static_cast<int>(grain.kinds));
+}
+
+std::vector<std::string> picture_grain_options(const VideoInfo& info) {
+    const FilmGrainScoring grain = effective_film_grain(info);
+    if (grain.scoring == GrainScoring::without || only_the_app_adds(grain)) {
+        return {"-export_side_data", "film_grain"};
+    }
+    return {};
+}
+
 std::optional<std::string> film_grain_identity(const VideoInfo& info) {
     const FilmGrainScoring grain = effective_film_grain(info);
     if (grain.scoring == GrainScoring::none) {

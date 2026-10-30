@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 
+#include "grain_decoding.h"
 #include "vml/analysis_request.h"
 #include "vml/film_grain_detect.h"
 #include "vml/hardware_decoding.h"
@@ -93,6 +94,44 @@ TEST(FilmGrainScoring, EachVideoIsScoredWithOrWithoutItsGrainAsItCanBe) {
     EXPECT_EQ(film_grain_default_choice("With"), std::nullopt);
 }
 
+// The decoders the scores are made with and Video Compare's take one rule
+// (grain_decoding.h): VVdeC for VVC's H.274 added, FFmpeg's decoders told to
+// leave the grain out, dav1d's switch; and FFmpeg's pictures in the viewers
+// leave out what it would not add as the scores have it.
+TEST(FilmGrainScoring, EveryDecoderAddsOrLeavesOutTheGrainAsItIsScored) {
+    const auto named = [](const GrainDecoding& decoding) {
+        return decoding.decoder != nullptr ? std::string(decoding.decoder) : std::string();
+    };
+    using Options = std::vector<std::string>;
+    const Options left_out{"-export_side_data", "film_grain"};
+    struct Case {
+        VideoInfo info;
+        std::string decoder;
+        bool export_grain;
+        bool apply_grain;
+        Options pictures;  // FFmpeg's, in Frame Compare and the playback fallback
+    };
+    const Case cases[] = {
+        {grain_video("vvc", "yuv420p10le", h274), "libvvdec", false, true, left_out},  // FFmpeg cannot add it
+        {grain_video("vvc", "yuv420p10le", model_1), "libvvdec", false, true, left_out},
+        {grain_video("vvc", "yuv420p10le", h274, false), "", true, false, left_out},
+        {grain_video("vvc", "yuv420p10le", afgs1), "", false, true, {}},  // FFmpeg's vvc adds AFGS1
+        {grain_video("hevc", "yuv420p", h274), "", true, false, left_out},  // forced out
+        {grain_video("av1", "yuv420p10le", av1), "", false, true, {}},
+        {grain_video("av1", "yuv420p10le", av1, false), "", true, false, left_out},
+        {grain_video("vvc", "yuv420p10le", 0u), "", false, true, {}},
+        {grain_video("vvc", "yuv420p", std::nullopt), "", false, true, {}},  // not known: as decoders add it
+    };
+    for (const Case& expected : cases) {
+        SCOPED_TRACE(expected.info.codec_name + " " + std::to_string(expected.info.film_grain.value_or(99)));
+        const GrainDecoding got = video_grain_decoding(expected.info);
+        EXPECT_EQ(named(got), expected.decoder);
+        EXPECT_EQ(got.export_grain, expected.export_grain);
+        EXPECT_EQ(got.apply_grain, expected.apply_grain);
+        EXPECT_EQ(picture_grain_options(expected.info), expected.pictures);
+    }
+}
+
 // The results' JSON and CSV record a video's film grain and how it was
 // scored; a video without grain has nothing more than before.
 TEST(FilmGrainScoring, TheResultsSayHowEachVideosGrainWasScored) {
@@ -123,7 +162,8 @@ TEST(FilmGrainScoring, FfmpegLeavesTheGrainOutOrRefusesToAddH274s) {
 }
 
 // No GPU decoder adds H.274's grain or AFGS1; AMD's in the app and Apple's
-// cannot leave AV1's out, and Apple's is not known to add it.
+// cannot leave AV1's out, and Apple's is not known to add it. Video
+// Compare's FFmpeg D3D11VA does both.
 TEST(FilmGrainScoring, GrainNoGpuDecoderAddsOrLeavesOutIsDecodedInSoftware) {
     DecodingCapabilities pc;
     pc.hwaccels = {"cuda", "d3d11va"};
@@ -136,6 +176,9 @@ TEST(FilmGrainScoring, GrainNoGpuDecoderAddsOrLeavesOutIsDecodedInSoftware) {
     EXPECT_EQ(pick_decode(pc, GpuVendor::amd, grain_video("av1", "yuv420p10le", av1, false)), std::nullopt);
     EXPECT_EQ(software_decoding_reason(grain_video("av1", "yuv420p10le", av1, false), true),
               "no GPU decoder here for av1 that leaves its film grain out (AMD's and Apple's cannot)");
+    EXPECT_FALSE(grain_needs_software_decoding(grain_video("av1", "yuv420p10le", av1, false), "d3d11va"));
+    EXPECT_TRUE(grain_needs_software_decoding(grain_video("av1", "yuv420p10le", av1, false), "videotoolbox"));
+    EXPECT_TRUE(grain_needs_software_decoding(grain_video("vvc", "yuv420p10le", h274), "d3d11va"));
     DecodingCapabilities mac;
     mac.hwaccels = {"videotoolbox"};
     mac.videotoolbox_codecs = {"av1"};

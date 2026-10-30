@@ -23,9 +23,10 @@ public:
 
     // A decoder for the AV1 stream `stream` describes: its configuration's
     // sequence header is given to dav1d before the first packet, and its
-    // colours are its pictures'. Throws std::runtime_error when dav1d is
+    // colours are its pictures'; its film grain added where `apply_grain`
+    // (grain_decoding.h). Throws std::runtime_error when dav1d is
     // unavailable or does not start.
-    explicit Dav1dVideo(const AVCodecParameters& stream);
+    Dav1dVideo(const AVCodecParameters& stream, bool apply_grain);
     ~Dav1dVideo();
     Dav1dVideo(const Dav1dVideo&) = delete;
     Dav1dVideo& operator=(const Dav1dVideo&) = delete;

@@ -756,7 +756,11 @@
   "AFGS1 film grain in H.264 is added by no decoder here": "зерно AFGS1 у H.264 тут не додає жоден декодер",
   "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "у ньому описано два види зерна, H.274 і AFGS1, які тут жоден декодер не додає разом",
   "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "воно оцінюється із зерном H.274, яке правильно додає лише власний декодер застосунку (FFmpeg додає його лише за 8 біт, з округленням донизу), а тут його декодував би FFmpeg: оцініть його без зерна або обчисліть метрику там, де застосунок сам декодує відео (VMAF на GPU)",
-  "Its film grain was not read.": "Його зерно не прочитано."
+  "Its film grain was not read.": "Його зерно не прочитано.",
+  "film grain not shown in stills": "плівкове зерно не показано в стоп-кадрах",
+  "film grain added": "плівкове зерно додано",
+  "film grain not shown (no VVdeC)": "плівкове зерно не показано (немає VVdeC)",
+  "film grain not shown (FFmpeg playback)": "плівкове зерно не показано (відтворення через FFmpeg)"
  },
  "plurals": {
   "about {count} day": [

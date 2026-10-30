@@ -756,7 +756,11 @@
   "AFGS1 film grain in H.264 is added by no decoder here": "H.264 の AFGS1 フィルムグレインを加えるデコーダーはここにはありません",
   "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "H.274 と AFGS1 の 2 種類のフィルムグレインが記述されており、両方を加えるデコーダーはここにはありません",
   "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "H.274 のフィルムグレインありで採点されますが、正しく加えられるのはアプリ独自のデコーダーだけです（FFmpeg は 8 ビットのときだけ切り捨てて加えます）。ここでは FFmpeg がデコードすることになるため、フィルムグレインなしで採点するか、アプリ自身が動画をデコードする方法（GPU 上の VMAF）で指標を計算してください",
-  "Its film grain was not read.": "フィルムグレインは読み取られていません。"
+  "Its film grain was not read.": "フィルムグレインは読み取られていません。",
+  "film grain not shown in stills": "静止画ではフィルムグレインを表示しません",
+  "film grain added": "フィルムグレインを追加",
+  "film grain not shown (no VVdeC)": "フィルムグレインを表示しません（VVdeC なし）",
+  "film grain not shown (FFmpeg playback)": "フィルムグレインを表示しません（FFmpeg 再生）"
  },
  "plurals": {
   "about {count} day": [

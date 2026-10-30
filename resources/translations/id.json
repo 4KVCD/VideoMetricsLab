@@ -756,7 +756,11 @@
   "AFGS1 film grain in H.264 is added by no decoder here": "grain film AFGS1 pada H.264 tidak ditambahkan oleh dekoder mana pun di sini",
   "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "menjelaskan dua jenis grain film, H.274 dan AFGS1, yang tidak ditambahkan bersama oleh dekoder mana pun di sini",
   "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "dinilai dengan grain film H.274, yang hanya ditambahkan dengan benar oleh dekoder aplikasi sendiri (FFmpeg hanya menambahkannya pada 8 bit, dibulatkan ke bawah), dan di sini FFmpeg yang akan mendekodenya: nilai tanpa grain film, atau hitung metrik di tempat aplikasi mendekode video sendiri (VMAF di GPU)",
-  "Its film grain was not read.": "Grain filmnya tidak terbaca."
+  "Its film grain was not read.": "Grain filmnya tidak terbaca.",
+  "film grain not shown in stills": "grain film tidak ditampilkan pada gambar diam",
+  "film grain added": "grain film ditambahkan",
+  "film grain not shown (no VVdeC)": "grain film tidak ditampilkan (tanpa VVdeC)",
+  "film grain not shown (FFmpeg playback)": "grain film tidak ditampilkan (pemutaran FFmpeg)"
  },
  "plurals": {
   "about {count} day": [

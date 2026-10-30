@@ -9,7 +9,9 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include "grain_decoding.h"
 #include "vml/video.h"
 
 namespace vml {
@@ -46,6 +48,21 @@ std::optional<bool> film_grain_default_choice(std::string_view setting);
 // as it should (VVC's, by VVdeC, at any bit depth). FFmpeg's own decoder adds
 // it at 8 bits only, rounded down, and GPU decoders add none.
 bool only_the_app_adds(const FilmGrainScoring& grain);
+
+// `grain` as a decoder is told it (grain_decoding.h's `film_grain`): 1 added,
+// 0 left out, -1 as the decoder adds it by itself (none, or not known).
+int decoder_film_grain(const FilmGrainScoring& grain);
+
+// How the app's own decoders decode `info` with its grain as it is scored:
+// grain_decoding.h's rule, which the scoring decoder takes from its plan.
+GrainDecoding video_grain_decoding(const VideoInfo& info);
+
+// The film grain options of an FFmpeg command that shows `info`'s pictures
+// (Frame Compare's stills, Video Compare's FFmpeg playback): none where
+// FFmpeg adds the grain as the video is scored, else -export_side_data
+// film_grain, which leaves it out. Out too where only the app adds it as it
+// should (only_the_app_adds): FFmpeg would add other grain, or none.
+std::vector<std::string> picture_grain_options(const VideoInfo& info);
 
 // What a saved score records of `info`'s film grain as it is scored
 // (score_identity.h's film_grain_*): nothing where every score made before

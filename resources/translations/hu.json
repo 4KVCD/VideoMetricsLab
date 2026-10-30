@@ -756,7 +756,11 @@
   "AFGS1 film grain in H.264 is added by no decoder here": "a H.264-ben lévő AFGS1 filmszemcsét itt egyetlen dekóder sem adja hozzá",
   "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "kétféle filmszemcsét ír le, a H.274-est és az AFGS1-et, amelyeket itt egyetlen dekóder sem ad hozzá együtt",
   "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "a H.274 filmszemcséjével pontozzuk, amelyet csak az alkalmazás saját dekódere ad hozzá helyesen (az FFmpeg csak 8 biten adja hozzá, lefelé kerekítve), itt pedig az FFmpeg dekódolná: pontozza filmszemcse nélkül, vagy számítsa a metrikát ott, ahol az alkalmazás maga dekódolja a videót (VMAF a GPU-n)",
-  "Its film grain was not read.": "A filmszemcséje nincs beolvasva."
+  "Its film grain was not read.": "A filmszemcséje nincs beolvasva.",
+  "film grain not shown in stills": "a filmszemcse állóképeken nem látszik",
+  "film grain added": "filmszemcse hozzáadva",
+  "film grain not shown (no VVdeC)": "a filmszemcse nem látszik (nincs VVdeC)",
+  "film grain not shown (FFmpeg playback)": "a filmszemcse nem látszik (FFmpeg-lejátszás)"
  },
  "plurals": {
   "about {count} day": [

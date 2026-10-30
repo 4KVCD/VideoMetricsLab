@@ -756,7 +756,11 @@
   "AFGS1 film grain in H.264 is added by no decoder here": "ไม่มีตัวถอดรหัสใดที่นี่เพิ่มเกรนฟิล์ม AFGS1 ใน H.264",
   "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "วิดีโอนี้ระบุเกรนฟิล์มสองแบบ คือ H.274 และ AFGS1 ซึ่งไม่มีตัวถอดรหัสใดที่นี่เพิ่มพร้อมกัน",
   "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "วิดีโอนี้ให้คะแนนโดยมีเกรนฟิล์ม H.274 ซึ่งมีเพียงตัวถอดรหัสของแอปเองที่เพิ่มได้ถูกต้อง (FFmpeg เพิ่มเฉพาะที่ 8 บิต และปัดลง) และที่นี่ FFmpeg จะเป็นตัวถอดรหัส: ให้คะแนนโดยไม่มีเกรนฟิล์ม หรือคำนวณเมตริกในที่ที่แอปถอดรหัสวิดีโอเอง (VMAF บน GPU)",
-  "Its film grain was not read.": "ไม่ได้อ่านเกรนฟิล์มของวิดีโอนี้"
+  "Its film grain was not read.": "ไม่ได้อ่านเกรนฟิล์มของวิดีโอนี้",
+  "film grain not shown in stills": "ภาพนิ่งไม่แสดงเกรนฟิล์ม",
+  "film grain added": "เพิ่มเกรนฟิล์มแล้ว",
+  "film grain not shown (no VVdeC)": "ไม่แสดงเกรนฟิล์ม (ไม่มี VVdeC)",
+  "film grain not shown (FFmpeg playback)": "ไม่แสดงเกรนฟิล์ม (เล่นด้วย FFmpeg)"
  },
  "plurals": {
   "about {count} day": [

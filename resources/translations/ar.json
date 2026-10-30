@@ -756,7 +756,11 @@
   "AFGS1 film grain in H.264 is added by no decoder here": "لا يضيف أي مفكك ترميز هنا حبيبات فيلم AFGS1 في H.264",
   "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "يصف نوعين من حبيبات الفيلم، حبيبات H.274 وAFGS1، ولا يضيفهما معًا أي مفكك ترميز هنا",
   "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "يُقيَّم مع حبيبات فيلم H.274 التي لا يضيفها بشكل صحيح إلا مفكك الترميز الخاص بالتطبيق (يضيفها FFmpeg عند 8 بت فقط مع التقريب للأسفل)، وهنا سيفك FFmpeg ترميزه: قيّمه دون حبيبات الفيلم، أو احسب المقياس حيث يفك التطبيق ترميز الفيديو بنفسه (VMAF على GPU)",
-  "Its film grain was not read.": "لم تُقرأ حبيبات الفيلم الخاصة به."
+  "Its film grain was not read.": "لم تُقرأ حبيبات الفيلم الخاصة به.",
+  "film grain not shown in stills": "لا تظهر حبيبات الفيلم في الصور الثابتة",
+  "film grain added": "أُضيفت حبيبات الفيلم",
+  "film grain not shown (no VVdeC)": "لا تظهر حبيبات الفيلم (لا يوجد VVdeC)",
+  "film grain not shown (FFmpeg playback)": "لا تظهر حبيبات الفيلم (التشغيل عبر FFmpeg)"
  },
  "plurals": {
   "about {count} day": [

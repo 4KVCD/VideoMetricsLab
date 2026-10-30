@@ -756,7 +756,11 @@
   "AFGS1 film grain in H.264 is added by no decoder here": "H.264의 AFGS1 필름 그레인을 더하는 디코더가 여기에 없습니다",
   "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "H.274와 AFGS1 두 종류의 필름 그레인이 기술되어 있으며, 둘을 함께 더하는 디코더가 여기에 없습니다",
   "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "H.274 필름 그레인을 포함해 채점하지만, 이를 올바르게 더하는 것은 앱 자체 디코더뿐입니다(FFmpeg는 8비트에서만 내림하여 더함). 여기서는 FFmpeg가 디코딩하게 되므로, 필름 그레인 없이 채점하거나 앱이 직접 영상을 디코딩하는 곳(GPU의 VMAF)에서 지표를 계산하세요",
-  "Its film grain was not read.": "필름 그레인을 읽지 못했습니다."
+  "Its film grain was not read.": "필름 그레인을 읽지 못했습니다.",
+  "film grain not shown in stills": "정지 화면에는 필름 그레인이 표시되지 않음",
+  "film grain added": "필름 그레인 추가됨",
+  "film grain not shown (no VVdeC)": "필름 그레인이 표시되지 않음 (VVdeC 없음)",
+  "film grain not shown (FFmpeg playback)": "필름 그레인이 표시되지 않음 (FFmpeg 재생)"
  },
  "plurals": {
   "about {count} day": [

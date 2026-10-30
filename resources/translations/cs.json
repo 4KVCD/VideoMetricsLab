@@ -756,7 +756,11 @@
   "AFGS1 film grain in H.264 is added by no decoder here": "zrno AFGS1 v H.264 zde nepřidává žádný dekodér",
   "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "popisuje dva druhy zrna, H.274 a AFGS1, které zde žádný dekodér nepřidá společně",
   "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "hodnotí se s jeho zrnem H.274, které správně přidává jen vlastní dekodér aplikace (FFmpeg ho přidává jen při 8 bitech, zaokrouhlené dolů), a zde by ho dekódoval FFmpeg: hodnoťte ho bez zrna, nebo spočítejte metriku tam, kde aplikace dekóduje video sama (VMAF na GPU)",
-  "Its film grain was not read.": "Jeho zrno nebylo načteno."
+  "Its film grain was not read.": "Jeho zrno nebylo načteno.",
+  "film grain not shown in stills": "filmové zrno se ve snímcích nezobrazuje",
+  "film grain added": "filmové zrno přidáno",
+  "film grain not shown (no VVdeC)": "filmové zrno se nezobrazuje (chybí VVdeC)",
+  "film grain not shown (FFmpeg playback)": "filmové zrno se nezobrazuje (přehrávání přes FFmpeg)"
  },
  "plurals": {
   "about {count} day": [

@@ -66,6 +66,9 @@ target_include_directories(vml_core PUBLIC ../../native/h274)
 # The decoders' scaler (native/scale/scale_filter.h), which gpu_frames.cpp
 # checks FFmpeg's scale filter against.
 target_include_directories(vml_core PRIVATE ../../native/scale)
+# The film grain rule the scoring decoder and Video Compare's decode by
+# (native/grain/grain_decoding.h, plain C++).
+target_include_directories(vml_core PUBLIC ../../native/grain)
 # libvmaf-fast's public headers, at the commit of the library the app ships
 # (third_party/README.md). SYSTEM: their warnings are not ours to fix.
 target_include_directories(vml_core SYSTEM PUBLIC ../third_party/libvmaf-fast/include)

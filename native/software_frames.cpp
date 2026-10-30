@@ -74,6 +74,7 @@ extern "C" {
 
 #include "dav1d/dav1d_api.h"
 #include "gpu_frames.h"
+#include "grain/grain_decoding.h"
 
 namespace {
 
@@ -628,6 +629,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     }
     d->slots.resize(params->pool);
     for (int slot = 0; slot < params->pool; slot++) d->free_slots.push_back(slot);
+    const GrainDecoding grain = grain_decoding(params->codec == CODEC_VVC, params->film_grain, params->film_grain_kinds);
     if (d->av1) {
         Dav1dSettings settings{};
         g_dav1d.default_settings(&settings);
@@ -637,7 +639,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         settings.all_layers = 0;
         settings.n_threads = 0;
         settings.max_frame_delay = 0;
-        settings.apply_grain = params->film_grain == 0 ? 0 : 1;
+        settings.apply_grain = grain.apply_grain ? 1 : 0;
         settings.logger_callback = nullptr;  // its messages would go to the scoring process's stderr
         if (g_dav1d.open(&d->dav1d, &settings) < 0) {
             copy_text(error, error_size, "dav1d could not start");
@@ -646,13 +648,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         }
     } else {
         d->errors_seen = g_ffmpeg_errors.load();
-        const char *name = decoder_name(params->codec);
-        if (params->codec == CODEC_VVC && params->film_grain == 1 &&
-            (params->film_grain_kinds & (GRAIN_H274 | GRAIN_H274_MODEL_1)) != 0) {
-            // VVC scored with its H.274 film grain: VVdeC adds it, of either
-            // model at any depth (FFmpeg's vvc only model 0 at 8 bits).
-            name = "libvvdec";
-        }
+        const char *name = grain.decoder != nullptr ? grain.decoder : decoder_name(params->codec);
         const AVCodec *codec = g_av.avcodec_find_decoder_by_name(name);
         if (!codec) {
             copy_text(error, error_size,
@@ -686,7 +682,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         }
         // A video scored without its film grain: its parameters given as the
         // frames' side data, not added (H.274's, AFGS1, and VVdeC's).
-        if (allocated && params->film_grain == 0) {
+        if (allocated && grain.export_grain) {
             d->codec_context->export_side_data |= AV_CODEC_EXPORT_DATA_FILM_GRAIN;
         }
         // FFmpeg's own threading, as its decode in ffmpeg.exe has it.

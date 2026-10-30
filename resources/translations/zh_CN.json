@@ -756,7 +756,11 @@
   "AFGS1 film grain in H.264 is added by no decoder here": "此处没有解码器会添加 H.264 中的 AFGS1 胶片颗粒",
   "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "它描述了两种胶片颗粒：H.274 和 AFGS1，此处没有解码器能同时添加",
   "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "它按包含 H.274 胶片颗粒评分，而只有应用自己的解码器能正确添加这种颗粒（FFmpeg 仅在 8 位时添加，且向下取整），此处却会由 FFmpeg 解码：请不含胶片颗粒评分，或在应用自行解码视频的地方计算该指标（GPU 上的 VMAF）",
-  "Its film grain was not read.": "未读取它的胶片颗粒。"
+  "Its film grain was not read.": "未读取它的胶片颗粒。",
+  "film grain not shown in stills": "静止画面不显示胶片颗粒",
+  "film grain added": "已添加胶片颗粒",
+  "film grain not shown (no VVdeC)": "不显示胶片颗粒（无 VVdeC）",
+  "film grain not shown (FFmpeg playback)": "不显示胶片颗粒（FFmpeg 播放）"
  },
  "plurals": {
   "about {count} day": [

@@ -320,9 +320,10 @@ commit it pins), on the same loader and MoltenVK as Vship:
 
 ### Still to do
 
-- VVC's film grain: Windows draws it with Direct3D 11 compute
-  (`native/d3d11_film_grain.cpp`); on macOS FFmpeg draws 8-bit 4:2:0's, and
-  10-bit VVC shows without it.
+- VVC's film grain: Video Compare decodes a VVC video scored with its H.274
+  grain with VVdeC (FFmpeg's libvvdec), which adds it at any depth; the
+  macOS FFmpeg build has no VVdeC yet, so there it shows without its grain
+  ("film grain not shown (no VVdeC)").
 - HDR on an HDR display (EDR): the presenter's layer takes PQ in BT.2020 for
   it, but the app does not yet ask macOS whether the display shows HDR
   (`query_display_hdr`), so HDR video is mapped to SDR.

@@ -756,7 +756,11 @@
   "AFGS1 film grain in H.264 is added by no decoder here": "aucun décodeur ici n'ajoute le grain de film AFGS1 en H.264",
   "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "elle décrit deux sortes de grain de film, celui de H.274 et AFGS1, qu'aucun décodeur ici n'ajoute ensemble",
   "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "elle est notée avec son grain de film H.274, que seul le décodeur de l'application ajoute correctement (FFmpeg ne l'ajoute qu'en 8 bits, arrondi vers le bas), et ici FFmpeg la décoderait : notez-la sans son grain de film, ou calculez la métrique là où l'application décode la vidéo elle-même (VMAF sur le GPU)",
-  "Its film grain was not read.": "Son grain de film n'a pas été lu."
+  "Its film grain was not read.": "Son grain de film n'a pas été lu.",
+  "film grain not shown in stills": "grain de film non affiché dans les images fixes",
+  "film grain added": "grain de film ajouté",
+  "film grain not shown (no VVdeC)": "grain de film non affiché (pas de VVdeC)",
+  "film grain not shown (FFmpeg playback)": "grain de film non affiché (lecture FFmpeg)"
  },
  "plurals": {
   "about {count} day": [

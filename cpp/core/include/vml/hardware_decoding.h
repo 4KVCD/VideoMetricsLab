@@ -131,6 +131,16 @@ bool take_read_profile(VideoInfo& saved, const VideoInfo& read);
 std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                        const VideoInfo& video, MacGpuDecoding mac = MacGpuDecoding::deep);
 
+// Whether `video`'s film grain, as it is scored (film_grain_scoring.h), needs
+// software decoding rather than FFmpeg's `hwaccel` decoding ("d3d11va" for
+// Video Compare's player on Windows, "videotoolbox" on macOS): H.274's and
+// AFGS1 added, which GPU decoders do not add; AV1's on VideoToolbox, which
+// FFmpeg cannot tell to leave it out and which is not known to add it.
+// (FFmpeg's D3D11VA does both as asked: NVIDIA's, Intel's and AMD's pictures
+// equal dav1d's with and without. pick_decode refuses it for AV1 without its
+// grain all the same: a run decodes with AMD's decoders in the app too.)
+bool grain_needs_software_decoding(const VideoInfo& video, const std::string& hwaccel);
+
 // Why `info` is decoded in software, for the log: GPU decoding is off (not
 // `gpu_decode`), or what pick_decode refuses in it.
 std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode);

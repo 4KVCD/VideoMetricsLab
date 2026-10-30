@@ -1052,9 +1052,7 @@ DecodePlan plan_decode(const VideoInfo& info, const std::optional<CropBox>& crop
     plan.shift = depth > 8 ? shift : 0;
     plan.luma_only = luma_only;
     plan.scaler = is_scaler(algorithm) ? algorithm : "bicubic";
-    plan.film_grain = grain.scoring == GrainScoring::with      ? 1
-                      : grain.scoring == GrainScoring::without ? 0
-                                                               : -1;
+    plan.film_grain = decoder_film_grain(grain);
     plan.film_grain_kinds = grain.kinds;
     plan.software_only = software_only;
     plan.untimed = info.is_raw_stream();

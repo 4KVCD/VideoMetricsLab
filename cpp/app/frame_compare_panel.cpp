@@ -36,6 +36,7 @@
 #include "widgets.h"
 #include "window_helpers.h"
 #include "vml/crop_detect.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
 #include "vml/python_text.h"
@@ -1202,7 +1203,13 @@ void FrameComparePanel::update_labels() {
                                   {{"side", app::tr("TEST")}, {"number", current_index_ + 1}, {"count", entries_.size()}});
     const QString name = showing_source_ ? qt_text(platform::path_text(comparison.source_info.path.filename()))
                                          : entry->label;
-    showing_label->setText(side + QString::fromUtf8(" \xE2\x80\x94 ") + name);
+    // A still is FFmpeg's, which leaves out H.274's grain where the scores
+    // have it (only VVdeC adds it as it should): Video Compare's player shows it.
+    const VideoInfo& shown = frame_video_info(comparison, showing_source_ ? FrameSide::source : FrameSide::distorted);
+    const bool grain_not_shown = !is_video_mode() && only_the_app_adds(effective_film_grain(shown));
+    showing_label->setText(side + QString::fromUtf8(" \xE2\x80\x94 ") + name +
+                           (grain_not_shown ? QString::fromUtf8(" \xC2\xB7 ") + app::tr("film grain not shown in stills")
+                                            : QString()));
     update_frame_line();
     update_color_status();
 }
@@ -1378,7 +1385,8 @@ std::optional<FrameComparePanel::CacheKey> FrameComparePanel::cache_key(FrameSid
                     platform::path_text(info.path),
                     python_repr(info.start_offset) + " " + python_repr(comparison.fps),
                     colors.cache_token(),
-                    frame_filter(comparison, side, colors)};
+                    frame_filter(comparison, side, colors),
+                    !picture_grain_options(info).empty()};
 }
 
 const QImage* FrameComparePanel::current_image() const {

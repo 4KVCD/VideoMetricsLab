@@ -756,7 +756,11 @@
   "AFGS1 film grain in H.264 is added by no decoder here": "H.264'teki AFGS1 film grenini burada hiçbir kod çözücü eklemez",
   "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "iki tür film greni tanımlıyor, H.274 ve AFGS1; bunları burada hiçbir kod çözücü birlikte eklemez",
   "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "H.274 film greniyle puanlanıyor; bunu yalnızca uygulamanın kendi kod çözücüsü doğru ekler (FFmpeg yalnızca 8 bitte, aşağı yuvarlayarak ekler) ve burada onu FFmpeg çözerdi: grensiz puanlayın ya da metriği uygulamanın videoyu kendisinin çözdüğü yerde hesaplayın (GPU'da VMAF)",
-  "Its film grain was not read.": "Film greni okunmadı."
+  "Its film grain was not read.": "Film greni okunmadı.",
+  "film grain not shown in stills": "film greni durağan karelerde gösterilmez",
+  "film grain added": "film greni eklendi",
+  "film grain not shown (no VVdeC)": "film greni gösterilmez (VVdeC yok)",
+  "film grain not shown (FFmpeg playback)": "film greni gösterilmez (FFmpeg ile oynatma)"
  },
  "plurals": {
   "about {count} day": [

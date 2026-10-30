@@ -10,6 +10,7 @@
 
 #include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/hardware_decoding.h"
 #include "vml/number_format.h"
 #include "vml/platform/process.h"
@@ -301,13 +302,19 @@ std::vector<std::string> build_frame_command(const std::string& ffmpeg, const Fr
     }
     std::error_code error;
     const std::filesystem::path input = std::filesystem::weakly_canonical(frame_input_path(comparison, side), error);
-    return {ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-ss", format_fixed(start.seek, 9), "-i",
-            platform::path_text(error ? frame_input_path(comparison, side) : input), "-map",
-            "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", filters, "-frames:v", "1", "-f", "image2pipe",
-            // Stored, not compressed: the same pixels, 25 MB for 4K rather
-            // than 2-8, but written 85-340 ms sooner and read in 27 ms rather
-            // than 64-104.
-            "-c:v", "png", "-compression_level", "0", "-pred", "none", "pipe:1"};
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error"};
+    const std::vector<std::string> grain = picture_grain_options(frame_video_info(comparison, side));
+    command.insert(command.end(), grain.begin(), grain.end());
+    command.insert(command.end(),
+                   {"-ss", format_fixed(start.seek, 9), "-i",
+                    platform::path_text(error ? frame_input_path(comparison, side) : input), "-map",
+                    "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", filters, "-frames:v", "1", "-f",
+                    "image2pipe",
+                    // Stored, not compressed: the same pixels, 25 MB for 4K
+                    // rather than 2-8, but written 85-340 ms sooner and read
+                    // in 27 ms rather than 64-104.
+                    "-c:v", "png", "-compression_level", "0", "-pred", "none", "pipe:1"});
+    return command;
 }
 
 std::string extract_frame_png(const std::string& ffmpeg, const FrameComparison& comparison, FrameSide side,

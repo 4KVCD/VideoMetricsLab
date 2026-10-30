@@ -7,6 +7,7 @@
 
 #include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -142,6 +143,8 @@ std::vector<std::string> build_playback_command(const std::string& ffmpeg, const
     if (interop && accel == "cuda") {
         command.insert(command.end(), {"-hwaccel_device", "decode"});  // the device the Vulkan one is made from
     }
+    const std::vector<std::string> grain = picture_grain_options(info);
+    command.insert(command.end(), grain.begin(), grain.end());
     command.insert(command.end(), {"-i", resolved_text(frame_input_path(comparison, side))});
 
     const std::optional<CropBox>& crop = side == FrameSide::source ? comparison.source_crop : comparison.distorted_crop;

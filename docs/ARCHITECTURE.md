@@ -18,10 +18,10 @@ both and on every system. CMake holds that boundary: `vml_core` links only
 
 The native libraries in `native` (C++ with a C API, built by the
 `scripts/build_*.ps1` into `resources/native`) are loaded when first needed:
-the GPU frame decoders and the software decoder (`native/gpu_frames.h`),
-Video Compare's Direct3D 11 presenter (`d3d11_tonemap.dll`) and its VVC film
-grain (`d3d11_film_grain.dll`). The bundled libvmaf, Vship and FFmpeg's
-libraries are loaded the same way, from `resources/tools`.
+the GPU frame decoders and the software decoder (`native/gpu_frames.h`) and
+Video Compare's Direct3D 11 presenter (`d3d11_tonemap.dll`). The bundled
+libvmaf, Vship and FFmpeg's libraries are loaded the same way, from
+`resources/tools`.
 
 | Concern | Main files (`cpp/core/src` unless named) |
 | --- | --- |
@@ -35,7 +35,7 @@ libraries are loaded the same way, from `resources/tools`.
 | Statistics and graphs | `stats.cpp`; `app/graph_panel.cpp`, `app/chart.cpp` |
 | The window's runs | `app/run_worker.cpp`, `app/main_window_run.cpp`, `run_line.cpp` |
 | Still comparison | `frame_extract.cpp`, `app/frame_compare_panel.cpp` |
-| Native playback | `native_playback.cpp`, `soundtrack_clock.cpp`; `app/native_pool.cpp`, `native_decoder.cpp`, `native_device.cpp`, `native_presentation.cpp`, `native_soundtrack.cpp`, `native_grain.cpp`, `native_dav1d.cpp` |
+| Native playback | `native_playback.cpp`, `soundtrack_clock.cpp`; `app/native_pool.cpp`, `native_decoder.cpp`, `native_device.cpp`, `native_presentation.cpp`, `native_soundtrack.cpp`, `native_dav1d.cpp` |
 | FFmpeg playback fallback | `video_playback.cpp`, `app/playback_worker.cpp` |
 | Bitrate analysis | `bitrate.cpp`, `app/bitrate_panel.cpp` |
 | Processes and cancelling | `cpp/platform` (`process.h`), `cancel.cpp` |

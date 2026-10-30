@@ -323,11 +323,17 @@ bool no_gpu_decoder_adds(const FilmGrainScoring& grain) {
            (grain.kinds & (film_grain_h274 | film_grain_h274_model_1 | film_grain_afgs1)) != 0;
 }
 
-// Whether `video`'s film grain, as it is scored (film_grain_scoring.h), needs
-// software decoding rather than `hwaccel`: H.274's and AFGS1 added
-// (no_gpu_decoder_adds); AV1's on AMD's decoders in the app and Apple's
-// VideoToolbox, which cannot leave it out (VideoToolbox's adding it is not
-// proven either).
+// Whether `video` is AV1 scored without its grain and `hwaccel` is D3D11VA,
+// which a run decodes with AMD's decoders in the app too (gpu_frames.cpp:
+// Windows' and AMF's). Neither can leave the grain out: on a Radeon 8060S
+// they add it whatever they are told, though FFmpeg's D3D11VA leaves it out.
+bool apps_amd_decoders_add_av1_grain(const VideoInfo& video, const std::string& hwaccel) {
+    const FilmGrainScoring grain = effective_film_grain(video);
+    return hwaccel == "d3d11va" && grain.scoring == GrainScoring::without && (grain.kinds & film_grain_av1) != 0;
+}
+
+}  // namespace
+
 bool grain_needs_software_decoding(const VideoInfo& video, const std::string& hwaccel) {
     const FilmGrainScoring grain = effective_film_grain(video);
     if (no_gpu_decoder_adds(grain)) {
@@ -336,16 +342,15 @@ bool grain_needs_software_decoding(const VideoInfo& video, const std::string& hw
     if ((grain.kinds & film_grain_av1) == 0 || grain.scoring == GrainScoring::none) {
         return false;
     }
-    return hwaccel == "videotoolbox" || (hwaccel == "d3d11va" && grain.scoring == GrainScoring::without);
+    return hwaccel == "videotoolbox";
 }
-
-}  // namespace
 
 std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                        const VideoInfo& video, MacGpuDecoding mac) {
     std::optional<std::string> hwaccel =
         pick_decode(capabilities, vendor, video.codec_name, video.pix_fmt, video.width, video.height, mac);
-    if (hwaccel && grain_needs_software_decoding(video, *hwaccel)) {
+    if (hwaccel &&
+        (grain_needs_software_decoding(video, *hwaccel) || apps_amd_decoders_add_av1_grain(video, *hwaccel))) {
         return std::nullopt;
     }
     // A video of no known profile may be lossless too (until the window has
