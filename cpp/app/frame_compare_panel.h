@@ -1,7 +1,7 @@
 // The Video Compare tab (the Python app's vmaf_app/ui/frame_compare_panel.py):
 // the source and a test video frame by frame, with zoom, a seek bar, the
-// frame's scores and HDR display handling. Still frames are extracted by
-// FFmpeg (frame_extract.h); pairs that can play are played by a
+// frame's scores and HDR display handling. Still frames are made by FFmpeg,
+// from the app's own decoder's pictures for VVC (frame_extract.h); pairs that can play are played by a
 // VideoCompareView (video_compare_view.h), and resolution tests and pairs
 // that cannot play show as still frames.
 #pragma once
@@ -254,7 +254,7 @@ private:
         std::string timing;    // where its frames start, and the frame rate
         std::string colours;   // PreviewColorSettings::cache_token
         std::string filters;   // the crops, the scaling, the tone mapping
-        bool grain_left_out = false;  // its film grain (picture_grain_options)
+        std::string grain;     // what its film grain depends on (still_grain)
         auto operator<=>(const CacheKey&) const = default;
     };
     // A pair's key for its black bars: the pair, and its two files (each

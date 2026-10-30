@@ -121,6 +121,22 @@ TEST(GrainFeed, AWindowFeedsThePicturesFfmpegsSeekAndDurationGive) {
     EXPECT_EQ(film.take(24), Take::feed_and_end);       // 1.001 s
 }
 
+// A still's window (Frame Compare's, frame_extract.cpp): the pictures before
+// its skip left out as trim=start leaves them out (9 decimals given, 6 read,
+// the rest cut, then to the nearest tick), and the first one after it alone fed.
+TEST(GrainFeed, AStillFeedsTheOnePictureFfmpegsTrimGives) {
+    using Take = WindowCut::Take;
+    const WindowCut still(Rational{1, 1000}, 0, 1.2345678);  // 1234567 us: tick 1234.567, rounded to 1235
+    EXPECT_EQ(still.take(-1), Take::skip);
+    EXPECT_EQ(still.take(1234), Take::skip);
+    EXPECT_EQ(still.take(1235), Take::feed_and_end);
+    const WindowCut cut_not_rounded(Rational{1, 1'000'000}, 0, 0.0000019);  // 1.9 us read as 1
+    EXPECT_EQ(cut_not_rounded.take(0), Take::skip);
+    EXPECT_EQ(cut_not_rounded.take(1), Take::feed_and_end);
+    const WindowCut no_skip(Rational{1, 1000}, 0);
+    EXPECT_EQ(no_skip.take(0), Take::feed_and_end);
+}
+
 // Each route's command has a fed video's input in its file's place, and no
 // GPU decoding for it; the other video's input and everything after are as
 // for the files.

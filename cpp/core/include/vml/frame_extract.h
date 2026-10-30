@@ -138,8 +138,21 @@ std::vector<std::string> build_frame_command(const std::string& ffmpeg, const Fr
                                              FrameSide side, long long frame,
                                              const PreviewColorSettings& colors = {}, double lead = 0.0);
 
-// Frame `frame` of `side` as PNG bytes. Throws FrameExtractError (a missing
-// file, FFmpeg's error, no frame there), and Cancelled once `cancel` ends it.
+// Whether a still of `info` is made from the app's decoder's pictures
+// (grain_feed.h's windows_from_the_app, where the app can decode it here),
+// with its grain as it is scored, rather than by FFmpeg from the file.
+bool still_from_the_app(const VideoInfo& info);
+
+// What a still of `info`'s film grain depends on, for keeping the still:
+// the decoder that makes it and how it is told the grain.
+std::string still_grain(const VideoInfo& info);
+
+// Frame `frame` of `side` as PNG bytes: from the app's decoder's pictures
+// (still_from_the_app), else from FFmpeg's decoding of the file
+// (build_frame_command; logged for a codec the app decodes elsewhere).
+// Throws FrameExtractError (a missing file, FFmpeg's error, no frame there,
+// the app's decoder failing on it, a codec only the app decodes that it
+// cannot here), and Cancelled once `cancel` ends it.
 std::string extract_frame_png(const std::string& ffmpeg, const FrameComparison& comparison, FrameSide side,
                               long long frame, const CancelToken& cancel, const PreviewColorSettings& colors = {});
 

@@ -749,7 +749,10 @@ std::optional<CropBox> run_fed_window(const std::string& ffmpeg, const VideoInfo
     // (gpu_frames.cpp's configuration).
     VideoInfo coded = info;
     coded.with_film_grain = false;
-    PictureFeed feed(coded, ffmpeg, "", cancel, FeedWindow{start, window});
+    // From the millisecond window_command's -ss gives FFmpeg (its text, so
+    // that a start on a half millisecond is rounded as that text rounds it).
+    const double start_ms = python_float(format_fixed(start, 3)).value_or(start);
+    PictureFeed feed(coded, ffmpeg, "", cancel, FeedWindow{start_ms, window});
     std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner"};
     command.insert(command.end(), feed.input_arguments().begin(), feed.input_arguments().end());
     command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-vf", cropdetect(), "-f", "null", "-"});
@@ -774,11 +777,8 @@ std::optional<CropBox> run_window_through_the_app(const std::string& ffmpeg, con
     try {
         return run_fed_window(ffmpeg, info, start, window, cancel);
     } catch (const FilmGrainRefusal& refusal) {
-        const AppDecodedCodec* codec = app_decoded_codec(ascii_lower(info.codec_name));
-        if (codec != nullptr && !codec->ffmpeg_decodes) {
-            throw CropDetectError("Crop detection failed for " + platform::path_text(info.path) + ": " +
-                                  std::string(codec->decoder) + " could not decode it here, and FFmpeg does not (" +
-                                  refusal.what() + ")");
+        if (const std::optional<std::string> failure = unfed_failure(info, refusal)) {
+            throw CropDetectError("Crop detection failed for " + platform::path_text(info.path) + ": " + *failure);
         }
         logger.info("Black bars in " + platform::path_text(info.path.filename()) + ": a window sampled by FFmpeg, " +
                     "as the app's decoder could not feed it (" + refusal.what() + ")");
@@ -1157,9 +1157,7 @@ CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double
 
 }  // namespace
 
-bool samples_through_the_app(const VideoInfo& info) {
-    return app_decoded_codec(ascii_lower(info.codec_name)) != nullptr && !info.is_raw_stream();
-}
+bool samples_through_the_app(const VideoInfo& info) { return windows_from_the_app(info); }
 
 void set_crop_store(std::function<std::filesystem::path()> store) { answers().set_store(std::move(store)); }
 

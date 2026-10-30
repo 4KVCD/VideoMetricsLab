@@ -1510,7 +1510,8 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
     state.software_only = plan.software_only;
     std::vector<std::string> reader_options = plan.untimed ? info.input_options() : std::vector<std::string>();
     if (start) {
-        reader_options.insert(reader_options.end(), {"-ss", format_fixed(*start, 3)});
+        // As the stills' -ss (frame_extract.cpp): FFmpeg reads it to the microsecond.
+        reader_options.insert(reader_options.end(), {"-ss", format_fixed(*start, 9)});
     }
     state.reader = std::make_unique<PacketReader>(ffmpeg, info.path, plan.codec, reader_options, plan.untimed);
     state.configuration = configuration(ffprobe, info.path, plan.codec);

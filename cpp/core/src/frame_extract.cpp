@@ -8,9 +8,11 @@
 #include <sstream>
 #include <tuple>
 
+#include "vml/app_log.h"
 #include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_scoring.h"
+#include "vml/grain_feed.h"
 #include "vml/hardware_decoding.h"
 #include "vml/number_format.h"
 #include "vml/platform/process.h"
@@ -20,6 +22,8 @@
 namespace vml {
 
 namespace {
+
+const app_log::Logger logger("vml.frame_extract");
 
 // The filters that convert a frame to 8-bit RGB for the window, mapping HDR
 // to SDR where the mode says.
@@ -286,16 +290,100 @@ std::string frame_filter(const FrameComparison& comparison, FrameSide side, cons
     return chain;
 }
 
-std::vector<std::string> build_frame_command(const std::string& ffmpeg, const FrameComparison& comparison,
-                                             FrameSide side, long long frame, const PreviewColorSettings& colors,
-                                             double lead) {
+namespace {
+
+// Where `frame` of `side` is decoded from (seek_point). Throws as
+// build_frame_command does.
+SeekPoint frame_start(const FrameComparison& comparison, FrameSide side, long long frame, double lead) {
     if (frame < 0) {
         throw std::invalid_argument("frame number must be non-negative");
     }
     if (comparison.fps <= 0) {
         throw FrameExtractError("This video has no usable frame rate.");
     }
-    const SeekPoint start = seek_point(seek_seconds(frame_video_info(comparison, side), frame, comparison.fps), lead);
+    return seek_point(seek_seconds(frame_video_info(comparison, side), frame, comparison.fps), lead);
+}
+
+// A still's command after its input: the first frame through `filters`, as a
+// PNG on standard output.
+void add_png_output(std::vector<std::string>& command, const std::string& filters) {
+    command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", filters,
+                                   "-frames:v", "1", "-f", "image2pipe",
+                                   // Stored, not compressed: the same pixels, 25 MB for 4K
+                                   // rather than 2-8, but written 85-340 ms sooner and read
+                                   // in 27 ms rather than 64-104.
+                                   "-c:v", "png", "-compression_level", "0", "-pred", "none", "pipe:1"});
+}
+
+// What a still's FFmpeg wrote: its standard output, exit code and error text.
+struct StillOutput {
+    std::string png;
+    int exit_code = 0;
+    std::string error;
+};
+
+StillOutput run_still(const std::vector<std::string>& command, const CancelToken& cancel) {
+    platform::ChildProcess process = platform::ChildProcess::start(command);
+    StillOutput output;
+    const CancelToken::Attached attached = cancel.attach(process);
+    std::vector<char> buffer(1 << 20);
+    while (const std::size_t count = process.read(buffer.data(), buffer.size())) {
+        output.png.append(buffer.data(), count);
+    }
+    output.exit_code = process.wait();
+    if (output.exit_code != 0) {
+        output.error = std::string(python_strip(replace_invalid_utf8(process.standard_error())));
+    }
+    return output;
+}
+
+// The PNG; FrameExtractError with FFmpeg's error, or for no frame there.
+std::string still_png(StillOutput output, long long frame, const CancelToken& cancel) {
+    if (output.exit_code != 0) {
+        cancel.throw_if_cancelled();
+        throw FrameExtractError(output.error.empty()
+                                    ? "ffmpeg exited with code " + platform::exit_code_text(output.exit_code) + "."
+                                    : last_characters(output.error, 2000));
+    }
+    if (output.png.empty()) {
+        throw FrameExtractError("No frame was returned at frame " + std::to_string(frame) +
+                                "; it may be beyond the end of the video.");
+    }
+    return std::move(output.png);
+}
+
+// The still made from the app's decoder's pictures, with the video's grain
+// as it is scored: the pictures from the seek point fed to FFmpeg, those
+// before the frame left out as the trim filter leaves them out, and the
+// first one after shown. Throws FilmGrainRefusal where the app could not
+// feed them.
+std::string fed_still(const std::string& ffmpeg, const FrameComparison& comparison, FrameSide side, long long frame,
+                      const CancelToken& cancel, const PreviewColorSettings& colors, const SeekPoint& start) {
+    // VVC's decoder asks ffprobe nothing (gpu_frames.cpp's configuration).
+    PictureFeed feed(frame_video_info(comparison, side), ffmpeg, "", cancel, FeedWindow{start.seek, 0, start.skip});
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error"};
+    command.insert(command.end(), feed.input_arguments().begin(), feed.input_arguments().end());
+    add_png_output(command, frame_filter(comparison, side, colors));
+    StillOutput output = run_still(command, cancel);
+    feed.finish();  // a feeding that failed gives no still
+    return still_png(std::move(output), frame, cancel);
+}
+
+}  // namespace
+
+bool still_from_the_app(const VideoInfo& info) { return windows_from_the_app(info) && !decoding_refusal(info); }
+
+std::string still_grain(const VideoInfo& info) {
+    if (still_from_the_app(info)) {
+        return "the app's decoder, grain " + std::to_string(decoder_film_grain(effective_film_grain(info)));
+    }
+    return picture_grain_options(info).empty() ? "FFmpeg, grain added" : "FFmpeg, grain left out";
+}
+
+std::vector<std::string> build_frame_command(const std::string& ffmpeg, const FrameComparison& comparison,
+                                             FrameSide side, long long frame, const PreviewColorSettings& colors,
+                                             double lead) {
+    const SeekPoint start = frame_start(comparison, side, frame, lead);
     std::string filters = frame_filter(comparison, side, colors);
     if (const std::optional<std::string> trim = trim_filter(start)) {
         filters = *trim + "," + filters;
@@ -305,15 +393,9 @@ std::vector<std::string> build_frame_command(const std::string& ffmpeg, const Fr
     std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error"};
     const std::vector<std::string> grain = picture_grain_options(frame_video_info(comparison, side));
     command.insert(command.end(), grain.begin(), grain.end());
-    command.insert(command.end(),
-                   {"-ss", format_fixed(start.seek, 9), "-i",
-                    platform::path_text(error ? frame_input_path(comparison, side) : input), "-map",
-                    "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", filters, "-frames:v", "1", "-f",
-                    "image2pipe",
-                    // Stored, not compressed: the same pixels, 25 MB for 4K
-                    // rather than 2-8, but written 85-340 ms sooner and read
-                    // in 27 ms rather than 64-104.
-                    "-c:v", "png", "-compression_level", "0", "-pred", "none", "pipe:1"});
+    command.insert(command.end(), {"-ss", format_fixed(start.seek, 9), "-i",
+                                   platform::path_text(error ? frame_input_path(comparison, side) : input)});
+    add_png_output(command, filters);
     return command;
 }
 
@@ -325,29 +407,28 @@ std::string extract_frame_png(const std::string& ffmpeg, const FrameComparison& 
         throw FrameExtractError("Video file is missing: " + platform::path_text(path));
     }
     cancel.throw_if_cancelled();
-    platform::ChildProcess process = platform::ChildProcess::start(
-        build_frame_command(ffmpeg, comparison, side, frame, colors, keyframe_lead(ffmpeg, path, cancel)));
-    std::string png;
-    int exit_code = 0;
-    {
-        const CancelToken::Attached attached = cancel.attach(process);
-        std::vector<char> buffer(1 << 20);
-        while (const std::size_t count = process.read(buffer.data(), buffer.size())) {
-            png.append(buffer.data(), count);
+    const double lead = keyframe_lead(ffmpeg, path, cancel);
+    const VideoInfo& info = frame_video_info(comparison, side);
+    if (still_from_the_app(info)) {
+        const SeekPoint start = frame_start(comparison, side, frame, lead);
+        try {
+            return fed_still(ffmpeg, comparison, side, frame, cancel, colors, start);
+        } catch (const FilmGrainRefusal& refusal) {
+            // Not FFmpeg's picture instead: the still is labelled and kept as
+            // the app's decoder's, and scoring the video would fail too.
+            throw FrameExtractError(std::string("The app's decoder could not decode this frame: ") + refusal.what());
         }
-        exit_code = process.wait();
     }
-    if (exit_code != 0) {
-        cancel.throw_if_cancelled();
-        const std::string detail(python_strip(replace_invalid_utf8(process.standard_error())));
-        throw FrameExtractError(detail.empty() ? "ffmpeg exited with code " + platform::exit_code_text(exit_code) + "."
-                                               : last_characters(detail, 2000));
+    if (windows_from_the_app(info)) {  // refused before any feeding: decoding_refusal
+        const FilmGrainRefusal refusal(decoding_refusal(info).value_or("the app's decoder cannot decode it here"));
+        if (const std::optional<std::string> failure = unfed_failure(info, refusal)) {
+            throw FrameExtractError(*failure);
+        }
+        logger.info("A still of " + platform::path_text(path.filename()) +
+                    " decoded by FFmpeg, as the app's decoder could not feed it (" + refusal.what() + ")");
     }
-    if (png.empty()) {
-        throw FrameExtractError("No frame was returned at frame " + std::to_string(frame) +
-                                "; it may be beyond the end of the video.");
-    }
-    return png;
+    return still_png(run_still(build_frame_command(ffmpeg, comparison, side, frame, colors, lead), cancel), frame,
+                     cancel);
 }
 
 }  // namespace vml

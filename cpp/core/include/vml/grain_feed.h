@@ -9,8 +9,8 @@
 // as the app's other decoding for scores does: one that crashes ends that
 // process and fails the run, not the window. It makes the pipe, says so,
 // decodes the video from its start (or a window of it: black-bar detection's
-// samples, FeedWindow) and writes each picture; FFmpeg is started once the
-// pipe is there.
+// samples and Frame Compare's stills, FeedWindow) and writes each picture;
+// FFmpeg is started once the pipe is there.
 #pragma once
 
 #include <functional>
@@ -22,6 +22,7 @@
 #include <nlohmann/json.hpp>
 
 #include "vml/cancel.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
 #include "vml/hardware_decoding.h"
 #include "vml/video.h"
@@ -44,25 +45,42 @@ std::optional<std::string> feed_refusal(const VideoInfo& info);
 // the run's frame pairing: what refuses a window of them (FeedWindow).
 std::optional<std::string> decoding_refusal(const VideoInfo& info);
 
+// Whether windows of `info`'s pictures (FeedWindow) are to come from the
+// app's decoder rather than FFmpeg's decoding of the file: a codec
+// app_decoders.h lists, read from a file FFmpeg seeks in (not a raw stream,
+// whose windows start from bytes). Black-bar detection's samples and Frame
+// Compare's stills.
+bool windows_from_the_app(const VideoInfo& info);
+
+// Where the app could not feed `info`'s pictures (`refusal`): the message
+// their use fails with where FFmpeg does not decode the codec either (a codec
+// only the app decodes, app_decoders.h), or nothing where FFmpeg decodes the
+// file instead.
+std::optional<std::string> unfed_failure(const VideoInfo& info, const FilmGrainRefusal& refusal);
+
 // A window of a video's pictures fed instead of the whole video: from `start`
-// seconds, as FFmpeg's -ss starts there (to the millisecond), `length`
-// seconds long, as its -t.
+// seconds, as FFmpeg's -ss starts there (to the microsecond), `length`
+// seconds long, as its -t (to the millisecond; 0: the first picture alone);
+// the pictures in its first `skip` seconds left out, as FFmpeg's trim=start
+// leaves them out (a still's: frame_extract.h's SeekPoint).
 struct FeedWindow {
     double start = 0;
     double length = 0;
+    double skip = 0;
 };
 
-// Which of a window's pictures are fed, as FFmpeg's -ss and -t give them to
-// what reads them (crop_detect.cpp's cropdetect, which sees the frame at or
-// past the end that -t drops after it): those stamped from the window's
-// start (0, its packets being read from there), the ones before it, from the
-// keyframe the reading starts at, skipped; up to and including the first at
-// or past its length, which ends it.
+// Which of a window's pictures are fed, as FFmpeg's -ss, trim=start and -t
+// give them to what reads them (crop_detect.cpp's cropdetect, which sees the
+// frame at or past the end that -t drops after it; a still's one frame):
+// those stamped from the window's start (0, its packets being read from
+// there) and from `skip` on, the ones before skipped; up to and including the
+// first at or past its length, which ends it.
 class WindowCut {
 public:
-    // `length` in seconds, to the millisecond as FFmpeg's -t takes it; the
-    // pictures' timestamps in `time_base`.
-    WindowCut(Rational time_base, double length);
+    // The pictures' timestamps in `time_base`; `length` to the millisecond,
+    // as FFmpeg's -t takes it, and `skip` as trim=start takes it: to the
+    // microsecond, cut there, then to the nearest tick.
+    WindowCut(Rational time_base, double length, double skip = 0);
 
     enum class Take { skip, feed, feed_and_end };
     // The picture stamped `pts`, in order.
@@ -71,6 +89,7 @@ public:
 private:
     Rational time_base_;
     long long length_ms_ = 0;
+    long long skip_pts_ = 0;
 };
 
 // The input options of a fed video's pictures, before "-i" and the pipe's

@@ -10,6 +10,7 @@
 #include <thread>
 #include <utility>
 
+#include "vml/app_decoders.h"
 #include "vml/app_log.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
@@ -143,11 +144,47 @@ std::optional<std::string> decoding_refusal(const VideoInfo& info) {
 #endif
 }
 
-WindowCut::WindowCut(Rational time_base, double length)
-    : time_base_(time_base), length_ms_(std::llround(length * 1000)) {}
+bool windows_from_the_app(const VideoInfo& info) {
+    return app_decoded_codec(ascii_lower(info.codec_name)) != nullptr && !info.is_raw_stream();
+}
+
+std::optional<std::string> unfed_failure(const VideoInfo& info, const FilmGrainRefusal& refusal) {
+    const AppDecodedCodec* codec = app_decoded_codec(ascii_lower(info.codec_name));
+    if (codec == nullptr || codec->ffmpeg_decodes) {
+        return std::nullopt;
+    }
+    return std::string(codec->decoder) + " could not decode it here, and FFmpeg does not (" + refusal.what() + ")";
+}
+
+namespace {
+
+// `seconds` as FFmpeg reads the text frame_extract.cpp's trim_filter gives it
+// (9 decimals; av_parse_time keeps 6 of them, cutting the rest): microseconds.
+long long trim_microseconds(double seconds) {
+    const std::string text = format_fixed(seconds, 9);
+    const std::size_t point = text.find('.');
+    const long long whole = std::stoll(text.substr(0, point));
+    const std::string fraction = point == std::string::npos ? "" : (text.substr(point + 1) + "000000").substr(0, 6);
+    return whole * 1'000'000 + (fraction.empty() ? 0 : std::stoll(fraction));
+}
+
+// `microseconds` in ticks of `time_base`, to the nearest, halves away from 0,
+// as av_rescale_q gives trim's start.
+long long ticks_of(long long microseconds, Rational time_base) {
+    const long long scaled = microseconds * time_base.denominator;
+    const long long per_tick = 1'000'000LL * time_base.numerator;
+    return (scaled + per_tick / 2) / per_tick;
+}
+
+}  // namespace
+
+WindowCut::WindowCut(Rational time_base, double length, double skip)
+    : time_base_(time_base),
+      length_ms_(std::llround(length * 1000)),
+      skip_pts_(skip > 0 ? ticks_of(trim_microseconds(skip), time_base) : 0) {}
 
 WindowCut::Take WindowCut::take(long long pts) const {
-    if (pts < 0) {
+    if (pts < 0 || pts < skip_pts_) {
         return Take::skip;
     }
     // pts * numerator / denominator seconds against length_ms_ / 1000, in
@@ -208,7 +245,7 @@ PictureFeed::PictureFeed(const VideoInfo& info, const std::string& ffmpeg, const
     nlohmann::json request = {
         {"video", video_json(info)}, {"pipe", state.pipe_path}, {"ffmpeg", ffmpeg}, {"ffprobe", ffprobe}};
     if (window) {
-        request["window"] = {{"start", window->start}, {"length", window->length}};
+        request["window"] = {{"start", window->start}, {"length", window->length}, {"skip", window->skip}};
     }
     const auto say_ready = [&state] {
         const std::lock_guard lock(state.mutex);
@@ -330,7 +367,8 @@ nlohmann::json picture_feed_task(const nlohmann::json& request, const std::funct
     }
     std::optional<FeedWindow> window;
     if (const auto found = request.find("window"); found != request.end()) {
-        window = FeedWindow{found->at("start").get<double>(), found->at("length").get<double>()};
+        window = FeedWindow{found->at("start").get<double>(), found->at("length").get<double>(),
+                            found->value("skip", 0.0)};
     }
     platform::OutboundPipe pipe(request.at("pipe").get<std::string>(), platform::frame_pipe_bytes);
     on_ready();
@@ -344,7 +382,7 @@ nlohmann::json picture_feed_task(const nlohmann::json& request, const std::funct
     const CancelToken never;  // the parent ends this process to stop it
     std::optional<WindowCut> cut;
     if (window) {
-        cut.emplace(stream.time_base(never), window->length);
+        cut.emplace(stream.time_base(never), window->length, window->skip);
     }
     std::vector<std::uint8_t> picture(plan.frame_bytes());
     long long frames = 0;
