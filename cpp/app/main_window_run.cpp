@@ -311,7 +311,13 @@ std::variant<VmafJob, QString> MainWindow::job_for(const RowData& row_data) cons
                                          ? resample_analysis_dimensions(*source_info_, std::nullopt)
                                          : analysis_dimensions(*source_info_, info, options);
         options.model = options.compute_vmaf ? resolve_model(options, width, height) : "";
-        tasks = plan_tasks(*source_info_, info, options, metric_keys, backends, kept);
+        // This PC's decoders are asked only when a video may be decoded on
+        // the GPU (once per FFmpeg: Video Compare asks too).
+        const DecodingCapabilities capabilities = options.gpu_decode
+                                                      ? DecodingCapabilities::remembered(tools_status_.ffmpeg.path)
+                                                      : DecodingCapabilities{};
+        tasks = plan_tasks(*source_info_, info, options, metric_keys, backends, kept,
+                           shares_decode(*source_info_, info, options, capabilities));
     } catch (const std::exception& error) {
         return QString::fromStdString(error.what());
     }

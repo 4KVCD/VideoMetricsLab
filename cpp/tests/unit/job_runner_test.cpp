@@ -167,6 +167,50 @@ TEST(JobRunner, AVideosTasksRunAtOnceAndMakeOneResult) {
     }
 }
 
+// PSNR and XPSNR scored beside VMAF on the GPU from one decode (plan_tasks's
+// share_decode) are one run of all three, and are shown as the CPU's task
+// they were, with the GPU's progress.
+TEST(JobRunner, CpuMetricsBesideTheGpusAreOneRunShownAsTheirOwnTask) {
+    MetricTask shared{std::string(gpu_vmaf_task), {"vmaf", "psnr", "xpsnr"}};
+    shared.cpu_beside = {"psnr", "xpsnr"};
+    const std::vector<VmafJob> jobs{job_of({shared})};
+    std::vector<std::vector<std::string>> asked;
+    std::vector<TaskSnapshot> running;  // the snapshots while it ran
+    Reported reported;
+    RunEvents events = reported.events();
+    events.task_progress = [&running](std::size_t, const std::vector<TaskSnapshot>& tasks) {
+        if (!tasks.empty() && tasks.front().state == "running") {
+            running = tasks;
+        }
+    };
+    run_jobs(
+        jobs, 1, events,
+        [&](const VmafJob&, const VmafOptions& options, const ProgressCallback& on_progress, const StatusCallback&,
+            const CancelToken&) {
+            asked.push_back(options.requested_metrics());
+            on_progress(5, 10, 30.0);
+            return result_with({{"psnr", {0, 1}}, {"xpsnr", {0, 1}}, {"vmaf", {0, 1}}}, "version=vmaf_v0.6.1");
+        },
+        24, CancelToken());
+
+    EXPECT_EQ(asked, (std::vector<std::vector<std::string>>{{"vmaf", "psnr", "xpsnr"}}));
+    ASSERT_EQ(running.size(), 2u);
+    EXPECT_EQ(running[0].backend, "ffmpeg");
+    EXPECT_EQ(running[0].lane, "cpu");
+    EXPECT_EQ(running[0].metric_keys, (std::vector<std::string>{"psnr", "xpsnr"}));
+    EXPECT_EQ(running[1].backend, gpu_vmaf_task);
+    EXPECT_EQ(running[1].lane, "gpu");
+    EXPECT_EQ(running[1].metric_keys, std::vector<std::string>{"vmaf"});
+    for (const TaskSnapshot& task : running) {
+        EXPECT_EQ(task.current, 5);
+        EXPECT_EQ(task.total, 10);
+    }
+    ASSERT_EQ(reported.finished.size(), 1u);
+    for (const std::string key : {"vmaf", "psnr", "xpsnr"}) {
+        EXPECT_TRUE(reported.finished.at(0).has_metric(key)) << key;
+    }
+}
+
 TEST(JobRunner, AFailedTaskLeavesTheVideosOtherMetrics) {
     // The first video's VMAF fails on the GPU while its PSNR finishes; both
     // of the second video's tasks fail.

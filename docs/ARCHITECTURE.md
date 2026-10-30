@@ -51,7 +51,9 @@ libvmaf, Vship and FFmpeg's libraries are loaded the same way, from
    video's metrics one program calculates in one place: FFmpeg's metrics on
    the CPU (PSNR, SSIM and XPSNR in the app where it decodes the videos
    itself), VMAF, NEG and v1 on the GPU, Vship's metrics on the GPU, and
-   SSIMULACRA2 and Butteraugli set to the CPU, with libjxl's tools.
+   SSIMULACRA2 and Butteraugli set to the CPU, with libjxl's tools. Where
+   the app decodes a video on the CPU, PSNR, SSIM and XPSNR join the GPU's
+   VMAF task (`MetricTask::cpu_beside`) and are scored from its frames.
 3. Saved scores are looked up by the request's identity (`metric_cache.h`):
    the comparison recipe and each metric's request, not where or how it is
    calculated. A saved score fills in its metric, and a task whose metrics

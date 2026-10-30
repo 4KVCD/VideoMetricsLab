@@ -850,11 +850,13 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
 // Adds the job that calculates what `video` asks for, less what is saved
 // under `cache_folder` (when `use_saved`); with everything saved, takes the
 // saved result and adds none (the Python app's cli._queue). `options` are
-// the run's, with VMAF's model resolved. Returns what this version cannot
-// do yet of the job's VMAF on the GPU (gpu_not_yet), or nothing.
+// the run's, with VMAF's model resolved; `share_decode` is plan_tasks's.
+// Returns what this version cannot do yet of the job's VMAF on the GPU
+// (gpu_not_yet), or nothing.
 std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, VmafOptions options,
                                  const PerceptualBackends& backends, const CvvdpSettings& cvvdp, bool use_saved,
-                                 const std::filesystem::path& cache_folder, std::vector<VmafJob>& jobs) {
+                                 const std::filesystem::path& cache_folder, std::vector<VmafJob>& jobs,
+                                 bool share_decode = false) {
     // The request the window makes for a row: what the saved scores are
     // looked up and saved under, so that the two apps find each other's.
     const std::map<std::string, std::string> chosen(backends.begin(), backends.end());
@@ -898,7 +900,8 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         video.from_cache = true;
         return std::nullopt;
     }
-    std::vector<MetricTask> tasks = plan_tasks(source, *video.info, options, video.metrics, backends, kept);
+    std::vector<MetricTask> tasks =
+        plan_tasks(source, *video.info, options, video.metrics, backends, kept, share_decode);
     std::optional<std::string> missing = gpu_not_yet(tasks);
     if (kept.empty()) {
         saved.reset();
@@ -1103,7 +1106,7 @@ private:
     void leave_out_cvvdp_if_unable(TestVideo& video) const;
     void add_colour_notes(TestVideo& video) const;
     void add_film_grain_notes(TestVideo& video) const;
-    std::optional<std::string> queue_jobs(TestVideo& video);
+    std::optional<std::string> queue_jobs(TestVideo& video, const std::string& ffmpeg);
     void queue_other_displays(TestVideo& video);
     // Whether `video`'s scores may be read from the saved scores: those it
     // would save (TestVideo::save_scores).
@@ -1170,7 +1173,7 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
         video.notes.push_back(*note);
     }
     try {
-        return queue_jobs(video);
+        return queue_jobs(video, ffmpeg);
     } catch (const std::exception& error) {
         video.error = error.what();
         if (video.error.starts_with("Durations do not match")) {
@@ -1251,14 +1254,18 @@ void ComparisonPlanner::add_film_grain_notes(TestVideo& video) const {
 
 // Queues the jobs that compare `video`, checked against the reference
 // first: its own, unless everything is saved, and CVVDP on each further
-// display. Returns what the command line cannot do yet of its own job, or
-// nothing; throws when the two videos cannot be compared as asked.
-std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video) {
+// display. `ffmpeg` is asked which decoders this PC has, where a video may be
+// decoded on the GPU. Returns what the command line cannot do yet of its own
+// job, or nothing; throws when the two videos cannot be compared as asked.
+std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video, const std::string& ffmpeg) {
     video.options = row_options(arguments_, settings_, video.metrics, *video.info);
     validate_video_pair(video.source, *video.info, video.options);
     const auto [width, height] = analysis_dimensions(video.source, *video.info, video.options);
     VmafOptions options = video.options;
     options.model = video.options.compute_vmaf ? resolve_model(video.options, width, height) : "";
+    const DecodingCapabilities capabilities =
+        options.gpu_decode ? DecodingCapabilities::remembered(ffmpeg) : DecodingCapabilities{};
+    const bool share_decode = shares_decode(video.source, *video.info, options, capabilities);
     const bool cvvdp = std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") != video.metrics.end();
     // By the reference as it is read here: with the test video's tags where
     // it has none, or --colour's.
@@ -1268,7 +1275,8 @@ std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video) {
     }
     const std::size_t queued = jobs.size();
     if (std::optional<std::string> missing = queue(video, video.source, std::move(options), backends_,
-                                                   display.second, reads_saved(video), cache_folder_, jobs)) {
+                                                   display.second, reads_saved(video), cache_folder_, jobs,
+                                                   share_decode)) {
         return missing;
     }
     if (jobs.size() > queued) {

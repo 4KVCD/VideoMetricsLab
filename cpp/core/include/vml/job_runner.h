@@ -54,6 +54,10 @@ struct MetricTask {
     // Why metrics of the GPU's are here, on the CPU: a check of the GPU
     // failed (scores_on_gpu). Said as the task starts, as a GPU failure is.
     std::vector<std::string> fallbacks{};
+    // Of the GPU's task's metric_keys: PSNR, SSIM and XPSNR, scored in the
+    // app beside the GPU's metrics from the same decode of each video
+    // (plan_tasks's share_decode), and shown as the CPU's metrics.
+    std::vector<std::string> cpu_beside{};
 
     // Whether it waits in the GPU's queue rather than the CPU's.
     bool on_gpu() const { return backend == gpu_vmaf_task || backend == perceptual_task; }
@@ -82,10 +86,15 @@ using PerceptualBackends = std::map<std::string, std::string, std::less<>>;
 // they are calculated together, except that a part of them that runs in a
 // place of its own (VMAF on the GPU, or what stays on the CPU) is left out
 // when all of that part is saved.
+//
+// With `share_decode` (shares_decode, ffmpeg_run.h), PSNR, SSIM and XPSNR
+// left to run on the CPU beside VMAF on the GPU join the GPU's task
+// (MetricTask::cpu_beside), which scores both from one decode of each video
+// rather than the CPU decoding a video once for each task.
 std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
                                    const std::vector<std::string>& metric_keys,
                                    const PerceptualBackends& perceptual_backends = {},
-                                   const MetricResultSet& saved = MetricResultSet());
+                                   const MetricResultSet& saved = MetricResultSet(), bool share_decode = false);
 
 // One video to compare with its source, with what to calculate.
 struct VmafJob {

@@ -21,6 +21,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/temp_files.h"
+#include "vml/threads.h"
 
 namespace vml {
 
@@ -1205,6 +1206,35 @@ PairScores MultiScorer::finish() {
     return result;
 }
 
+namespace {
+
+// A buffer page-locked for NVIDIA's decoder's downloads while this lives
+// (GpuFrameStream::pin), unlocked before the buffer and the stream go: the
+// GPU then copies a frame into it by itself, where into pageable memory the
+// driver copies it again on the CPU (a 4K 10-bit frame: 5.3 ms). Other
+// decoders' buffers are left as they are.
+class PinnedFor {
+public:
+    PinnedFor(GpuFrameStream& stream, std::vector<std::uint8_t>& buffer)
+        : stream_(stream),
+          address_(buffer.data()),
+          pinned_(stream.backend() == "nvidia" && stream.pin(address_, buffer.size())) {}
+    ~PinnedFor() {
+        if (pinned_) {
+            stream_.unpin(address_);
+        }
+    }
+    PinnedFor(const PinnedFor&) = delete;
+    PinnedFor& operator=(const PinnedFor&) = delete;
+
+private:
+    GpuFrameStream& stream_;
+    void* address_;
+    bool pinned_;
+};
+
+}  // namespace
+
 PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                             const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                             const GpuPlan& plan, int n_subsample, const std::optional<std::string>& duration_limit,
@@ -1262,7 +1292,10 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
     // same decoder library decodes both videos: the scorers' memory is
     // imported by the test video's, and the source's copies go into it.
     bool on_gpu = false;
-    if (test.handover() && reference.handover() && !test.shares_gpu_memory_with(reference)) {
+    if (!plan.beside.empty()) {
+        logger.info("VMAF v1 with the GPU: the frames go through system memory, where the CPU's metrics beside it "
+                    "read them");
+    } else if (test.handover() && reference.handover() && !test.shares_gpu_memory_with(reference)) {
         // Windows' own decoder for one video and AMF's for the other.
         logger.info("VMAF v1 with the GPU: the frames go through system memory (the videos' decoders share no "
                     "GPU memory)");
@@ -1284,9 +1317,25 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
         throw VmafV1Error("the decoders' frames are not the size the scorers take");
     }
     std::array<std::vector<std::uint8_t>, 2> buffers;
+    // After the buffers and the streams, so that they go first.
+    std::optional<PinnedFor> pinned_source;
+    std::optional<PinnedFor> pinned_test;
     if (!on_gpu) {
         buffers[0].resize(scorer->frame_bytes());
         buffers[1].resize(scorer->frame_bytes());
+        pinned_source.emplace(reference, buffers[0]);
+        pinned_test.emplace(test, buffers[1]);
+    }
+    // Whole frames, luma first, as the scorers take them.
+    std::optional<CpuScorer> beside;
+    start_beside(beside, plan, n_subsample);
+    if (beside && beside->frame_bytes() != scorer->frame_bytes()) {
+        throw VmafV1Error("the CPU's metrics take frames of another size than the GPU's");
+    }
+    // Last, so that it goes first: its jobs use what comes before.
+    std::optional<SideThread> side;
+    if (!on_gpu) {
+        side.emplace();
     }
     test.start();
     reference.start();
@@ -1300,14 +1349,32 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
         [&](int test_slot, int reference_slot) {
             if (on_gpu) {
                 scorer->add_decoded(reference, reference_slot, test, test_slot);
+                return;
+            }
+            // The two decoders write their frames at the same time where they
+            // allow (downloads_at_once), the source's on the side thread, and
+            // the CPU's metrics copy out their luma while the GPU's scorers
+            // take them: one after the other on this one thread they took
+            // 15.5 ms per 4K 10-bit pair.
+            const auto source_frame = [&] { reference.download(reference_slot, buffers[0].data()); };
+            const auto test_frame = [&] { test.download(test_slot, buffers[1].data()); };
+            if (downloads_at_once(source_backend, test_backend)) {
+                side->both(source_frame, test_frame);
             } else {
-                reference.download(reference_slot, buffers[0].data());
-                test.download(test_slot, buffers[1].data());
-                scorer->add(buffers[0], buffers[1]);
+                source_frame();
+                test_frame();
+            }
+            const auto gpu = [&] { scorer->add(buffers[0], buffers[1]); };
+            if (beside) {
+                side->both([&] { beside->add(buffers[0], buffers[1]); }, gpu);
+            } else {
+                gpu();
             }
         },
         on_progress, cancel, releases);
-    return scorer->finish();
+    PairScores scores = scorer->finish();
+    add_beside(scores, beside);
+    return scores;
 }
 
 // ------------------------------------------------------------- availability

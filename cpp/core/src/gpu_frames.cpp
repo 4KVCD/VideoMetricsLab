@@ -1201,6 +1201,13 @@ std::optional<std::pair<std::string, std::string>> decoders_here(const HardwareD
     return std::pair(decoders[0], decoders[1]);
 }
 
+bool downloads_at_once(const std::string& source_decoder, const std::string& test_decoder) {
+    const auto keeps_streams_apart = [](const std::string& decoder) {
+        return decoder == software_decoder || decoder == "nvidia";
+    };
+    return keeps_streams_apart(source_decoder) && keeps_streams_apart(test_decoder);
+}
+
 std::vector<std::string> packet_reader_command(const std::string& ffmpeg, const std::filesystem::path& video,
                                                std::string_view codec, const std::string& listing_pipe,
                                                const std::vector<std::string>& input_options) {

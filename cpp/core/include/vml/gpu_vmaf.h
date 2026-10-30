@@ -21,6 +21,7 @@
 
 #include "vml/cancel.h"
 #include "vml/frame_sync.h"
+#include "vml/libvmaf_cpu.h"
 #include "vml/video.h"
 #include "vml/vmaf_vulkan.h"
 
@@ -98,9 +99,23 @@ struct GpuPlan {
     // libvmaf's CPU extractors (libvmaf_cpu.h), which take their frames the
     // same way.
     std::string backend = "vulkan";
+    // PSNR, SSIM and XPSNR scored beside the GPU's metrics with libvmaf's CPU
+    // extractors, from the frames decoded for the GPU (a run that decodes each
+    // video once for both). `threads` and `frame_rate` are theirs.
+    std::vector<std::string> beside;
     int threads = 0;     // the CPU extractors' libvmaf threads
     int frame_rate = 0;  // XPSNR's, in whole frames per second
 };
+
+// The scorer of a plan's metrics beside the GPU's (GpuPlan::beside), made in
+// `scorer` where the plan has any: every `n_subsample`th pair, as the GPU's
+// scorers score them. Throws LibvmafError.
+void start_beside(std::optional<CpuScorer>& scorer, const GpuPlan& plan, int n_subsample);
+
+// The GPU's `scores` with those of the metrics scored beside them (if any)
+// added after theirs. Throws LibvmafError when the two were not scored for
+// the same frames.
+void add_beside(PairScores& scores, std::optional<CpuScorer>& beside);
 
 // The GPU's turn: one GPU pass at a time in this process (the Python app's
 // gpu.GPU_PASS), so that no video's GPU metrics run beside another's.
@@ -213,7 +228,8 @@ private:
 // videos' frames to, and the thread that pairs them, frame N with frame N
 // until either video ends (or by timestamp, when VML_FRAME_PAIRING says so),
 // and has the plan's scorer score each pair: the Vulkan engine, libvmaf's
-// CUDA code, or libvmaf's CPU extractors.
+// CUDA code, or libvmaf's CPU extractors (and those beside the GPU's,
+// GpuPlan::beside).
 class GpuAttempt {
 public:
     // Throws LibvmafError (VmafVulkanError) when the scorer cannot start,
@@ -261,8 +277,10 @@ private:
 // the GPU, each luma plane copied into the memory the scorer reads it from
 // (for the Vulkan engine, with NVIDIA's decoder for both videos);
 // otherwise the decoder writes it into the memory the scorer copies to the
-// GPU. Throws GpuDecodeUnavailableError before the first picture when the
-// app cannot decode a video, GpuDecodeFailedError after it, LibvmafError
+// GPU. The metrics beside the GPU's (GpuPlan::beside; not with libvmaf's
+// CUDA code) are scored from the same decoded pictures. Throws
+// GpuDecodeUnavailableError before the first picture when the app cannot
+// decode a video, GpuDecodeFailedError after it, LibvmafError
 // (VmafVulkanError), and Cancelled.
 PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                          const std::optional<CropBox>& source_crop,

@@ -136,6 +136,22 @@ bool refused_frame_write(int exit_code, std::string_view ffmpeg_errors);
 // to FFmpeg ("ffmpeg").
 bool cpu_metrics_in_app();
 
+// Whether `key` is PSNR, SSIM or XPSNR: the metrics of FFmpeg's that the app
+// scores itself with libvmaf's CPU extractors, where the GPU scores the
+// others (VMAF, NEG and VMAF v1).
+bool is_cpu_metric(std::string_view key);
+
+// Whether a run of VMAF on the GPU and PSNR, SSIM and XPSNR in the app should
+// score both from one decode of each video (plan_tasks's share_decode): when
+// the app scores those (cpu_metrics_in_app) and decodes either video on the
+// CPU, where a second decode of it would cost about as much again (GPU
+// decoding off, no GPU decoder for it on this PC, or film grain only the
+// app's decoder adds). Where both are decoded on the GPU, the CPU's metrics
+// keep a task of their own, which does not hold the GPU's queue. On this PC's
+// decoders (`capabilities`, DecodingCapabilities::remembered).
+bool shares_decode(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
+                   const DecodingCapabilities& capabilities);
+
 // The filter graph of a comparison: each video downloaded from its GPU
 // decoder if need be, cropped, converted and scaled to the compared size,
 // its frames numbered, then libvmaf and xpsnr. With XPSNR beside libvmaf's

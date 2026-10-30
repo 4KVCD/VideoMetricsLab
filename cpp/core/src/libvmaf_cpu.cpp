@@ -214,6 +214,11 @@ void CpuScorer::add(std::span<const std::uint8_t> reference, std::span<const std
 }
 
 void CpuScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot) {
+    add_decoded(reference, reference_slot, test, test_slot, nullptr);
+}
+
+void CpuScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot,
+                            const std::function<void(Plane, Plane)>& also) {
     VmafPicture reference_picture = take_picture();
     VmafPicture distorted_picture{};
     try {
@@ -223,8 +228,14 @@ void CpuScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFr
         throw;
     }
     try {
-        download(reference_picture, reference, reference_slot, 0);
-        download(distorted_picture, test, test_slot, 1);
+        download_both(reference_picture, reference, reference_slot, distorted_picture, test, test_slot);
+        if (also) {
+            const auto plane = [](const VmafPicture& picture) {
+                return Plane{static_cast<const std::uint8_t*>(picture.data[0]),
+                             static_cast<std::size_t>(picture.stride[0])};
+            };
+            also(plane(reference_picture), plane(distorted_picture));
+        }
     } catch (...) {
         give_back(reference_picture, distorted_picture);
         throw;
@@ -232,12 +243,39 @@ void CpuScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFr
     score(reference_picture, distorted_picture);
 }
 
+void CpuScorer::download_both(VmafPicture& reference_picture, GpuFrameStream& reference, int reference_slot,
+                              VmafPicture& distorted_picture, GpuFrameStream& test, int test_slot) {
+    if (!downloads_at_once(reference.backend(), test.backend())) {
+        download(reference_picture, reference, reference_slot, 0);
+        download(distorted_picture, test, test_slot, 1);
+        return;
+    }
+    // The two decoders write their pictures at the same time, the source's
+    // on the side thread: one after the other they took about 3 ms each per
+    // 4K 10-bit pair, on the one thread that feeds the scorers.
+    side_.both([&] { download(reference_picture, reference, reference_slot, 0); },
+               [&] { download(distorted_picture, test, test_slot, 1); });
+}
+
+void CpuScorer::copy_packed(Plane plane, std::uint8_t* target) const {
+    if (plane.stride == row_bytes_) {
+        std::memcpy(target, plane.data, luma_bytes_);
+        return;
+    }
+    for (std::size_t row = 0; row < rows_; ++row) {
+        std::memcpy(target + row * row_bytes_, plane.data + row * plane.stride, row_bytes_);
+    }
+}
+
 void CpuScorer::download(VmafPicture& picture, GpuFrameStream& stream, int slot, std::size_t which) {
     void* const address = picture.data[0];
     const auto pitch = static_cast<std::size_t>(picture.stride[0]);
     if (stream.backend() == "nvidia") {
-        if (!pinned_.contains(address)) {
-            pinned_[address] = stream.pin(address, pitch * picture.h[0]) ? &stream : nullptr;
+        {
+            const std::lock_guard lock(pinned_mutex_);  // the two videos' downloads run at once
+            if (!pinned_.contains(address)) {
+                pinned_[address] = stream.pin(address, pitch * picture.h[0]) ? &stream : nullptr;
+            }
         }
         stream.download_planes(slot, {address, nullptr, nullptr}, {static_cast<std::int64_t>(pitch), 0, 0});
     } else if (pitch == row_bytes_) {

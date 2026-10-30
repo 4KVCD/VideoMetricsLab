@@ -272,6 +272,28 @@ GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::str
     return models;
 }
 
+void start_beside(std::optional<CpuScorer>& scorer, const GpuPlan& plan, int n_subsample) {
+    if (!plan.beside.empty()) {
+        scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.beside, n_subsample, plan.threads,
+                       plan.frame_rate);
+    }
+}
+
+void add_beside(PairScores& scores, std::optional<CpuScorer>& beside) {
+    if (!beside) {
+        return;
+    }
+    PairScores scored = beside->finish();
+    if (scored.frames != scores.frames) {
+        throw LibvmafError("the CPU's metrics were scored for other frames than the GPU's (" +
+                           std::to_string(scored.frames.size()) + " against " + std::to_string(scores.frames.size()) +
+                           ")");
+    }
+    for (auto& metric : scored.by_metric) {
+        scores.by_metric.push_back(std::move(metric));
+    }
+}
+
 std::timed_mutex& gpu_pass() {
     static std::timed_mutex pass;
     return pass;
@@ -634,6 +656,7 @@ void StreamReader::join() {
 
 struct GpuAttempt::State {
     std::unique_ptr<PairScorer> scorer;
+    std::optional<CpuScorer> beside;  // the plan's metrics beside the GPU's
     // Whether frames are paired by timestamp (by_timestamp), decided once so
     // that the readers, FFmpeg's outputs and the pairing agree.
     bool by_time = by_timestamp();
@@ -663,6 +686,11 @@ GpuAttempt::GpuAttempt(const GpuPlan& plan, int n_subsample) : state_(std::make_
     } else {
         s.scorer = std::make_unique<VulkanScorer>(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample,
                                                   plan.device);
+    }
+    start_beside(s.beside, plan, n_subsample);
+    // Both read the frames FFmpeg writes: whole frames, luma first.
+    if (s.beside && s.beside->frame_bytes() != s.scorer->frame_bytes()) {
+        throw LibvmafError("the CPU's metrics take frames of another size than the GPU's");
     }
     s.distorted = std::make_unique<StreamReader>("distorted", s.scorer->frame_bytes(), s.by_time);
     s.reference = std::make_unique<StreamReader>("reference", s.scorer->frame_bytes(), s.by_time);
@@ -709,6 +737,9 @@ void GpuAttempt::feed_timed() {
         if (!pair->source) {
             throw LibvmafError("the source has no frame for the test video's first");
         }
+        if (s.beside) {
+            s.beside->add(source.buffer(*pair->source), test.buffer(pair->test));
+        }
         s.scorer->add(source.buffer(*pair->source), test.buffer(pair->test));
     }
 }
@@ -730,6 +761,9 @@ void GpuAttempt::feed_numbered() {
             break;
         }
         try {
+            if (s.beside) {
+                s.beside->add(*source_frame, *test_frame);
+            }
             s.scorer->add(*source_frame, *test_frame);
         } catch (...) {
             test.release(test_frame);
@@ -756,6 +790,7 @@ void GpuAttempt::feed() {
         test.join();
         source.join();
         s.result = s.scorer->finish();
+        add_beside(*s.result, s.beside);
     } catch (...) {
         s.error = std::current_exception();
         stop();
@@ -779,6 +814,7 @@ std::optional<PairScores> GpuAttempt::finish(bool ffmpeg_succeeded) {
         s.feeder.join();
     }
     s.scorer.reset();  // its GPU memory, before anything else runs
+    s.beside.reset();
     // Frames cut short where FFmpeg failed are that failure, which the
     // caller reports and tries another decode plan for.
     if (s.error && !(frames_cut(s.error) && !ffmpeg_succeeded)) {
@@ -850,6 +886,9 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                          const CancelToken& cancel) {
     const auto& [source_backend, test_backend] = decoders;
     const bool cuda = plan.backend == "cuda";
+    if (cuda && !plan.beside.empty()) {
+        throw std::invalid_argument("libvmaf's CUDA code is not given CPU metrics to score beside it");
+    }
     std::string gpu;  // its name, for messages
     if (cuda) {
         // libvmaf's CUDA code takes NVIDIA's pictures on the GPU and uploads
@@ -931,11 +970,29 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     if (!scorer) {
         scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.device);
     }
+    // After the streams, so that it goes before them: it gives back the
+    // memory NVIDIA's decoder page-locked for it.
+    std::optional<CpuScorer> beside;
+    start_beside(beside, plan, n_subsample);
     test.start();
     reference.start();
     score_frame_pairs(
         test, reference, distorted, duration_limit, total_frames,
         [&](int test_slot, int reference_slot) {
+            if (beside && !shared) {
+                // Each luma plane written out once, into the CPU's picture,
+                // and copied from there into the GPU's upload.
+                beside->add_decoded(reference, reference_slot, test, test_slot,
+                                    [&](CpuScorer::Plane source_plane, CpuScorer::Plane test_plane) {
+                                        scorer->add_decoded(
+                                            [&](std::uint8_t* plane) { beside->copy_packed(source_plane, plane); },
+                                            [&](std::uint8_t* plane) { beside->copy_packed(test_plane, plane); });
+                                    });
+                return;
+            }
+            if (beside) {
+                beside->add_decoded(reference, reference_slot, test, test_slot);
+            }
             if (shared) {
                 scorer->add_shared(
                     [&](std::uint64_t address, std::int64_t pitch) {
@@ -948,7 +1005,9 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
             }
         },
         on_progress, cancel);
-    return scorer->finish();
+    PairScores scores = scorer->finish();
+    add_beside(scores, beside);
+    return scores;
 }
 
 }  // namespace vml

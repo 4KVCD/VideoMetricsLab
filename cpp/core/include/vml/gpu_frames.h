@@ -212,6 +212,13 @@ std::optional<std::string> scaling_refusal(const DecodePlan& plan, const std::st
 // Two GPU makers' decoders are never used together.
 std::optional<std::pair<std::string, std::string>> decoders_here(const HardwareDecoding& decoding);
 
+// Whether pictures of two streams of these decoders may be downloaded at the
+// same time, from two threads: the software decoder's and NVIDIA's keep each
+// stream's state apart (native/software_frames.cpp, nvdec_frames.cpp); the
+// other libraries are not known to (AMD's shares memory between its
+// streams).
+bool downloads_at_once(const std::string& source_decoder, const std::string& test_decoder);
+
 // FFmpeg's command that copies the video's first video stream out of its
 // container: the packets to its standard output, and each packet's
 // timestamp and size to a framecrc listing on the pipe at `listing_pipe`.

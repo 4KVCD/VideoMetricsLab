@@ -14,6 +14,7 @@
 #include <thread>
 
 #include "vml/app_log.h"
+#include "vml/ffmpeg_run.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
@@ -130,6 +131,17 @@ std::string took_since(std::chrono::steady_clock::time_point started) {
 
 enum Pool { cpu_pool, gpu_pool };
 
+// A task's metrics but those scored beside them (MetricTask::cpu_beside).
+std::vector<std::string> own_keys(const MetricTask& task) {
+    std::vector<std::string> keys;
+    for (const std::string& key : task.metric_keys) {
+        if (!contains(task.cpu_beside, key)) {
+            keys.push_back(key);
+        }
+    }
+    return keys;
+}
+
 class Scheduler;
 
 // One video: its tasks, which the scheduler's CPU and GPU lanes run, their
@@ -217,6 +229,9 @@ private:
     void report_cpu(std::size_t task, const std::vector<std::string>& keys);
     // The rest are called with mutex_ held.
     std::vector<TaskSnapshot> snapshots() const;
+    // Task `task`'s snapshot for its metrics `keys`, as `backend` in `lane`.
+    TaskSnapshot snapshot_of(std::size_t task, const std::string& backend, const std::string& lane,
+                             const std::vector<std::string>& keys) const;
     void send_snapshots() const;
     std::optional<PerceptualTaskOutput> perceptual_so_far() const;
     std::optional<ComparisonResult> merged() const;
@@ -356,8 +371,13 @@ JobRun::JobRun(Scheduler& scheduler, std::size_t index, const VmafJob& job)
 }
 
 std::string JobRun::task_name(std::size_t task) const {
-    return std::string(pool_of(task) == gpu_pool ? "GPU" : "CPU") + " metrics (" +
-           metric_labels(job_.tasks[task].metric_keys) + ")";
+    const MetricTask& planned = job_.tasks[task];
+    std::string name = std::string(pool_of(task) == gpu_pool ? "GPU" : "CPU") + " metrics (" +
+                       metric_labels(own_keys(planned)) + ")";
+    if (!planned.cpu_beside.empty()) {
+        name += " with CPU metrics (" + metric_labels(planned.cpu_beside) + ") beside them";
+    }
+    return name;
 }
 
 std::string JobRun::describe() const {
@@ -675,47 +695,63 @@ std::vector<TaskSnapshot> JobRun::snapshots() const {
     std::vector<TaskSnapshot> found;
     for (std::size_t task = 0; task < tasks_.size(); ++task) {
         const MetricTask& planned = job_.tasks[task];
-        const TaskState& state = tasks_[task];
-        TaskSnapshot& snapshot = found.emplace_back();
-        snapshot.backend = planned.backend;
-        snapshot.metric_keys = planned.metric_keys;
-        snapshot.lane = pool_of(task) == gpu_pool ? "gpu" : "cpu";
-        snapshot.cpu_keys = state.cpu_keys;
-        snapshot.passes = state.passes.value_or(std::vector<std::vector<std::string>>{planned.metric_keys});
-        snapshot.phase = state.phase;
-        // Its metrics that have scores: all that it scored once it is done,
-        // or those of its finished passes while it runs.
-        const auto scored = [&](const std::string& key) {
-            if (state.result) {
-                return state.result->has_metric(key);
-            }
-            if (state.perceptual) {
-                return state.perceptual->metrics.has(key);
-            }
-            return planned.backend == perceptual_task &&
-                   std::any_of(pass_outputs_.begin(), pass_outputs_.end(),
-                               [&key](const PerceptualTaskOutput& output) { return output.metrics.has(key); });
-        };
-        for (const std::string& key : planned.metric_keys) {
-            if (scored(key)) {
-                snapshot.done_keys.push_back(key);
-            }
+        if (!planned.cpu_beside.empty()) {
+            // Shown as the CPU's task they were, with the GPU's progress.
+            found.push_back(snapshot_of(task, "ffmpeg", "cpu", planned.cpu_beside));
         }
-        if (state.progress) {
-            snapshot.current = state.progress->current;
-            snapshot.total = state.progress->total;
-            snapshot.fps = state.progress->fps;
-        }
-        snapshot.state = state.finished()             ? "done"
-                         : state.error                ? "failed"
-                         : !state.waiting_for.empty() ? "waiting"
-                         : state.progress             ? "running"
-                                                      : "starting";
-        snapshot.waiting_for = state.waiting_for;
-        snapshot.step = state.step;
-        snapshot.decode = state.decode;
+        found.push_back(snapshot_of(task, planned.backend, pool_of(task) == gpu_pool ? "gpu" : "cpu",
+                                    own_keys(planned)));
     }
     return found;
+}
+
+TaskSnapshot JobRun::snapshot_of(std::size_t task, const std::string& backend, const std::string& lane,
+                                 const std::vector<std::string>& keys) const {
+    const MetricTask& planned = job_.tasks[task];
+    const TaskState& state = tasks_[task];
+    TaskSnapshot snapshot;
+    snapshot.backend = backend;
+    snapshot.metric_keys = keys;
+    snapshot.lane = lane;
+    for (const std::string& key : state.cpu_keys) {
+        if (contains(keys, key)) {
+            snapshot.cpu_keys.push_back(key);
+        }
+    }
+    snapshot.passes = state.passes.value_or(std::vector<std::vector<std::string>>{keys});
+    snapshot.phase = state.phase;
+    // Its metrics that have scores: all that it scored once it is done, or
+    // those of its finished passes while it runs.
+    const auto scored = [&](const std::string& key) {
+        if (state.result) {
+            return state.result->has_metric(key);
+        }
+        if (state.perceptual) {
+            return state.perceptual->metrics.has(key);
+        }
+        return planned.backend == perceptual_task &&
+               std::any_of(pass_outputs_.begin(), pass_outputs_.end(),
+                           [&key](const PerceptualTaskOutput& output) { return output.metrics.has(key); });
+    };
+    for (const std::string& key : keys) {
+        if (scored(key)) {
+            snapshot.done_keys.push_back(key);
+        }
+    }
+    if (state.progress) {
+        snapshot.current = state.progress->current;
+        snapshot.total = state.progress->total;
+        snapshot.fps = state.progress->fps;
+    }
+    snapshot.state = state.finished()             ? "done"
+                     : state.error                ? "failed"
+                     : !state.waiting_for.empty() ? "waiting"
+                     : state.progress             ? "running"
+                                                  : "starting";
+    snapshot.waiting_for = state.waiting_for;
+    snapshot.step = state.step;
+    snapshot.decode = state.decode;
+    return snapshot;
 }
 
 void JobRun::send_snapshots() const {
@@ -1024,7 +1060,8 @@ std::vector<std::string> fallback_notes(const std::vector<std::pair<std::string,
 
 std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
                                    const std::vector<std::string>& metric_keys,
-                                   const PerceptualBackends& perceptual_backends, const MetricResultSet& saved) {
+                                   const PerceptualBackends& perceptual_backends, const MetricResultSet& saved,
+                                   bool share_decode) {
     // FFmpeg's metrics are calculated together: unless all of them are saved,
     // a saved one is calculated again with the rest. The others are each
     // left out when saved.
@@ -1085,6 +1122,20 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
             if (std::all_of(part->metric_keys.begin(), part->metric_keys.end(),
                             [&saved](const std::string& key) { return saved.has(key); })) {
                 part->metric_keys.clear();
+            }
+        }
+    }
+    // PSNR, SSIM and XPSNR beside VMAF on the GPU, from the GPU's decode,
+    // when both parts still run.
+    if (share_decode && !gpu.metric_keys.empty() && !ffmpeg.metric_keys.empty() &&
+        std::all_of(ffmpeg.metric_keys.begin(), ffmpeg.metric_keys.end(),
+                    [](const std::string& key) { return is_cpu_metric(key); })) {
+        gpu.cpu_beside = std::move(ffmpeg.metric_keys);
+        ffmpeg.metric_keys.clear();
+        gpu.metric_keys.clear();
+        for (const std::string& key : keys) {  // in the registry's order
+            if (!is_perceptual_metric(key)) {
+                gpu.metric_keys.push_back(key);
             }
         }
     }

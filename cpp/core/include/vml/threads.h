@@ -5,9 +5,11 @@
 #include <condition_variable>
 #include <deque>
 #include <exception>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 
 namespace vml {
 
@@ -47,6 +49,71 @@ private:
     std::mutex mutex_;
     std::condition_variable ready_;
     std::deque<T> items_;
+};
+
+// A thread of its own that runs one job at a time beside its caller's: a
+// step of a frame's work made at the same time as another (a decoder's
+// download beside the other video's), without starting a thread per frame.
+// Every job run() starts must be waited for (wait) before what it uses goes.
+class SideThread {
+public:
+    SideThread() : thread_([this] { serve(); }) {}
+    ~SideThread() {
+        jobs_.put(nullptr);
+        thread_.join();
+    }
+    SideThread(const SideThread&) = delete;
+    SideThread& operator=(const SideThread&) = delete;
+
+    void run(std::function<void()> job) { jobs_.put(std::move(job)); }
+
+    // Waits for the job run() started, and throws what it threw.
+    void wait() {
+        if (const std::exception_ptr error = done_.get()) {
+            std::rethrow_exception(error);
+        }
+    }
+
+    // wait(), for a caller unwinding from a failure of its own: the job's is
+    // dropped.
+    void wait_quietly() noexcept {
+        try {
+            wait();
+        } catch (...) {
+            // The caller's failure is the one to report.
+        }
+    }
+
+    // Runs `there` on this thread and `here` on the caller's at the same
+    // time, and returns once both are done. Throws `here`'s failure, else
+    // `there`'s.
+    void both(const std::function<void()>& there, const std::function<void()>& here) {
+        run(there);
+        try {
+            here();
+        } catch (...) {
+            wait_quietly();
+            throw;
+        }
+        wait();
+    }
+
+private:
+    void serve() {
+        while (std::function<void()> job = jobs_.get()) {
+            std::exception_ptr error;
+            try {
+                job();
+            } catch (...) {
+                error = std::current_exception();
+            }
+            done_.put(error);
+        }
+    }
+
+    Channel<std::function<void()>> jobs_;
+    Channel<std::exception_ptr> done_;
+    std::thread thread_;  // last: it starts once the channels are made
 };
 
 // The message of the exception `error` holds, as a thread that caught it
