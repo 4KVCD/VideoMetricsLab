@@ -27,14 +27,15 @@
 // libvvdec, of either model at any depth), AFGS1 as FFmpeg 9 adds it and
 // AV1's by dav1d; or, the grain not known, as the decoders add it by
 // themselves (FFmpeg's H.274 at 8 bits only). Pictures are held as the
-// decoder made them, by reference, until the caller downloads them.
-// nvf_download makes the one CPU pass a picture costs, straight into the
-// caller's buffer: it copies the crop's planes, aligns 10-bit samples as
-// asked and widens 8-bit ones as FFmpeg widens them, or scales the crop with
-// the GPU decoders' filters (scale_filter.h). The app asks it to scale only a
-// video no other decoder may make (gpu_frames.decoder_supports): on the
-// caller's one thread that is slower than FFmpeg scaling in threads before
-// its pipe.
+// decoder made them, by reference, until the caller has downloaded them or
+// read them where they are (nvf_slot_planes, for a picture a download would
+// only copy). nvf_download makes the one CPU pass a picture costs, straight
+// into the caller's buffer: it copies the crop's planes, aligns 10-bit
+// samples as asked and widens 8-bit ones as FFmpeg widens them, or scales
+// the crop with the GPU decoders' filters (scale_filter.h). The app asks it
+// to scale only a video no other decoder may make
+// (gpu_frames.decoder_supports): on the caller's one thread that is slower
+// than FFmpeg scaling in threads before its pipe.
 //
 // A damaged stream is left to FFmpeg. Its decoders conceal damage, and one
 // FFmpeg's concealment is not another's: on a stream with a few garbled
@@ -46,8 +47,8 @@
 // decoding here, and the run is made again through FFmpeg.
 //
 // One thread feeds the packets (nvf_push, nvf_finish) and waits for a free
-// slot when the pool is full; nvf_pop, nvf_download and nvf_release come from
-// another.
+// slot when the pool is full; nvf_pop, nvf_download, nvf_slot_planes and
+// nvf_release come from another.
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -776,17 +777,16 @@ NVF_API int nvf_pop(void *handle, int timeout_ms, int *slot, long long *pts) {
     return NVF_FRAME;
 }
 
-// Copies the slot's picture, cropped (and scaled) and planes packed, into `host`.
-NVF_API int nvf_download(void *handle, int slot, void *host) {
-    Decoder *d = static_cast<Decoder *>(handle);
-    if (slot < 0 || slot >= static_cast<int>(d->slots.size())) return NVF_ERROR;
+// The picture the caller holds in `slot`, as the decoder made it: each
+// plane's first sample and the bytes from one row to the next. False for a
+// slot that is not held.
+bool held_planes(Decoder *d, int slot, uint8_t *planes[3], ptrdiff_t pitches[3]) {
+    if (slot < 0 || slot >= static_cast<int>(d->slots.size())) return false;
     Slot &held = d->slots[slot];
     {
         std::lock_guard<std::mutex> guard(d->mutex);
-        if (!held.held) return NVF_ERROR;
+        if (!held.held) return false;
     }
-    uint8_t *planes[3];
-    ptrdiff_t pitches[3];
     if (d->av1) {
         for (int c = 0; c < 3; c++) planes[c] = static_cast<uint8_t *>(held.picture.data[c]);
         pitches[0] = held.picture.stride[0];
@@ -797,10 +797,41 @@ NVF_API int nvf_download(void *handle, int slot, void *host) {
             pitches[c] = held.frame->linesize[c];
         }
     }
+    return true;
+}
+
+// Copies the slot's picture, cropped (and scaled) and planes packed, into `host`.
+NVF_API int nvf_download(void *handle, int slot, void *host) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    uint8_t *planes[3];
+    ptrdiff_t pitches[3];
+    if (!held_planes(d, slot, planes, pitches)) return NVF_ERROR;
     if (is_scaled(d->params)) {
         scale_planar(d->params, d->scaler, planes, pitches, static_cast<uint8_t *>(host));
     } else {
         convert_planar(d->params, planes, pitches, static_cast<uint8_t *>(host));
+    }
+    return 0;
+}
+
+// The crop of the slot's picture where the decoder holds it, for a caller
+// that reads it there rather than download it: each plane's first sample and
+// the bytes from one row to the next, valid until nvf_release. Only for a
+// picture nvf_download would only copy (convert_planar's memcpy: neither
+// scaled nor widened, 10-bit samples kept in the low bits); NVF_ERROR
+// otherwise. The app's gpu_frames.cpp can_lend_planes has the same rule.
+NVF_API int nvf_slot_planes(void *handle, int slot, const void **planes, long long *pitches) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    const Params &p = d->params;
+    const bool copied_as_is = !is_scaled(p) && !p.widen && (p.bit_depth == 8 || p.shift != 0);
+    uint8_t *base[3];
+    ptrdiff_t pitch[3];
+    if (!copied_as_is || !held_planes(d, slot, base, pitch)) return NVF_ERROR;
+    const ptrdiff_t sample = p.bit_depth > 8 ? 2 : 1;
+    for (int c = 0; c < 3; c++) {
+        const ptrdiff_t x = c ? p.crop_x / 2 : p.crop_x, y = c ? p.crop_y / 2 : p.crop_y;
+        planes[c] = base[c] + y * pitch[c] + x * sample;
+        pitches[c] = pitch[c];
     }
     return 0;
 }

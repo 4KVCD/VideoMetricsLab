@@ -66,8 +66,9 @@ struct V1Features {
 };
 
 // Calculates VMAF v1 of frame pairs given in order: 4:2:0 frames packed as
-// FFmpeg's rawvideo writes them, at `bit_depth` bits (16-bit little-endian
-// samples above 8 bits), with their chroma, which SpEED reads.
+// FFmpeg's rawvideo writes them (add) or as planes wherever they are
+// (add_planes), at `bit_depth` bits (16-bit little-endian samples above 8
+// bits), with their chroma, which SpEED reads.
 class V1Scorer : public PairScorer {
 public:
     // `model` is the model's file. Every `n_subsample`th frame is scored.
@@ -95,6 +96,7 @@ public:
     std::size_t frame_bytes() const override { return frame_bytes_; }
 
     void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) override;
+    void add_planes(const FramePlanes& reference, const FramePlanes& distorted) override;
 
     // Scores one more pair held by the decoders, for a scorer made with
     // `shared`. The CPU copies none of it.
@@ -163,6 +165,7 @@ public:
 
     std::size_t frame_bytes() const override;
     void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) override;
+    void add_planes(const FramePlanes& reference, const FramePlanes& distorted) override;
 
     // Scores one more pair held by the decoders, without a copy through the
     // CPU (for scorers made with `shared`).
@@ -189,7 +192,7 @@ private:
 // score_decoded (gpu_vmaf.h) for a run with VMAF v1: both videos decoded in
 // this process as whole frames, because SpEED reads the chroma; with
 // NVIDIA's decoder for both, or AMD's with Vulkan, the planes stay on the
-// GPU. Throws as score_decoded does, and VmafV1Error.
+// GPU, and the software decoder's are read where it holds them. Throws as score_decoded does, and VmafV1Error.
 PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                             const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                             const GpuPlan& plan, int n_subsample, const std::optional<std::string>& duration_limit,

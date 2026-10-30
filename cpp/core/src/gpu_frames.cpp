@@ -329,6 +329,7 @@ struct DecoderLibrary {
         if (backend == software_decoder) {
             set_libraries = library.function<decltype(set_libraries)>("nvf_set_libraries");
             libraries_error = library.function<decltype(libraries_error)>("nvf_libraries_error");
+            slot_planes = library.function<decltype(slot_planes)>("nvf_slot_planes");
         }
         if (backend == "intel" || amd) {
             scale_note = library.function<decltype(scale_note)>("nvf_scale_note");
@@ -374,9 +375,11 @@ struct DecoderLibrary {
     int (*slot_texture)(void* decoder, int slot, void** texture, unsigned* width, unsigned* height, int* x,
                         int* y) = nullptr;
     // The software decoder's: the libraries it decodes with (their handles),
-    // and why it cannot use one of them.
+    // and why it cannot use one of them; a slot's picture in place, in
+    // system memory.
     int (*set_libraries)(void* avutil, void* avcodec, void* dav1d) = nullptr;
     int (*libraries_error)(char* out, int size) = nullptr;
+    int (*slot_planes)(void* decoder, int slot, const void** planes, long long* pitches) = nullptr;
     // Intel's and AMD's, which scale the pictures on the GPU when they can:
     // why they were scaled on the CPU instead.
     int (*scale_note)(void* decoder, char* out, int size) = nullptr;
@@ -1090,6 +1093,11 @@ bool can_hand_over(const DecodePlan& plan, std::string_view backend) {
     return backend == "amd" && !plan.scaled() && plan.widen == 0;
 }
 
+bool can_lend_planes(const DecodePlan& plan, std::string_view backend) {
+    // native/software_frames.cpp's nvf_slot_planes: the pictures nvf_download copies as they are.
+    return backend == software_decoder && !plan.scaled() && plan.widen == 0 && (plan.bit_depth <= 8 || plan.shift != 0);
+}
+
 bool hands_over_textures(std::string_view backend) {
     if (backend != "amd") {
         return false;
@@ -1368,6 +1376,7 @@ struct GpuFrameStream::State {
     void* handle = nullptr;
     // Whether the pictures are handed over on the GPU (handover()).
     bool handover = false;
+    bool lends_planes = false;   // gives_planes()
     bool untimed = false;        // DecodePlan::untimed
     bool software_only = false;  // DecodePlan::software_only
     std::unique_ptr<PacketReader> reader;
@@ -1438,6 +1447,7 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
         throw GpuDecodeUnavailableError(*refusal);
     }
     state.library = &load_decoder(backend);
+    state.lends_planes = can_lend_planes(plan, backend);
     state.untimed = plan.untimed;
     state.software_only = plan.software_only;
     state.reader = std::make_unique<PacketReader>(
@@ -1593,6 +1603,29 @@ void GpuFrameStream::download(int slot, void* host) {
         throw_final_if_software_only(error);
         throw error;
     }
+}
+
+bool GpuFrameStream::gives_planes() const { return state_->lends_planes; }
+
+FramePlanes GpuFrameStream::slot_planes(int slot) {
+    State& state = *state_;
+    if (!state.lends_planes) {
+        throw std::logic_error("the planes of a picture that is downloaded");
+    }
+    std::array<const void*, 3> planes{};
+    std::array<long long, 3> pitches{};
+    if (state.library->slot_planes(state.handle, slot, planes.data(), pitches.data()) != 0) {
+        const std::string said = state.error_text();
+        const GpuDecodeFailedError error(said.empty() ? state.decoder + " failed" : said, state.backend);
+        throw_final_if_software_only(error);
+        throw error;
+    }
+    FramePlanes frame;
+    for (std::size_t plane = 0; plane < frame.size(); ++plane) {
+        frame[plane] =
+            Plane{static_cast<const std::uint8_t*>(planes[plane]), static_cast<std::ptrdiff_t>(pitches[plane])};
+    }
+    return frame;
 }
 
 void GpuFrameStream::copy_luma(int slot, std::uint64_t address, std::int64_t pitch) {

@@ -174,18 +174,19 @@ public:
         const CudaDriver& cu_;
     };
 
-    // The bytes of a luma plane, its rows packed.
+    // The bytes of a luma plane, its rows packed, and of one of its rows.
     std::size_t luma_bytes() const { return row_bytes_ * rows_; }
+    std::size_t row_bytes() const { return row_bytes_; }
 
     // The page-locked memory of `side` (0 the source, 1 the test video),
     // to write a luma plane into, its rows packed, for send_staged.
     std::uint8_t* staging(int side) { return static_cast<std::uint8_t*>(staging_.at(static_cast<std::size_t>(side))); }
 
-    // Starts copying `luma` (luma_bytes(), rows packed) to the GPU picture
-    // at `address`, whose rows are `pitch` bytes apart. Call wait() before
-    // sending on the same side again. Only with Current alive.
-    void send(int side, const std::uint8_t* luma, std::uint64_t address, std::int64_t pitch) {
-        std::memcpy(staging(side), luma, luma_bytes());
+    // Starts copying `luma` to the GPU picture at `address`, whose rows are
+    // `pitch` bytes apart. Call wait() before sending on the same side
+    // again. Only with Current alive.
+    void send(int side, Plane luma, std::uint64_t address, std::int64_t pitch) {
+        pack_plane(luma, rows_, row_bytes_, staging(side));
         send_staged(side, address, pitch);
     }
 
@@ -345,21 +346,32 @@ void CudaScorer::add(std::span<const std::uint8_t> reference, std::span<const st
     if (!upload_) {
         throw LibvmafError("this scorer takes pictures in GPU memory only");
     }
-    CudaUpload& upload = *upload_;
+    const CudaUpload& upload = *upload_;
     for (const std::span<const std::uint8_t> frame : {reference, distorted}) {
         if (frame.size() < upload.luma_bytes()) {
             throw LibvmafError("a frame of " + std::to_string(frame.size()) + " bytes, where its luma alone is " +
                                std::to_string(upload.luma_bytes()));
         }
     }
+    const auto packed = [&upload](std::span<const std::uint8_t> frame) {
+        return FramePlanes{Plane{frame.data(), static_cast<std::ptrdiff_t>(upload.row_bytes())}};
+    };
+    add_planes(packed(reference), packed(distorted));
+}
+
+void CudaScorer::add_planes(const FramePlanes& reference, const FramePlanes& distorted) {
+    if (!upload_) {
+        throw LibvmafError("this scorer takes pictures in GPU memory only");
+    }
+    CudaUpload& upload = *upload_;
     const CudaUpload::Current current(upload);
     add_pictures([&](VmafPicture& source, VmafPicture& test) {
         // Both copies run at the same time, and the wait covers both. When
         // one cannot start, the other's is waited for before its picture
         // goes back to the pool.
         try {
-            upload.send(0, reference.data(), luma_address(source), source.stride[0]);
-            upload.send(1, distorted.data(), luma_address(test), test.stride[0]);
+            upload.send(0, reference[0], luma_address(source), source.stride[0]);
+            upload.send(1, distorted[0], luma_address(test), test.stride[0]);
         } catch (...) {
             upload.wait_quietly();
             throw;

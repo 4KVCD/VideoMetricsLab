@@ -51,6 +51,7 @@
 #include "vml/cancel.h"
 #include "vml/frame_sync.h"
 #include "vml/hardware_decoding.h"
+#include "vml/pair_scorer.h"
 #include "vml/video.h"
 
 namespace vml {
@@ -165,6 +166,12 @@ inline constexpr std::string_view media_foundation_decoder = "amd-mf";
 // (GpuFrameStream's handover): NVIDIA's always, and AMD's when they are
 // neither scaled nor widened (native/amf_handover.h).
 bool can_hand_over(const DecodePlan& plan, std::string_view backend);
+
+// Whether `backend`'s decoder may let the plan's pictures be read where it
+// holds them in system memory (GpuFrameStream::slot_planes): the software
+// decoder's, when a download would only copy them (neither scaled nor
+// widened, 10-bit samples kept in the low bits, as they are decoded).
+bool can_lend_planes(const DecodePlan& plan, std::string_view backend);
 
 // Whether `backend`'s decoder may give its pictures in place, as textures
 // (GpuFrameStream::slot_texture): AMD's, through Windows' own decoder, where
@@ -372,6 +379,14 @@ public:
     // Copies the slot's picture, planes packed, to `host` (frame_bytes()
     // of the plan long).
     void download(int slot, void* host);
+
+    // Whether slot_planes gives this stream's pictures (can_lend_planes).
+    bool gives_planes() const;
+
+    // The slot's picture where the decoder holds it, cropped, to be read in
+    // place of a download: each plane's first sample and the bytes from one
+    // row to the next. Valid until the slot is given back.
+    FramePlanes slot_planes(int slot);
 
     // Copies the slot's luma plane to GPU memory at `address` that
     // import_memory imported, with rows `pitch` bytes apart (a decoder that

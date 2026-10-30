@@ -34,9 +34,9 @@ class CudaUpload;  // vmaf_cuda.cpp: the copies of frames from system memory to 
 // One libvmaf context on the GPU, scoring frame pairs given in order (the
 // Python app's vmaf_gpu.GpuScorer). add takes 4:2:0 frames in system memory,
 // packed as FFmpeg's rawvideo writes them, at `bit_depth` bits (16-bit
-// little-endian samples above 8 bits); only their luma is uploaded, because
-// VMAF reads nothing else. add_decoded takes the pictures of the app's own
-// decoders.
+// little-endian samples above 8 bits), and add_planes their planes wherever
+// they are; only their luma is uploaded, because VMAF reads nothing else.
+// add_decoded takes the pictures of the app's own decoders.
 class CudaScorer : public PairScorer {
 public:
     // `models` are libvmaf models to score, each a name and the version of a
@@ -54,6 +54,7 @@ public:
     std::size_t frame_bytes() const override { return frame_bytes_; }
 
     void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) override;
+    void add_planes(const FramePlanes& reference, const FramePlanes& distorted) override;
 
     // One picture of a pair from a decoder in this process, given one of two
     // ways: copied on the GPU (`copy` is called with the GPU address of the

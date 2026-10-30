@@ -983,7 +983,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                 // Each luma plane written out once, into the CPU's picture,
                 // and copied from there into the GPU's upload.
                 beside->add_decoded(reference, reference_slot, test, test_slot,
-                                    [&](CpuScorer::Plane source_plane, CpuScorer::Plane test_plane) {
+                                    [&](Plane source_plane, Plane test_plane) {
                                         scorer->add_decoded(
                                             [&](std::uint8_t* plane) { beside->copy_packed(source_plane, plane); },
                                             [&](std::uint8_t* plane) { beside->copy_packed(test_plane, plane); });

@@ -183,18 +183,25 @@ void CpuScorer::score(VmafPicture& reference, VmafPicture& distorted) {
     ++count_;
 }
 
-void CpuScorer::fill(VmafPicture& picture, std::span<const std::uint8_t> frame, std::size_t size) {
-    if (frame.size() < size) {
-        throw LibvmafError("frame " + std::to_string(count_) + " is shorter than a picture");
-    }
+void CpuScorer::fill(VmafPicture& picture, Plane luma) const {
     auto* target = static_cast<std::uint8_t*>(picture.data[0]);
     const auto stride = static_cast<std::size_t>(picture.stride[0]);
     for (std::size_t row = 0; row < rows_; ++row) {
-        std::memcpy(target + row * stride, frame.data() + row * row_bytes_, row_bytes_);
+        std::memcpy(target + row * stride, luma.data + static_cast<std::ptrdiff_t>(row) * luma.stride, row_bytes_);
     }
 }
 
 void CpuScorer::add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) {
+    if (std::min(reference.size(), distorted.size()) < frame_bytes_) {
+        throw LibvmafError("frame " + std::to_string(count_) + " is shorter than a picture");
+    }
+    const auto packed = [this](std::span<const std::uint8_t> frame) {
+        return FramePlanes{Plane{frame.data(), static_cast<std::ptrdiff_t>(row_bytes_)}};
+    };
+    add_planes(packed(reference), packed(distorted));
+}
+
+void CpuScorer::add_planes(const FramePlanes& reference, const FramePlanes& distorted) {
     VmafPicture reference_picture = take_picture();
     VmafPicture distorted_picture{};
     try {
@@ -203,13 +210,8 @@ void CpuScorer::add(std::span<const std::uint8_t> reference, std::span<const std
         library_.picture_unref(&reference_picture);
         throw;
     }
-    try {
-        fill(reference_picture, reference, frame_bytes_);
-        fill(distorted_picture, distorted, frame_bytes_);
-    } catch (...) {
-        give_back(reference_picture, distorted_picture);
-        throw;
-    }
+    fill(reference_picture, reference[0]);
+    fill(distorted_picture, distorted[0]);
     score(reference_picture, distorted_picture);
 }
 
@@ -232,7 +234,7 @@ void CpuScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFr
         if (also) {
             const auto plane = [](const VmafPicture& picture) {
                 return Plane{static_cast<const std::uint8_t*>(picture.data[0]),
-                             static_cast<std::size_t>(picture.stride[0])};
+                             static_cast<std::ptrdiff_t>(picture.stride[0])};
             };
             also(plane(reference_picture), plane(distorted_picture));
         }
@@ -257,15 +259,7 @@ void CpuScorer::download_both(VmafPicture& reference_picture, GpuFrameStream& re
                [&] { download(distorted_picture, test, test_slot, 1); });
 }
 
-void CpuScorer::copy_packed(Plane plane, std::uint8_t* target) const {
-    if (plane.stride == row_bytes_) {
-        std::memcpy(target, plane.data, luma_bytes_);
-        return;
-    }
-    for (std::size_t row = 0; row < rows_; ++row) {
-        std::memcpy(target + row * row_bytes_, plane.data + row * plane.stride, row_bytes_);
-    }
-}
+void CpuScorer::copy_packed(Plane plane, std::uint8_t* target) const { pack_plane(plane, rows_, row_bytes_, target); }
 
 void CpuScorer::download(VmafPicture& picture, GpuFrameStream& stream, int slot, std::size_t which) {
     void* const address = picture.data[0];
@@ -284,7 +278,7 @@ void CpuScorer::download(VmafPicture& picture, GpuFrameStream& stream, int slot,
         std::vector<std::uint8_t>& staging = staging_[which];
         staging.resize(luma_bytes_);
         stream.download(slot, staging.data());
-        fill(picture, staging, luma_bytes_);
+        fill(picture, Plane{staging.data(), static_cast<std::ptrdiff_t>(row_bytes_)});
     }
 }
 

@@ -56,8 +56,8 @@ std::string cpu_library_build();
 // The pictures hold luma only: the app keeps PSNR's luma score (psnr_y) and
 // SSIM, which read nothing else, and libvmaf's PSNR skips the chroma planes
 // of a picture without them. Frames are given packed as FFmpeg's rawvideo
-// writes them (add; only the luma is read), or as a decoder's pictures
-// (add_decoded).
+// writes them (add; only the luma is read), as planes wherever they are
+// (add_planes), or as a decoder's pictures (add_decoded).
 class CpuScorer : public PairScorer {
 public:
     // `metrics` are cpu_feature keys. Every `n_subsample`th frame is scored,
@@ -75,6 +75,7 @@ public:
     std::size_t luma_bytes() const { return luma_bytes_; }
 
     void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) override;
+    void add_planes(const FramePlanes& reference, const FramePlanes& distorted) override;
 
     // Scores one more pair held by the app's decoders, which decode luma
     // only. NVIDIA's decoder copies the luma into libvmaf's picture itself,
@@ -87,11 +88,6 @@ public:
     // source's from a thread of the scorer's.
     void add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot);
 
-    // A luma plane of a pair: its rows, `stride` bytes apart.
-    struct Plane {
-        const std::uint8_t* data = nullptr;
-        std::size_t stride = 0;
-    };
     // add_decoded, giving `also` the pair's two luma planes (the source's,
     // then the test video's) before they are scored: another scorer of the
     // same pair copies them (copy_packed) rather than having the decoders
@@ -115,7 +111,8 @@ private:
     // (downloads_at_once).
     void download_both(VmafPicture& reference_picture, GpuFrameStream& reference, int reference_slot,
                        VmafPicture& distorted_picture, GpuFrameStream& test, int test_slot);
-    void fill(VmafPicture& picture, std::span<const std::uint8_t> frame, std::size_t size);
+    // Copies a luma plane into the picture.
+    void fill(VmafPicture& picture, Plane luma) const;
     void release();
 
     const Libvmaf& library_;

@@ -417,40 +417,18 @@ const FeatureNames& feature_names(const std::filesystem::path& model) {
     return found.emplace(key, std::move(names)).first->second;
 }
 
-// A frame's planes in a packed 4:2:0 frame: where each starts, its rows and
-// the bytes of each row.
-struct PlaneLayout {
-    std::size_t offset = 0;
-    std::size_t rows = 0;
-    std::size_t row_bytes = 0;
-};
-
-std::array<PlaneLayout, 3> packed_layout(int width, int height, int bit_depth) {
-    const std::size_t sample = bit_depth <= 8 ? 1 : 2;
-    const auto columns = static_cast<std::size_t>(width), rows = static_cast<std::size_t>(height);
-    const std::size_t chroma_columns = (columns + 1) / 2, chroma_rows = (rows + 1) / 2;
-    std::array<PlaneLayout, 3> planes{};
-    planes[0] = {0, rows, columns * sample};
-    std::size_t offset = columns * rows * sample;
-    for (std::size_t plane = 1; plane < 3; ++plane) {
-        planes[plane] = {offset, chroma_rows, chroma_columns * sample};
-        offset += chroma_columns * chroma_rows * sample;
-    }
-    return planes;
-}
-
-// Copies the given planes of a packed frame into a libvmaf picture.
-// libvmaf rounds an odd size's chroma planes down, and FFmpeg up.
-void fill_picture(VmafPicture& picture, std::span<const std::uint8_t> frame, const std::array<PlaneLayout, 3>& layout,
-                  std::size_t sample, std::initializer_list<int> planes) {
+// Copies the given planes of a frame into a libvmaf picture of its size. Its
+// planes are the frame's, but for an odd size's chroma planes, which libvmaf
+// rounds down where FFmpeg rounds up: the picture's part of them is copied.
+void fill_picture(VmafPicture& picture, const FramePlanes& frame, std::size_t sample,
+                  std::initializer_list<int> planes) {
     for (const int plane : planes) {
-        const PlaneLayout& from = layout[static_cast<std::size_t>(plane)];
-        const std::size_t rows = std::min<std::size_t>(from.rows, picture.h[plane]);
-        const std::size_t width = std::min<std::size_t>(from.row_bytes, picture.w[plane] * sample);
+        const Plane& from = frame[static_cast<std::size_t>(plane)];
+        const std::size_t row_bytes = picture.w[plane] * sample;
         auto* target = static_cast<std::uint8_t*>(picture.data[plane]);
         const auto stride = static_cast<std::size_t>(picture.stride[plane]);
-        for (std::size_t row = 0; row < rows; ++row) {
-            std::memcpy(target + row * stride, frame.data() + from.offset + row * from.row_bytes, width);
+        for (std::size_t row = 0; row < picture.h[plane]; ++row) {
+            std::memcpy(target + row * stride, from.data + static_cast<std::ptrdiff_t>(row) * from.stride, row_bytes);
         }
     }
 }
@@ -471,8 +449,7 @@ struct V1Scorer::State {
     unsigned step = 1;
     unsigned count = 0;
     std::size_t sample = 1;
-    std::ptrdiff_t luma_stride = 0;
-    std::array<PlaneLayout, 3> layout{};
+    PackedFrame packed;  // add's frames
     const FeatureNames* names = nullptr;
     VulkanContext* gpu = nullptr;
     VmafContext* cpu = nullptr;  // libvmaf's extractors, for the features the GPU does not calculate
@@ -777,9 +754,8 @@ V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::
         s.start_cpu_features(options, width, height, bit_depth, threads);
     }
     s.sample = bit_depth <= 8 ? 1 : 2;
-    s.luma_stride = static_cast<std::ptrdiff_t>(static_cast<std::size_t>(width) * s.sample);
-    s.layout = packed_layout(width, height, bit_depth);
-    frame_bytes_ = s.layout[2].offset + s.layout[2].rows * s.layout[2].row_bytes;
+    s.packed = PackedFrame(width, height, bit_depth);
+    frame_bytes_ = s.packed.bytes();
 }
 
 V1Scorer::~V1Scorer() = default;
@@ -789,19 +765,26 @@ void V1Scorer::add(std::span<const std::uint8_t> reference, std::span<const std:
     if (std::min(reference.size(), distorted.size()) < frame_bytes_) {
         throw VmafV1Error("frame " + std::to_string(s.count) + " is cut short");
     }
+    add_planes(s.packed.planes(reference.data()), s.packed.planes(distorted.data()));
+}
+
+void V1Scorer::add_planes(const FramePlanes& reference, const FramePlanes& distorted) {
+    State& s = *state_;
     const bool score = s.count % s.step == 0;
     int code = 0;
     if (s.on_gpu.contains(v1_speed)) {  // the GPU needs the chroma planes too
         std::array<const std::uint8_t*, 6> planes{};
         std::array<std::ptrdiff_t, 6> strides{};
         for (std::size_t plane = 0; plane < 3; ++plane) {
-            planes[plane] = reference.data() + s.layout[plane].offset;
-            planes[3 + plane] = distorted.data() + s.layout[plane].offset;
-            strides[plane] = strides[3 + plane] = static_cast<std::ptrdiff_t>(s.layout[plane].row_bytes);
+            planes[plane] = reference[plane].data;
+            planes[3 + plane] = distorted[plane].data;
+            strides[plane] = reference[plane].stride;
+            strides[3 + plane] = distorted[plane].stride;
         }
         code = s.engine.submit_v1(s.gpu, planes.data(), strides.data(), score ? 1 : 0);
     } else {
-        code = s.engine.submit(s.gpu, reference.data(), s.luma_stride, distorted.data(), s.luma_stride, score ? 1 : 0);
+        code = s.engine.submit(s.gpu, reference[0].data, reference[0].stride, distorted[0].data, distorted[0].stride,
+                               score ? 1 : 0);
     }
     if (code < 0) {
         s.check(code, "Scoring frame " + std::to_string(s.count));
@@ -812,8 +795,8 @@ void V1Scorer::add(std::span<const std::uint8_t> reference, std::span<const std:
         // luma).
         s.to_libvmaf(
             [&](VmafPicture& reference_picture, VmafPicture& distorted_picture) {
-                fill_picture(reference_picture, reference, s.layout, s.sample, {1, 2});
-                fill_picture(distorted_picture, distorted, s.layout, s.sample, {0, 1, 2});
+                fill_picture(reference_picture, reference, s.sample, {1, 2});
+                fill_picture(distorted_picture, distorted, s.sample, {0, 1, 2});
             },
             s.count);
     }
@@ -1005,7 +988,7 @@ V1Reference v1_cpu_reference(const std::filesystem::path& model, int width, int 
          VMAF_PIX_FMT_YUV420P},
         static_cast<unsigned>(2 * (std::max(1, threads) + 2))};
     check_libvmaf(library.preallocate_pictures(handles.context, pool), "Allocating pictures");
-    const std::array<PlaneLayout, 3> layout = packed_layout(width, height, bit_depth);
+    const PackedFrame packed(width, height, bit_depth);
     const std::size_t sample = bit_depth <= 8 ? 1 : 2;
     for (std::size_t index = 0; index < reference.size(); ++index) {
         std::array<VmafPicture, 2> pictures{};
@@ -1017,7 +1000,7 @@ V1Reference v1_cpu_reference(const std::filesystem::path& model, int width, int 
                               "Taking a picture");
             }
             for (std::size_t i = 0; i < 2; ++i) {
-                fill_picture(pictures[i], *frames[i], layout, sample, {0, 1, 2});
+                fill_picture(pictures[i], packed.planes(frames[i]->data()), sample, {0, 1, 2});
             }
         } catch (...) {
             // A picture taken and never handed over keeps vmaf_close waiting for it.
@@ -1162,6 +1145,15 @@ void MultiScorer::add(std::span<const std::uint8_t> reference, std::span<const s
     }
 }
 
+void MultiScorer::add_planes(const FramePlanes& reference, const FramePlanes& distorted) {
+    for (PairScorer* scorer : {static_cast<PairScorer*>(vulkan_.get()), static_cast<PairScorer*>(cuda_.get()),
+                               static_cast<PairScorer*>(v1_.get())}) {
+        if (scorer != nullptr) {
+            scorer->add_planes(reference, distorted);
+        }
+    }
+}
+
 void MultiScorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFrameStream& test, int test_slot) {
     // VMAF v0.6.1 and NEG read only the luma planes, copied on the GPU.
     const auto copy_reference = [&](std::uint64_t address, std::int64_t pitch) {
@@ -1208,29 +1200,49 @@ PairScores MultiScorer::finish() {
 
 namespace {
 
-// A buffer page-locked for NVIDIA's decoder's downloads while this lives
-// (GpuFrameStream::pin), unlocked before the buffer and the stream go: the
-// GPU then copies a frame into it by itself, where into pageable memory the
-// driver copies it again on the CPU (a 4K 10-bit frame: 5.3 ms). Other
-// decoders' buffers are left as they are.
-class PinnedFor {
+// A video's pictures for scorers that read them in system memory: where the
+// software decoder holds them (GpuFrameStream::gives_planes), or downloaded
+// into a buffer of this one's. For NVIDIA's decoder the buffer is
+// page-locked while this lives (GpuFrameStream::pin), and unlocked before it
+// and the stream go: the GPU then copies a frame into it by itself, where
+// into pageable memory the driver copies it again on the CPU (a 4K 10-bit
+// frame: 5.3 ms).
+class HostFrames {
 public:
-    PinnedFor(GpuFrameStream& stream, std::vector<std::uint8_t>& buffer)
-        : stream_(stream),
-          address_(buffer.data()),
-          pinned_(stream.backend() == "nvidia" && stream.pin(address_, buffer.size())) {}
-    ~PinnedFor() {
+    HostFrames(GpuFrameStream& stream, const PackedFrame& packed) : stream_(stream), packed_(packed) {
+        if (stream.gives_planes()) {
+            return;
+        }
+        buffer_.resize(packed.bytes());
+        pinned_ = stream.backend() == "nvidia" && stream.pin(buffer_.data(), buffer_.size());
+    }
+    ~HostFrames() {
         if (pinned_) {
-            stream_.unpin(address_);
+            stream_.unpin(buffer_.data());
         }
     }
-    PinnedFor(const PinnedFor&) = delete;
-    PinnedFor& operator=(const PinnedFor&) = delete;
+    HostFrames(const HostFrames&) = delete;
+    HostFrames& operator=(const HostFrames&) = delete;
+
+    // Whether the pictures are downloaded, rather than read where they are.
+    bool downloads() const { return !buffer_.empty(); }
+
+    // The planes of the slot's picture, downloaded first where it is not
+    // read in place. They are valid until the slot is given back, or the
+    // next take.
+    FramePlanes take(int slot) {
+        if (!downloads()) {
+            return stream_.slot_planes(slot);
+        }
+        stream_.download(slot, buffer_.data());
+        return packed_.planes(buffer_.data());
+    }
 
 private:
     GpuFrameStream& stream_;
-    void* address_;
-    bool pinned_;
+    PackedFrame packed_;
+    std::vector<std::uint8_t> buffer_;
+    bool pinned_ = false;
 };
 
 }  // namespace
@@ -1316,17 +1328,15 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                     [&](const DecodePlan& decoded) { return decoded.frame_bytes() != scorer->frame_bytes(); })) {
         throw VmafV1Error("the decoders' frames are not the size the scorers take");
     }
-    std::array<std::vector<std::uint8_t>, 2> buffers;
-    // After the buffers and the streams, so that they go first.
-    std::optional<PinnedFor> pinned_source;
-    std::optional<PinnedFor> pinned_test;
+    // After the streams, so that they go first.
+    std::optional<HostFrames> source_frames;
+    std::optional<HostFrames> test_frames;
     if (!on_gpu) {
-        buffers[0].resize(scorer->frame_bytes());
-        buffers[1].resize(scorer->frame_bytes());
-        pinned_source.emplace(reference, buffers[0]);
-        pinned_test.emplace(test, buffers[1]);
+        const PackedFrame packed(plan.width, plan.height, plan.bit_depth);
+        source_frames.emplace(reference, packed);
+        test_frames.emplace(test, packed);
     }
-    // Whole frames, luma first, as the scorers take them.
+    // The CPU's metrics, which read the same frames' luma.
     std::optional<CpuScorer> beside;
     start_beside(beside, plan, n_subsample);
     if (beside && beside->frame_bytes() != scorer->frame_bytes()) {
@@ -1351,22 +1361,27 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                 scorer->add_decoded(reference, reference_slot, test, test_slot);
                 return;
             }
-            // The two decoders write their frames at the same time where they
-            // allow (downloads_at_once), the source's on the side thread, and
-            // the CPU's metrics copy out their luma while the GPU's scorers
-            // take them: one after the other on this one thread they took
-            // 15.5 ms per 4K 10-bit pair.
-            const auto source_frame = [&] { reference.download(reference_slot, buffers[0].data()); };
-            const auto test_frame = [&] { test.download(test_slot, buffers[1].data()); };
-            if (downloads_at_once(source_backend, test_backend)) {
+            // The software decoder's pictures are read where it holds them
+            // (a 4K 10-bit copy less per picture: 3.4 ms). The others are
+            // downloaded, the two at the same time where the decoders allow
+            // (downloads_at_once), the source's on the side thread; and the
+            // CPU's metrics copy out their luma while the GPU's scorers take
+            // them: one after the other on this one thread they took 15.5 ms
+            // per 4K 10-bit pair.
+            FramePlanes source_planes;
+            FramePlanes test_planes;
+            const auto source_frame = [&] { source_planes = source_frames->take(reference_slot); };
+            const auto test_frame = [&] { test_planes = test_frames->take(test_slot); };
+            if (source_frames->downloads() && test_frames->downloads() &&
+                downloads_at_once(source_backend, test_backend)) {
                 side->both(source_frame, test_frame);
             } else {
                 source_frame();
                 test_frame();
             }
-            const auto gpu = [&] { scorer->add(buffers[0], buffers[1]); };
+            const auto gpu = [&] { scorer->add_planes(source_planes, test_planes); };
             if (beside) {
-                side->both([&] { beside->add(buffers[0], buffers[1]); }, gpu);
+                side->both([&] { beside->add_planes(source_planes, test_planes); }, gpu);
             } else {
                 gpu();
             }

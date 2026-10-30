@@ -189,9 +189,10 @@ struct VulkanFeatures {
 // Calculates VMAF's features with Vulkan for frame pairs given in order:
 // 4:2:0 frames with luma and chroma planes, packed as FFmpeg's rawvideo
 // writes them, at `bit_depth` bits (16-bit little-endian samples above 8
-// bits). Only the luma is used, as in VMAF. Frames a decoder in this
-// process writes itself go straight into the engine's memory instead
-// (add_decoded), or, from NVIDIA's decoder, stay on the GPU (add_shared).
+// bits), or as planes wherever they are (add_planes). Only the luma is used,
+// as in VMAF. Frames a decoder in this process writes itself go straight
+// into the engine's memory instead (add_decoded), or, from NVIDIA's decoder,
+// stay on the GPU (add_shared).
 class VulkanScorer : public PairScorer {
 public:
     // `models` are libvmaf models to score, each a name and the version of
@@ -210,6 +211,7 @@ public:
     std::size_t frame_bytes() const override { return frame_bytes_; }
 
     void add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) override;
+    void add_planes(const FramePlanes& reference, const FramePlanes& distorted) override;
 
     // Scores one more pair that a decoder writes in itself: `reference` and
     // `distorted` are each called with the address to write a luma plane to,

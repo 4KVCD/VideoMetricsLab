@@ -267,12 +267,17 @@ void VulkanScorer::release() {
 void VulkanScorer::check(int error, const std::string& what) const { check_vulkan(engine_, error, what); }
 
 void VulkanScorer::add(std::span<const std::uint8_t> reference, std::span<const std::uint8_t> distorted) {
-    const bool score = count_ % step_ == 0;
     if (std::min(reference.size(), distorted.size()) < luma_bytes_) {  // the engine reads that much of each
         throw VmafVulkanError("frame " + std::to_string(count_) + " is shorter than its luma plane");
     }
+    add_planes(FramePlanes{Plane{reference.data(), luma_stride_}}, FramePlanes{Plane{distorted.data(), luma_stride_}});
+}
+
+void VulkanScorer::add_planes(const FramePlanes& reference, const FramePlanes& distorted) {
+    const bool score = count_ % step_ == 0;
     // Made for every frame: what failed is only put into words when it does.
-    if (engine_.submit(context_, reference.data(), luma_stride_, distorted.data(), luma_stride_, score ? 1 : 0) < 0) {
+    if (engine_.submit(context_, reference[0].data, reference[0].stride, distorted[0].data, distorted[0].stride,
+                       score ? 1 : 0) < 0) {
         fail(engine_, "Scoring frame " + std::to_string(count_));
     }
     ++count_;

@@ -90,6 +90,36 @@ TEST(GpuFrames, PlansAsThePythonAppDoes) {
     }
 }
 
+// The pictures read where the software decoder holds them are those its
+// download would only copy, and its planes are those of the packed frame it
+// would download.
+TEST(GpuFrames, OnlyTheSoftwareDecoderLendsThePicturesItWouldOnlyCopy) {
+    DecodePlan plan;
+    plan.codec = "vvc";
+    plan.bit_depth = 10;
+    plan.width = plan.crop_w = 1919;
+    plan.height = plan.crop_h = 1079;
+    plan.shift = 6;
+    EXPECT_TRUE(can_lend_planes(plan, software_decoder));
+    EXPECT_EQ(PackedFrame(plan.crop_w, plan.crop_h, plan.bit_depth).bytes(), plan.frame_bytes());
+    for (const std::string_view backend : {"nvidia", "intel", "amd"}) {
+        EXPECT_FALSE(can_lend_planes(plan, backend)) << backend;
+    }
+    DecodePlan moved = plan;  // samples moved to the top bits (P016's layout)
+    moved.shift = 0;
+    EXPECT_FALSE(can_lend_planes(moved, software_decoder));
+    DecodePlan scaled = plan;
+    scaled.out_w = 1280;
+    scaled.out_h = 720;
+    EXPECT_FALSE(can_lend_planes(scaled, software_decoder));
+    DecodePlan eight = plan;
+    eight.bit_depth = 8;
+    eight.shift = 0;
+    EXPECT_TRUE(can_lend_planes(eight, software_decoder));
+    eight.widen = widen_shift;
+    EXPECT_FALSE(can_lend_planes(eight, software_decoder));
+}
+
 TEST(GpuFrames, CopiesThePacketsWithThePythonAppsCommand) {
     const Json reference = test::load_reference("decoding.json");
     ASSERT_FALSE(reference["packet_commands"].empty());
