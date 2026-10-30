@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "vml/platform/system.h"
+#include "vml/translatable.h"
 
 namespace vml {
 
@@ -14,25 +15,34 @@ namespace {
 constexpr int uhd_width_threshold = 3840;
 constexpr int uhd_height_threshold = 2160;
 
-// The bundled models by their stable ids (saved in options and results; a
-// path is never saved, since it differs between installs).
-constexpr std::array<std::pair<std::string_view, std::string_view>, 8> builtin_model_files{{
-    {"vmaf_v1_3d0h", "vmaf_v1.0.16/vmaf_v1.0.16_3d0h.json"},
-    {"vmaf_v1_5d0h", "vmaf_v1.0.16/vmaf_v1.0.16_5d0h.json"},
-    {"vmaf_v1_1d5h_2160", "vmaf_v1.0.16/vmaf_v1.0.16_1d5h_2160.json"},
-    {"vmaf_v1_3d0h_2160", "vmaf_v1.0.16/vmaf_v1.0.16_3d0h_2160.json"},
-    {"vmaf_v1_hfr_3d0h", "vmaf_v1.0.16_hfr/vmaf_v1.0.16_hfr_3d0h.json"},
-    {"vmaf_v1_hfr_5d0h", "vmaf_v1.0.16_hfr/vmaf_v1.0.16_hfr_5d0h.json"},
-    {"vmaf_v1_hfr_1d5h_2160", "vmaf_v1.0.16_hfr/vmaf_v1.0.16_hfr_1d5h_2160.json"},
-    {"vmaf_v1_hfr_3d0h_2160", "vmaf_v1.0.16_hfr/vmaf_v1.0.16_hfr_3d0h_2160.json"},
+// A bundled model: its stable id (saved in options and results; a path is
+// never saved, since it differs between installs), its file, and the name
+// the window shows it by.
+struct BuiltinModel {
+    std::string_view id;
+    std::string_view file;
+    const char* name;
+};
+
+// The bundled models, in the window's VMAF v1 dropdown's order.
+constexpr std::array<BuiltinModel, 8> builtin_models{{
+    {"vmaf_v1_3d0h", "vmaf_v1.0.16/vmaf_v1.0.16_3d0h.json", N_("VMAF v1 (1080p / 3H)")},
+    {"vmaf_v1_5d0h", "vmaf_v1.0.16/vmaf_v1.0.16_5d0h.json", N_("VMAF v1 (1080p phone / 5H)")},
+    {"vmaf_v1_1d5h_2160", "vmaf_v1.0.16/vmaf_v1.0.16_1d5h_2160.json", N_("VMAF v1 (4K / 1.5H)")},
+    {"vmaf_v1_3d0h_2160", "vmaf_v1.0.16/vmaf_v1.0.16_3d0h_2160.json", N_("VMAF v1 (4K / 3H, up to 110)")},
+    {"vmaf_v1_hfr_3d0h", "vmaf_v1.0.16_hfr/vmaf_v1.0.16_hfr_3d0h.json", N_("VMAF v1 HFR (1080p / 3H)")},
+    {"vmaf_v1_hfr_5d0h", "vmaf_v1.0.16_hfr/vmaf_v1.0.16_hfr_5d0h.json", N_("VMAF v1 HFR (1080p phone / 5H)")},
+    {"vmaf_v1_hfr_1d5h_2160", "vmaf_v1.0.16_hfr/vmaf_v1.0.16_hfr_1d5h_2160.json", N_("VMAF v1 HFR (4K / 1.5H)")},
+    {"vmaf_v1_hfr_3d0h_2160", "vmaf_v1.0.16_hfr/vmaf_v1.0.16_hfr_3d0h_2160.json",
+     N_("VMAF v1 HFR (4K / 3H, up to 110)")},
 }};
 
 constexpr std::string_view builtin_prefix = "__builtin:";
 
 const std::string_view* model_file(std::string_view model_id) {
-    for (const auto& [id, file] : builtin_model_files) {
-        if (id == model_id) {
-            return &file;
+    for (const BuiltinModel& model : builtin_models) {
+        if (model.id == model_id) {
+            return &model.file;
         }
     }
     return nullptr;
@@ -95,6 +105,18 @@ std::string builtin_choice(std::string_view model_id) {
         throw std::invalid_argument("Unknown built-in VMAF model: " + std::string(model_id));
     }
     return std::string(builtin_prefix) + std::string(model_id);
+}
+
+const std::vector<ModelChoice>& v1_model_choices() {
+    static const std::vector<ModelChoice> choices = [] {
+        std::vector<ModelChoice> made{
+            {N_("Auto (analysis resolution)"), std::string(auto_model_choice), std::string(auto_word)}};
+        for (const BuiltinModel& model : builtin_models) {
+            made.push_back({model.name, builtin_choice(model.id), std::string(model.id)});
+        }
+        return made;
+    }();
+    return choices;
 }
 
 std::string model_for_resolution(int width, int height) {

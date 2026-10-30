@@ -197,20 +197,25 @@ $run.videos[0].metrics.vmaf.score
 | --- | --- |
 | `-m`, `--metrics LIST` | Comma-separated: `vmaf`, `vmaf_neg`, `vmaf_v1`, `psnr`, `ssim`, `xpsnr`, `ssimulacra2`, `butteraugli`, `cvvdp`, or `all`. Left out: the metrics a video added to the app starts with. |
 | `--model auto\|standard\|4k\|FILE` | VMAF v0.6.1's model. `auto` uses the 4K model for a 4K comparison. |
+| `--model-v1 MODEL` | VMAF v1's model, as the Options panel's **VMAF v1 model**: `auto` (the one for the size frames are compared at), or a bundled one by its name: `vmaf_v1_3d0h`, `vmaf_v1_5d0h` (1080p), `vmaf_v1_1d5h_2160`, `vmaf_v1_3d0h_2160` (4K), or their high frame rate models `vmaf_v1_hfr_3d0h`, `vmaf_v1_hfr_5d0h`, `vmaf_v1_hfr_1d5h_2160`, `vmaf_v1_hfr_3d0h_2160`. |
 | `--black-bars auto\|none` | Detect and cut black bars, or compare whole pictures. |
 | `--scale-to test\|reference` | Which video's size the other is scaled to when they differ. |
 | `--scaler bicubic\|bilinear\|lanczos\|spline` | Scaling algorithm. |
 | `--duration SECONDS` | Compare only the start of each video. |
 | `--frames N` | Compare only the first N frames of each video, such as a short encode of a longer reference. |
 | `--colour pq-bt2020\|hlg-bt2020\|bt709` | The colours of a video with no colour tags (y4m, say); a tagged video keeps its own. Left out, such a video takes the other video's tags when that one has them (a y4m encode of a tagged HDR10 source is read as HDR10), and is otherwise taken as SDR, which changes CVVDP, SSIMULACRA2 and Butteraugli. Scores with colours given or taken are not saved. |
+| `--film-grain with\|without` | Score with the film grain a video's stream asks the player to add, as players show it, or without it, the coded pictures only. Left out: as Settings' **Film grain** default says; with, where it asks. |
 | `--fps RATE` | The frame rate of a raw video stream or raw YUV file (below), such as `24000/1001`, `23.976` or `60`. Required when the reference or a test video is one. These scores are not saved. |
 | `--size WIDTHxHEIGHT`, `--pix-fmt FORMAT` | The picture size and pixel format (as FFmpeg names it: `yuv420p`, `yuv420p10le`...) of a raw YUV file (below). Required with `--fps` for one. |
 | `--cvvdp-display PRESET` | The display CVVDP models, by preset name. Repeat it for a CVVDP score on each display. Left out: the app's default display, Automatic unless Settings name a preset: the HDR display (`30-inch 4K HDR monitor, dim room`, the official `standard_hdr_pq`) for an HDR reference (PQ or HLG), the SDR one (`30-inch 4K monitor, office`, `standard_4k`) otherwise. |
+| `--cvvdp-fill` | Scale the compared frames up to fill CVVDP's display, aspect kept, as the Options panel's **Scale the video to fill the display**. Left out: off, as the official tool (a 1080p video covers a quarter of a 4K display). These scores are saved apart. |
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
 | `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only): VMAF as with `--vmaf-on cpu`, and SSIMULACRA2 and Butteraugli with libjxl rather than on the GPU. |
 | `--vmaf-on` `gpu\|cpu` | Where VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated. Left out: as the app's Options panel was last set. |
 | `--vship` `vship-fast\|vship` | The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: Vship-fast, or stock Vship 5.1.2, whose scores differ slightly and are saved apart. Left out: as Settings > GPU metrics sets it. |
+| `--vship-pass one\|each` | SSIMULACRA2, Butteraugli and CVVDP in one pass per video, which decodes it once (faster only on a very powerful GPU, and needs much GPU memory), or a pass for each. The scores are the same. Left out: as Settings > GPU metrics sets it. |
 | `--no-gpu-decode` | Decode the videos on the CPU. |
+| `--gpu-decode auto\|nvidia\|intel\|amd` | Decode the videos on the GPU, as the Options panel's **GPU decode**: `auto`, the first GPU whose decoder takes each video (NVIDIA, Intel, then AMD), or that maker's, which the PC must have. A Mac uses its own. Left out: on or off as the app's Options panel was last set, the maker automatic. |
 | `--threads N` | libvmaf threads. Left out: automatic. |
 | `--parallel 1\|2` | Videos calculated at once on the CPU. |
 | `--recalculate` | Ignore saved scores. |

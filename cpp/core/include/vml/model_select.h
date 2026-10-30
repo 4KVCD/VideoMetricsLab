@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "vml/options.h"
 
@@ -36,6 +37,22 @@ bool is_builtin_model_choice(std::string_view choice);
 std::filesystem::path builtin_model_path(std::string_view model_id);
 // The model choice that names a bundled model.
 std::string builtin_choice(std::string_view model_id);
+
+// A VMAF model one can choose: its name in the window's dropdown (English,
+// shown translated), the choice a video saves (VmafOptions' model_choice or
+// model_choice_v1), and the command line's word for it (--model-v1).
+struct ModelChoice {
+    const char* name;
+    std::string choice;
+    std::string word{};
+};
+
+// The command line's word for Auto.
+inline constexpr std::string_view auto_word = "auto";
+
+// The VMAF v1 column's models: Auto, then each bundled model (its word its
+// id), in the window's dropdown order.
+const std::vector<ModelChoice>& v1_model_choices();
 
 // The model "Auto" picks for frames compared at this size.
 std::string model_for_resolution(int width, int height);

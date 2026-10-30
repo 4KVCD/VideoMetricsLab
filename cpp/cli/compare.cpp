@@ -279,12 +279,13 @@ bool is_raw_yuv(const std::filesystem::path& path) { return ascii_lower(platform
 // The video at `path` as the command reads it: a raw YUV file with --size,
 // --pix-fmt and --fps (ffprobe.h's probe_raw_yuv), a raw stream timed at
 // --fps (timed_raw_stream), any other video as ffprobe reads it, with the
-// film grain its stream describes (detect_film_grain). Nothing, with `wrong`
-// saying why, when the command does not give what it needs (`which` names
-// the video). Throws ProbeError when it cannot be read.
+// film grain its stream describes (detect_film_grain), scored with it or
+// without as `with_film_grain` says (film_grain_choice). Nothing, with
+// `wrong` saying why, when the command does not give what it needs (`which`
+// names the video). Throws ProbeError when it cannot be read.
 std::optional<VideoInfo> read_video(const std::filesystem::path& path, const CompareArguments& arguments,
-                                    const std::string& ffprobe, const std::string& ffmpeg, const std::string& which,
-                                    std::string& wrong) {
+                                    std::optional<bool> with_film_grain, const std::string& ffprobe,
+                                    const std::string& ffmpeg, const std::string& which, std::string& wrong) {
     if (is_raw_yuv(path)) {
         if (!arguments.size || !arguments.pix_fmt || !arguments.fps) {
             wrong = which + " is a raw YUV file, which records no picture size, pixel format or frame rate: give "
@@ -298,9 +299,7 @@ std::optional<VideoInfo> read_video(const std::filesystem::path& path, const Com
     }
     VideoInfo info = probe_video(path, ffprobe);
     info.film_grain = detect_film_grain(info, ffmpeg, CancelToken());
-    if (arguments.film_grain) {
-        info.with_film_grain = *arguments.film_grain == "with";
-    }
+    info.with_film_grain = with_film_grain;
     if (!info.is_raw_stream()) {
         return info;
     }
@@ -347,13 +346,55 @@ VshipBuild vship_build(const CompareArguments& arguments, const Settings& settin
     return arguments.vship ? vship_build_from(*arguments.vship) : default_vship_build(settings.default_vship_build);
 }
 
-// The options the window's row would hold for these choices, for the test
-// video `test`.
+// The maker --gpu-decode names: automatic for its "auto", and without it.
+GpuVendor gpu_maker(const std::optional<std::string>& word) {
+    if (word == "nvidia") {
+        return GpuVendor::nvidia;
+    }
+    if (word == "intel") {
+        return GpuVendor::intel;
+    }
+    if (word == "amd") {
+        return GpuVendor::amd;
+    }
+    return GpuVendor::automatic;
+}
+
+// A GPU maker's name, as the window's GPU decode dropdown has it.
+std::string maker_name(GpuVendor vendor) {
+    return vendor == GpuVendor::nvidia ? "NVIDIA" : vendor == GpuVendor::intel ? "Intel" : "AMD";
+}
+
+}  // namespace
+
+std::optional<std::string> missing_gpu_maker(const std::optional<std::string>& gpu_decode,
+                                             const std::vector<GpuVendor>& found, bool listed) {
+    const GpuVendor maker = gpu_maker(gpu_decode);
+    if (maker == GpuVendor::automatic || !listed || std::find(found.begin(), found.end(), maker) != found.end()) {
+        return std::nullopt;
+    }
+    std::string have;
+    for (const GpuVendor vendor : found) {
+        have += (have.empty() ? "" : ", ") + maker_name(vendor);
+    }
+    return "--gpu-decode " + *gpu_decode + ": this PC has no " + maker_name(maker) + " GPU" +
+           (have.empty() ? "." : " (it has " + have + ").");
+}
+
+std::optional<bool> film_grain_choice(const CompareArguments& arguments, const Settings& settings) {
+    if (arguments.film_grain) {
+        return *arguments.film_grain == "with";
+    }
+    return film_grain_default_choice(settings.film_grain_default);
+}
+
 VmafOptions row_options(const CompareArguments& arguments, const Settings& settings,
                         const std::vector<std::string>& metric_keys, const VideoInfo& test) {
     const std::optional<std::string> vmaf_on = vmaf_where(arguments);
     VmafOptions options;
-    options.gpu_decode = settings.default_gpu_decode && !arguments.no_gpu_decode;
+    // --gpu-decode turns GPU decoding on, whatever Settings say.
+    options.gpu_decode = arguments.gpu_decode || (settings.default_gpu_decode && !arguments.no_gpu_decode);
+    options.gpu_vendor = gpu_maker(arguments.gpu_decode);
     options.vmaf_on_gpu = vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu;
     options.vship_build = vship_build(arguments, settings);
     options.n_threads = arguments.threads.value_or(0);
@@ -374,6 +415,11 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
         options.model_choice = std::string(custom_model_choice);
         options.custom_model_path = platform::path_text(resolved_path(python_path(arguments.model)));
     }
+    for (const ModelChoice& model : v1_model_choices()) {
+        if (model.word == arguments.model_v1) {
+            options.model_choice_v1 = model.choice;
+        }
+    }
     for (const std::string& key : metric_keys) {
         if (metric_definition(key).ffmpeg_binding) {
             options.set_metric_enabled(key, true);
@@ -381,6 +427,8 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
     }
     return options;
 }
+
+namespace {
 
 // Where SSIMULACRA2 and Butteraugli run: as the window runs them, on the GPU
 // where one can and on the CPU without one (so that a score of theirs saved
@@ -419,20 +467,21 @@ std::vector<std::future<void>> start_gpu_checks(const CompareArguments& argument
     return checks;
 }
 
-// A display CVVDP models, by its preset's name.
-using CvvdpDisplayChoice = std::pair<std::string, CvvdpSettings>;
+// A preset's display, the compared frames scaled up to fill it with `fill`
+// (--cvvdp-fill), else not, as for a video added to the window.
+CvvdpDisplayChoice on_display(const CvvdpPreset& preset, bool fill) {
+    CvvdpSettings settings{preset.settings.display};
+    settings.resize_to_display = fill;
+    return {preset.name, settings};
+}
 
-// The CVVDP displays to score on: those --cvvdp-display names, each once in
-// the order given, else the app's default; none for Automatic, the default
-// unless Settings name a preset, which gives each video its reference's
-// (display_for). Throws std::invalid_argument for a name that is no preset.
+}  // namespace
+
 std::vector<CvvdpDisplayChoice> cvvdp_displays(const CompareArguments& arguments, const Settings& settings) {
-    // A preset is a display; scaling to fill it starts off, as for a video
-    // added to the window.
     if (arguments.cvvdp_displays.empty()) {
         if (const std::optional<CvvdpPreset> preset =
                 cvvdp_preset_named(settings.cvvdp_default_preset, settings.cvvdp_presets_json)) {
-            return {{preset->name, CvvdpSettings{preset->settings.display}}};
+            return {on_display(*preset, arguments.cvvdp_fill)};
         }
         return {};
     }
@@ -451,20 +500,20 @@ std::vector<CvvdpDisplayChoice> cvvdp_displays(const CompareArguments& arguments
             throw std::invalid_argument("No CVVDP display preset is called " + python_string_repr(name) +
                                         ". The presets: " + names + ".");
         }
-        displays.emplace_back(preset->name, CvvdpSettings{preset->settings.display});
+        displays.push_back(on_display(*preset, arguments.cvvdp_fill));
     }
     return displays;
 }
 
-// The display a video's CVVDP models first: the first of `displays`, or with
-// none (Automatic) its reference's, SDR or HDR (automatic_cvvdp_preset).
-CvvdpDisplayChoice display_for(const std::vector<CvvdpDisplayChoice>& displays, const VideoInfo& reference) {
+CvvdpDisplayChoice display_for(const std::vector<CvvdpDisplayChoice>& displays, const VideoInfo& reference,
+                               bool fill) {
     if (!displays.empty()) {
         return displays.front();
     }
-    const CvvdpPreset& preset = automatic_cvvdp_preset(&reference);
-    return {preset.name, CvvdpSettings{preset.settings.display}};
+    return on_display(automatic_cvvdp_preset(&reference), fill);
 }
+
+namespace {
 
 // The note for HDR video whose CVVDP modelled the SDR display chosen as the
 // app's default in Settings, or nothing.
@@ -1130,8 +1179,8 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
     video.path = path;
     try {
         std::string wrong;
-        std::optional<VideoInfo> read =
-            read_video(path, arguments_, ffprobe, ffmpeg, platform::path_text(path.filename()), wrong);
+        std::optional<VideoInfo> read = read_video(path, arguments_, film_grain_choice(arguments_, settings_), ffprobe,
+                                                   ffmpeg, platform::path_text(path.filename()), wrong);
         if (!read) {
             video.error = "the command does not say how to read it";
             command_wrong = wrong;
@@ -1269,7 +1318,7 @@ std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video, const
     const bool cvvdp = std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") != video.metrics.end();
     // By the reference as it is read here: with the test video's tags where
     // it has none, or --colour's.
-    const CvvdpDisplayChoice display = display_for(displays_, video.source);
+    const CvvdpDisplayChoice display = display_for(displays_, video.source, arguments_.cvvdp_fill);
     if (cvvdp) {
         video.display = display.first;
     }
@@ -1435,6 +1484,11 @@ int compare(const CompareArguments& arguments) {
         print_error("--vship vship: stock Vship 5.1.2 is not bundled with this package.");
         return exit_usage;
     }
+    if (const std::optional<std::string> missing =
+            missing_gpu_maker(arguments.gpu_decode, detected_gpu_vendors(), platform::lists_gpus())) {
+        print_error(*missing);
+        return exit_usage;
+    }
     if (const std::optional<std::string> missing = not_yet(arguments, settings, asked)) {
         print_error("The C++ command line cannot do this yet: " + *missing + ".");
         return exit_usage;
@@ -1446,8 +1500,8 @@ int compare(const CompareArguments& arguments) {
         const std::filesystem::path reference = python_path(arguments.reference);
         std::string wrong;
         std::optional<VideoInfo> read =
-            read_video(reference, arguments, tools.ffprobe.path, tools.ffmpeg.path,
-                       "The reference, " + platform::path_text(reference.filename()) + ",", wrong);
+            read_video(reference, arguments, film_grain_choice(arguments, settings), tools.ffprobe.path,
+                       tools.ffmpeg.path, "The reference, " + platform::path_text(reference.filename()) + ",", wrong);
         if (!read) {
             print_error(wrong);
             return exit_usage;
@@ -1488,7 +1542,8 @@ int compare(const CompareArguments& arguments) {
             }
         });
         run(run_environment(tools, planner.jobs), planner.job_targets(), planner.jobs,
-            arguments.parallel.value_or(settings.parallel_jobs), settings.gpu_metrics_together, cache_folder,
+            arguments.parallel.value_or(settings.parallel_jobs),
+            arguments.vship_pass ? *arguments.vship_pass == "one" : settings.gpu_metrics_together, cache_folder,
             *progress, cancel);
         cancelled = cancel.cancelled();
         *running = false;

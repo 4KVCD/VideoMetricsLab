@@ -22,6 +22,7 @@ struct CompareArguments {
     std::vector<std::string> tests;  // files, or patterns such as encodes\*.mkv
     std::optional<std::vector<std::string>> metrics;  // keys, in the registry's order
     std::string model = "auto";
+    std::string model_v1 = "auto";  // a word of v1_model_choices (model_select.h)
     std::string black_bars = "auto";
     std::string scale_to = "test";
     std::string scaler = "bicubic";
@@ -33,12 +34,15 @@ struct CompareArguments {
     std::optional<std::string> size;      // a raw YUV file's picture size, "1920x1080"
     std::optional<std::string> pix_fmt;   // a raw YUV file's pixel format, as FFmpeg names it
     std::vector<std::string> cvvdp_displays;
+    bool cvvdp_fill = false;  // CvvdpSettings::resize_to_display
     int subsample = 1;
     std::optional<int> threads;
     std::optional<std::string> vmaf_on;
-    std::optional<std::string> vship;  // "vship-fast" or "vship" (vship_build_value)
+    std::optional<std::string> vship;       // "vship-fast" or "vship" (vship_build_value)
+    std::optional<std::string> vship_pass;  // "one" or "each" (Settings::gpu_metrics_together)
     bool cpu = false;
     bool no_gpu_decode = false;
+    std::optional<std::string> gpu_decode;  // "auto", or the maker: "nvidia", "intel" or "amd"
     std::optional<int> parallel;
     bool recalculate = false;
     std::optional<std::string> csv;

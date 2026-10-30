@@ -9,6 +9,7 @@
 #include <set>
 
 #include "vml/metrics.h"
+#include "vml/model_select.h"
 #include "vml/python_text.h"
 
 namespace vml::cli {
@@ -23,6 +24,7 @@ namespace {
 const char* const top_usage = "usage: VideoMetricsLab-cli [-h] [--version] COMMAND ...\n";
 
 const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]
+                                   [--model-v1 MODEL]
                                    [--black-bars {auto,none}]
                                    [--scale-to {test,reference}]
                                    [--scaler {bicubic,bilinear,lanczos,spline}]
@@ -30,12 +32,15 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--colour {pq-bt2020,hlg-bt2020,bt709}]
                                    [--film-grain {with,without}] [--fps RATE]
                                    [--size WIDTHxHEIGHT] [--pix-fmt FORMAT]
-                                   [--cvvdp-display PRESET] [--subsample N]
-                                   [--threads N] [--vmaf-on {gpu,cpu}]
-                                   [--vship {vship-fast,vship}] [--cpu]
-                                   [--no-gpu-decode] [--parallel N]
-                                   [--recalculate] [--csv FOLDER]
-                                   [--json FILE] [-q] [-v]
+                                   [--cvvdp-display PRESET] [--cvvdp-fill]
+                                   [--subsample N] [--threads N]
+                                   [--vmaf-on {gpu,cpu}]
+                                   [--vship {vship-fast,vship}]
+                                   [--vship-pass {one,each}] [--cpu]
+                                   [--no-gpu-decode |
+                                   --gpu-decode {auto,nvidia,intel,amd}]
+                                   [--parallel N] [--recalculate]
+                                   [--csv FOLDER] [--json FILE] [-q] [-v]
                                    REFERENCE TEST [TEST ...]
 )";
 
@@ -92,6 +97,13 @@ options:
   --model MODEL         VMAF v0.6.1's model: auto (4K model for a 4K
                         comparison), standard, 4k, or a model .json file
                         (default: auto)
+  --model-v1 MODEL      VMAF v1's model: auto (the one for the size frames are
+                        compared at), or a bundled one: vmaf_v1_3d0h or
+                        vmaf_v1_5d0h (1080p, 3 or 5 picture heights away),
+                        vmaf_v1_1d5h_2160 or vmaf_v1_3d0h_2160 (4K, 1.5 or 3),
+                        or their high frame rate models vmaf_v1_hfr_3d0h,
+                        vmaf_v1_hfr_5d0h, vmaf_v1_hfr_1d5h_2160,
+                        vmaf_v1_hfr_3d0h_2160 (default: auto)
   --black-bars {auto,none}
                         auto: detect and cut black bars; none: compare the
                         whole pictures (default: auto)
@@ -114,10 +126,11 @@ options:
                         scores
   --film-grain {with,without}
                         the film grain a video's stream asks the player to
-                        add: with (the default), as players show the video, or
-                        without, the coded pictures only. Grain no decoder
-                        here adds as it should (H.274's outside VVC, AFGS1 in
-                        H.264) is always left out
+                        add: with, as players show the video, or without, the
+                        coded pictures only (default: the app's; with where it
+                        asks). Grain no decoder here adds as it should
+                        (H.274's outside VVC, AFGS1 in H.264) is always left
+                        out
   --fps RATE            the frame rate of a raw video stream (a .264, .265,
                         .266 or .obu file, with no container) or a raw YUV
                         file (.yuv), which records none, such as 24000/1001,
@@ -139,6 +152,10 @@ options:
                         nits, living room', '65-inch 4K HDR TV, 2000 nits,
                         living room', '65-inch 4K HDR TV, 4000 nits, living
                         room', '6-inch phone', or one saved in the app
+  --cvvdp-fill          scale the compared frames up to fill CVVDP's display,
+                        aspect kept (default: off, as the official tool: a
+                        1080p video covers a quarter of a 4K display). These
+                        scores are saved apart
   --subsample N         score every N-th frame (default: 1, every frame; CVVDP
                         needs every frame)
   --threads N           libvmaf threads (default: automatic)
@@ -149,11 +166,22 @@ options:
                         Butteraugli and CVVDP on the GPU: vship-fast, or vship
                         (stock Vship 5.1.2), whose scores differ slightly and
                         are saved apart (default: the app's)
+  --vship-pass {one,each}
+                        one: SSIMULACRA2, Butteraugli and CVVDP in one pass
+                        per video, which decodes it once (faster only on a
+                        very powerful GPU, and needs much GPU memory); each: a
+                        pass for each. The scores are the same (default: the
+                        app's)
   --cpu                 calculate on the CPU every metric that can be (CVVDP
                         is GPU only): VMAF as with --vmaf-on cpu, and
                         SSIMULACRA2 and Butteraugli with libjxl's tools rather
                         than on the GPU where one can
   --no-gpu-decode       decode the videos on the CPU
+  --gpu-decode {auto,nvidia,intel,amd}
+                        decode the videos on the GPU: auto, the first GPU
+                        whose decoder takes each video (NVIDIA, Intel, then
+                        AMD), or that maker's, which this PC must have; a Mac
+                        uses its own (default: the app's)
   --parallel N          videos calculated at once on the CPU, 1-2 (default:
                         the app's)
   --recalculate         calculate every metric again instead of using saved
@@ -696,6 +724,15 @@ std::string pixel_format(const std::string& text) {
     return text;
 }
 
+// --model-v1's words: auto, then the bundled VMAF v1 models' ids.
+std::vector<std::string> v1_words() {
+    std::vector<std::string> words;
+    for (const ModelChoice& model : v1_model_choices()) {
+        words.push_back(model.word);
+    }
+    return words;
+}
+
 std::string choice(const std::string& value, const std::vector<std::string>& choices) {
     if (std::find(choices.begin(), choices.end(), value) == choices.end()) {
         std::string listed;
@@ -742,6 +779,7 @@ Parser compare_parser(CompareArguments& parsed) {
          [&parsed](const std::vector<std::string>& values) { parsed.tests = values; }},
         option({"-m", "--metrics"}, [&parsed](const std::string& value) { parsed.metrics = metric_list(value); }),
         option({"--model"}, [&parsed](const std::string& value) { parsed.model = value; }),
+        option({"--model-v1"}, [&parsed](const std::string& value) { parsed.model_v1 = choice(value, v1_words()); }),
         option({"--black-bars"},
                [&parsed](const std::string& value) { parsed.black_bars = choice(value, {"auto", "none"}); }),
         option({"--scale-to"},
@@ -762,14 +800,21 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--size"}, [&parsed](const std::string& value) { parsed.size = picture_size(value); }),
         option({"--pix-fmt"}, [&parsed](const std::string& value) { parsed.pix_fmt = pixel_format(value); }),
         option({"--cvvdp-display"}, [&parsed](const std::string& value) { parsed.cvvdp_displays.push_back(value); }),
+        flag({"--cvvdp-fill"}, parsed.cvvdp_fill),
         option({"--subsample"},
                [&parsed](const std::string& value) { parsed.subsample = int_up_to(value, 60); }),
         option({"--threads"}, [&parsed](const std::string& value) { parsed.threads = int_up_to(value, 128); }),
         option({"--vmaf-on"}, [&parsed](const std::string& value) { parsed.vmaf_on = choice(value, {"gpu", "cpu"}); }),
         option({"--vship"},
                [&parsed](const std::string& value) { parsed.vship = choice(value, {"vship-fast", "vship"}); }),
+        option({"--vship-pass"},
+               [&parsed](const std::string& value) { parsed.vship_pass = choice(value, {"one", "each"}); }),
         flag({"--cpu"}, parsed.cpu),
         flag({"--no-gpu-decode"}, parsed.no_gpu_decode),
+        option({"--gpu-decode"},
+               [&parsed](const std::string& value) {
+                   parsed.gpu_decode = choice(value, {"auto", "nvidia", "intel", "amd"});
+               }),
         option({"--parallel"},
                [&parsed](const std::string& value) {
                    const std::optional<long long> number = python_int(value);
@@ -784,7 +829,7 @@ Parser compare_parser(CompareArguments& parsed) {
         flag({"-q", "--quiet"}, parsed.quiet),
         flag({"-v", "--verbose"}, parsed.verbose),
     };
-    parser.exclusive = {{"--duration", "--frames"}};
+    parser.exclusive = {{"--duration", "--frames"}, {"--no-gpu-decode", "--gpu-decode"}};
     return parser;
 }
 

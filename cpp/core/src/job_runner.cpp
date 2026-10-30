@@ -399,6 +399,9 @@ std::string JobRun::describe() const {
                            "), VMAF v0.6.1 model " + options.model_choice + ", VMAF v1 model " +
                            options.model_choice_v1 + ", frame subsample " + std::to_string(options.n_subsample) +
                            ", GPU decode " + (options.gpu_decode ? "on" : "off");
+    if (options.gpu_decode && !vendor_label(options.gpu_vendor).empty()) {
+        settings += " (" + std::string(vendor_label(options.gpu_vendor)) + ")";
+    }
     for (const auto& [key, backend] : job_.perceptual_backends) {
         settings += ", " + std::string(metric_definition(key).label) + " on " + ascii_upper(backend);
     }
@@ -406,7 +409,8 @@ std::string JobRun::describe() const {
     if (const VshipBuild in_use = vship_build_in_use(options.vship_build); in_use != options.vship_build) {
         settings += " (" + std::string(vship_build_label(in_use)) + " in use)";
     }
-    settings += ", CVVDP display " + job_.cvvdp.display.describe();
+    settings += ", CVVDP display " + job_.cvvdp.display.describe() +
+                (job_.cvvdp.resize_to_display ? ", the frames filling it" : "");
     std::string text = name() + ":\n  test   " + platform::path_text(job_.distorted_info.path) + " (" +
                        media_text(job_.distorted_info) + ")\n  source " + platform::path_text(job_.source_info.path) +
                        " (" + media_text(job_.source_info) + ")\n  calculating " + calculating +

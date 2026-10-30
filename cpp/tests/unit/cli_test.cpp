@@ -16,6 +16,7 @@
 #include "compare.h"
 #include "devices.h"
 #include "reference.h"
+#include "vml/model_select.h"
 #include "vml/platform/system.h"
 
 namespace vml::cli {
@@ -40,6 +41,7 @@ Json values_of(const Arguments& parsed) {
         {"tests", a.tests},
         {"metrics", either(a.metrics)},
         {"model", a.model},
+        {"model_v1", a.model_v1},
         {"black_bars", a.black_bars},
         {"scale_to", a.scale_to},
         {"scaler", a.scaler},
@@ -51,12 +53,15 @@ Json values_of(const Arguments& parsed) {
         {"size", either(a.size)},
         {"pix_fmt", either(a.pix_fmt)},
         {"cvvdp_displays", a.cvvdp_displays.empty() ? Json(nullptr) : Json(a.cvvdp_displays)},
+        {"cvvdp_fill", a.cvvdp_fill},
         {"subsample", a.subsample},
         {"threads", either(a.threads)},
         {"vmaf_on", either(a.vmaf_on)},
         {"vship", either(a.vship)},
+        {"vship_pass", either(a.vship_pass)},
         {"cpu", a.cpu},
         {"no_gpu_decode", a.no_gpu_decode},
+        {"gpu_decode", either(a.gpu_decode)},
         {"parallel", either(a.parallel)},
         {"recalculate", a.recalculate},
         {"csv", path(a.csv)},
@@ -183,6 +188,46 @@ TEST(CommandLine, SaysWhereEachMetricIsCalculatedAsThePythonApp) {
         }
         EXPECT_EQ(device_lines(found), lines);
     }
+}
+
+// The command's options over the app's settings, as the window's controls
+// set them: --gpu-decode turns GPU decoding on where Settings have it off,
+// --model-v1 picks the window's choice, --cvvdp-fill fills every display
+// (the Automatic one too), and without --film-grain Settings' default holds.
+TEST(CommandLine, OptionsTakeThePlaceOfTheAppsSettings) {
+    Settings settings;
+    settings.default_gpu_decode = false;
+    settings.film_grain_default = "without";
+    CompareArguments arguments;
+    EXPECT_FALSE(row_options(arguments, settings, {"vmaf"}, VideoInfo{}).gpu_decode);
+    EXPECT_EQ(film_grain_choice(arguments, settings), false);
+    arguments.gpu_decode = "intel";
+    arguments.model_v1 = "vmaf_v1_3d0h_2160";
+    arguments.film_grain = "with";
+    const VmafOptions options = row_options(arguments, settings, {"vmaf_v1"}, VideoInfo{});
+    EXPECT_TRUE(options.gpu_decode);
+    EXPECT_EQ(options.gpu_vendor, GpuVendor::intel);
+    EXPECT_EQ(options.model_choice_v1, builtin_choice("vmaf_v1_3d0h_2160"));
+    EXPECT_EQ(film_grain_choice(arguments, settings), true);
+    settings.film_grain_default = "ask";
+    EXPECT_EQ(film_grain_choice(CompareArguments{}, settings), std::nullopt);
+
+    arguments.cvvdp_fill = true;
+    arguments.cvvdp_displays = {"6-inch phone"};
+    EXPECT_TRUE(cvvdp_displays(arguments, settings).front().second.resize_to_display);
+    EXPECT_TRUE(display_for({}, VideoInfo{}, true).second.resize_to_display);
+    EXPECT_FALSE(display_for({}, VideoInfo{}, false).second.resize_to_display);
+}
+
+// --gpu-decode naming a maker whose GPU this PC lacks is refused where
+// Windows lists the GPUs, and not on a Mac or Linux PC.
+TEST(CommandLine, RefusesAGpuMakerThePcLacks) {
+    const std::vector<GpuVendor> found{GpuVendor::nvidia, GpuVendor::intel};
+    EXPECT_EQ(missing_gpu_maker("amd", found, true), "--gpu-decode amd: this PC has no AMD GPU (it has NVIDIA, Intel).");
+    EXPECT_EQ(missing_gpu_maker("intel", found, true), std::nullopt);
+    EXPECT_EQ(missing_gpu_maker("auto", {}, true), std::nullopt);
+    EXPECT_EQ(missing_gpu_maker(std::nullopt, {}, true), std::nullopt);
+    EXPECT_EQ(missing_gpu_maker("amd", {}, false), std::nullopt);
 }
 
 }  // namespace

@@ -88,21 +88,6 @@ const std::vector<ModelChoice>& model_choices() {
     return choices;
 }
 
-const std::vector<ModelChoice>& v1_model_choices() {
-    static const std::vector<ModelChoice> choices{
-        {N_("Auto (analysis resolution)"), std::string(auto_model_choice)},
-        {N_("VMAF v1 (1080p / 3H)"), builtin_choice("vmaf_v1_3d0h")},
-        {N_("VMAF v1 (1080p phone / 5H)"), builtin_choice("vmaf_v1_5d0h")},
-        {N_("VMAF v1 (4K / 1.5H)"), builtin_choice("vmaf_v1_1d5h_2160")},
-        {N_("VMAF v1 (4K / 3H, up to 110)"), builtin_choice("vmaf_v1_3d0h_2160")},
-        {N_("VMAF v1 HFR (1080p / 3H)"), builtin_choice("vmaf_v1_hfr_3d0h")},
-        {N_("VMAF v1 HFR (1080p phone / 5H)"), builtin_choice("vmaf_v1_hfr_5d0h")},
-        {N_("VMAF v1 HFR (4K / 1.5H)"), builtin_choice("vmaf_v1_hfr_1d5h_2160")},
-        {N_("VMAF v1 HFR (4K / 3H, up to 110)"), builtin_choice("vmaf_v1_hfr_3d0h_2160")},
-    };
-    return choices;
-}
-
 namespace {
 
 // Whether VMAF can be calculated on a GPU here: one of the GPUs found (an

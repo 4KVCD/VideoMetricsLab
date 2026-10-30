@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "vml/cvvdp.h"
+#include "vml/model_select.h"
 #include "vml/options.h"
 #include "vml/video.h"
 
@@ -31,17 +32,9 @@ class QTimeEdit;
 
 namespace vml::app {
 
-// A VMAF model in a dropdown: its name (shown translated) and the choice a
-// video saves (VmafOptions' model_choice or model_choice_v1).
-struct ModelChoice {
-    const char* name;
-    std::string choice;
-};
-
-// The VMAF v0.6.1 column's models, in the dropdown's order.
+// The VMAF v0.6.1 column's models, in the dropdown's order. (VMAF v1's,
+// v1_model_choices, are the core's: the command line takes them too.)
 const std::vector<ModelChoice>& model_choices();
-// The VMAF v1 column's models, in the dropdown's order.
-const std::vector<ModelChoice>& v1_model_choices();
 
 // A selected row's video as the Film grain dropdown sees it.
 struct FilmGrainVideo {
