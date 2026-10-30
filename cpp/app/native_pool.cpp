@@ -64,10 +64,10 @@ PairedFrameWidget::PairedFrameWidget(VideoCompareView* view) : QWidget(view), vi
 }
 
 void PairedFrameWidget::paintEvent(QPaintEvent* /*event*/) {
-    // Painted dark even while native playback owns it: its presenter's window
-    // covers all of it once it shows a frame, but until then (a pool just
-    // started) this is what shows. Unpainted, it would show whatever the
-    // window last drew there, such as the Videos tab.
+    // Painted dark. Little of it shows: under its presenter's window nothing
+    // painted here does (the presenter fills its window dark itself until
+    // its first frame), so only before that window is made, and in a strip
+    // the view grows by until the window follows at the next frame.
     QPainter(this).fillRect(rect(), QColor("#171717"));
 }
 
@@ -269,13 +269,18 @@ void NativePool::retire_video(NativeVideo* video) {
 void NativePool::sync(int selected) {
     selected_ = selected;
     source_recipe_ = source_playback_comparison(series_[static_cast<std::size_t>(selected)], source_native_);
-    const Size size = comparison_dimensions(source_recipe_);
-    const std::optional<CropBox>& crop = source_recipe_.source_crop;
-    source_key_ = "s:" + platform::path_text(source_recipe_.source_info.path) + "|" +
-                  (crop ? std::to_string(crop->w) + "," + std::to_string(crop->h) + "," + std::to_string(crop->x) + "," +
-                              std::to_string(crop->y)
-                        : std::string("none")) +
-                  "|" + std::to_string(size.first) + "x" + std::to_string(size.second);
+    // One source decoder for every pair whose frames it makes alike: at their
+    // own size (each pair's crop is the presenter's), or scaled down, cropped
+    // first, which only pairs with that crop and size share.
+    source_key_ = "s:" + platform::path_text(source_recipe_.source_info.path);
+    if (const std::optional<Size> scaled = source_scaled_size(source_recipe_)) {
+        const std::optional<CropBox>& crop = source_recipe_.source_crop;
+        source_key_ += "|" +
+                       (crop ? std::to_string(crop->w) + "," + std::to_string(crop->h) + "," +
+                                   std::to_string(crop->x) + "," + std::to_string(crop->y)
+                             : std::string("none")) +
+                       "|" + std::to_string(scaled->first) + "x" + std::to_string(scaled->second);
+    }
     desired_.clear();
     desired_.push_back({source_key_, {source_recipe_, FrameSide::source}});
     for (const int index : neighbour_indices(static_cast<int>(series_.size()), selected, view_.decoded_videos_)) {
@@ -311,6 +316,25 @@ void NativePool::sync(int selected) {
     }
     launch_missing();
     choose_pair(frame_);
+}
+
+void NativePool::set_series(std::vector<FrameComparison> series, int selected) {
+    const std::string source_before = source_key_;
+    series_ = std::move(series);
+    sync(selected);
+    if (source_key_ != source_before) {
+        // The source is decoded again at another size: the pair on screen
+        // waits for its frames (the frame drawn last stays until then).
+        pair_.reset();
+        pair_index_.reset();
+        shown_ = false;
+        return;
+    }
+    // choose_pair draws only a frame that changed: paused, the new crops
+    // would not show until playing on.
+    if (pair_ && pair_index_ == selected_) {
+        present(showing_source_);
+    }
 }
 
 void NativePool::launch_missing() {

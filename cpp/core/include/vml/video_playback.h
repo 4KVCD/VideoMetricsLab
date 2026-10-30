@@ -30,6 +30,12 @@ inline constexpr int default_compare_decoded_videos = 3;
 // video's, its shape kept. Crops come off first.
 FrameComparison source_playback_comparison(const FrameComparison& comparison, bool native = true);
 
+// The size the source's frames are scaled down to as `recipe` (one of
+// source_playback_comparison's) plays it, cropped first: its decoder makes
+// them so. Nothing when they play at their own size, cropped as they are
+// drawn.
+std::optional<Size> source_scaled_size(const FrameComparison& recipe);
+
 // The `width` test videos to keep decoding, the one shown (`selected`)
 // first, then its neighbours in the order the arrows reach them, around the
 // ends: the next, the previous, the one after next, and so on. Never more

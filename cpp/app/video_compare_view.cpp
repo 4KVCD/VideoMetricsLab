@@ -475,6 +475,25 @@ bool VideoCompareView::crops_change_nothing(const FrameComparison& pending, cons
     return true;
 }
 
+bool VideoCompareView::only_crops_differ(const std::vector<FrameComparison>& playing,
+                                         const std::vector<FrameComparison>& wanted) {
+    if (playing.size() != wanted.size()) {
+        return false;
+    }
+    for (std::size_t index = 0; index < playing.size(); ++index) {
+        // The pair wanted with the crops playing: every other field compared,
+        // those added later too.
+        FrameComparison uncropped = wanted[index];
+        uncropped.source_crop = playing[index].source_crop;
+        uncropped.distorted_crop = playing[index].distorted_crop;
+        uncropped.auto_crop_pending = playing[index].auto_crop_pending;
+        if (!(uncropped == playing[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 int VideoCompareView::position() const {
     if (!comparison_ || comparison_->fps <= 0) {
         return 0;
@@ -572,6 +591,27 @@ bool VideoCompareView::load(const FrameComparison& comparison, int position_ms, 
         }
         return true;
     }
+#ifdef VML_NATIVE_PLAYBACK
+    if (native_pool_ && colors_ == colors && comparison_ && source_native_ == source_native &&
+        only_crops_differ(series_, played)) {
+        // Black bars found (or others) for the pairs playing: natively the
+        // crops are drawn, so the decoders go on. The view first: the pool's
+        // drawing and the zoom read what it plays.
+        const int timestamp = position();
+        series_ = played;
+        selected_ = selected;
+        comparison_ = series_[static_cast<std::size_t>(selected)];
+        frame_ = static_cast<long long>(std::nearbyint(timestamp / 1000.0 * comparison.fps));
+        try {
+            native_pool_->set_series(played, selected);
+        } catch (const std::exception& error) {
+            native_failed(error);
+            return true;
+        }
+        set_playing(playing);
+        return true;
+    }
+#endif
     series_ = played;
     source_native_ = source_native;
     selected_ = selected;

@@ -24,6 +24,7 @@
 #include "vml/app_log.h"
 #include "vml/film_grain.h"
 #include "vml/platform/system.h"
+#include "vml/video_playback.h"
 
 #ifdef _WIN32
 using Microsoft::WRL::ComPtr;
@@ -404,13 +405,7 @@ FfmpegNativeVideo::FfmpegNativeVideo(std::shared_ptr<NativeDevice> device, Frame
     // The source played scaled down (source_playback_comparison): its crop
     // made the comparison's smaller size.
     if (side_ == FrameSide::source) {
-        const Size size = comparison_dimensions(comparison_);
-        const std::optional<CropBox>& crop = comparison_.source_crop;
-        const int width = crop ? crop->w : info.width;
-        const int height = crop ? crop->h : info.height;
-        if (size.first > 0 && size.second > 0 && (size.first < width || size.second < height)) {
-            scale_to_ = size;
-        }
+        scale_to_ = source_scaled_size(comparison_);
     }
     // Opened at the video's first frame, which says where frames are counted
     // from, and then sought.

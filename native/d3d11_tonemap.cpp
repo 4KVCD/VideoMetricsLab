@@ -232,6 +232,21 @@ extern "C" __declspec(dllexport) void* vmaf_present_create(ID3D11Device* device,
     return p;
 }
 
+// The window filled with `clear` (RGBA) and presented, as vmaf_present_create
+// left it: on its thread, with the device lock held. Its window shows at
+// once, and until its first frame it would show whatever was drawn last at
+// those pixels (nothing can paint under it), such as another tab of the app.
+// Like every frame's, the present waits for the swapchain to take it (at
+// once, for a new swapchain), so that its frame count stays as the present
+// thread's waits expect.
+extern "C" __declspec(dllexport) int vmaf_present_clear(void* opaque, const float* clear) {
+    auto p=static_cast<Presenter*>(opaque);
+    if (!p || !clear) return E_INVALIDARG;
+    if (WaitForSingleObjectEx(p->waitable,0,TRUE)!=WAIT_OBJECT_0) return S_FALSE;  // left as it was
+    p->immediate->ClearRenderTargetView(p->target.Get(),clear);
+    return p->swapchain->Present(1,0);
+}
+
 // The window follows the view's size (on its thread); the buffers follow the
 // window at the next frame drawn.
 extern "C" __declspec(dllexport) void vmaf_present_follow(void* opaque, HWND parent) {

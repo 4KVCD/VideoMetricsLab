@@ -128,5 +128,27 @@ TEST(VideoPlayback, DecodesEachVideoAsThePythonAppDoes) {
     }
 }
 
+// The source is scaled down by its decoder only when it plays smaller than
+// its crop: native, or beside a test video as large, it plays at its own
+// size, whatever its crop (the presenter crops it).
+TEST(VideoPlayback, OnlyASourcePlayedSmallerIsScaledByItsDecoder) {
+    FrameComparison pair;
+    pair.source_info.width = 3840;
+    pair.source_info.height = 2160;
+    pair.distorted_info = pair.source_info;
+    pair.distorted_info.width = 1920;
+    pair.distorted_info.height = 1080;
+    pair.scale_direction = ScaleDirection::distorted_to_source;
+    EXPECT_EQ(source_scaled_size(source_playback_comparison(pair, true)), std::nullopt);
+    EXPECT_EQ(source_scaled_size(source_playback_comparison(pair, false)), (Size{1920, 1080}));
+    // Letterboxed: cropped first, then scaled to fit the encode's crop.
+    pair.source_crop = CropBox{3840, 1608, 0, 276};
+    pair.distorted_crop = CropBox{1920, 804, 0, 138};
+    EXPECT_EQ(source_scaled_size(source_playback_comparison(pair, false)), (Size{1920, 804}));
+    pair.distorted_info = pair.source_info;  // as large as the source
+    pair.distorted_crop = pair.source_crop;
+    EXPECT_EQ(source_scaled_size(source_playback_comparison(pair, false)), std::nullopt);
+}
+
 }  // namespace
 }  // namespace vml

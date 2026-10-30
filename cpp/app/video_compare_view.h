@@ -106,11 +106,17 @@ public:
     // side boxed while they were looked for. Then the frames playing are
     // the ones the crops give.
     static bool crops_change_nothing(const FrameComparison& pending, const FrameComparison& cropped);
+    // Whether `wanted` is `playing`, pair for pair, but for their black bars'
+    // crops (found since, or other ones).
+    static bool only_crops_differ(const std::vector<FrameComparison>& playing,
+                                  const std::vector<FrameComparison>& wanted);
 
     // Shows `comparison` (one of `series`, the pairs that can play) at
     // `position_ms`. Another test video of the same series keeps the
     // decoders running; so does a series whose black bars, found since,
-    // change nothing (crops_change_nothing). False when it cannot be played.
+    // change nothing (crops_change_nothing), and, played natively, one whose
+    // crops alone changed (NativePool::set_series). False when it cannot be
+    // played.
     bool load(const FrameComparison& comparison, int position_ms, bool playing, const PreviewColorSettings& colors,
               const std::vector<FrameComparison>& series, bool source_native);
     // Stops playback and shows nothing.

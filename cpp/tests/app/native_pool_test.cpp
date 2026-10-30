@@ -161,6 +161,7 @@ protected:
                                   QObject* owner) -> NativeVideo* {
             auto* video = new FakeVideo(side == FrameSide::distorted ? distorted_shading_ : std::nullopt, owner);
             videos_.push_back(video);
+            sides_.push_back(side);
             return video;
         };
         parts.make_presentation = [this](PairedFrameWidget&) -> std::unique_ptr<NativeOutput> {
@@ -172,7 +173,7 @@ protected:
             return sound;
         };
         view_->native_parts = [parts](const PreviewColorSettings&, QString&) { return std::optional(parts); };
-        EXPECT_TRUE(view_->load(series_.front(), 400, playing, {}, series_, true));
+        EXPECT_TRUE(view_->load(series_.front(), 400, playing, {}, series_, source_native_));
         EXPECT_NE(view_->native_pool_, nullptr) << "not played natively";
         return view_->native_pool_.get();
     }
@@ -200,6 +201,12 @@ protected:
     static std::map<std::string, std::optional<std::array<float, 16>>>& shadings(NativePool& pool) {
         return pool.shadings_;
     }
+    // Until the decoders the view stopped have.
+    static void wait_for_stopped(const VideoCompareView& view) {
+        for (QThread* stopping : std::set<QThread*>(view.retired_)) {
+            stopping->wait();
+        }
+    }
 
     // The view stops its pool and waits for the stand-ins.
     void TearDown() override { view_.reset(); }
@@ -210,10 +217,12 @@ protected:
     std::unique_ptr<VideoCompareView> view_;
     std::vector<FrameComparison> series_;
     std::vector<FakeVideo*> videos_;
+    std::vector<FrameSide> sides_;  // each decoder's, as they were made
     std::vector<Presented> presented_;
     FakeSound* sound_ = nullptr;
     std::optional<std::array<float, 16>> distorted_shading_;
     bool smaller_second_ = false;
+    bool source_native_ = true;
     NativePool* pool_ = nullptr;
 };
 
@@ -252,6 +261,68 @@ TEST_F(NativePoolTest, SwitchingShowsTheSameFrameOfTheOtherTestVideo) {
         drawn.push_back(item.frame);
     }
     EXPECT_EQ(drawn, (std::vector<NativeFramePtr>{d10, other10, s10}));
+}
+
+// Black bars found for the pairs playing (letterboxed: 16x12 cropped to
+// 16x8) keep every decoder going: natively the crop is drawn. Paused, the
+// frame shown is drawn again with it at once, and the other test video,
+// cropped differently, plays on the same source decoder. (Brian: the first
+// switch after the bars were found showed the Videos tab for seconds while
+// every decoder started again.)
+TEST_F(NativePoolTest, BlackBarsFoundKeepTheDecodersAndDrawTheNewCrop) {
+    pool_ = make_pool(2);
+    const NativeFramePtr s10 = frame(), d10 = frame(), other10 = frame();
+    source_frames(*pool_) = {{10, s10}};
+    frames(*pool_, "d:0") = {{10, d10}};
+    ASSERT_TRUE(choose_pair(*pool_, 10));
+    pool_->sync(0);  // a pair shown: the other test video's decoder starts too
+    const std::size_t made = videos_.size();
+    ASSERT_EQ(made, 3U);
+    frames(*pool_, "d:1") = {{10, other10}};
+
+    std::vector<FrameComparison> cropped = series_;
+    cropped[0].source_crop = cropped[0].distorted_crop = CropBox{16, 8, 0, 2};
+    cropped[1].source_crop = cropped[1].distorted_crop = CropBox{16, 10, 0, 1};
+    ASSERT_TRUE(view_->load(cropped[0], 400, false, {}, cropped, true));
+    EXPECT_EQ(videos_.size(), made) << "the decoders were started again";
+    EXPECT_EQ(presented_.back().frame, d10);
+    EXPECT_EQ(presented_.back().placement.source, (std::array<int, 4>{0, 2, 16, 8}));
+
+    ASSERT_TRUE(view_->load(cropped[1], 400, false, {}, cropped, true));  // Right
+    EXPECT_EQ(videos_.size(), made) << "a decoder was started for the other crop";
+    EXPECT_EQ(presented_.back().frame, other10);
+    EXPECT_EQ(presented_.back().placement.source, (std::array<int, 4>{0, 1, 16, 10}));
+}
+
+// A source played scaled down to a smaller test video (source_native off) is
+// decoded cropped: new black bars start its decoder again, and only its.
+TEST_F(NativePoolTest, NewBlackBarsStartAScaledDownSourceAgainAndNothingElse) {
+    smaller_second_ = true;
+    source_native_ = false;
+    pool_ = make_pool(2);
+    ASSERT_TRUE(view_->load(series_[1], 400, false, {}, series_, false));  // the 8x6 test video
+    const auto made = [this](FrameSide side) { return std::count(sides_.begin(), sides_.end(), side); };
+    const long long sources = made(FrameSide::source), distorted = made(FrameSide::distorted);
+    std::vector<FrameComparison> cropped = series_;
+    cropped[1].source_crop = CropBox{16, 8, 0, 2};
+    cropped[1].distorted_crop = CropBox{8, 4, 0, 1};
+    ASSERT_TRUE(view_->load(cropped[1], 400, false, {}, cropped, false));
+    // A decoder still stopping counts against the limit: the new one starts
+    // once the old ones have stopped, at the next sync (or poll).
+    wait_for_stopped(*view_);
+    pool_->sync(1);
+    EXPECT_EQ(made(FrameSide::source), sources + 1);
+    EXPECT_EQ(made(FrameSide::distorted), distorted);
+}
+
+// Anything else that changed starts playback afresh: a pair's scaling, say.
+TEST_F(NativePoolTest, AnotherChangeThanCropsStartsTheDecodersAgain) {
+    pool_ = make_pool(1);
+    const std::size_t made = videos_.size();
+    std::vector<FrameComparison> changed = series_;
+    changed[0].scale_algorithm = "lanczos";
+    ASSERT_TRUE(view_->load(changed[0], 400, false, {}, changed, true));
+    EXPECT_EQ(videos_.size(), made + 2) << "the source and the test video, again";
 }
 
 // Zoomed, the part of the frame in view is drawn where the zoom puts it, in

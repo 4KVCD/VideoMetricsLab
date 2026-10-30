@@ -54,6 +54,17 @@ FrameComparison source_playback_comparison(const FrameComparison& comparison, bo
     return played;
 }
 
+std::optional<Size> source_scaled_size(const FrameComparison& recipe) {
+    const Size size = comparison_dimensions(recipe);
+    const std::optional<CropBox>& crop = recipe.source_crop;
+    const int width = crop ? crop->w : recipe.source_info.width;
+    const int height = crop ? crop->h : recipe.source_info.height;
+    if (size.first > 0 && size.second > 0 && (size.first < width || size.second < height)) {
+        return size;
+    }
+    return std::nullopt;
+}
+
 std::vector<int> neighbour_indices(int count, int selected, int width) {
     if (count <= 0 || selected < 0 || selected >= count) {
         return {};

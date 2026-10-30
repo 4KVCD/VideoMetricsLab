@@ -102,6 +102,11 @@ public:
     // Selects a test video: keeps the decoders still needed, stops the
     // others and starts the missing ones.
     void sync(int selected);
+    // Plays `series` instead: the same pairs, their black bars' crops alone
+    // changed (VideoCompareView::load sees to it), with `selected` shown.
+    // The decoders whose frames stay the same go on, and the frame shown is
+    // drawn again with the new crops.
+    void set_series(std::vector<FrameComparison> series, int selected);
     void seek(int position_ms);
     void set_playing(bool playing);
     void show_source(bool showing);

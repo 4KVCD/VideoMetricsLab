@@ -30,8 +30,10 @@ struct PresenterApi {
     using Texture = int (*)(void*, ID3D11Resource*, unsigned, const int*, const int*, const float*, const float*, int,
                             const float*);
     using Destroy = void (*)(void*);
+    using Clear = int (*)(void*, const float*);
     Prepare prepare = nullptr;
     Create create = nullptr;
+    Clear clear = nullptr;
     Follow follow = nullptr;
     Wait wait = nullptr;
     Texture texture = nullptr;
@@ -60,6 +62,7 @@ const PresenterApi& presenter_api() {
             loaded.problem = QStringLiteral("the native video presenter is out of date (d3d11_tonemap.dll)");
         }
         bind(loaded.prepare, "vmaf_present_prepare");  // an older build compiles them for its first presenter
+        bind(loaded.clear, "vmaf_present_clear");      // an older build's window shows nothing of its own at first
         return loaded;
     }();
     return api;
@@ -98,6 +101,12 @@ NativePresentation::NativePresentation(std::shared_ptr<NativeDevice> device, HWN
     {
         const std::lock_guard lock(device_->lock());
         presenter_ = api.create(device_->device(), window_, hdr_display ? 1 : 0);
+        // Its window covers the view from now on: until the first frame, the
+        // views' background rather than what was drawn there last (the
+        // Videos tab, while a pool's decoders start).
+        if (presenter_ != nullptr && api.clear != nullptr) {
+            api.clear(presenter_, background.data());
+        }
     }
     if (presenter_ == nullptr) {
         throw std::runtime_error("Could not set up the native video presentation");
