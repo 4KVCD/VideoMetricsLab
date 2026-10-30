@@ -1361,7 +1361,8 @@ struct GpuFrameStream::State {
     void* handle = nullptr;
     // Whether the pictures are handed over on the GPU (handover()).
     bool handover = false;
-    bool untimed = false;  // DecodePlan::untimed
+    bool untimed = false;        // DecodePlan::untimed
+    bool software_only = false;  // DecodePlan::software_only
     std::unique_ptr<PacketReader> reader;
     std::atomic<bool> closing{false};
 
@@ -1431,6 +1432,7 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
     }
     state.library = &load_decoder(backend);
     state.untimed = plan.untimed;
+    state.software_only = plan.software_only;
     state.reader = std::make_unique<PacketReader>(
         ffmpeg, info.path, plan.codec, plan.untimed ? info.input_options() : std::vector<std::string>(), plan.untimed);
     state.configuration = configuration(ffprobe, info.path, plan.codec);
@@ -1495,7 +1497,24 @@ void GpuFrameStream::start() {
     });
 }
 
+void GpuFrameStream::throw_final_if_software_only(const GpuDecodeFailedError& error) const {
+    if (state_->software_only) {
+        // The only decoder for its pictures: decoding them again by another
+        // route would fail the same way.
+        throw FilmGrainRefusal(std::string("the app could not decode its pictures: ") + error.what());
+    }
+}
+
 std::optional<GpuFrameStream::Picture> GpuFrameStream::next(const CancelToken& cancel) {
+    try {
+        return next_picture(cancel);
+    } catch (const GpuDecodeFailedError& error) {
+        throw_final_if_software_only(error);
+        throw;
+    }
+}
+
+std::optional<GpuFrameStream::Picture> GpuFrameStream::next_picture(const CancelToken& cancel) {
     State& state = *state_;
     while (true) {
         cancel.throw_if_cancelled();
@@ -1563,7 +1582,9 @@ void GpuFrameStream::download(int slot, void* host) {
     State& state = *state_;
     if (state.library->download(state.handle, slot, host) != 0) {
         const std::string said = state.error_text();
-        throw GpuDecodeFailedError(said.empty() ? state.decoder + " failed" : said, state.backend);
+        const GpuDecodeFailedError error(said.empty() ? state.decoder + " failed" : said, state.backend);
+        throw_final_if_software_only(error);
+        throw error;
     }
 }
 

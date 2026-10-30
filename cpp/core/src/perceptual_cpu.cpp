@@ -25,6 +25,7 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
+#include "vml/grain_feed.h"
 #include "vml/model_select.h"
 #include "vml/number_format.h"
 #include "vml/platform/process.h"
@@ -927,11 +928,17 @@ std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const Vide
                                            const VideoInfo& distorted, const VmafOptions& options,
                                            const std::optional<CropBox>& source_crop,
                                            const std::optional<CropBox>& distorted_crop, int step,
-                                           const std::filesystem::path& folder) {
+                                           const std::filesystem::path& folder,
+                                           const std::optional<std::vector<std::string>>& distorted_fed,
+                                           const std::optional<std::vector<std::string>>& source_fed) {
     // At watched_log_level: PngPairs reads FFmpeg's word that it rebuilt its filters.
     std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", watched_log_level,
                                      "-nostats", "-y"};
-    for (const VideoInfo* video : {&distorted, &source}) {
+    for (const auto& [video, fed] : {std::pair{&distorted, &distorted_fed}, std::pair{&source, &source_fed}}) {
+        if (*fed) {
+            command.insert(command.end(), (*fed)->begin(), (*fed)->end());
+            continue;
+        }
         const std::vector<std::string> input = video->decode_options();
         command.insert(command.end(), input.begin(), input.end());
         command.insert(command.end(), {"-i", input_path(video->path)});
@@ -1244,14 +1251,23 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
 
     std::vector<std::vector<double>> by_pair;
     {
-        // A folder of its own for the task's pictures, deleted with them.
-        const TempFolder folder = TempFolder::make<PerceptualRunError>("videometricslab-perceptual-",
-                                                                       "A folder for the frame pictures could not be made.");
-        // Room for every worker's next pair while FFmpeg wakes up.
-        PngPairs pairs(png_pairs_command(request.environment.ffmpeg, source, distorted, options, source_crop,
-                                         distorted_crop, step, folder.path()),
-                       folder.path(), std::max(backlog_pairs, 2 * workers), pool.stopping(), cancel);
-        by_pair = pool.score_all(pairs, workers, step, total_units, on_progress, rate_of);
+        // Before FFmpeg, which it outlives.
+        PairFeeds feeds(&source, &distorted, request.environment.ffmpeg, request.environment.ffprobe, cancel);
+        const auto fed_input = [](const PictureFeed* feed) {
+            return feed != nullptr ? std::optional(feed->input_arguments()) : std::nullopt;
+        };
+        {
+            // A folder of its own for the task's pictures, deleted with them.
+            const TempFolder folder = TempFolder::make<PerceptualRunError>(
+                "videometricslab-perceptual-", "A folder for the frame pictures could not be made.");
+            // Room for every worker's next pair while FFmpeg wakes up.
+            PngPairs pairs(png_pairs_command(request.environment.ffmpeg, source, distorted, options, source_crop,
+                                             distorted_crop, step, folder.path(), fed_input(feeds.distorted()),
+                                             fed_input(feeds.source())),
+                           folder.path(), std::max(backlog_pairs, 2 * workers), pool.stopping(), cancel);
+            by_pair = pool.score_all(pairs, workers, step, total_units, on_progress, rate_of);
+        }
+        feeds.finish();  // a fed video decoded in part is no score
     }
     const auto total = static_cast<long long>(by_pair.size());
     if (const std::optional<std::string> short_reason = short_comparison(expected, total * step, source.fps, step)) {

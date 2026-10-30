@@ -85,10 +85,18 @@ previous build's output undeletable. The package therefore goes to
   by `scripts/build_gpu_frames.ps1` with the GPU decoders below, against
   FFmpeg's headers in `native/ffmpeg`. It decodes H.264, HEVC, VVC, VP9,
   MPEG-2 and FFV1 with FFmpeg 9.0.2's decoders and AV1 with dav1d --
-  FFmpeg's decode's pictures, sample for sample, film grain and all. A
-  video of another codec or format, one that must be scaled, or a damaged
-  one goes through FFmpeg's pipes. `VML_SOFTWARE_DECODE=ffmpeg` sends them
-  all that way.
+  FFmpeg's decode's pictures, sample for sample, each video's film grain
+  added or left out as it is scored -- and a VVC video scored with its
+  H.274 grain with VVdeC (FFmpeg's `libvvdec`), the one decoder here that
+  adds that grain as it should. A video of another codec or format, one that
+  must be scaled, or a damaged one goes through FFmpeg's pipes;
+  `VML_SOFTWARE_DECODE=ffmpeg` sends them all that way. A VVC video with its
+  H.274 grain never goes there (with `VML_SOFTWARE_DECODE=ffmpeg` its metrics
+  are not calculated): this decoder scales it itself, a damaged one is not
+  scored, and FFmpeg's own routes (VMAF on the CPU, its xpsnr filter, the
+  resolution test, the PNG pictures of SSIMULACRA2 and Butteraugli on the
+  CPU) read its pictures from this decoder, run in a process of its own and
+  fed to FFmpeg through a pipe as rawvideo (`cpp/core/src/grain_feed.cpp`).
 - **FFmpeg's libraries** (`resources/tools/ffmpeg`: `avcodec-63.dll`,
   `avutil-61.dll`, `swresample-7.dll`, which libavcodec imports, and
   `avformat-63.dll` and `swscale-10.dll`, with which Video Compare's

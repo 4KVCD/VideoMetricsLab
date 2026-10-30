@@ -760,7 +760,13 @@
   "film grain not shown in stills": "grain film tidak ditampilkan pada gambar diam",
   "film grain added": "grain film ditambahkan",
   "film grain not shown (no VVdeC)": "grain film tidak ditampilkan (tanpa VVdeC)",
-  "film grain not shown (FFmpeg playback)": "grain film tidak ditampilkan (pemutaran FFmpeg)"
+  "film grain not shown (FFmpeg playback)": "grain film tidak ditampilkan (pemutaran FFmpeg)",
+  "the app could not decode its pictures: {error}": "aplikasi tidak dapat mendekode gambarnya: {error}",
+  "the app's decoder does not decode it: {reason}": "dekoder aplikasi tidak mendekodenya: {reason}",
+  "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "dekoder milik aplikasi tidak ada di sini (atau VML_SOFTWARE_DECODE=ffmpeg mematikannya)",
+  "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "ukurannya berubah selama video, yang tidak dapat diikuti oleh gambar yang diberikan ke FFmpeg dalam satu ukuran",
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "format piksel atau tag warnanya tidak memiliki padanan rawvideo untuk FFmpeg",
+  "the app decodes a video for FFmpeg on Windows only": "aplikasi mendekode video untuk FFmpeg hanya di Windows"
  },
  "plurals": {
   "about {count} day": [

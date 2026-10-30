@@ -147,11 +147,15 @@ std::string build_filtergraph(const VideoInfo& source, const VideoInfo& distorte
                               const HardwareDecoding& decoding, const std::string& log_name, const std::string& model,
                               const std::optional<std::string>& xpsnr_log_name, unsigned cores);
 
-// FFmpeg's options before each video's -i (VideoInfo::input_options): a
-// raw stream's frame rate.
+// FFmpeg's options before each video's -i (VideoInfo::decode_options): a
+// raw stream's frame rate, its film grain left out. Or, for a video whose
+// pictures the app feeds (grain_feed.h), its whole input in the file's place:
+// rawvideo's options, "-i" and the pipe's path (PictureFeed::input_arguments).
 struct InputOptions {
     std::vector<std::string> distorted;
     std::vector<std::string> source;
+    std::optional<std::vector<std::string>> distorted_fed;
+    std::optional<std::vector<std::string>> source_fed;
 };
 
 // FFmpeg's command for a filter graph, the test video first.
@@ -172,11 +176,13 @@ std::string build_resample_filtergraph(const VideoInfo& source, const VmafOption
                                        unsigned cores);
 
 // FFmpeg's command for a resolution test's filter graph; `source_options`
-// go before the source's -i.
+// go before the source's -i, or `source_fed` is its whole input (as
+// InputOptions' fed inputs).
 std::vector<std::string> build_resample_command(const std::string& ffmpeg, const std::filesystem::path& source,
                                                 const std::string& filtergraph,
                                                 const std::optional<std::string>& hwaccel, double duration_limit,
-                                                const std::vector<std::string>& source_options = {});
+                                                const std::vector<std::string>& source_options = {},
+                                                const std::optional<std::vector<std::string>>& source_fed = {});
 
 // For VMAF on the GPU, the filter graph of each video's own FFmpeg (the test
 // video's, then the source's): its chain as build_filtergraph's, giving its

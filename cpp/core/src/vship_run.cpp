@@ -29,6 +29,7 @@
 #include "vml/geometry.h"
 #include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
+#include "vml/grain_feed.h"
 #include "vml/hardware_decoding.h"
 #include "vml/isolated.h"
 #include "vml/metrics.h"
@@ -352,12 +353,16 @@ std::vector<std::string> with_timestamps(std::vector<std::string> command, const
 // software instead (the next command), and `on_software` is called first.
 // With `timestamps`, each frame's timestamp is read too, for pairing by
 // timestamp, from a file FFmpeg writes in `scratch_folder`. `video` is the
-// file it decodes, which a VideoSizeChanged names.
+// file it decodes, which a VideoSizeChanged names. With a `feed`, FFmpeg
+// reads the video's pictures from the app (grain_feed.h; its one command has
+// the feed's input): the feeding's failure, or its end before the video's,
+// fails the pass for good, whatever FFmpeg did.
 class FrameStream : public FrameRing {
 public:
     FrameStream(const VshipLibrary& library, std::size_t frame_bytes, std::vector<std::vector<std::string>> commands,
                 std::filesystem::path video, std::string label, std::optional<InterleavedChroma> split,
-                std::function<void()> on_software, int gpu_id, bool timestamps, std::filesystem::path scratch_folder)
+                std::function<void()> on_software, int gpu_id, bool timestamps, std::filesystem::path scratch_folder,
+                std::unique_ptr<PictureFeed> feed = nullptr)
         : FrameRing(library, frame_bytes, gpu_id),
           frame_bytes_(frame_bytes),
           commands_(std::move(commands)),
@@ -366,7 +371,8 @@ public:
           split_(split),
           on_software_(std::move(on_software)),
           timestamps_(timestamps),
-          scratch_folder_(std::move(scratch_folder)) {
+          scratch_folder_(std::move(scratch_folder)),
+          feed_(std::move(feed)) {
         if (split_) {
             staging_.resize(2 * split_->plane);
         }
@@ -400,10 +406,18 @@ private:
     void run() {
         try {
             for (std::size_t attempt = 0; attempt < commands_.size(); ++attempt) {
-                const auto [frames, code, errors] = decode(commands_[attempt]);
+                std::tuple<long long, int, std::string> decoded;
+                try {
+                    decoded = decode(commands_[attempt]);
+                } catch (...) {
+                    finish_feed();  // a failed feeding is the cause of what FFmpeg then did
+                    throw;
+                }
                 if (stopping_) {
                     return;
                 }
+                finish_feed();
+                const auto& [frames, code, errors] = decoded;
                 if (code == 0) {
                     filled_.put({end_of_video, nullptr});
                     return;
@@ -424,10 +438,23 @@ private:
             filled_.put({end_of_video, std::current_exception()});
         } catch (const VideoSizeChanged&) {  // the pass is made again, the video scaled first
             filled_.put({end_of_video, std::current_exception()});
+        } catch (const FilmGrainRefusal&) {  // final, not an input to read again
+            filled_.put({end_of_video, std::current_exception()});
+        } catch (const Cancelled&) {
+            filled_.put({end_of_video, std::current_exception()});
         } catch (const std::exception& error) {
             filled_.put({end_of_video, std::make_exception_ptr(VshipInputError(error.what()))});
         } catch (...) {
             filled_.put({end_of_video, std::current_exception()});
+        }
+    }
+
+    // Once FFmpeg has ended, unless the stream is closing (the feeding is then
+    // let go as the feed is destroyed): waits for the feeding of the video's
+    // pictures, if FFmpeg had one. Throws FilmGrainRefusal if it failed.
+    void finish_feed() {
+        if (feed_ && !stopping_) {
+            feed_->finish();
         }
     }
 
@@ -648,6 +675,7 @@ private:
     std::atomic<bool> stopping_{false};
     std::mutex process_mutex_;
     platform::ChildProcess* process_ = nullptr;  // the FFmpeg running, if one is
+    std::unique_ptr<PictureFeed> feed_;          // the feeding of FFmpeg's input, if any
 };
 
 // One video decoded in this process by the GPU's decoder or the software
@@ -1451,7 +1479,7 @@ private:
                 reason = error.what();
             }
         }
-        logger.info("Vship: the " + video.label + " is decoded by FFmpeg (" + reason + ")");
+        logger.info("Vship: the " + video.label + " is not decoded in the scoring process (" + reason + ")");
         return nullptr;
     }
 
@@ -1463,8 +1491,13 @@ private:
     std::unique_ptr<FrameRing> open_stream(const VideoPlan& video) {
         const bool cut = video.side == "distorted" || !by_time_;
         const int every = video.side == "source" && every_source_frame_ ? 1 : step_;
-        bool said = false;  // native_decoder logs which decoder the video has
-        if (native_ && !video.info.scaled_to) {
+        bool said = false;  // native_decoder logs which decoder the video has, or why none here
+        // A video only the app's decoder makes the pictures of stays with it
+        // when the pass is made again without decoding here (the other
+        // video's decoder failed): FFmpeg would only be fed the same
+        // decoder's pictures, through a pipe.
+        const bool only_here = only_the_app_adds(effective_film_grain(video.info));
+        if ((native_ || only_here) && !video.info.scaled_to) {
             if (const std::optional<std::string> backend = decoded_here(video.hwaccel)) {
                 said = true;
                 if (std::unique_ptr<GpuFrameStream> decoder = native_decoder(video, *backend)) {
@@ -1475,7 +1508,19 @@ private:
                 }
             }
         }
-        if (!said) {
+        // A video only the app's decoder makes the pictures of (VML_FEED=all:
+        // every one it takes) is fed to FFmpeg by it (grain_feed.h); the
+        // feeding is made from the file's own details, not the matrix the
+        // other video lent it (with_shared_matrix).
+        const VideoInfo& file = video.side == "source" ? request_.source : request_.distorted;
+        std::unique_ptr<PictureFeed> feed;
+        if (fed_to_ffmpeg(file)) {
+            feed = std::make_unique<PictureFeed>(file, request_.environment.ffmpeg, request_.environment.ffprobe,
+                                                 cancel_);
+            logger.info("Vship: the " + video.label + "'s pictures are decoded by the app and fed to FFmpeg");
+        } else if (said) {
+            logger.info("Vship: the " + video.label + " is decoded by FFmpeg");
+        } else {
             logger.info("Vship: the " + video.label + " is decoded by FFmpeg " +
                         (video.hwaccel ? "on the GPU (-hwaccel " + *video.hwaccel + ")"
                                        : "in software (" +
@@ -1488,11 +1533,11 @@ private:
         }
         const std::string pixel_format = video.passthrough ? video.passthrough->second : video.image.pixel_format;
         const std::string side = video.side;
-        return std::make_unique<FrameStream>(library_, video.layout.frame_bytes,
-                                             ffmpeg_commands(video, pixel_format, every, cut), video.info.path,
+        std::vector<std::vector<std::string>> commands = ffmpeg_commands(video, pixel_format, every, cut, feed.get());
+        return std::make_unique<FrameStream>(library_, video.layout.frame_bytes, std::move(commands), video.info.path,
                                              video.label, split,
                                              [this, side] { decoded_in_software(side); }, plan_.device.gpu_id,
-                                             by_time_, plan_.scratch_folder);
+                                             by_time_, plan_.scratch_folder, std::move(feed));
     }
 
 
@@ -1500,11 +1545,12 @@ private:
     // frame, cut at the duration limit when `cut`: with hardware decoding
     // first if it has any, then in software. The software retry sends the
     // same layout as the hardware attempt, because Vship's handlers are set
-    // up for one layout per video.
+    // up for one layout per video. A `fed` video has one, its input the
+    // feed's (raw pictures: nothing to decode on the GPU).
     std::vector<std::vector<std::string>> ffmpeg_commands(const VideoPlan& video, const std::string& pixel_format,
-                                                          int every, bool cut) {
-        std::vector<std::optional<std::string>> attempts{video.hwaccel};
-        if (video.hwaccel) {
+                                                          int every, bool cut, const PictureFeed* fed) {
+        std::vector<std::optional<std::string>> attempts{fed != nullptr ? std::nullopt : video.hwaccel};
+        if (attempts.front()) {
             attempts.emplace_back(std::nullopt);
         }
         std::vector<std::vector<std::string>> commands;
@@ -1516,12 +1562,16 @@ private:
                                    video.colour.colorFamily == 0 && video.colour.range == 1);
             std::vector<std::string> command{request_.environment.ffmpeg, "-hide_banner", "-loglevel",
                                              watched_log_level, "-nostats", "-nostdin"};
-            const std::vector<std::string> decode = hwaccel_args(accel);
-            command.insert(command.end(), decode.begin(), decode.end());
-            const std::vector<std::string> input = video.info.decode_options();
-            command.insert(command.end(), input.begin(), input.end());
-            command.insert(command.end(), {"-i", input_path(video.info.path), "-map",
-                                           "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", chain});
+            if (fed != nullptr) {
+                command.insert(command.end(), fed->input_arguments().begin(), fed->input_arguments().end());
+            } else {
+                const std::vector<std::string> decode = hwaccel_args(accel);
+                command.insert(command.end(), decode.begin(), decode.end());
+                const std::vector<std::string> input = video.info.decode_options();
+                command.insert(command.end(), input.begin(), input.end());
+                command.insert(command.end(), {"-i", input_path(video.info.path)});
+            }
+            command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", chain});
             if (cut) {
                 const std::vector<std::string> args = duration_args(duration_limit_);
                 command.insert(command.end(), args.begin(), args.end());
@@ -2176,7 +2226,7 @@ PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const Pass
     } catch (const VideoSizeChanged&) {
         throw;  // the child's, kept by run_isolated
     } catch (const FilmGrainRefusal&) {
-        throw;  // likewise: no other route adds the grain either
+        throw;  // likewise: final (the app's decoder failed, or its pictures cannot be fed)
     } catch (const std::runtime_error& error) {
         throw VshipUnavailableError(error.what());  // the child's own error, as its message
     }
@@ -2553,7 +2603,9 @@ public:
         } catch (const VideoSizeChanged&) {
             throw;  // the task is made again, the video scaled first (run_perceptual_task)
         } catch (const FilmGrainRefusal&) {
-            throw;  // not retried with stock Vship or on the CPU either: neither adds the grain
+            // Not retried with stock Vship or on the CPU either: the app's
+            // decoder failed, or its pictures cannot be fed, there too.
+            throw;
         } catch (const std::exception& error) {
             if (cancel_.cancelled()) {
                 throw Cancelled();

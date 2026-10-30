@@ -433,6 +433,13 @@ const char* const templates[] = {
     "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 "
     "bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the "
     "metric where the app decodes the video itself (VMAF on the GPU)",
+    // --- the app's pictures fed to FFmpeg (grain_feed.cpp, gpu_frames.cpp)
+    "the app could not decode its pictures: {error}",
+    "the app's decoder does not decode it: {reason}",
+    "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)",
+    "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow",
+    "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg",
+    "the app decodes a video for FFmpeg on Windows only",
 };
 
 // Without a closing "...", "…" or full stop: the run line shows some

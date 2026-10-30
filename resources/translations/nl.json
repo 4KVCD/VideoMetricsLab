@@ -760,7 +760,13 @@
   "film grain not shown in stills": "filmkorrel niet getoond in stilstaande beelden",
   "film grain added": "filmkorrel toegevoegd",
   "film grain not shown (no VVdeC)": "filmkorrel niet getoond (geen VVdeC)",
-  "film grain not shown (FFmpeg playback)": "filmkorrel niet getoond (FFmpeg-weergave)"
+  "film grain not shown (FFmpeg playback)": "filmkorrel niet getoond (FFmpeg-weergave)",
+  "the app could not decode its pictures: {error}": "de app kon de beelden ervan niet decoderen: {error}",
+  "the app's decoder does not decode it: {reason}": "de decoder van de app decodeert het niet: {reason}",
+  "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "de eigen decoder van de app is hier niet (of VML_SOFTWARE_DECODE=ffmpeg heeft hem uitgezet)",
+  "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "de grootte verandert tijdens de video, wat beelden die op één grootte aan FFmpeg worden gegeven niet kunnen volgen",
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "het pixelformaat of een kleurlabel ervan heeft geen rawvideo-equivalent voor FFmpeg",
+  "the app decodes a video for FFmpeg on Windows only": "de app decodeert een video voor FFmpeg alleen op Windows"
  },
  "plurals": {
   "about {count} day": [

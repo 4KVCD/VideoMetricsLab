@@ -760,7 +760,13 @@
   "film grain not shown in stills": "filmové zrno se ve snímcích nezobrazuje",
   "film grain added": "filmové zrno přidáno",
   "film grain not shown (no VVdeC)": "filmové zrno se nezobrazuje (chybí VVdeC)",
-  "film grain not shown (FFmpeg playback)": "filmové zrno se nezobrazuje (přehrávání přes FFmpeg)"
+  "film grain not shown (FFmpeg playback)": "filmové zrno se nezobrazuje (přehrávání přes FFmpeg)",
+  "the app could not decode its pictures: {error}": "aplikace nemohla dekódovat jeho snímky: {error}",
+  "the app's decoder does not decode it: {reason}": "dekodér aplikace ho nedekóduje: {reason}",
+  "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "vlastní dekodér aplikace tu není (nebo ho vypnulo VML_SOFTWARE_DECODE=ffmpeg)",
+  "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "jeho velikost se během videa mění, což snímky předávané FFmpeg v jedné velikosti nemohou sledovat",
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "jeho formát pixelů nebo barevný štítek nemá pro FFmpeg obdobu v rawvideo",
+  "the app decodes a video for FFmpeg on Windows only": "aplikace dekóduje video pro FFmpeg jen ve Windows"
  },
  "plurals": {
   "about {count} day": [

@@ -1,7 +1,8 @@
-// A pipe this process reads and another program writes, opening it by its
-// path as it opens a file: how FFmpeg hands its frames over for VMAF on the
-// GPU. A named pipe (\\.\pipe\...) on Windows, a FIFO in the temporary
-// folder elsewhere.
+// Pipes another program opens by their path as it opens a file. InboundPipe,
+// which this process reads: how FFmpeg hands its frames over for VMAF on the
+// GPU; a named pipe (\\.\pipe\...) on Windows, a FIFO in the temporary
+// folder elsewhere. OutboundPipe, which this process writes: how FFmpeg gets
+// pictures the app decodes itself; a named pipe, on Windows only.
 #pragma once
 
 #include <atomic>
@@ -82,6 +83,58 @@ public:
 private:
     std::string path_;
     struct State;  // each system's own (pipe_windows.cpp, pipe_posix.cpp)
+    std::unique_ptr<State> state_;
+};
+
+// What a write that failed means: the reader closed its end (FFmpeg stopped
+// reading), the system is short of memory for a moment (on Windows what
+// waits in a pipe is nonpaged memory, refused now and then on a busy PC:
+// worth waiting for and writing again), or anything else.
+enum class PipeWriteError { reader_gone, try_again, failed };
+// The meaning of Windows' error `code` from a write into a named pipe.
+PipeWriteError pipe_write_error(unsigned long code);
+
+// A pipe this process writes and another program reads, opening it by its
+// path as it opens a file: how pictures the app decodes itself reach an
+// FFmpeg as a rawvideo input. A named pipe; only on Windows (elsewhere making
+// one throws PipeError).
+class OutboundPipe {
+public:
+    // A path unique to this process for a pipe ending in `name`, made before
+    // the pipe: by the process that starts the reader, for the writer to make.
+    static std::string unique_path(std::string_view name);
+
+    // A new pipe at `path` (unique_path), holding `buffer_bytes`. Throws
+    // PipeError.
+    OutboundPipe(const std::string& path, std::size_t buffer_bytes);
+    ~OutboundPipe();
+    OutboundPipe(const OutboundPipe&) = delete;
+    OutboundPipe& operator=(const OutboundPipe&) = delete;
+
+    // Waits for the reader to open the pipe; one that opened it and closed
+    // it already (touch) counts, and the next write finds it gone. Throws
+    // PipeError.
+    void connect();
+
+    // Writes `bytes` at `data`, in pieces of at most a megabyte, waiting and
+    // writing again what the system refused for a moment: false once the
+    // reader has closed its end, true when everything was written. Throws
+    // PipeError on any other failure.
+    bool write(const void* data, std::size_t bytes);
+
+    // Waits until the reader has read everything written (false when it
+    // closed its end first), then closes this end: the reader then finds the
+    // end of its input.
+    bool finish();
+
+    // Opens the pipe at `path` to read and closes it at once: a writer
+    // waiting in connect() for a reader that never comes (an FFmpeg that
+    // failed before opening its inputs) goes on, and finds it gone. Does
+    // nothing to a pipe whose reader has it.
+    static void touch(const std::string& path);
+
+private:
+    struct State;  // pipe_windows.cpp
     std::unique_ptr<State> state_;
 };
 

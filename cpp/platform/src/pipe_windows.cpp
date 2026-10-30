@@ -5,6 +5,7 @@
 #include "text_windows.h"  // first: it sets <windows.h> up
 
 #include <algorithm>
+#include <cstdint>
 #include <random>
 
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
@@ -119,5 +120,101 @@ void InboundPipe::touch(const std::string& path) {
 }
 
 void InboundPipe::remove_left_by(int) {}
+
+struct OutboundPipe::State {
+    HANDLE pipe = nullptr;
+    std::string path;
+};
+
+std::string OutboundPipe::unique_path(std::string_view name) {
+    return R"(\\.\pipe\vml-feed-)" + std::to_string(GetCurrentProcessId()) + "-" + random_part() + "-" +
+           std::string(name);
+}
+
+OutboundPipe::OutboundPipe(const std::string& path, std::size_t buffer_bytes) : state_(std::make_unique<State>()) {
+    state_->path = path;
+    const DWORD size = static_cast<DWORD>(std::min<std::size_t>(buffer_bytes, 1u << 30));
+    const HANDLE pipe = CreateNamedPipeW(widen(path).c_str(), PIPE_ACCESS_OUTBOUND, PIPE_TYPE_BYTE | PIPE_WAIT, 1,
+                                         size, size, 0, nullptr);
+    if (pipe == INVALID_HANDLE_VALUE) {
+        throw PipeError("The pipe " + path + " could not be made (Windows error " + std::to_string(GetLastError()) +
+                        ")");
+    }
+    state_->pipe = pipe;
+}
+
+OutboundPipe::~OutboundPipe() {
+    if (state_->pipe != nullptr) {
+        CloseHandle(state_->pipe);
+    }
+}
+
+void OutboundPipe::connect() {
+    if (ConnectNamedPipe(state_->pipe, nullptr)) {
+        return;
+    }
+    // The reader opened the pipe first; or opened and closed it (touch):
+    // the first write then finds it gone.
+    const DWORD error = GetLastError();
+    if (error != ERROR_PIPE_CONNECTED && error != ERROR_NO_DATA) {
+        throw PipeError("Waiting for the reader of " + state_->path + " failed (Windows error " +
+                        std::to_string(error) + ")");
+    }
+}
+
+bool OutboundPipe::write(const void* data, std::size_t bytes) {
+    // A megabyte at most at a time: what waits in the pipe is this process's
+    // nonpaged memory, refused less often in small pieces.
+    constexpr std::size_t piece = 1 << 20;
+    // A refusal for want of memory is waited out, a millisecond at first,
+    // up to a tenth of a second, for a minute at most.
+    constexpr DWORD longest_wait_ms = 100;
+    constexpr DWORD patience_ms = 60'000;
+    const auto* next = static_cast<const std::uint8_t*>(data);
+    std::size_t left = bytes;
+    DWORD wait_ms = 1;
+    DWORD waited_ms = 0;
+    while (left > 0) {
+        DWORD written = 0;
+        if (WriteFile(state_->pipe, next, static_cast<DWORD>(std::min(left, piece)), &written, nullptr)) {
+            next += written;
+            left -= written;
+            wait_ms = 1;
+            continue;
+        }
+        const DWORD error = GetLastError();
+        switch (pipe_write_error(error)) {
+            case PipeWriteError::reader_gone: return false;
+            case PipeWriteError::try_again:
+                if (waited_ms < patience_ms) {
+                    Sleep(wait_ms);
+                    waited_ms += wait_ms;
+                    wait_ms = std::min(wait_ms * 2, longest_wait_ms);
+                    continue;
+                }
+                [[fallthrough]];
+            case PipeWriteError::failed:
+                throw PipeError("Writing into " + state_->path + " failed (Windows error " + std::to_string(error) +
+                                ")");
+        }
+    }
+    return true;
+}
+
+bool OutboundPipe::finish() {
+    // FlushFileBuffers waits for the reader to read what waits in the pipe:
+    // closing first would throw it away.
+    const bool read = FlushFileBuffers(state_->pipe) != 0;
+    CloseHandle(state_->pipe);
+    state_->pipe = nullptr;
+    return read;
+}
+
+void OutboundPipe::touch(const std::string& path) {
+    const HANDLE reader = CreateFileW(widen(path).c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (reader != INVALID_HANDLE_VALUE) {
+        CloseHandle(reader);
+    }
+}
 
 }  // namespace vml::platform

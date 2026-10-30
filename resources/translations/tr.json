@@ -760,7 +760,13 @@
   "film grain not shown in stills": "film greni durağan karelerde gösterilmez",
   "film grain added": "film greni eklendi",
   "film grain not shown (no VVdeC)": "film greni gösterilmez (VVdeC yok)",
-  "film grain not shown (FFmpeg playback)": "film greni gösterilmez (FFmpeg ile oynatma)"
+  "film grain not shown (FFmpeg playback)": "film greni gösterilmez (FFmpeg ile oynatma)",
+  "the app could not decode its pictures: {error}": "uygulama karelerinin kodunu çözemedi: {error}",
+  "the app's decoder does not decode it: {reason}": "uygulamanın kod çözücüsü bunu çözmüyor: {reason}",
+  "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "uygulamanın kendi kod çözücüsü burada yok (veya VML_SOFTWARE_DECODE=ffmpeg onu kapattı)",
+  "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "boyutu video boyunca değişiyor; FFmpeg'e tek boyutta verilen kareler bunu izleyemez",
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "piksel biçiminin veya bir renk etiketinin FFmpeg için rawvideo karşılığı yok",
+  "the app decodes a video for FFmpeg on Windows only": "uygulama FFmpeg için videonun kodunu yalnızca Windows'ta çözer"
  },
  "plurals": {
   "about {count} day": [

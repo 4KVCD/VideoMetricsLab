@@ -14,6 +14,7 @@
 #include "vml/ffmpeg_run.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/gpu_frames.h"
+#include "vml/grain_feed.h"
 #include "vml/platform/console.h"
 #include "vml/platform/pipe.h"
 #include "vml/platform/process.h"
@@ -367,6 +368,8 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
             result = vship_probe_result(probe_vship_device(request.value("vship51", false)));
         } else if (task == "gpu-run" || task == "cpu-metrics") {
             result = scoring_task(request, request_file.parent_path());
+        } else if (task == "grain-feed") {
+            result = picture_feed_task(request, [] { send_isolated_message({{"ready", true}}); });
         } else if (task == "process-id") {
             // For the window's self-test: that a process of its own starts.
             result = platform::process_id();

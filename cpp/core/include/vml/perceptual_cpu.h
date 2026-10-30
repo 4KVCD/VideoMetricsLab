@@ -92,12 +92,16 @@ std::string image_filtergraph(const VideoInfo& source, const VideoInfo& distorte
 // The FFmpeg command that writes the pictures of image_filtergraph into
 // `folder` as test-%08d.png and reference-%08d.png, each output to its own
 // input's end or the duration limit, each picture under a temporary name
-// until it is whole (-atomic_writing).
+// until it is whole (-atomic_writing). A video whose pictures the app feeds
+// (grain_feed.h) has its feed's input (`distorted_fed`, `source_fed`) in its
+// file's place.
 std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const VideoInfo& source,
                                            const VideoInfo& distorted, const VmafOptions& options,
                                            const std::optional<CropBox>& source_crop,
                                            const std::optional<CropBox>& distorted_crop, int step,
-                                           const std::filesystem::path& folder);
+                                           const std::filesystem::path& folder,
+                                           const std::optional<std::vector<std::string>>& distorted_fed = {},
+                                           const std::optional<std::vector<std::string>>& source_fed = {});
 
 // Calculates `keys` (SSIMULACRA2 and Butteraugli) on the CPU and returns
 // each frame's scores (the Python app's run_perceptual_task): with the black

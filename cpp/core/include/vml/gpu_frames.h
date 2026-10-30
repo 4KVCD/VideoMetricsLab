@@ -348,7 +348,9 @@ public:
     // The next picture, or nothing at the video's end (which is then
     // checked, see PictureChecks). Checks `cancel` every 100 ms while it
     // waits. Throws GpuDecodeFailedError when decoding failed or the
-    // pictures do not match the packets, and Cancelled.
+    // pictures do not match the packets (FilmGrainRefusal for a plan only the
+    // software decoder makes the pictures of: DecodePlan::software_only), and
+    // Cancelled.
     std::optional<Picture> next(const CancelToken& cancel);
 
     // Gives a slot back to the decoder once its picture has been copied.
@@ -444,6 +446,12 @@ public:
     void close();
 
 private:
+    std::optional<Picture> next_picture(const CancelToken& cancel);
+    // A failed decoding of a plan only this decoder makes the pictures of
+    // (DecodePlan::software_only) as FilmGrainRefusal, which the routes'
+    // fallbacks pass on: no other route would decode them.
+    void throw_final_if_software_only(const GpuDecodeFailedError& error) const;
+
     struct State;
     std::shared_ptr<State> state_;  // shared with the feeding thread, which may outlive a close that gives up on it
 };

@@ -760,7 +760,13 @@
   "film grain not shown in stills": "плівкове зерно не показано в стоп-кадрах",
   "film grain added": "плівкове зерно додано",
   "film grain not shown (no VVdeC)": "плівкове зерно не показано (немає VVdeC)",
-  "film grain not shown (FFmpeg playback)": "плівкове зерно не показано (відтворення через FFmpeg)"
+  "film grain not shown (FFmpeg playback)": "плівкове зерно не показано (відтворення через FFmpeg)",
+  "the app could not decode its pictures: {error}": "застосунку не вдалося декодувати його кадри: {error}",
+  "the app's decoder does not decode it: {reason}": "декодер застосунку його не декодує: {reason}",
+  "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "власного декодера застосунку тут немає (або його вимкнув VML_SOFTWARE_DECODE=ffmpeg)",
+  "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "його розмір змінюється протягом відео, а кадри, що передаються FFmpeg в одному розмірі, цього не відтворять",
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "його формат пікселів або колірна мітка не має відповідника rawvideo для FFmpeg",
+  "the app decodes a video for FFmpeg on Windows only": "застосунок декодує відео для FFmpeg лише у Windows"
  },
  "plurals": {
   "about {count} day": [

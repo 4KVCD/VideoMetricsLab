@@ -21,6 +21,7 @@ add_library(vml_core
     src/geometry.cpp
     src/gpu_frames.cpp
     src/gpu_vmaf.cpp
+    src/grain_feed.cpp
     src/hardware_decoding.cpp
     src/isolated.cpp
     src/job_runner.cpp

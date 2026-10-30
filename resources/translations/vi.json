@@ -760,7 +760,13 @@
   "film grain not shown in stills": "không hiển thị hạt phim trong ảnh tĩnh",
   "film grain added": "đã thêm hạt phim",
   "film grain not shown (no VVdeC)": "không hiển thị hạt phim (không có VVdeC)",
-  "film grain not shown (FFmpeg playback)": "không hiển thị hạt phim (phát bằng FFmpeg)"
+  "film grain not shown (FFmpeg playback)": "không hiển thị hạt phim (phát bằng FFmpeg)",
+  "the app could not decode its pictures: {error}": "ứng dụng không giải mã được các khung hình của nó: {error}",
+  "the app's decoder does not decode it: {reason}": "bộ giải mã của ứng dụng không giải mã nó: {reason}",
+  "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "không có bộ giải mã riêng của ứng dụng ở đây (hoặc VML_SOFTWARE_DECODE=ffmpeg đã tắt nó)",
+  "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "kích thước của nó thay đổi trong video, điều mà các khung hình gửi cho FFmpeg ở một kích thước không theo kịp",
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "định dạng điểm ảnh hoặc một thẻ màu của nó không có tương đương rawvideo cho FFmpeg",
+  "the app decodes a video for FFmpeg on Windows only": "ứng dụng chỉ giải mã video cho FFmpeg trên Windows"
  },
  "plurals": {
   "about {count} day": [

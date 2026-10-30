@@ -113,4 +113,24 @@ void InboundPipe::remove_left_by(int process_id) {
     }
 }
 
+// OutboundPipe: Windows only, for want of a decoder in this process to feed
+// it from (native/software_frames.cpp is Windows' own).
+struct OutboundPipe::State {};
+
+std::string OutboundPipe::unique_path(std::string_view name) {
+    return (std::filesystem::temp_directory_path() / ("vml-feed-" + std::to_string(getpid()) + "-" + random_part() +
+                                                      "-" + std::string(name)))
+        .string();
+}
+
+OutboundPipe::OutboundPipe(const std::string&, std::size_t) {
+    throw PipeError("The app's own decoding into FFmpeg is made on Windows only");
+}
+
+OutboundPipe::~OutboundPipe() = default;
+void OutboundPipe::connect() {}
+bool OutboundPipe::write(const void*, std::size_t) { return false; }
+bool OutboundPipe::finish() { return false; }
+void OutboundPipe::touch(const std::string&) {}
+
 }  // namespace vml::platform

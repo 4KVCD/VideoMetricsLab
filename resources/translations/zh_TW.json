@@ -760,7 +760,13 @@
   "film grain not shown in stills": "靜止畫面不顯示膠片顆粒",
   "film grain added": "已加入膠片顆粒",
   "film grain not shown (no VVdeC)": "不顯示膠片顆粒（無 VVdeC）",
-  "film grain not shown (FFmpeg playback)": "不顯示膠片顆粒（FFmpeg 播放）"
+  "film grain not shown (FFmpeg playback)": "不顯示膠片顆粒（FFmpeg 播放）",
+  "the app could not decode its pictures: {error}": "應用程式無法解碼其畫面：{error}",
+  "the app's decoder does not decode it: {reason}": "應用程式的解碼器不解碼它：{reason}",
+  "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "此處沒有應用程式自帶的解碼器（或已被 VML_SOFTWARE_DECODE=ffmpeg 關閉）",
+  "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "其尺寸在影片中途改變，以單一尺寸傳給 FFmpeg 的畫面無法跟隨",
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "其像素格式或某個色彩標籤在 FFmpeg 的 rawvideo 中沒有對應項",
+  "the app decodes a video for FFmpeg on Windows only": "應用程式僅在 Windows 上為 FFmpeg 解碼影片"
  },
  "plurals": {
   "about {count} day": [

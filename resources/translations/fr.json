@@ -760,7 +760,13 @@
   "film grain not shown in stills": "grain de film non affiché dans les images fixes",
   "film grain added": "grain de film ajouté",
   "film grain not shown (no VVdeC)": "grain de film non affiché (pas de VVdeC)",
-  "film grain not shown (FFmpeg playback)": "grain de film non affiché (lecture FFmpeg)"
+  "film grain not shown (FFmpeg playback)": "grain de film non affiché (lecture FFmpeg)",
+  "the app could not decode its pictures: {error}": "l'application n'a pas pu décoder ses images : {error}",
+  "the app's decoder does not decode it: {reason}": "le décodeur de l'application ne le décode pas : {reason}",
+  "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "le décodeur de l'application n'est pas présent (ou VML_SOFTWARE_DECODE=ffmpeg l'a désactivé)",
+  "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "sa taille change au cours de la vidéo, ce que des images transmises à FFmpeg à une seule taille ne peuvent suivre",
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "son format de pixels ou une étiquette de couleur n'a pas d'équivalent rawvideo pour FFmpeg",
+  "the app decodes a video for FFmpeg on Windows only": "l'application ne décode une vidéo pour FFmpeg que sous Windows"
  },
  "plurals": {
   "about {count} day": [

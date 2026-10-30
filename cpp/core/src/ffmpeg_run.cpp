@@ -27,6 +27,7 @@
 #include "vml/geometry.h"
 #include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
+#include "vml/grain_feed.h"
 #include "vml/isolated.h"
 #include "vml/libvmaf_cpu.h"
 #include "vml/metrics.h"
@@ -718,18 +719,40 @@ ParsedScores parse_log(const std::filesystem::path& log_path, double fps,
     return parsed;
 }
 
+// The inputs of a run's two videos: a fed video's pictures (grain_feed.h),
+// the other's file.
+InputOptions run_inputs(const PairFeeds& feeds, const VideoInfo& source, const VideoInfo& distorted) {
+    InputOptions inputs;
+    if (const PictureFeed* fed = feeds.distorted()) {
+        inputs.distorted_fed = fed->input_arguments();
+    } else {
+        inputs.distorted = distorted.decode_options();
+    }
+    if (const PictureFeed* fed = feeds.source()) {
+        inputs.source_fed = fed->input_arguments();
+    } else {
+        inputs.source = source.decode_options();
+    }
+    return inputs;
+}
+
 // The FFmpeg command of a run for a decode plan, the run's model= value (by
-// its bare file name for a file) and XPSNR's stats file name, if any.
-using CommandBuilder = std::function<std::vector<std::string>(
-    const HardwareDecoding& plan, const std::string& run_model, const std::optional<std::string>& xpsnr_log_name)>;
+// its bare file name for a file), XPSNR's stats file name, if any, and the
+// run's feeds of its videos' pictures.
+using CommandBuilder =
+    std::function<std::vector<std::string>(const HardwareDecoding& plan, const std::string& run_model,
+                                           const std::optional<std::string>& xpsnr_log_name, const PairFeeds& feeds)>;
 
 // Runs the FFmpeg command `build_command` makes to its end and parses its
 // logs, falling back to other decode plans when hardware decoding fails.
-// The logs are kept in a folder named from `folder_prefix`.
+// The logs are kept in a folder named from `folder_prefix`. Each FFmpeg gets
+// the pictures of those of `source` and `distorted` (either may be nothing)
+// the app feeds it (grain_feed.h).
 ParsedScores execute_run(const CommandBuilder& build_command, const VmafOptions& options, const std::string& model,
                          double fps, long long total_frames, const HardwareDecoding& decoding,
                          const std::string& folder_prefix, const ProgressCallback& on_progress,
-                         const StatusCallback& on_status, const CancelToken& cancel) {
+                         const StatusCallback& on_status, const CancelToken& cancel,
+                         const RunEnvironment& environment, const VideoInfo* source, const VideoInfo* distorted) {
     if (options.requested_metrics().empty()) {
         throw VmafRunError("Select at least one metric to calculate.");
     }
@@ -748,18 +771,21 @@ ParsedScores execute_run(const CommandBuilder& build_command, const VmafOptions&
     FfmpegOutcome outcome;
     const std::vector<HardwareDecoding> ladder = fallback_ladder(decoding);
     for (std::size_t attempt = 0; attempt < ladder.size(); ++attempt) {
-        const HardwareDecoding& plan = ladder[attempt];
+        // Before the FFmpeg, which it outlives.
+        PairFeeds feeds(source, distorted, environment.ffmpeg, environment.ffprobe, cancel);
+        const HardwareDecoding plan = feeds.decoding(ladder[attempt]);
         if (on_status) {
             on_status(attempt == 0 ? decoding_status("Running ffmpeg", plan, StatusKind::starting)
                                    : decoding_status("GPU decode failed, retrying", plan));
         }
-        const std::vector<std::string> command = build_command(plan, run_model, xpsnr_log_name);
+        const std::vector<std::string> command = build_command(plan, run_model, xpsnr_log_name, feeds);
         logger.info("FFmpeg: " + python_list2cmdline(command));
         try {
             outcome = run_ffmpeg(command, total_frames, on_progress, cancel, folder.path());
         } catch (const platform::ProcessError& error) {
             throw VmafRunError(std::string("FFmpeg could not be started: ") + error.what());
         }
+        feeds.finish();
         if (outcome.exit_code == 0) {
             break;
         }
@@ -820,14 +846,14 @@ ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& sou
                          long long total_frames, const HardwareDecoding& decoding, const ProgressCallback& on_progress,
                          const StatusCallback& on_status, const CancelToken& cancel) {
     const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
-                                   const std::optional<std::string>& xpsnr_log_name) {
+                                   const std::optional<std::string>& xpsnr_log_name, const PairFeeds& feeds) {
         const std::string graph = build_filtergraph(source, distorted, options, source_crop, distorted_crop, plan,
                                                     "vmaf_log.json", run_model, xpsnr_log_name, environment.cores);
         return build_ffmpeg_command(environment.ffmpeg, distorted.path, source.path, graph, plan,
-                                    options.duration_limit, {distorted.decode_options(), source.decode_options()});
+                                    options.duration_limit, run_inputs(feeds, source, distorted));
     };
     return execute_run(build_command, options, model, fps, total_frames, decoding, "vmaf_run_", on_progress, on_status,
-                       cancel);
+                       cancel, environment, &source, &distorted);
 }
 
 // The duration limit of a GPU run, in seconds (0: none): one frame more
@@ -916,7 +942,9 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
     bool refusal_retried = false;
     bool same_again = false;  // this attempt is the last one's plan again
     while (attempt_number < ladder.size()) {
-        const HardwareDecoding& decode = ladder[attempt_number];
+        // Before the FFmpegs, which it outlives.
+        PairFeeds feeds(&source, &distorted, environment.ffmpeg, environment.ffprobe, cancel);
+        const HardwareDecoding decode = feeds.decoding(ladder[attempt_number]);
         if (on_status && !same_again) {
             on_status(attempt_number == 0
                           ? decoding_status("Running ffmpeg, " + doing(plan), decode, StatusKind::starting)
@@ -937,7 +965,7 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
             const std::vector<std::vector<std::string>> commands = build_stream_commands(
                 environment.ffmpeg, distorted.path, source.path,
                 build_stream_graphs(source, distorted, options, source_crop, distorted_crop, decode), decode,
-                attempt.output_args(limit), {distorted.decode_options(), source.decode_options()});
+                attempt.output_args(limit), run_inputs(feeds, source, distorted));
             for (const std::vector<std::string>& command : commands) {
                 logger.info("FFmpeg: " + python_list2cmdline(command));
             }
@@ -947,6 +975,12 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
         } catch (const platform::ProcessError& error) {
             abandon();
             throw VmafRunError(std::string("FFmpeg could not be started: ") + error.what());
+        } catch (...) {
+            abandon();
+            throw;
+        }
+        try {
+            feeds.finish();  // a fed video decoded in part is no score
         } catch (...) {
             abandon();
             throw;
@@ -1370,7 +1404,7 @@ std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const 
     } catch (const VideoSizeChanged&) {
         throw;  // the run is made again, the video marked (run_vmaf)
     } catch (const FilmGrainRefusal&) {
-        throw;  // not a failure: the CPU's FFmpeg would not add the grain either
+        throw;  // final: the CPU's FFmpeg gets its pictures from the same decoder (grain_feed.h)
     } catch (const std::exception& error) {
         logger.error(std::string("VMAF on the GPU failed; calculating it on the CPU: ") + error.what());
         if (on_status) {
@@ -1539,7 +1573,7 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
         throw;  // the run is made again, the video marked (run_vmaf)
     } catch (const FilmGrainRefusal&) {
         xpsnr.reset();
-        throw;  // not a failure: FFmpeg would not add the grain either
+        throw;  // final: FFmpeg gets its pictures from the same decoder (grain_feed.h)
     } catch (const std::exception& error) {
         xpsnr.reset();
         logger.error(metric_names(plan) + " in the app failed; FFmpeg calculates them: " + error.what());
@@ -1715,8 +1749,13 @@ std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const s
         return several_graphs ? split_hwaccel_args(hwaccel) : hwaccel_args(hwaccel);
     };
     std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-y"};
-    for (const auto& [hwaccel, path, own] : {std::tuple{decoding.distorted, distorted, &inputs.distorted},
-                                             std::tuple{decoding.source, source, &inputs.source}}) {
+    for (const auto& [hwaccel, path, own, fed] :
+         {std::tuple{decoding.distorted, distorted, &inputs.distorted, &inputs.distorted_fed},
+          std::tuple{decoding.source, source, &inputs.source, &inputs.source_fed}}) {
+        if (*fed) {
+            command.insert(command.end(), (*fed)->begin(), (*fed)->end());
+            continue;
+        }
         const std::vector<std::string> options = decode(hwaccel);
         command.insert(command.end(), options.begin(), options.end());
         command.insert(command.end(), own->begin(), own->end());
@@ -1768,12 +1807,17 @@ std::string build_resample_filtergraph(const VideoInfo& source, const VmafOption
 std::vector<std::string> build_resample_command(const std::string& ffmpeg, const std::filesystem::path& source,
                                                 const std::string& filtergraph,
                                                 const std::optional<std::string>& hwaccel, double duration_limit,
-                                                const std::vector<std::string>& source_options) {
+                                                const std::vector<std::string>& source_options,
+                                                const std::optional<std::vector<std::string>>& source_fed) {
     std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-y"};
-    const std::vector<std::string> decode = hwaccel_args(hwaccel);
-    command.insert(command.end(), decode.begin(), decode.end());
-    command.insert(command.end(), source_options.begin(), source_options.end());
-    command.insert(command.end(), {"-i", input_path(source)});
+    if (source_fed) {
+        command.insert(command.end(), source_fed->begin(), source_fed->end());
+    } else {
+        const std::vector<std::string> decode = hwaccel_args(hwaccel);
+        command.insert(command.end(), decode.begin(), decode.end());
+        command.insert(command.end(), source_options.begin(), source_options.end());
+        command.insert(command.end(), {"-i", input_path(source)});
+    }
     const std::vector<std::string> outputs = output_args(filtergraph, duration_limit);
     command.insert(command.end(), outputs.begin(), outputs.end());
     return command;
@@ -1838,18 +1882,25 @@ std::vector<std::vector<std::string>> build_stream_commands(
     const std::pair<std::string, std::string>& graphs, const HardwareDecoding& decoding,
     const std::pair<std::vector<std::string>, std::vector<std::string>>& outputs, const InputOptions& inputs) {
     const auto command = [&ffmpeg](const std::filesystem::path& path, const std::optional<std::string>& hwaccel,
-                                   const std::vector<std::string>& input, const std::string& graph,
+                                   const std::vector<std::string>& input,
+                                   const std::optional<std::vector<std::string>>& fed, const std::string& graph,
                                    const std::vector<std::string>& output) {
         std::vector<std::string> made{ffmpeg, "-nostdin", "-hide_banner", "-y"};
-        const std::vector<std::string> decode = hwaccel_args(hwaccel);
-        made.insert(made.end(), decode.begin(), decode.end());
-        made.insert(made.end(), input.begin(), input.end());
-        made.insert(made.end(), {"-i", input_path(path), "-lavfi", graph, "-progress", "pipe:1", "-nostats"});
+        if (fed) {
+            made.insert(made.end(), fed->begin(), fed->end());
+        } else {
+            const std::vector<std::string> decode = hwaccel_args(hwaccel);
+            made.insert(made.end(), decode.begin(), decode.end());
+            made.insert(made.end(), input.begin(), input.end());
+            made.insert(made.end(), {"-i", input_path(path)});
+        }
+        made.insert(made.end(), {"-lavfi", graph, "-progress", "pipe:1", "-nostats"});
         made.insert(made.end(), output.begin(), output.end());
         return made;
     };
-    return {command(distorted, decoding.distorted, inputs.distorted, graphs.first, outputs.first),
-            command(source, decoding.source, inputs.source, graphs.second, outputs.second)};
+    return {command(distorted, decoding.distorted, inputs.distorted, inputs.distorted_fed, graphs.first,
+                    outputs.first),
+            command(source, decoding.source, inputs.source, inputs.source_fed, graphs.second, outputs.second)};
 }
 
 namespace {
@@ -2087,15 +2138,20 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
     const std::string model = resolve_run_models(options, width, height);
     const long long total_frames = estimate_total_frames(source, options, nullptr);
     const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
-                                   const std::optional<std::string>& xpsnr_log_name) {
+                                   const std::optional<std::string>& xpsnr_log_name, const PairFeeds& feeds) {
         const std::string graph = build_resample_filtergraph(source, options, source_crop, plan.source,
                                                              "vmaf_log.json", run_model, xpsnr_log_name,
                                                              environment.cores);
+        if (const PictureFeed* fed = feeds.source()) {
+            return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, options.duration_limit,
+                                          {}, fed->input_arguments());
+        }
         return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, options.duration_limit,
                                       source.decode_options());
     };
-    const ParsedScores scores = execute_run(build_command, options, model, source.fps, total_frames, decoding,
-                                            "vmaf_resample_", on_progress, on_status, cancel);
+    const ParsedScores scores =
+        execute_run(build_command, options, model, source.fps, total_frames, decoding, "vmaf_resample_", on_progress,
+                    on_status, cancel, environment, &source, nullptr);
 
     ComparisonResult result;
     result.source = source.path;

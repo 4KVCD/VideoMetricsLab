@@ -28,6 +28,7 @@ libvmaf, Vship and FFmpeg's libraries are loaded the same way, from
 | Media metadata and geometry | `ffprobe.cpp`, `video.cpp`, `geometry.cpp`, `crop_detect.cpp`, `model_select.cpp` |
 | Metric requests and planning | `analysis_request.cpp`, `options.cpp`, `job_runner.cpp` (`plan_tasks`, `run_jobs`, `JobScheduler`) |
 | FFmpeg's runs | `ffmpeg_run.cpp`, `ffmpeg_tools.cpp`, `hardware_decoding.cpp` |
+| Film grain | `film_grain_detect.cpp` (what a stream describes), `film_grain_scoring.cpp` (scored with or without it), `grain_feed.cpp` (a video's pictures decoded by the app and fed to FFmpeg); `native/grain/grain_decoding.h` (which decoder adds it) |
 | Metrics calculated in the app | `libvmaf.cpp` (the bundled libvmaf), `libvmaf_cpu.cpp` (PSNR, SSIM, XPSNR), `gpu_vmaf.cpp`, `vmaf_cuda.cpp`, `vmaf_vulkan.cpp`, `vmaf_v1_gpu.cpp` (VMAF on the GPU), `gpu_frames.cpp` (decoding), `isolated.cpp` (the process of its own they run in) |
 | SSIMULACRA2, Butteraugli, CVVDP | `vship.cpp`, `vship_run.cpp` (on the GPU), `perceptual_cpu.cpp` (libjxl's tools), `perceptual.cpp`, `cvvdp.cpp` |
 | Metric registry | `metrics.cpp` |
