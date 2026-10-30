@@ -42,6 +42,10 @@ struct Settings {
     // The Vship build new videos use for SSIMULACRA2, Butteraugli and CVVDP
     // (vship_build_value: "vship-fast" or "vship").
     std::string default_vship_build = "vship-fast";
+    // How a video with film grain it can be scored with or without is scored
+    // until its own choice is made: "with", "without", or "" to ask at
+    // Calculate metrics (VideoInfo::with_film_grain).
+    std::string film_grain_default;
     std::string graph_metric = "vmaf";
 
     // How many videos to score at once (1 or 2).

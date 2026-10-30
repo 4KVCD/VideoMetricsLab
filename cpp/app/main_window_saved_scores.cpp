@@ -39,14 +39,14 @@ AnalysisRequest MainWindow::analysis_request_of(const RowData& row_data) const {
                             row_data.cvvdp, source, distorted);
 }
 
-void MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& paths) {
+bool MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& paths) {
     // Looks for the saved scores of the rows `paths`. A newer lookup replaces
     // one under way, and the window refuses the older one's answers (by its
     // number): which saved scores apply depends on the reference and on each
     // row's settings, as they are now. None as the window closes: a reading
     // started then would hold up the closing.
     if (paths.empty() || !source_info_ || !settings_.use_cache || closing_) {
-        return;
+        return false;
     }
     // The rows the replaced lookup had not answered for are asked about
     // again. Asked only about `paths`, editing one row while the saved scores
@@ -71,7 +71,7 @@ void MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& pa
         cache_lookup_paths_.push_back(row_data->path);
     }
     if (texts.isEmpty()) {
-        return;
+        return false;
     }
     auto* worker = new ProbeWorker(texts, cache_folder(), source_info_->path, std::move(queries), this);
     cache_worker_ = worker;
@@ -82,6 +82,7 @@ void MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& pa
             [this, generation](const OtherDisplaysFound& found) { on_other_displays_found(generation, found); });
     connect(worker, &ProbeWorker::finished_all, this, [this, worker] { on_cache_lookup_finished(worker); });
     worker->start();
+    return true;
 }
 
 void MainWindow::reload_saved_scores(const std::vector<int>& rows) {
@@ -110,11 +111,19 @@ std::vector<std::filesystem::path> MainWindow::cancel_cache_lookup() {
 }
 
 void MainWindow::on_cache_lookup_finished(ProbeWorker* worker) {
+    // A replaced lookup ends too (cancelled). A run waiting for saved scores
+    // starts once none is under way: it waits for every lookup that replaced
+    // the one it asked for, and not for one a Recalculate cancelled with none
+    // after it (each lookup's end comes, cancelled or not).
     if (worker == cache_worker_) {
         cache_worker_ = nullptr;
         cache_lookup_paths_.clear();
     }
     on_probe_finished(worker);
+    if (run_waits_for_saved_scores_ && cache_worker_ == nullptr) {
+        stop_waiting_for_saved_scores();
+        on_run_clicked();  // the rows' saved scores are in: the run asked for starts
+    }
 }
 
 void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {

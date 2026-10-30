@@ -68,6 +68,9 @@ public:
     // has already saved (from the table's column heading), without treating
     // it as an edit.
     void show_default_metric(const std::string& key, bool checked);
+    // Shows the film grain default the window has already saved (answered
+    // "Don't ask again"), without treating it as an edit.
+    void show_film_grain_default();
     // Deletes the saved results, after asking.
     void clear_saved_results();
 
@@ -84,6 +87,7 @@ public:
     QCheckBox* default_gpu = nullptr;
     std::map<std::string, QCheckBox*> default_metrics;  // by metric key
     QComboBox* cvvdp_default = nullptr;
+    QComboBox* film_grain_default = nullptr;
     QComboBox* vship_build_default = nullptr;  // none where stock Vship 5.1.2 is not bundled
     QCheckBox* gpu_together = nullptr;
     QComboBox* decoded_videos = nullptr;

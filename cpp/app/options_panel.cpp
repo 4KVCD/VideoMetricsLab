@@ -23,11 +23,42 @@
 #include "i18n.h"
 #include "theme.h"
 #include "window_helpers.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/model_select.h"
 #include "vml/vship.h"
 
 // The panel's text is app::tr's: inside a Q_OBJECT class, tr() is Qt's.
 namespace vml::app {
+
+FilmGrainControl film_grain_control(const std::vector<FilmGrainVideo>& videos) {
+    FilmGrainControl control;
+    QString why;  // why none can be chosen, as the first video that cannot says it
+    bool first = true;
+    for (const FilmGrainVideo& video : videos) {
+        if (video.resolution_test || video.info == nullptr || !film_grain_choosable(*video.info)) {
+            if (why.isEmpty()) {
+                why = video.resolution_test ? tr("A resolution test's film grain is the reference's, chosen when "
+                                                 "metrics are calculated.")
+                      : video.info == nullptr || !video.info->film_grain ? tr("Its film grain was not read.")
+                      : !film_grain_note(*video.info).isEmpty()          ? film_grain_note(*video.info)
+                                                                         : tr("It has no film grain.");
+            }
+            continue;
+        }
+        const bool with = effective_film_grain(*video.info).scoring == GrainScoring::with;
+        control.with = first || control.with == with ? std::optional(with) : std::nullopt;
+        first = false;
+        control.enabled = true;
+    }
+    if (!control.enabled) {
+        control.with.reset();
+    }
+    control.tooltip = control.enabled ? tr("Whether the scores are made with the film grain the video's stream asks "
+                                           "the player to add, as viewers see the video, or without it, from the "
+                                           "coded pictures.")
+                                      : why;
+    return control;
+}
 
 namespace {
 
@@ -117,8 +148,8 @@ OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* p
     layout->addLayout(columns);
 
     auto* metrics_hint = new QLabel(
-        app::tr("Cropping and scaling here affect scores. Video Compare's tone mapping and playback resolution are "
-                "display-only settings and do not change calculated metrics."));
+        app::tr("Cropping, scaling and film grain here affect scores. Video Compare's tone mapping and playback "
+                "resolution are display-only settings and do not change calculated metrics."));
     theme::style(metrics_hint, "color: {muted}; font-style: italic;");
     metrics_hint->setWordWrap(true);
     layout->addWidget(metrics_hint);
@@ -174,6 +205,37 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
                 "file using the other direction, so you can run and compare both."));
     connect(scale_direction_combo, &QComboBox::currentIndexChanged, this, &OptionsPanel::scale_direction_chosen);
     form->addRow(app::tr("Resolution mismatch:"), scale_direction_combo);
+
+    // The entries' data: with the grain (true) or without; an entry without
+    // data is shown in front of them for videos that differ ("Mixed"), and
+    // empty where none can be chosen.
+    film_grain_combo = new QComboBox;
+    film_grain_combo->addItem(app::tr("With film grain (what viewers see)"), true);
+    film_grain_combo->addItem(app::tr("Without film grain (the coded pictures only)"), false);
+    connect(film_grain_combo, &QComboBox::currentIndexChanged, this, [this](int index) {
+        if (const QVariant with = film_grain_combo->itemData(index); with.isValid()) {
+            emit film_grain_chosen(with.toBool());
+        }
+    });
+    form->addRow(app::tr("Film grain:"), film_grain_combo);
+}
+
+void OptionsPanel::show_film_grain(const std::vector<FilmGrainVideo>& videos) {
+    const FilmGrainControl control = film_grain_control(videos);
+    const QSignalBlocker blocker(film_grain_combo);
+    const bool has_blank = !film_grain_combo->itemData(0).isValid();
+    if (!control.with && !has_blank) {
+        film_grain_combo->insertItem(0, QString(), QVariant());
+    } else if (control.with && has_blank) {
+        film_grain_combo->removeItem(0);
+    }
+    if (!control.with) {
+        // Empty where nothing can be chosen (the tooltip says why).
+        film_grain_combo->setItemText(0, control.enabled ? app::tr("Mixed (the selected videos differ)") : QString());
+    }
+    film_grain_combo->setCurrentIndex(control.with ? film_grain_combo->findData(*control.with) : 0);
+    film_grain_combo->setEnabled(control.enabled);
+    film_grain_combo->setToolTip(control.tooltip);
 }
 
 void OptionsPanel::build_metric_settings(QFormLayout* form) {

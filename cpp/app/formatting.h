@@ -14,8 +14,14 @@ namespace vml::app {
 inline const QString not_computed = QStringLiteral("N/A");
 
 // The one-line summary shown in the Media info column: "1920x1080, 23.98fps,
-// hevc".
+// hevc", and "film grain" or "film grain left out" for a video whose stream
+// asks for film grain, as it is scored (film_grain_scoring.h).
 QString media_info_string(const VideoInfo& info);
+
+// The video's film grain for the Media info tooltip: its kinds, and whether
+// it is scored with it, or why it is left out where that is no choice. Empty
+// for a video with none, or not read.
+QString film_grain_note(const VideoInfo& info);
 
 // Bitrate at a human scale: Mb/s once it is over a megabit, else kb/s; "≈"
 // when it is the whole file's, the soundtrack included (bitrate_note).

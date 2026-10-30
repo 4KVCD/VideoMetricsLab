@@ -426,6 +426,13 @@ const char* const templates[] = {
     "retry: {error}",
     "Decoder returned a truncated frame.",
     "Decoder produced no frames.",
+    // --- film grain left out, or refused (film_grain_scoring.h, video.cpp)
+    "H.274 film grain is added to VVC only (by VVdeC), not to {codec}",
+    "AFGS1 film grain in H.264 is added by no decoder here",
+    "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together",
+    "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 "
+    "bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the "
+    "metric where the app decodes the video itself (VMAF on the GPU)",
 };
 
 // Without a closing "...", "…" or full stop: the run line shows some

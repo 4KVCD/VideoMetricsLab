@@ -15,11 +15,8 @@ FilmGrainScoring effective_film_grain(const VideoInfo& info) {
     }
     result.kinds = *info.film_grain;
     result.scoring = info.with_film_grain.value_or(true) ? GrainScoring::with : GrainScoring::without;
-    if (result.scoring == GrainScoring::without) {
-        return result;
-    }
     // Grain added in part is not what viewers see either: a video with any
-    // grain nothing here adds is scored without all of it.
+    // grain nothing here adds is scored without all of it, whatever is chosen.
     const std::string codec = ascii_lower(info.codec_name);
     const bool h274 = (result.kinds & (film_grain_h274 | film_grain_h274_model_1)) != 0;
     if (h274 && codec != "vvc") {
@@ -36,6 +33,18 @@ FilmGrainScoring effective_film_grain(const VideoInfo& info) {
         result.scoring = GrainScoring::without;
     }
     return result;
+}
+
+bool film_grain_choosable(const VideoInfo& info) {
+    const FilmGrainScoring grain = effective_film_grain(info);
+    return grain.scoring != GrainScoring::none && grain.why_without.empty();
+}
+
+std::optional<bool> film_grain_default_choice(std::string_view setting) {
+    if (setting == "with" || setting == "without") {
+        return setting == "with";
+    }
+    return std::nullopt;
 }
 
 bool only_the_app_adds(const FilmGrainScoring& grain) {

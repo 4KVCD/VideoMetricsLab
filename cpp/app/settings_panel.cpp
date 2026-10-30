@@ -222,6 +222,24 @@ QGroupBox* SettingsPanel::build_defaults_box() {
     cvvdp_row->addWidget(cvvdp_default);
     cvvdp_row->addStretch(1);
     defaults_layout->addLayout(cvvdp_row);
+
+    // The entries' data: Settings' film_grain_default values.
+    auto* grain_row = new QHBoxLayout;
+    grain_row->addWidget(new QLabel(app::tr("Film grain:")));
+    film_grain_default = new QComboBox;
+    film_grain_default->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    film_grain_default->addItem(app::tr("Ask at Calculate metrics"), QString());
+    film_grain_default->addItem(app::tr("With film grain (what viewers see)"), QStringLiteral("with"));
+    film_grain_default->addItem(app::tr("Without film grain (the coded pictures only)"), QStringLiteral("without"));
+    film_grain_default->setToolTip(app::tr(
+        "How a video whose stream asks the player to add film grain is scored: asked when its metrics are "
+        "calculated, or with or without the grain. Each video keeps the choice it was given, by you or by this "
+        "setting when it was added; change a video's own in the Options panel."));
+    show_film_grain_default();
+    connect(film_grain_default, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
+    grain_row->addWidget(film_grain_default);
+    grain_row->addStretch(1);
+    defaults_layout->addLayout(grain_row);
     return defaults_box;
 }
 
@@ -432,6 +450,12 @@ void SettingsPanel::show_default_metric(const std::string& key, bool checked) {
     }
 }
 
+void SettingsPanel::show_film_grain_default() {
+    const QSignalBlocker blocker(film_grain_default);
+    const int index = film_grain_default->findData(QString::fromStdString(settings_.film_grain_default));
+    film_grain_default->setCurrentIndex(index < 0 ? 0 : index);  // an unknown value asks
+}
+
 void SettingsPanel::clear_saved_results() {
     const std::filesystem::path directory = cache_folder();
     // The count the tab shows, made off the window's thread
@@ -549,6 +573,7 @@ void SettingsPanel::read_controls() {
     if (vship_build_default != nullptr) {
         settings_.default_vship_build = vship_build_default->currentData().toString().toStdString();
     }
+    settings_.film_grain_default = film_grain_default->currentData().toString().toStdString();
 }
 
 void SettingsPanel::apply_global_changes(const Settings& before) {

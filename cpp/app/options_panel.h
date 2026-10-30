@@ -13,6 +13,7 @@
 #include <QString>
 
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,22 @@ const std::vector<ModelChoice>& model_choices();
 // The VMAF v1 column's models, in the dropdown's order.
 const std::vector<ModelChoice>& v1_model_choices();
 
+// A selected row's video as the Film grain dropdown sees it.
+struct FilmGrainVideo {
+    const VideoInfo* info = nullptr;  // nothing: not read yet
+    bool resolution_test = false;     // its video is the reference, chosen with it at Calculate metrics
+};
+
+// What the Film grain dropdown shows for the selected videos: whether it can
+// be used (a video with film grain it can be scored with or without), the
+// choice they share (nothing: they differ, or none has one to make), and why.
+struct FilmGrainControl {
+    bool enabled = false;
+    std::optional<bool> with;
+    QString tooltip;
+};
+FilmGrainControl film_grain_control(const std::vector<FilmGrainVideo>& videos);
+
 class OptionsPanel : public QGroupBox {
     Q_OBJECT
 
@@ -69,6 +86,8 @@ public:
     // videos, or set them the wrong way round.
     void show_cvvdp(const std::vector<CvvdpSettings>& selected, const std::string& preferred,
                     const std::string& user_presets_json, bool automatic);
+    // Shows the selected videos' film grain choice (film_grain_control).
+    void show_film_grain(const std::vector<FilmGrainVideo>& videos);
 
     // The options the controls show. The metrics are not in the panel, so
     // the window gives them, from the table's column headings.
@@ -86,6 +105,7 @@ public:
     QTimeEdit* duration_edit = nullptr;
     QComboBox* scale_algo_combo = nullptr;
     QComboBox* scale_direction_combo = nullptr;
+    QComboBox* film_grain_combo = nullptr;
     QComboBox* model_combo = nullptr;
     QComboBox* model_v1_combo = nullptr;
     QSpinBox* subsample_spin = nullptr;
@@ -116,6 +136,8 @@ signals:
     void cvvdp_delete_requested();
     // The resolution mismatch dropdown changed to this index (2: "Test both").
     void scale_direction_chosen(int index);
+    // The Film grain dropdown chose with the grain (true) or without.
+    void film_grain_chosen(bool with);
 
 private:
     void build_preparation(QFormLayout* form);

@@ -83,6 +83,7 @@ if(TARGET vml_app)
     add_executable(vml_app_tests
         app/bitrate_panel_test.cpp
         app/chart_test.cpp
+        app/film_grain_control_test.cpp
         app/frame_compare_test.cpp
         app/graph_panel_test.cpp
         app/i18n_test.cpp

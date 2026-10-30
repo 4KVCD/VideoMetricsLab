@@ -66,6 +66,7 @@
 #include "vml/app_log.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
 #include "vml/hardware_decoding.h"
 #include "vml/metric_cache.h"
@@ -409,6 +410,9 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         if (gpu_check_watcher_ != nullptr) {
             stop_waiting_for_gpu_checks();  // a run asked for is not started now
         }
+        if (run_waits_for_saved_scores_) {
+            stop_waiting_for_saved_scores();
+        }
         frame_compare_panel_->cancel();
         bitrate_panel_->cancel();
         for (ProbeWorker* worker : probe_workers_) {
@@ -588,6 +592,7 @@ void MainWindow::build_ui() {
     connect(options_panel_, &OptionsPanel::cvvdp_delete_requested, this, [this] { on_cvvdp_delete_preset(); });
     connect(options_panel_, &OptionsPanel::scale_direction_chosen, this,
             [this](int index) { on_scale_direction_combo_changed(index); });
+    connect(options_panel_, &OptionsPanel::film_grain_chosen, this, [this](bool with) { on_film_grain_chosen(with); });
     run_cvvdp_dialog_ = [](CvvdpDisplayDialog& dialog) { return dialog.exec(); };
     dialogs_ = standard_dialogs(this);
     splitter->addWidget(options_panel_);
@@ -912,6 +917,12 @@ void MainWindow::on_default_settings_changed() {
     use_crop_store();  // the saved results' folder may have changed
     default_options_ = options_from_settings();
     default_extra_metric_keys_ = extra_metrics_from_settings();
+    // Unlike the other defaults, film grain's is for every video without a
+    // choice of its own, not only new ones: until then it is to be asked.
+    if (!run_active_) {
+        start_cache_lookup(apply_film_grain_default());
+        show_panel_film_grain();
+    }
 }
 
 // ------------------------------------------------------------ the update check
@@ -1269,10 +1280,7 @@ void MainWindow::on_source_probed(int generation, const Probed& probed) {
     source_reading_.reset();
     if (!probed.info) {
         source_edit_->setText(shown_source_path());  // a path typed in that would not read
-        source_info_label_->setText(
-            source_info_ ? media_info_string(*source_info_) + ", " + bitrate_string(*source_info_) + "  (" +
-                               QString::fromStdString(format_hms(source_info_->duration, 1)) + ")"
-                         : app::tr("No reference selected."));
+        show_source_label();
         QMessageBox::critical(this, app::tr("Could not read video"), tr_message(probed.error));
         return;
     }
@@ -1281,10 +1289,31 @@ void MainWindow::on_source_probed(int generation, const Probed& probed) {
 
 void MainWindow::apply_source_info(const std::filesystem::path& path, const VideoInfo& info) {
     source_info_ = info;
+    // A reference just read (chosen again too) has no film grain choice:
+    // Settings' default, or it is asked about at Calculate metrics.
+    const std::optional<bool> with = film_grain_default_choice(settings_.film_grain_default);
+    if (with && film_grain_choosable(*source_info_) && !source_info_->with_film_grain) {
+        source_info_->with_film_grain = *with;
+    }
+    for (const std::shared_ptr<RowData>& row_data : rows_) {
+        if (row_data->options.resample_test && row_data->video_info) {
+            take_film_grain(*row_data->video_info, *source_info_);  // its copy of the reference
+        }
+    }
     source_edit_->setText(text_of(path));
-    source_info_label_->setText(media_info_string(info) + ", " + bitrate_string(info) + "  (" +
-                                QString::fromStdString(format_hms(info.duration, 1)) + ")");
+    show_source_label();
     check_rows_against_new_source(path);
+}
+
+void MainWindow::show_source_label() {
+    if (!source_info_) {
+        source_info_label_->setText(app::tr("No reference selected."));
+        source_info_label_->setToolTip(QString());
+        return;
+    }
+    source_info_label_->setText(media_info_string(*source_info_) + ", " + bitrate_string(*source_info_) + "  (" +
+                                QString::fromStdString(format_hms(source_info_->duration, 1)) + ")");
+    source_info_label_->setToolTip(film_grain_note(*source_info_));
 }
 
 void MainWindow::check_rows_against_new_source(const std::filesystem::path& path) {
@@ -1300,11 +1329,13 @@ void MainWindow::check_rows_against_new_source(const std::filesystem::path& path
     // table as the new pair's, and keep a run from calculating it, and the
     // state of every row without scores (how its run against the old one
     // ended, failed or cancelled). Those measured against the very reference
-    // chosen stay: choosing it again confirms them.
+    // chosen stay, with its film grain as it is scored now: choosing it again
+    // confirms them.
     std::vector<int> stale;
     for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
         const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
-        if (!row_data.completed_run || !same_file(row_data.completed_run->result.source, path)) {
+        if (!row_data.completed_run || !same_file(row_data.completed_run->result.source, path) ||
+            film_grain_identity(row_data.completed_run->result.source_info) != film_grain_identity(*source_info_)) {
             stale.push_back(row);
         }
     }
@@ -1855,7 +1886,9 @@ void MainWindow::set_row_info(int row, const std::optional<VideoInfo>& info, con
         // Back to normal text: the placeholder shown while probing greys the
         // cell, and leaving it grey makes a probed row look disabled.
         theme::foreground(item, std::nullopt);
-        item->setToolTip(QString::fromStdString(format_hms(info->duration, 1)));
+        const QString grain = film_grain_note(*info);
+        item->setToolTip(QString::fromStdString(format_hms(info->duration, 1)) +
+                         (grain.isEmpty() ? QString() : "\n" + grain));
         distorted_table_->item(row, col_bitrate)->setText(bitrate_string(*info));
         distorted_table_->item(row, col_bitrate)->setToolTip(bitrate_note(*info));
         RowData& row_data = *rows_[static_cast<std::size_t>(row)];
@@ -2034,7 +2067,12 @@ void MainWindow::on_probed(const Probed& probed) {
         return lookup_token(source_info_->path, row_data.identity_path(), analysis_request_of(row_data));
     };
     const std::optional<std::string> asked = source_info_ ? std::optional(token()) : std::nullopt;
-    set_row_info(*row, probed.info, probed.info ? QString() : probed.error);
+    std::optional<VideoInfo> info = probed.info;
+    const std::optional<bool> with = film_grain_default_choice(settings_.film_grain_default);
+    if (info && with && film_grain_choosable(*info)) {
+        info->with_film_grain = *with;  // Settings' default, until the video is chosen for
+    }
+    set_row_info(*row, info, info ? QString() : probed.error);
     if (asked && token() != *asked) {
         invalidate_completed_results({*row});
         probed_lookups_.push_back(row_data.path);

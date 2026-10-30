@@ -24,11 +24,13 @@
 #include "main_window.h"
 #include "options_panel.h"
 #include "run_worker.h"
+#include "settings_panel.h"
 #include "widgets.h"
 #include "window_helpers.h"
 #include "vml/app_log.h"
 #include "vml/crop_detect.h"
 #include "vml/ffmpeg_run.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/isolated.h"
@@ -169,7 +171,74 @@ bool MainWindow::ready_to_run(const std::vector<int>& checked) {
                                      "not want to calculate."));
         return false;
     }
-    return !wait_for_gpu_checks(checked);
+    // Asked at the click, not seconds later once the GPU checks are done.
+    return settle_film_grain(checked) && !wait_for_gpu_checks(checked);
+}
+
+bool MainWindow::settle_film_grain(const std::vector<int>& checked) {
+    std::vector<std::filesystem::path> changed = apply_film_grain_default();
+    // Asked about (Settings: Ask): the checked videos with a choice to make
+    // and none made, and the reference; a resolution test's video is the
+    // reference.
+    const auto unchosen = [](const VideoInfo& info) { return film_grain_choosable(info) && !info.with_film_grain; };
+    const bool reference = unchosen(*source_info_);
+    QStringList names;
+    if (reference) {
+        names.append(app::tr("{name} (the reference)", {{"name", name_of(source_info_->path)}}));
+    }
+    std::vector<int> rows;
+    for (const int row : checked) {
+        const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        if (!row_data.options.resample_test && row_data.video_info && unchosen(*row_data.video_info)) {
+            rows.push_back(row);
+            names.append(name_of(row_data.path));
+        }
+    }
+    if (!names.isEmpty()) {
+        const std::optional<FilmGrainAnswer> answer = dialogs_.ask_film_grain(names);
+        if (!answer) {
+            return false;
+        }
+        const std::vector<std::filesystem::path> chosen = choose_film_grain(rows, reference, answer->with);
+        changed.insert(changed.end(), chosen.begin(), chosen.end());
+        if (answer->dont_ask_again) {
+            // The other videos without a choice take it too, unchecked ones included.
+            settings_.film_grain_default = answer->with ? "with" : "without";
+            save_settings();
+            settings_panel_->show_film_grain_default();
+            const std::vector<std::filesystem::path> others = apply_film_grain_default();
+            changed.insert(changed.end(), others.begin(), others.end());
+        }
+        show_panel_film_grain();
+    }
+    if (changed.empty() || !start_cache_lookup(changed)) {
+        return true;
+    }
+    // Rows whose scores are now filed otherwise: their saved ones are found
+    // before the run, rather than calculated again.
+    run_waits_for_saved_scores_ = true;
+    show_waiting_to_run(app::tr("Looking up saved scores before the run\xE2\x80\xA6"));
+    return false;
+}
+
+void MainWindow::stop_waiting_for_saved_scores() {
+    run_waits_for_saved_scores_ = false;
+    stop_showing_waiting_to_run(app::tr("Looking up saved scores before the run\xE2\x80\xA6"));
+}
+
+void MainWindow::show_waiting_to_run(const QString& text) {
+    status_before_waiting_ = status_label_->text();
+    show_status(text);
+    run_button_->setEnabled(false);
+    cancel_button_->setEnabled(true);
+}
+
+void MainWindow::stop_showing_waiting_to_run(const QString& text) {
+    run_button_->setEnabled(true);
+    cancel_button_->setEnabled(false);
+    if (status_label_->text() == text) {
+        show_status(status_before_waiting_);
+    }
 }
 
 // Nothing to run: each of the `checked` rows (`count` of them) has every
@@ -366,10 +435,7 @@ bool MainWindow::wait_for_gpu_checks(const std::vector<int>& checked) {
     }
     if (gpu_check_watcher_ == nullptr) {
         // Meanwhile Run waits, and Cancel drops the run asked for.
-        status_before_gpu_checks_ = status_label_->text();
-        show_status(app::tr("Checking the GPU before the run\xE2\x80\xA6"));
-        run_button_->setEnabled(false);
-        cancel_button_->setEnabled(true);
+        show_waiting_to_run(app::tr("Checking the GPU before the run\xE2\x80\xA6"));
         gpu_check_watcher_ = new QFutureWatcher<void>(this);
         connect(gpu_check_watcher_, &QFutureWatcher<void>::finished, this, [this] {
             stop_waiting_for_gpu_checks();
@@ -395,11 +461,7 @@ void MainWindow::stop_waiting_for_gpu_checks() {
     gpu_check_watcher_->disconnect(this);
     gpu_check_watcher_->deleteLater();
     gpu_check_watcher_ = nullptr;
-    run_button_->setEnabled(true);
-    cancel_button_->setEnabled(false);
-    if (status_label_->text() == app::tr("Checking the GPU before the run\xE2\x80\xA6")) {
-        show_status(status_before_gpu_checks_);
-    }
+    stop_showing_waiting_to_run(app::tr("Checking the GPU before the run\xE2\x80\xA6"));
 }
 
 bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<RowData>>& job_rows) {
@@ -508,6 +570,10 @@ void MainWindow::on_parallel_jobs_changed(bool /*on*/) {
 void MainWindow::on_cancel_clicked() {
     if (gpu_check_watcher_ != nullptr) {
         stop_waiting_for_gpu_checks();  // nothing started yet: the run is not
+        return;
+    }
+    if (run_waits_for_saved_scores_) {
+        stop_waiting_for_saved_scores();  // likewise
         return;
     }
     if (worker_ == nullptr) {
@@ -914,10 +980,13 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
         }
         return std::nullopt;
     }
-    if (job_options_[job] != row_data.options || !job_cvvdp_[job].same_as(row_data.cvvdp)) {
+    const bool grain_changed =
+        film_grain_identity(result.source_info) != film_grain_identity(*source_info_) ||
+        (row_data.video_info && film_grain_identity(result.distorted_info) != film_grain_identity(*row_data.video_info));
+    if (job_options_[job] != row_data.options || !job_cvvdp_[job].same_as(row_data.cvvdp) || grain_changed) {
         // The row's settings changed after the video started, so the result
         // does not match what the row says now: shown, it would be labelled
-        // with settings it was not calculated with.
+        // with settings it was not calculated with (its film grain too).
         if (final) {
             set_row_status(*row, RowState::for_previous_settings);
         }

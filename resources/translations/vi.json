@@ -170,7 +170,6 @@
   "Test both (adds a comparison row)": "Thử cả hai (thêm một hàng so sánh)",
   "When the two resolutions differ: either evaluate quality at the resolution actually\ndelivered (source scaled to match test -- the default), or as if the test\nvideo were upscaled back to the reference's native resolution for playback.\n\"Test both\" doesn't change this row -- it adds a second row for the same test\nfile using the other direction, so you can run and compare both.": "Khi độ phân giải khác nhau: chấm chất lượng ở độ phân giải thực sự được phân phối\n(nguồn được co giãn cho khớp video thử — mặc định), hoặc như thể video thử được phóng to\nlên độ phân giải gốc của video tham chiếu khi phát.\n\"Thử cả hai\" không thay đổi hàng này — mà thêm một hàng thứ hai cho cùng tệp thử\ntheo chiều ngược lại, để có thể tính và so sánh cả hai.",
   "Resolution mismatch:": "Độ phân giải không khớp:",
-  "Cropping and scaling here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "Việc cắt và đổi kích thước ở đây ảnh hưởng đến điểm. Tone mapping và độ phân giải phát trong So sánh video chỉ để hiển thị và không thay đổi các chỉ số đã tính.",
   "Calculate metrics": "Tính chỉ số",
   "Pause": "Tạm dừng",
   "Cancel": "Hủy",
@@ -727,7 +726,37 @@
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "Với GPU, VMAF v0.6.1, VMAF NEG và VMAF v1 được tính trên GPU bằng Vulkan (VMAF v0.6.1 và NEG bằng CUDA trên GPU NVIDIA mà Vulkan không tính được). VMAF v1: với mô hình có tùy chọn mà mã GPU không hỗ trợ, các đặc trưng dải màu và màu sắc (CAMBI, SpEED) trên CPU. PSNR, SSIM và XPSNR luôn được tính trên CPU. Điểm của GPU khớp với điểm của CPU trong phạm vi một phần nghìn điểm ở mọi khung hình, nên điểm đã lưu được giữ lại dù chọn cách nào. Nếu việc tính trên GPU thất bại, chúng được tính trên CPU.",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "Tính SSIMULACRA2, Butteraugli và CVVDP cùng lúc, một lượt cho mỗi video",
   "Each video is decoded once for all three instead of once for each. This is faster only on very powerful GPUs, and needs a lot of GPU memory. A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "Mỗi video được giải mã một lần cho cả ba chỉ số thay vì một lần cho mỗi chỉ số. Cách này chỉ nhanh hơn trên GPU rất mạnh và cần nhiều bộ nhớ GPU. Chỉ số nào lỗi trong lượt chung, chẳng hạn do hết bộ nhớ GPU, sẽ được tính lại riêng.\n\nĐiểm số như nhau theo cả hai cách. Áp dụng từ lần chạy tiếp theo.",
-  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "Khi không chọn, cả ba được tính lần lượt từng cái, cần ít bộ nhớ GPU hơn nhiều và hầu như không chậm hơn trên đa số GPU."
+  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "Khi không chọn, cả ba được tính lần lượt từng cái, cần ít bộ nhớ GPU hơn nhiều và hầu như không chậm hơn trên đa số GPU.",
+  "Film grain": "Hạt phim",
+  "These videos tell the player to add film grain. Calculate their metrics:": "Các video này yêu cầu trình phát thêm hạt phim. Tính chỉ số của chúng:",
+  "With film grain (what viewers see)": "Có hạt phim (như người xem thấy)",
+  "Without film grain (the coded pictures only)": "Không có hạt phim (chỉ ảnh đã mã hóa)",
+  "Don't ask again (change it in Settings)": "Không hỏi lại (đổi trong Cài đặt)",
+  "Film grain:": "Hạt phim:",
+  "Ask at Calculate metrics": "Hỏi khi Tính chỉ số",
+  "How a video whose stream asks the player to add film grain is scored: asked when its metrics are calculated, or with or without the grain. Each video keeps the choice it was given, by you or by this setting when it was added; change a video's own in the Options panel.": "Cách chấm điểm video có luồng yêu cầu trình phát thêm hạt phim: hỏi khi tính chỉ số, hoặc có hay không có hạt. Mỗi video giữ lựa chọn đã được đặt cho nó, bởi bạn hoặc bởi cài đặt này khi được thêm; lựa chọn của một video được đổi trong bảng Tùy chọn.",
+  "film grain": "hạt phim",
+  "film grain left out": "bỏ hạt phim",
+  "H.274 model 1": "H.274 mô hình 1",
+  "Film grain ({kinds}) left out: {why}": "Hạt phim ({kinds}) bị bỏ: {why}",
+  "Film grain ({kinds}): the scores are made with it, as viewers see the video": "Hạt phim ({kinds}): điểm được tính có hạt, như người xem thấy video",
+  "Film grain ({kinds}): the scores are made without it, from the coded pictures": "Hạt phim ({kinds}): điểm được tính không có hạt, từ ảnh đã mã hóa",
+  "A resolution test's film grain is the reference's, chosen when metrics are calculated.": "Hạt phim của phép thử độ phân giải là của video tham chiếu, chọn khi tính chỉ số.",
+  "It has no film grain.": "Nó không có hạt phim.",
+  "Whether the scores are made with the film grain the video's stream asks the player to add, as viewers see the video, or without it, from the coded pictures.": "Điểm được tính có hạt phim mà luồng video yêu cầu trình phát thêm, như người xem thấy video, hay không có hạt, từ ảnh đã mã hóa.",
+  "Mixed (the selected videos differ)": "Hỗn hợp (các video đã chọn khác nhau)",
+  "Cropping, scaling and film grain here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "Việc cắt, đổi kích thước và hạt phim ở đây ảnh hưởng đến điểm. Tone mapping và độ phân giải phát trong So sánh video chỉ để hiển thị và không thay đổi các chỉ số đã tính.",
+  "{name} (the reference)": "{name} (video tham chiếu)",
+  "Looking up saved scores before the run…": "Đang tìm điểm đã lưu trước khi chạy…",
+  "Reference scored otherwise": "Tham chiếu được chấm khác",
+  "This saved run scored the reference without its film grain, and it is now scored with it. Scores made the two ways cannot be compared. Score the reference as this run did?": "Lần chạy đã lưu này chấm video tham chiếu không có hạt phim, còn giờ nó được chấm có hạt. Điểm chấm theo hai cách không thể so sánh. Chấm video tham chiếu như lần chạy này?",
+  "This saved run scored the reference with its film grain, and it is now scored without it. Scores made the two ways cannot be compared. Score the reference as this run did?": "Lần chạy đã lưu này chấm video tham chiếu có hạt phim, còn giờ nó được chấm không có hạt. Điểm chấm theo hai cách không thể so sánh. Chấm video tham chiếu như lần chạy này?",
+  "{name} (without film grain)": "{name} (không có hạt phim)",
+  "H.274 film grain is added to VVC only (by VVdeC), not to {codec}": "hạt phim H.274 chỉ được thêm vào VVC (bởi VVdeC), không vào {codec}",
+  "AFGS1 film grain in H.264 is added by no decoder here": "không bộ giải mã nào ở đây thêm hạt phim AFGS1 trong H.264",
+  "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "nó mô tả hai loại hạt phim, H.274 và AFGS1, mà không bộ giải mã nào ở đây thêm cùng lúc",
+  "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "nó được chấm có hạt phim H.274, thứ chỉ bộ giải mã riêng của ứng dụng thêm đúng (FFmpeg chỉ thêm ở 8 bit, làm tròn xuống), và ở đây FFmpeg sẽ giải mã nó: hãy chấm nó không có hạt phim, hoặc tính chỉ số ở nơi ứng dụng tự giải mã video (VMAF trên GPU)",
+  "Its film grain was not read.": "Không đọc được hạt phim của nó."
  },
  "plurals": {
   "about {count} day": [
@@ -792,6 +821,9 @@
   ],
   "{count:,} packet": [
    "{count:,} gói"
+  ],
+  "and {count} more": [
+   "và {count} video khác"
   ]
  }
 }

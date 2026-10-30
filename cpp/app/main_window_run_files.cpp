@@ -18,6 +18,7 @@
 #include "graph_panel.h"
 #include "i18n.h"
 #include "vml/export_csv.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/hardware_decoding.h"
 #include "vml/model_select.h"
 #include "vml/run_file.h"
@@ -156,7 +157,8 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
         // Nothing to contradict: the run's own reference is taken, so that
         // the window and the result agree about what was compared.
         adopt_source_from_run(result);
-    } else if (!same_file(source_info_->path, result.source) && !offer_to_switch_source(result)) {
+    } else if (!same_file(source_info_->path, result.source) ? !offer_to_switch_source(result)
+                                                             : !offer_to_take_reference_film_grain(result)) {
         return;
     }
     if (const std::optional<int> existing = row_index_of_path(result.distorted)) {
@@ -270,7 +272,29 @@ void MainWindow::adopt_source_from_run(const ComparisonResult& result) {
                                         {{"media", media_info_string(info)},
                                          {"bitrate", bitrate_string(info)},
                                          {"duration", QString::fromStdString(format_hms(info.duration, 1))}}));
+    source_info_label_->setToolTip(film_grain_note(info));
     check_rows_against_new_source(result.source);
+}
+
+bool MainWindow::offer_to_take_reference_film_grain(const ComparisonResult& result) {
+    // The same reference, but scored with its film grain where the run left
+    // it out, or the other way round: asks as for another reference (yes:
+    // the reference is scored as the run scored it) before the run is shown.
+    if (film_grain_identity(result.source_info) == film_grain_identity(*source_info_)) {
+        return true;
+    }
+    const bool run_without = effective_film_grain(result.source_info).scoring == GrainScoring::without;
+    if (!dialogs_.ask(app::tr("Reference scored otherwise"),
+                      run_without ? app::tr("This saved run scored the reference without its film grain, and it is "
+                                            "now scored with it. Scores made the two ways cannot be compared. Score "
+                                            "the reference as this run did?")
+                                  : app::tr("This saved run scored the reference with its film grain, and it is now "
+                                            "scored without it. Scores made the two ways cannot be compared. Score "
+                                            "the reference as this run did?"))) {
+        return false;
+    }
+    adopt_source_from_run(result);
+    return true;
 }
 
 bool MainWindow::offer_to_switch_source(const ComparisonResult& result) {

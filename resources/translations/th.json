@@ -170,7 +170,6 @@
   "Test both (adds a comparison row)": "ทดสอบทั้งสองแบบ (เพิ่มแถวเปรียบเทียบ)",
   "When the two resolutions differ: either evaluate quality at the resolution actually\ndelivered (source scaled to match test -- the default), or as if the test\nvideo were upscaled back to the reference's native resolution for playback.\n\"Test both\" doesn't change this row -- it adds a second row for the same test\nfile using the other direction, so you can run and compare both.": "เมื่อความละเอียดต่างกัน: ให้คะแนนคุณภาพที่ความละเอียดที่ส่งจริง\n(ปรับต้นฉบับให้ตรงกับวิดีโอทดสอบ — ค่าเริ่มต้น) หรือเสมือนวิดีโอทดสอบถูกขยาย\nเป็นความละเอียดดั้งเดิมของวิดีโออ้างอิงขณะเล่น\n\"ทดสอบทั้งสองแบบ\" ไม่เปลี่ยนแถวนี้ — แต่เพิ่มแถวที่สองสำหรับไฟล์ทดสอบเดียวกัน\nในทิศทางตรงข้าม เพื่อคำนวณและเปรียบเทียบทั้งสอง",
   "Resolution mismatch:": "ความละเอียดไม่ตรงกัน:",
-  "Cropping and scaling here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "การครอปและปรับขนาดที่นี่มีผลต่อคะแนน โทนแมปปิงและความละเอียดการเล่นในเปรียบเทียบวิดีโอใช้แสดงผลเท่านั้น และไม่เปลี่ยนเมตริกที่คำนวณ",
   "Calculate metrics": "คำนวณเมตริก",
   "Pause": "หยุดชั่วคราว",
   "Cancel": "ยกเลิก",
@@ -727,7 +726,37 @@
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "เมื่อเลือก GPU ค่า VMAF v0.6.1, VMAF NEG และ VMAF v1 จะคำนวณบน GPU ด้วย Vulkan (VMAF v0.6.1 และ NEG ใช้ CUDA บน GPU ของ NVIDIA ที่ Vulkan คำนวณไม่ได้) ส่วน VMAF v1 สำหรับโมเดลที่โค้ด GPU ไม่รองรับตัวเลือก จะคำนวณคุณลักษณะด้านแถบสีและสี (CAMBI, SpEED) บน CPU PSNR, SSIM และ XPSNR คำนวณบน CPU เสมอ คะแนนจาก GPU ตรงกับของ CPU ภายในหนึ่งในพันคะแนนในทุกเฟรม คะแนนที่บันทึกไว้จึงยังคงอยู่ไม่ว่าจะเลือกแบบใด หากการคำนวณบน GPU ล้มเหลว จะคำนวณบน CPU แทน",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "คำนวณ SSIMULACRA2, Butteraugli และ CVVDP พร้อมกัน ในรอบเดียวต่อวิดีโอ",
   "Each video is decoded once for all three instead of once for each. This is faster only on very powerful GPUs, and needs a lot of GPU memory. A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "แต่ละวิดีโอถูกถอดรหัสครั้งเดียวสำหรับทั้งสามเมตริก แทนที่จะถอดรหัสครั้งละเมตริก วิธีนี้เร็วกว่าเฉพาะบน GPU ที่แรงมากเท่านั้น และใช้หน่วยความจำ GPU มาก เมตริกที่ล้มเหลวในรอบร่วม เช่น เพราะหน่วยความจำ GPU ไม่พอ จะถูกคำนวณใหม่แยกต่างหาก\n\nคะแนนเท่ากันทั้งสองแบบ มีผลตั้งแต่การรันครั้งถัดไป",
-  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "เมื่อไม่ได้เลือก ทั้งสามจะคำนวณทีละตัว ซึ่งใช้หน่วยความจำ GPU น้อยกว่ามาก และแทบไม่ช้ากว่าบน GPU ส่วนใหญ่"
+  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "เมื่อไม่ได้เลือก ทั้งสามจะคำนวณทีละตัว ซึ่งใช้หน่วยความจำ GPU น้อยกว่ามาก และแทบไม่ช้ากว่าบน GPU ส่วนใหญ่",
+  "Film grain": "เกรนฟิล์ม",
+  "These videos tell the player to add film grain. Calculate their metrics:": "วิดีโอเหล่านี้สั่งให้เครื่องเล่นเพิ่มเกรนฟิล์ม คำนวณเมตริกของวิดีโอ:",
+  "With film grain (what viewers see)": "มีเกรนฟิล์ม (สิ่งที่ผู้ชมเห็น)",
+  "Without film grain (the coded pictures only)": "ไม่มีเกรนฟิล์ม (เฉพาะภาพที่เข้ารหัส)",
+  "Don't ask again (change it in Settings)": "ไม่ต้องถามอีก (เปลี่ยนได้ในการตั้งค่า)",
+  "Film grain:": "เกรนฟิล์ม:",
+  "Ask at Calculate metrics": "ถามเมื่อคำนวณเมตริก",
+  "How a video whose stream asks the player to add film grain is scored: asked when its metrics are calculated, or with or without the grain. Each video keeps the choice it was given, by you or by this setting when it was added; change a video's own in the Options panel.": "วิธีให้คะแนนวิดีโอที่สตรีมสั่งให้เครื่องเล่นเพิ่มเกรนฟิล์ม: ถามเมื่อคำนวณเมตริก หรือมีหรือไม่มีเกรน แต่ละวิดีโอคงตัวเลือกที่ได้รับไว้ ไม่ว่าจากคุณหรือจากการตั้งค่านี้เมื่อเพิ่มวิดีโอ เปลี่ยนตัวเลือกของวิดีโอได้ในแผงตัวเลือก",
+  "film grain": "เกรนฟิล์ม",
+  "film grain left out": "ไม่รวมเกรนฟิล์ม",
+  "H.274 model 1": "H.274 โมเดล 1",
+  "Film grain ({kinds}) left out: {why}": "ไม่รวมเกรนฟิล์ม ({kinds}): {why}",
+  "Film grain ({kinds}): the scores are made with it, as viewers see the video": "เกรนฟิล์ม ({kinds}): คะแนนคำนวณโดยมีเกรน ตามที่ผู้ชมเห็นวิดีโอ",
+  "Film grain ({kinds}): the scores are made without it, from the coded pictures": "เกรนฟิล์ม ({kinds}): คะแนนคำนวณโดยไม่มีเกรน จากภาพที่เข้ารหัส",
+  "A resolution test's film grain is the reference's, chosen when metrics are calculated.": "เกรนฟิล์มของการทดสอบความละเอียดเป็นของวิดีโออ้างอิง เลือกเมื่อคำนวณเมตริก",
+  "It has no film grain.": "วิดีโอนี้ไม่มีเกรนฟิล์ม",
+  "Whether the scores are made with the film grain the video's stream asks the player to add, as viewers see the video, or without it, from the coded pictures.": "คะแนนคำนวณโดยมีเกรนฟิล์มที่สตรีมของวิดีโอสั่งให้เครื่องเล่นเพิ่ม ตามที่ผู้ชมเห็นวิดีโอ หรือไม่มีเกรน จากภาพที่เข้ารหัส",
+  "Mixed (the selected videos differ)": "ผสม (วิดีโอที่เลือกต่างกัน)",
+  "Cropping, scaling and film grain here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "การครอป การปรับขนาด และเกรนฟิล์มที่นี่มีผลต่อคะแนน โทนแมปปิงและความละเอียดการเล่นในเปรียบเทียบวิดีโอใช้แสดงผลเท่านั้น และไม่เปลี่ยนเมตริกที่คำนวณ",
+  "{name} (the reference)": "{name} (วิดีโออ้างอิง)",
+  "Looking up saved scores before the run…": "กำลังค้นหาคะแนนที่บันทึกไว้ก่อนเริ่มการคำนวณ…",
+  "Reference scored otherwise": "วิดีโออ้างอิงให้คะแนนต่างกัน",
+  "This saved run scored the reference without its film grain, and it is now scored with it. Scores made the two ways cannot be compared. Score the reference as this run did?": "การคำนวณที่บันทึกไว้นี้ให้คะแนนวิดีโออ้างอิงโดยไม่มีเกรนฟิล์ม แต่ตอนนี้ให้คะแนนโดยมีเกรน คะแนนที่ได้ด้วยสองวิธีนี้เปรียบเทียบกันไม่ได้ ให้คะแนนวิดีโออ้างอิงแบบเดียวกับการคำนวณนี้หรือไม่",
+  "This saved run scored the reference with its film grain, and it is now scored without it. Scores made the two ways cannot be compared. Score the reference as this run did?": "การคำนวณที่บันทึกไว้นี้ให้คะแนนวิดีโออ้างอิงโดยมีเกรนฟิล์ม แต่ตอนนี้ให้คะแนนโดยไม่มีเกรน คะแนนที่ได้ด้วยสองวิธีนี้เปรียบเทียบกันไม่ได้ ให้คะแนนวิดีโออ้างอิงแบบเดียวกับการคำนวณนี้หรือไม่",
+  "{name} (without film grain)": "{name} (ไม่มีเกรนฟิล์ม)",
+  "H.274 film grain is added to VVC only (by VVdeC), not to {codec}": "เกรนฟิล์ม H.274 เพิ่มให้เฉพาะ VVC (โดย VVdeC) ไม่ใช่ {codec}",
+  "AFGS1 film grain in H.264 is added by no decoder here": "ไม่มีตัวถอดรหัสใดที่นี่เพิ่มเกรนฟิล์ม AFGS1 ใน H.264",
+  "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "วิดีโอนี้ระบุเกรนฟิล์มสองแบบ คือ H.274 และ AFGS1 ซึ่งไม่มีตัวถอดรหัสใดที่นี่เพิ่มพร้อมกัน",
+  "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "วิดีโอนี้ให้คะแนนโดยมีเกรนฟิล์ม H.274 ซึ่งมีเพียงตัวถอดรหัสของแอปเองที่เพิ่มได้ถูกต้อง (FFmpeg เพิ่มเฉพาะที่ 8 บิต และปัดลง) และที่นี่ FFmpeg จะเป็นตัวถอดรหัส: ให้คะแนนโดยไม่มีเกรนฟิล์ม หรือคำนวณเมตริกในที่ที่แอปถอดรหัสวิดีโอเอง (VMAF บน GPU)",
+  "Its film grain was not read.": "ไม่ได้อ่านเกรนฟิล์มของวิดีโอนี้"
  },
  "plurals": {
   "about {count} day": [
@@ -792,6 +821,9 @@
   ],
   "{count:,} packet": [
    "{count:,} แพ็กเก็ต"
+  ],
+  "and {count} more": [
+   "และอีก {count} รายการ"
   ]
  }
 }

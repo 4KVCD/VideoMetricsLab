@@ -170,7 +170,6 @@
   "Test both (adds a comparison row)": "Mindkettő tesztelése (összehasonlító sort ad hozzá)",
   "When the two resolutions differ: either evaluate quality at the resolution actually\ndelivered (source scaled to match test -- the default), or as if the test\nvideo were upscaled back to the reference's native resolution for playback.\n\"Test both\" doesn't change this row -- it adds a second row for the same test\nfile using the other direction, so you can run and compare both.": "Eltérő felbontásnál: a minőség pontozása a ténylegesen szállított felbontásban\n(a forrás a teszthez igazodik — alapértelmezett), vagy úgy, mintha a tesztvideót lejátszáskor\na referencia natív felbontására nagyítanák.\nA „Mindkettő tesztelése” nem módosítja ezt a sort — ugyanahhoz a tesztfájlhoz egy második sort ad\nfordított iránnyal, hogy mindkettőt kiszámolhassa és összehasonlíthassa.",
   "Resolution mismatch:": "Eltérő felbontás:",
-  "Cropping and scaling here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "Az itteni vágás és átméretezés befolyásolja a pontszámokat. A tónusleképezés és a lejátszási felbontás a Videó-összehasonlításban csak a megjelenítést érinti, a számított metrikákat nem.",
   "Calculate metrics": "Metrikák számítása",
   "Pause": "Szünet",
   "Cancel": "Mégse",
@@ -727,7 +726,37 @@
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "GPU beállítással a VMAF v0.6.1, a VMAF NEG és a VMAF v1 a GPU-n számítódik Vulkannal (a VMAF v0.6.1 és a NEG CUDA-val olyan NVIDIA GPU-n, amelynek Vulkanja nem tudja kiszámolni őket). VMAF v1: olyan modellnél, amelynek beállításait a GPU-kód nem támogatja, a sávosodás- és színjellemzők (CAMBI, SpEED) a CPU-n. A PSNR, az SSIM és az XPSNR mindenképp a CPU-n számítódik. A GPU pontszámai minden képkockán ezredpontnyi pontossággal egyeznek a CPU-éival, így a mentett pontszám megmarad, bármelyik van kiválasztva. Ha a GPU-s számítás sikertelen, a CPU-n számítódnak.",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2, Butteraugli és CVVDP számítása együtt, videónként egy menetben",
   "Each video is decoded once for all three instead of once for each. This is faster only on very powerful GPUs, and needs a lot of GPU memory. A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "Minden videó egyszer dekódolódik mindhárom metrikához, nem metrikánként egyszer. Ez csak nagyon erős GPU-kon gyorsabb, és sok GPU-memóriát igényel. A közös menetben sikertelen metrika – például GPU-memória hiánya miatt – külön újraszámolódik.\n\nA pontszámok mindkét módon azonosak. A következő futtatástól érvényes.",
-  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "Bejelölés nélkül a három metrika egymás után számítódik, ami sokkal kevesebb GPU-memóriát igényel, és a legtöbb GPU-n alig lassabb."
+  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "Bejelölés nélkül a három metrika egymás után számítódik, ami sokkal kevesebb GPU-memóriát igényel, és a legtöbb GPU-n alig lassabb.",
+  "Film grain": "Filmszemcse",
+  "These videos tell the player to add film grain. Calculate their metrics:": "Ezek a videók azt kérik a lejátszótól, hogy adjon hozzá filmszemcsét. Metrikáik számítása:",
+  "With film grain (what viewers see)": "Filmszemcsével (amit a néző lát)",
+  "Without film grain (the coded pictures only)": "Filmszemcse nélkül (csak a kódolt képek)",
+  "Don't ask again (change it in Settings)": "Ne kérdezze újra (a Beállításokban módosítható)",
+  "Film grain:": "Filmszemcse:",
+  "Ask at Calculate metrics": "Kérdezzen a Metrikák számításakor",
+  "How a video whose stream asks the player to add film grain is scored: asked when its metrics are calculated, or with or without the grain. Each video keeps the choice it was given, by you or by this setting when it was added; change a video's own in the Options panel.": "Hogyan pontozzuk azt a videót, amelynek folyama filmszemcse hozzáadását kéri a lejátszótól: rákérdezés a metrikák számításakor, vagy a szemcsével vagy anélkül. Minden videó megtartja a kapott választást, öntől vagy a hozzáadáskor ettől a beállítástól; egy videó választását a Beállítások panelen módosíthatja.",
+  "film grain": "filmszemcse",
+  "film grain left out": "filmszemcse kihagyva",
+  "H.274 model 1": "H.274 1. modell",
+  "Film grain ({kinds}) left out: {why}": "Filmszemcse ({kinds}) kihagyva: {why}",
+  "Film grain ({kinds}): the scores are made with it, as viewers see the video": "Filmszemcse ({kinds}): a pontszámok vele készülnek, ahogy a néző a videót látja",
+  "Film grain ({kinds}): the scores are made without it, from the coded pictures": "Filmszemcse ({kinds}): a pontszámok nélküle készülnek, a kódolt képekből",
+  "A resolution test's film grain is the reference's, chosen when metrics are calculated.": "A felbontásteszt filmszemcséje a referenciáé, a metrikák számításakor választva.",
+  "It has no film grain.": "Nincs filmszemcséje.",
+  "Whether the scores are made with the film grain the video's stream asks the player to add, as viewers see the video, or without it, from the coded pictures.": "A pontszámok azzal a filmszemcsével készülnek-e, amelynek hozzáadását a videó folyama kéri a lejátszótól, ahogy a néző a videót látja, vagy nélküle, a kódolt képekből.",
+  "Mixed (the selected videos differ)": "Vegyes (a kijelölt videók eltérnek)",
+  "Cropping, scaling and film grain here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "Az itteni vágás, átméretezés és filmszemcse befolyásolja a pontszámokat. A tónusleképezés és a lejátszási felbontás a Videó-összehasonlításban csak a megjelenítést érinti, a számított metrikákat nem.",
+  "{name} (the reference)": "{name} (a referencia)",
+  "Looking up saved scores before the run…": "Mentett pontszámok keresése a futtatás előtt…",
+  "Reference scored otherwise": "Másként pontozott referencia",
+  "This saved run scored the reference without its film grain, and it is now scored with it. Scores made the two ways cannot be compared. Score the reference as this run did?": "Ez a mentett futtatás a referenciát a filmszemcséje nélkül pontozta, most pedig vele pontozzuk. A kétféleképpen készült pontszámok nem hasonlíthatók össze. A referenciát úgy pontozzuk, ahogy ez a futtatás?",
+  "This saved run scored the reference with its film grain, and it is now scored without it. Scores made the two ways cannot be compared. Score the reference as this run did?": "Ez a mentett futtatás a referenciát a filmszemcséjével pontozta, most pedig nélküle pontozzuk. A kétféleképpen készült pontszámok nem hasonlíthatók össze. A referenciát úgy pontozzuk, ahogy ez a futtatás?",
+  "{name} (without film grain)": "{name} (filmszemcse nélkül)",
+  "H.274 film grain is added to VVC only (by VVdeC), not to {codec}": "a H.274 filmszemcsét csak a VVC kapja meg (a VVdeC-től), a {codec} nem",
+  "AFGS1 film grain in H.264 is added by no decoder here": "a H.264-ben lévő AFGS1 filmszemcsét itt egyetlen dekóder sem adja hozzá",
+  "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "kétféle filmszemcsét ír le, a H.274-est és az AFGS1-et, amelyeket itt egyetlen dekóder sem ad hozzá együtt",
+  "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "a H.274 filmszemcséjével pontozzuk, amelyet csak az alkalmazás saját dekódere ad hozzá helyesen (az FFmpeg csak 8 biten adja hozzá, lefelé kerekítve), itt pedig az FFmpeg dekódolná: pontozza filmszemcse nélkül, vagy számítsa a metrikát ott, ahol az alkalmazás maga dekódolja a videót (VMAF a GPU-n)",
+  "Its film grain was not read.": "A filmszemcséje nincs beolvasva."
  },
  "plurals": {
   "about {count} day": [
@@ -813,6 +842,10 @@
   "{count:,} packet": [
    "{count:,} csomag",
    "{count:,} csomag"
+  ],
+  "and {count} more": [
+   "és még {count}",
+   "és még {count}"
   ]
  }
 }

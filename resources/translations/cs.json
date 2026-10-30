@@ -170,7 +170,6 @@
   "Test both (adds a comparison row)": "Otestovat obojí (přidá řádek porovnání)",
   "When the two resolutions differ: either evaluate quality at the resolution actually\ndelivered (source scaled to match test -- the default), or as if the test\nvideo were upscaled back to the reference's native resolution for playback.\n\"Test both\" doesn't change this row -- it adds a second row for the same test\nfile using the other direction, so you can run and compare both.": "Při rozdílném rozlišení: hodnotit kvalitu ve skutečně doručeném rozlišení\n(zdroj se přizpůsobí testu — výchozí), nebo jako by bylo testovací video při přehrávání\nzvětšeno na nativní rozlišení referenčního videa.\n„Otestovat obojí“ tento řádek nemění — přidá druhý řádek pro stejný testovací soubor\nv opačném směru, abyste mohli spočítat a porovnat obojí.",
   "Resolution mismatch:": "Nesoulad rozlišení:",
-  "Cropping and scaling here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "Ořez a změna velikosti zde ovlivňují skóre. Mapování tónů a rozlišení přehrávání v Porovnání videa slouží jen k zobrazení a vypočtené metriky nemění.",
   "Calculate metrics": "Spočítat metriky",
   "Pause": "Pozastavit",
   "Cancel": "Zrušit",
@@ -727,7 +726,37 @@
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "S volbou GPU se VMAF v0.6.1, VMAF NEG a VMAF v1 počítají na GPU pomocí Vulkanu (VMAF v0.6.1 a NEG pomocí CUDA na GPU NVIDIA, jehož Vulkan je spočítat nedokáže). VMAF v1: u modelu, jehož volby kód pro GPU nepodporuje, příznaky pruhování a barev (CAMBI, SpEED) na CPU. PSNR, SSIM a XPSNR se vždy počítají na CPU. Skóre z GPU se u každého snímku shodují se skóre z CPU s přesností na tisícinu bodu, takže uložené skóre zůstává zachováno při kterékoli volbě. Pokud výpočet na GPU selže, spočítají se na CPU.",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "Počítat SSIMULACRA2, Butteraugli a CVVDP společně, v jednom průchodu na video",
   "Each video is decoded once for all three instead of once for each. This is faster only on very powerful GPUs, and needs a lot of GPU memory. A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "Každé video se dekóduje jednou pro všechny tři metriky místo jednou pro každou. Rychlejší je to jen na velmi výkonných GPU a potřebuje to hodně paměti GPU. Metrika, která ve společném průchodu selže, například kvůli nedostatku paměti GPU, se přepočítá samostatně.\n\nSkóre jsou v obou případech stejná. Platí od příštího běhu.",
-  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "Bez zaškrtnutí se všechny tři počítají jedna po druhé, což potřebuje mnohem méně paměti GPU a na většině GPU to není skoro vůbec pomalejší."
+  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "Bez zaškrtnutí se všechny tři počítají jedna po druhé, což potřebuje mnohem méně paměti GPU a na většině GPU to není skoro vůbec pomalejší.",
+  "Film grain": "Filmové zrno",
+  "These videos tell the player to add film grain. Calculate their metrics:": "Tato videa říkají přehrávači, aby přidal filmové zrno. Spočítat jejich metriky:",
+  "With film grain (what viewers see)": "Se zrnem (co vidí divák)",
+  "Without film grain (the coded pictures only)": "Bez zrna (jen zakódované snímky)",
+  "Don't ask again (change it in Settings)": "Už se neptat (změníte v Nastavení)",
+  "Film grain:": "Filmové zrno:",
+  "Ask at Calculate metrics": "Zeptat se při Spočítat metriky",
+  "How a video whose stream asks the player to add film grain is scored: asked when its metrics are calculated, or with or without the grain. Each video keeps the choice it was given, by you or by this setting when it was added; change a video's own in the Options panel.": "Jak se hodnotí video, jehož stream říká přehrávači, aby přidal filmové zrno: dotaz při výpočtu jeho metrik, nebo se zrnem či bez něj. Každé video si ponechá volbu, kterou dostalo, od vás nebo od tohoto nastavení při přidání; volbu videa změníte v panelu Možnosti.",
+  "film grain": "filmové zrno",
+  "film grain left out": "zrno vynecháno",
+  "H.274 model 1": "H.274 model 1",
+  "Film grain ({kinds}) left out: {why}": "Filmové zrno ({kinds}) vynecháno: {why}",
+  "Film grain ({kinds}): the scores are made with it, as viewers see the video": "Filmové zrno ({kinds}): skóre se počítá s ním, jak video vidí divák",
+  "Film grain ({kinds}): the scores are made without it, from the coded pictures": "Filmové zrno ({kinds}): skóre se počítá bez něj, ze zakódovaných snímků",
+  "A resolution test's film grain is the reference's, chosen when metrics are calculated.": "Zrno testu rozlišení je zrno reference, zvolené při výpočtu metrik.",
+  "It has no film grain.": "Nemá filmové zrno.",
+  "Whether the scores are made with the film grain the video's stream asks the player to add, as viewers see the video, or without it, from the coded pictures.": "Zda se skóre počítá se zrnem, které stream videa říká přehrávači přidat, jak video vidí divák, nebo bez něj, ze zakódovaných snímků.",
+  "Mixed (the selected videos differ)": "Smíšené (vybraná videa se liší)",
+  "Cropping, scaling and film grain here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "Ořez, změna velikosti a filmové zrno zde ovlivňují skóre. Mapování tónů a rozlišení přehrávání v Porovnání videa slouží jen k zobrazení a vypočtené metriky nemění.",
+  "{name} (the reference)": "{name} (reference)",
+  "Looking up saved scores before the run…": "Hledání uložených skóre před spuštěním…",
+  "Reference scored otherwise": "Reference hodnocena jinak",
+  "This saved run scored the reference without its film grain, and it is now scored with it. Scores made the two ways cannot be compared. Score the reference as this run did?": "Tento uložený běh hodnotil referenci bez jejího zrna a nyní se hodnotí s ním. Skóre získaná oběma způsoby nelze porovnat. Hodnotit referenci jako tento běh?",
+  "This saved run scored the reference with its film grain, and it is now scored without it. Scores made the two ways cannot be compared. Score the reference as this run did?": "Tento uložený běh hodnotil referenci s jejím zrnem a nyní se hodnotí bez něj. Skóre získaná oběma způsoby nelze porovnat. Hodnotit referenci jako tento běh?",
+  "{name} (without film grain)": "{name} (bez zrna)",
+  "H.274 film grain is added to VVC only (by VVdeC), not to {codec}": "zrno H.274 se přidává jen do VVC (pomocí VVdeC), ne do {codec}",
+  "AFGS1 film grain in H.264 is added by no decoder here": "zrno AFGS1 v H.264 zde nepřidává žádný dekodér",
+  "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "popisuje dva druhy zrna, H.274 a AFGS1, které zde žádný dekodér nepřidá společně",
+  "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "hodnotí se s jeho zrnem H.274, které správně přidává jen vlastní dekodér aplikace (FFmpeg ho přidává jen při 8 bitech, zaokrouhlené dolů), a zde by ho dekódoval FFmpeg: hodnoťte ho bez zrna, nebo spočítejte metriku tam, kde aplikace dekóduje video sama (VMAF na GPU)",
+  "Its film grain was not read.": "Jeho zrno nebylo načteno."
  },
  "plurals": {
   "about {count} day": [
@@ -834,6 +863,11 @@
    "{count:,} paket",
    "{count:,} pakety",
    "{count:,} paketů"
+  ],
+  "and {count} more": [
+   "a {count} další",
+   "a {count} další",
+   "a {count} dalších"
   ]
  }
 }

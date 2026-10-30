@@ -170,7 +170,6 @@
   "Test both (adds a comparison row)": "Оба варианта (добавляет строку сравнения)",
   "When the two resolutions differ: either evaluate quality at the resolution actually\ndelivered (source scaled to match test -- the default), or as if the test\nvideo were upscaled back to the reference's native resolution for playback.\n\"Test both\" doesn't change this row -- it adds a second row for the same test\nfile using the other direction, so you can run and compare both.": "Когда разрешения различаются: оценивать качество в реально\nпередаваемом разрешении (исходник масштабируется к тесту — по умолчанию) или так,\nкак если бы тестовое видео при воспроизведении увеличивалось до разрешения эталона.\n«Оба варианта» не меняет эту строку — добавляется вторая строка для того же\nтестового файла с другим направлением, чтобы можно было вычислить и сравнить оба.",
   "Resolution mismatch:": "Несовпадение разрешений:",
-  "Cropping and scaling here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "Обрезка и масштабирование здесь влияют на оценки. Тональная компрессия и разрешение воспроизведения в «Сравнении видео» влияют только на показ и не меняют вычисленные метрики.",
   "Calculate metrics": "Вычислить метрики",
   "Pause": "Пауза",
   "Cancel": "Отмена",
@@ -727,7 +726,37 @@
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "При выборе GPU метрики VMAF v0.6.1, VMAF NEG и VMAF v1 вычисляются на GPU с помощью Vulkan (VMAF v0.6.1 и NEG — с помощью CUDA на GPU NVIDIA, Vulkan которого не может их вычислить). VMAF v1: для модели, параметры которой код для GPU не поддерживает, признаки полос и цвета (CAMBI, SpEED) — на CPU. PSNR, SSIM и XPSNR в любом случае вычисляются на CPU. Оценки GPU совпадают с оценками CPU с точностью до тысячной балла на каждом кадре, поэтому сохранённая оценка остаётся при любом выборе. Если вычисление на GPU не удаётся, они вычисляются на CPU.",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "Вычислять SSIMULACRA2, Butteraugli и CVVDP вместе, за один проход на видео",
   "Each video is decoded once for all three instead of once for each. This is faster only on very powerful GPUs, and needs a lot of GPU memory. A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "Каждое видео декодируется один раз для всех трёх метрик, а не отдельно для каждой. Это быстрее только на очень мощных GPU и требует много памяти GPU. Метрика, которая не удалась в общем проходе, например из-за нехватки памяти GPU, пересчитывается отдельно.\n\nОценки в обоих случаях одинаковы. Действует со следующего запуска.",
-  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "Без отметки все три вычисляются по одной: это требует намного меньше памяти GPU и на большинстве GPU почти не медленнее."
+  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "Без отметки все три вычисляются по одной: это требует намного меньше памяти GPU и на большинстве GPU почти не медленнее.",
+  "Film grain": "Плёночное зерно",
+  "These videos tell the player to add film grain. Calculate their metrics:": "Эти видео просят плеер добавить плёночное зерно. Вычислить их метрики:",
+  "With film grain (what viewers see)": "С зерном (то, что видит зритель)",
+  "Without film grain (the coded pictures only)": "Без зерна (только закодированные кадры)",
+  "Don't ask again (change it in Settings)": "Больше не спрашивать (меняется в Настройках)",
+  "Film grain:": "Плёночное зерно:",
+  "Ask at Calculate metrics": "Спрашивать при вычислении метрик",
+  "How a video whose stream asks the player to add film grain is scored: asked when its metrics are calculated, or with or without the grain. Each video keeps the choice it was given, by you or by this setting when it was added; change a video's own in the Options panel.": "Как оценивается видео, чей поток просит плеер добавить плёночное зерно: спрашивается при вычислении его метрик, либо с зерном или без него. Каждое видео сохраняет выбор, который ему дан, — вами или этой настройкой при добавлении; выбор для видео меняется на панели «Параметры».",
+  "film grain": "плёночное зерно",
+  "film grain left out": "зерно не учтено",
+  "H.274 model 1": "H.274, модель 1",
+  "Film grain ({kinds}) left out: {why}": "Плёночное зерно ({kinds}) не учтено: {why}",
+  "Film grain ({kinds}): the scores are made with it, as viewers see the video": "Плёночное зерно ({kinds}): оценки вычисляются с ним, как видео видит зритель",
+  "Film grain ({kinds}): the scores are made without it, from the coded pictures": "Плёночное зерно ({kinds}): оценки вычисляются без него, по закодированным кадрам",
+  "A resolution test's film grain is the reference's, chosen when metrics are calculated.": "Зерно теста разрешения — это зерно эталона, выбираемое при вычислении метрик.",
+  "It has no film grain.": "У него нет плёночного зерна.",
+  "Whether the scores are made with the film grain the video's stream asks the player to add, as viewers see the video, or without it, from the coded pictures.": "Вычисляются ли оценки с зерном, которое поток видео просит плеер добавить, как видео видит зритель, или без него, по закодированным кадрам.",
+  "Mixed (the selected videos differ)": "Смешанно (выбранные видео различаются)",
+  "Cropping, scaling and film grain here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "Обрезка, масштабирование и плёночное зерно здесь влияют на оценки. Тональная компрессия и разрешение воспроизведения в «Сравнении видео» влияют только на показ и не меняют вычисленные метрики.",
+  "{name} (the reference)": "{name} (эталон)",
+  "Looking up saved scores before the run…": "Поиск сохранённых оценок перед запуском…",
+  "Reference scored otherwise": "Эталон оценён иначе",
+  "This saved run scored the reference without its film grain, and it is now scored with it. Scores made the two ways cannot be compared. Score the reference as this run did?": "Этот сохранённый запуск оценивал эталон без его зерна, а теперь он оценивается с ним. Оценки, полученные двумя способами, нельзя сравнивать. Оценивать эталон так, как в этом запуске?",
+  "This saved run scored the reference with its film grain, and it is now scored without it. Scores made the two ways cannot be compared. Score the reference as this run did?": "Этот сохранённый запуск оценивал эталон с его зерном, а теперь он оценивается без него. Оценки, полученные двумя способами, нельзя сравнивать. Оценивать эталон так, как в этом запуске?",
+  "{name} (without film grain)": "{name} (без зерна)",
+  "H.274 film grain is added to VVC only (by VVdeC), not to {codec}": "зерно H.274 добавляется только к VVC (декодером VVdeC), но не к {codec}",
+  "AFGS1 film grain in H.264 is added by no decoder here": "зерно AFGS1 в H.264 здесь не добавляет ни один декодер",
+  "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "в нём описаны два вида зерна, H.274 и AFGS1, которые здесь ни один декодер не добавляет вместе",
+  "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "оно оценивается с зерном H.274, которое правильно добавляет только собственный декодер приложения (FFmpeg добавляет его только при 8 битах, с округлением вниз), а здесь его декодировал бы FFmpeg: оцените его без зерна или вычислите метрику там, где приложение само декодирует видео (VMAF на GPU)",
+  "Its film grain was not read.": "Его зерно не прочитано."
  },
  "plurals": {
   "about {count} day": [
@@ -834,6 +863,11 @@
    "{count:,} пакет",
    "{count:,} пакета",
    "{count:,} пакетов"
+  ],
+  "and {count} more": [
+   "и ещё {count}",
+   "и ещё {count}",
+   "и ещё {count}"
   ]
  }
 }

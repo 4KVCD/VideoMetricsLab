@@ -170,7 +170,6 @@
   "Test both (adds a comparison row)": "Prova entrambi (aggiunge una riga di confronto)",
   "When the two resolutions differ: either evaluate quality at the resolution actually\ndelivered (source scaled to match test -- the default), or as if the test\nvideo were upscaled back to the reference's native resolution for playback.\n\"Test both\" doesn't change this row -- it adds a second row for the same test\nfile using the other direction, so you can run and compare both.": "Quando le due risoluzioni differiscono: valuta la qualità alla risoluzione effettivamente\nconsegnata (originale scalato sul test, il predefinito) oppure come se il video di prova\nvenisse ingrandito alla risoluzione nativa del riferimento per la riproduzione.\n\"Prova entrambi\" non cambia questa riga: aggiunge una seconda riga per lo stesso file\ndi prova con l'altra direzione, così puoi calcolare e confrontare entrambe.",
   "Resolution mismatch:": "Risoluzioni diverse:",
-  "Cropping and scaling here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "Il ritaglio e il ridimensionamento qui influiscono sui punteggi. La mappatura dei toni e la risoluzione di riproduzione di Confronto video riguardano solo la visualizzazione e non cambiano le metriche calcolate.",
   "Calculate metrics": "Calcola metriche",
   "Pause": "Pausa",
   "Cancel": "Annulla",
@@ -727,7 +726,37 @@
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "Con GPU, VMAF v0.6.1, VMAF NEG e VMAF v1 vengono calcolati sulla GPU con Vulkan (VMAF v0.6.1 e NEG con CUDA su una GPU NVIDIA il cui Vulkan non riesce a calcolarli). VMAF v1: per un modello le cui opzioni il codice GPU non supporta, le caratteristiche di banding e colore (CAMBI, SpEED) sulla CPU. PSNR, SSIM e XPSNR vengono calcolati sulla CPU in ogni caso. I punteggi della GPU concordano con quelli della CPU entro un millesimo di punto su ogni fotogramma, quindi un punteggio salvato viene mantenuto qualunque sia la scelta. Se il calcolo sulla GPU non riesce, vengono calcolati sulla CPU.",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "Calcola SSIMULACRA2, Butteraugli e CVVDP insieme, in un solo passaggio per video",
   "Each video is decoded once for all three instead of once for each. This is faster only on very powerful GPUs, and needs a lot of GPU memory. A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "Ogni video viene decodificato una volta per tutte e tre le metriche invece che una volta per metrica. È più veloce solo sulle GPU molto potenti e richiede molta memoria GPU. Una metrica che non riesce nel passaggio comune, ad esempio per memoria GPU insufficiente, viene ricalcolata da sola.\n\nI punteggi sono gli stessi in entrambi i casi. Vale dalla prossima esecuzione.",
-  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "Se non è spuntato, le tre vengono calcolate una alla volta, il che richiede molta meno memoria GPU ed è appena più lento sulla maggior parte delle GPU."
+  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "Se non è spuntato, le tre vengono calcolate una alla volta, il che richiede molta meno memoria GPU ed è appena più lento sulla maggior parte delle GPU.",
+  "Film grain": "Grana della pellicola",
+  "These videos tell the player to add film grain. Calculate their metrics:": "Questi video chiedono al lettore di aggiungere la grana della pellicola. Calcolarne le metriche:",
+  "With film grain (what viewers see)": "Con la grana (ciò che vede lo spettatore)",
+  "Without film grain (the coded pictures only)": "Senza la grana (solo le immagini codificate)",
+  "Don't ask again (change it in Settings)": "Non chiedere più (si cambia in Impostazioni)",
+  "Film grain:": "Grana della pellicola:",
+  "Ask at Calculate metrics": "Chiedi al calcolo delle metriche",
+  "How a video whose stream asks the player to add film grain is scored: asked when its metrics are calculated, or with or without the grain. Each video keeps the choice it was given, by you or by this setting when it was added; change a video's own in the Options panel.": "Come viene valutato un video il cui flusso chiede al lettore di aggiungere la grana della pellicola: chiesto al calcolo delle metriche, oppure con o senza la grana. Ogni video mantiene la scelta ricevuta, da te o da questa impostazione quando è stato aggiunto; quella di un video si cambia nel pannello Opzioni.",
+  "film grain": "grana",
+  "film grain left out": "grana omessa",
+  "H.274 model 1": "H.274 modello 1",
+  "Film grain ({kinds}) left out: {why}": "Grana della pellicola ({kinds}) omessa: {why}",
+  "Film grain ({kinds}): the scores are made with it, as viewers see the video": "Grana della pellicola ({kinds}): i punteggi sono calcolati con essa, come lo spettatore vede il video",
+  "Film grain ({kinds}): the scores are made without it, from the coded pictures": "Grana della pellicola ({kinds}): i punteggi sono calcolati senza, dalle immagini codificate",
+  "A resolution test's film grain is the reference's, chosen when metrics are calculated.": "La grana di un test di risoluzione è quella del riferimento, scelta al calcolo delle metriche.",
+  "It has no film grain.": "Non ha grana della pellicola.",
+  "Whether the scores are made with the film grain the video's stream asks the player to add, as viewers see the video, or without it, from the coded pictures.": "Se i punteggi sono calcolati con la grana che il flusso del video chiede al lettore di aggiungere, come lo spettatore vede il video, o senza, dalle immagini codificate.",
+  "Mixed (the selected videos differ)": "Misto (i video selezionati differiscono)",
+  "Cropping, scaling and film grain here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "Il ritaglio, il ridimensionamento e la grana qui influiscono sui punteggi. La mappatura dei toni e la risoluzione di riproduzione di Confronto video riguardano solo la visualizzazione e non cambiano le metriche calcolate.",
+  "{name} (the reference)": "{name} (il riferimento)",
+  "Looking up saved scores before the run…": "Ricerca dei punteggi salvati prima dell'esecuzione…",
+  "Reference scored otherwise": "Riferimento valutato diversamente",
+  "This saved run scored the reference without its film grain, and it is now scored with it. Scores made the two ways cannot be compared. Score the reference as this run did?": "Questa esecuzione salvata ha valutato il riferimento senza la sua grana, e ora è valutato con essa. I punteggi ottenuti nei due modi non sono confrontabili. Valutare il riferimento come ha fatto questa esecuzione?",
+  "This saved run scored the reference with its film grain, and it is now scored without it. Scores made the two ways cannot be compared. Score the reference as this run did?": "Questa esecuzione salvata ha valutato il riferimento con la sua grana, e ora è valutato senza. I punteggi ottenuti nei due modi non sono confrontabili. Valutare il riferimento come ha fatto questa esecuzione?",
+  "{name} (without film grain)": "{name} (senza grana)",
+  "H.274 film grain is added to VVC only (by VVdeC), not to {codec}": "la grana H.274 viene aggiunta solo a VVC (da VVdeC), non a {codec}",
+  "AFGS1 film grain in H.264 is added by no decoder here": "nessun decodificatore qui aggiunge la grana AFGS1 in H.264",
+  "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "descrive due tipi di grana, quella di H.274 e AFGS1, che nessun decodificatore qui aggiunge insieme",
+  "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "è valutato con la sua grana H.274, che solo il decodificatore dell'app aggiunge correttamente (FFmpeg la aggiunge solo a 8 bit, arrotondata per difetto), e qui lo decodificherebbe FFmpeg: valutalo senza la sua grana, oppure calcola la metrica dove l'app decodifica il video da sé (VMAF sulla GPU)",
+  "Its film grain was not read.": "La sua grana non è stata letta."
  },
  "plurals": {
   "about {count} day": [
@@ -813,6 +842,10 @@
   "{count:,} packet": [
    "{count:,} pacchetto",
    "{count:,} pacchetti"
+  ],
+  "and {count} more": [
+   "e {count} altro",
+   "e altri {count}"
   ]
  }
 }

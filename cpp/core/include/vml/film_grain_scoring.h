@@ -8,6 +8,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #include "vml/video.h"
 
@@ -22,8 +23,8 @@ enum class GrainScoring {
 struct FilmGrainScoring {
     GrainScoring scoring = GrainScoring::none;
     unsigned kinds = 0;  // FilmGrainKind bits (film_grain_detect.h)
-    // Why a video asked to be scored with its grain is scored without:
-    // grain nothing here adds (H.274's outside VVC, where only VVdeC adds it;
+    // Why the video is scored without its grain whatever is chosen: grain
+    // nothing here adds (H.274's outside VVC, where only VVdeC adds it;
     // AFGS1 in H.264). Empty otherwise.
     std::string why_without;
 };
@@ -31,6 +32,15 @@ struct FilmGrainScoring {
 // The film grain `info`'s video is scored with: its stream's grain
 // (VideoInfo::film_grain) and the choice (with unless chosen without).
 FilmGrainScoring effective_film_grain(const VideoInfo& info);
+
+// Whether `info`'s video can be scored with its film grain or without, as
+// the user chooses: grain read, and none that nothing here adds (why_without).
+bool film_grain_choosable(const VideoInfo& info);
+
+// The choice Settings::film_grain_default makes for a video with none of its
+// own: with its grain (true), without (false), or nothing to ask ("" and any
+// other text).
+std::optional<bool> film_grain_default_choice(std::string_view setting);
 
 // Whether `grain` is H.274's, added: only the app's software decoder adds it
 // as it should (VVC's, by VVdeC, at any bit depth). FFmpeg's own decoder adds

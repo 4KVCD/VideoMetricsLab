@@ -170,7 +170,6 @@
   "Test both (adds a comparison row)": "اختبار الاثنين (يضيف صف مقارنة)",
   "When the two resolutions differ: either evaluate quality at the resolution actually\ndelivered (source scaled to match test -- the default), or as if the test\nvideo were upscaled back to the reference's native resolution for playback.\n\"Test both\" doesn't change this row -- it adds a second row for the same test\nfile using the other direction, so you can run and compare both.": "عند اختلاف الدقتين: قيّم الجودة بالدقة المسلَّمة فعلًا\n(المصدر يُحجَّم ليطابق الاختبار — الافتراضي)، أو كما لو كُبّر فيديو الاختبار\nإلى الدقة الأصلية للمرجع عند التشغيل.\n«اختبار الاثنين» لا يغيّر هذا الصف — بل يضيف صفًا ثانيًا لملف الاختبار نفسه\nبالاتجاه الآخر، لتتمكن من حساب الاثنين ومقارنتهما.",
   "Resolution mismatch:": "عدم تطابق الدقة:",
-  "Cropping and scaling here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "يؤثر الاقتصاص وتغيير الحجم هنا في الدرجات. أما تعيين النغمات ودقة التشغيل في «مقارنة الفيديو» فهما للعرض فقط ولا يغيّران المقاييس المحسوبة.",
   "Calculate metrics": "حساب المقاييس",
   "Pause": "إيقاف مؤقت",
   "Cancel": "إلغاء",
@@ -727,7 +726,37 @@
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "مع خيار GPU، تُحسب VMAF v0.6.1 و VMAF NEG و VMAF v1 على معالج الرسوميات باستخدام Vulkan (و VMAF v0.6.1 و NEG باستخدام CUDA على معالج رسوميات NVIDIA لا يستطيع Vulkan فيه حسابهما). VMAF v1: لنموذج لا يدعم كود معالج الرسوميات خياراته، تُحسب خصائص التدرّج الشريطي واللون (CAMBI، SpEED) على المعالج CPU. تُحسب PSNR و SSIM و XPSNR على المعالج CPU في كل الأحوال. درجات معالج الرسوميات تتطابق مع درجات المعالج CPU في حدود جزء من ألف من النقطة في كل إطار، لذا تبقى الدرجة المحفوظة أيًّا كان الاختيار. إذا فشل الحساب على معالج الرسوميات، تُحسب على المعالج CPU بدلاً من ذلك.",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "حساب SSIMULACRA2 وButteraugli وCVVDP معًا في مرور واحد لكل فيديو",
   "Each video is decoded once for all three instead of once for each. This is faster only on very powerful GPUs, and needs a lot of GPU memory. A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "يُفك ترميز كل فيديو مرة واحدة للمقاييس الثلاثة بدلًا من مرة لكل مقياس. هذا أسرع فقط على وحدات GPU القوية جدًا، ويحتاج إلى الكثير من ذاكرة GPU. المقياس الذي يفشل في المرور المشترك، لنفاد ذاكرة GPU مثلًا، يُعاد حسابه وحده.\n\nالدرجات هي نفسها في الحالتين. يُطبَّق بدءًا من التشغيل التالي.",
-  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "عند عدم التحديد، تُحسب الثلاثة واحدًا تلو الآخر، وهذا يحتاج إلى ذاكرة GPU أقل بكثير ولا يكاد يكون أبطأ على معظم وحدات GPU."
+  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "عند عدم التحديد، تُحسب الثلاثة واحدًا تلو الآخر، وهذا يحتاج إلى ذاكرة GPU أقل بكثير ولا يكاد يكون أبطأ على معظم وحدات GPU.",
+  "Film grain": "حبيبات الفيلم",
+  "These videos tell the player to add film grain. Calculate their metrics:": "تطلب مقاطع الفيديو هذه من المشغّل إضافة حبيبات الفيلم. حساب مقاييسها:",
+  "With film grain (what viewers see)": "مع حبيبات الفيلم (ما يراه المشاهد)",
+  "Without film grain (the coded pictures only)": "دون حبيبات الفيلم (الصور المرمّزة فقط)",
+  "Don't ask again (change it in Settings)": "لا تسأل مرة أخرى (يُغيَّر في الإعدادات)",
+  "Film grain:": "حبيبات الفيلم:",
+  "Ask at Calculate metrics": "السؤال عند حساب المقاييس",
+  "How a video whose stream asks the player to add film grain is scored: asked when its metrics are calculated, or with or without the grain. Each video keeps the choice it was given, by you or by this setting when it was added; change a video's own in the Options panel.": "كيف يُقيَّم فيديو يطلب تدفقه من المشغّل إضافة حبيبات الفيلم: يُسأل عند حساب مقاييسه، أو مع الحبيبات أو دونها. يحتفظ كل فيديو بالاختيار الذي أُعطي له، منك أو من هذا الإعداد عند إضافته؛ يُغيَّر اختيار الفيديو في لوحة «الخيارات».",
+  "film grain": "حبيبات الفيلم",
+  "film grain left out": "دون حبيبات الفيلم",
+  "H.274 model 1": "H.274 النموذج 1",
+  "Film grain ({kinds}) left out: {why}": "استُبعدت حبيبات الفيلم ({kinds}): {why}",
+  "Film grain ({kinds}): the scores are made with it, as viewers see the video": "حبيبات الفيلم ({kinds}): تُحسب الدرجات معها، كما يرى المشاهد الفيديو",
+  "Film grain ({kinds}): the scores are made without it, from the coded pictures": "حبيبات الفيلم ({kinds}): تُحسب الدرجات دونها، من الصور المرمّزة",
+  "A resolution test's film grain is the reference's, chosen when metrics are calculated.": "حبيبات فيلم اختبار الدقة هي حبيبات المرجع، وتُختار عند حساب المقاييس.",
+  "It has no film grain.": "لا يحتوي على حبيبات فيلم.",
+  "Whether the scores are made with the film grain the video's stream asks the player to add, as viewers see the video, or without it, from the coded pictures.": "هل تُحسب الدرجات مع حبيبات الفيلم التي يطلب تدفق الفيديو من المشغّل إضافتها، كما يرى المشاهد الفيديو، أم دونها، من الصور المرمّزة.",
+  "Mixed (the selected videos differ)": "مختلط (تختلف مقاطع الفيديو المحددة)",
+  "Cropping, scaling and film grain here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "يؤثر الاقتصاص وتغيير الحجم وحبيبات الفيلم هنا في الدرجات. أما تعيين النغمات ودقة التشغيل في «مقارنة الفيديو» فهما للعرض فقط ولا يغيّران المقاييس المحسوبة.",
+  "{name} (the reference)": "{name} (المرجع)",
+  "Looking up saved scores before the run…": "جارٍ البحث عن الدرجات المحفوظة قبل التشغيل…",
+  "Reference scored otherwise": "قُيّم المرجع بطريقة أخرى",
+  "This saved run scored the reference without its film grain, and it is now scored with it. Scores made the two ways cannot be compared. Score the reference as this run did?": "قيّم هذا التشغيل المحفوظ المرجع دون حبيبات الفيلم الخاصة به، أما الآن فيُقيَّم معها. لا يمكن مقارنة الدرجات المحسوبة بالطريقتين. هل تريد تقييم المرجع كما فعل هذا التشغيل؟",
+  "This saved run scored the reference with its film grain, and it is now scored without it. Scores made the two ways cannot be compared. Score the reference as this run did?": "قيّم هذا التشغيل المحفوظ المرجع مع حبيبات الفيلم الخاصة به، أما الآن فيُقيَّم دونها. لا يمكن مقارنة الدرجات المحسوبة بالطريقتين. هل تريد تقييم المرجع كما فعل هذا التشغيل؟",
+  "{name} (without film grain)": "{name} (دون حبيبات الفيلم)",
+  "H.274 film grain is added to VVC only (by VVdeC), not to {codec}": "تُضاف حبيبات فيلم H.274 إلى VVC فقط (بواسطة VVdeC)، وليس إلى {codec}",
+  "AFGS1 film grain in H.264 is added by no decoder here": "لا يضيف أي مفكك ترميز هنا حبيبات فيلم AFGS1 في H.264",
+  "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "يصف نوعين من حبيبات الفيلم، حبيبات H.274 وAFGS1، ولا يضيفهما معًا أي مفكك ترميز هنا",
+  "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "يُقيَّم مع حبيبات فيلم H.274 التي لا يضيفها بشكل صحيح إلا مفكك الترميز الخاص بالتطبيق (يضيفها FFmpeg عند 8 بت فقط مع التقريب للأسفل)، وهنا سيفك FFmpeg ترميزه: قيّمه دون حبيبات الفيلم، أو احسب المقياس حيث يفك التطبيق ترميز الفيديو بنفسه (VMAF على GPU)",
+  "Its film grain was not read.": "لم تُقرأ حبيبات الفيلم الخاصة به."
  },
  "plurals": {
   "about {count} day": [
@@ -897,6 +926,14 @@
    "{count:,} حزم",
    "{count:,} حزمة",
    "{count:,} حزمة"
+  ],
+  "and {count} more": [
+   "و{count} أخرى",
+   "و{count} آخر",
+   "و{count} آخران",
+   "و{count} أخرى",
+   "و{count} أخرى",
+   "و{count} أخرى"
   ]
  }
 }

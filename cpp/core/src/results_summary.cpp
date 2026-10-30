@@ -6,6 +6,8 @@
 #include <utility>
 #include <vector>
 
+#include "vml/film_grain_detect.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
 #include "vml/python_text.h"
@@ -138,6 +140,17 @@ void add_media(Json& entry, const VideoInfo& info) {
     entry["codec"] = info.codec_name;
     entry["pixel_format"] = info.pix_fmt;
     entry["duration"] = info.duration;
+    // Its film grain where its stream has some: the kinds, and how it was
+    // scored (and why without, where that was no choice).
+    const FilmGrainScoring grain = effective_film_grain(info);
+    if (grain.scoring != GrainScoring::none) {
+        Json film_grain{{"kinds", film_grain_names(grain.kinds)},
+                        {"scored", grain.scoring == GrainScoring::with ? "with" : "without"}};
+        if (!grain.why_without.empty()) {
+            film_grain["why_without"] = grain.why_without;
+        }
+        entry["film_grain"] = film_grain;
+    }
 }
 
 std::string results_csv(const Json& document) {

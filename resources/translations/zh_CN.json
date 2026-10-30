@@ -170,7 +170,6 @@
   "Test both (adds a comparison row)": "两者都测试（添加一行对比）",
   "When the two resolutions differ: either evaluate quality at the resolution actually\ndelivered (source scaled to match test -- the default), or as if the test\nvideo were upscaled back to the reference's native resolution for playback.\n\"Test both\" doesn't change this row -- it adds a second row for the same test\nfile using the other direction, so you can run and compare both.": "当两者分辨率不同时：要么以实际交付的分辨率评估画质\n（将源缩放到测试视频的分辨率——默认），要么假设测试视频\n在播放时被放大回参考视频的原生分辨率。\n“两者都测试”不会改变此行——它会为同一测试文件添加\n使用另一方向的第二行，便于分别计算并对比。",
   "Resolution mismatch:": "分辨率不一致：",
-  "Cropping and scaling here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "此处的裁切和缩放会影响分数。视频对比中的色调映射和播放分辨率只影响显示，不会改变计算出的指标。",
   "Calculate metrics": "计算指标",
   "Pause": "暂停",
   "Cancel": "取消",
@@ -727,7 +726,37 @@
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "选择 GPU 时，VMAF v0.6.1、VMAF NEG 和 VMAF v1 通过 Vulkan 在 GPU 上计算（在 Vulkan 无法计算它们的 NVIDIA GPU 上，VMAF v0.6.1 和 NEG 使用 CUDA）。VMAF v1：对于 GPU 代码不支持其选项的模型，色带和色彩特征（CAMBI、SpEED）在 CPU 上计算。PSNR、SSIM 和 XPSNR 无论如何都在 CPU 上计算。GPU 的分数在每一帧都与 CPU 的结果相差不超过千分之一分，因此无论选择哪一项，已保存的分数都会保留。如果 GPU 计算失败，则改在 CPU 上计算。",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2、Butteraugli 和 CVVDP 在每个视频的同一遍中一起计算",
   "Each video is decoded once for all three instead of once for each. This is faster only on very powerful GPUs, and needs a lot of GPU memory. A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "每个视频只为三个指标解码一次，而不是每个指标解码一次。只有在性能非常强的 GPU 上才更快，并且需要大量显存。在共享的一遍中失败的指标（例如显存不足）会单独重新计算。\n\n两种方式的分数相同。从下次运行开始生效。",
-  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "不勾选时，三个指标逐个计算，所需显存少得多，在大多数 GPU 上几乎不会更慢。"
+  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "不勾选时，三个指标逐个计算，所需显存少得多，在大多数 GPU 上几乎不会更慢。",
+  "Film grain": "胶片颗粒",
+  "These videos tell the player to add film grain. Calculate their metrics:": "这些视频要求播放器添加胶片颗粒。计算它们的指标：",
+  "With film grain (what viewers see)": "包含胶片颗粒（观众看到的画面）",
+  "Without film grain (the coded pictures only)": "不含胶片颗粒（仅编码图像）",
+  "Don't ask again (change it in Settings)": "不再询问（可在设置中更改）",
+  "Film grain:": "胶片颗粒：",
+  "Ask at Calculate metrics": "计算指标时询问",
+  "How a video whose stream asks the player to add film grain is scored: asked when its metrics are calculated, or with or without the grain. Each video keeps the choice it was given, by you or by this setting when it was added; change a video's own in the Options panel.": "对于流中要求播放器添加胶片颗粒的视频如何评分：计算指标时询问，或包含或不含颗粒。每个视频保留它得到的选择（你选的，或添加时由此设置给出的）；单个视频的选择在选项面板中更改。",
+  "film grain": "胶片颗粒",
+  "film grain left out": "不含胶片颗粒",
+  "H.274 model 1": "H.274 模型 1",
+  "Film grain ({kinds}) left out: {why}": "未包含胶片颗粒（{kinds}）：{why}",
+  "Film grain ({kinds}): the scores are made with it, as viewers see the video": "胶片颗粒（{kinds}）：分数包含颗粒计算，与观众看到的视频一致",
+  "Film grain ({kinds}): the scores are made without it, from the coded pictures": "胶片颗粒（{kinds}）：分数不含颗粒，根据编码图像计算",
+  "A resolution test's film grain is the reference's, chosen when metrics are calculated.": "分辨率测试的胶片颗粒即参考视频的颗粒，在计算指标时选择。",
+  "It has no film grain.": "它没有胶片颗粒。",
+  "Whether the scores are made with the film grain the video's stream asks the player to add, as viewers see the video, or without it, from the coded pictures.": "分数是包含视频流要求播放器添加的胶片颗粒、与观众看到的一致，还是不含颗粒、根据编码图像计算。",
+  "Mixed (the selected videos differ)": "混合（所选视频各不相同）",
+  "Cropping, scaling and film grain here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "此处的裁切、缩放和胶片颗粒会影响分数。视频对比中的色调映射和播放分辨率只影响显示，不会改变计算出的指标。",
+  "{name} (the reference)": "{name}（参考视频）",
+  "Looking up saved scores before the run…": "运行前正在查找已保存的分数…",
+  "Reference scored otherwise": "参考视频的评分方式不同",
+  "This saved run scored the reference without its film grain, and it is now scored with it. Scores made the two ways cannot be compared. Score the reference as this run did?": "此已保存的运行在评分参考视频时未包含其胶片颗粒，而现在评分时包含颗粒。两种方式得到的分数无法比较。是否按此运行的方式评分参考视频？",
+  "This saved run scored the reference with its film grain, and it is now scored without it. Scores made the two ways cannot be compared. Score the reference as this run did?": "此已保存的运行在评分参考视频时包含其胶片颗粒，而现在评分时不含颗粒。两种方式得到的分数无法比较。是否按此运行的方式评分参考视频？",
+  "{name} (without film grain)": "{name}（不含胶片颗粒）",
+  "H.274 film grain is added to VVC only (by VVdeC), not to {codec}": "H.274 胶片颗粒只会（由 VVdeC）添加到 VVC，不会添加到 {codec}",
+  "AFGS1 film grain in H.264 is added by no decoder here": "此处没有解码器会添加 H.264 中的 AFGS1 胶片颗粒",
+  "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "它描述了两种胶片颗粒：H.274 和 AFGS1，此处没有解码器能同时添加",
+  "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "它按包含 H.274 胶片颗粒评分，而只有应用自己的解码器能正确添加这种颗粒（FFmpeg 仅在 8 位时添加，且向下取整），此处却会由 FFmpeg 解码：请不含胶片颗粒评分，或在应用自行解码视频的地方计算该指标（GPU 上的 VMAF）",
+  "Its film grain was not read.": "未读取它的胶片颗粒。"
  },
  "plurals": {
   "about {count} day": [
@@ -792,6 +821,9 @@
   ],
   "{count:,} packet": [
    "{count:,} 个数据包"
+  ],
+  "and {count} more": [
+   "及其他 {count} 个"
   ]
  }
 }

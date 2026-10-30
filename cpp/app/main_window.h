@@ -340,7 +340,9 @@ private:
     // ------------------------------------------------------ the saved scores
     std::filesystem::path cache_folder() const;
     AnalysisRequest analysis_request_of(const RowData& row_data) const;
-    void start_cache_lookup(const std::vector<std::filesystem::path>& paths);
+    // Whether a lookup started (none with saved scores off, no reference, or
+    // the window closing).
+    bool start_cache_lookup(const std::vector<std::filesystem::path>& paths);
     void reload_saved_scores(const std::vector<int>& rows);
     std::vector<std::filesystem::path> cancel_cache_lookup();
     void on_cache_lookup_finished(ProbeWorker* worker);
@@ -371,6 +373,14 @@ private:
     void save_cvvdp_preset(const CvvdpDisplayDialog& dialog, const CvvdpSettings& settings,
                            const std::optional<std::string>& replacing, bool apply_to_rows = true);
     void on_cvvdp_delete_preset();
+    // The film grain choice (VideoInfo::with_film_grain), main_window_options.cpp.
+    std::vector<std::filesystem::path> choose_film_grain(const std::vector<int>& rows, bool reference, bool with);
+    std::vector<std::filesystem::path> apply_film_grain_default();
+    void on_film_grain_chosen(bool with);
+    void show_panel_film_grain();
+    // The reference's line under its path: its media info, bitrate, length,
+    // and its film grain in the tooltip.
+    void show_source_label();
 
     // ------------------------------------------------------- Metric Graphs
     void on_tab_changed(int index);
@@ -385,6 +395,7 @@ private:
     void read_unknown_profiles();
     void take_profile(const Probed& probed);
     bool offer_to_switch_source(const ComparisonResult& result);
+    bool offer_to_take_reference_film_grain(const ComparisonResult& result);
     std::vector<std::shared_ptr<CompletedRun>> selected_runs() const;
     void on_save_selected();
     void submit_save(const ComparisonResult& result, const std::filesystem::path& path, const QString& label);
@@ -427,6 +438,16 @@ private:
     // true while they are not, the run then starting by itself.
     bool wait_for_gpu_checks(const std::vector<int>& checked);
     void stop_waiting_for_gpu_checks();
+    // The checked rows' and the reference's film grain choices, made before
+    // the run: Settings' default, or asked. False when the run does not start
+    // now: the question was cancelled, or the saved scores of rows whose
+    // choice changed are looked up first (the run then starts by itself).
+    bool settle_film_grain(const std::vector<int>& checked);
+    void stop_waiting_for_saved_scores();
+    // While a run waits for something before it starts: Run off, Cancel on,
+    // and the status line saying what (put back after, unless it changed).
+    void show_waiting_to_run(const QString& text);
+    void stop_showing_waiting_to_run(const QString& text);
     void refresh_metric_cells();
     void on_vship_checked();
     void set_run_ui_active(bool active);
@@ -595,9 +616,12 @@ private:
     // The newer release offered, while its message is open.
     QPointer<QMessageBox> update_box_;
     // The GPU checks a run is waiting for (wait_for_gpu_checks), while it is,
-    // and what the status line said before.
+    // and what the status line said before it waited for something.
     QFutureWatcher<void>* gpu_check_watcher_ = nullptr;
-    QString status_before_gpu_checks_;
+    QString status_before_waiting_;
+    // Whether a run asked for waits for the saved scores of rows whose film
+    // grain choice changed (settle_film_grain).
+    bool run_waits_for_saved_scores_ = false;
     // The Settings tab, and the latest check of FFmpeg, which it shows.
     SettingsPanel* settings_panel_ = nullptr;
     ToolsStatus tools_status_;

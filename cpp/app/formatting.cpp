@@ -3,14 +3,47 @@
 #include <cmath>
 #include <format>
 
+#include <QStringList>
+
 #include "i18n.h"
+#include "vml/film_grain_detect.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/number_format.h"
 
 namespace vml::app {
 
 QString media_info_string(const VideoInfo& info) {
-    return QString::fromStdString(std::format("{}x{}, {:.2f}fps, ", info.width, info.height, info.fps)) +
-           QString::fromStdString(info.codec_name);
+    QString text = QString::fromStdString(std::format("{}x{}, {:.2f}fps, ", info.width, info.height, info.fps)) +
+                   QString::fromStdString(info.codec_name);
+    const FilmGrainScoring grain = effective_film_grain(info);
+    if (grain.scoring != GrainScoring::none) {
+        text += ", " + (grain.scoring == GrainScoring::with ? tr("film grain") : tr("film grain left out"));
+    }
+    return text;
+}
+
+QString film_grain_note(const VideoInfo& info) {
+    const FilmGrainScoring grain = effective_film_grain(info);
+    if (grain.scoring == GrainScoring::none) {
+        return {};
+    }
+    QStringList kinds;
+    for (const std::string& name : film_grain_names(grain.kinds)) {
+        kinds.append(name == "h274"           ? QStringLiteral("H.274")
+                     : name == "h274 model 1" ? tr("H.274 model 1")
+                     : name == "afgs1"        ? QStringLiteral("AFGS1")
+                     : name == "av1"          ? QStringLiteral("AV1")
+                                              : QString::fromStdString(name));
+    }
+    const QString listed = kinds.join(", ");
+    if (!grain.why_without.empty()) {
+        return tr("Film grain ({kinds}) left out: {why}",
+                  {{"kinds", listed}, {"why", tr_message(QString::fromStdString(grain.why_without))}});
+    }
+    return grain.scoring == GrainScoring::with
+               ? tr("Film grain ({kinds}): the scores are made with it, as viewers see the video", {{"kinds", listed}})
+               : tr("Film grain ({kinds}): the scores are made without it, from the coded pictures",
+                    {{"kinds", listed}});
 }
 
 QString bitrate_string(const VideoInfo& info) {

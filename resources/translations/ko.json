@@ -170,7 +170,6 @@
   "Test both (adds a comparison row)": "둘 다 테스트(비교 행 추가)",
   "When the two resolutions differ: either evaluate quality at the resolution actually\ndelivered (source scaled to match test -- the default), or as if the test\nvideo were upscaled back to the reference's native resolution for playback.\n\"Test both\" doesn't change this row -- it adds a second row for the same test\nfile using the other direction, so you can run and compare both.": "두 해상도가 다를 때: 실제로 전달되는 해상도에서 화질을 평가하거나\n(원본을 테스트에 맞춰 조정 — 기본값), 테스트 영상이 재생 시 참조 영상의\n기본 해상도로 확대된다고 보고 평가합니다.\n[둘 다 테스트]는 이 행을 바꾸지 않고, 같은 테스트 파일에 반대 방향의\n두 번째 행을 추가해 둘 다 계산하고 비교할 수 있게 합니다.",
   "Resolution mismatch:": "해상도 불일치:",
-  "Cropping and scaling here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "여기의 자르기와 크기 조정은 점수에 영향을 줍니다. [영상 비교]의 톤 매핑과 재생 해상도는 표시에만 영향을 주며 계산된 지표는 바뀌지 않습니다.",
   "Calculate metrics": "지표 계산",
   "Pause": "일시 중지",
   "Cancel": "취소",
@@ -727,7 +726,37 @@
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "GPU를 선택하면 VMAF v0.6.1, VMAF NEG, VMAF v1이 Vulkan으로 GPU에서 계산됩니다(Vulkan으로 계산할 수 없는 NVIDIA GPU에서는 VMAF v0.6.1 및 NEG를 CUDA로 계산). VMAF v1: GPU 코드가 옵션을 지원하지 않는 모델에서는 밴딩 및 색상 특징(CAMBI, SpEED)을 CPU에서 계산합니다. PSNR, SSIM, XPSNR은 어느 쪽이든 CPU에서 계산됩니다. GPU의 점수는 모든 프레임에서 CPU의 점수와 1000분의 1점 이내로 일치하므로, 어느 쪽을 선택하든 저장된 점수가 유지됩니다. GPU 계산이 실패하면 대신 CPU에서 계산됩니다.",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2, Butteraugli, CVVDP를 영상당 한 번의 패스에서 함께 계산",
   "Each video is decoded once for all three instead of once for each. This is faster only on very powerful GPUs, and needs a lot of GPU memory. A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "각 영상을 지표마다 디코딩하지 않고 세 지표에 대해 한 번만 디코딩합니다. 매우 강력한 GPU에서만 더 빠르며, GPU 메모리를 많이 씁니다. 공유 패스에서 실패한 지표(예: GPU 메모리 부족)는 따로 다시 계산합니다.\n\n어느 방식이든 점수는 같습니다. 다음 실행부터 적용됩니다.",
-  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "선택하지 않으면 세 지표를 하나씩 계산합니다. GPU 메모리를 훨씬 적게 쓰고, 대부분의 GPU에서 거의 느려지지 않습니다."
+  "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "선택하지 않으면 세 지표를 하나씩 계산합니다. GPU 메모리를 훨씬 적게 쓰고, 대부분의 GPU에서 거의 느려지지 않습니다.",
+  "Film grain": "필름 그레인",
+  "These videos tell the player to add film grain. Calculate their metrics:": "이 영상들은 재생 시 필름 그레인을 더하도록 지시합니다. 지표 계산 방식:",
+  "With film grain (what viewers see)": "필름 그레인 포함(시청자가 보는 영상)",
+  "Without film grain (the coded pictures only)": "필름 그레인 제외(인코딩된 화면만)",
+  "Don't ask again (change it in Settings)": "다시 묻지 않기([설정]에서 변경)",
+  "Film grain:": "필름 그레인:",
+  "Ask at Calculate metrics": "[지표 계산] 시 묻기",
+  "How a video whose stream asks the player to add film grain is scored: asked when its metrics are calculated, or with or without the grain. Each video keeps the choice it was given, by you or by this setting when it was added; change a video's own in the Options panel.": "스트림이 재생 시 필름 그레인을 더하도록 지시하는 영상을 어떻게 채점할지: 지표 계산 시 묻거나, 그레인 포함 또는 제외. 각 영상은 받은 선택(사용자가 정했거나 추가될 때 이 설정이 정한 것)을 유지합니다. 영상별 선택은 [옵션] 패널에서 바꿉니다.",
+  "film grain": "필름 그레인",
+  "film grain left out": "필름 그레인 제외",
+  "H.274 model 1": "H.274 모델 1",
+  "Film grain ({kinds}) left out: {why}": "필름 그레인({kinds}) 제외: {why}",
+  "Film grain ({kinds}): the scores are made with it, as viewers see the video": "필름 그레인({kinds}): 시청자가 보는 대로 그레인을 포함해 채점합니다",
+  "Film grain ({kinds}): the scores are made without it, from the coded pictures": "필름 그레인({kinds}): 그레인 없이 인코딩된 화면으로 채점합니다",
+  "A resolution test's film grain is the reference's, chosen when metrics are calculated.": "해상도 테스트의 필름 그레인은 참조 영상의 것이며, 지표를 계산할 때 선택합니다.",
+  "It has no film grain.": "필름 그레인이 없습니다.",
+  "Whether the scores are made with the film grain the video's stream asks the player to add, as viewers see the video, or without it, from the coded pictures.": "영상의 스트림이 재생 시 더하도록 지시하는 필름 그레인을 포함해 시청자가 보는 대로 채점할지, 그레인 없이 인코딩된 화면으로 채점할지.",
+  "Mixed (the selected videos differ)": "혼합(선택한 영상이 서로 다름)",
+  "Cropping, scaling and film grain here affect scores. Video Compare's tone mapping and playback resolution are display-only settings and do not change calculated metrics.": "여기의 자르기, 크기 조정, 필름 그레인은 점수에 영향을 줍니다. [영상 비교]의 톤 매핑과 재생 해상도는 표시에만 영향을 주며 계산된 지표는 바뀌지 않습니다.",
+  "{name} (the reference)": "{name}(참조 영상)",
+  "Looking up saved scores before the run…": "실행 전에 저장된 점수를 찾는 중…",
+  "Reference scored otherwise": "참조 영상 채점 방식이 다름",
+  "This saved run scored the reference without its film grain, and it is now scored with it. Scores made the two ways cannot be compared. Score the reference as this run did?": "이 저장된 실행은 참조 영상을 필름 그레인 없이 채점했지만, 지금은 그레인을 포함해 채점합니다. 두 방식으로 얻은 점수는 비교할 수 없습니다. 이 실행과 같은 방식으로 참조 영상을 채점할까요?",
+  "This saved run scored the reference with its film grain, and it is now scored without it. Scores made the two ways cannot be compared. Score the reference as this run did?": "이 저장된 실행은 참조 영상을 필름 그레인을 포함해 채점했지만, 지금은 그레인 없이 채점합니다. 두 방식으로 얻은 점수는 비교할 수 없습니다. 이 실행과 같은 방식으로 참조 영상을 채점할까요?",
+  "{name} (without film grain)": "{name}(필름 그레인 제외)",
+  "H.274 film grain is added to VVC only (by VVdeC), not to {codec}": "H.274 필름 그레인은 VVC에만(VVdeC로) 더해지며 {codec}에는 더해지지 않습니다",
+  "AFGS1 film grain in H.264 is added by no decoder here": "H.264의 AFGS1 필름 그레인을 더하는 디코더가 여기에 없습니다",
+  "it describes two kinds of film grain, H.274's and AFGS1, which no decoder here adds together": "H.274와 AFGS1 두 종류의 필름 그레인이 기술되어 있으며, 둘을 함께 더하는 디코더가 여기에 없습니다",
+  "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or calculate the metric where the app decodes the video itself (VMAF on the GPU)": "H.274 필름 그레인을 포함해 채점하지만, 이를 올바르게 더하는 것은 앱 자체 디코더뿐입니다(FFmpeg는 8비트에서만 내림하여 더함). 여기서는 FFmpeg가 디코딩하게 되므로, 필름 그레인 없이 채점하거나 앱이 직접 영상을 디코딩하는 곳(GPU의 VMAF)에서 지표를 계산하세요",
+  "Its film grain was not read.": "필름 그레인을 읽지 못했습니다."
  },
  "plurals": {
   "about {count} day": [
@@ -792,6 +821,9 @@
   ],
   "{count:,} packet": [
    "패킷 {count:,}개"
+  ],
+  "and {count} more": [
+   "외 {count}개"
   ]
  }
 }

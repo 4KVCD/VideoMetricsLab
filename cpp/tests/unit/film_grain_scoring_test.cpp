@@ -11,6 +11,7 @@
 #include "vml/analysis_request.h"
 #include "vml/film_grain_detect.h"
 #include "vml/hardware_decoding.h"
+#include "vml/results_summary.h"
 #include "vml/score_identity.h"
 
 namespace vml {
@@ -79,7 +80,32 @@ TEST(FilmGrainScoring, EachVideoIsScoredWithOrWithoutItsGrainAsItCanBe) {
         EXPECT_EQ(!grain.why_without.empty(), expected.why);
         EXPECT_EQ(only_the_app_adds(grain), expected.only_the_app);
         EXPECT_EQ(film_grain_identity(expected.info), expected.identity);
+        // A choice to make: grain read, and none forced out.
+        EXPECT_EQ(film_grain_choosable(expected.info), grain.scoring != GrainScoring::none && !expected.why);
     }
+    // Forced out whatever is chosen, and said so.
+    EXPECT_FALSE(effective_film_grain(grain_video("hevc", "yuv420p10le", h274, false)).why_without.empty());
+    EXPECT_FALSE(film_grain_choosable(grain_video("hevc", "yuv420p10le", h274, false)));
+    EXPECT_TRUE(film_grain_choosable(grain_video("vvc", "yuv420p10le", h274, false)));
+    EXPECT_EQ(film_grain_default_choice("with"), true);
+    EXPECT_EQ(film_grain_default_choice("without"), false);
+    EXPECT_EQ(film_grain_default_choice(""), std::nullopt);  // ask
+    EXPECT_EQ(film_grain_default_choice("With"), std::nullopt);
+}
+
+// The results' JSON and CSV record a video's film grain and how it was
+// scored; a video without grain has nothing more than before.
+TEST(FilmGrainScoring, TheResultsSayHowEachVideosGrainWasScored) {
+    nlohmann::ordered_json entry;
+    add_media(entry, grain_video("hevc", "yuv420p10le", 0u));
+    EXPECT_FALSE(entry.contains("film_grain"));
+    add_media(entry, grain_video("vvc", "yuv420p10le", h274, false));
+    EXPECT_EQ(entry.at("film_grain"),
+              (nlohmann::ordered_json{{"kinds", {"h274"}}, {"scored", "without"}}));
+    add_media(entry, grain_video("hevc", "yuv420p10le", h274 | afgs1));
+    EXPECT_EQ(entry.at("film_grain").at("scored"), "without");
+    EXPECT_EQ(entry.at("film_grain").at("kinds"), (nlohmann::ordered_json{"h274", "afgs1"}));
+    EXPECT_TRUE(entry.at("film_grain").contains("why_without"));
 }
 
 // FFmpeg's decoding is told to leave the grain out, and refuses to make the

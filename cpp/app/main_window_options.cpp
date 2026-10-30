@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <numeric>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -22,7 +23,9 @@
 #include "widgets.h"
 #include "window_helpers.h"
 #include "vml/cvvdp.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/isolated.h"
+#include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/vship.h"
 
@@ -101,7 +104,21 @@ void MainWindow::write_panel_options(const VmafOptions& options) {
         automatic = cvvdp_default_automatic();
     }
     options_panel_->show_cvvdp(displays, preferred, settings_.cvvdp_presets_json, automatic);
+    show_panel_film_grain();
     syncing_panel_ = false;
+}
+
+void MainWindow::show_panel_film_grain() {
+    // The selected rows' videos' film grain choice.
+    const bool syncing = std::exchange(syncing_panel_, true);
+    std::vector<FilmGrainVideo> videos;
+    for (const int row : panel_target_rows_) {
+        const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        videos.push_back({row_data.video_info ? &*row_data.video_info : nullptr,
+                          row_data.options.resample_test.has_value()});
+    }
+    options_panel_->show_film_grain(videos);
+    syncing_panel_ = syncing;
 }
 
 VmafOptions MainWindow::read_panel_options() const {
@@ -577,6 +594,90 @@ void MainWindow::on_cvvdp_delete_preset() {
     }
     show_status(error ? tr_message(QString::fromStdString(*error))
                       : app::tr("Deleted the CVVDP preset \"{name}\".", {{"name", quoted}}));
+}
+
+// ------------------------------------------------------------- film grain
+
+std::vector<std::filesystem::path> MainWindow::choose_film_grain(const std::vector<int>& rows, bool reference,
+                                                                 bool with) {
+    // Scores the videos of `rows` (a resolution test's is the reference) and,
+    // with `reference`, the reference with their film grain or without. A
+    // row whose saved scores are now filed otherwise (its lookup token: "with"
+    // and no choice are the same scores) loses the scores it shows; returns
+    // those rows, to be looked up again.
+    std::vector<int> affected = rows;
+    if (reference) {
+        affected.resize(rows_.size());
+        std::iota(affected.begin(), affected.end(), 0);  // every row is compared with it
+    }
+    const auto token = [this](int row) {
+        const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        return source_info_ ? lookup_token(source_info_->path, row_data.identity_path(), analysis_request_of(row_data))
+                            : std::string();
+    };
+    std::vector<std::string> before;
+    for (const int row : affected) {
+        before.push_back(token(row));
+    }
+    if (reference && source_info_) {
+        source_info_->with_film_grain = with;
+        for (const std::shared_ptr<RowData>& row_data : rows_) {
+            if (row_data->options.resample_test && row_data->video_info) {
+                take_film_grain(*row_data->video_info, *source_info_);  // its copy of the reference
+            }
+        }
+        show_source_label();
+    }
+    for (const int row : rows) {
+        RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        if (!row_data.options.resample_test && row_data.video_info && film_grain_choosable(*row_data.video_info)) {
+            row_data.video_info->with_film_grain = with;
+            set_row_info(row, row_data.video_info);  // its Media info tag
+        }
+    }
+    std::vector<int> changed;
+    std::vector<std::filesystem::path> paths;
+    for (std::size_t i = 0; i < affected.size(); ++i) {
+        if (token(affected[i]) != before[i]) {
+            changed.push_back(affected[i]);
+            paths.push_back(rows_[static_cast<std::size_t>(affected[i])]->path);
+        }
+    }
+    invalidate_completed_results(changed);
+    sync_frame_compare();  // the viewers show the videos as they are scored
+    return paths;
+}
+
+std::vector<std::filesystem::path> MainWindow::apply_film_grain_default() {
+    // Gives the videos with a film grain choice to make and none made yet
+    // (the reference too) Settings' default, unless it is to ask. Returns the
+    // rows whose saved scores are to be looked up again (choose_film_grain).
+    const std::optional<bool> with = film_grain_default_choice(settings_.film_grain_default);
+    if (!with) {
+        return {};
+    }
+    const auto unchosen = [](const VideoInfo& info) { return film_grain_choosable(info) && !info.with_film_grain; };
+    std::vector<int> rows;
+    for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
+        const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        if (!row_data.options.resample_test && row_data.video_info && unchosen(*row_data.video_info)) {
+            rows.push_back(row);
+        }
+    }
+    const bool reference = source_info_ && unchosen(*source_info_);
+    if (rows.empty() && !reference) {
+        return {};
+    }
+    return choose_film_grain(rows, reference, *with);
+}
+
+void MainWindow::on_film_grain_chosen(bool with) {
+    // The Options panel's Film grain, for the selected rows.
+    if (syncing_panel_ || run_active_) {
+        return;
+    }
+    start_cache_lookup(choose_film_grain(panel_target_rows_, false, with));
+    show_panel_film_grain();
 }
 
 }  // namespace vml::app

@@ -4,12 +4,20 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 
 #include <functional>
+#include <optional>
 
 class QWidget;
 
 namespace vml::app {
+
+// The answer to the film grain question at Calculate metrics.
+struct FilmGrainAnswer {
+    bool with = true;             // scored with the videos' film grain
+    bool dont_ask_again = false;  // the answer made Settings' default
+};
 
 struct Dialogs {
     // A message with an OK button: information, and a failure (critical).
@@ -25,6 +33,9 @@ struct Dialogs {
     std::function<QString(const QString& title, const QString& suggested, const QString& filter)> save_file;
     // A folder, the dialog opening at `start` (none: wherever it opens).
     std::function<QString(const QString& title, const QString& start)> choose_folder;
+    // Whether the `videos` named, which have film grain and no choice for it
+    // yet, are scored with it or without: nothing for Cancel.
+    std::function<std::optional<FilmGrainAnswer>(const QStringList& videos)> ask_film_grain;
 };
 
 // The real dialogs, over `parent`.

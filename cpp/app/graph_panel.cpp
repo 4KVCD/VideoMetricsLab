@@ -35,6 +35,7 @@
 #include "widgets.h"
 #include "window_helpers.h"
 #include "vml/export_csv.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/number_format.h"
 #include "vml/run_file.h"
 #include "vml/time_format.h"
@@ -1256,7 +1257,12 @@ bool GraphPanel::add_series(const Run& run) {
         }
         suppressed_identities_.erase(identity);
     }
-    const QString label = run.label.isEmpty() ? text_of(run.result->distorted.stem()) : run.label;
+    // A test video scored without the film grain its stream asks for says so:
+    // its scores are not those of the video viewers see.
+    const QString name = run.label.isEmpty() ? text_of(run.result->distorted.stem()) : run.label;
+    const QString label = effective_film_grain(run.result->distorted_info).scoring == GrainScoring::without
+                              ? app::tr("{name} (without film grain)", {{"name", name}})
+                              : name;
     // A resolution test's or a direction companion's made-up path: the
     // colour of the video it is.
     const std::filesystem::path path = color_path(*run.result);
