@@ -54,3 +54,17 @@ inline unsigned video_compare_parse_delay(unsigned threads) {
     const unsigned half = vvdec_default_parse_delay(threads) / 2;
     return half > 2 ? half : 2;
 }
+
+// Scoring's (software_frames.cpp, the decoder scores are made from): one per
+// thread, at least 2, at most VVdeC's 48. Scoring has no seeks and waits for
+// the decoding wherever the app decodes for a GPU metric, so it must decode
+// as fast as with the default: one per thread did, where Video Compare's did
+// not quite (the same 149 Mbit/s stream on 32 threads: 145 fps, 24 142-143,
+// the default 143-145; on 16 threads 84 fps, as the default), holding a fifth
+// to a quarter less (1,977 MB, not 2,630; 1,310, not 1,638). The threads are
+// VVdeC's own: std::thread::hardware_concurrency in the same process, from
+// the same C++ library.
+inline unsigned scoring_parse_delay(unsigned threads) {
+    const unsigned delay = threads > 2 ? threads : 2;
+    return delay < 48 ? delay : 48;
+}

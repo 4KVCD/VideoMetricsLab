@@ -61,6 +61,7 @@
 #include <deque>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 extern "C" {
@@ -688,6 +689,11 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         // FFmpeg's own threading, as its decode in ffmpeg.exe has it.
         AVDictionary *options = nullptr;
         g_av.av_dict_set(&options, "threads", "auto", 0);
+        if (std::string(name) == "libvvdec") {
+            // One picture parsed ahead per thread, not VVdeC's 1.5 (scoring_parse_delay).
+            const std::string delay = std::to_string(scoring_parse_delay(std::thread::hardware_concurrency()));
+            g_av.av_dict_set(&options, "parse_delay", delay.c_str(), 0);
+        }
         int result = allocated ? g_av.avcodec_open2(d->codec_context, codec, &options) : -1;
         g_av.av_dict_free(&options);
         if (result < 0) {

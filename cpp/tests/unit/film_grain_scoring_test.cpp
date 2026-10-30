@@ -133,14 +133,16 @@ TEST(FilmGrainScoring, EveryDecoderAddsOrLeavesOutTheGrainAsItIsScored) {
     }
 }
 
-// VVdeC's own parse delay for the threads, (threads * 24) >> 4 at most 48,
-// and Video Compare's, half of it and at least 2 (grain_decoding.h).
+// VVdeC's own parse delay for the threads, (threads * 24) >> 4 at most 48;
+// Video Compare's, half of it and at least 2; and scoring's, one per thread,
+// at least 2 and at most 48 (grain_decoding.h).
 TEST(FilmGrainScoring, VvdecParsesAheadAsTheRuleForEachUseSays) {
-    for (const auto [threads, vvdec, video_compare] :
-         {std::tuple(0u, 0u, 2u), std::tuple(1u, 1u, 2u), std::tuple(16u, 24u, 12u), std::tuple(24u, 36u, 18u),
-          std::tuple(32u, 48u, 24u), std::tuple(64u, 48u, 24u)}) {
+    for (const auto [threads, vvdec, video_compare, scoring] :
+         {std::tuple(0u, 0u, 2u, 2u), std::tuple(1u, 1u, 2u, 2u), std::tuple(16u, 24u, 12u, 16u),
+          std::tuple(24u, 36u, 18u, 24u), std::tuple(32u, 48u, 24u, 32u), std::tuple(64u, 48u, 24u, 48u)}) {
         EXPECT_EQ(vvdec_default_parse_delay(threads), vvdec) << threads << " threads";
         EXPECT_EQ(video_compare_parse_delay(threads), video_compare) << threads << " threads";
+        EXPECT_EQ(scoring_parse_delay(threads), scoring) << threads << " threads";
     }
 }
 
