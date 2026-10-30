@@ -94,6 +94,10 @@ struct VideoInfo {
     // scaled to first, so that the whole video is scored at one size
     // (size_changes.h). Nothing for any other video.
     std::optional<std::pair<int, int>> scaled_to;
+    // The film grain its stream describes for the player to add, as
+    // film_grain_detect.h's FilmGrainKind bits, 0 for none; nothing where it
+    // was not read (a run saved before 2.3, a scan that failed).
+    std::optional<unsigned> film_grain;
 
     // Its frames' size as they reach the comparison's filters: scaled_to,
     // or its own.

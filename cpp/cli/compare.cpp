@@ -25,6 +25,7 @@
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
+#include "vml/film_grain_detect.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
 #include "vml/gpu_vmaf.h"
@@ -276,11 +277,13 @@ bool is_raw_yuv(const std::filesystem::path& path) { return ascii_lower(platform
 
 // The video at `path` as the command reads it: a raw YUV file with --size,
 // --pix-fmt and --fps (ffprobe.h's probe_raw_yuv), a raw stream timed at
-// --fps (timed_raw_stream), any other video as ffprobe reads it. Nothing,
-// with `wrong` saying why, when the command does not give what it needs
-// (`which` names the video). Throws ProbeError when it cannot be read.
+// --fps (timed_raw_stream), any other video as ffprobe reads it, with the
+// film grain its stream describes (detect_film_grain). Nothing, with `wrong`
+// saying why, when the command does not give what it needs (`which` names
+// the video). Throws ProbeError when it cannot be read.
 std::optional<VideoInfo> read_video(const std::filesystem::path& path, const CompareArguments& arguments,
-                                    const std::string& ffprobe, const std::string& which, std::string& wrong) {
+                                    const std::string& ffprobe, const std::string& ffmpeg, const std::string& which,
+                                    std::string& wrong) {
     if (is_raw_yuv(path)) {
         if (!arguments.size || !arguments.pix_fmt || !arguments.fps) {
             wrong = which + " is a raw YUV file, which records no picture size, pixel format or frame rate: give "
@@ -288,9 +291,12 @@ std::optional<VideoInfo> read_video(const std::filesystem::path& path, const Com
                             "--fps 24000/1001.";
             return std::nullopt;
         }
-        return probe_raw_yuv(path, *arguments.size, *arguments.pix_fmt, *arguments.fps, ffprobe);
+        VideoInfo info = probe_raw_yuv(path, *arguments.size, *arguments.pix_fmt, *arguments.fps, ffprobe);
+        info.film_grain = 0u;  // raw pictures carry no film grain message
+        return info;
     }
     VideoInfo info = probe_video(path, ffprobe);
+    info.film_grain = detect_film_grain(info, ffmpeg, CancelToken());
     if (!info.is_raw_stream()) {
         return info;
     }
@@ -1077,7 +1083,8 @@ public:
     // Plans the comparison of the video at `path` (read with `ffprobe`), kept
     // in `videos` with why it is not compared, if it is not. Returns what the
     // command line cannot do yet of it, or nothing.
-    std::optional<std::string> plan(const std::filesystem::path& path, const std::string& ffprobe);
+    std::optional<std::string> plan(const std::filesystem::path& path, const std::string& ffprobe,
+                                    const std::string& ffmpeg);
     // Each job's video, once every video is planned (the lists no longer grow).
     std::vector<TestVideo*> job_targets();
 
@@ -1109,12 +1116,14 @@ private:
     std::vector<std::pair<std::size_t, std::optional<std::size_t>>> job_videos_;
 };
 
-std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& path, const std::string& ffprobe) {
+std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& path, const std::string& ffprobe,
+                                                   const std::string& ffmpeg) {
     TestVideo& video = videos.emplace_back();
     video.path = path;
     try {
         std::string wrong;
-        std::optional<VideoInfo> read = read_video(path, arguments_, ffprobe, platform::path_text(path.filename()), wrong);
+        std::optional<VideoInfo> read =
+            read_video(path, arguments_, ffprobe, ffmpeg, platform::path_text(path.filename()), wrong);
         if (!read) {
             video.error = "the command does not say how to read it";
             command_wrong = wrong;
@@ -1405,7 +1414,7 @@ int compare(const CompareArguments& arguments) {
         const std::filesystem::path reference = python_path(arguments.reference);
         std::string wrong;
         std::optional<VideoInfo> read =
-            read_video(reference, arguments, tools.ffprobe.path,
+            read_video(reference, arguments, tools.ffprobe.path, tools.ffmpeg.path,
                        "The reference, " + platform::path_text(reference.filename()) + ",", wrong);
         if (!read) {
             print_error(wrong);
@@ -1418,7 +1427,7 @@ int compare(const CompareArguments& arguments) {
     }
     ComparisonPlanner planner(arguments, settings, source, displays, asked, cache_folder);
     for (const std::filesystem::path& path : expand_tests(arguments.tests, python_path(arguments.reference))) {
-        if (const std::optional<std::string> missing = planner.plan(path, tools.ffprobe.path)) {
+        if (const std::optional<std::string> missing = planner.plan(path, tools.ffprobe.path, tools.ffmpeg.path)) {
             print_error("The C++ command line cannot do this yet: " + *missing + ".");
             return exit_usage;
         }

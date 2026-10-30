@@ -1251,7 +1251,8 @@ void MainWindow::start_source_probe(const std::filesystem::path& path) {
         source_probe_worker_->cancel();
     }
     const int generation = ++source_probe_generation_;
-    auto* worker = new ProbeWorker({text_of(path)}, find_tool("ffprobe", settings_), this);
+    auto* worker =
+        new ProbeWorker({text_of(path)}, find_tool("ffprobe", settings_), find_tool("ffmpeg", settings_), this);
     source_probe_worker_ = worker;
     probe_workers_.push_back(worker);
     connect(worker, &ProbeWorker::probed, this,
@@ -2010,7 +2011,7 @@ void MainWindow::start_media_probe(const std::vector<std::filesystem::path>& pat
     for (const std::filesystem::path& path : paths) {
         texts.append(text_of(path));
     }
-    auto* worker = new ProbeWorker(texts, find_tool("ffprobe", settings_), this);
+    auto* worker = new ProbeWorker(texts, find_tool("ffprobe", settings_), find_tool("ffmpeg", settings_), this);
     probe_workers_.push_back(worker);
     connect(worker, &ProbeWorker::probed, this, [this](const Probed& probed) { on_probed(probed); });
     connect(worker, &ProbeWorker::finished_all, this, [this, worker] { on_probe_finished(worker); });

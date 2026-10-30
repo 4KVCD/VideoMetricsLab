@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "vml/ffprobe.h"
+#include "vml/film_grain_detect.h"
 #include "vml/metric_cache.h"
 #include "vml/platform/system.h"
 
@@ -19,8 +20,8 @@ void register_types() {
 
 }  // namespace
 
-ProbeWorker::ProbeWorker(QStringList paths, std::string ffprobe, QObject* parent)
-    : QThread(parent), paths_(std::move(paths)), ffprobe_(std::move(ffprobe)) {
+ProbeWorker::ProbeWorker(QStringList paths, std::string ffprobe, std::string ffmpeg, QObject* parent)
+    : QThread(parent), paths_(std::move(paths)), ffprobe_(std::move(ffprobe)), ffmpeg_(std::move(ffmpeg)) {
     register_types();
 }
 
@@ -47,6 +48,9 @@ void ProbeWorker::run() {
         Probed result{path, std::nullopt, QString()};
         try {
             result.info = probe_video(platform::path_from_text(path.toStdString()), ffprobe_, cancel_);
+            if (!ffmpeg_.empty()) {
+                result.info->film_grain = detect_film_grain(*result.info, ffmpeg_, cancel_);
+            }
         } catch (const Cancelled&) {
             break;  // ended by cancel(): nothing to say about this video
         } catch (const std::exception& error) {

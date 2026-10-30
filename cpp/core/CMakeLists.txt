@@ -13,6 +13,7 @@ add_library(vml_core
     src/ffmpeg_tools.cpp
     src/ffprobe.cpp
     src/film_grain.cpp
+    src/film_grain_detect.cpp
     src/frame_extract.cpp
     src/frame_sync.cpp
     src/frame_sync_by_time.cpp

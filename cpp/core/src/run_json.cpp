@@ -1,5 +1,6 @@
 #include "vml/run_json.h"
 
+#include "vml/film_grain_detect.h"
 #include "vml/platform/system.h"
 
 namespace vml {
@@ -30,6 +31,9 @@ nlohmann::json video_json(const VideoInfo& info) {
     if (info.scaled_to) {  // only where set, so that other videos' text stays as it was
         text["scaled_to"] = {info.scaled_to->first, info.scaled_to->second};
     }
+    if (info.film_grain) {  // only where read, likewise
+        text["film_grain"] = film_grain_names(*info.film_grain);
+    }
     return text;
 }
 
@@ -59,6 +63,9 @@ VideoInfo video_from(const nlohmann::json& text) {
     text.at("timed_raw").get_to(info.timed_raw);
     if (const auto scaled = text.find("scaled_to"); scaled != text.end()) {
         info.scaled_to = std::pair(scaled->at(0).get<int>(), scaled->at(1).get<int>());
+    }
+    if (const auto grain = text.find("film_grain"); grain != text.end()) {
+        info.film_grain = film_grain_from_names(grain->get<std::vector<std::string>>());
     }
     return info;
 }

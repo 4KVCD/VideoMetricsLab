@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 
+#include "vml/film_grain_detect.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 
@@ -59,6 +60,9 @@ nlohmann::ordered_json video_info_to_dict(const VideoInfo& info) {
     if (info.scaled_to) {
         dict["scaled_to"] = {info.scaled_to->first, info.scaled_to->second};
     }
+    if (info.film_grain) {
+        dict["film_grain"] = film_grain_names(*info.film_grain);
+    }
     return dict;
 }
 
@@ -85,6 +89,15 @@ VideoInfo video_info_from_dict(const nlohmann::json& data) {
     info.profile = data.value("profile", std::string());  // saved from 2.3 on
     if (const auto scaled = data.find("scaled_to"); scaled != data.end() && scaled->is_array() && scaled->size() == 2) {
         info.scaled_to = std::pair(scaled->at(0).get<int>(), scaled->at(1).get<int>());
+    }
+    if (const auto grain = data.find("film_grain"); grain != data.end() && grain->is_array()) {  // from 2.3 on
+        std::vector<std::string> names;
+        for (const nlohmann::json& name : *grain) {
+            if (name.is_string()) {
+                names.push_back(name.get<std::string>());
+            }
+        }
+        info.film_grain = film_grain_from_names(names);
     }
     return info;
 }

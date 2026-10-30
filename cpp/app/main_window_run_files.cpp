@@ -227,7 +227,8 @@ void MainWindow::read_unknown_profiles() {
     if (paths.isEmpty()) {
         return;
     }
-    auto* worker = new ProbeWorker(paths, find_tool("ffprobe", settings_), this);
+    // Only the profile is taken: no film grain scan.
+    auto* worker = new ProbeWorker(paths, find_tool("ffprobe", settings_), std::string(), this);
     probe_workers_.push_back(worker);
     connect(worker, &ProbeWorker::probed, this, [this](const Probed& probed) { take_profile(probed); });
     // As the rows' readers end: a "Reading..." shown while this one read is
