@@ -34,3 +34,23 @@ inline GrainDecoding grain_decoding(bool vvc, int film_grain, int kinds) {
     decoding.apply_grain = film_grain != 0;
     return decoding;
 }
+
+// How many pictures VVdeC parses ahead by default when it decodes with
+// `threads` (its DecLib: (threads * 24) >> 4, at most 48). A decoder holds
+// that many before its first comes out, and each seek starts a new one.
+inline unsigned vvdec_default_parse_delay(unsigned threads) {
+    const unsigned delay = (threads * 24) >> 4;
+    return delay < 48 ? delay : 48;
+}
+
+// Video Compare's (libvvdec's parse_delay): half the default, at least 2.
+// Half decodes as fast, where 2 did not: a 149 Mbit/s 4K60 stream on a
+// 32-thread CPU at 142-143 fps (the default 143-145, 2 36-37), and on 16
+// threads at 84 fps, as the default. A 4K 10-bit grain video then seeks
+// 0.23-0.33 s sooner and its decoder holds 1,750 MB, not 2,697 (32 threads).
+// The pictures are the same. 0 would decode strictly in order, waiting at
+// every picture's suffix SEI.
+inline unsigned video_compare_parse_delay(unsigned threads) {
+    const unsigned half = vvdec_default_parse_delay(threads) / 2;
+    return half > 2 ? half : 2;
+}

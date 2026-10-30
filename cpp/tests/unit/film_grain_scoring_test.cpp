@@ -7,6 +7,7 @@
 
 #include <optional>
 #include <string>
+#include <tuple>
 
 #include "grain_decoding.h"
 #include "vml/analysis_request.h"
@@ -129,6 +130,17 @@ TEST(FilmGrainScoring, EveryDecoderAddsOrLeavesOutTheGrainAsItIsScored) {
         EXPECT_EQ(got.export_grain, expected.export_grain);
         EXPECT_EQ(got.apply_grain, expected.apply_grain);
         EXPECT_EQ(picture_grain_options(expected.info), expected.pictures);
+    }
+}
+
+// VVdeC's own parse delay for the threads, (threads * 24) >> 4 at most 48,
+// and Video Compare's, half of it and at least 2 (grain_decoding.h).
+TEST(FilmGrainScoring, VvdecParsesAheadAsTheRuleForEachUseSays) {
+    for (const auto [threads, vvdec, video_compare] :
+         {std::tuple(0u, 0u, 2u), std::tuple(1u, 1u, 2u), std::tuple(16u, 24u, 12u), std::tuple(24u, 36u, 18u),
+          std::tuple(32u, 48u, 24u), std::tuple(64u, 48u, 24u)}) {
+        EXPECT_EQ(vvdec_default_parse_delay(threads), vvdec) << threads << " threads";
+        EXPECT_EQ(video_compare_parse_delay(threads), video_compare) << threads << " threads";
     }
 }
 

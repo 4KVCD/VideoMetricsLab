@@ -14,6 +14,7 @@
 #include <cstring>
 #include <limits>
 #include <map>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -563,10 +564,13 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::p
     }
     bool export_grain = grain.export_grain;
     vvdec_missing = false;
+    AVDictionary* options = nullptr;
     if (!hardware && grain.decoder != nullptr) {
         if (const AVCodec* named = avcodec_find_decoder_by_name(grain.decoder)) {
             codec = named;
             decoding->codec_name = codec->name;
+            // VVdeC decodes with every thread the CPU has (thread_count 0 below).
+            av_dict_set_int(&options, "parse_delay", video_compare_parse_delay(std::thread::hardware_concurrency()), 0);
         } else {
             vvdec_missing = true;  // FFmpeg's own decoder, its grain (other or none) left out
             export_grain = true;
@@ -574,6 +578,7 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::p
     }
     decoding->codec = avcodec_alloc_context3(codec);
     if (decoding->codec == nullptr) {
+        av_dict_free(&options);
         error = QStringLiteral("Out of memory");
         return nullptr;
     }
@@ -593,7 +598,8 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::p
     } else {
         decoding->codec->thread_count = 0;  // as many as the CPU has
     }
-    result = avcodec_open2(decoding->codec, codec, nullptr);
+    result = avcodec_open2(decoding->codec, codec, &options);
+    av_dict_free(&options);
     if (result < 0) {
         error = QStringLiteral("Could not start the decoder: %1").arg(error_text(result));
         return nullptr;
