@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <system_error>
 
+#include "vml/film_grain_scoring.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
 #include "vml/score_identity.h"
@@ -36,15 +37,20 @@ std::string custom_model_identity(const std::string& path) {
 }  // namespace
 
 nlohmann::json ComparisonRecipe::identity() const {
-    return {{"crop_mode", crop_mode == CropMode::automatic ? "auto" : "none"},
-            {"scale_direction",
-             scale_direction == ScaleDirection::source_to_distorted ? "source_to_distorted" : "distorted_to_source"},
-            {"duration_limit", duration_limit},
-            {"resample_test", resample_test ? nlohmann::json{{"width", resample_test->width},
-                                                             {"label", resample_test->label}}
-                                            : nlohmann::json(nullptr)},
-            {"manual_source_crop", nullptr},
-            {"manual_distorted_crop", nullptr}};
+    nlohmann::json identity{
+        {"crop_mode", crop_mode == CropMode::automatic ? "auto" : "none"},
+        {"scale_direction",
+         scale_direction == ScaleDirection::source_to_distorted ? "source_to_distorted" : "distorted_to_source"},
+        {"duration_limit", duration_limit},
+        {"resample_test", resample_test ? nlohmann::json{{"width", resample_test->width},
+                                                         {"label", resample_test->label}}
+                                        : nlohmann::json(nullptr)},
+        {"manual_source_crop", nullptr},
+        {"manual_distorted_crop", nullptr}};
+    if (!film_grain.is_null()) {
+        identity["film_grain"] = film_grain;
+    }
+    return identity;
 }
 
 nlohmann::json MetricRequestSpec::identity() const {
@@ -61,10 +67,18 @@ const MetricRequestSpec* AnalysisRequest::metric(const std::string& key) const {
 
 AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<std::string>& metric_keys,
                                  const std::map<std::string, std::string>& perceptual_backends,
-                                 const CvvdpSettings& cvvdp) {
+                                 const CvvdpSettings& cvvdp, const VideoInfo& source, const VideoInfo& distorted) {
     AnalysisRequest request;
     request.recipe = {options.crop_mode, options.scale_algorithm, options.scale_direction, options.duration_limit,
                       options.resample_test};
+    const std::optional<std::string> source_grain = film_grain_identity(source);
+    const std::optional<std::string> distorted_grain = film_grain_identity(distorted);
+    if (source_grain || distorted_grain) {
+        const auto text = [](const std::optional<std::string>& grain) {
+            return grain ? nlohmann::json(*grain) : nlohmann::json(nullptr);
+        };
+        request.recipe.film_grain = {{"source", text(source_grain)}, {"distorted", text(distorted_grain)}};
+    }
     request.perceptual_backends = automatic_perceptual_backends;
     for (const auto& [key, backend] : perceptual_backends) {
         if (!request.perceptual_backends.contains(key)) {
@@ -149,7 +163,8 @@ std::vector<MetricRequestSpec> displayable_metric_specs(const VmafOptions& optio
     std::vector<MetricRequestSpec> specs;
     std::set<std::string> found;  // each identity once, the first time it comes
     for (const std::vector<std::string>& keys : {ffmpeg, std::vector<std::string>{"xpsnr"}, perceptual}) {
-        for (MetricRequestSpec& spec : analysis_request(options, keys, {}, cvvdp).metrics) {
+        // Only the metrics' requests, which the videos' film grain is not part of.
+        for (MetricRequestSpec& spec : analysis_request(options, keys, {}, cvvdp, VideoInfo{}, VideoInfo{}).metrics) {
             if (found.insert(spec.identity().dump()).second) {
                 specs.push_back(std::move(spec));
             }

@@ -2024,11 +2024,28 @@ void MainWindow::on_probed(const Probed& probed) {
     if (!row) {
         return;  // removed while the probe was in flight
     }
+    // What the row's saved scores are filed under can depend on what reading
+    // the video finds (its film grain), and the lookup started with the probe:
+    // an answer to the request without it is dropped (a later one is refused
+    // by its token), and the lookup made again when the lane ends, once for
+    // all its videos.
+    const RowData& row_data = *rows_[static_cast<std::size_t>(*row)];
+    const auto token = [&] {
+        return lookup_token(source_info_->path, row_data.identity_path(), analysis_request_of(row_data));
+    };
+    const std::optional<std::string> asked = source_info_ ? std::optional(token()) : std::nullopt;
     set_row_info(*row, probed.info, probed.info ? QString() : probed.error);
+    if (asked && token() != *asked) {
+        invalidate_completed_results({*row});
+        probed_lookups_.push_back(row_data.path);
+    }
 }
 
 void MainWindow::on_probe_finished(ProbeWorker* worker) {
     retire(worker);
+    if (!probed_lookups_.empty()) {
+        start_cache_lookup(std::exchange(probed_lookups_, {}));
+    }
     if (std::any_of(probe_workers_.begin(), probe_workers_.end(), [](ProbeWorker* w) { return w->isRunning(); })) {
         return;  // another lane is still reading
     }
@@ -2546,9 +2563,10 @@ std::vector<std::string> MainWindow::reusable_metric_keys(const RowData& row_dat
                              (*info)->color_space, (*info)->color_range, (*info)->height});
         }
     }
-    return reusable_keys(row_data.completed_run->result,
+    const ComparisonResult& result = row_data.completed_run->result;
+    return reusable_keys(result,
                          analysis_request(row_data.options, requested_metrics(row_data), automatic_perceptual_backends,
-                                          row_data.cvvdp)
+                                          row_data.cvvdp, result.source_info, result.distorted_info)
                              .metrics,
                          automatic_perceptual_backends,
                          [build = row_data.options.vship_build](const std::string&) { return vship_available(build); },

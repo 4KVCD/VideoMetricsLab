@@ -98,6 +98,10 @@ struct VideoInfo {
     // film_grain_detect.h's FilmGrainKind bits, 0 for none; nothing where it
     // was not read (a run saved before 2.3, a scan that failed).
     std::optional<unsigned> film_grain;
+    // Whether it is scored with that film grain (true) or without (false),
+    // as the user chose; nothing where no choice was made: then with
+    // (film_grain_scoring.h's effective_film_grain).
+    std::optional<bool> with_film_grain;
 
     // Its frames' size as they reach the comparison's filters: scaled_to,
     // or its own.
@@ -119,6 +123,13 @@ struct VideoInfo {
     // filters (and their scale) as the size changes. Nothing for any other
     // video.
     std::vector<std::string> input_options() const;
+    // input_options() for an FFmpeg that decodes its pictures to score them,
+    // with -export_side_data film_grain for a video scored without its film
+    // grain (FFmpeg then adds none). Throws FilmGrainRefusal for one scored
+    // with grain FFmpeg does not add as the app does (H.274's: FFmpeg adds it
+    // at 8 bits only, rounded down): it is decoded in the app or not at all.
+    // Stream copies, ffprobe and black-bar detection take input_options().
+    std::vector<std::string> decode_options() const;
     // Whether the nominal and the average frame rate differ by more than
     // rounding.
     bool is_variable_frame_rate() const;

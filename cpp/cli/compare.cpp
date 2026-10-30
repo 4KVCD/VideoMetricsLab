@@ -26,6 +26,7 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
 #include "vml/film_grain_detect.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
 #include "vml/gpu_vmaf.h"
@@ -297,6 +298,9 @@ std::optional<VideoInfo> read_video(const std::filesystem::path& path, const Com
     }
     VideoInfo info = probe_video(path, ffprobe);
     info.film_grain = detect_film_grain(info, ffmpeg, CancelToken());
+    if (arguments.film_grain) {
+        info.with_film_grain = *arguments.film_grain == "with";
+    }
     if (!info.is_raw_stream()) {
         return info;
     }
@@ -868,7 +872,7 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         // 5.1.2's scores (vship_build_in_use), which is what is calculated.
         detect_vship_device(VshipBuild::fast, gpu_probes_token());
     }
-    video.request = analysis_request(video.options, video.metrics, chosen, cvvdp);
+    video.request = analysis_request(video.options, video.metrics, chosen, cvvdp, source, *video.info);
     std::optional<ComparisonResult> saved;
     if (use_saved) {
         if (auto found = load_result(cache_folder, source.path, video.path, video.request.recipe,
@@ -1098,6 +1102,7 @@ public:
 private:
     void leave_out_cvvdp_if_unable(TestVideo& video) const;
     void add_colour_notes(TestVideo& video) const;
+    void add_film_grain_notes(TestVideo& video) const;
     std::optional<std::string> queue_jobs(TestVideo& video);
     void queue_other_displays(TestVideo& video);
     // Whether `video`'s scores may be read from the saved scores: those it
@@ -1153,6 +1158,7 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
         video.notes.emplace_back("--size and --pix-fmt are not used: they are for raw YUV files, and neither this "
                                  "video nor the reference is one");
     }
+    add_film_grain_notes(video);
     video.metrics = asked_;
     leave_out_cvvdp_if_unable(video);
     if (video.metrics.empty()) {
@@ -1222,6 +1228,24 @@ void ComparisonPlanner::add_colour_notes(TestVideo& video) const {
         } else if (!has_colour_tags(*side.info)) {
             video.notes.push_back(guessed_colour_note(*side.info, side.which, video.source, *video.info));
         }
+    }
+}
+
+// Film grain asked for but left out (FilmGrainScoring::why_without), and
+// --film-grain given for two videos with no film grain.
+void ComparisonPlanner::add_film_grain_notes(TestVideo& video) const {
+    const std::pair<const VideoInfo*, const char*> sides[] = {{&video.source, "the reference"},
+                                                              {&*video.info, "the test video"}};
+    bool any_grain = false;
+    for (const auto& [info, which] : sides) {
+        const FilmGrainScoring grain = effective_film_grain(*info);
+        any_grain = any_grain || grain.scoring != GrainScoring::none;
+        if (!grain.why_without.empty()) {
+            video.notes.push_back(std::string("the film grain of ") + which + " is left out: " + grain.why_without);
+        }
+    }
+    if (arguments_.film_grain && !any_grain) {
+        video.notes.emplace_back("--film-grain is not used: neither this video nor the reference has film grain");
     }
 }
 

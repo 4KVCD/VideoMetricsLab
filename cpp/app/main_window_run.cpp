@@ -955,7 +955,7 @@ void MainWindow::save_job_result(std::size_t job, const RowData& row_data, const
                                  const QString& label) {
     const AnalysisRequest request =
         analysis_request(job_options_[job], requested_metrics(row_data), automatic_perceptual_backends,
-                         job_cvvdp_[job]);
+                         job_cvvdp_[job], result.source_info, result.distorted_info);
     file_writes_->submit(QStringLiteral("cache %1").arg(label),
                          [base = cache_folder(), identity = row_data.identity_path(), result,
                           label = label.toStdString(), request] {

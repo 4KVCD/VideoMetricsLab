@@ -932,7 +932,7 @@ std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const Vide
     std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", watched_log_level,
                                      "-nostats", "-y"};
     for (const VideoInfo* video : {&distorted, &source}) {
-        const std::vector<std::string> input = video->input_options();
+        const std::vector<std::string> input = video->decode_options();
         command.insert(command.end(), input.begin(), input.end());
         command.insert(command.end(), {"-i", input_path(video->path)});
     }

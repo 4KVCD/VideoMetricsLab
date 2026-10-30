@@ -46,6 +46,7 @@ Json values_of(const Arguments& parsed) {
         {"duration", either(a.duration)},
         {"frames", either(a.frames)},
         {"colour", either(a.colour)},
+        {"film_grain", either(a.film_grain)},
         {"fps", either(a.fps)},
         {"size", either(a.size)},
         {"pix_fmt", either(a.pix_fmt)},

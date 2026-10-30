@@ -5,6 +5,7 @@
 #include <cmath>
 #include <string_view>
 
+#include "vml/film_grain_scoring.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -92,6 +93,20 @@ std::vector<std::string> VideoInfo::input_options() const {
     // The rate as a double's shortest exact text: FFmpeg turns it back into
     // the fraction it came from (24000/1001 for 23.976023976023978).
     options.insert(options.end(), {"-framerate", python_repr(fps)});
+    return options;
+}
+
+std::vector<std::string> VideoInfo::decode_options() const {
+    std::vector<std::string> options = input_options();
+    const FilmGrainScoring grain = effective_film_grain(*this);
+    if (grain.scoring == GrainScoring::without) {
+        options.insert(options.end(), {"-export_side_data", "film_grain"});
+    } else if (only_the_app_adds(grain)) {
+        throw FilmGrainRefusal(
+            "it is scored with its H.274 film grain, which only the app's own decoder adds as it should (FFmpeg adds "
+            "it at 8 bits only, rounded down), and here FFmpeg would decode it: score it without its film grain, or "
+            "calculate the metric where the app decodes the video itself (VMAF on the GPU)");
+    }
     return options;
 }
 

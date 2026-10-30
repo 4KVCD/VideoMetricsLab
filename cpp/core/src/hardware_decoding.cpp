@@ -10,6 +10,8 @@
 #include <system_error>
 #include <utility>
 
+#include "vml/film_grain_detect.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -311,10 +313,41 @@ bool take_read_profile(VideoInfo& saved, const VideoInfo& read) {
     return true;
 }
 
+namespace {
+
+// Whether `grain` is H.274's or AFGS1, added: GPU decoders add neither
+// (FFmpeg adds them only decoding in software, the app's decoder as the app
+// does).
+bool no_gpu_decoder_adds(const FilmGrainScoring& grain) {
+    return grain.scoring == GrainScoring::with &&
+           (grain.kinds & (film_grain_h274 | film_grain_h274_model_1 | film_grain_afgs1)) != 0;
+}
+
+// Whether `video`'s film grain, as it is scored (film_grain_scoring.h), needs
+// software decoding rather than `hwaccel`: H.274's and AFGS1 added
+// (no_gpu_decoder_adds); AV1's on AMD's decoders in the app and Apple's
+// VideoToolbox, which cannot leave it out (VideoToolbox's adding it is not
+// proven either).
+bool grain_needs_software_decoding(const VideoInfo& video, const std::string& hwaccel) {
+    const FilmGrainScoring grain = effective_film_grain(video);
+    if (no_gpu_decoder_adds(grain)) {
+        return true;
+    }
+    if ((grain.kinds & film_grain_av1) == 0 || grain.scoring == GrainScoring::none) {
+        return false;
+    }
+    return hwaccel == "videotoolbox" || (hwaccel == "d3d11va" && grain.scoring == GrainScoring::without);
+}
+
+}  // namespace
+
 std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                        const VideoInfo& video, MacGpuDecoding mac) {
     std::optional<std::string> hwaccel =
         pick_decode(capabilities, vendor, video.codec_name, video.pix_fmt, video.width, video.height, mac);
+    if (hwaccel && grain_needs_software_decoding(video, *hwaccel)) {
+        return std::nullopt;
+    }
     // A video of no known profile may be lossless too (until the window has
     // read the file of a run saved before 2.3).
     if (hwaccel && (h264_444_profile(video) || h264_profile_unknown(video)) && hwaccel != "cuda" &&
@@ -349,6 +382,16 @@ std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode) {
     if (h264_profile_unknown(info)) {
         return "its H.264 profile is not known (a run saved before 2.3) and may be a lossless 4:4:4 one, which only "
                "NVIDIA's and Apple's GPUs decode exactly";
+    }
+    const FilmGrainScoring grain = effective_film_grain(info);
+    if (no_gpu_decoder_adds(grain)) {
+        return "it is scored with its film grain, which GPU decoders do not add";
+    }
+    if (grain.scoring != GrainScoring::none && (grain.kinds & film_grain_av1) != 0) {
+        // Not "this GPU" either: the video may have no GPU decoder here at all.
+        return grain.scoring == GrainScoring::without
+                   ? "no GPU decoder here for av1 that leaves its film grain out (AMD's and Apple's cannot)"
+                   : "no GPU decoder here for av1 known to add its film grain (Apple's is not)";
     }
     return "no GPU decoder here for " + info.codec_name;
 }

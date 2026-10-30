@@ -20,6 +20,7 @@
 #include "test_videos.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/film_grain_detect.h"
 #include "vml/ffprobe.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/model_select.h"
@@ -192,6 +193,36 @@ TEST(GpuFrames, DecodesTheVideosThePythonAppDecodesItself) {
         ++checked;
     }
     EXPECT_GE(checked, 20);  // at least the cases without the software decoder
+}
+
+// A video scored with H.274's film grain, which only the software decoder
+// adds as it should, is decoded by it alone, which then also decodes it as
+// a raw stream and scales it: FFmpeg could not decode it instead.
+TEST(GpuFrames, OnlyTheSoftwareDecoderAddsH274GrainAndThenDecodesRawStreamsAndScales) {
+    VideoInfo info;
+    info.path = "encode.266";
+    info.format_name = "vvc";
+    info.codec_name = "vvc";
+    info.pix_fmt = "yuv420p10le";
+    info.width = 1920;
+    info.height = 1080;
+    info.film_grain = film_grain_h274;
+    const DecodePlan raw = plan_decode(info, std::nullopt);
+    EXPECT_TRUE(raw.software_only);
+    EXPECT_TRUE(raw.untimed);
+    EXPECT_EQ(raw.film_grain, 1);
+    info.with_film_grain = false;  // FFmpeg decodes the raw stream, as before
+    EXPECT_THROW(plan_decode(info, std::nullopt), GpuDecodeUnavailableError);
+    info.format_name = "matroska,webm";
+    const std::string not_scaled = "the software decoder does not scale; FFmpeg scales it";
+    const DecodePlan without = plan_decode(info, std::nullopt, 0, false, std::pair(1280, 720));
+    EXPECT_FALSE(without.software_only || without.untimed);
+    EXPECT_EQ(without.film_grain, 0);
+    EXPECT_EQ(decoder_supports(0, without, software_decoder).second, not_scaled);
+    info.with_film_grain = true;
+    EXPECT_NE(decoder_supports(0, plan_decode(info, std::nullopt, 0, false, std::pair(1280, 720)), software_decoder)
+                  .second,
+              not_scaled);
 }
 
 // The decoder's pictures must match the packets fed: in timestamp order,

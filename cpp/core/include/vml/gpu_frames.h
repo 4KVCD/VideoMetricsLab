@@ -111,6 +111,20 @@ struct DecodePlan {
     int out_h = 0;
     std::string scaler = "bicubic";  // the app's scaling algorithm
     int widen = 0;  // widen_shift or widen_repeat: 8-bit pictures handed back as 10-bit (0: no)
+    // The stream's film grain as the video is scored (film_grain_scoring.h):
+    // 1 added, 0 left out, -1 as the decoder adds it by itself (none, or not
+    // known); and the kinds the stream describes (FilmGrainKind bits).
+    int film_grain = -1;
+    unsigned film_grain_kinds = 0;
+    // Whether only the software decoder may make the pictures, as it alone
+    // adds the H.274 film grain the video is scored with (only_the_app_adds).
+    // FFmpeg could not decode the video instead, so the software decoder then
+    // also scales, and decodes a raw stream.
+    bool software_only = false;
+    // A raw stream: its packets have no timestamps, so each is given the sum
+    // of the frame durations before it, and each picture, in display order,
+    // the earliest of those still waiting (frames are paired by number).
+    bool untimed = false;
 
     // The bytes per sample of the pictures handed back.
     int bytes_per_sample() const { return bit_depth > 8 || widen ? 2 : 1; }
@@ -201,8 +215,10 @@ std::optional<std::pair<std::string, std::string>> decoders_here(const HardwareD
 // FFmpeg's command that copies the video's first video stream out of its
 // container: the packets to its standard output, and each packet's
 // timestamp and size to a framecrc listing on the pipe at `listing_pipe`.
+// `input_options` go before the video (a raw stream's frame rate).
 std::vector<std::string> packet_reader_command(const std::string& ffmpeg, const std::filesystem::path& video,
-                                               std::string_view codec, const std::string& listing_pipe);
+                                               std::string_view codec, const std::string& listing_pipe,
+                                               const std::vector<std::string>& input_options = {});
 
 // How many decoders this process gave up closing because their library
 // never returned. Such a process cannot be trusted to end by itself (the
@@ -264,6 +280,11 @@ public:
     // Checks the picture stamped `pts` as it comes out. Returns whether it
     // is one to drop. Throws GpuDecodeFailedError.
     bool take(long long pts);
+
+    // The smallest timestamp of the packets fed whose pictures have not come
+    // out; nothing when there is none. An untimed stream's picture is
+    // stamped with it (DecodePlan::untimed).
+    std::optional<long long> earliest_waiting();
 
     // Throws GpuDecodeFailedError unless every packet fed has had its
     // picture. Call it at the stream's end.

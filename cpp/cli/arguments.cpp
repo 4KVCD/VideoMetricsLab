@@ -28,10 +28,10 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--scaler {bicubic,bilinear,lanczos,spline}]
                                    [--duration SECONDS | --frames N]
                                    [--colour {pq-bt2020,hlg-bt2020,bt709}]
-                                   [--fps RATE] [--size WIDTHxHEIGHT]
-                                   [--pix-fmt FORMAT] [--cvvdp-display PRESET]
-                                   [--subsample N] [--threads N]
-                                   [--vmaf-on {gpu,cpu}]
+                                   [--film-grain {with,without}] [--fps RATE]
+                                   [--size WIDTHxHEIGHT] [--pix-fmt FORMAT]
+                                   [--cvvdp-display PRESET] [--subsample N]
+                                   [--threads N] [--vmaf-on {gpu,cpu}]
                                    [--vship {vship-fast,vship}] [--cpu]
                                    [--no-gpu-decode] [--parallel N]
                                    [--recalculate] [--csv FOLDER]
@@ -112,6 +112,12 @@ options:
                         SSIMULACRA2 and Butteraugli. Scores with colours given
                         or taken are neither read from nor saved to the saved
                         scores
+  --film-grain {with,without}
+                        the film grain a video's stream asks the player to
+                        add: with (the default), as players show the video, or
+                        without, the coded pictures only. Grain no decoder
+                        here adds as it should (H.274's outside VVC, AFGS1 in
+                        H.264) is always left out
   --fps RATE            the frame rate of a raw video stream (a .264, .265,
                         .266 or .obu file, with no container) or a raw YUV
                         file (.yuv), which records none, such as 24000/1001,
@@ -750,6 +756,8 @@ Parser compare_parser(CompareArguments& parsed) {
                [&parsed](const std::string& value) {
                    parsed.colour = choice(value, {"pq-bt2020", "hlg-bt2020", "bt709"});
                }),
+        option({"--film-grain"},
+               [&parsed](const std::string& value) { parsed.film_grain = choice(value, {"with", "without"}); }),
         option({"--fps"}, [&parsed](const std::string& value) { parsed.fps = frame_rate(value); }),
         option({"--size"}, [&parsed](const std::string& value) { parsed.size = picture_size(value); }),
         option({"--pix-fmt"}, [&parsed](const std::string& value) { parsed.pix_fmt = pixel_format(value); }),

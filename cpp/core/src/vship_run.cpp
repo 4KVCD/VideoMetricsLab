@@ -16,12 +16,14 @@
 #include <mutex>
 #include <numeric>
 #include <optional>
+#include <set>
 #include <system_error>
 #include <thread>
 
 #include "vml/app_log.h"
 #include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
 #include "vml/frame_sync_by_time.h"
 #include "vml/geometry.h"
@@ -1289,6 +1291,9 @@ public:
         } catch (const VideoSizeChanged&) {
             close();  // made again with the video scaled first (run_perceptual_task)
             throw;
+        } catch (const FilmGrainRefusal&) {
+            close();  // final: stock Vship 5.1.2 and the CPU would meet it alike
+            throw;
         } catch (const VshipInputError& error) {
             logger.error("Vship pass (" + metric_labels(plan_.keys, ", ") + ") failed: " + error.what());
             // Made again the same way (remade_vship_pass), but not where a
@@ -1513,7 +1518,7 @@ private:
                                              watched_log_level, "-nostats", "-nostdin"};
             const std::vector<std::string> decode = hwaccel_args(accel);
             command.insert(command.end(), decode.begin(), decode.end());
-            const std::vector<std::string> input = video.info.input_options();
+            const std::vector<std::string> input = video.info.decode_options();
             command.insert(command.end(), input.begin(), input.end());
             command.insert(command.end(), {"-i", input_path(video.info.path), "-map",
                                            "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", chain});
@@ -2170,6 +2175,8 @@ PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const Pass
         throw;
     } catch (const VideoSizeChanged&) {
         throw;  // the child's, kept by run_isolated
+    } catch (const FilmGrainRefusal&) {
+        throw;  // likewise: no other route adds the grain either
     } catch (const std::runtime_error& error) {
         throw VshipUnavailableError(error.what());  // the child's own error, as its message
     }
@@ -2278,6 +2285,8 @@ private:
         } catch (const ComparisonCutShortError&) {
             throw;
         } catch (const VideoSizeChanged&) {
+            throw;
+        } catch (const FilmGrainRefusal&) {
             throw;
         } catch (const VshipPassesFailedError& error) {
             // The others failed too. Each keeps its own reason.
@@ -2405,6 +2414,8 @@ private:
                 throw;
             } catch (const VideoSizeChanged&) {
                 throw;  // every pass is made again, the video scaled first (run_perceptual_task)
+            } catch (const FilmGrainRefusal&) {
+                throw;  // the same in every pass and on the CPU
             } catch (const std::exception& error) {
                 if (cancel_.cancelled()) {
                     throw Cancelled();
@@ -2541,6 +2552,8 @@ public:
             throw;
         } catch (const VideoSizeChanged&) {
             throw;  // the task is made again, the video scaled first (run_perceptual_task)
+        } catch (const FilmGrainRefusal&) {
+            throw;  // not retried with stock Vship or on the CPU either: neither adds the grain
         } catch (const std::exception& error) {
             if (cancel_.cancelled()) {
                 throw Cancelled();
@@ -2656,6 +2669,8 @@ private:
             throw;
         } catch (const VideoSizeChanged&) {
             throw;
+        } catch (const FilmGrainRefusal&) {
+            throw;
         } catch (const std::exception& again) {
             if (cancel_.cancelled()) {
                 throw Cancelled();
@@ -2722,6 +2737,14 @@ private:
             throw;
         } catch (const VideoSizeChanged&) {
             throw;
+        } catch (const FilmGrainRefusal& refusal) {
+            // Final for these metrics, which the CPU is not asked for
+            // either (after_gpu); what Vship-fast scored stays.
+            for (const std::string& key : keys) {
+                set_failure(gpu_output.failures, key, refusal.what());
+                refused_.insert(key);
+            }
+            return;
         } catch (const std::exception& error) {
             if (cancel_.cancelled()) {
                 throw Cancelled();
@@ -2757,7 +2780,7 @@ private:
         PerceptualFailures failures = gpu_output.failures;
         std::vector<std::string> gpu_failed;
         for (const std::string& key : gpu_) {
-            if (key != "cvvdp" && failure_of(failures, key) != nullptr) {
+            if (key != "cvvdp" && failure_of(failures, key) != nullptr && !refused_.contains(key)) {
                 gpu_failed.push_back(key);
             }
         }
@@ -2800,6 +2823,16 @@ private:
             throw;
         } catch (const VideoSizeChanged&) {
             throw;  // the whole task is made again, the video scaled first
+        } catch (const FilmGrainRefusal& refusal) {
+            // Final for the CPU's metrics, as any failure from here is.
+            if (gpu_output.metrics.empty()) {
+                throw;
+            }
+            for (const std::string& key : cpu_keys) {
+                set_failure(failures, key, failed_on_cpu(key, refusal.what()));
+            }
+            gpu_output.failures = failures;
+            return gpu_output;
         } catch (const std::exception& error) {
             if (cancel_.cancelled()) {
                 throw Cancelled();
@@ -2855,6 +2888,7 @@ private:
     std::vector<std::string> cpu_;        // the metrics set to run on the CPU
     std::vector<std::string> gpu_only_;   // the GPU's metrics that run on no CPU (CVVDP)
     std::vector<std::string> retryable_;  // the metrics the CPU can take over
+    std::set<std::string> refused_;       // refused for the film grain: tried nowhere else
 };
 
 }  // namespace

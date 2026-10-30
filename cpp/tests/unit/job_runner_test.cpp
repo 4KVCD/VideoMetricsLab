@@ -17,6 +17,8 @@
 #include <utility>
 #include <vector>
 
+#include "vml/film_grain_detect.h"
+
 namespace vml {
 namespace {
 
@@ -440,6 +442,38 @@ TEST(JobRunner, PerceptualMetricsAloneMakeAResult) {
     EXPECT_EQ(result.source_crop, (CropBox{3840, 1608, 0, 276}));
     ASSERT_NE(result.metric_results.frame("ssimulacra2"), nullptr);
     EXPECT_EQ(result.metric_results.frame("ssimulacra2")->frame, (std::vector<int>{0, 3, 6}));
+}
+
+// A run that keeps all of FFmpeg's metrics from the saved scores builds on
+// the saved result, but with its videos' film grain as the run reads and
+// scores them: one saved before either was known has none, and the new
+// scores would be saved under another identity.
+TEST(JobRunner, AResultBuiltOnSavedScoresHasTheVideosFilmGrainAsScored) {
+    VmafJob job = job_of({});
+    job.source_info.film_grain = 0u;
+    job.distorted_info.film_grain = film_grain_h274;
+    job.distorted_info.with_film_grain = false;
+    job.metric_keys = {"vmaf", "ssimulacra2"};
+    job.tasks = {{std::string(perceptual_task), {"ssimulacra2"}}};
+    job.cached_result = result_with({{"vmaf", {0, 3, 6}}}, "version=vmaf_v0.6.1");  // no film grain read
+    job.cached_metrics = job.cached_result->metric_results;
+    const std::vector<VmafJob> jobs{job};
+    Reported reported;
+    run_jobs(
+        jobs, 1, reported.events(),
+        [](const VmafJob&, const VmafOptions&, const ProgressCallback&, const StatusCallback&,
+           const CancelToken&) -> ComparisonResult { throw std::logic_error("no FFmpeg task"); },
+        [](const VmafJob&, const std::vector<std::string>&, bool, int, const PerceptualHooks&, const CancelToken&) {
+            return output_with({{"ssimulacra2", {0, 3, 6}}}, 9);
+        },
+        false, 24, CancelToken());
+
+    ASSERT_EQ(reported.finished.size(), 1u);
+    const ComparisonResult& result = reported.finished.at(0);
+    EXPECT_TRUE(result.has_metric("vmaf") && result.has_metric("ssimulacra2"));
+    EXPECT_EQ(result.source_info.film_grain, 0u);
+    EXPECT_EQ(result.distorted_info.film_grain, film_grain_h274);
+    EXPECT_EQ(result.distorted_info.with_film_grain, false);
 }
 
 // Saved scores, scored on frames 0 and 1.

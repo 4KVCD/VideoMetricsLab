@@ -745,6 +745,9 @@ int CUDAAPI on_sequence(void *user, CUVIDEOFORMAT *format) {
 int CUDAAPI on_decode(void *user, CUVIDPICPARAMS *picture) {
     Decoder *d = static_cast<Decoder *>(user);
     if (!d->decoder || d->stopped()) return 0;
+    // The parser asks for AV1's film grain as the stream gives it; left out,
+    // the picture shown is the one decoded.
+    if (d->params.codec == CODEC_AV1 && d->params.film_grain == 0) picture->CodecSpecific.av1.apply_grain = 0;
     if (!d->check(g_driver.cuvidDecodePicture(d->decoder, picture), "Decoding a picture")) return 0;
     std::lock_guard<std::mutex> guard(d->mutex);
     d->info.decoded++;

@@ -477,6 +477,9 @@ bool start_decoder(Decoder *d) {
         d->fail("the crop is outside the picture");
         return false;
     }
+    // DecodeHeader asks for AV1's film grain to be added when the stream has
+    // it; zero leaves it out (the pictures are then the reconstructed ones).
+    if (d->params.film_grain == 0) v.mfx.FilmGrain = 0;
     // Scaled pictures stay on the GPU, to be scaled there.
     d->buffered = is_scaled(d->params) && d->params.cpu_scaling != 1;
     v.IOPattern = d->buffered ? MFX_IOPATTERN_OUT_VIDEO_MEMORY : MFX_IOPATTERN_OUT_SYSTEM_MEMORY;

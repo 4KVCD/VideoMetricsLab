@@ -63,6 +63,9 @@ nlohmann::ordered_json video_info_to_dict(const VideoInfo& info) {
     if (info.film_grain) {
         dict["film_grain"] = film_grain_names(*info.film_grain);
     }
+    if (info.with_film_grain) {
+        dict["with_film_grain"] = *info.with_film_grain;
+    }
     return dict;
 }
 
@@ -98,6 +101,9 @@ VideoInfo video_info_from_dict(const nlohmann::json& data) {
             }
         }
         info.film_grain = film_grain_from_names(names);
+    }
+    if (const auto with = data.find("with_film_grain"); with != data.end() && with->is_boolean()) {
+        info.with_film_grain = with->get<bool>();
     }
     return info;
 }

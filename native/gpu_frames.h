@@ -54,7 +54,20 @@ struct Params {
     int handover;        // AMD: the pictures stay on the GPU, for nvf_copy_luma,
                          // nvf_download_planes and nvf_import_vulkan (amf_handover.h); not
                          // scaled. NVIDIA's always do; unused elsewhere
+    int film_grain;      // the stream's film grain: 1 added, 0 left out, -1 as the decoder adds
+                         // it by itself (the grain not known)
+    int film_grain_kinds;  // what grain the stream describes: the app's FilmGrainKind bits
+                           // (1 H.274, 2 H.274's model 1, 4 AFGS1, 8 AV1's)
 };
+
+// The Params layout this library was built with. The app refuses a library of
+// another: it would read the fields given as other ones (one built before the
+// film grain fields would leave them unread).
+#define NVF_PARAMS_VERSION 2
+NVF_API int nvf_params_version() { return NVF_PARAMS_VERSION; }
+
+// FilmGrainKind bits (the app's film_grain_detect.h).
+enum GrainKind { GRAIN_H274 = 1, GRAIN_H274_MODEL_1 = 2, GRAIN_AFGS1 = 4, GRAIN_AV1 = 8 };
 
 inline int out_width(const Params &p) { return p.out_w > 0 ? p.out_w : p.crop_w; }
 inline int out_height(const Params &p) { return p.out_h > 0 ? p.out_h : p.crop_h; }
@@ -75,7 +88,7 @@ inline bool params_valid(const Params &p) {
     return (p.bit_depth == 8 || p.bit_depth == 10) && !(p.crop_x & 1) && !(p.crop_y & 1) && p.crop_w > 0
            && p.crop_h > 0 && p.pool >= 1 && (p.shift == 0 || p.shift == 6) && !(p.bit_depth == 8 && p.shift)
            && p.out_w >= 0 && p.out_h >= 0 && p.scaler >= 0 && p.scaler <= 3 && p.widen >= 0 && p.widen <= 2
-           && !(p.widen && p.bit_depth != 8);
+           && !(p.widen && p.bit_depth != 8) && p.film_grain >= -1 && p.film_grain <= 1;
 }
 
 // The bytes of one picture handed back: the (scaled) crop's luma, then U and V.

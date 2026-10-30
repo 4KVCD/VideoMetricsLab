@@ -50,7 +50,7 @@ AnalysisRequest request_from(const nlohmann::json& item) {
     std::map<std::string, std::string> backends = item.at("backends");
     const CvvdpSettings cvvdp =
         item.at("cvvdp").is_null() ? CvvdpSettings{} : CvvdpSettings::from_parameters(item.at("cvvdp"));
-    return analysis_request(options_from(item.at("options")), keys, backends, cvvdp);
+    return analysis_request(options_from(item.at("options")), keys, backends, cvvdp, VideoInfo{}, VideoInfo{});
 }
 
 std::optional<std::string> text_or_none(const nlohmann::json& data) {
@@ -227,7 +227,7 @@ TEST(MetricCache, AnswersAsThePythonApp) {
         VmafOptions options;
         options.vship_build = vship_build_from(item.value("vship_build", std::string("vship-fast")));
         const AnalysisRequest request =
-            analysis_request(options, {"ssimulacra2", "xpsnr", "vmaf"}, {}, CvvdpSettings{});
+            analysis_request(options, {"ssimulacra2", "xpsnr", "vmaf"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{});
         std::vector<ColourTags> infos;
         for (const nlohmann::json& info : item.at("infos")) {
             infos.push_back({info.at("pix_fmt"), info.at("color_transfer"), {}, {}, {}, 0});  // no siting, matrix, range
@@ -266,9 +266,11 @@ TEST(MetricCache, AnswersAsThePythonApp) {
 TEST(MetricCache, OldScoresAreKeptButForAPairALaterColourFixReadsOtherwise) {
     VmafOptions vship51;
     vship51.vship_build = VshipBuild::stock;
-    const AnalysisRequest request = analysis_request(vship51, {"ssimulacra2", "cvvdp"}, {}, CvvdpSettings{});
+    const AnalysisRequest request =
+        analysis_request(vship51, {"ssimulacra2", "cvvdp"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{});
     const MetricRequestSpec& spec = *request.metric("ssimulacra2");
-    const AnalysisRequest fast_request = analysis_request(VmafOptions{}, {"ssimulacra2", "cvvdp"}, {}, CvvdpSettings{});
+    const AnalysisRequest fast_request =
+        analysis_request(VmafOptions{}, {"ssimulacra2", "cvvdp"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{});
     const MetricRequestSpec& fast_spec = *fast_request.metric("ssimulacra2");
     const std::vector<ColourTags> guessed_apart{{"yuv420p", "", "", "", "", 720}, {"yuv420p", "", "", "", "", 540}};
     const std::vector<ColourTags> guessed_alike{{"yuv420p", "", "", "", "", 1080}, {"yuv420p", "", "", "", "", 720}};
@@ -457,14 +459,15 @@ TEST(MetricCache, ASavedVmafKeepsTheModelItWasMadeWith) {
             vmaf.provenance.parameters["model"] = nlohmann::json(model).dump();
             result.metric_results.add(vmaf);
         }
-        const AnalysisRequest request =
-            analysis_request(options, {model.empty() ? "cvvdp" : "vmaf"}, {}, CvvdpSettings{});
+        const AnalysisRequest request = analysis_request(options, {model.empty() ? "cvvdp" : "vmaf"}, {},
+                                                         CvvdpSettings{}, VideoInfo{}, VideoInfo{});
         store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe, result, "t", request.metrics);
     };
     const auto load = [&](const std::string& choice) {
         VmafOptions options;
         options.model_choice = choice;
-        const AnalysisRequest request = analysis_request(options, {"vmaf"}, {}, CvvdpSettings{});
+        const AnalysisRequest request =
+            analysis_request(options, {"vmaf"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{});
         const auto loaded = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
                                         request.metrics, request.perceptual_backends);
         return loaded ? Models(loaded->first.model, loaded->first.model_choice) : Models();

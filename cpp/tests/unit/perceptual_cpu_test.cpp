@@ -24,6 +24,7 @@
 #include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
@@ -555,6 +556,47 @@ TEST(PerceptualRouting, AFailedGpuTaskMovesToVship51ThenToTheCpuAtAnyLength) {
     }
 }
 
+// A film grain refusal is final: a GPU task refused is not made again with
+// stock Vship 5.1.2 or on the CPU, a metric refused by 5.1.2 is not taken to
+// the CPU, and what the GPU scored stays when the CPU refuses its metrics.
+TEST(PerceptualRouting, AFilmGrainRefusalIsFinal) {
+    const auto refused = [](const auto&...) -> PerceptualTaskOutput { throw FilmGrainRefusal("refused"); };
+    const auto on_cpu = [](const auto&, const auto&) { return scored("ssimulacra2", 80.0f, "cpu"); };
+    const auto stock = [](const auto&) { return scored("ssimulacra2", 81.0f, "gpu"); };
+    Routed routed;
+    EXPECT_THROW(run_perceptual_task(routed_request(), {"ssimulacra2", "cvvdp"}, false, recording_hooks(routed),
+                                     CancelToken(), stand_in_routes(routed, test_gpu, refused, on_cpu, stock)),
+                 FilmGrainRefusal);
+    EXPECT_TRUE(routed.vship51.empty());
+    EXPECT_TRUE(routed.cpu.empty());
+
+    const auto failed_ssimulacra2 = [](const auto&, const auto&) {
+        PerceptualTaskOutput output = scored("cvvdp", 9.4f, "gpu");
+        output.failures = {{"ssimulacra2", "Vship SSIMULACRA2 failed: out of memory"}};
+        return output;
+    };
+    Routed by_vship51;
+    PerceptualTaskOutput output =
+        run_perceptual_task(routed_request(), {"ssimulacra2", "cvvdp"}, false, recording_hooks(by_vship51),
+                            CancelToken(), stand_in_routes(by_vship51, test_gpu, failed_ssimulacra2, on_cpu, refused));
+    EXPECT_EQ(by_vship51.vship51, (std::vector<std::string>{"ssimulacra2"}));
+    EXPECT_TRUE(by_vship51.cpu.empty());
+    EXPECT_TRUE(output.metrics.has("cvvdp"));
+    ASSERT_NE(failure_of(output.failures, "ssimulacra2"), nullptr);
+    EXPECT_EQ(*failure_of(output.failures, "ssimulacra2"), "refused");
+
+    Routed by_cpu;
+    PerceptualRequest request = routed_request();
+    request.backends = {{"ssimulacra2", "cpu"}};
+    output = run_perceptual_task(
+        request, {"ssimulacra2", "cvvdp"}, false, recording_hooks(by_cpu), CancelToken(),
+        stand_in_routes(by_cpu, test_gpu, [](const auto&, const auto&) { return scored("cvvdp", 9.4f, "gpu"); },
+                        refused));
+    EXPECT_TRUE(output.metrics.has("cvvdp"));
+    ASSERT_NE(failure_of(output.failures, "ssimulacra2"), nullptr);
+    EXPECT_EQ(*failure_of(output.failures, "ssimulacra2"), "refused");
+}
+
 // A cancelled GPU task does not start the CPU's.
 TEST(PerceptualRouting, CancellingDoesNotStartTheCpu) {
     Routed routed;
@@ -595,6 +637,10 @@ TEST(PerceptualRouting, APassWhoseInputFailedIsMadeOnceMore) {
     attempts = 0;
     const auto gpu_error = std::make_exception_ptr(VshipUnavailableError("Vship CVVDP failed"));
     EXPECT_THROW(remade_vship_pass(pass(1, gpu_error), on_status, CancelToken()), VshipUnavailableError);
+    EXPECT_EQ(attempts, 1);
+    attempts = 0;
+    const auto refusal = std::make_exception_ptr(FilmGrainRefusal("the app could not decode its pictures"));
+    EXPECT_THROW(remade_vship_pass(pass(1, refusal), on_status, CancelToken()), FilmGrainRefusal);
     EXPECT_EQ(attempts, 1);
 }
 

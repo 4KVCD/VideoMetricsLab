@@ -21,6 +21,7 @@
 
 #include "vml/app_log.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
 #include "vml/frame_sync_by_time.h"
 #include "vml/hevc.h"
@@ -276,7 +277,11 @@ struct NativeParams {
     int widen;
     int cpu_scaling;
     int handover;
+    int film_grain;
+    int film_grain_kinds;
 };
+// The layout above: a library that says another is refused (DecoderLibrary).
+constexpr int native_params_version = 2;
 
 // A function of `library` that some builds of it lack: nullptr where it has
 // none.
@@ -435,6 +440,14 @@ const DecoderLibrary& load_decoder(std::string_view backend) {
     } catch (const platform::LibraryError& error) {
         throw GpuDecodeUnavailableError(std::string("the GPU frame decoder could not be loaded: ") + error.what());
     }
+    // One built for another Params layout would read the fields it is given
+    // as other ones: one older than the film grain fields would never read
+    // them, and add the grain whatever the video is scored with.
+    if (const auto version = optional_function<int (*)()>(library->library, "nvf_params_version");
+        version == nullptr || version() != native_params_version) {
+        throw GpuDecodeUnavailableError("the frame decoder (" + platform::path_text(path.filename()) +
+                                        ") is out of date: build it again (scripts/build_gpu_frames.ps1)");
+    }
     if (backend == software_decoder) {
         software_libraries.reserve(3);  // never moved: the decoder keeps their handles
         std::array<void*, 3> handles{};
@@ -487,7 +500,9 @@ NativeParams native_params(const DecodePlan& plan, int device, int pool, const s
                         scaler_number(plan.scaler),
                         plan.widen,
                         0,  // cpu_scaling: Intel's and AMD's tests only
-                        handover ? 1 : 0};
+                        handover ? 1 : 0,
+                        plan.film_grain,
+                        static_cast<int>(plan.film_grain_kinds)};
 }
 
 // Closes a decoder on a thread of its own, waited for only so long: a close
@@ -551,11 +566,14 @@ long long listing_int(std::string_view text) {
 // outputs waits for the other.
 class PacketReader {
 public:
-    PacketReader(const std::string& ffmpeg, const std::filesystem::path& video, std::string_view codec)
+    // `untimed`: a raw stream, read with `input_options` (DecodePlan::untimed).
+    PacketReader(const std::string& ffmpeg, const std::filesystem::path& video, std::string_view codec,
+                 const std::vector<std::string>& input_options = {}, bool untimed = false)
         : listing_pipe_("gpu-frames", listing_pipe_bytes),
-          command_(packet_reader_command(ffmpeg, video, codec, listing_pipe_.path())),
+          command_(packet_reader_command(ffmpeg, video, codec, listing_pipe_.path(), input_options)),
           file_name_(platform::path_text(video.filename())),
-          leading_(codec) {}
+          leading_(codec),
+          untimed_(untimed) {}
 
     ~PacketReader() {
         close();
@@ -587,7 +605,13 @@ public:
             if (passes_over(data)) {
                 continue;
             }
-            if (item->pts == no_pts) {
+            const long long time = untimed_ ? untimed_time_ : item->pts;
+            if (untimed_) {
+                if (item->duration <= 0) {
+                    throw GpuDecodeFailedError("a packet of the raw stream has no duration");
+                }
+                untimed_time_ += item->duration;
+            } else if (item->pts == no_pts) {
                 throw GpuDecodeFailedError("a packet has no timestamp");
             }
             if (first_ && !(item->flags & key_flag)) {
@@ -597,7 +621,7 @@ public:
                 throw GpuDecodeFailedError("FFmpeg rewrote the video's timestamps: " + *warning);
             }
             first_ = false;
-            pts = item->pts;
+            pts = time;
             flags = item->flags;
             return true;
         }
@@ -639,6 +663,7 @@ public:
 private:
     struct Listed {
         long long pts;
+        long long duration;
         long long size;
         int flags;
     };
@@ -789,7 +814,7 @@ private:
             }
             last_dts = dts;
         }
-        const Listed listed{listing_int(fields[2]), listing_int(fields[4]), flags};
+        const Listed listed{listing_int(fields[2]), listing_int(fields[3]), listing_int(fields[4]), flags};
         const std::lock_guard lock(mutex_);
         listing_.push_back(listed);
         listed_.notify_all();
@@ -880,6 +905,8 @@ private:
     bool first_ = true;
     std::string file_name_;  // for the log
     LeadingPictures leading_;  // what of the video's start is passed over
+    bool untimed_ = false;
+    long long untimed_time_ = 0;  // an untimed stream's next packet's time: the durations so far
     std::atomic<bool> closed_{false};
     // After what its error thread uses (note_error_line), so that it goes first.
     std::optional<platform::ChildProcess> ffmpeg_;
@@ -977,9 +1004,11 @@ DecodePlan plan_decode(const VideoInfo& info, const std::optional<CropBox>& crop
         throw GpuDecodeUnavailableError((info.codec_name.empty() ? "this codec" : info.codec_name) +
                                         " is decoded by FFmpeg");
     }
-    if (info.is_raw_stream()) {
-        // Decoding here needs each packet's timestamp, and a raw stream's
-        // packets have none: the pass would start only to fail.
+    const FilmGrainScoring grain = effective_film_grain(info);
+    const bool software_only = only_the_app_adds(grain);
+    if (info.is_raw_stream() && !software_only) {
+        // A raw stream's packets have no timestamps to check the pictures
+        // by, only their count (DecodePlan::untimed); FFmpeg decodes it.
         throw GpuDecodeUnavailableError("a raw stream is decoded by FFmpeg");
     }
     const int depth = depth_of(ascii_lower(info.pix_fmt));
@@ -1023,6 +1052,12 @@ DecodePlan plan_decode(const VideoInfo& info, const std::optional<CropBox>& crop
     plan.shift = depth > 8 ? shift : 0;
     plan.luma_only = luma_only;
     plan.scaler = is_scaler(algorithm) ? algorithm : "bicubic";
+    plan.film_grain = grain.scoring == GrainScoring::with      ? 1
+                      : grain.scoring == GrainScoring::without ? 0
+                                                               : -1;
+    plan.film_grain_kinds = grain.kinds;
+    plan.software_only = software_only;
+    plan.untimed = info.is_raw_stream();
     return plan;
 }
 
@@ -1100,7 +1135,11 @@ std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan
     if (!decodes_codec(plan.codec, backend)) {
         return {false, plan.codec + " is not decoded by the " + std::string(backend) + " decoder"};
     }
-    if (backend == software_decoder && plan.scaled()) {
+    if (plan.software_only && backend != software_decoder) {
+        return {false, "only the software decoder adds the H.274 film grain the video is scored with"};
+    }
+    if (backend == software_decoder && plan.scaled() && !plan.software_only) {
+        // On the caller's one thread it is slower than FFmpeg's scaling.
         return {false, "the software decoder does not scale; FFmpeg scales it"};
     }
     const DecoderLibrary* library = nullptr;
@@ -1165,7 +1204,8 @@ std::optional<std::pair<std::string, std::string>> decoders_here(const HardwareD
 }
 
 std::vector<std::string> packet_reader_command(const std::string& ffmpeg, const std::filesystem::path& video,
-                                               std::string_view codec, const std::string& listing_pipe) {
+                                               std::string_view codec, const std::string& listing_pipe,
+                                               const std::vector<std::string>& input_options) {
     const Codec* found = find_codec(codec);
     if (found == nullptr) {
         throw std::invalid_argument(std::string(codec) + " is not decoded here");
@@ -1178,8 +1218,9 @@ std::vector<std::string> packet_reader_command(const std::string& ffmpeg, const 
     // -y: the listing's pipe already exists (this process serves it).
     // -copyinkf copies every packet, as a decoder would be given them (the
     // reader checks that the first is a keyframe).
-    std::vector<std::string> command{ffmpeg, "-hide_banner", "-nostdin", "-y", "-loglevel", "warning",
-                                     "-i", input_path(video), "-map", stream, "-c:v", "copy", "-copyinkf"};
+    std::vector<std::string> command{ffmpeg, "-hide_banner", "-nostdin", "-y", "-loglevel", "warning"};
+    command.insert(command.end(), input_options.begin(), input_options.end());
+    command.insert(command.end(), {"-i", input_path(video), "-map", stream, "-c:v", "copy", "-copyinkf"});
     command.insert(command.end(), filters.begin(), filters.end());
     command.insert(command.end(), {"-f", "data", "pipe:1", "-map", stream, "-c:v", "copy", "-copyinkf"});
     command.insert(command.end(), filters.begin(), filters.end());
@@ -1279,6 +1320,11 @@ bool PictureChecks::take(long long pts) {
     return discarded;
 }
 
+std::optional<long long> PictureChecks::earliest_waiting() {
+    const std::lock_guard lock(mutex_);
+    return waiting_.empty() ? std::nullopt : std::optional(waiting_.top());
+}
+
 void PictureChecks::check_end() {
     long long fed = 0;
     {
@@ -1317,6 +1363,7 @@ struct GpuFrameStream::State {
     void* handle = nullptr;
     // Whether the pictures are handed over on the GPU (handover()).
     bool handover = false;
+    bool untimed = false;  // DecodePlan::untimed
     std::unique_ptr<PacketReader> reader;
     std::atomic<bool> closing{false};
 
@@ -1385,7 +1432,9 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
         throw GpuDecodeUnavailableError(*refusal);
     }
     state.library = &load_decoder(backend);
-    state.reader = std::make_unique<PacketReader>(ffmpeg, info.path, plan.codec);
+    state.untimed = plan.untimed;
+    state.reader = std::make_unique<PacketReader>(
+        ffmpeg, info.path, plan.codec, plan.untimed ? info.input_options() : std::vector<std::string>(), plan.untimed);
     state.configuration = configuration(ffprobe, info.path, plan.codec);
     state.handover = backend == "nvidia" || (handover && can_hand_over(plan, backend));
     std::string said;
@@ -1456,6 +1505,11 @@ std::optional<GpuFrameStream::Picture> GpuFrameStream::next(const CancelToken& c
         long long pts = 0;
         int code = 0;
         while ((code = state.library->pop(state.handle, 100, &slot, &pts)) == nvf_frame) {
+            if (state.untimed) {
+                // Each picture comes back with its own packet's time, given
+                // in decode order; shown in display order, it is the next due.
+                pts = state.checks.earliest_waiting().value_or(pts);
+            }
             bool discarded = false;
             try {
                 discarded = state.checks.take(pts);

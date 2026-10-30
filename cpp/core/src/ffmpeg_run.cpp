@@ -22,6 +22,7 @@
 #include "vml/app_log.h"
 #include "vml/crop_detect.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
 #include "vml/gpu_frames.h"
@@ -823,7 +824,7 @@ ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& sou
         const std::string graph = build_filtergraph(source, distorted, options, source_crop, distorted_crop, plan,
                                                     "vmaf_log.json", run_model, xpsnr_log_name, environment.cores);
         return build_ffmpeg_command(environment.ffmpeg, distorted.path, source.path, graph, plan,
-                                    options.duration_limit, {distorted.input_options(), source.input_options()});
+                                    options.duration_limit, {distorted.decode_options(), source.decode_options()});
     };
     return execute_run(build_command, options, model, fps, total_frames, decoding, "vmaf_run_", on_progress, on_status,
                        cancel);
@@ -936,7 +937,7 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
             const std::vector<std::vector<std::string>> commands = build_stream_commands(
                 environment.ffmpeg, distorted.path, source.path,
                 build_stream_graphs(source, distorted, options, source_crop, distorted_crop, decode), decode,
-                attempt.output_args(limit), {distorted.input_options(), source.input_options()});
+                attempt.output_args(limit), {distorted.decode_options(), source.decode_options()});
             for (const std::vector<std::string>& command : commands) {
                 logger.info("FFmpeg: " + python_list2cmdline(command));
             }
@@ -1108,8 +1109,8 @@ bool xpsnr_in_app(int width, int height, int bit_depth) {
 
 // Whether the app will decode both videos itself (score_decoded_cpu), as far
 // as can be known before it asks the decoders: a video compared at another
-// size only with a GPU's decoder that scales it as `ffmpeg` would
-// (scaling_refusal; the software decoder does not scale).
+// size only with a decoder that scales it as `ffmpeg` would (scaling_refusal;
+// the software decoder scales only what it alone decodes, software_only).
 bool decoded_in_app(const VideoInfo& source, const VideoInfo& distorted, const std::optional<CropBox>& source_crop,
                     const std::optional<CropBox>& distorted_crop, std::pair<int, int> size,
                     const std::string& scale_algorithm, const HardwareDecoding& decoding, const std::string& ffmpeg) {
@@ -1121,7 +1122,7 @@ bool decoded_in_app(const VideoInfo& source, const VideoInfo& distorted, const s
         return false;
     }
     const auto decodes_here = [&ffmpeg](const std::string& decoder, const DecodePlan& plan) {
-        return !plan.scaled() || (decoder != software_decoder && !scaling_refusal(plan, ffmpeg));
+        return !plan.scaled() || ((decoder != software_decoder || plan.software_only) && !scaling_refusal(plan, ffmpeg));
     };
     try {
         return decodes_here(decoders->first, plan_decode(source, source_crop, 6, true, size, scale_algorithm)) &&
@@ -1368,6 +1369,8 @@ std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const 
         throw;
     } catch (const VideoSizeChanged&) {
         throw;  // the run is made again, the video marked (run_vmaf)
+    } catch (const FilmGrainRefusal&) {
+        throw;  // not a failure: the CPU's FFmpeg would not add the grain either
     } catch (const std::exception& error) {
         logger.error(std::string("VMAF on the GPU failed; calculating it on the CPU: ") + error.what());
         if (on_status) {
@@ -1534,6 +1537,9 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
     } catch (const VideoSizeChanged&) {
         xpsnr.reset();
         throw;  // the run is made again, the video marked (run_vmaf)
+    } catch (const FilmGrainRefusal&) {
+        xpsnr.reset();
+        throw;  // not a failure: FFmpeg would not add the grain either
     } catch (const std::exception& error) {
         xpsnr.reset();
         logger.error(metric_names(plan) + " in the app failed; FFmpeg calculates them: " + error.what());
@@ -2086,7 +2092,7 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
                                                              "vmaf_log.json", run_model, xpsnr_log_name,
                                                              environment.cores);
         return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, options.duration_limit,
-                                      source.input_options());
+                                      source.decode_options());
     };
     const ParsedScores scores = execute_run(build_command, options, model, source.fps, total_frames, decoding,
                                             "vmaf_resample_", on_progress, on_status, cancel);

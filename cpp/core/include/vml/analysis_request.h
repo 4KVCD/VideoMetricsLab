@@ -24,11 +24,16 @@ struct ComparisonRecipe {
     ScaleDirection scale_direction = ScaleDirection::source_to_distorted;
     double duration_limit = 0.0;
     std::optional<ResampleTarget> resample_test;
+    // The two videos' film grain as they are scored: {"source": ..,
+    // "distorted": ..}, each film_grain_identity's text or null; null where
+    // neither has one (film_grain_scoring.h).
+    nlohmann::json film_grain = nullptr;
 
     // The settings that decide what the comparison is (identity_dict): the
     // scaling algorithm is not one (the Python app counts a comparison
     // scaled another way as the same one), and the manual crops, which the
-    // app no longer has, are null.
+    // app no longer has, are null. The film grain is in it only where it is
+    // not null, so that every other comparison keeps the identity it had.
     nlohmann::json identity() const;
 };
 
@@ -71,15 +76,15 @@ struct AnalysisRequest {
     const MetricRequestSpec* metric(const std::string& key) const;
 };
 
-// The request for the metrics `metric_keys` of a comparison made with
-// `options` (analysis_request_from_vmaf_options), with CVVDP modelling
-// `cvvdp`'s display. Its Vship metrics ask for the scores of the build that
-// calculates here (vship_build_in_use), which can depend on Vship-fast's
-// finished probe. Throws std::invalid_argument for a metric with no way to
-// calculate it.
+// The request for the metrics `metric_keys` of a comparison of `distorted`
+// with `source` made with `options` (analysis_request_from_vmaf_options),
+// with CVVDP modelling `cvvdp`'s display. Its Vship metrics ask for the
+// scores of the build that calculates here (vship_build_in_use), which can
+// depend on Vship-fast's finished probe. Throws std::invalid_argument for a
+// metric with no way to calculate it.
 AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<std::string>& metric_keys,
                                  const std::map<std::string, std::string>& perceptual_backends,
-                                 const CvvdpSettings& cvvdp);
+                                 const CvvdpSettings& cvvdp, const VideoInfo& source, const VideoInfo& distorted);
 
 // The request of every saved score a row of the window can show for its
 // comparison, its metric ticked or not (the Python app's

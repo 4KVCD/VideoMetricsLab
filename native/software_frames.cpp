@@ -18,19 +18,23 @@
 // (native/ffmpeg) and refuses libraries of another major version; of dav1d
 // it mirrors the few structures it uses (dav1d/dav1d_api.h), checked against
 // its API version. The app feeds the packets FFmpeg copies out of the
-// container with their timestamps, as for the GPU decoders.
+// container with their timestamps (a raw stream's made up), as for the GPU
+// decoders.
 //
 // Their pictures are the same as FFmpeg's decode, sample for sample. The
-// film grain an H.264, HEVC or VVC stream asks for (H.274's, or AOM's AFGS1)
-// is added as FFmpeg 9 adds it, and AV1's by dav1d as FFmpeg's libdav1d
-// decoder adds it. Pictures are held as the decoder made them, by reference,
-// until the caller downloads them. nvf_download makes the one CPU pass a
-// picture costs, straight into the caller's buffer: it copies the crop's
-// planes, aligns 10-bit samples as asked and widens 8-bit ones as FFmpeg
-// widens them, or scales the crop with the GPU decoders' filters
-// (scale_filter.h). The app does not ask
-// it to scale (gpu_frames.decoder_supports): on the caller's one thread that
-// is slower than FFmpeg scaling in threads before its pipe.
+// film grain a stream asks for is as the video is scored (Params::film_grain):
+// left out, its parameters exported; or added, VVC's H.274 by VVdeC (FFmpeg's
+// libvvdec, of either model at any depth), AFGS1 as FFmpeg 9 adds it and
+// AV1's by dav1d; or, the grain not known, as the decoders add it by
+// themselves (FFmpeg's H.274 at 8 bits only). Pictures are held as the
+// decoder made them, by reference, until the caller downloads them.
+// nvf_download makes the one CPU pass a picture costs, straight into the
+// caller's buffer: it copies the crop's planes, aligns 10-bit samples as
+// asked and widens 8-bit ones as FFmpeg widens them, or scales the crop with
+// the GPU decoders' filters (scale_filter.h). The app asks it to scale only a
+// video no other decoder may make (gpu_frames.decoder_supports): on the
+// caller's one thread that is slower than FFmpeg scaling in threads before
+// its pipe.
 //
 // A damaged stream is left to FFmpeg. Its decoders conceal damage, and one
 // FFmpeg's concealment is not another's: on a stream with a few garbled
@@ -117,11 +121,28 @@ struct Dav1d {
 
 Ffmpeg g_av{};
 Dav1d g_dav1d{};
-// Errors libavcodec has reported in this process (its log's error level).
+// Errors libavcodec has reported in this process (its log's error level),
+// and the last one's words, for the failure it ends a decoder with.
 std::atomic<unsigned> g_ffmpeg_errors{0};
+std::mutex g_last_error_lock;
+std::string g_last_error;
 
-void count_errors(void *, int level, const char *, va_list) {
-    if (level <= AV_LOG_ERROR) g_ffmpeg_errors++;
+void count_errors(void *, int level, const char *format, va_list arguments) {
+    if (level > AV_LOG_ERROR) return;
+    char text[300];
+    vsnprintf(text, sizeof text, format, arguments);
+    size_t length = strlen(text);
+    while (length > 0 && (text[length - 1] == '\n' || text[length - 1] == '\r')) text[--length] = '\0';
+    {
+        std::lock_guard<std::mutex> guard(g_last_error_lock);
+        g_last_error = text;
+    }
+    g_ffmpeg_errors++;
+}
+
+std::string last_ffmpeg_error() {
+    std::lock_guard<std::mutex> guard(g_last_error_lock);
+    return g_last_error;
 }
 bool g_av_ready = false, g_dav1d_ready = false;
 std::string g_libraries_error = "the decoding libraries were not loaded";
@@ -307,7 +328,8 @@ void unhold(Decoder *d, Slot &slot) {
 // either way the run is made again through FFmpeg.
 bool error_reported(Decoder *d) {
     if (g_ffmpeg_errors.load() == d->errors_seen) return false;
-    d->fail("the decoder found an error in the video");
+    const std::string said = last_ffmpeg_error();
+    d->fail("the decoder found an error in the video" + (said.empty() ? std::string() : ": " + said));
     return true;
 }
 
@@ -610,10 +632,12 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         Dav1dSettings settings{};
         g_dav1d.default_settings(&settings);
         // As FFmpeg's libdav1d decoder sets it: the operating point's
-        // highest spatial layer only, film grain applied; its own threads.
+        // highest spatial layer only, film grain applied unless the video is
+        // scored without it; its own threads.
         settings.all_layers = 0;
         settings.n_threads = 0;
         settings.max_frame_delay = 0;
+        settings.apply_grain = params->film_grain == 0 ? 0 : 1;
         settings.logger_callback = nullptr;  // its messages would go to the scoring process's stderr
         if (g_dav1d.open(&d->dav1d, &settings) < 0) {
             copy_text(error, error_size, "dav1d could not start");
@@ -622,7 +646,20 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         }
     } else {
         d->errors_seen = g_ffmpeg_errors.load();
-        const AVCodec *codec = g_av.avcodec_find_decoder_by_name(decoder_name(params->codec));
+        const char *name = decoder_name(params->codec);
+        if (params->codec == CODEC_VVC && params->film_grain == 1 &&
+            (params->film_grain_kinds & (GRAIN_H274 | GRAIN_H274_MODEL_1)) != 0) {
+            // VVC scored with its H.274 film grain: VVdeC adds it, of either
+            // model at any depth (FFmpeg's vvc only model 0 at 8 bits).
+            name = "libvvdec";
+        }
+        const AVCodec *codec = g_av.avcodec_find_decoder_by_name(name);
+        if (!codec) {
+            copy_text(error, error_size,
+                      std::string("this FFmpeg build has no ") + name + " decoder (scripts/build_ffmpeg_decoders.ps1)");
+            destroy(d);
+            return nullptr;
+        }
         d->codec_context = g_av.avcodec_alloc_context3(codec);
         d->packet = g_av.av_packet_alloc();
         d->frame = g_av.av_frame_alloc();
@@ -646,6 +683,11 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
                     context->extradata_size = params->extradata_size;
                 }
             }
+        }
+        // A video scored without its film grain: its parameters given as the
+        // frames' side data, not added (H.274's, AFGS1, and VVdeC's).
+        if (allocated && params->film_grain == 0) {
+            d->codec_context->export_side_data |= AV_CODEC_EXPORT_DATA_FILM_GRAIN;
         }
         // FFmpeg's own threading, as its decode in ffmpeg.exe has it.
         AVDictionary *options = nullptr;

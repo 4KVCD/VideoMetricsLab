@@ -12,6 +12,7 @@
 
 #include "vml/app_log.h"
 #include "vml/ffmpeg_run.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/gpu_frames.h"
 #include "vml/platform/console.h"
 #include "vml/platform/pipe.h"
@@ -144,6 +145,9 @@ public:
     std::optional<std::string> failure;
     bool size_changed = false;
     std::optional<std::filesystem::path> changed_video;
+    // Whether the error was a film grain refusal (FilmGrainRefusal), which
+    // the parent's fallbacks pass on rather than trying another route.
+    bool film_grain_refused = false;
     // Whether Cancel ended it, and whether it was ended for not ending by
     // itself once it had answered.
     bool stopped = false;
@@ -222,6 +226,7 @@ void ChildConversation::take(const std::string& text) {
     } else if (message.is_object() && message.contains("error")) {
         failure = message["error"].is_string() ? message["error"].get<std::string>() : message["error"].dump();
         size_changed = message.value("size_changed", false);
+        film_grain_refused = message.value("film_grain_refused", false);
         if (const auto video = message.find("changed_video"); video != message.end() && video->is_string()) {
             changed_video = platform::path_from_text(video->get<std::string>());
         }
@@ -300,6 +305,9 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
     if (conversation.failure) {
         if (conversation.size_changed) {
             throw VideoSizeChanged(*conversation.failure, conversation.changed_video);
+        }
+        if (conversation.film_grain_refused) {
+            throw FilmGrainRefusal(*conversation.failure);
         }
         throw std::runtime_error(*conversation.failure);
     }
@@ -412,6 +420,9 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
             message["changed_video"] = platform::path_text(*error.video());
         }
         send_isolated_message(message);
+        exit_code = 1;
+    } catch (const FilmGrainRefusal& error) {
+        send_isolated_message({{"error", error.what()}, {"film_grain_refused", true}});
         exit_code = 1;
     } catch (const std::exception& error) {
         send_isolated_message({{"error", error.what()}});

@@ -18,6 +18,7 @@
 #include "main_window.h"
 #include "widgets.h"
 #include "window_helpers.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/metric_cache.h"
 
 // The window's text is app::tr's, as in main_window.cpp.
@@ -30,8 +31,12 @@ std::filesystem::path MainWindow::cache_folder() const {
 AnalysisRequest MainWindow::analysis_request_of(const RowData& row_data) const {
     // The row's request as runs save it and lookups ask for it: one place,
     // so that a lookup never asks with other settings than a run saves under.
+    // Its videos as the run's result gives them (save_job_result): a
+    // resampled reference's test video is the reference itself.
+    const VideoInfo source = source_info_.value_or(VideoInfo{});
+    const VideoInfo distorted = row_data.options.resample_test ? source : row_data.video_info.value_or(VideoInfo{});
     return analysis_request(row_data.options, requested_metrics(row_data), automatic_perceptual_backends,
-                            row_data.cvvdp);
+                            row_data.cvvdp, source, distorted);
 }
 
 void MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& paths) {
@@ -131,6 +136,15 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     auto run = std::make_shared<CompletedRun>();
     run->result = found.result;
     run->label = found.label;
+    // They answer the row's request as it is now (its token): its videos'
+    // film grain as read and chosen now, which a result saved before either
+    // was known lacks. A resolution test's test video is the reference.
+    take_film_grain(run->result.source_info, *source_info_);
+    if (row_data.options.resample_test) {
+        take_film_grain(run->result.distorted_info, *source_info_);
+    } else if (row_data.video_info) {
+        take_film_grain(run->result.distorted_info, *row_data.video_info);
+    }
     if (previous) {
         // The row's line updated in place: its colour, and whether it is
         // hidden or removed, stay. Replaced under a new identity, they were

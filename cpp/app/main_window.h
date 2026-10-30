@@ -472,6 +472,9 @@ private:
     // by position.
     std::vector<std::shared_ptr<RowData>> rows_;
     std::vector<ProbeWorker*> probe_workers_;
+    // The videos whose saved scores are looked up again once their probe
+    // lane ends: reading them changed what the scores are filed under.
+    std::vector<std::filesystem::path> probed_lookups_;
     ProbeWorker* source_probe_worker_ = nullptr;
     int source_probe_generation_ = 0;
     std::optional<std::filesystem::path> source_reading_;  // the reference being read, until it is

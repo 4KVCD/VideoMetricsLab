@@ -34,6 +34,9 @@ nlohmann::json video_json(const VideoInfo& info) {
     if (info.film_grain) {  // only where read, likewise
         text["film_grain"] = film_grain_names(*info.film_grain);
     }
+    if (info.with_film_grain) {  // only where chosen
+        text["with_film_grain"] = *info.with_film_grain;
+    }
     return text;
 }
 
@@ -66,6 +69,9 @@ VideoInfo video_from(const nlohmann::json& text) {
     }
     if (const auto grain = text.find("film_grain"); grain != text.end()) {
         info.film_grain = film_grain_from_names(grain->get<std::vector<std::string>>());
+    }
+    if (const auto with = text.find("with_film_grain"); with != text.end()) {
+        info.with_film_grain = with->get<bool>();
     }
     return info;
 }

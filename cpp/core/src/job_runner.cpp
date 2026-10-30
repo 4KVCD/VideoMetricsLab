@@ -14,6 +14,7 @@
 #include <thread>
 
 #include "vml/app_log.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
 #include "vml/gpu_vmaf.h"
@@ -786,8 +787,13 @@ std::optional<ComparisonResult> JobRun::merged() const {
         result = *ffmpeg;
     } else if (cached) {
         // FFmpeg's metrics are all saved: the saved result is the base, with
-        // its crops, frame count and the videos' details.
+        // its crops, frame count and the videos' details, but their film
+        // grain as this run reads and scores them (one saved before either
+        // was known has none, and its scores would be saved under another
+        // identity).
         result = *job_.cached_result;
+        take_film_grain(result->source_info, job_.source_info);
+        take_film_grain(result->distorted_info, job_.distorted_info);
     }
     if (ffmpeg != nullptr && gpu != nullptr) {
         result->metric_results.add_all(gpu->metric_results);

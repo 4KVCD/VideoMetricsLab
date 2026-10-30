@@ -28,6 +28,7 @@ struct CompareArguments {
     std::optional<double> duration;
     std::optional<long long> frames;
     std::optional<std::string> colour;
+    std::optional<std::string> film_grain;  // "with" or "without" (VideoInfo::with_film_grain)
     std::optional<double> fps;            // a raw stream's or raw YUV file's frame rate
     std::optional<std::string> size;      // a raw YUV file's picture size, "1920x1080"
     std::optional<std::string> pix_fmt;   // a raw YUV file's pixel format, as FFmpeg names it
