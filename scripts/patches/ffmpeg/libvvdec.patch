@@ -21,7 +21,7 @@
  libdav1d_decoder_deps="libdav1d"
  libdav1d_decoder_select="itut_t35"
 +libvvdec_decoder_deps="libvvdec"
-+libvvdec_decoder_select="vvc_mp4toannexb_bsf"
++libvvdec_decoder_select="vvc_mp4toannexb_bsf vvc_sei"
  libdavs2_decoder_deps="libdavs2"
  libdavs2_decoder_select="avs2_parser"
  libfdk_aac_decoder_deps="libfdk_aac"
