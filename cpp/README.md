@@ -62,8 +62,8 @@ cases cover FFmpeg's route too.
 | `third_party` | Vendored libraries: see its README. |
 | `packaging` | What the Windows package adds to the build (Qt's licence texts). |
 
-The native libraries the app loads (Video Compare's presenter, its film
-grain, the GPU metrics' frame decoders) are built from the repository's
+The native libraries the app loads (Video Compare's presenter, the GPU
+metrics' frame decoders) are built from the repository's
 `native` folder by its scripts, into `resources/native`, beside the rest
 of the app's own files (`resources`: the VMAF models, the translations,
 the bundled tools). `native/vulkan_presenter.cpp`, the Python app's
@@ -140,8 +140,9 @@ results are saved and loaded as the Python app's are. Metric Graphs draws
 each metric's scores frame by frame, with each video's statistics, and
 exports them (PNG, CSV). Video Compare shows a pair of frames, or plays the
 videos locked together: decoded with FFmpeg's libraries, on the GPU where
-Direct3D 11 can (else in software, AV1 by dav1d), a VVC video's film grain drawn as the Python app draws it
-(AV1's, AFGS1, by FFmpeg), drawn by the app's presenter (HDR too) and timed
+Direct3D 11 can (else in software, AV1 by dav1d), each video's film grain
+added or left out as it is scored (VVC's H.274 by VVdeC), drawn by the
+app's presenter (HDR too) and timed
 by the source's soundtrack when it plays, or, where that cannot play them,
 through ffmpeg.exe.
 The Bitrate Viewer plots each video's bitrate by frame, second or GOP. The

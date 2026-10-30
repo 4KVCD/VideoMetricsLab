@@ -14,8 +14,8 @@ pull before you start. A working branch is deleted once its work is released
 - Python: `.venv\Scripts\python.exe` (3.14, `requirements-dev.txt`), for the
   repository's scripts.
 - After pulling, rebuild the native libraries with
-  `scripts\build_gpu_frames.ps1`, `build_d3d11_tonemap.ps1` and
-  `build_d3d11_film_grain.ps1` if your copies are older than the pull.
+  `scripts\build_gpu_frames.ps1` and `build_d3d11_tonemap.ps1` if your
+  copies are older than the pull.
 - `libvmaf.dll` and `vmaf_vulkan.dll` are committed and come from libvmaf-fast
   (github.com/4KVCD/libvmaf-fast). A change to libvmaf or the Vulkan shaders
   is made in that fork, not here. During development they are a build of the

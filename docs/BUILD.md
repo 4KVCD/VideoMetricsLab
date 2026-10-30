@@ -68,14 +68,6 @@ previous build's output undeletable. The package therefore goes to
   with Direct3D 11 -- NV12 or P010 into RGB, HDR mapped to SDR or kept for
   an HDR display -- and presents them. Built from
   `native/d3d11_tonemap.cpp` by `scripts/build_d3d11_tonemap.ps1`.
-- **`d3d11_film_grain.dll`**, a drawer of H.274 film grain on the GPU
-  (SMPTE RDD 5's grain, worked out at the video's own depth and rounded),
-  which Video Compare no longer uses: a VVC video's grain is VVdeC's, the
-  grain its scores are made with, and Video Compare's player adds or leaves
-  out every video's grain as it is scored. Only the self-test still loads
-  it. Built from `native/d3d11_film_grain.cpp` by
-  `scripts/build_d3d11_film_grain.ps1`; its SMPTE RDD 5 tables come from VTM
-  (`native/h274`, BSD licence, shipped in `licenses`).
 - **`software_frames.dll`**, the decoder for the videos FFmpeg would decode
   in software -- no GPU decoder takes them (VVC, AV1 on an older GPU, 10-bit
   H.264), the GPUs' decoders give other pictures than FFmpeg's (MPEG-2), or
@@ -209,7 +201,7 @@ The packaged window can check itself:
 ```
 
 It reports FFmpeg, FFmpeg's libraries for Video Compare, the GPU decoders,
-the film grain library, dav1d, the presenter, Qt and its TLS backend, each
+VVdeC, dav1d, the presenter, Qt and its TLS backend, each
 frame decoder for the GPU metrics, the software decoder's codecs, libjxl's
 tools, the process of its own GPU work runs in, Vship, and VMAF and VMAF v1
 on the GPU, in a dialog and in `~\.videometricslab\self-test.txt`. `--quiet`

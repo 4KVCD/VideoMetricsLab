@@ -69,8 +69,8 @@ if(WIN32 AND MSVC)
     endforeach()
     add_custom_target(vml_ffmpeg_imports DEPENDS ${vml_ffmpeg_imports})
     add_dependencies(vml_app vml_ffmpeg_imports)
-    target_sources(vml_app PRIVATE native_dav1d.cpp native_decoder.cpp native_device.cpp native_grain.cpp
-                                   native_pool.cpp native_presentation.cpp native_soundtrack.cpp)
+    target_sources(vml_app PRIVATE native_dav1d.cpp native_decoder.cpp native_device.cpp native_pool.cpp
+                                   native_presentation.cpp native_soundtrack.cpp)
     # dav1d's structures as the app mirrors them (native_dav1d.h).
     target_include_directories(vml_app SYSTEM PRIVATE ${vml_ffmpeg}/include ${PROJECT_SOURCE_DIR}/../native/dav1d)
     target_link_libraries(vml_app PUBLIC ${vml_ffmpeg_imports} delayimp d3d11 dxgi dxguid)
@@ -103,8 +103,8 @@ if(APPLE AND NOT vml_ffmpeg_found)
 elseif(APPLE)
     enable_language(OBJCXX)
     set(vml_ffmpeg ${PROJECT_SOURCE_DIR}/../native/ffmpeg)
-    target_sources(vml_app PRIVATE native_dav1d.cpp native_decoder.cpp native_device_mac.mm native_grain_mac.cpp
-                                   native_pool.cpp native_presentation_mac.mm native_soundtrack.cpp)
+    target_sources(vml_app PRIVATE native_dav1d.cpp native_decoder.cpp native_device_mac.mm native_pool.cpp
+                                   native_presentation_mac.mm native_soundtrack.cpp)
     set_source_files_properties(native_device_mac.mm native_presentation_mac.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
     # The headers are Windows' build's (native/ffmpeg), the same for this
     # version: avconfig.h's endianness and alignment are the same on arm64.

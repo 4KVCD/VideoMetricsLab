@@ -20,7 +20,6 @@ extern "C" {
 #include <libavutil/hwcontext_d3d11va.h>
 #endif
 #include <libavutil/channel_layout.h>
-#include <libavutil/film_grain_params.h>
 #include <libavutil/pixdesc.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>

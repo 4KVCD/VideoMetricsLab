@@ -94,8 +94,6 @@ if (-not (Get-Command g++ -ErrorAction SilentlyContinue)) {
 }
 Write-Host '==> Building d3d11_tonemap.dll' -ForegroundColor Cyan
 & (Join-Path $PSScriptRoot 'build_d3d11_tonemap.ps1')
-Write-Host '==> Building d3d11_film_grain.dll' -ForegroundColor Cyan
-& (Join-Path $PSScriptRoot 'build_d3d11_film_grain.ps1')
 Write-Host '==> Building the GPU frame decoders' -ForegroundColor Cyan
 & (Join-Path $PSScriptRoot 'build_gpu_frames.ps1')
 
@@ -176,18 +174,17 @@ if (-not (Test-Path (Join-Path $tools 'ffmpeg/dav1d.dll'))) {
     throw 'resources/tools/ffmpeg has no dav1d.dll: build it with scripts/build_dav1d.ps1'
 }
 
-# The native libraries the C++ app loads, with the notices of what is
-# compiled into them (headers, and the film grain library's VTM tables).
-# (Not the Vulkan presenter, native/vulkan_presenter.cpp, which the app does
-# without on Windows.)
+# The native libraries the C++ app loads, with the notices of the headers
+# compiled into them. (Not the Vulkan presenter, native/vulkan_presenter.cpp,
+# which the app does without on Windows.)
 $native = Join-Path $resources 'native'
 New-Item -ItemType Directory -Path (Join-Path $native 'licenses') -Force | Out-Null
-foreach ($library in @('d3d11_tonemap.dll', 'd3d11_film_grain.dll', 'nvdec_frames.dll', 'vpl_frames.dll',
-        'amf_frames.dll', 'mf_frames.dll', 'software_frames.dll')) {
+foreach ($library in @('d3d11_tonemap.dll', 'nvdec_frames.dll', 'vpl_frames.dll', 'amf_frames.dll', 'mf_frames.dll',
+        'software_frames.dll')) {
     Copy-Item (Join-Path $appFiles "native/$library") $native
 }
 foreach ($notice in @('ffnvcodec/LICENSE.nv-codec-headers.txt', 'onevpl/LICENSE.onevpl.txt', 'amf/LICENSE.amf.txt',
-        'vulkan/LICENSE.vulkan-headers.txt', 'h274/LICENSE.vtm.txt')) {
+        'vulkan/LICENSE.vulkan-headers.txt')) {
     Copy-Item (Join-Path $projectDirectory "native/$notice") (Join-Path $native 'licenses')
 }
 

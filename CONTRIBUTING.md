@@ -13,7 +13,6 @@ MinGW-w64's `g++` for the native libraries. From the repository root:
 ```powershell
 ./scripts/build_gpu_frames.ps1
 ./scripts/build_d3d11_tonemap.ps1
-./scripts/build_d3d11_film_grain.ps1
 cd cpp
 cmake --preset windows -DCMAKE_PREFIX_PATH=C:/Qt/6.12.0/msvc2022_64
 cmake --build --preset windows-release

@@ -64,9 +64,8 @@
 9. Audit the exact bundled components, preserve their notices, and satisfy
    applicable source and relinking obligations ([THIRD_PARTY.md](THIRD_PARTY.md)):
    Qt 6.12.0 under the LGPL 3 and its translations under the BSD 3-Clause
-   licence (`licenses/`), Microsoft's C++ runtime, FFmpeg's libraries,
-   dav1d, libvmaf-fast, Vship, libjxl's tools and the film grain library's
-   VTM tables.
+   licence (`licenses/`), Microsoft's C++ runtime, FFmpeg's libraries with
+   VVdeC, dav1d, libvmaf-fast, Vship and libjxl's tools.
 10. Update the changelog, choose a version/tag, and write release notes with
     known issues, requirements and tested hardware. Do not invent a release
     version from the development commit count.

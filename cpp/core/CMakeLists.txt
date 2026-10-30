@@ -12,7 +12,6 @@ add_library(vml_core
     src/ffmpeg_run.cpp
     src/ffmpeg_tools.cpp
     src/ffprobe.cpp
-    src/film_grain.cpp
     src/film_grain_detect.cpp
     src/film_grain_scoring.cpp
     src/frame_extract.cpp
@@ -61,9 +60,6 @@ add_library(vml_core
     src/vmaf_vulkan.cpp
 )
 target_include_directories(vml_core PUBLIC include)
-# The film grain library's parameters (native/h274/grain_params.h, plain C),
-# which film_grain.h works out.
-target_include_directories(vml_core PUBLIC ../../native/h274)
 # The decoders' scaler (native/scale/scale_filter.h), which gpu_frames.cpp
 # checks FFmpeg's scale filter against.
 target_include_directories(vml_core PRIVATE ../../native/scale)

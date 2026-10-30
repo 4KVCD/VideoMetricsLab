@@ -25,9 +25,9 @@
 #include "vml/vmaf_v1_gpu.h"
 #include "vml/vship.h"
 #ifdef VML_NATIVE_PLAYBACK
+#include "ffmpeg_api.h"
 #include "native_dav1d.h"
 #include "native_device.h"
-#include "native_grain.h"
 #include "native_presentation.h"
 #endif
 
@@ -91,11 +91,12 @@ void check_native_playback(SelfTestReport& report) {
         } catch (const std::exception& error) {
             report.warn("no " + drawing + " device, videos play through " + ffmpeg_program + ": " + error.what());
         }
-        if (const std::optional<QString> no_grain = NativeGrain::unavailable()) {
-            report.warn("Film grain for VVC videos unavailable (" + no_grain->toStdString() +
-                        "); only FFmpeg's is drawn: on 8-bit video, and AV1's");
+        // A VVC video's H.274 film grain is VVdeC's, decoded as it is scored.
+        if (avcodec_find_decoder_by_name("libvvdec") == nullptr) {
+            report.warn("Video Compare shows VVC videos without their H.274 film grain: these FFmpeg libraries "
+                        "have no VVdeC (libvvdec)");
         } else {
-            report.ok("Film grain for VVC videos in Video Compare (d3d11_film_grain.dll; AV1's by FFmpeg)");
+            report.ok("VVC film grain in Video Compare (VVdeC, FFmpeg's libvvdec)");
         }
         if (const std::optional<QString> no_dav1d = Dav1dVideo::unavailable()) {
             report.warn("Video Compare cannot decode AV1 in software (" + no_dav1d->toStdString() +
