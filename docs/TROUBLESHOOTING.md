@@ -11,8 +11,9 @@ ffprobe -version
 ffmpeg -filters | Select-String 'libvmaf|xpsnr'
 ```
 
-On a Mac, `ffmpeg -filters | grep -E 'libvmaf|xpsnr'`; `brew install ffmpeg`
-installs a build with both.
+On a Mac, `ffmpeg -filters | grep -E 'libvmaf|xpsnr|zscale'`;
+`brew install ffmpeg-full` installs a build with all three (zscale shows HDR
+video in SDR).
 
 FFmpeg 9+ is the tested baseline. A version number alone does not guarantee
 that a build contains all required filters. Restart after changing PATH.

@@ -93,9 +93,11 @@ CVVDP runs, on the CPU.
   `Contents/MacOS` and the app's files in `Contents/Resources/resources`.
   `packaged_resource_folder()` finds them there, and the self-test uses the
   same function.
-- **FFmpeg.** The user installs it, `brew install ffmpeg`, which has
-  libvmaf. An app opened from the Finder does not have Homebrew on its
-  PATH, so the app also looks in Homebrew's and MacPorts' folders.
+- **FFmpeg.** The user installs it, `brew install ffmpeg-full`, which has
+  libvmaf and zscale (Homebrew's plain `ffmpeg` has no zscale, which HDR
+  video needs to be shown in SDR; the self-test warns of it). An app opened
+  from the Finder does not have Homebrew on its PATH, so the app also looks
+  in Homebrew's and MacPorts' folders, ffmpeg-full's (keg-only) first.
 - **The bundled tools** are built from their pinned releases' source,
   because neither project publishes macOS builds: libvmaf-fast v1.2's
   `libvmaf.dylib` and libjxl 0.12.0's `ssimulacra2` and `butteraugli_main`,
