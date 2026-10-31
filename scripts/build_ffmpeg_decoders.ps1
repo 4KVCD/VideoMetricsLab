@@ -116,7 +116,11 @@ if ($LASTEXITCODE -ne 0) { throw 'building VVdeC failed' }
 # The decoder libvvdec in FFmpeg's source, and the name the app logs for it.
 $ffmpegSource = Join-Path $work "ffmpeg-$Version"
 $patches = Join-Path $PSScriptRoot 'patches/ffmpeg'
-Invoke-Program { git -C $ffmpegSource apply (Join-Path $patches 'libvvdec.patch') }
+# Applied with LF line ends, as FFmpeg's sources have them: a Windows checkout with Git's
+# default core.autocrlf gives the patch CRLF, which none of its lines would match.
+$patchLf = Join-Path $work 'libvvdec.patch'
+[IO.File]::WriteAllText($patchLf, ([IO.File]::ReadAllText((Join-Path $patches 'libvvdec.patch')) -replace "`r`n", "`n"))
+Invoke-Program { git -C $ffmpegSource apply $patchLf }
 if ($LASTEXITCODE -ne 0) { throw 'patching FFmpeg for libvvdec failed' }
 Copy-Item (Join-Path $patches 'libvvdec.c') (Join-Path $ffmpegSource 'libavcodec/libvvdec.c')
 [IO.File]::WriteAllText((Join-Path $ffmpegSource 'libavcodec/libvvdec_build.h'),
