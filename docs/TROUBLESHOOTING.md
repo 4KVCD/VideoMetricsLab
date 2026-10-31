@@ -11,6 +11,9 @@ ffprobe -version
 ffmpeg -filters | Select-String 'libvmaf|xpsnr'
 ```
 
+On a Mac, `ffmpeg -filters | grep -E 'libvmaf|xpsnr'`; `brew install ffmpeg`
+installs a build with both.
+
 FFmpeg 9+ is the tested baseline. A version number alone does not guarantee
 that a build contains all required filters. Restart after changing PATH.
 
@@ -35,18 +38,22 @@ Use a short shareable clip to investigate synchronization or frame mismatches.
 
 ## Crash or hang
 
-Preserve the exact error and action sequence. Include the Windows, FFmpeg and
-GPU driver versions and the commit/release, and the log (Settings > Copy
-log), which says what the app did up to then. From source, the Debug build
-(`cmake --build --preset windows-debug`) checks every index and iterator.
+Preserve the exact error and action sequence. Include the Windows or macOS,
+FFmpeg and GPU driver versions and the commit/release, and the log (Settings >
+Copy log), which says what the app did up to then. From source, the Debug
+build (`cmake --build --preset windows-debug`, or `macos-debug`) checks every
+index and iterator.
 
 Windows Event Viewer → Windows Logs → Application may identify the faulting
-module. Redact personal paths before reporting and check
-[known limitations](KNOWN_ISSUES.md) before opening an issue.
+module; on a Mac, Console → Crash Reports. Redact personal paths before
+reporting and check [known limitations](KNOWN_ISSUES.md) before opening an
+issue.
 
 ## Packaged build diagnostics
 
-Run `VideoMetricsLab.exe --self-test`; `--quiet` omits the dialog.
+Run `VideoMetricsLab.exe --self-test` (on a Mac,
+`VideoMetricsLab.app/Contents/MacOS/VideoMetricsLab --self-test`); `--quiet`
+omits the dialog.
 The report is saved to `~/.videometricslab/self-test.txt`. Self-test checks
 availability, not actual HDR appearance, frame lock or performance.
 

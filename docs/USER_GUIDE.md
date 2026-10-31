@@ -24,7 +24,7 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one.
 
-**Settings > Window** chooses the theme (Same as Windows, Light or Dark) and
+**Settings > Window** chooses the theme (the system's, Light or Dark) and
 whether the app reopens the videos it had open when it was last closed (off by
 default).
 
@@ -156,7 +156,10 @@ bitrate is video packet bytes × 8 divided by the measured video duration.
 ## Command line
 
 `VideoMetricsLab-cli.exe`, beside the app, calculates metrics without the
-window (from a source build: `cpp\build\windows\cli\Release\vml-cli.exe`):
+window (from a source build: `cpp\build\windows\cli\Release\vml-cli.exe`; on a
+Mac it is inside the app, `VideoMetricsLab.app/Contents/MacOS/VideoMetricsLab-cli`).
+The examples below are Windows' PowerShell; on a Mac they are the same with
+`/` in paths, and a script reads the JSON with `jq`:
 
 ```powershell
 .\VideoMetricsLab-cli.exe compare reference.mkv encode1.mkv encode2.mkv
