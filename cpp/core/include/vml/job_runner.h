@@ -80,12 +80,10 @@ using PerceptualBackends = std::map<std::string, std::string, std::less<>>;
 // make a task of their own on the CPU. `options.model` is the run's model=
 // value; `options.model_v1` is empty while VMAF v1's Auto is not resolved.
 //
-// Metrics with a saved score the run keeps (`saved`) are left out as the
-// Python app's planner leaves them out (build_execution_plan, _by_place):
-// SSIMULACRA2, Butteraugli and CVVDP each on its own; FFmpeg's together, as
-// they are calculated together, except that a part of them that runs in a
-// place of its own (VMAF on the GPU, or what stays on the CPU) is left out
-// when all of that part is saved.
+// Each metric with a saved score the run keeps (`saved`) is left out, and
+// the others are calculated where they would be with it (the Python app's
+// planner, whose one FFmpeg pass scored all of FFmpeg's metrics, calculated
+// them again together unless all were saved).
 //
 // With `share_decode` (shares_decode, ffmpeg_run.h), PSNR, SSIM and XPSNR
 // left to run on the CPU beside VMAF on the GPU join the GPU's task
@@ -110,7 +108,8 @@ struct VmafJob {
     // The saved result, where the run keeps some of its scores, and those
     // scores (the Python app's cached_result and cached_metrics): they fill
     // in what the run does not calculate, and a new score replaces a saved
-    // one. With FFmpeg's metrics all saved, the saved result is the base.
+    // one. With every metric FFmpeg or the GPU's VMAF would calculate saved,
+    // the saved result is the base.
     std::optional<ComparisonResult> cached_result;
     MetricResultSet cached_metrics;
     // The video's name in the log: its file's name without the extension

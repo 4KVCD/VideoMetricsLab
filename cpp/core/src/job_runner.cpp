@@ -390,7 +390,15 @@ std::string JobRun::describe() const {
     }
     std::string kept;
     if (job_.cached_result) {  // saved scores are kept only with their saved result, as merged() keeps them
-        kept = metric_labels(job_.cached_metrics.keys());
+        // Those the run does not calculate again (a VMAF beside the NEG it
+        // keeps on the CPU, say: plan_tasks).
+        std::vector<std::string> keys = job_.cached_metrics.keys();
+        std::erase_if(keys, [this](const std::string& key) {
+            return std::any_of(job_.tasks.begin(), job_.tasks.end(), [&key](const MetricTask& task) {
+                return contains(task.metric_keys, key) || contains(task.cpu_beside, key);
+            });
+        });
+        kept = metric_labels(keys);
     }
     const VmafOptions& options = job_.options;
     std::string settings = std::string("black bars ") + (options.crop_mode == CropMode::automatic ? "auto" : "none") +
@@ -881,9 +889,8 @@ std::optional<ComparisonResult> JobRun::merged() const {
             carried_vmaf = carried_vmaf || key == "vmaf";
             carried_v1 = carried_v1 || key == "vmaf_v1";
         }
-        // A saved VMAF keeps its model when the run calculated no VMAF: with
-        // VMAF on the GPU, a part of FFmpeg's metrics that is all saved is
-        // not calculated again, and the saved result is not the base.
+        // A saved VMAF keeps its model when the run calculated no VMAF (only
+        // NEG, say, or only PSNR, its result the base).
         if (carried_vmaf && result->model.empty()) {
             result->model = job_.cached_result->model;
         }
@@ -1066,26 +1073,44 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
                                    const std::vector<std::string>& metric_keys,
                                    const PerceptualBackends& perceptual_backends, const MetricResultSet& saved,
                                    bool share_decode) {
-    // FFmpeg's metrics are calculated together: unless all of them are saved,
-    // a saved one is calculated again with the rest. The others are each
-    // left out when saved.
-    const bool ffmpeg_saved = std::all_of(metric_keys.begin(), metric_keys.end(), [&saved](const std::string& key) {
-        return is_perceptual_metric(key) || saved.has(key);
-    });
+    // Each metric with a saved score is left out (the run's result takes the
+    // saved one). Where the others are calculated is decided from every
+    // metric asked for, saved or not, so that one calculated alone is
+    // calculated where it would be with the rest, and its score is the same.
+    // VMAF, NEG and v1 are placed together as a run starts (models_on_gpu,
+    // ffmpeg_run.cpp: all of them on the GPU, or none): where VMAF may go to
+    // the GPU but a saved one of them was made on the CPU (VMAF with a model
+    // file of its own, v1 with a model the GPU refused), the one missing,
+    // calculated alone, could go to the GPU, whose scores differ a little.
+    // Those asked for are then calculated again together, as before.
+    const auto vmaf_family = [](const std::string& key) {
+        return key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1";
+    };
+    const auto made_on_cpu = [&saved](const std::string& key) {
+        const FrameMetricResult* frame = saved.frame(key);
+        return frame != nullptr && frame->provenance.compute_backend != "gpu";
+    };
+    const bool family_again =
+        options.vmaf_on_gpu && !options.resample_test &&
+        std::any_of(metric_keys.begin(), metric_keys.end(),
+                    [&](const std::string& key) { return vmaf_family(key) && !saved.has(key); }) &&
+        std::any_of(metric_keys.begin(), metric_keys.end(),
+                    [&](const std::string& key) { return vmaf_family(key) && made_on_cpu(key); });
     std::vector<std::string> keys;
     for (const std::string& key : metric_keys) {
-        if (is_perceptual_metric(key) ? !saved.has(key) : !ffmpeg_saved) {
+        if (!saved.has(key) || (family_again && vmaf_family(key))) {
             keys.push_back(key);
         }
     }
-    const bool vmaf = contains(keys, "vmaf");
-    const bool neg = contains(keys, "vmaf_neg");
-    const bool v1 = contains(keys, "vmaf_v1");
+    const bool vmaf = contains(metric_keys, "vmaf");
+    const bool neg = contains(metric_keys, "vmaf_neg");
+    const bool v1 = contains(metric_keys, "vmaf_v1");
+    const bool vmaf_family_left = contains(keys, "vmaf") || contains(keys, "vmaf_neg") || contains(keys, "vmaf_v1");
     GpuModels on_gpu;
     std::vector<std::pair<std::string, std::string>> check_failures;  // (key, why) of scores_on_gpu
     // A resolution test's VMAF is FFmpeg's: its test video is made in
     // FFmpeg's filter graph, from the source.
-    if ((vmaf || neg || v1) && !options.resample_test) {
+    if (vmaf_family_left && !options.resample_test) {
         // The size frames are compared at, where it is known before the run:
         // with black bars kept. Pictures with their black bars cut are
         // always even-sized.
@@ -1118,16 +1143,6 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
         const bool scored_on_gpu = std::any_of(on_gpu.begin(), on_gpu.end(),
                                                [&key](const auto& model) { return model.first == key; });
         (scored_on_gpu ? gpu : ffmpeg).metric_keys.push_back(key);
-    }
-    // Once FFmpeg's metrics are split between the GPU and the CPU, a part
-    // whose metrics are all saved is not run.
-    if (vmaf || neg || v1) {
-        for (MetricTask* part : {&ffmpeg, &gpu}) {
-            if (std::all_of(part->metric_keys.begin(), part->metric_keys.end(),
-                            [&saved](const std::string& key) { return saved.has(key); })) {
-                part->metric_keys.clear();
-            }
-        }
     }
     // PSNR, SSIM and XPSNR beside VMAF on the GPU, from the GPU's decode,
     // when both parts still run.

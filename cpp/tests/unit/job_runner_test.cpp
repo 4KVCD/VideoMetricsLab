@@ -529,10 +529,8 @@ MetricResultSet saved_scores(const std::vector<std::string>& keys) {
     return result_with(metrics).metric_results;
 }
 
-// The saved scores a run keeps are left out of its tasks, as the Python app
-// plans them: FFmpeg's metrics are calculated together, so a saved one is
-// calculated again with the rest unless all of them are saved; SSIMULACRA2,
-// Butteraugli and CVVDP are each left out.
+// Each saved score a run keeps is left out of its tasks: FFmpeg's metrics
+// as SSIMULACRA2, Butteraugli and CVVDP are.
 TEST(JobRunner, SavedScoresAreNotCalculatedAgain) {
     VideoInfo source;
     source.path = "reference.mkv";
@@ -548,7 +546,7 @@ TEST(JobRunner, SavedScoresAreNotCalculatedAgain) {
     std::vector<MetricTask> planned = plan_tasks(source, test, options, asked, {}, saved_scores({"vmaf", "ssimulacra2"}));
     ASSERT_EQ(planned.size(), 2u);
     EXPECT_EQ(planned[0].backend, "ffmpeg");
-    EXPECT_EQ(planned[0].metric_keys, (std::vector<std::string>{"vmaf", "psnr"}));
+    EXPECT_EQ(planned[0].metric_keys, std::vector<std::string>{"psnr"});
     EXPECT_EQ(planned[1].backend, perceptual_task);
     EXPECT_EQ(planned[1].metric_keys, std::vector<std::string>{"butteraugli"});
 
@@ -556,13 +554,73 @@ TEST(JobRunner, SavedScoresAreNotCalculatedAgain) {
     ASSERT_EQ(planned.size(), 1u);
     EXPECT_EQ(planned[0].backend, perceptual_task);
     EXPECT_EQ(planned[0].metric_keys, std::vector<std::string>{"ssimulacra2"});
+
+    const std::vector<std::string> every{"vmaf", "vmaf_neg", "vmaf_v1", "psnr", "ssim", "xpsnr"};
+    planned = plan_tasks(source, test, options, every, {}, saved_scores({"vmaf", "vmaf_v1", "psnr", "ssim"}));
+    ASSERT_EQ(planned.size(), 1u);
+    EXPECT_EQ(planned[0].metric_keys, (std::vector<std::string>{"vmaf_neg", "xpsnr"}));
+
+    // With VMAF on the GPU, NEG missing beside a VMAF saved from the CPU (one
+    // with a model file of its own) is calculated with that VMAF again: alone
+    // it could go to the GPU.
+    options.vmaf_on_gpu = true;
+    options.model = "model_path=C\\:/models/own.json";
+    MetricResultSet cpu_vmaf = saved_scores({"vmaf"});
+    FrameMetricResult made_on_cpu = *cpu_vmaf.frame("vmaf");
+    made_on_cpu.provenance.compute_backend = "cpu";
+    cpu_vmaf = MetricResultSet();
+    cpu_vmaf.add(made_on_cpu);
+    planned = plan_tasks(source, test, options, {"vmaf", "vmaf_neg"}, {}, cpu_vmaf);
+    ASSERT_EQ(planned.size(), 1u);
+    EXPECT_EQ(planned[0].backend, "ffmpeg");
+    EXPECT_EQ(planned[0].metric_keys, (std::vector<std::string>{"vmaf", "vmaf_neg"}));
+}
+
+// A metric calculated alone takes the others from the saved scores: VMAF
+// with its model and v1 with its model and choice, the run having calculated
+// neither (its result names no VMAF model), and PSNR on the frames XPSNR,
+// scored on every frame, is cut back to with subsampling.
+TEST(JobRunner, AMetricCalculatedAloneJoinsTheSavedScores) {
+    VmafJob neg = job_of({{"ffmpeg", {"vmaf_neg"}}});
+    neg.metric_keys = {"vmaf", "vmaf_neg", "vmaf_v1"};
+    neg.cached_result = result_with({{"vmaf", {0, 1}}, {"vmaf_v1", {0, 1}}}, "version=vmaf_4k_v0.6.1");
+    neg.cached_result->model_v1 = "vmaf_v1_4k";
+    neg.cached_result->model_choice_v1 = "4k";
+    neg.cached_metrics = neg.cached_result->metric_results;
+    VmafJob xpsnr = job_of({{"ffmpeg", {"xpsnr"}}}, 2);
+    xpsnr.metric_keys = {"psnr", "xpsnr"};
+    xpsnr.cached_result = result_with({{"psnr", {0, 2, 4}}});
+    xpsnr.cached_metrics = xpsnr.cached_result->metric_results;
+    Reported reported;
+    run_jobs(
+        {neg, xpsnr}, 1, reported.events(),
+        [](const VmafJob& job, const VmafOptions&, const ProgressCallback&, const StatusCallback&, const CancelToken&) {
+            return job.metric_keys.front() == "vmaf" ? result_with({{"vmaf_neg", {0, 1}}})
+                                                     : result_with({{"xpsnr", {0, 1, 2, 3, 4}}});
+        },
+        24, CancelToken());
+
+    ASSERT_EQ(reported.finished.size(), 2u);
+    const ComparisonResult& with_neg = reported.finished.at(0);
+    EXPECT_EQ(with_neg.model, "version=vmaf_4k_v0.6.1");
+    EXPECT_EQ(with_neg.model_v1, "vmaf_v1_4k");
+    EXPECT_EQ(with_neg.model_choice_v1, std::optional<std::string>("4k"));
+    for (const std::string key : {"vmaf", "vmaf_neg", "vmaf_v1"}) {
+        ASSERT_TRUE(with_neg.metric_results.frame(key)) << key;
+        EXPECT_EQ(with_neg.metric_results.frame(key)->values, (std::vector<float>{0.0F, 1.0F})) << key;
+    }
+    const ComparisonResult& with_xpsnr = reported.finished.at(1);
+    ASSERT_TRUE(with_xpsnr.metric_results.frame("xpsnr"));
+    EXPECT_EQ(with_xpsnr.metric_results.frame("xpsnr")->frame, (std::vector<int>{0, 2, 4}));
+    EXPECT_EQ(with_xpsnr.metric_results.frame("psnr")->frame, (std::vector<int>{0, 2, 4}));
 }
 
 // The saved scores a run keeps fill in its result where it calculates none,
 // with the saved VMAF's model; a score it calculates replaces the saved one.
 TEST(JobRunner, SavedScoresFillInWhatTheRunDoesNotCalculate) {
     // The first video's VMAF is saved and not calculated; the second's is
-    // calculated again with its PSNR (VMAF on the CPU).
+    // calculated again with its PSNR (VMAF on the CPU), as a run planned
+    // otherwise would.
     std::vector<VmafJob> jobs{job_of({{"ffmpeg", {"psnr"}}}), job_of({{"ffmpeg", {"vmaf", "psnr"}}})};
     for (VmafJob& job : jobs) {
         job.metric_keys = {"vmaf", "psnr", "ssimulacra2"};
