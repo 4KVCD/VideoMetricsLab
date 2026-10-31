@@ -2072,7 +2072,11 @@ std::optional<GpuPlan> gpu_plan(const RunFrames& run, const VmafOptions& options
         return std::nullopt;
     }
     const GpuVmafBackend backend = gpu_vmaf_backend(run.cancel);
-    GpuPlan plan{gpu, run.width, run.height, run.depth};
+    GpuPlan plan;
+    plan.models = gpu;
+    plan.width = run.width;
+    plan.height = run.height;
+    plan.bit_depth = run.depth;
     plan.backend = backend.backend == "vulkan" ? "vulkan" : "cuda";
     plan.device = backend.backend == "vulkan" && backend.device ? *backend.device : -1;
     return plan;

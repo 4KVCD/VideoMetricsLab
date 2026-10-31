@@ -8,6 +8,8 @@
 #include <numeric>
 #include <string>
 
+#include "vml/platform/system.h"
+
 namespace vml::av2 {
 
 namespace {
@@ -640,7 +642,7 @@ std::optional<TemporalUnit> Reader::next_section5() {
 std::shared_ptr<const std::vector<TemporalUnit>> closed_keyframes(const std::filesystem::path& path) {
     std::error_code ignored;
     const std::string key = path.string() + '|' + std::to_string(std::filesystem::file_size(path, ignored)) + '|' +
-                            std::to_string(std::filesystem::last_write_time(path, ignored).time_since_epoch().count());
+                            std::to_string(platform::modified_ns(path).value_or(0));
     static std::mutex mutex;
     static std::map<std::string, std::shared_ptr<const std::vector<TemporalUnit>>> scanned;
     {
