@@ -51,7 +51,7 @@
     { "name": "macos-release", "configurePreset": "macos", "configuration": "Release" }
   ],
   "testPresets": [
-    { "name": "base", "hidden": true, "output": { "outputOnFailure": true }, "execution": { "jobs": 8 } },
+    { "name": "base", "hidden": true, "output": { "outputOnFailure": true }, "execution": { "jobs": 8, "timeout": 60 } },
     { "name": "unit", "hidden": true, "inherits": "base", "filter": { "include": { "label": "^unit$" } } },
     { "name": "windows-debug", "inherits": "unit", "configurePreset": "windows", "configuration": "Debug" },
     { "name": "windows-release", "inherits": "unit", "configurePreset": "windows", "configuration": "Release" },
