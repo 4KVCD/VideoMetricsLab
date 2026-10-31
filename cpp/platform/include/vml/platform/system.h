@@ -100,6 +100,9 @@ struct DisplayHdrInfo {
     // Windows' SDR content brightness: the white SDR is shown at while HDR
     // is on.
     std::optional<double> sdr_white_nits;
+    // macOS's EDR headroom: how many times SDR white the display can show
+    // at most (display_hdr_from_edr); unknown on Windows.
+    std::optional<double> edr_headroom;
     bool operator==(const DisplayHdrInfo&) const = default;
 };
 
@@ -108,6 +111,16 @@ struct DisplayHdrInfo {
 // display_hdr.py); all unknown elsewhere, or when a driver does not say.
 // Only read: nothing about the display is changed.
 DisplayHdrInfo query_display_hdr(void* window);
+
+// A macOS display's HDR state from its NSScreen's
+// maximumPotentialExtendedDynamicRangeColorComponentValue: the EDR headroom,
+// in multiples of SDR white. macOS shows PQ through EDR on any display that
+// has headroom (an XDR panel, an external display with HDR on, and SDR panels
+// with brightness to spare), mapping it into that headroom as its own players
+// do: above 1, HDR is on; 1 or less, off (whether the display could show HDR
+// is not known then); anything else, unknown. SDR white is not known: macOS
+// keeps SDR at its reference white.
+DisplayHdrInfo display_hdr_from_edr(double potential_headroom, std::string device_name);
 
 // Lets the calling thread run ahead of ordinary work (Windows'
 // THREAD_PRIORITY_HIGHEST), for a light thread whose timing matters. It does

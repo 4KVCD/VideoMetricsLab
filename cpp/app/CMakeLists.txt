@@ -47,6 +47,15 @@ target_link_libraries(vml_app PUBLIC vml_core Qt6::Concurrent Qt6::Network Qt6::
 # The version: shown, and compared by the update check with GitHub's latest
 # release.
 target_compile_definitions(vml_app PUBLIC VML_APP_VERSION="${PROJECT_VERSION}")
+# The display's HDR state for Video Compare (display_hdr.h): macOS asks its
+# NSScreen (AppKit), the others vml_platform.
+if(APPLE)
+    target_sources(vml_app PRIVATE display_hdr_mac.mm)
+    set_source_files_properties(display_hdr_mac.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+    target_link_libraries(vml_app PUBLIC "-framework AppKit")
+else()
+    target_sources(vml_app PRIVATE display_hdr.cpp)
+endif()
 
 if(WIN32 AND MSVC)
     # Video Compare's native playback: FFmpeg's libraries (resources/tools/

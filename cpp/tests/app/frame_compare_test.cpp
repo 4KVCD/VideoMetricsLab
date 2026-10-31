@@ -24,6 +24,7 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -48,6 +49,13 @@ protected:
         panel.on_frame_ready(panel.generation_, static_cast<int>(side), image);
     }
     static bool idle(const FrameComparePanel& panel) { return panel.live_workers().empty(); }
+    // The display's HDR state as the panel would find it, and the colour
+    // status it then shows.
+    static QString colour_status(FrameComparePanel& panel, const platform::DisplayHdrInfo& display) {
+        panel.display_hdr_ = display;
+        panel.update_color_status();
+        return panel.color_status_label->text();
+    }
 #ifdef VML_NATIVE_PLAYBACK
     static bool plays_natively(const VideoCompareView& view) { return view.native_active(); }
 #endif
@@ -106,6 +114,23 @@ FrameComparisonEntry scored(const std::string& name, double score = 90.0, long l
     result->metric_results.add(std::move(vmaf));
     return {"run:" + name, QString::fromStdString(name), FrameComparison::from_result(*result), result,
             "row:" + name};
+}
+
+// A pair of files that exist (so it plays), both tagged with `transfer` and
+// `primaries`.
+FrameComparisonEntry tagged(const test::Folder& folder, const std::string& transfer, const std::string& primaries) {
+    FrameComparison comparison;
+    comparison.source_info = video(platform::path_text(folder / "source.mkv"), 3840, 2160, 120);
+    comparison.distorted_info = video(platform::path_text(folder / "hdr.mkv"), 3840, 2160, 120);
+    for (VideoInfo* info : {&comparison.source_info, &comparison.distorted_info}) {
+        std::ofstream(info->path).put('\0');
+        info->pix_fmt = "yuv420p10le";
+        info->color_transfer = transfer;
+        info->color_primaries = primaries;
+    }
+    comparison.fps = 24.0;
+    comparison.frame_count = 120;
+    return {"row:hdr", QStringLiteral("hdr"), comparison, nullptr, "row:hdr"};
 }
 
 // A pair that has only been read: no run, no scores.
@@ -192,6 +217,60 @@ TEST_F(FramePanelTest, HoldingSShowsTheSource) {
     QTest::keyRelease(panel->viewer, Qt::Key_S);
     EXPECT_FALSE(showing_source(*panel));
     EXPECT_TRUE(panel->showing_label->text().startsWith("TEST"));
+    panel->cancel();
+}
+
+// Display-aware playback says how the display shows HDR: on macOS its EDR
+// headroom (HDR above SDR white, or none on this display), never Windows'
+// HDR setting or D3D11; on Windows as before.
+TEST_F(FramePanelTest, TheColourStatusNamesTheSystemsHdr) {
+    const test::Folder folder;
+    const auto panel = make_panel();
+    const auto status = [&](const std::string& transfer, const std::string& primaries,
+                            const platform::DisplayHdrInfo& display) {
+        panel->set_runs({tagged(folder, transfer, primaries)});
+        return colour_status(*panel, display).toStdString();
+    };
+#ifdef __APPLE__
+    const platform::DisplayHdrInfo xdr = platform::display_hdr_from_edr(16.0, "Built-in Retina Display");
+    const platform::DisplayHdrInfo sdr = platform::display_hdr_from_edr(1.0, "GP01");
+    const std::vector<std::pair<std::string, std::string>> shown{
+        {status("smpte2084", "bt2020", xdr),
+         "Video playback \xC2\xB7 HDR10 / PQ \xC2\xB7 macOS EDR on (16\xC3\x97 SDR white) \xC2\xB7 native 10-bit Metal "
+         "presentation \xC2\xB7 tone mapping off"},
+        {status("arib-std-b67", "bt2020", xdr),
+         "Video playback \xC2\xB7 HLG \xC2\xB7 macOS EDR on (16\xC3\x97 SDR white) \xC2\xB7 native 10-bit Metal "
+         "presentation \xC2\xB7 tone mapping off"},
+        {status("bt709", "bt2020", xdr),
+         "Video playback \xC2\xB7 BT.2020 wide-gamut input \xC2\xB7 macOS EDR on (16\xC3\x97 SDR white) \xC2\xB7 "
+         "native 10-bit Metal presentation"},
+        {status("smpte2084", "bt2020", sdr),
+         "Video playback \xC2\xB7 HDR10 / PQ \xC2\xB7 HDR \xE2\x86\x92 SDR preview \xC2\xB7 no macOS EDR headroom on "
+         "this display"},
+    };
+    for (const auto& [text, expected] : shown) {
+        EXPECT_EQ(text, expected);
+        EXPECT_EQ(text.find("Windows"), std::string::npos) << text;
+        EXPECT_EQ(text.find("D3D11"), std::string::npos) << text;
+    }
+    EXPECT_EQ(panel->color_mode_combo->toolTip().toStdString().find("Windows"), std::string::npos);
+#else
+    platform::DisplayHdrInfo on;
+    on.hdr_enabled = true;
+    platform::DisplayHdrInfo off;
+    off.hdr_enabled = false;
+    EXPECT_EQ(status("smpte2084", "bt2020", on),
+              "Video playback \xC2\xB7 HDR10 / PQ \xC2\xB7 Windows HDR on \xC2\xB7 native 10-bit D3D11 presentation "
+              "\xC2\xB7 tone mapping off");
+    EXPECT_EQ(status("bt709", "bt2020", on),
+              "Video playback \xC2\xB7 BT.2020 wide-gamut input \xC2\xB7 Windows HDR on \xC2\xB7 native 10-bit D3D11 "
+              "presentation");
+    EXPECT_EQ(status("smpte2084", "bt2020", off),
+              "Video playback \xC2\xB7 HDR10 / PQ \xC2\xB7 HDR \xE2\x86\x92 SDR preview \xC2\xB7 Windows HDR off");
+#endif
+    EXPECT_EQ(status("smpte2084", "bt2020", platform::DisplayHdrInfo{}),
+              "Video playback \xC2\xB7 HDR10 / PQ \xC2\xB7 HDR \xE2\x86\x92 SDR preview \xC2\xB7 display HDR state "
+              "unavailable");
     panel->cancel();
 }
 

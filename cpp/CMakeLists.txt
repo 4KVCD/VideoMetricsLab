@@ -4,6 +4,11 @@
 cmake_minimum_required(VERSION 3.25)
 # C only for miniz (third_party/miniz): the app itself is C++.
 project(VideoMetricsLab VERSION 2.3 LANGUAGES C CXX)
+# Objective-C++ on macOS for the window's AppKit parts (cpp/app's .mm files),
+# enabled here, where every target that links them is below.
+if(APPLE)
+    enable_language(OBJCXX)
+endif()
 
 # On Windows the app is built with MSVC, as the package and GitHub's CI build
 # it, with Qt's MSVC build. Configured with another generator than Visual

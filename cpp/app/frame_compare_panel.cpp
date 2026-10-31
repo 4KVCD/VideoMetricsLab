@@ -439,8 +439,14 @@ void FrameComparePanel::add_colour_row(QVBoxLayout* root) {
     color_mode_combo->addItem(app::tr("Unmanaged (diagnostic)"), "unmanaged");
     color_mode_combo->setCurrentIndex(
         std::max(0, color_mode_combo->findData(qt_text(std::string(preview_color_mode_value(color_mode_))))));
+#ifdef __APPLE__
+    color_mode_combo->setToolTip(app::tr("Display-aware detects PQ/HLG tags and shows them in HDR where macOS gives "
+                                         "the display EDR headroom, otherwise tone-mapped to SDR. The fixed mode can "
+                                         "recover an untagged PQ file."));
+#else
     color_mode_combo->setToolTip(app::tr("Display-aware detects PQ/HLG tags and uses the Windows monitor's "
                                          "SDR-white setting. The fixed mode can recover an untagged PQ file."));
+#endif
     connect(color_mode_combo, &QComboBox::currentIndexChanged, this, [this](int index) { on_color_mode_changed(index); });
     color_status_label = new QLabel;
     theme::style(color_status_label, "color: {muted};");
@@ -565,6 +571,7 @@ void FrameComparePanel::make_timers() {
     display_timer_->setSingleShot(true);
     display_timer_->setInterval(200);
     connect(display_timer_, &QTimer::timeout, this, [this] { on_display_maybe_changed(); });
+    display_watch_ = std::make_unique<DisplayWatch>([this] { display_timer_->start(); });
     // While playing, the seek widgets and the frame line follow the frames
     // ten times a second, not at each.
     position_timer_ = new QTimer(this);
@@ -791,6 +798,7 @@ void FrameComparePanel::showEvent(QShowEvent* event) {
         }
         window_filters_installed_ = true;
     }
+    display_retried_ = false;
     refresh_display_hdr();
     if (!entries_.empty()) {
         if (is_video_mode()) {
@@ -806,6 +814,7 @@ void FrameComparePanel::hideEvent(QHideEvent* event) {
     // go of if it stays off screen.
     seek_timer_->stop();
     display_timer_->stop();
+    display_retried_ = false;
     ++generation_;
     cancel_workers();
     cancel_crop_workers();
@@ -833,7 +842,7 @@ bool FrameComparePanel::eventFilter(QObject* watched, QEvent* event) {
     }
     const QEvent::Type type = event->type();
     if (watched == window() && (type == QEvent::Move || type == QEvent::ScreenChangeInternal)) {
-        // Asked once Windows has finished the move.
+        // Asked once the system has finished the move.
         display_timer_->start();
     }
     const bool key_event = type == QEvent::KeyPress || type == QEvent::KeyRelease;
@@ -1276,8 +1285,14 @@ PreviewColorSettings FrameComparePanel::color_settings() const {
 
 bool FrameComparePanel::refresh_display_hdr() {
     // The display's HDR state again; whether it changed.
-    const platform::DisplayHdrInfo current =
-        platform::query_display_hdr(reinterpret_cast<void*>(window()->winId()));
+    const std::optional<platform::DisplayHdrInfo> found = window_display_hdr(window());
+    if (!found && !display_retried_) {
+        display_retried_ = true;
+        display_timer_->start();
+    }
+    // A display not found for a moment (the window between screens) keeps
+    // the state known before.
+    const platform::DisplayHdrInfo current = found.value_or(display_hdr_);
     if (current == display_hdr_) {
         return false;
     }
@@ -1313,6 +1328,9 @@ void FrameComparePanel::update_color_status() {
         return;
     }
     const PreviewColorSettings settings = color_settings();
+#ifdef __APPLE__
+    const double headroom = display_hdr_.edr_headroom.value_or(1.0);
+#endif
     if (color_mode_ == PreviewColorMode::hdr_to_sdr) {
         QString source = kind ? qt_text(*kind) : app::tr("Untagged input (assuming HDR10 / PQ)");
         if (video) {
@@ -1333,9 +1351,16 @@ void FrameComparePanel::update_color_status() {
         const std::string primaries = ascii_lower(info.color_primaries);
         const bool wide_gamut = primaries == "bt2020" || primaries == "bt.2020";
         if (video && wide_gamut && display_hdr_.hdr_enabled == true && !ffmpeg_playback) {
+#ifdef __APPLE__
+            color_status_label->setText(
+                app::tr("{prefix}BT.2020 wide-gamut input \xC2\xB7 macOS EDR on ({headroom:g}\xC3\x97 SDR white) "
+                        "\xC2\xB7 native 10-bit Metal presentation",
+                        {{"prefix", prefix}, {"headroom", headroom}}));
+#else
             color_status_label->setText(app::tr(
                 "{prefix}BT.2020 wide-gamut input \xC2\xB7 Windows HDR on \xC2\xB7 native 10-bit D3D11 presentation",
                 {{"prefix", prefix}}));
+#endif
             return;
         }
         color_status_label->setText(
@@ -1350,20 +1375,40 @@ void FrameComparePanel::update_color_status() {
                                                     {{"prefix", prefix}, {"kind", qt_text(*kind)}}));
                 return;
             }
+#ifdef __APPLE__
+            color_status_label->setText(
+                app::tr("{prefix}{kind} \xC2\xB7 macOS EDR on ({headroom:g}\xC3\x97 SDR white) \xC2\xB7 native 10-bit "
+                        "Metal presentation \xC2\xB7 tone mapping off",
+                        {{"prefix", prefix}, {"kind", qt_text(*kind)}, {"headroom", headroom}}));
+#else
             color_status_label->setText(app::tr(
                 "{prefix}{kind} \xC2\xB7 Windows HDR on \xC2\xB7 native 10-bit D3D11 presentation \xC2\xB7 tone "
                 "mapping off",
                 {{"prefix", prefix}, {"kind", qt_text(*kind)}}));
+#endif
             return;
         }
+#ifdef __APPLE__
+        color_status_label->setText(
+            app::tr("{prefix}{kind} \xC2\xB7 display-aware HDR \xE2\x86\x92 SDR at {target_nits:g} nit \xC2\xB7 macOS "
+                    "EDR on",
+                    {{"prefix", prefix}, {"kind", qt_text(*kind)}, {"target_nits", settings.target_nits()}}));
+#else
         color_status_label->setText(app::tr(
             "{prefix}{kind} \xC2\xB7 display-aware HDR \xE2\x86\x92 SDR \xC2\xB7 Windows HDR on \xC2\xB7 SDR white "
             "{target_nits:g} nit",
             {{"prefix", prefix}, {"kind", qt_text(*kind)}, {"target_nits", settings.target_nits()}}));
+#endif
     } else if (display_hdr_.hdr_enabled == false) {
+#ifdef __APPLE__
+        color_status_label->setText(
+            app::tr("{prefix}{kind} \xC2\xB7 HDR \xE2\x86\x92 {target} \xC2\xB7 no macOS EDR headroom on this display",
+                    {{"prefix", prefix}, {"kind", qt_text(*kind)}, {"target", target}}));
+#else
         color_status_label->setText(
             app::tr("{prefix}{kind} \xC2\xB7 HDR \xE2\x86\x92 {target} \xC2\xB7 Windows HDR off",
                     {{"prefix", prefix}, {"kind", qt_text(*kind)}, {"target", target}}));
+#endif
     } else {
         color_status_label->setText(
             app::tr("{prefix}{kind} \xC2\xB7 HDR \xE2\x86\x92 {target} \xC2\xB7 display HDR state unavailable",

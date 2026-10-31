@@ -4,11 +4,13 @@
 // natively and why not, what the presenter's shader does to each video's
 // colours and with which parameters, and the YUV-to-RGB rows.
 #include "vml/native_playback.h"
+#include "vml/platform/system.h"
 
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
 #include <cmath>
+#include <limits>
 #include <string>
 
 #include "reference.h"
@@ -101,5 +103,40 @@ TEST(NativePlayback, DecidesAndShadesAsThePythonAppDoes) {
     }
 }
 
+// macOS's display state from its EDR headroom (display_hdr_from_edr): HDR on
+// where there is headroom above SDR white, so that PQ and HLG are shown in
+// HDR there and tone-mapped to SDR elsewhere; nothing known from a value that
+// is no headroom at all.
+TEST(NativePlayback, MacOSShowsHdrWhereTheDisplayHasEdrHeadroom) {
+    const platform::DisplayHdrInfo xdr = platform::display_hdr_from_edr(16.0, "Built-in Retina Display");
+    EXPECT_EQ(xdr.device_name, "Built-in Retina Display");
+    EXPECT_EQ(xdr.hdr_enabled, true);
+    EXPECT_EQ(xdr.hdr_supported, true);
+    EXPECT_EQ(xdr.edr_headroom, 16.0);
+    EXPECT_FALSE(xdr.sdr_white_nits);
+    EXPECT_EQ(platform::display_hdr_from_edr(2.0, "").hdr_enabled, true);
+    for (const double none : {1.0, 0.5}) {
+        const platform::DisplayHdrInfo sdr = platform::display_hdr_from_edr(none, "GP01");
+        EXPECT_EQ(sdr.hdr_enabled, false) << none;
+        EXPECT_FALSE(sdr.hdr_supported) << none;
+        EXPECT_EQ(sdr.edr_headroom, 1.0) << none;
+    }
+    for (const double unknown : {0.0, -1.0, std::numeric_limits<double>::quiet_NaN(),
+                                 std::numeric_limits<double>::infinity()}) {
+        const platform::DisplayHdrInfo info = platform::display_hdr_from_edr(unknown, "");
+        EXPECT_FALSE(info.hdr_enabled) << unknown;
+        EXPECT_FALSE(info.hdr_supported) << unknown;
+        EXPECT_FALSE(info.edr_headroom) << unknown;
+    }
+
+    PreviewColorSettings colours;
+    colours.display_hdr_enabled = xdr.hdr_enabled;
+    EXPECT_FALSE(needs_sdr_tonemap(colours));
+    colours.display_hdr_enabled = platform::display_hdr_from_edr(1.0, "GP01").hdr_enabled;
+    EXPECT_TRUE(needs_sdr_tonemap(colours));
+    EXPECT_EQ(colours.target_nits(), 100.0);
+}
+
 }  // namespace
+
 }  // namespace vml

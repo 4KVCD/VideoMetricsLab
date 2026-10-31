@@ -25,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "display_hdr.h"
 #include "vml/cancel.h"
 #include "vml/frame_extract.h"
 #include "vml/platform/system.h"
@@ -336,6 +337,12 @@ private:
     bool window_filters_installed_ = false;
     PreviewColorMode color_mode_;
     platform::DisplayHdrInfo display_hdr_;
+    // Asked again once, 200 ms later, when the display could not be known
+    // yet (a window shown before it is on a screen): once per show.
+    bool display_retried_ = false;
+    // The displays' settings changing (macOS), which re-asks; a member, gone
+    // before the timers it starts.
+    std::unique_ptr<DisplayWatch> display_watch_;
     // The frames extracted, oldest first, and why some could not be.
     std::deque<std::pair<CacheKey, QImage>> cache_;
     std::map<CacheKey, QString> errors_;

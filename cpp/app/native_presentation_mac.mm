@@ -174,11 +174,18 @@ void set_space(Presenter& presenter, Space space) {
         presenter.layer.colorspace = pq;
         CGColorSpaceRelease(pq);
         presenter.layer.wantsExtendedDynamicRangeContent = YES;
+        // Graded to 1000 nits (as HLG is shown, and most HDR10 is): macOS
+        // tone-maps it into the headroom the display has now. Without it,
+        // what is brighter than that headroom is clipped.
+        presenter.layer.EDRMetadata = [CAEDRMetadata HDR10MetadataWithMinLuminance:0.005f
+                                                                      maxLuminance:1000.0f
+                                                                opticalOutputScale:100.0f];
     } else {
         CGColorSpaceRef srgb = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
         presenter.layer.colorspace = srgb;
         CGColorSpaceRelease(srgb);
         presenter.layer.wantsExtendedDynamicRangeContent = NO;
+        presenter.layer.EDRMetadata = nil;
     }
     [CATransaction commit];
 }
