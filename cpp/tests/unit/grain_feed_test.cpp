@@ -80,8 +80,8 @@ TEST(GrainFeed, FedPicturesAreRawvideoTaggedAsTheFilesFramesAre) {
     // As FFmpeg's av_guess_frame_rate: the average where it is below 70 and
     // r_frame_rate above 210.
     VideoInfo rated = pq_video("g.mkv");
-    for (const auto [nominal, average, expected] : {std::tuple(240.0, 60.0, "60.0"), std::tuple(200.0, 24.0, "200.0"),
-                                                    std::tuple(1000.0, 0.0, "1000.0")}) {
+    for (const auto& [nominal, average, expected] :
+         {std::tuple(240.0, 60.0, "60.0"), std::tuple(200.0, 24.0, "200.0"), std::tuple(1000.0, 0.0, "1000.0")}) {
         rated.nominal_fps = nominal;
         rated.average_fps = average;
         EXPECT_EQ(feed_input_options(rated)->at(7), expected) << nominal << " / " << average;
