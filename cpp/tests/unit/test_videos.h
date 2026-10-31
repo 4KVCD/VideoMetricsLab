@@ -52,7 +52,7 @@ public:
 
 private:
     std::string name_;
-    std::string previous_;
+    std::optional<std::string> previous_;  // nothing: it was not set
 };
 
 }  // namespace vml::test

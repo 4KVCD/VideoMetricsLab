@@ -49,6 +49,12 @@ std::optional<bool> film_grain_choice(const CompareArguments& arguments, const S
 std::optional<std::string> missing_gpu_maker(const std::optional<std::string>& gpu_decode,
                                              const std::vector<GpuVendor>& found, bool listed);
 
+#ifdef __APPLE__
+// Why --gpu-decode (`gpu_decode`) cannot name a maker on a Mac, which decodes
+// with its own media engine; nothing for auto.
+std::optional<std::string> mac_gpu_decode_refusal(const std::optional<std::string>& gpu_decode);
+#endif
+
 // A display CVVDP models, by its preset's name.
 using CvvdpDisplayChoice = std::pair<std::string, CvvdpSettings>;
 

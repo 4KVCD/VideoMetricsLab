@@ -5,6 +5,7 @@
 #include <string_view>
 #include <utility>
 
+#include "vml/ffmpeg_tools.h"
 #include "vml/platform/pipe.h"
 #include "vml/platform/process.h"
 #include "vml/python_text.h"
@@ -188,8 +189,8 @@ void StreamDecodeWorker::run() {
         // The frames queued are kept, and the next way starts at the first
         // frame not decoded: after a device lost mid-video too, without
         // replaying frames or retrying for ever.
-        const QString detail =
-            QString::fromStdString(std::string(python_strip(replace_invalid_utf8(attempt->error_output))));
+        const QString detail = QString::fromStdString(
+            explain_ffmpeg_error(std::string(python_strip(replace_invalid_utf8(attempt->error_output)))));
         errors.push_back(!detail.isEmpty()          ? detail
                          : !attempt->error.isEmpty() ? attempt->error
                                                      : QStringLiteral("Decoder produced no frames."));

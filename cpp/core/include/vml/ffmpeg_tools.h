@@ -26,16 +26,43 @@ std::string input_path(const std::filesystem::path& path);
 inline const std::vector<int> minimum_ffmpeg_version{9};
 
 // The program to run for `name` ("ffmpeg" or "ffprobe"): in the folder chosen
-// in Settings, then on the PATH, then in common install folders (a newly
-// installed winget package is not on the PATH of programs already running;
-// on macOS, Homebrew's folder is not on the PATH of an app the Finder
-// opens); else the bare name, in case it is on the PATH by the time it runs.
+// in Settings, then (macOS) in Homebrew's ffmpeg-full, then on the PATH, then
+// in common install folders (a newly installed winget package is not on the
+// PATH of programs already running; on macOS, Homebrew's folder is not on the
+// PATH of an app the Finder opens); else the bare name, in case it is on the
+// PATH by the time it runs.
 std::string find_tool(std::string_view name, const Settings& settings);
 
 // On macOS, the folders find_tool looks in after the PATH, separated by ':',
-// instead of Homebrew's and MacPorts': for tests, which need a Mac where
-// FFmpeg is missing.
+// instead of Homebrew's and MacPorts' (and of ffmpeg-full's before the PATH):
+// for tests, which need a Mac where FFmpeg is missing.
 inline constexpr std::string_view ffmpeg_folders_variable = "VML_FFMPEG_FOLDERS";
+
+#ifdef __APPLE__
+// The folders find_tool looks in before the PATH on macOS: Homebrew's
+// ffmpeg-full (this system's: /opt/homebrew on Apple silicon, /usr/local on
+// Intel), which Homebrew does not link into
+// its bin folder, and whose zscale (zimg) plain ffmpeg lacks; none when
+// ffmpeg_folders_variable names the folders.
+std::vector<std::filesystem::path> mac_preferred_ffmpeg_folders();
+#endif
+
+// Whether `ffmpeg -hide_banner -filters` output lists the filter `name`:
+// each filter's line is its flags, its name, its pads and its description.
+bool lists_filter(std::string_view filters_output, std::string_view name);
+
+// Whether `ffmpeg` has the zscale filter, which converts HDR video to SDR
+// for Video Compare's still frames and FFmpeg playback (frame_extract.h);
+// nothing when it cannot be run. Scores never need it.
+std::optional<bool> ffmpeg_has_zscale(const std::string& ffmpeg);
+
+// Why HDR video cannot be converted to SDR with an FFmpeg without zscale, for
+// the user (on macOS with what to install).
+std::string missing_zscale_text();
+
+// FFmpeg's error `error` as the user is told it: the cause where it is known
+// (a missing zscale filter), else as it is.
+std::string explain_ffmpeg_error(const std::string& error);
 
 // The version in a tool's -version output, such as {9, 0, 1}; nothing for a
 // development build ("N-113411-g1234567"), which has no usable number.

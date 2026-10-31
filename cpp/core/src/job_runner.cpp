@@ -407,9 +407,12 @@ std::string JobRun::describe() const {
                            "), VMAF v0.6.1 model " + options.model_choice + ", VMAF v1 model " +
                            options.model_choice_v1 + ", frame subsample " + std::to_string(options.n_subsample) +
                            ", GPU decode " + (options.gpu_decode ? "on" : "off");
+#ifndef __APPLE__
+    // A Mac decodes with its own media engine, whichever maker is asked.
     if (options.gpu_decode && !vendor_label(options.gpu_vendor).empty()) {
         settings += " (" + std::string(vendor_label(options.gpu_vendor)) + ")";
     }
+#endif
     for (const auto& [key, backend] : job_.perceptual_backends) {
         settings += ", " + std::string(metric_definition(key).label) + " on " + ascii_upper(backend);
     }

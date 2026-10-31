@@ -142,7 +142,9 @@
   "The VMAF v1 column's model (Netflix's bundled VMAF v1 models). Auto picks the 1080p model at three screen heights, or the 4K model at one and a half for 4K comparisons, as for VMAF v0.6.1.": "VMAF v1 열의 모델입니다(Netflix가 제공하는 VMAF v1 모델). [자동]은 화면 높이 3배의 1080p 모델을, 4K 비교에서는 화면 높이 1.5배의 4K 모델을 고릅니다(VMAF v0.6.1과 같음).",
   "VMAF v1 model:": "VMAF v1 모델:",
   "Hardware-decodes the reference and the test video. Each is decided separately, and either one falls back to the CPU on its own if this GPU can't decode its format.": "참조 영상과 테스트 영상을 하드웨어로 디코딩합니다. 각각 따로 결정되며, 이 GPU가 형식을 디코딩하지 못하면 해당 영상만 CPU로 전환됩니다.",
+  "Decodes the videos with the Mac's media engine (VideoToolbox) where it can decode their codec: every video for SSIMULACRA2, Butteraugli and CVVDP; for VMAF, VMAF NEG, VMAF v1, PSNR, SSIM and XPSNR, the resolution test and black-bar detection only videos deeper than 8 bits (8-bit ones decode faster in the app). Each video falls back to the CPU on its own if VideoToolbox can't decode it.": "코덱을 디코딩할 수 있으면 Mac의 미디어 엔진(VideoToolbox)으로 비디오를 디코딩합니다. SSIMULACRA2, Butteraugli, CVVDP에는 모든 비디오를, VMAF, VMAF NEG, VMAF v1, PSNR, SSIM, XPSNR, 해상도 테스트와 검은 띠 감지에는 8비트보다 깊은 비디오만 디코딩합니다(8비트 비디오는 앱에서 더 빨리 디코딩됨). VideoToolbox가 디코딩할 수 없는 비디오는 각각 CPU로 돌아갑니다.",
   "Auto-detect": "자동 감지",
+  "Apple (VideoToolbox)": "Apple (VideoToolbox)",
   "GPU decode:": "GPU 디코딩:",
   "Detected GPU(s): {names}": "감지된 GPU: {names}",
   "Auto-detect (recommended)": "자동 감지(권장)",
@@ -729,6 +731,7 @@
   "\n\nCalculated on the CPU, which gives different numbers from the GPU, so the next run calculates it again on this PC's GPU.": "\n\nCPU에서 계산했으며, CPU는 GPU와 결과가 다르므로 다음 실행에서 이 PC의 GPU로 다시 계산합니다.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a duration limit to score only the start.\n\nCalculate anyway?": "\n\n지원되는 GPU를 찾지 못해 CPU에서 계산합니다. CPU 도구는 정지 이미지 한 쌍씩 채점합니다. 4K 프레임당 SSIMULACRA2는 약 1초, Butteraugli는 약 2초가 걸려 영화 한 편에 며칠이 걸립니다(위 예상은 측정에 쓴 것과 비슷한 CPU 기준). 앞부분만 채점하려면 길이 제한을 설정하세요.\n\n그래도 계산하시겠습니까?",
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "GPU를 선택하면 VMAF v0.6.1, VMAF NEG, VMAF v1이 Vulkan으로 GPU에서 계산됩니다(Vulkan으로 계산할 수 없는 NVIDIA GPU에서는 VMAF v0.6.1 및 NEG를 CUDA로 계산). VMAF v1: GPU 코드가 옵션을 지원하지 않는 모델에서는 밴딩 및 색상 특징(CAMBI, SpEED)을 CPU에서 계산합니다. PSNR, SSIM, XPSNR은 어느 쪽이든 CPU에서 계산됩니다. GPU의 점수는 모든 프레임에서 CPU의 점수와 1000분의 1점 이내로 일치하므로, 어느 쪽을 선택하든 저장된 점수가 유지됩니다. GPU 계산이 실패하면 대신 CPU에서 계산됩니다.",
+  "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (MoltenVK on Metal). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "GPU를 선택하면 VMAF v0.6.1, VMAF NEG, VMAF v1이 Vulkan으로 GPU에서 계산됩니다(MoltenVK / Metal). VMAF v1: GPU 코드가 옵션을 지원하지 않는 모델에서는 밴딩 및 색상 특징(CAMBI, SpEED)을 CPU에서 계산합니다. PSNR, SSIM, XPSNR은 어느 쪽이든 CPU에서 계산됩니다. GPU의 점수는 모든 프레임에서 CPU의 점수와 1000분의 1점 이내로 일치하므로, 어느 쪽을 선택하든 저장된 점수가 유지됩니다. GPU 계산이 실패하면 대신 CPU에서 계산됩니다.",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2, Butteraugli, CVVDP를 영상당 한 번의 패스에서 함께 계산",
   "Each video is decoded once for all three instead of once for each. This is faster only on very powerful GPUs, and needs a lot of GPU memory. A metric that fails in the shared pass, out of GPU memory for example, is calculated again on its own.\n\nThe scores are the same either way. Applies from the next run.": "각 영상을 지표마다 디코딩하지 않고 세 지표에 대해 한 번만 디코딩합니다. 매우 강력한 GPU에서만 더 빠르며, GPU 메모리를 많이 씁니다. 공유 패스에서 실패한 지표(예: GPU 메모리 부족)는 따로 다시 계산합니다.\n\n어느 방식이든 점수는 같습니다. 다음 실행부터 적용됩니다.",
   "Unticked, the three are calculated one at a time, which needs much less GPU memory and is hardly any slower on most GPUs.": "선택하지 않으면 세 지표를 하나씩 계산합니다. GPU 메모리를 훨씬 적게 쓰고, 대부분의 GPU에서 거의 느려지지 않습니다.",
@@ -770,7 +773,10 @@
   "the app's decoder does not decode it: {reason}": "앱의 디코더가 이 영상을 디코딩하지 않습니다: {reason}",
   "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "앱 자체 디코더가 여기에 없습니다(또는 VML_SOFTWARE_DECODE=ffmpeg로 꺼졌습니다)",
   "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "영상 도중 크기가 바뀌며, 한 크기로 FFmpeg에 넘기는 화면은 이를 따라갈 수 없습니다",
-  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "픽셀 형식 또는 색상 태그에 FFmpeg용 rawvideo 대응 값이 없습니다"
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "픽셀 형식 또는 색상 태그에 FFmpeg용 rawvideo 대응 값이 없습니다",
+  "  Install it with Homebrew: brew install ffmpeg-full.": "  Homebrew로 설치하세요: brew install ffmpeg-full.",
+  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR": "FFmpeg에 zscale 필터가 없습니다: HDR 비디오를 SDR로 변환할 수 없습니다",
+  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)": "FFmpeg에 zscale 필터가 없습니다: HDR 비디오를 SDR로 변환할 수 없습니다 (brew install ffmpeg-full)"
  },
  "plurals": {
   "about {count} day": [

@@ -67,10 +67,22 @@ std::filesystem::path make_clip(const Tools& found, const std::filesystem::path&
 }
 
 ScopedVariable::ScopedVariable(std::string name, const std::string& value)
-    : name_(std::move(name)), previous_(platform::environment_variable(name_).value_or("")) {
+    : name_(std::move(name)), previous_(platform::environment_variable(name_)) {
     set_variable(name_, value);
 }
 
-ScopedVariable::~ScopedVariable() { set_variable(name_, previous_); }
+ScopedVariable::~ScopedVariable() {
+    // One that was not set goes again: set to nothing, it would still be set
+    // outside Windows.
+#ifdef _WIN32
+    set_variable(name_, previous_.value_or(""));
+#else
+    if (previous_) {
+        set_variable(name_, *previous_);
+    } else {
+        unsetenv(name_.c_str());
+    }
+#endif
+}
 
 }  // namespace vml::test

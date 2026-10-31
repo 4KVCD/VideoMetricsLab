@@ -12,7 +12,7 @@
 # QT_FOLDER is Qt's macos folder (such as ~/Qt/6.12.0/macos), for a build
 # folder not yet configured with it. Needs what building the app needs
 # (cpp/README.md), git, meson and Ninja for libvmaf-fast, and ffmpeg and
-# ffprobe on the PATH for the self-test. Output goes outside the
+# ffprobe (on the PATH, or Homebrew's ffmpeg-full) for the self-test. Output goes outside the
 # repository, under ~/Library/Caches/VideoMetricsLab-build (or OUTPUT_ROOT).
 set -euo pipefail
 
@@ -38,9 +38,18 @@ if ! grep -q '"release": true' "$app_files/tools/libvmaf/libvmaf-fast.json" && !
     echo "libvmaf-fast is a local build: install its release (docs/RELEASING.md), or pass --allow-local-libvmaf to test" >&2
     exit 1
 fi
+# Homebrew's ffmpeg-full (with zscale) is keg-only: not on the PATH.
 ffmpeg="$(command -v ffmpeg || true)"
-if [[ -z "$ffmpeg" ]] || ! command -v ffprobe > /dev/null; then
-    echo "The self-test needs ffmpeg and ffprobe on the PATH" >&2
+if [[ -z "$ffmpeg" ]]; then
+    for keg in /opt/homebrew/opt/ffmpeg-full/bin; do  # the arm64 build's Homebrew
+        if [[ -x "$keg/ffmpeg" && -x "$keg/ffprobe" ]]; then
+            ffmpeg="$keg/ffmpeg"
+            break
+        fi
+    done
+fi
+if [[ -z "$ffmpeg" ]] || { [[ ! -x "$(dirname "$ffmpeg")/ffprobe" ]] && ! command -v ffprobe > /dev/null; }; then
+    echo "The self-test needs ffmpeg and ffprobe: brew install ffmpeg-full" >&2
     exit 1
 fi
 
@@ -253,4 +262,4 @@ printf '\033[32mBuilt %s bundle, %s zip\033[0m\n' "$(du -sh "$app" | cut -f1)" "
 echo "  $app"
 echo "  $zip"
 echo
-printf '\033[33mFFmpeg itself (ffmpeg, ffprobe) is not bundled: brew install ffmpeg.\033[0m\n'
+printf '\033[33mFFmpeg itself (ffmpeg, ffprobe) is not bundled: brew install ffmpeg-full (its zscale converts HDR video to SDR).\033[0m\n'

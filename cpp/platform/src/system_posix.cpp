@@ -170,6 +170,17 @@ bool keep_system_awake(bool /*awake*/) { return false; }
 
 std::vector<unsigned> gpu_vendor_ids() { return {}; }
 
+#ifdef __APPLE__
+std::string chip_name() {
+    char name[256] = {};
+    std::size_t size = sizeof name;
+    if (sysctlbyname("machdep.cpu.brand_string", name, &size, nullptr, 0) != 0) {
+        return {};
+    }
+    return std::string(name, strnlen(name, sizeof name));
+}
+#endif
+
 bool lists_gpus() { return false; }
 
 std::optional<unsigned> first_gpu_adapter() { return 0; }

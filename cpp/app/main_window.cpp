@@ -1054,7 +1054,13 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     for (const std::string& problem : status.problems()) {
         problems.append(QString::fromStdString(problem));
     }
-    ffmpeg_banner_->setText(problems.join("  ") +
+#ifdef __APPLE__
+    // The formula with zscale, which plain ffmpeg lacks (missing_zscale_text).
+    const QString install = app::tr("  Install it with Homebrew: brew install ffmpeg-full.");
+#else
+    const QString install;
+#endif
+    ffmpeg_banner_->setText(problems.join("  ") + install +
                             app::with_program_names(app::tr("  Click \"Locate ffmpeg.exe...\" to point at it.")));
     ffmpeg_banner_->setVisible(true);
     locate_ffmpeg_button_->setVisible(true);
@@ -1062,7 +1068,7 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     if (prompt && qEnvironmentVariable("QT_QPA_PLATFORM") != "offscreen") {
         const auto answer = QMessageBox::warning(
             this, app::tr("ffmpeg not usable"),
-            problems.join("\n") +
+            problems.join("\n") + install +
                 app::tr("\n\nffmpeg was looked for at:\n  {path}", {{"path", status.ffmpeg.path}}) +
                 app::tr("\nffprobe at:\n  {path}", {{"path", status.ffprobe.path}}) +
                 app::with_program_names(app::tr("\n\nWould you like to point the app at ffmpeg.exe now?")),

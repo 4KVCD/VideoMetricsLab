@@ -25,6 +25,7 @@
 #include "window_helpers.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/model_select.h"
+#include "vml/platform/system.h"
 #include "vml/vship.h"
 #include "vship_names.h"
 
@@ -67,8 +68,13 @@ namespace {
 const QStringList scale_algorithms{"bicubic", "lanczos", "bilinear", "spline"};
 
 // The GPU decode dropdown's entries, in its order.
+#ifdef __APPLE__
+// A Mac decodes with its own media engine, whichever maker is asked.
+const std::vector<GpuVendor> gpu_vendor_entries{GpuVendor::automatic};
+#else
 const std::vector<GpuVendor> gpu_vendor_entries{GpuVendor::automatic, GpuVendor::nvidia, GpuVendor::intel,
                                                 GpuVendor::amd};
+#endif
 
 // The index of `choice` in a model dropdown; Auto's for one not there.
 int index_of(const std::vector<ModelChoice>& choices, const std::string& choice) {
@@ -314,12 +320,24 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
     // GPU decoding, where each metric is calculated, the GPUs found, and
     // libvmaf's threads.
     gpu_checkbox = new QCheckBox(app::tr("Use GPU decoding"));
+#ifdef __APPLE__
+    gpu_checkbox->setToolTip(app::tr(
+        "Decodes the videos with the Mac's media engine (VideoToolbox) where it can decode their codec: every video "
+        "for SSIMULACRA2, Butteraugli and CVVDP; for VMAF, VMAF NEG, VMAF v1, PSNR, SSIM and XPSNR, the resolution "
+        "test and black-bar detection only videos deeper than 8 bits (8-bit ones decode faster in the app). Each "
+        "video falls back to the CPU on its own if VideoToolbox can't decode it."));
+#else
     gpu_checkbox->setToolTip(
         app::tr("Hardware-decodes the reference and the test video. Each is decided separately, and either one falls "
                 "back to the CPU on its own if this GPU can't decode its format."));
+#endif
     gpu_checkbox->setChecked(true);
     gpu_vendor_combo = new QComboBox;
+#ifdef __APPLE__
+    gpu_vendor_combo->addItem(app::tr("Apple (VideoToolbox)"));
+#else
     gpu_vendor_combo->addItems({app::tr("Auto-detect"), "NVIDIA", "Intel", "AMD"});
+#endif
     connect(gpu_checkbox, &QCheckBox::toggled, gpu_vendor_combo, &QWidget::setEnabled);
     connect(gpu_checkbox, &QCheckBox::toggled, this, [this] { emit field_edited("gpu"); });
     connect(gpu_vendor_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("gpu"); });
@@ -337,6 +355,14 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
     // only of the Vship build (below).
     vmaf_backend_combo = new QComboBox;
     vmaf_backend_combo->addItems({"GPU", "CPU"});
+#ifdef __APPLE__
+    vmaf_backend_combo->setToolTip(app::tr(
+        "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (MoltenVK on Metal). "
+        "VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, "
+        "SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with "
+        "the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. "
+        "If the GPU calculation fails, they are calculated on the CPU instead."));
+#else
     vmaf_backend_combo->setToolTip(app::tr(
         "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG "
         "with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model "
@@ -344,6 +370,7 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
         "PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a "
         "thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation "
         "fails, they are calculated on the CPU instead."));
+#endif
     connect(vmaf_backend_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("vmaf_on_gpu"); });
     form->addRow(app::tr("VMAF compute:"), vmaf_backend_combo);
 
@@ -368,11 +395,18 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
     connect(vship_build_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("vship_build"); });
     form->addRow(app::tr("Vship compute:"), vship_build_combo);
     form->setRowVisible(vship_build_combo, vship51_bundled());
-    if (!gpu_vendors.empty()) {
-        QStringList names;
-        for (const GpuVendor vendor : gpu_vendors) {
-            names.append(qt_text(vendor_label(vendor)));
-        }
+    QStringList names;
+    for (const GpuVendor vendor : gpu_vendors) {
+        names.append(qt_text(vendor_label(vendor)));
+    }
+#ifdef __APPLE__
+    // An Apple silicon Mac's GPU is its chip's (it lists no makers); an Intel
+    // Mac's chip name is its CPU's.
+    if (const std::string chip = platform::chip_name(); names.isEmpty() && chip.starts_with("Apple")) {
+        names.append(qt_text(chip));
+    }
+#endif
+    if (!names.isEmpty()) {
         form->addRow(QString(), new QLabel(app::tr("Detected GPU(s): {names}", {{"names", names.join(", ")}})));
     }
 

@@ -122,6 +122,12 @@ DisplayHdrInfo query_display_hdr(void* window);
 // keeps SDR at its reference white.
 DisplayHdrInfo display_hdr_from_edr(double potential_headroom, std::string device_name);
 
+#ifdef __APPLE__
+// The Mac's chip, whose GPU it is, such as "Apple M1 Pro"; empty if macOS
+// does not say.
+std::string chip_name();
+#endif
+
 // Lets the calling thread run ahead of ordinary work (Windows'
 // THREAD_PRIORITY_HIGHEST), for a light thread whose timing matters. It does
 // nothing on other systems, as in the Python app, or if Windows refuses.

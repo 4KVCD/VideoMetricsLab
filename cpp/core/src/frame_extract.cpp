@@ -343,7 +343,7 @@ std::string still_png(StillOutput output, long long frame, const CancelToken& ca
         cancel.throw_if_cancelled();
         throw FrameExtractError(output.error.empty()
                                     ? "ffmpeg exited with code " + platform::exit_code_text(output.exit_code) + "."
-                                    : last_characters(output.error, 2000));
+                                    : explain_ffmpeg_error(last_characters(output.error, 2000)));
     }
     if (output.png.empty()) {
         throw FrameExtractError("No frame was returned at frame " + std::to_string(frame) +

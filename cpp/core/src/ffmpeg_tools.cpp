@@ -6,12 +6,14 @@
 #include <filesystem>
 #include <future>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <utility>
 
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/translatable.h"
 
 namespace vml {
 
@@ -103,6 +105,21 @@ std::string input_path(const std::filesystem::path& path) {
     return platform::path_text(error ? std::filesystem::absolute(path) : resolved);
 }
 
+#ifdef __APPLE__
+std::vector<std::filesystem::path> mac_preferred_ffmpeg_folders() {
+    if (platform::environment_variable(ffmpeg_folders_variable)) {
+        return {};
+    }
+    // This system's Homebrew only: on Apple silicon /usr/local's is an Intel
+    // one's (from a migrated Mac), which would come before the PATH's own.
+#if defined(__aarch64__) || defined(__arm64__)
+    return {"/opt/homebrew/opt/ffmpeg-full/bin"};
+#else
+    return {"/usr/local/opt/ffmpeg-full/bin"};
+#endif
+}
+#endif
+
 std::string find_tool(std::string_view name, const Settings& settings) {
     const std::string program = platform::executable_name(name);
     if (const std::optional<std::filesystem::path> folder = settings.ffmpeg_dir_path()) {
@@ -110,6 +127,13 @@ std::string find_tool(std::string_view name, const Settings& settings) {
             return platform::path_text(candidate);
         }
     }
+#ifdef __APPLE__
+    for (const std::filesystem::path& folder : mac_preferred_ffmpeg_folders()) {
+        if (const std::filesystem::path candidate = folder / platform::path_from_text(program); is_file(candidate)) {
+            return platform::path_text(candidate);
+        }
+    }
+#endif
     if (const std::optional<std::filesystem::path> on_path = platform::find_on_path(name)) {
         return platform::path_text(*on_path);
     }
@@ -204,6 +228,49 @@ ToolsStatus check_tools(const Settings& settings) {
         std::async(std::launch::async, [&settings] { return check_tool("ffprobe", settings); });
     ToolStatus ffmpeg = check_tool("ffmpeg", settings);
     return ToolsStatus{std::move(ffmpeg), ffprobe.get()};
+}
+
+bool lists_filter(std::string_view filters_output, std::string_view name) {
+    // " .S zscale            V->V       Apply resizing, ...": the name is a
+    // filter line's second field (the legend's lines have "=" there, or
+    // nothing).
+    std::size_t start = 0;
+    while (start < filters_output.size()) {
+        const std::size_t end = std::min(filters_output.find('\n', start), filters_output.size());
+        std::istringstream fields{std::string(filters_output.substr(start, end - start))};
+        std::string flags;
+        std::string filter;
+        if (fields >> flags >> filter && filter == name) {
+            return true;
+        }
+        start = end + 1;
+    }
+    return false;
+}
+
+std::optional<bool> ffmpeg_has_zscale(const std::string& ffmpeg) {
+    try {
+        const platform::ProcessOutput output =
+            platform::run_program({ffmpeg, "-hide_banner", "-filters"}, tool_check_timeout);
+        if (output.timed_out || output.exit_code != 0) {
+            return std::nullopt;
+        }
+        return lists_filter(output.standard_output, "zscale");
+    } catch (const platform::ProcessError&) {
+        return std::nullopt;
+    }
+}
+
+std::string missing_zscale_text() {
+#ifdef __APPLE__
+    return N_("FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)");
+#else
+    return N_("FFmpeg has no zscale filter: HDR video cannot be converted to SDR");
+#endif
+}
+
+std::string explain_ffmpeg_error(const std::string& error) {
+    return error.find("No such filter: 'zscale'") != std::string::npos ? missing_zscale_text() : error;
 }
 
 }  // namespace vml

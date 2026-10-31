@@ -381,6 +381,15 @@ std::optional<std::string> missing_gpu_maker(const std::optional<std::string>& g
            (have.empty() ? "." : " (it has " + have + ").");
 }
 
+#ifdef __APPLE__
+std::optional<std::string> mac_gpu_decode_refusal(const std::optional<std::string>& gpu_decode) {
+    if (!gpu_decode || *gpu_decode == "auto") {
+        return std::nullopt;
+    }
+    return "--gpu-decode " + *gpu_decode + ": a Mac decodes with its own GPU (VideoToolbox); use --gpu-decode auto.";
+}
+#endif
+
 std::optional<bool> film_grain_choice(const CompareArguments& arguments, const Settings& settings) {
     if (arguments.film_grain) {
         return *arguments.film_grain == "with";
@@ -1484,6 +1493,12 @@ int compare(const CompareArguments& arguments) {
         print_error("--vship vship: stock Vship is not bundled with this package.");
         return exit_usage;
     }
+#ifdef __APPLE__
+    if (const std::optional<std::string> refused = mac_gpu_decode_refusal(arguments.gpu_decode)) {
+        print_error(*refused);
+        return exit_usage;
+    }
+#endif
     if (const std::optional<std::string> missing =
             missing_gpu_maker(arguments.gpu_decode, detected_gpu_vendors(), platform::lists_gpus())) {
         print_error(*missing);

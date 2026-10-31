@@ -54,6 +54,11 @@ void check_ffmpeg(SelfTestReport& report, const Settings& settings) {
     const ToolsStatus tools = check_tools(settings);
     if (tools.ok()) {
         report.ok("ffmpeg " + format_version(tools.ffmpeg.version) + " and ffprobe");
+        // Only HDR video converted to SDR (Video Compare's stills and FFmpeg
+        // playback) needs it: no score does.
+        if (ffmpeg_has_zscale(tools.ffmpeg.path) == false) {
+            report.warn(missing_zscale_text() + " (" + tools.ffmpeg.path + ")");
+        }
     } else {
         for (const std::string& problem : tools.problems()) {
             report.fail(problem);

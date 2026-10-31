@@ -230,5 +230,18 @@ TEST(CommandLine, RefusesAGpuMakerThePcLacks) {
     EXPECT_EQ(missing_gpu_maker("amd", {}, false), std::nullopt);
 }
 
+#ifdef __APPLE__
+// A Mac decodes with its own media engine: a maker named is refused, auto
+// and none are not.
+TEST(CommandLine, AMacRefusesAGpuMaker) {
+    EXPECT_EQ(mac_gpu_decode_refusal("nvidia"),
+              "--gpu-decode nvidia: a Mac decodes with its own GPU (VideoToolbox); use --gpu-decode auto.");
+    EXPECT_TRUE(mac_gpu_decode_refusal("intel"));
+    EXPECT_TRUE(mac_gpu_decode_refusal("amd"));
+    EXPECT_FALSE(mac_gpu_decode_refusal("auto"));
+    EXPECT_FALSE(mac_gpu_decode_refusal(std::nullopt));
+}
+#endif
+
 }  // namespace
 }  // namespace vml::cli
