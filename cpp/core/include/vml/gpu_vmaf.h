@@ -4,8 +4,7 @@
 // vmaf_cuda.h), from one FFmpeg per video or from the app's own decoders,
 // paired frame N with frame N. A port of the parts of
 // vmaf_app/core/vmaf_gpu.py and vmaf_vulkan.py the C++ app has so far. Not
-// yet: frames paired by timestamp (VML_FRAME_PAIRING) and FFmpeg pairing
-// them (VML_VMAF_PIPES=canvas).
+// yet: FFmpeg pairing them (VML_VMAF_PIPES=canvas).
 #pragma once
 
 #include <chrono>
@@ -21,7 +20,6 @@
 #include <vector>
 
 #include "vml/cancel.h"
-#include "vml/frame_sync.h"
 #include "vml/libvmaf_cpu.h"
 #include "vml/video.h"
 #include "vml/vmaf_vulkan.h"
@@ -140,30 +138,18 @@ std::pair<std::vector<std::string>, std::vector<std::string>> gpu_output_args(do
                                                                               const std::string& test_pipe,
                                                                               const std::string& source_pipe);
 
-// gpu_output_args when pairing by timestamp: each video's frames as
-// YUV4MPEG, and from their copy ([vmaf_dist_ts] or [vmaf_ref_ts]) their
-// timestamps as a framecrc listing into the pipe at `test_listing` or
-// `source_listing`. The source runs a second past the limit, so that the
-// source frame nearest the test video's last frame is among those written.
-std::pair<std::vector<std::string>, std::vector<std::string>> timed_gpu_output_args(
-    double duration_limit, const std::string& test_pipe, const std::string& test_listing,
-    const std::string& source_pipe, const std::string& source_listing);
-
 // The status a run waiting for the GPU's turn sends.
 inline constexpr std::string_view gpu_wait_message = "Waiting for the GPU: another video's GPU pass is running…";
 
 // One video as FFmpeg's filter chain gives it: its frames as a YUV4MPEG
 // stream (FFmpeg's yuv4mpegpipe output) on a pipe this process serves. A
 // thread reads the frames ahead into a few buffers; pull() gives them in
-// order, and each is given back with release(). A timed reader, for pairing
-// by timestamp, also reads each frame's timestamp from the framecrc listing
-// FFmpeg writes to a second pipe (the Python app's _TimedStreamReader).
+// order, and each is given back with release().
 class StreamReader {
 public:
     // A reader of frames of `frame_bytes` each, its pipe's path ending in
-    // `name`; `timed`, with the listing's pipe too. Throws
-    // platform::PipeError.
-    StreamReader(std::string_view name, std::size_t frame_bytes, bool timed = false);
+    // `name`. Throws platform::PipeError.
+    StreamReader(std::string_view name, std::size_t frame_bytes);
     ~StreamReader();
     StreamReader(const StreamReader&) = delete;
     StreamReader& operator=(const StreamReader&) = delete;
@@ -171,10 +157,7 @@ public:
     // The path FFmpeg writes to.
     const std::string& path() const;
 
-    // The path FFmpeg writes the frames' timestamps to (a timed reader's).
-    const std::string& listing_path() const;
-
-    // Starts the reading threads.
+    // Starts the reading thread.
     void start();
 
     // The next frame, or nullptr at the video's end. Throws LibvmafError
@@ -183,24 +166,6 @@ public:
 
     // Gives a frame's buffer back for the next frame.
     void release(std::vector<std::uint8_t>* frame);
-
-    // A timed reader's next frame: its buffer's number, and its timestamp.
-    struct TimedFrame {
-        int buffer = 0;
-        long long pts = 0;
-    };
-
-    // A timed reader's next frame, or nothing at the video's end. Throws
-    // LibvmafError, also for a frame without its timestamp.
-    std::optional<TimedFrame> pull_timed();
-
-    // The buffer pull_timed() numbered, and giving it back.
-    std::vector<std::uint8_t>& buffer(int number);
-    void release(int number);
-
-    // The time base of the timestamps, once FFmpeg has reported it (any, for
-    // a video without frames).
-    Rational wait_time_base();
 
     // Says the comparison is over: whatever FFmpeg still writes is read and
     // dropped.
@@ -223,8 +188,6 @@ public:
 
 private:
     void read_frames();
-    void read_listing();
-    void take_listing_line(std::string_view line);
 
     struct State;
     std::unique_ptr<State> state_;
@@ -232,10 +195,9 @@ private:
 
 // The app's side of one FFmpeg attempt: the pipes FFmpeg writes the two
 // videos' frames to, and the thread that pairs them, frame N with frame N
-// until either video ends (or by timestamp, when VML_FRAME_PAIRING says so),
-// and has the plan's scorer score each pair: the Vulkan engine, libvmaf's
-// CUDA code, or libvmaf's CPU extractors (and those beside the GPU's,
-// GpuPlan::beside).
+// until either video ends, and has the plan's scorer score each pair: the
+// Vulkan engine, libvmaf's CUDA code, or libvmaf's CPU extractors (and those
+// beside the GPU's, GpuPlan::beside).
 class GpuAttempt {
 public:
     // Throws LibvmafError (VmafVulkanError) when the scorer cannot start,
@@ -247,8 +209,7 @@ public:
 
     // FFmpeg's output options for the test video's FFmpeg and the source's:
     // the video's frames ([vmaf_dist] or [vmaf_ref]) as they come, cut at
-    // `duration_limit` seconds (0: none), as YUV4MPEG into its pipe (and by
-    // timestamp, timed_gpu_output_args's).
+    // `duration_limit` seconds (0: none), as YUV4MPEG into its pipe.
     std::pair<std::vector<std::string>, std::vector<std::string>> output_args(double duration_limit) const;
 
     // Call once FFmpeg has ended: the scores, or nothing when FFmpeg failed
@@ -264,8 +225,7 @@ public:
 
 private:
     void feed();
-    void feed_numbered();
-    void feed_timed();
+    void feed_pairs();
     void stop();
 
     struct State;

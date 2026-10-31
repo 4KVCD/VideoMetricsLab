@@ -202,7 +202,7 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
     const bool sizes_differ = source_w != distorted_w || source_h != distorted_h;
     const bool upscale_distorted = sizes_differ && options.scale_direction == ScaleDirection::distorted_to_source;
     const std::string analysis_format = analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt});
-    const std::vector<std::string> numbering = pairing_filters(frame_rate(distorted));
+    const std::vector<std::string> numbering = numbering_filters(frame_rate(distorted));
     // A GPU decoder's 8-bit picture (NV12) widened to a deeper analysis
     // format is made planar first: FFmpeg widens NV12 with a plain shift, but
     // a planar picture, as its software decoding gives it, with full-range
@@ -1831,7 +1831,7 @@ std::string build_resample_filtergraph(const VideoInfo& source, const VmafOption
         base.push_back(source_crop->as_filter());  // before the conversion, as build_filtergraph's
     }
     base.push_back("format=" + analysis_format);
-    const std::string numbering = join(pairing_filters(frame_rate(source)), ",");
+    const std::string numbering = join(numbering_filters(frame_rate(source)), ",");
     const std::string scale_flags = ":flags=" + options.scale_algorithm;
     return join({"[0:" + std::string(video_stream) + "]" + join(base, ",") + "[base]",
                    "[base]split=2[ref_src][dist_src]", "[ref_src]" + numbering + "[ref]",
@@ -1906,12 +1906,6 @@ std::pair<std::string, std::string> build_stream_graphs(const VideoInfo& source,
                                                         const HardwareDecoding& decoding) {
     const VideoChains chains = video_chains(source, distorted, options, source_crop, distorted_crop, decoding, false);
     const std::string input = "[0:" + std::string(video_stream) + "]";  // each FFmpeg has its video alone
-    if (by_timestamp()) {
-        // A copy of the frames, which costs nothing, for FFmpeg to list their
-        // timestamps (timed_gpu_output_args).
-        return {input + join(chains.test, ",") + ",split=2[vmaf_dist][vmaf_dist_ts]",
-                input + join(chains.source, ",") + ",split=2[vmaf_ref][vmaf_ref_ts]"};
-    }
     return {input + join(chains.test, ",") + "[vmaf_dist]", input + join(chains.source, ",") + "[vmaf_ref]"};
 }
 

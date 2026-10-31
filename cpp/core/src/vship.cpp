@@ -894,11 +894,8 @@ std::pair<std::pair<int, int>, std::pair<int, int>> vship_scaled_sizes(const Vid
 std::string vship_filter_chain(const VideoInfo& info, const std::optional<CropBox>& crop,
                                std::pair<int, int> target_size, const std::string& pixel_format, int step,
                                const std::string& algorithm, const std::optional<std::string>& hwaccel,
-                               const std::optional<Rational>& numbered_at, bool full_range) {
-    std::vector<std::string> operations;
-    if (numbered_at) {
-        operations = numbering_filters(*numbered_at);
-    }
+                               Rational numbered_at, bool full_range) {
+    std::vector<std::string> operations = numbering_filters(numbered_at);
     if (step > 1) {
         // select comes before the rest, so that the frames it drops are not
         // downloaded, cropped or scaled. Nothing after it drops a frame, so n
@@ -921,9 +918,6 @@ std::string vship_filter_chain(const VideoInfo& info, const std::optional<CropBo
     if (content_size(info, crop) != target_size) {
         operations.push_back("scale=" + std::to_string(target_size.first) + ":" + std::to_string(target_size.second) +
                              ":flags=" + algorithm);
-    }
-    if (!numbered_at) {
-        operations.push_back("setpts=PTS-STARTPTS");
     }
     if (full_range) {
         // FFmpeg brings full-range gray to the limited range as it gives it

@@ -81,10 +81,9 @@ double butteraugli_norm3(const std::filesystem::path& distortion_map);
 // size, [distorted] and [reference], from the test video (FFmpeg's first
 // input) and the source (its second). Their Nth pictures are a pair: each
 // video's frame N, as every metric pairs them (frame_sync.h), every
-// `step`-th; or, when frames are paired by timestamp, the test video's Nth
-// frame and the source frame FFmpeg's frame sync pairs with it. Each video
-// is converted to RGB with the matrix and range Vship reads it with, after
-// any crop and scaling, so that the tools see what Vship sees.
+// `step`-th. Each video is converted to RGB with the matrix and range Vship
+// reads it with, after any crop and scaling, so that the tools see what
+// Vship sees.
 std::string image_filtergraph(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options,
                               const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                               int step);

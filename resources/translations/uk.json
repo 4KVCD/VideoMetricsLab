@@ -693,8 +693,6 @@
   "It could not be read. Remove it or add the file again to retry.": "Не вдалося прочитати. Приберіть його або додайте файл знову, щоб повторити.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Бітрейт усього файлу разом зі звуковою доріжкою: бітрейт самого відео у файлі не записано.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} уже є у списку. Показати замість цього оцінки збереженого запуску?",
-  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg не видав мітку часу кадру {side}.",
-  "The source has no frame at the test video's first.": "У вихідного відео немає кадру в момент першого кадру тестового відео.",
   "Drop a video here, paste its path, or click Browse...": "Перетягніть сюди відео, вставте шлях до нього або натисніть «Огляд...»",
   "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Перетягніть сюди відеофайли, щоб додати їх, перетягуйте рядки, щоб змінити порядок, і клацніть заголовок стовпця для сортування.",
   "No such video": "Відео не знайдено",

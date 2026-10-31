@@ -115,13 +115,6 @@ bool fed_to_ffmpeg(const VideoInfo& info) {
 }
 
 std::optional<std::string> feed_refusal(const VideoInfo& info) {
-    if (by_timestamp()) {
-        return "frames are paired by their timestamps (VML_FRAME_PAIRING), which pictures fed to FFmpeg do not carry";
-    }
-    return decoding_refusal(info);
-}
-
-std::optional<std::string> decoding_refusal(const VideoInfo& info) {
     if (info.scaled_to) {
         return "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow";
     }
@@ -230,7 +223,7 @@ struct PictureFeed::State {
 PictureFeed::PictureFeed(const VideoInfo& info, const std::string& ffmpeg, const std::string& ffprobe,
                          const CancelToken& cancel, const std::optional<FeedWindow>& window)
     : state_(std::make_unique<State>()) {
-    if (const std::optional<std::string> refusal = window ? decoding_refusal(info) : feed_refusal(info)) {
+    if (const std::optional<std::string> refusal = feed_refusal(info)) {
         throw FilmGrainRefusal(*refusal);
     }
     State& state = *state_;

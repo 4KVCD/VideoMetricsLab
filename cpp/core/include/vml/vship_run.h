@@ -7,8 +7,8 @@
 // metric's handlers, two per metric on threads of their own, and CVVDP's
 // one, which takes the pairs in order; a pass scores one or more metrics
 // over both videos, in a process of its own; and a task's metrics are
-// scored in one pass or several. Frames are paired frame N with frame N, or
-// by timestamp (frame_sync_by_time.h) when VML_FRAME_PAIRING says so.
+// scored in one pass or several. Frames are paired frame N with frame N
+// (frame_sync.h).
 //
 // A task's metrics go where each is set to run, and to the CPU's tools
 // (perceptual_cpu.h) where the GPU cannot calculate them
@@ -118,14 +118,12 @@ PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const
 
 // One Vship pass, made by `attempt` and made again where another try can
 // give its scores: with FFmpeg decoding after a decoder of the app's failed
-// partway (GpuDecodeFailedError), with every source frame after frames
-// paired by time came apart, and once more the same way after its FFmpeg
-// failed to give it a video's frames (VshipInputError), which another Vship
-// would read the same. `attempt` is told whether the app's decoders decode,
-// and whether the source gives every frame.
-PerceptualTaskOutput remade_vship_pass(
-    const std::function<PerceptualTaskOutput(bool native, bool every_source_frame)>& attempt,
-    const StatusCallback& on_status, const CancelToken& cancel);
+// partway (GpuDecodeFailedError), and once more the same way after its
+// FFmpeg failed to give it a video's frames (VshipInputError), which another
+// Vship would read the same. `attempt` is told whether the app's decoders
+// decode.
+PerceptualTaskOutput remade_vship_pass(const std::function<PerceptualTaskOutput(bool native)>& attempt,
+                                       const StatusCallback& on_status, const CancelToken& cancel);
 
 // The isolated "vship-pass" task's work (isolated.cpp): one pass, in this
 // process, from the request the parent wrote; the scores are left in

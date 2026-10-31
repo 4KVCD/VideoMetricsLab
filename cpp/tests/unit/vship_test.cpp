@@ -178,10 +178,8 @@ TEST(Vship, AMacsGpuDecodedFramesAreDownloadedBeforeTheFilters) {
 TEST(Vship, PlansFfmpegAndSizesAsThePythonApp) {
     for (const Json& expected : vship_reference()["chains"]) {
         SCOPED_TRACE(expected["name"].get<std::string>());
-        std::optional<Rational> numbered_at;
-        if (!expected["numbered_at"].is_null()) {
-            numbered_at = Rational{expected["numbered_at"][0].get<long long>(), expected["numbered_at"][1].get<long long>()};
-        }
+        const Rational numbered_at{expected["numbered_at"][0].get<long long>(),
+                                   expected["numbered_at"][1].get<long long>()};
         EXPECT_EQ(vship_filter_chain(video_from(expected["info"]), crop_from(expected["crop"]),
                                      std::pair(expected["target"][0].get<int>(), expected["target"][1].get<int>()),
                                      expected["pixel_format"].get<std::string>(), expected["step"].get<int>(),

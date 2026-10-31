@@ -5,8 +5,6 @@
 #include <numeric>
 #include <stdexcept>
 
-#include "vml/platform/system.h"
-
 namespace vml {
 
 namespace {
@@ -77,22 +75,7 @@ long long duration_microseconds(const std::string& duration) {
     return whole * 1'000'000 + fraction;
 }
 
-bool by_timestamp() {
-    std::string value = platform::environment_variable(pairing_variable).value_or("");
-    value.erase(0, value.find_first_not_of(" \t\r\n"));
-    value.erase(value.find_last_not_of(" \t\r\n") + 1);
-    for (char& c : value) {
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-    return value == "timestamp";
-}
-
-std::vector<std::string> framesync_opts() {
-    if (by_timestamp()) {
-        return {"shortest=1", "repeatlast=0", "ts_sync_mode=nearest"};
-    }
-    return {"shortest=1", "repeatlast=0"};
-}
+std::vector<std::string> framesync_opts() { return {"shortest=1", "repeatlast=0"}; }
 
 Rational limit_denominator(double value, long long max_denominator) {
     // The double's exact value as a fraction: its 53-bit mantissa over a
@@ -158,19 +141,9 @@ std::vector<std::string> numbering_filters(Rational rate) {
                                 std::to_string(rate.numerator)};
 }
 
-std::vector<std::string> pairing_filters(Rational rate) {
-    if (by_timestamp()) {
-        return {"setpts=PTS-STARTPTS"};
-    }
-    return numbering_filters(rate);
-}
-
 std::vector<std::string> duration_args(const std::optional<std::string>& duration_limit) {
     if (!duration_limit || duration_limit->empty()) {
         return {};
-    }
-    if (by_timestamp()) {
-        return {"-t", *duration_limit};
     }
     return {"-enc_time_base", "filter", "-t", *duration_limit};
 }

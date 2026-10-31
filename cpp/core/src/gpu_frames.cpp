@@ -24,7 +24,6 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
-#include "vml/frame_sync_by_time.h"
 #include "vml/hevc.h"
 #include "vml/model_select.h"
 #include "vml/number_format.h"
@@ -2016,10 +2015,6 @@ void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const Vi
     }
     if (!release.reference) {
         release.reference = [&reference](int slot) { reference.release(slot); };
-    }
-    if (by_timestamp()) {
-        score_timed_pairs(test, reference, duration_limit, total_frames, score, on_progress, cancel, release);
-        return;
     }
     const std::optional<long long> limit = frames_within(duration_limit, frame_rate(distorted));
     const auto started = std::chrono::steady_clock::now();

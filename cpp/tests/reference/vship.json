@@ -3398,30 +3398,6 @@
    "chain": "settb=AVTB,setpts=N*1000000/25,hwdownload,format=nv12,format=yuv444p16le"
   },
   {
-   "name": "paired by timestamp",
-   "info": {
-    "width": 1920,
-    "height": 1080,
-    "pix_fmt": "yuv420p",
-    "color_range": "",
-    "color_space": "",
-    "color_transfer": "",
-    "color_primaries": "",
-    "chroma_location": ""
-   },
-   "crop": null,
-   "target": [
-    1280,
-    720
-   ],
-   "pixel_format": "yuv420p",
-   "step": 2,
-   "algorithm": "bilinear",
-   "hwaccel": null,
-   "numbered_at": null,
-   "chain": "select=not(mod(n\\,2)),scale=1280:720:flags=bilinear,setpts=PTS-STARTPTS,format=yuv420p"
-  },
-  {
    "name": "full-range gray, kept in the full range",
    "info": {
     "width": 1280,

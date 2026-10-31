@@ -10946,66 +10946,22 @@
    ]
   }
  ],
- "pairing": {
-  "": {
-   "framesync": [
-    "shortest=1",
-    "repeatlast=0"
-   ],
-   "pairing": [
-    "settb=AVTB",
-    "setpts=N*1001000000/24000"
-   ],
-   "numbering": [
-    "settb=AVTB",
-    "setpts=N*1001000000/24000"
-   ],
-   "duration": [
-    "-enc_time_base",
-    "filter",
-    "-t",
-    "30.042"
-   ],
-   "no_duration": []
-  },
-  "timestamp": {
-   "framesync": [
-    "shortest=1",
-    "repeatlast=0",
-    "ts_sync_mode=nearest"
-   ],
-   "pairing": [
-    "setpts=PTS-STARTPTS"
-   ],
-   "numbering": [
-    "settb=AVTB",
-    "setpts=N*1001000000/24000"
-   ],
-   "duration": [
-    "-t",
-    "30.042"
-   ],
-   "no_duration": []
-  },
-  " TimeStamp ": {
-   "framesync": [
-    "shortest=1",
-    "repeatlast=0",
-    "ts_sync_mode=nearest"
-   ],
-   "pairing": [
-    "setpts=PTS-STARTPTS"
-   ],
-   "numbering": [
-    "settb=AVTB",
-    "setpts=N*1001000000/24000"
-   ],
-   "duration": [
-    "-t",
-    "30.042"
-   ],
-   "no_duration": []
-  }
+ "frame_filters": {
+  "framesync": [
+   "shortest=1",
+   "repeatlast=0"
+  ],
+  "numbering": [
+   "settb=AVTB",
+   "setpts=N*1001000000/24000"
+  ],
+  "duration": [
+   "-enc_time_base",
+   "filter",
+   "-t",
+   "30.042"
+  ],
+  "no_duration": []
  },
  "within": [
   {

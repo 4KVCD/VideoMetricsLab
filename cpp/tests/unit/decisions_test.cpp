@@ -1,11 +1,10 @@
 // The run's pure decisions, held to the Python app's own (decisions.json):
 // pixel formats and GPU decoding, frame-rate fractions and frame counts,
-// the two ways of pairing frames, why two videos cannot be compared, the
+// the filters that pair frames, why two videos cannot be compared, the
 // shapes they are compared at, and the VMAF model.
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <cstdlib>
 #include <string>
 
 #include "reference.h"
@@ -39,26 +38,6 @@ GpuVendor vendor_named(const std::string& name) {
     }
     return name == "none" ? GpuVendor::none : GpuVendor::automatic;
 }
-
-// Sets VML_FRAME_PAIRING for one test, and puts it back after.
-class PairingVariable {
-public:
-    explicit PairingVariable(const std::string& value) {
-        previous_ = platform::environment_variable(pairing_variable);
-        set(value);
-    }
-    ~PairingVariable() { set(previous_.value_or("")); }
-
-private:
-    static void set(const std::string& value) {
-#ifdef _WIN32
-        _putenv_s(std::string(pairing_variable).c_str(), value.c_str());
-#else
-        setenv(std::string(pairing_variable).c_str(), value.c_str(), 1);
-#endif
-    }
-    std::optional<std::string> previous_;
-};
 
 TEST(Decisions, PixelFormatsAreReadAsThePythonAppReadsThem) {
     for (const Json& item : decisions()["pixel_formats"]) {
@@ -261,16 +240,12 @@ TEST(Decisions, AFrameLimitKeepsThePythonAppsFrames) {
 }
 
 TEST(Decisions, FramesArePairedAsThePythonAppPairsThem) {
-    for (const auto& [mode, expected] : decisions()["pairing"].items()) {
-        const PairingVariable variable(mode);
-        SCOPED_TRACE("VML_FRAME_PAIRING='" + mode + "'");
-        const Rational rate{24000, 1001};
-        EXPECT_EQ(framesync_opts(), expected["framesync"].get<std::vector<std::string>>());
-        EXPECT_EQ(pairing_filters(rate), expected["pairing"].get<std::vector<std::string>>());
-        EXPECT_EQ(numbering_filters(rate), expected["numbering"].get<std::vector<std::string>>());
-        EXPECT_EQ(duration_args("30.042"), expected["duration"].get<std::vector<std::string>>());
-        EXPECT_EQ(duration_args(std::nullopt), expected["no_duration"].get<std::vector<std::string>>());
-    }
+    const Json& expected = decisions()["frame_filters"];
+    const Rational rate{24000, 1001};
+    EXPECT_EQ(framesync_opts(), expected["framesync"].get<std::vector<std::string>>());
+    EXPECT_EQ(numbering_filters(rate), expected["numbering"].get<std::vector<std::string>>());
+    EXPECT_EQ(duration_args("30.042"), expected["duration"].get<std::vector<std::string>>());
+    EXPECT_EQ(duration_args(std::nullopt), expected["no_duration"].get<std::vector<std::string>>());
 }
 
 VideoInfo video_from(const Json& item) {

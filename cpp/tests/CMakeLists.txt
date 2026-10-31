@@ -14,7 +14,6 @@ add_executable(vml_tests
     unit/ffmpeg_tools_test.cpp
     unit/ffprobe_test.cpp
     unit/frame_extract_test.cpp
-    unit/frame_sync_by_time_test.cpp
     unit/gpu_frames_test.cpp
     unit/gpu_vmaf_test.cpp
     unit/grain_feed_test.cpp

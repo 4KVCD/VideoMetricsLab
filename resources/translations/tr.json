@@ -693,8 +693,6 @@
   "It could not be read. Remove it or add the file again to retry.": "Okunamadı. Kaldırın veya yeniden denemek için dosyayı tekrar ekleyin.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Ses parçası dahil tüm dosyanın bit hızı: dosya videonun kendi bit hızını kaydetmiyor.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} zaten listede. Onun yerine kayıtlı çalıştırmanın puanları gösterilsin mi?",
-  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg bir karenin zaman damgasını vermedi ({side}).",
-  "The source has no frame at the test video's first.": "Kaynağın, test videosunun ilk karesinin anında karesi yok.",
   "Drop a video here, paste its path, or click Browse...": "Bir videoyu buraya bırakın, yolunu yapıştırın veya Gözat... düğmesine tıklayın",
   "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Eklemek için video dosyalarını buraya bırakın, yeniden sıralamak için satırları sürükleyin ve sıralamak için bir sütun başlığına tıklayın.",
   "No such video": "Böyle bir video yok",

@@ -218,70 +218,6 @@ std::vector<std::string> to_rgb(const VideoInfo& info) {
     return filters;
 }
 
-// Whether FFmpeg's blend filter takes frames of this pixel format as they
-// are, so that it can carry a source frame through unchanged
-// (pairs_by_time): the planar YUV, GBR and gray formats,
-// (yuv(420|422|444)p|gbrp|gray)(9|10|12|14|16)?(le)?. Each was checked frame
-// by frame against the source's own frames.
-bool blend_takes(std::string_view format) {
-    std::string_view rest = format;
-    bool known = false;
-    for (const std::string_view family : {"yuv420p", "yuv422p", "yuv444p", "gbrp", "gray"}) {
-        if (rest.starts_with(family)) {
-            rest.remove_prefix(family.size());
-            known = true;
-            break;
-        }
-    }
-    if (!known) {
-        return false;
-    }
-    for (const std::string_view depth : {"9", "10", "12", "14", "16"}) {
-        if (rest.starts_with(depth)) {
-            rest.remove_prefix(depth.size());
-            break;
-        }
-    }
-    return rest.empty() || rest == "le";
-}
-
-// The names setparams knows for each colour tag, as ffprobe prints them.
-const std::map<std::string, std::set<std::string, std::less<>>, std::less<>> setparams_names{
-    {"range", {"unknown", "tv", "pc"}},
-    {"color_primaries",
-     {"bt709", "unknown", "bt470m", "bt470bg", "smpte170m", "smpte240m", "film", "bt2020", "smpte428", "smpte431",
-      "smpte432", "jedec-p22", "ebu3213", "vgamut"}},
-    {"color_trc",
-     {"bt709", "unknown", "bt470m", "bt470bg", "smpte170m", "smpte240m", "linear", "log100", "log316",
-      "iec61966-2-4", "bt1361e", "iec61966-2-1", "bt2020-10", "bt2020-12", "smpte2084", "smpte428", "arib-std-b67",
-      "vlog"}},
-    {"colorspace",
-     {"gbr", "bt709", "unknown", "fcc", "bt470bg", "smpte170m", "smpte240m", "ycgco", "ycgco-re", "ycgco-ro",
-      "bt2020nc", "bt2020c", "smpte2085", "chroma-derived-nc", "chroma-derived-c", "ictcp", "ipt-c2"}},
-    {"chroma_location", {"unspecified", "left", "center", "topleft", "top", "bottomleft", "bottom"}},
-};
-
-// A setparams filter that gives frames `info`'s colour tags again, or
-// nothing when setparams has no name for one of them.
-std::optional<std::string> frame_tags(const VideoInfo& info) {
-    const std::array<std::pair<std::string, std::string>, 5> tags{{
-        {"range", info.color_range.empty() ? "unknown" : info.color_range},
-        {"color_primaries", info.color_primaries.empty() ? "unknown" : info.color_primaries},
-        {"color_trc", info.color_transfer.empty() ? "unknown" : info.color_transfer},
-        {"colorspace", info.color_space.empty() ? "unknown" : info.color_space},
-        {"chroma_location", info.chroma_location.empty() ? "unspecified" : info.chroma_location},
-    }};
-    std::vector<std::string> options;
-    for (const auto& [option, value] : tags) {
-        const std::string name = ascii_lower(value);
-        if (!setparams_names.at(option).contains(name)) {
-            return std::nullopt;
-        }
-        options.push_back(option + "=" + name);
-    }
-    return "setparams=" + join(options, ":");
-}
-
 // What image_filtergraph's chains need of the two videos.
 struct GraphPlan {
     const VideoInfo& source;
@@ -294,92 +230,6 @@ struct GraphPlan {
     std::vector<std::string> sample;       // the filter keeping every step-th frame, if any
     std::string scale_algorithm;
 };
-
-// image_filtergraph's streams when frames are paired by timestamp.
-//
-// The two streams' Nth pictures are a pair: the test video's Nth frame, and
-// the source frame that libvmaf pairs it with by timestamp (FFmpeg's frame
-// sync, framesync_opts). The blend filter makes the pairs with the same
-// frame sync. It ORs a "clock" of all-zero frames, one at each test frame's
-// time, with the source's frames, which gives one source frame per test
-// frame with the source's pixels unchanged. The source's own colour tags are
-// then set again, because blend's output takes the clock's tags, which are
-// the test video's. Every step-th pair is kept. A source in a pixel format
-// that blend does not take as it is (packed RGB, NV12, full-range "yuvj")
-// is paired by position instead.
-std::string pairs_by_time(const GraphPlan& plan) {
-    const std::string source_format = ascii_lower(plan.source.pix_fmt);
-    const std::optional<std::string> restore = frame_tags(plan.source);
-    const auto prepared = [&plan](const std::optional<CropBox>& crop, const VideoInfo& info,
-                                  const std::optional<Size>& target) {
-        return prepare(crop, info, target, plan.scale_algorithm);
-    };
-    if (!blend_takes(source_format) || !restore) {
-        logger.info("The CPU tools' frames are paired by position: " +
-                    (restore ? "blend cannot carry the source's " + source_format + " frames unchanged"
-                             : std::string("setparams has no name for one of the source's colour tags")));
-        // select comes first, so that the frames it drops are not cropped or
-        // scaled.
-        const auto chain = [&plan, &prepared](const std::string& input, const std::string& output,
-                                              const std::optional<CropBox>& crop, const VideoInfo& info,
-                                              const std::optional<Size>& target) {
-            std::vector<std::string> filters = plan.sample;
-            for (std::string& filter : prepared(crop, info, target)) {
-                filters.push_back(std::move(filter));
-            }
-            filters.emplace_back("setpts=PTS-STARTPTS");
-            for (std::string& filter : to_rgb(info)) {
-                filters.push_back(std::move(filter));
-            }
-            return "[" + input + "]" + join(filters, ",") + "[" + output + "]";
-        };
-        return chain("0:" + std::string(video_stream), "distorted", plan.distorted_crop, plan.distorted,
-                     plan.distorted_target) +
-               ";" +
-               chain("1:" + std::string(video_stream), "reference", plan.source_crop, plan.source,
-                     plan.source_target);
-    }
-
-    const auto [width, height] = plan.source_target.value_or(plan.source_size);
-    // pad keeps a subsampled picture on whole chroma samples: asked for an
-    // odd size, it gives the even size below, and blend then refuses the two
-    // inputs ("size 852x480 do not match ... 853x480"). So an odd-sized clock
-    // is padded to the even size above, then cropped to the picture's size
-    // exactly.
-    std::string clock_size = "pad=" + std::to_string(width + (width & 1)) + ":" + std::to_string(height + (height & 1));
-    if ((width & 1) != 0 || (height & 1) != 0) {
-        clock_size += ",crop=" + std::to_string(width) + ":" + std::to_string(height) + ":0:0:exact=1";
-    }
-    std::vector<std::string> test_chain = prepared(plan.distorted_crop, plan.distorted, plan.distorted_target);
-    test_chain.emplace_back("setpts=PTS-STARTPTS");
-    test_chain.emplace_back("split=2[test_frames][test_times]");
-    std::vector<std::string> source_chain = prepared(plan.source_crop, plan.source, plan.source_target);
-    if (!plan.source_target) {
-        source_chain.push_back("format=" + source_format);
-    }
-    source_chain.emplace_back("setpts=PTS-STARTPTS");
-    std::vector<std::string> reference_end = plan.sample;
-    for (std::string& filter : to_rgb(plan.source)) {
-        reference_end.push_back(std::move(filter));
-    }
-    std::vector<std::string> distorted_end = plan.sample;
-    for (std::string& filter : to_rgb(plan.distorted)) {
-        distorted_end.push_back(std::move(filter));
-    }
-    const std::string stream = std::string(video_stream);
-    return join({
-        "[0:" + stream + "]" + join(test_chain, ","),
-        // The clock has a scale filter of its own, because it is made in the
-        // source's format, while the test frames reach the split (and the
-        // test's pictures) as they are decoded.
-        "[test_times]crop=2:2:0:0,scale,format=" + source_format + "," + clock_size +
-            ",lut=c0=0:c1=0:c2=0:c3=0[clock]",
-        "[1:" + stream + "]" + join(source_chain, ",") + "[source_frames]",
-        "[clock][source_frames]blend=all_mode=or:" + join(framesync_opts(), ":") + "," + *restore + "," +
-            join(reference_end, ",") + "[reference]",
-        "[test_frames]" + join(distorted_end, ",") + "[distorted]",
-    }, ";");
-}
 
 // ------------------------------------------------------------ the tools
 
@@ -898,9 +748,6 @@ std::string image_filtergraph(const VideoInfo& source_info, const VideoInfo& dis
     }
     if (step > 1) {
         plan.sample.push_back("select=not(mod(n\\," + std::to_string(step) + "))");
-    }
-    if (by_timestamp()) {
-        return pairs_by_time(plan);
     }
     // Both videos' frames are first numbered at the test video's frame rate,
     // so that the duration limit (each output's -t) keeps the same frames of

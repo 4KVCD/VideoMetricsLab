@@ -10,7 +10,6 @@
 #include <tuple>
 
 #include "grain_decoding.h"
-#include "test_videos.h"
 #include "vml/analysis_request.h"
 #include "vml/film_grain_detect.h"
 #include "vml/hardware_decoding.h"
@@ -239,10 +238,6 @@ TEST(FilmGrainScoring, SavedScoresAreFiledUnderEachSidesGrainAlone) {
     EXPECT_EQ(recipe(plain, grain_video("hevc", "yuv420p10le", h274, false)), before);  // as every run scored it
     const VideoInfo vvc = grain_video("vvc", "yuv420p10le", h274, false);
     EXPECT_EQ(recipe(plain, vvc), before);  // VVdeC's pictures
-    {
-        test::ScopedVariable by_time("VML_FRAME_PAIRING", "timestamp");  // FFmpeg's: not fed
-        EXPECT_EQ(recipe(plain, vvc), before);
-    }
     const nlohmann::json with = recipe(plain, grain_video("vvc", "yuv420p10le", h274));
     EXPECT_EQ(with.at("film_grain"),
               (nlohmann::json{{"source", nullptr}, {"distorted", std::string(score_identity::film_grain_h274)}}));

@@ -16,7 +16,6 @@
 #include "vml/app_log.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/film_grain_scoring.h"
-#include "vml/frame_sync.h"
 #include "vml/geometry.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
@@ -929,8 +928,8 @@ void Scheduler::run() {
     }
     logger.info(std::string(app_log::run_start) + " " + std::to_string(jobs_.size()) +
                 " video(s), CPU metrics for up to " + std::to_string(parallel_jobs_.load()) +
-                " at once, GPU metrics one video at a time" + (gpu_metrics_together ? ", each video's in one pass" : "") +
-                (by_timestamp() ? ", frames paired by timestamp (VML_FRAME_PAIRING)" : ""));
+                " at once, GPU metrics one video at a time" +
+                (gpu_metrics_together ? ", each video's in one pass" : ""));
     for (const std::unique_ptr<JobRun>& run : runs_) {
         logger.info(run->describe());
     }

@@ -29,7 +29,6 @@
    "step": 1,
    "to_source": false,
    "algorithm": "bicubic",
-   "by_time": false,
    "graph": "[0:V:0]settb=AVTB,setpts=N*1001000000/24000,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1001000000/24000,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
@@ -61,7 +60,6 @@
    "step": 3,
    "to_source": false,
    "algorithm": "lanczos",
-   "by_time": false,
    "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),scale=1920:1080:flags=lanczos,format=yuv420p10le,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
@@ -93,7 +91,6 @@
    "step": 1,
    "to_source": true,
    "algorithm": "bicubic",
-   "by_time": false,
    "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,scale=3840:2160:flags=bicubic,format=yuv420p,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
@@ -135,7 +132,6 @@
    "step": 2,
    "to_source": false,
    "algorithm": "bicubic",
-   "by_time": false,
    "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),crop=1920:804:0:138,setparams=colorspace=bt2020nc:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),crop=3840:1608:0:276,scale=1920:804:flags=bicubic,format=yuv420p,setparams=colorspace=bt2020nc:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
@@ -172,7 +168,6 @@
    "step": 1,
    "to_source": false,
    "algorithm": "bicubic",
-   "by_time": false,
    "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
@@ -204,7 +199,6 @@
    "step": 1,
    "to_source": false,
    "algorithm": "bicubic",
-   "by_time": false,
    "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt470bg:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,scale=1920:1080:flags=bicubic,format=yuvj420p,setparams=colorspace=bt470bg:range=pc,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   },
   {
@@ -236,205 +230,7 @@
    "step": 1,
    "to_source": false,
    "algorithm": "bicubic",
-   "by_time": false,
    "graph": "[0:V:0]settb=AVTB,setpts=N*1000000/24,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
-  },
-  {
-   "name": "by timestamp, blended",
-   "source": {
-    "width": 1920,
-    "height": 1080,
-    "fps": "0x1.8000000000000p+4",
-    "pix_fmt": "yuv420p10le",
-    "color_range": "tv",
-    "color_space": "bt2020nc",
-    "color_transfer": "smpte2084",
-    "color_primaries": "bt2020",
-    "chroma_location": "topleft"
-   },
-   "test": {
-    "width": 1920,
-    "height": 1080,
-    "fps": "0x1.8000000000000p+4",
-    "pix_fmt": "yuv420p10le",
-    "color_range": "tv",
-    "color_space": "bt2020nc",
-    "color_transfer": "smpte2084",
-    "color_primaries": "bt2020",
-    "chroma_location": "topleft"
-   },
-   "source_crop": null,
-   "test_crop": null,
-   "step": 1,
-   "to_source": false,
-   "algorithm": "bicubic",
-   "by_time": true,
-   "graph": "[0:V:0]setpts=PTS-STARTPTS,split=2[test_frames][test_times];[test_times]crop=2:2:0:0,scale,format=yuv420p10le,pad=1920:1080,lut=c0=0:c1=0:c2=0:c3=0[clock];[1:V:0]format=yuv420p10le,setpts=PTS-STARTPTS[source_frames];[clock][source_frames]blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest,setparams=range=tv:color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc:chroma_location=topleft,setparams=colorspace=bt2020nc:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference];[test_frames]setparams=colorspace=bt2020nc:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted]"
-  },
-  {
-   "name": "by timestamp, odd-sized, every third",
-   "source": {
-    "width": 1920,
-    "height": 1080,
-    "fps": "0x1.8000000000000p+4",
-    "pix_fmt": "yuv420p",
-    "color_range": "",
-    "color_space": "",
-    "color_transfer": "",
-    "color_primaries": "",
-    "chroma_location": ""
-   },
-   "test": {
-    "width": 853,
-    "height": 480,
-    "fps": "0x1.8000000000000p+4",
-    "pix_fmt": "yuv420p",
-    "color_range": "",
-    "color_space": "",
-    "color_transfer": "",
-    "color_primaries": "",
-    "chroma_location": ""
-   },
-   "source_crop": null,
-   "test_crop": null,
-   "step": 3,
-   "to_source": false,
-   "algorithm": "bicubic",
-   "by_time": true,
-   "graph": "[0:V:0]setpts=PTS-STARTPTS,split=2[test_frames][test_times];[test_times]crop=2:2:0:0,scale,format=yuv420p,pad=854:480,crop=853:480:0:0:exact=1,lut=c0=0:c1=0:c2=0:c3=0[clock];[1:V:0]scale=853:480:flags=bicubic,format=yuv420p,setpts=PTS-STARTPTS[source_frames];[clock][source_frames]blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest,setparams=range=unknown:color_primaries=unknown:color_trc=unknown:colorspace=bt709:chroma_location=unspecified,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference];[test_frames]select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted]"
-  },
-  {
-   "name": "by timestamp, scaled to the source and cropped",
-   "source": {
-    "width": 3840,
-    "height": 2160,
-    "fps": "0x1.e000000000000p+6",
-    "pix_fmt": "yuv420p10le",
-    "color_range": "",
-    "color_space": "",
-    "color_transfer": "",
-    "color_primaries": "",
-    "chroma_location": ""
-   },
-   "test": {
-    "width": 1920,
-    "height": 1080,
-    "fps": "0x1.8000000000000p+4",
-    "pix_fmt": "yuv420p",
-    "color_range": "",
-    "color_space": "",
-    "color_transfer": "",
-    "color_primaries": "",
-    "chroma_location": ""
-   },
-   "source_crop": [
-    3840,
-    1600,
-    0,
-    280
-   ],
-   "test_crop": null,
-   "step": 2,
-   "to_source": true,
-   "algorithm": "bilinear",
-   "by_time": true,
-   "graph": "[0:V:0]scale=3840:1600:flags=bilinear,format=yuv420p,setpts=PTS-STARTPTS,split=2[test_frames][test_times];[test_times]crop=2:2:0:0,scale,format=yuv420p10le,pad=3840:1600,lut=c0=0:c1=0:c2=0:c3=0[clock];[1:V:0]crop=3840:1600:0:280,format=yuv420p10le,setpts=PTS-STARTPTS[source_frames];[clock][source_frames]blend=all_mode=or:shortest=1:repeatlast=0:ts_sync_mode=nearest,setparams=range=unknown:color_primaries=unknown:color_trc=unknown:colorspace=bt709:chroma_location=unspecified,select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference];[test_frames]select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted]"
-  },
-  {
-   "name": "by timestamp, an NV12 source by position",
-   "source": {
-    "width": 1920,
-    "height": 1080,
-    "fps": "0x1.8000000000000p+4",
-    "pix_fmt": "nv12",
-    "color_range": "",
-    "color_space": "",
-    "color_transfer": "",
-    "color_primaries": "",
-    "chroma_location": ""
-   },
-   "test": {
-    "width": 1920,
-    "height": 1080,
-    "fps": "0x1.8000000000000p+4",
-    "pix_fmt": "yuv420p",
-    "color_range": "",
-    "color_space": "",
-    "color_transfer": "",
-    "color_primaries": "",
-    "chroma_location": ""
-   },
-   "source_crop": null,
-   "test_crop": null,
-   "step": 2,
-   "to_source": false,
-   "algorithm": "bicubic",
-   "by_time": true,
-   "graph": "[0:V:0]select=not(mod(n\\,2)),setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]select=not(mod(n\\,2)),setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
-  },
-  {
-   "name": "by timestamp, a siting setparams has no name for",
-   "source": {
-    "width": 1920,
-    "height": 1080,
-    "fps": "0x1.8000000000000p+4",
-    "pix_fmt": "yuv420p",
-    "color_range": "",
-    "color_space": "",
-    "color_transfer": "",
-    "color_primaries": "",
-    "chroma_location": "top-left"
-   },
-   "test": {
-    "width": 1920,
-    "height": 1080,
-    "fps": "0x1.8000000000000p+4",
-    "pix_fmt": "yuv420p",
-    "color_range": "",
-    "color_space": "",
-    "color_transfer": "",
-    "color_primaries": "",
-    "chroma_location": ""
-   },
-   "source_crop": null,
-   "test_crop": null,
-   "step": 1,
-   "to_source": false,
-   "algorithm": "bicubic",
-   "by_time": true,
-   "graph": "[0:V:0]setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
-  },
-  {
-   "name": "by timestamp, a full-range yuvj source by position",
-   "source": {
-    "width": 1920,
-    "height": 1080,
-    "fps": "0x1.8000000000000p+4",
-    "pix_fmt": "yuvj420p",
-    "color_range": "",
-    "color_space": "",
-    "color_transfer": "",
-    "color_primaries": "",
-    "chroma_location": ""
-   },
-   "test": {
-    "width": 1920,
-    "height": 1080,
-    "fps": "0x1.8000000000000p+4",
-    "pix_fmt": "yuv420p",
-    "color_range": "",
-    "color_space": "",
-    "color_transfer": "",
-    "color_primaries": "",
-    "chroma_location": ""
-   },
-   "source_crop": null,
-   "test_crop": null,
-   "step": 1,
-   "to_source": false,
-   "algorithm": "bicubic",
-   "by_time": true,
-   "graph": "[0:V:0]setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]setpts=PTS-STARTPTS,setparams=colorspace=bt709:range=pc,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]"
   }
  ],
  "commands": [

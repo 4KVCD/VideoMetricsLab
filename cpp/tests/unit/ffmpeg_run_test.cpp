@@ -5,13 +5,11 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <string>
 
 #include "reference.h"
-#include "vml/frame_sync.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/platform/system.h"
 #include "vml/size_changes.h"
@@ -20,14 +18,6 @@ namespace vml {
 namespace {
 
 using Json = nlohmann::json;
-
-void set_pairing(const std::string& value) {
-#ifdef _WIN32
-    _putenv_s(std::string(pairing_variable).c_str(), value.c_str());
-#else
-    setenv(std::string(pairing_variable).c_str(), value.c_str(), 1);
-#endif
-}
 
 // A video at the root of the drive: a command names its videos by their full
 // paths (input_path), which for a name that does not exist checks every
@@ -117,7 +107,6 @@ TEST(FfmpegRun, BuildsThePythonAppsResolutionTestCommands) {
         {"1080p", {1920, "1080p"}}, {"720p", {1280, "720p"}}, {"480p", {854, "480p"}}};
     for (const Json& item : reference["resample_commands"]) {
         SCOPED_TRACE(item["name"].get<std::string>());
-        set_pairing(item["pairing"].get<std::string>());
         const VideoInfo source = pair_named(item["pair"].get<std::string>()).first;
         const std::optional<CropBox> source_crop = crops_named(item["crop"].get<std::string>()).first;
         const std::optional<std::string> hwaccel = plan_named(item["plan"].get<std::string>()).source;
@@ -137,7 +126,6 @@ TEST(FfmpegRun, BuildsThePythonAppsResolutionTestCommands) {
         }
         EXPECT_EQ(command, item["command"].get<std::vector<std::string>>());
     }
-    set_pairing("");
 }
 
 // VMAF on the GPU: each video's own FFmpeg, decoding it, giving its frames
@@ -147,7 +135,6 @@ TEST(FfmpegRun, BuildsThePythonAppsCommandsForVmafOnTheGpu) {
     ASSERT_FALSE(reference["gpu_commands"].empty());
     for (const Json& item : reference["gpu_commands"]) {
         SCOPED_TRACE(item["name"].get<std::string>());
-        set_pairing(item["pairing"].get<std::string>());
         const auto [source, test] = pair_named(item["pair"].get<std::string>());
         const auto [source_crop, test_crop] = crops_named(item["crop"].get<std::string>());
         const HardwareDecoding plan = plan_named(item["plan"].get<std::string>());
@@ -156,9 +143,7 @@ TEST(FfmpegRun, BuildsThePythonAppsCommandsForVmafOnTheGpu) {
         std::vector<std::vector<std::string>> commands = build_stream_commands(
             "<ffmpeg>", test.path, source.path,
             build_stream_graphs(source, test, options, source_crop, test_crop, plan), plan,
-            by_timestamp()
-                ? timed_gpu_output_args(limit, "<test pipe>", "<test pipe>-times", "<source pipe>", "<source pipe>-times")
-                : gpu_output_args(limit, "<test pipe>", "<source pipe>"));
+            gpu_output_args(limit, "<test pipe>", "<source pipe>"));
         for (std::vector<std::string>& command : commands) {
             for (std::string& part : command) {
                 if (part == platform::path_text(std::filesystem::absolute(test.path))) {
@@ -170,7 +155,6 @@ TEST(FfmpegRun, BuildsThePythonAppsCommandsForVmafOnTheGpu) {
         }
         EXPECT_EQ(commands, item["commands"].get<std::vector<std::vector<std::string>>>());
     }
-    set_pairing("");
 }
 
 // A Mac's GPU decoder hands its frames over in system memory itself, so a

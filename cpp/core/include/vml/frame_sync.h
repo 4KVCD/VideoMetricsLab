@@ -7,14 +7,10 @@
 // are first restamped with their numbers (numbering_filters): frame N gets
 // the time of N frames of the test video, in both videos. A duration limit
 // (an output's -t, duration_args) then keeps the same frames of both.
-//
-// With the environment variable VML_FRAME_PAIRING=timestamp, frames are
-// paired by timestamp, as the app did before.
 #pragma once
 
 #include <optional>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include "vml/video.h"
@@ -28,15 +24,9 @@ struct Rational {
     bool operator==(const Rational&) const = default;
 };
 
-// The environment variable that brings back the old pairing by timestamp.
-inline constexpr std::string_view pairing_variable = "VML_FRAME_PAIRING";
-
-// Whether frames are paired the old way, by timestamp.
-bool by_timestamp();
-
 // FFmpeg's frame sync options for its two-input filters: the comparison ends
 // with the shorter video, and no video's last frame is repeated past its
-// end (when pairing by timestamp, the nearest timestamp is also taken).
+// end.
 std::vector<std::string> framesync_opts();
 
 // The fraction nearest `value` with a denominator up to `max_denominator`,
@@ -48,13 +38,9 @@ Rational limit_denominator(double value, long long max_denominator = 1'000'000);
 Rational frame_rate(const VideoInfo& info);
 
 // FFmpeg filters that restamp each frame by its number: frame N gets the
-// time N / `rate` seconds, in whole microseconds.
+// time N / `rate` seconds, in whole microseconds. They end each video's chain
+// before a filter pairs the two.
 std::vector<std::string> numbering_filters(Rational rate);
-
-// The filters at the end of each video's chain before a filter pairs the
-// two: numbering_filters, or when pairing by timestamp each video's times
-// started at 0.
-std::vector<std::string> pairing_filters(Rational rate);
 
 // An FFmpeg output's options for a duration limit, given as -t takes it
 // ("30.042"); none without a limit.

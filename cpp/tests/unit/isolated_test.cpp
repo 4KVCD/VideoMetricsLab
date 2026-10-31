@@ -56,7 +56,7 @@ TEST(Isolated, RunsWorkInAProcessOfItsOwn) {
 
 // Cancel ends the child and what it started. A program the child started
 // can still have a file in the child's folder open for a moment after that
-// (FFmpeg, its timestamps): the folder goes all the same.
+// (FFmpeg, a file it writes): the folder goes all the same.
 TEST(Isolated, ItsFolderGoesWhenAProgramItStartedHadAFileThereOpen) {
     set_isolation_program(std::filesystem::path(VML_CLI));
     std::filesystem::path folder;

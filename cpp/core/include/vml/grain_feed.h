@@ -36,14 +36,10 @@ namespace vml {
 bool fed_to_ffmpeg(const VideoInfo& info);
 
 // Why `info`'s pictures cannot be fed (a size or format the app's software
-// decoder does not take, its decoder missing, a video scaled on the way,
-// frames paired by timestamp), or nothing when they can. FFmpeg's routes
-// refuse the metric with it (FilmGrainRefusal).
+// decoder does not take, its decoder missing, a video scaled on the way), or
+// nothing when they can: the whole video or a window of it (FeedWindow).
+// FFmpeg's routes refuse the metric with it (FilmGrainRefusal).
 std::optional<std::string> feed_refusal(const VideoInfo& info);
-
-// feed_refusal's reasons that concern decoding the video's pictures, without
-// the run's frame pairing: what refuses a window of them (FeedWindow).
-std::optional<std::string> decoding_refusal(const VideoInfo& info);
 
 // Whether windows of `info`'s pictures (FeedWindow) are to come from the
 // app's decoder rather than FFmpeg's decoding of the file: a codec
@@ -106,9 +102,9 @@ std::optional<std::vector<std::string>> feed_input_options(const VideoInfo& info
 class PictureFeed {
 public:
     // Starts the feeding process and waits for its pipe: the whole video, or
-    // `window` of it. Throws FilmGrainRefusal with feed_refusal's reason
-    // (decoding_refusal's for a window), Cancelled, and what the feeding
-    // process threw before its pipe was there.
+    // `window` of it. Throws FilmGrainRefusal with feed_refusal's reason,
+    // Cancelled, and what the feeding process threw before its pipe was
+    // there.
     PictureFeed(const VideoInfo& info, const std::string& ffmpeg, const std::string& ffprobe,
                 const CancelToken& cancel, const std::optional<FeedWindow>& window = std::nullopt);
     ~PictureFeed();

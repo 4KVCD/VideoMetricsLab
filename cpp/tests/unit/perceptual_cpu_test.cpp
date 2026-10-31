@@ -25,7 +25,6 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
 #include "vml/film_grain_scoring.h"
-#include "vml/frame_sync.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/size_changes.h"
@@ -107,13 +106,10 @@ VideoInfo plain_video(const std::filesystem::path& path) {
     return video;
 }
 
-// The filter graph and the command FFmpeg is given, by frame number and by
-// timestamp.
+// The filter graph and the command FFmpeg is given.
 TEST(PerceptualCpu, MakesThePicturesAsThePythonApp) {
     for (const Json& expected : reference()["graphs"]) {
         SCOPED_TRACE(expected["name"].get<std::string>());
-        const test::ScopedVariable pairing(std::string(pairing_variable),
-                                           expected["by_time"].get<bool>() ? "timestamp" : "");
         VmafOptions options;
         options.scale_direction = expected["to_source"].get<bool>() ? ScaleDirection::distorted_to_source
                                                                      : ScaleDirection::source_to_distorted;
@@ -618,7 +614,7 @@ TEST(PerceptualRouting, APassWhoseInputFailedIsMadeOnceMore) {
     int attempts = 0;
     // A pass that fails `failures` times with `error`, then gives its score.
     const auto pass = [&attempts](int failures, const std::exception_ptr& error) {
-        return [&attempts, failures, error](bool, bool) {
+        return [&attempts, failures, error](bool) {
             if (++attempts <= failures) {
                 std::rethrow_exception(error);
             }

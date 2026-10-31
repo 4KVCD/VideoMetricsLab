@@ -693,8 +693,6 @@
   "It could not be read. Remove it or add the file again to retry.": "无法读取。请将其移除，或重新添加该文件后重试。",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "整个文件的码率，包括音轨：文件中没有记录视频本身的码率。",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} 已在列表中。改为显示已保存运行的分数吗？",
-  "FFmpeg did not give the timestamp of a {side} frame.": "FFmpeg 没有给出 {side} 一帧的时间戳。",
-  "The source has no frame at the test video's first.": "源视频在测试视频第一帧的时间点没有帧。",
   "Drop a video here, paste its path, or click Browse...": "将视频拖放到此处、粘贴其路径，或点击“浏览...”",
   "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "将视频文件拖放到此处以添加，拖动行以调整顺序，点击列标题以排序。",
   "No such video": "视频不存在",

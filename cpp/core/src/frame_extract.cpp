@@ -371,7 +371,7 @@ std::string fed_still(const std::string& ffmpeg, const FrameComparison& comparis
 
 }  // namespace
 
-bool still_from_the_app(const VideoInfo& info) { return windows_from_the_app(info) && !decoding_refusal(info); }
+bool still_from_the_app(const VideoInfo& info) { return windows_from_the_app(info) && !feed_refusal(info); }
 
 std::string still_grain(const VideoInfo& info) {
     if (still_from_the_app(info)) {
@@ -419,8 +419,8 @@ std::string extract_frame_png(const std::string& ffmpeg, const FrameComparison& 
             throw FrameExtractError(std::string("The app's decoder could not decode this frame: ") + refusal.what());
         }
     }
-    if (windows_from_the_app(info)) {  // refused before any feeding: decoding_refusal
-        const FilmGrainRefusal refusal(decoding_refusal(info).value_or("the app's decoder cannot decode it here"));
+    if (windows_from_the_app(info)) {  // refused before any feeding: feed_refusal
+        const FilmGrainRefusal refusal(feed_refusal(info).value_or("the app's decoder cannot decode it here"));
         if (const std::optional<std::string> failure = unfed_failure(info, refusal)) {
             throw FrameExtractError(*failure);
         }
