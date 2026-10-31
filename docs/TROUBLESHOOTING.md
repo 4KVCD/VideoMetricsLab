@@ -28,7 +28,8 @@ Try one encode first, then add neighbors. Record codec, dimensions, bit depth,
 HDR metadata and whether each input is hardware decoded. Software decoding
 for one stream does not imply that every stream must use software.
 
-Check Windows HDR mode and the selected preview mode for washed-out highlights
+Check Windows HDR mode (on a Mac, that the playback status says "macOS EDR
+on") and the selected preview mode for washed-out highlights
 or colors. Do not use a screenshot alone as proof of HDR output correctness.
 Use a short shareable clip to investigate synchronization or frame mismatches.
 
