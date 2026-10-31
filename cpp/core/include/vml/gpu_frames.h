@@ -205,6 +205,12 @@ std::filesystem::path dav1d_library_path();
 // several threads, the decoder would on one).
 std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan, std::string_view backend);
 
+// Whether NVIDIA's decoder (CUDA device 0, the one FFmpeg's cuda and the
+// app's own NVIDIA decoder use) decodes H.264 at 10 bits: the RTX 50 series'
+// H.264 decoder does, earlier ones decode 8 bits only. The isolated task
+// "nvdec-probe" (hardware_decoding.h's DecodingCapabilities).
+bool nvidia_decodes_10bit_h264();
+
 // Why a GPU's decoder cannot scale the plan's pictures exactly as this
 // FFmpeg's scale filter does, or nothing (nothing too for a plan that is not
 // scaled): so large a downscale that swscale makes it in two steps, or an

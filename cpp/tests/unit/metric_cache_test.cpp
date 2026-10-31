@@ -218,6 +218,42 @@ TEST(MetricCache, AnMpegPairsScoresSavedBeforeSoftwareDecodingAreCalculatedAgain
     EXPECT_EQ(loaded_after("hevc", "mpeg4"), 0U);
 }
 
+// A pair with H.264 in a lossless 4:4:4 profile, which NVIDIA's GPUs before
+// the RTX 50 series decoded to other pictures (9f983c8), or of no known
+// profile (a context saved before 2.3), loads only the scores saved since;
+// one with other H.264 loads every score.
+TEST(MetricCache, ALosslessH264PairsScoresSavedBeforeExactDecodingAreCalculatedAgain) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.distorted_info.codec_name = "h264";
+    // How many scores load when the test video's profile was `saved_as` and
+    // the comparison's context then says `now` (nothing: not recorded).
+    const auto loaded_after = [&](const std::string& saved_as, const std::optional<std::string>& now) {
+        result.distorted_info.profile = saved_as;
+        const std::filesystem::path directory = store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4",
+                                                             request.recipe, result, "t", request.metrics);
+        nlohmann::json context = nlohmann::json::parse(*platform::read_file(directory / "context.json"));
+        if (now) {
+            context["distorted_info"]["profile"] = *now;
+        } else {
+            context["distorted_info"].erase("profile");
+        }
+        touch(directory / "context.json", context.dump());
+        const auto loaded = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                        request.metrics, request.perceptual_backends);
+        return loaded ? loaded->first.metric_results.keys().size() : 0;
+    };
+    const std::size_t all = loaded_after("High", "High");
+    EXPECT_EQ(all, request.metrics.size());
+    EXPECT_EQ(loaded_after("High", "High 4:4:4 Predictive"), 0U);  // saved as by a build without the mark
+    EXPECT_EQ(loaded_after("High", std::nullopt), 0U);
+    EXPECT_EQ(loaded_after("High 4:4:4 Predictive", "High 4:4:4 Predictive"), all);
+}
+
 // Which saved scores answer a request: made by a compatible implementation
 // (on the GPU, by the request's Vship build), and not known to be wrong;
 // and where a perceptual metric's score counts.

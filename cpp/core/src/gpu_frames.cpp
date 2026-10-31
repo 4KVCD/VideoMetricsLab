@@ -1168,6 +1168,15 @@ std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan
     return {ok != 0, buffer_text(error.data(), error.size())};
 }
 
+bool nvidia_decodes_10bit_h264() {
+    DecodePlan plan;
+    plan.codec = "h264";
+    plan.bit_depth = 10;
+    plan.width = 1920;
+    plan.height = 1080;
+    return decoder_supports(0, plan, "nvidia").first;
+}
+
 std::optional<std::string> scaling_refusal(const DecodePlan& plan, const std::string& ffmpeg) {
     if (!plan.scaled()) {
         return std::nullopt;

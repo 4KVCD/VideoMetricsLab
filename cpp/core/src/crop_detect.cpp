@@ -66,8 +66,9 @@ std::counting_semaphore<2> decoder_slots(2);
 constexpr std::size_t remembered_answers = 512;
 // Raised when the detection itself changes what it finds, so that older
 // answers in the store are ignored. 2: Intel's GPU decoded lossless H.264
-// to other pixels before (pick_decode).
-constexpr int store_version = 2;
+// to other pixels before (pick_decode); 3: so did NVIDIA's before the RTX 50
+// series.
+constexpr int store_version = 3;
 
 // What an answer depends on: which bytes are in the file, and which stretch
 // of it is sampled (not how it was decoded: the GPUs that decode a video

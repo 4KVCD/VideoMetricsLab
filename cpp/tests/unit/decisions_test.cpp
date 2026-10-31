@@ -75,11 +75,14 @@ TEST(Decisions, PixelFormatsAreReadAsThePythonAppReadsThem) {
 }
 
 // As the Python app chose, but for MPEG-2, which is decoded in software now
-// (gpu_decodes_exactly).
+// (gpu_decodes_exactly). Its NVIDIA GPUs took 10-bit H.264, as the RTX 50
+// series' decoder does (H264In444ProfilesIsGpuDecodedOnlyWhereItIsExact has
+// the earlier ones).
 TEST(Decisions, GpuDecodingIsChosenAsThePythonAppChoosesIt) {
     ASSERT_FALSE(decisions()["decode"].empty());
     for (const Json& item : decisions()["decode"]) {
         DecodingCapabilities capabilities;
+        capabilities.nvidia_decodes_10bit_h264 = true;
         for (const Json& hwaccel : item["hwaccels"]) {
             capabilities.hwaccels.insert(hwaccel.get<std::string>());
         }
@@ -149,13 +152,15 @@ TEST(Decisions, D3d11vaDecodesOnlyTheCodecsTheGpuHasADecoderFor) {
 }
 
 // H.264 in a 4:4:4 profile (x264's lossless -qp 0 writes "High 4:4:4
-// Predictive", in 4:2:0 too) is decoded on the GPU only by NVIDIA's and
-// Apple's decoders, both checked bit-exact; Intel's gave other pictures, and
+// Predictive", in 4:2:0 too) is decoded on the GPU only by Apple's decoder and
+// NVIDIA's of the RTX 50 series (the one that decodes 10-bit H.264), both
+// checked bit-exact; Intel's and an RTX 3070's gave other pictures, and
 // FFmpeg's D3D11VA refuses the profile. Other H.264 as before, and 10-bit
-// lossless on NVIDIA's.
+// lossless on the RTX 50 series' alone.
 TEST(Decisions, H264In444ProfilesIsGpuDecodedOnlyWhereItIsExact) {
     DecodingCapabilities pc;
     pc.hwaccels = {"cuda", "qsv", "d3d11va"};
+    pc.nvidia_decodes_10bit_h264 = true;
     VideoInfo video;
     video.codec_name = "h264";
     video.pix_fmt = "yuv420p";
@@ -169,7 +174,7 @@ TEST(Decisions, H264In444ProfilesIsGpuDecodedOnlyWhereItIsExact) {
         EXPECT_EQ(pick_decode(pc, GpuVendor::amd, video), std::nullopt) << profile;
     }
     EXPECT_EQ(software_decoding_reason(video, true),
-              "only NVIDIA's and Apple's GPUs decode H.264's CAVLC 4:4:4 profile exactly");
+              "only Apple's GPUs and NVIDIA's of the RTX 50 series decode H.264's CAVLC 4:4:4 profile exactly");
     video.profile = "High";
     EXPECT_EQ(pick_decode(pc, GpuVendor::intel, video), "qsv");
     EXPECT_EQ(pick_decode(pc, GpuVendor::amd, video), "d3d11va");
@@ -178,12 +183,26 @@ TEST(Decisions, H264In444ProfilesIsGpuDecodedOnlyWhereItIsExact) {
     EXPECT_EQ(pick_decode(pc, GpuVendor::nvidia, video), "cuda");
     EXPECT_EQ(software_decoding_reason(video, true),
               "its H.264 profile is not known (a run saved before 2.3) and may be a lossless 4:4:4 one, which only "
-              "NVIDIA's and Apple's GPUs decode exactly");
+              "Apple's GPUs and NVIDIA's of the RTX 50 series decode exactly");
     video.profile = "High 4:4:4 Predictive";
     video.pix_fmt = "yuv420p10le";
     EXPECT_EQ(pick_decode(pc, GpuVendor::nvidia, video), "cuda");
     EXPECT_EQ(software_decoding_reason(video, true),
               "only NVIDIA's GPUs (the RTX 50 series) decode H.264 deeper than 8 bits");
+    // An NVIDIA decoder before the RTX 50 series (8-bit H.264 only), or one not
+    // asked: lossless and 10-bit H.264 in software, other H.264 on it still.
+    for (const std::optional<bool> known : {std::optional<bool>(false), std::optional<bool>()}) {
+        pc.nvidia_decodes_10bit_h264 = known;
+        video.pix_fmt = "yuv420p10le";
+        EXPECT_EQ(pick_decode(pc, GpuVendor::nvidia, video), std::nullopt);
+        video.pix_fmt = "yuv420p";
+        EXPECT_EQ(pick_decode(pc, GpuVendor::nvidia, video), std::nullopt);
+        video.profile.clear();
+        EXPECT_EQ(pick_decode(pc, GpuVendor::nvidia, video), std::nullopt);
+        video.profile = "High";
+        EXPECT_EQ(pick_decode(pc, GpuVendor::nvidia, video), "cuda");
+        video.profile = "High 4:4:4 Predictive";
+    }
     DecodingCapabilities mac;
     mac.hwaccels = {"videotoolbox"};
     mac.videotoolbox_codecs = {"h264"};

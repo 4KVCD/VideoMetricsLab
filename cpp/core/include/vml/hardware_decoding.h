@@ -57,6 +57,14 @@ struct DecodingCapabilities {
     // and the run goes on only after its software retries. Nothing where it is
     // not known: D3D11VA is then tried for every codec it decodes.
     std::optional<std::set<std::string>> d3d11va_codecs;
+    // Whether NVIDIA's decoder decodes H.264 at 10 bits (gpu_frames.h's
+    // nvidia_decodes_10bit_h264): the RTX 50 series' does. Taken too for
+    // decoding H.264's lossless 4:4:4 profiles exactly, as the RTX 5090 was
+    // measured to (550f10e) and an RTX 3070, which decodes 8 bits only, does
+    // not (other pictures, without an error); NVIDIA documents those profiles
+    // for none of its GPUs. Nothing where it is not known (no NVIDIA GPU, no
+    // program to ask it in): such H.264 is then decoded in software.
+    std::optional<bool> nvidia_decodes_10bit_h264;
 
     // Asks `ffmpeg` (-hwaccels) and the system.
     static DecodingCapabilities detect(const std::string& ffmpeg);
@@ -123,11 +131,13 @@ bool take_read_profile(VideoInfo& saved, const VideoInfo& read);
 
 // The -hwaccel for `video`, as pick_decode gives it for its codec, format and
 // size, but only a GPU's decoder that decodes its profile exactly: H.264 in
-// a 4:4:4 profile only NVIDIA's (cuda) and Apple's (videotoolbox), each
-// checked bit-exact against software. Intel's (qsv) turns lossless 4:2:0
-// H.264 into other pictures with no error (a 285K's: VMAF 10.90 for 94.34);
-// FFmpeg's D3D11VA refuses that profile. H.264 of no known profile (a video
-// not probed) is taken as 4:4:4.
+// a 4:4:4 profile only Apple's (videotoolbox) and NVIDIA's of the RTX 50
+// series (cuda, where DecodingCapabilities::nvidia_decodes_10bit_h264), each
+// checked bit-exact against software. Intel's (qsv) and an RTX 3070's turn
+// lossless 4:2:0 H.264 into other pictures with no error (a 285K's: VMAF
+// 10.90 for 94.34; the 3070's: PSNR 26.23 for 36.49); FFmpeg's D3D11VA
+// refuses that profile. H.264 of no known profile (a video not probed) is
+// taken as 4:4:4.
 std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                        const VideoInfo& video, MacGpuDecoding mac = MacGpuDecoding::deep);
 

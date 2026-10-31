@@ -10,8 +10,10 @@
 #include <system_error>
 #include <utility>
 
+#include "vml/app_log.h"
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
+#include "vml/isolated.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -162,9 +164,57 @@ std::string HardwareDecoding::describe() const {
     return "source " + source.value_or("cpu") + ", distorted " + distorted.value_or("cpu");
 }
 
+namespace {
+
+const app_log::Logger logger("vml.hardware_decoding");
+
+// NVIDIA's answer to DecodingCapabilities::nvidia_decodes_10bit_h264, asked in
+// a process of its own (it loads the GPU's driver), once in this process: it
+// does not change while the process runs. Nothing where there is no program
+// to ask it in, or the probe failed; a cancelled probe is asked again.
+std::optional<bool> ask_nvidia_decodes_10bit_h264() {
+    static std::mutex mutex;
+    static bool asked = false;
+    static std::optional<bool> answer;
+    const std::lock_guard lock(mutex);  // a second caller waits for the first one's answer
+    if (asked || !isolation_program()) {
+        return answer;
+    }
+    try {
+        answer = run_isolated("nvdec-probe", "NVIDIA's decoder probe", nlohmann::json::object(), {},
+                              gpu_probes_token())
+                     .at("h264_10bit")
+                     .get<bool>();
+        logger.info(*answer ? "NVIDIA's decoder decodes H.264 at 10 bits (the RTX 50 series): it takes H.264 deeper "
+                              "than 8 bits and in a lossless 4:4:4 profile too"
+                            : "NVIDIA's decoder does not decode H.264 at 10 bits (an RTX 50 series' does): any H.264 "
+                              "deeper than 8 bits or in a lossless 4:4:4 profile is decoded in software, other H.264 "
+                              "on it");
+    } catch (const Cancelled&) {
+        return std::nullopt;
+    } catch (const std::exception& error) {
+        logger.info(std::string("NVIDIA's decoder could not be asked what H.264 it decodes (") + error.what() +
+                    "): any H.264 deeper than 8 bits or in a lossless 4:4:4 profile is decoded in software");
+    }
+    asked = true;
+    return answer;
+}
+
+}  // namespace
+
 DecodingCapabilities DecodingCapabilities::detect(const std::string& ffmpeg) {
     DecodingCapabilities capabilities;
     capabilities.vendors = detected_gpu_vendors();
+    // NVIDIA's decoder is asked while FFmpeg lists its -hwaccel methods.
+    std::future<std::optional<bool>> nvidia;
+    if (std::find(capabilities.vendors.begin(), capabilities.vendors.end(), GpuVendor::nvidia) !=
+        capabilities.vendors.end()) {
+        try {
+            nvidia = std::async(std::launch::async, ask_nvidia_decodes_10bit_h264);
+        } catch (const std::system_error&) {
+            // No thread for it: not known.
+        }
+    }
     // D3D11VA is AMD's route only. Its GPU's decoder profiles are asked while
     // FFmpeg lists its -hwaccel methods, which takes longer: on a Ryzen AI
     // Max+ 395, FFmpeg's list 0.21-0.24 s, the profiles 0.09-0.13 s. A check
@@ -213,6 +263,9 @@ DecodingCapabilities DecodingCapabilities::detect(const std::string& ffmpeg) {
         if (capabilities.hwaccels.contains("d3d11va")) {
             capabilities.d3d11va_codecs = std::move(codecs);
         }
+    }
+    if (nvidia.valid()) {
+        capabilities.nvidia_decodes_10bit_h264 = nvidia.get();
     }
     capabilities.videotoolbox_codecs = codecs_this_mac_decodes();
     return capabilities;
@@ -287,9 +340,10 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
     }
     std::optional<std::string> hwaccel = pick_hwaccel(capabilities, vendor, codec, mac);
     // Intel's, AMD's and Apple's GPUs do not decode H.264 deeper than 8 bits
-    // (FFmpeg then decodes it in software and the download fails); NVIDIA's
-    // RTX 50 series does.
-    if (hwaccel != "cuda" && ascii_lower(codec) == "h264" && !pix_fmt.empty() && bit_depth(pix_fmt) > 8) {
+    // (FFmpeg then decodes it in software and the download fails), nor
+    // NVIDIA's before the RTX 50 series (FFmpeg's decoding fails to start).
+    if (ascii_lower(codec) == "h264" && !pix_fmt.empty() && bit_depth(pix_fmt) > 8 &&
+        !(hwaccel == "cuda" && capabilities.nvidia_decodes_10bit_h264 == true)) {
         return std::nullopt;
     }
     return hwaccel;
@@ -353,10 +407,12 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
         (grain_needs_software_decoding(video, *hwaccel) || apps_amd_decoders_add_av1_grain(video, *hwaccel))) {
         return std::nullopt;
     }
-    // A video of no known profile may be lossless too (until the window has
-    // read the file of a run saved before 2.3).
-    if (hwaccel && (h264_444_profile(video) || h264_profile_unknown(video)) && hwaccel != "cuda" &&
-        hwaccel != "videotoolbox") {
+    // Only Apple's decoder and NVIDIA's of the RTX 50 series decode H.264's
+    // lossless 4:4:4 profiles exactly (nvidia_decodes_10bit_h264). A video of
+    // no known profile may be lossless too (until the window has read the file
+    // of a run saved before 2.3).
+    if (hwaccel && (h264_444_profile(video) || h264_profile_unknown(video)) && hwaccel != "videotoolbox" &&
+        !(hwaccel == "cuda" && capabilities.nvidia_decodes_10bit_h264 == true)) {
         return std::nullopt;
     }
     return hwaccel;
@@ -382,11 +438,12 @@ std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode) {
         return "only NVIDIA's GPUs (the RTX 50 series) decode H.264 deeper than 8 bits";
     }
     if (h264_444_profile(info)) {
-        return "only NVIDIA's and Apple's GPUs decode H.264's " + info.profile + " profile exactly";
+        return "only Apple's GPUs and NVIDIA's of the RTX 50 series decode H.264's " + info.profile +
+               " profile exactly";
     }
     if (h264_profile_unknown(info)) {
         return "its H.264 profile is not known (a run saved before 2.3) and may be a lossless 4:4:4 one, which only "
-               "NVIDIA's and Apple's GPUs decode exactly";
+               "Apple's GPUs and NVIDIA's of the RTX 50 series decode exactly";
     }
     const FilmGrainScoring grain = effective_film_grain(info);
     if (no_gpu_decoder_adds(grain)) {
