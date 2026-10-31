@@ -6,13 +6,17 @@
 // files, and the VMAF model a loaded result has.
 #include "vml/metric_cache.h"
 #include "vml/colour.h"
+#include "vml/film_grain_detect.h"
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -216,6 +220,173 @@ TEST(MetricCache, AnMpegPairsScoresSavedBeforeSoftwareDecodingAreCalculatedAgain
     EXPECT_EQ(loaded_after("hevc", "mpeg2video"), 0U);
     EXPECT_EQ(loaded_after("mpeg2video", "mpeg2video"), all);
     EXPECT_EQ(loaded_after("hevc", "mpeg4"), 0U);
+}
+
+// A score of a pair with a video scored with its AV1 film grain, or an AV1
+// video whose grain is not known, says in its saved file that it was decoded
+// as dav1d decodes it (av1_grain_dav1d): one this run made as its pair says,
+// one it kept as it was saved. Outside Windows only scores that say so are
+// taken, from the saved scores or kept from a run file (a comparison saved
+// before 2.3: none); Windows takes them all, as before. A kept score that
+// says nothing never replaces a saved one that says it.
+TEST(MetricCache, AnAv1PairsScoresSayTheirGrainWasDav1dsAndOnlyThoseCountOutsideWindows) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    const AnalysisRequest request = request_from(stored);
+    const ComparisonResult reference = test::result_from(stored.at("result"));
+#ifdef _WIN32
+    const bool marks_count = false;
+#else
+    const bool marks_count = true;
+#endif
+    // The result with its test video `codec`, its grain `grain` (nothing: not
+    // known) scored with it unless `without`, and every score marked `mark`.
+    const auto made = [&](const std::string& codec, std::optional<unsigned> grain, bool without,
+                          std::optional<bool> mark) {
+        ComparisonResult result = reference;
+        result.distorted_info.codec_name = codec;
+        result.distorted_info.film_grain = grain;
+        if (without) {
+            result.distorted_info.with_film_grain = false;
+        }
+        MetricResultSet scores;
+        for (const std::string& key : result.metric_results.keys()) {
+            if (const FrameMetricResult* frame = result.metric_results.frame(key)) {
+                FrameMetricResult copy = *frame;
+                copy.av1_grain_dav1d = mark;
+                scores.add(std::move(copy));
+            } else {
+                SequenceMetricResult copy = *result.metric_results.sequence(key);
+                copy.av1_grain_dav1d = mark;
+                scores.add(std::move(copy));
+            }
+        }
+        result.metric_results = std::move(scores);
+        return result;
+    };
+    // Whether each saved file has the mark, and how many scores load.
+    const auto saved = [&](const ComparisonResult& result) {
+        std::filesystem::remove_all(folder / "cache");
+        const std::filesystem::path directory = store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4",
+                                                             request.recipe, result, "t", request.metrics);
+        std::set<bool> marked;
+        for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(directory)) {
+            if (entry.path().extension() == ".npz") {
+                const nlohmann::json metadata =
+                    nlohmann::json::parse(*npy_text_value(read_npz(entry.path())->at("metadata")));
+                marked.insert(metadata.value("av1_grain_dav1d", 0) == 1);
+            }
+        }
+        const auto loaded = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                        request.metrics, request.perceptual_backends);
+        const std::size_t count = loaded ? loaded->first.metric_results.keys().size() : 0;
+        if (loaded) {
+            for (const std::string& key : loaded->first.metric_results.keys()) {
+                const FrameMetricResult* frame = loaded->first.metric_results.frame(key);
+                EXPECT_EQ(frame ? frame->av1_grain_dav1d : loaded->first.metric_results.sequence(key)->av1_grain_dav1d,
+                          std::optional(marked.contains(true))) << key;
+            }
+        }
+        EXPECT_EQ(marked.size(), 1u);
+        return std::pair(marked.contains(true), count);
+    };
+    const std::size_t all = request.metrics.size();
+    const unsigned av1 = film_grain_av1;
+
+    // Made by this run: marked as the pair says, and taken.
+    EXPECT_EQ(saved(made("av1", av1, false, std::nullopt)), std::pair(true, all));
+    EXPECT_EQ(saved(made("av1", av1, true, std::nullopt)), std::pair(false, all));  // left out: its own identity
+    EXPECT_EQ(saved(made("av1", 0u, false, std::nullopt)), std::pair(false, all));   // no grain
+    EXPECT_EQ(saved(made("hevc", std::nullopt, false, std::nullopt)), std::pair(false, all));
+    EXPECT_EQ(saved(made("hevc", unsigned(film_grain_afgs1), false, std::nullopt)), std::pair(false, all));
+    EXPECT_EQ(saved(made("vvc", unsigned(film_grain_h274), false, std::nullopt)), std::pair(false, all));
+    EXPECT_EQ(saved(made("av2", unsigned(film_grain_av2), false, std::nullopt)), std::pair(false, all));
+    // Grain not known (a scan that failed): decoded as dav1d decodes it, so
+    // marked and taken.
+    EXPECT_EQ(saved(made("av1", std::nullopt, false, std::nullopt)), std::pair(true, all));
+    // Kept from an earlier result: as it was saved.
+    EXPECT_EQ(saved(made("av1", av1, false, false)), std::pair(false, marks_count ? 0 : all));
+    EXPECT_EQ(saved(made("av1", std::nullopt, false, true)), std::pair(true, all));
+    // A run file's scores (unmarked) stored again over the marked ones: the
+    // saved ones keep their mark, and still load everywhere; over unusable
+    // ones they are written.
+    saved(made("av1", av1, false, std::nullopt));
+    const std::filesystem::path again = store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4",
+                                                     request.recipe, made("av1", av1, false, false), "t", request.metrics);
+    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(again)) {
+        if (entry.path().extension() == ".npz") {
+            const nlohmann::json metadata =
+                nlohmann::json::parse(*npy_text_value(read_npz(entry.path())->at("metadata")));
+            EXPECT_EQ(metadata.value("av1_grain_dav1d", 0), 1) << entry.path().filename().string();
+        }
+    }
+    const auto kept_marked = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                         request.metrics, request.perceptual_backends);
+    EXPECT_EQ(kept_marked ? kept_marked->first.metric_results.keys().size() : 0, all);
+    // A marked file of another format (unusable) is replaced as before.
+    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(again)) {
+        if (entry.path().extension() == ".npz") {
+            std::map<std::string, NpyArray> arrays = *read_npz(entry.path());
+            nlohmann::json metadata = nlohmann::json::parse(*npy_text_value(arrays.at("metadata")));
+            metadata["format_version"] = -1;
+            arrays["metadata"] = npy_text(metadata.dump());
+            std::ofstream(entry.path(), std::ios::binary | std::ios::trunc)
+                << npz_bytes({arrays.begin(), arrays.end()});
+        }
+    }
+    store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                 made("av1", av1, false, false), "t", request.metrics);
+    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(again)) {
+        if (entry.path().extension() == ".npz") {
+            const nlohmann::json metadata =
+                nlohmann::json::parse(*npy_text_value(read_npz(entry.path())->at("metadata")));
+            EXPECT_NE(metadata.value("format_version", -1.0), -1.0) << entry.path().filename().string();
+            EXPECT_FALSE(metadata.contains("av1_grain_dav1d")) << entry.path().filename().string();
+        }
+    }
+
+    // A context saved before 2.3 (no film grain written) asks for the mark
+    // outside Windows: the same unmarked scores no longer load there.
+    std::filesystem::remove_all(folder / "cache");
+    const std::filesystem::path directory =
+        store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                     made("hevc", std::nullopt, false, std::nullopt), "t", request.metrics);
+    nlohmann::json context = nlohmann::json::parse(*platform::read_file(directory / "context.json"));
+    context["distorted_info"]["codec_name"] = "av1";
+    touch(directory / "context.json", context.dump());
+    const auto old = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe, request.metrics,
+                                 request.perceptual_backends);
+    EXPECT_EQ(old ? old->first.metric_results.keys().size() : 0, marks_count ? 0 : all);
+    // An AV1 video's grain in another shape: not known either. A video with no
+    // codec named makes the context unreadable on every system
+    // (video_info_from_dict, as the Python app's): nothing loads.
+    for (const auto& [change, expected] :
+         std::vector<std::pair<std::function<void(nlohmann::json&)>, std::size_t>>{
+             {[](nlohmann::json& info) { info["film_grain"] = "av1"; }, marks_count ? 0 : all},
+             {[](nlohmann::json& info) { info.erase("codec_name"); }, 0}}) {
+        nlohmann::json odd = context;
+        change(odd["distorted_info"]);
+        touch(directory / "context.json", odd.dump());
+        const auto loaded = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                        request.metrics, request.perceptual_backends);
+        EXPECT_EQ(loaded ? loaded->first.metric_results.keys().size() : 0, expected);
+    }
+
+    // A run's scores kept for its next run: outside Windows not a run file's
+    // (unmarked) of such a pair; this session's (nothing) and marked ones are.
+    const auto kept = [&](const ComparisonResult& result) {
+        return reusable_keys(result, request.metrics, request.perceptual_backends,
+                             [](const std::string&) { return true; }, {})
+            .size();
+    };
+    const std::size_t keepable = kept(made("hevc", std::nullopt, false, false));
+    ASSERT_GT(keepable, 0u);
+    EXPECT_EQ(kept(made("av1", av1, false, false)), marks_count ? 0 : keepable);
+    EXPECT_EQ(kept(made("av1", std::nullopt, false, false)), marks_count ? 0 : keepable);
+    EXPECT_EQ(kept(made("av1", av1, false, std::nullopt)), keepable);
+    EXPECT_EQ(kept(made("av1", av1, false, true)), keepable);
 }
 
 // A pair with H.264 in a lossless 4:4:4 profile, which NVIDIA's GPUs before

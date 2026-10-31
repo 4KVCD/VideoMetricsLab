@@ -41,6 +41,11 @@ struct FrameMetricResult {
     std::vector<double> time;
     std::vector<float> values;
     MetricProvenance provenance;
+    // Whether its saved file says its pair's AV1 film grain was added as
+    // dav1d adds it (metric_cache.cpp's av1_grain_dav1d), for a score loaded
+    // from the saved scores or a run file (which says nothing: false);
+    // nothing for one this run made, whose pair says. Saved only there.
+    std::optional<bool> av1_grain_dav1d = std::nullopt;
 
     // The one number for the whole video, by the metric's own way of
     // averaging; nothing when no frame has a score.
@@ -55,6 +60,8 @@ struct SequenceMetricResult {
     std::vector<int> frame;
     std::vector<double> time;
     std::vector<float> values;
+    // As FrameMetricResult's.
+    std::optional<bool> av1_grain_dav1d = std::nullopt;
 
     bool has_timeline() const { return !values.empty(); }
 };

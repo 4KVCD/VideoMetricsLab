@@ -1336,7 +1336,8 @@ void MainWindow::check_rows_against_new_source(const std::filesystem::path& path
     for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
         const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
         if (!row_data.completed_run || !same_file(row_data.completed_run->result.source, path) ||
-            film_grain_identity(row_data.completed_run->result.source_info) != film_grain_identity(*source_info_)) {
+            film_grain_route_identity(row_data.completed_run->result.source_info) !=
+                film_grain_route_identity(*source_info_)) {
             stale.push_back(row);
         }
     }

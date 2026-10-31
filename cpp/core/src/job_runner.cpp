@@ -47,7 +47,7 @@ bool contains(const std::vector<std::string>& keys, std::string_view key) {
 // `result` with only every `step`-th frame (0, step, 2*step...): the frames
 // a subsampled request covers, as libvmaf's n_subsample scores them.
 FrameMetricResult sampled_every(const FrameMetricResult& result, int step) {
-    FrameMetricResult kept{result.key, {}, {}, {}, result.provenance};
+    FrameMetricResult kept{result.key, {}, {}, {}, result.provenance, result.av1_grain_dav1d};
     for (std::size_t i = 0; i < result.frame.size(); ++i) {
         if (result.frame[i] % step == 0) {
             kept.frame.push_back(result.frame[i]);

@@ -280,7 +280,7 @@ bool MainWindow::offer_to_take_reference_film_grain(const ComparisonResult& resu
     // The same reference, but scored with its film grain where the run left
     // it out, or the other way round: asks as for another reference (yes:
     // the reference is scored as the run scored it) before the run is shown.
-    if (film_grain_identity(result.source_info) == film_grain_identity(*source_info_)) {
+    if (film_grain_route_identity(result.source_info) == film_grain_route_identity(*source_info_)) {
         return true;
     }
     const bool run_without = effective_film_grain(result.source_info).scoring == GrainScoring::without;

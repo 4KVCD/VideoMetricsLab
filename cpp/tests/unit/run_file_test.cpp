@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <optional>
 #include <string>
 
 #include "reference.h"
@@ -50,6 +51,14 @@ TEST(RunFile, LoadsFilesAsThePythonApp) {
         const auto [result, label] = run_from_text(text);
         EXPECT_EQ(label, item.at("label").get<std::string>());
         EXPECT_EQ(run_file_text(result, label), item.at("resaved").get<std::string>());
+        // A run file records no decoding marks: its scores say none
+        // (metric_cache.cpp's av1_grain_dav1d).
+        for (const std::string& key : result.metric_results.keys()) {
+            const FrameMetricResult* frame = result.metric_results.frame(key);
+            EXPECT_EQ(frame ? frame->av1_grain_dav1d : result.metric_results.sequence(key)->av1_grain_dav1d,
+                      std::optional(false))
+                << key;
+        }
     }
 }
 

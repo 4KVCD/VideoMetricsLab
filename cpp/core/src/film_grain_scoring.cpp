@@ -103,14 +103,28 @@ std::optional<std::string> film_grain_identity(const VideoInfo& info) {
     if ((grain.kinds & film_grain_av1) == 0) {
         return std::string(score_identity::film_grain_afgs1);
     }
-#ifdef _WIN32
-    // The Windows routes added AV1's grain before, and alike: dav1d, FFmpeg's
-    // libdav1d, CUDA and QSV decoding, and NVIDIA's, Intel's and AMD's
-    // decoders in the app (the same scores frame for frame).
+    // Every route on every system adds AV1's grain as dav1d does: dav1d,
+    // FFmpeg's libdav1d, CUDA and QSV decoding, and NVIDIA's, Intel's and
+    // AMD's decoders in the app (the same scores frame for frame); a Mac sends
+    // it to dav1d (grain_needs_software_decoding). Windows' scores made before
+    // the choice existed added it alike. A Mac's then may hold VideoToolbox's:
+    // they are kept apart by the scores' av1_grain_dav1d mark
+    // (metric_cache.cpp), not here.
     return std::nullopt;
-#else
-    return std::string(score_identity::film_grain_av1);  // VideoToolbox's is not known
+}
+
+std::optional<std::string> film_grain_route_identity(const VideoInfo& info) {
+#ifndef _WIN32
+    // Grain not known (a scan that failed) went to VideoToolbox, which leaves
+    // AV1's out, in a Mac's runs made before 2.3 (a run file's): never the
+    // same as AV1's added.
+    const FilmGrainScoring grain = effective_film_grain(info);
+    if (grain.scoring == GrainScoring::with && (grain.kinds & film_grain_av1) != 0 &&
+        (grain.kinds & film_grain_av2) == 0 && !only_the_app_adds(grain)) {
+        return std::string(score_identity::film_grain_av1);
+    }
 #endif
+    return film_grain_identity(info);
 }
 
 void take_film_grain(VideoInfo& into, const VideoInfo& from) {

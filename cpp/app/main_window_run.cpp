@@ -996,8 +996,9 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
         return std::nullopt;
     }
     const bool grain_changed =
-        film_grain_identity(result.source_info) != film_grain_identity(*source_info_) ||
-        (row_data.video_info && film_grain_identity(result.distorted_info) != film_grain_identity(*row_data.video_info));
+        film_grain_route_identity(result.source_info) != film_grain_route_identity(*source_info_) ||
+        (row_data.video_info &&
+         film_grain_route_identity(result.distorted_info) != film_grain_route_identity(*row_data.video_info));
     if (job_options_[job] != row_data.options || !job_cvvdp_[job].same_as(row_data.cvvdp) || grain_changed) {
         // The row's settings changed after the video started, so the result
         // does not match what the row says now: shown, it would be labelled

@@ -393,6 +393,11 @@ bool grain_needs_software_decoding(const VideoInfo& video, const std::string& hw
     if (no_gpu_decoder_adds(grain)) {
         return true;
     }
+    // AV1 whose grain is not known (a scan that failed) may have some: decoded
+    // as dav1d decodes it, as on every other route, never VideoToolbox's way.
+    if (hwaccel == "videotoolbox" && ascii_lower(video.codec_name) == "av1" && !video.film_grain) {
+        return true;
+    }
     if ((grain.kinds & film_grain_av1) == 0 || grain.scoring == GrainScoring::none) {
         return false;
     }
@@ -455,6 +460,11 @@ std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode) {
                    ? "no GPU decoder here for av1 that leaves its film grain out (AMD's and Apple's cannot)"
                    : "no GPU decoder here for av1 known to add its film grain (Apple's is not)";
     }
+#ifdef __APPLE__
+    if (ascii_lower(info.codec_name) == "av1" && !info.film_grain) {
+        return "its film grain is not known, and Apple's decoder may leave it out";
+    }
+#endif
     return "no GPU decoder here for " + info.codec_name;
 }
 

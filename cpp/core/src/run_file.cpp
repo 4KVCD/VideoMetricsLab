@@ -220,6 +220,24 @@ std::string python_type_name(const nlohmann::json& value) {
     }
 }
 
+// A run file records no decoding marks (metric_cache.cpp): its scores say
+// nothing of how their pair's AV1 film grain was added.
+void recorded_without_marks(MetricResultSet& results) {
+    MetricResultSet unmarked;
+    for (const std::string& key : results.keys()) {
+        if (const FrameMetricResult* frame = results.frame(key)) {
+            FrameMetricResult copy = *frame;
+            copy.av1_grain_dav1d = false;
+            unmarked.add(std::move(copy));
+        } else if (const SequenceMetricResult* sequence = results.sequence(key)) {
+            SequenceMetricResult copy = *sequence;
+            copy.av1_grain_dav1d = false;
+            unmarked.add(std::move(copy));
+        }
+    }
+    results = std::move(unmarked);
+}
+
 // A file saved while VMAF v1 was a model of the one VMAF column holds its v1
 // scores as "vmaf": they become VMAF v1's, so that they show in the VMAF v1
 // column and are never taken for VMAF v0.6.1's (_v1_from_old_vmaf_column).
@@ -233,7 +251,8 @@ void v1_from_old_vmaf_column(ComparisonResult& result) {
     MetricResultSet moved;
     for (const std::string& key : result.metric_results.keys()) {
         if (key == "vmaf") {
-            moved.add(FrameMetricResult{"vmaf_v1", vmaf->frame, vmaf->time, vmaf->values, vmaf->provenance});
+            moved.add(FrameMetricResult{"vmaf_v1", vmaf->frame, vmaf->time, vmaf->values, vmaf->provenance,
+                                        vmaf->av1_grain_dav1d});
         } else if (const FrameMetricResult* frame = result.metric_results.frame(key)) {
             moved.add(*frame);
         } else if (const SequenceMetricResult* sequence = result.metric_results.sequence(key)) {
@@ -340,6 +359,7 @@ std::pair<ComparisonResult, std::string> run_from_text(const std::string& text) 
             result.compared_frame_count = frames.frame.back() + 1LL;
         }
         v1_from_old_vmaf_column(result);
+        recorded_without_marks(result.metric_results);
         return {std::move(result), python_str(python_item(data, "label"))};
     } catch (const RunFileError&) {
         throw;

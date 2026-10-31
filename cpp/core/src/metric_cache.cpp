@@ -13,6 +13,8 @@
 
 #include "vml/app_log.h"
 #include "vml/colour.h"
+#include "vml/film_grain_detect.h"
+#include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
 #include "vml/hardware_decoding.h"
 #include "vml/model_select.h"
@@ -51,11 +53,60 @@ constexpr int exact_decoding_version = 1;
 constexpr const char* exact_lossless_h264 = "exact_lossless_h264";
 constexpr int exact_lossless_h264_version = 1;
 
+// What a score's metadata carries when its pair has a video scored with its
+// AV1 film grain, added as dav1d adds it, or an AV1 video whose grain is not
+// known, decoded as dav1d decodes it: every route on every system does so
+// from 2.3 on, and the score shares Windows' identity (film_grain_identity).
+// A Mac's score made before may hold VideoToolbox's grain, which no score
+// records: outside Windows, such a pair's scores count only with it. Windows writes it and asks for
+// nothing (every route there added it alike). Raise it when a decoder that
+// adds AV1's grain otherwise joins.
+constexpr const char* av1_grain_dav1d = "av1_grain_dav1d";
+constexpr int av1_grain_dav1d_version = 1;
+
 // The marks a pair's saved scores carry, and must carry to be taken.
 struct DecodingMarks {
     bool inexact_codec = false;  // exact_decoding
     bool lossless_h264 = false;  // exact_lossless_h264
+    bool av1_grain = false;      // av1_grain_dav1d: scored with its AV1 grain
+    bool av1_grain_unknown = false;  // an AV1 video whose grain is not known
 };
+
+// The two rules of the av1_grain_dav1d mark, for a video as a run reads it
+// and as a saved comparison's context.json gives it (grain_facts).
+bool adds_av1_grain(const VideoInfo& info) {
+    const FilmGrainScoring grain = effective_film_grain(info);
+    return grain.scoring == GrainScoring::with && (grain.kinds & film_grain_av1) != 0;
+}
+
+bool av1_grain_unknown(const VideoInfo& info) { return ascii_lower(info.codec_name) == "av1" && !info.film_grain; }
+
+void add_grain_marks(DecodingMarks& marks, const VideoInfo& source, const VideoInfo& distorted) {
+    marks.av1_grain = adds_av1_grain(source) || adds_av1_grain(distorted);
+    marks.av1_grain_unknown = av1_grain_unknown(source) || av1_grain_unknown(distorted);
+}
+
+// What the mark's rules read of a video in a context.json: its codec and its
+// film grain, as video_info_to_dict wrote them. Grain in another shape is not
+// known; a video with no codec named may be an AV1 one.
+VideoInfo grain_facts(const nlohmann::json& info) {
+    VideoInfo video;
+    video.codec_name = "av1";
+    if (!info.is_object()) {
+        return video;
+    }
+    if (const nlohmann::json codec = info.value("codec_name", nlohmann::json()); codec.is_string()) {
+        video.codec_name = codec.get<std::string>();
+    }
+    if (const nlohmann::json names = info.value("film_grain", nlohmann::json()); names.is_array() &&
+        std::all_of(names.begin(), names.end(), [](const nlohmann::json& name) { return name.is_string(); })) {
+        video.film_grain = film_grain_from_names(names.get<std::vector<std::string>>());
+    }
+    if (const nlohmann::json with = info.value("with_film_grain", nlohmann::json()); with.is_boolean()) {
+        video.with_film_grain = with.get<bool>();
+    }
+    return video;
+}
 
 DecodingMarks decoding_marks(const std::string& source_codec, const std::string& source_profile,
                              const std::string& distorted_codec, const std::string& distorted_profile) {
@@ -315,9 +366,11 @@ void write_atomically(const std::filesystem::path& path, const std::string& byte
 // The metadata saved with a score: the cache format, the kind of score, the
 // request it answers and the score's provenance (with the version that made
 // it, which the results name; no lookup reads it), and the pair's decoding
-// marks.
+// marks: the AV1 grain mark as the score itself says where it was kept from
+// an earlier result (av1_grain_dav1d), as the pair says for one made now.
 std::string metadata(const std::string& key, const char* kind, const MetricRequestSpec& spec,
-                     const MetricProvenance& provenance, const DecodingMarks& marks) {
+                     const MetricProvenance& provenance, const DecodingMarks& marks,
+                     const std::optional<bool>& av1_grain_mark) {
     nlohmann::json data{{"format_version", metric_cache_format_version},
                         {"kind", kind},
                         {"key", key},
@@ -328,6 +381,10 @@ std::string metadata(const std::string& key, const char* kind, const MetricReque
     }
     if (marks.lossless_h264) {
         data[exact_lossless_h264] = exact_lossless_h264_version;
+    }
+    // A score this run made: as its pair; one it kept: as it was saved.
+    if (av1_grain_mark.value_or(marks.av1_grain || marks.av1_grain_unknown)) {
+        data[av1_grain_dav1d] = av1_grain_dav1d_version;
     }
     return python_json_compact(data);
 }
@@ -347,7 +404,8 @@ MetricRequestSpec stored_spec(const MetricRequestSpec& spec, const MetricProvena
 void store_metric(const std::filesystem::path& directory, const FrameMetricResult& result,
                   const MetricRequestSpec& spec, const DecodingMarks& marks) {
     const MetricRequestSpec stored = stored_spec(spec, result.provenance);
-    const std::string described = metadata(result.key, "frame", stored, result.provenance, marks);
+    const std::string described =
+        metadata(result.key, "frame", stored, result.provenance, marks, result.av1_grain_dav1d);
     write_atomically(metric_path(directory, stored),
                      npz_bytes({{"metadata", npy_text(described)},
                                 {"frame", npy_int32(result.frame)},
@@ -360,7 +418,8 @@ void store_metric(const std::filesystem::path& directory, const SequenceMetricRe
                   const MetricRequestSpec& spec, const DecodingMarks& marks) {
     const MetricRequestSpec stored = stored_spec(spec, result.provenance);
     std::vector<std::pair<std::string, NpyArray>> arrays{
-        {"metadata", npy_text(metadata(result.key, "sequence", stored, result.provenance, marks))},
+        {"metadata",
+         npy_text(metadata(result.key, "sequence", stored, result.provenance, marks, result.av1_grain_dav1d))},
         {"score", npy_float64_scalar(result.score)}};
     if (result.has_timeline()) {
         arrays.emplace_back("frame", npy_int32(result.frame));
@@ -434,7 +493,9 @@ std::vector<ColourTags> context_colour_tags(const nlohmann::json& context) {
 // profile: its H.264 videos count as maybe lossless.
 DecodingMarks decoding_marks(const nlohmann::json& context) {
     if (!context.is_object()) {
-        return {};
+        DecodingMarks marks;
+        marks.av1_grain_unknown = true;  // nothing says the videos are not AV1 ones
+        return marks;
     }
     const auto field = [&context](const char* video, const char* name) {
         const nlohmann::json info = context.value(video, nlohmann::json());
@@ -448,12 +509,20 @@ DecodingMarks decoding_marks(const nlohmann::json& context) {
     // A video with no codec named is no video of either kind (as before).
     marks.inexact_codec = (!source_codec.empty() && !gpu_decodes_exactly(source_codec)) ||
                           (!distorted_codec.empty() && !gpu_decodes_exactly(distorted_codec));
+    add_grain_marks(marks, grain_facts(context.value("source_info", nlohmann::json())),
+                    grain_facts(context.value("distorted_info", nlohmann::json())));
     return marks;
 }
 
 // Whether a saved score was made from the pictures its pair is decoded to
 // now: one with each of the pair's decoding marks.
 bool decoded_as_now(const nlohmann::json& metadata, const DecodingMarks& marks) {
+#ifndef _WIN32
+    if ((marks.av1_grain || marks.av1_grain_unknown) &&
+        metadata.value(av1_grain_dav1d, nlohmann::json()) != av1_grain_dav1d_version) {
+        return false;
+    }
+#endif
     return (!marks.inexact_codec || metadata.value(exact_decoding, nlohmann::json()) == exact_decoding_version) &&
            (!marks.lossless_h264 ||
             metadata.value(exact_lossless_h264, nlohmann::json()) == exact_lossless_h264_version);
@@ -497,7 +566,7 @@ FrameMetricResult sampled_every(FrameMetricResult result, int step) {
     if (step <= 1 || std::none_of(result.frame.begin(), result.frame.end(), [step](int f) { return f % step != 0; })) {
         return result;
     }
-    FrameMetricResult kept{result.key, {}, {}, {}, result.provenance};
+    FrameMetricResult kept{result.key, {}, {}, {}, result.provenance, result.av1_grain_dav1d};
     for (std::size_t i = 0; i < result.frame.size(); ++i) {
         if (result.frame[i] % step == 0) {
             kept.frame.push_back(result.frame[i]);
@@ -558,13 +627,15 @@ std::optional<LoadedMetric> load_metric_file(const std::filesystem::path& path, 
             return std::nullopt;
         }
         const nlohmann::json kind = metadata.at("kind");
+        const bool marked = metadata.value(av1_grain_dav1d, nlohmann::json()) == av1_grain_dav1d_version;
         if (kind == "frame") {
             auto frames = timeline(arrays);
             if (!frames) {
                 return std::nullopt;
             }
             auto& [frame, time, values] = *frames;
-            return sampled_every(FrameMetricResult{spec.key, std::move(frame), std::move(time), std::move(values), *provenance},
+            return sampled_every(FrameMetricResult{spec.key, std::move(frame), std::move(time), std::move(values),
+                                                   *provenance, marked},
                                  spec.coverage ? spec.coverage->step : 1);
         }
         if (kind == "sequence") {
@@ -575,7 +646,7 @@ std::optional<LoadedMetric> load_metric_file(const std::filesystem::path& path, 
             if (!score_value || score_value->size() != 1) {
                 return std::nullopt;
             }
-            SequenceMetricResult result{spec.key, score_value->front(), *provenance, {}, {}, {}};
+            SequenceMetricResult result{spec.key, score_value->front(), *provenance, {}, {}, {}, marked};
             if (arrays.contains("values")) {
                 auto frames = timeline(arrays);
                 if (!frames) {
@@ -1027,16 +1098,28 @@ std::vector<std::string> reusable_keys(const ComparisonResult& result, const std
                                        const std::function<bool(const std::string&)>& gpu_can_score,
                                        const std::vector<ColourTags>& infos) {
     std::vector<std::string> kept;
+#ifndef _WIN32
+    // A score loaded without the av1_grain_dav1d mark (a run file's) of a pair
+    // that must have it: its AV1 grain may be VideoToolbox's.
+    DecodingMarks marks;
+    add_grain_marks(marks, result.source_info, result.distorted_info);
+    const auto unmarked = [&marks](const std::optional<bool>& mark) {
+        return (marks.av1_grain || marks.av1_grain_unknown) && mark == false;
+    };
+#else
+    const auto unmarked = [](const std::optional<bool>&) { return false; };
+#endif
     for (const MetricRequestSpec& spec : specs) {
         if (const SequenceMetricResult* sequence = result.metric_results.sequence(spec.key)) {
             // One score for the video (CVVDP).
-            if (std::isfinite(sequence->score) && answers(spec, sequence->provenance, infos)) {
+            if (std::isfinite(sequence->score) && !unmarked(sequence->av1_grain_dav1d) &&
+                answers(spec, sequence->provenance, infos)) {
                 kept.push_back(spec.key);
             }
             continue;
         }
         const FrameMetricResult* metric = result.metric_results.frame(spec.key);
-        if (metric == nullptr ||
+        if (metric == nullptr || unmarked(metric->av1_grain_dav1d) ||
             std::all_of(metric->values.begin(), metric->values.end(), [](float value) { return std::isnan(value); })) {
             continue;
         }
@@ -1082,16 +1165,35 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
                            "'s, the request asks for " + spec.implementation_compatibility_id + "'s");
         return false;
     };
-    const DecodingMarks marks =
+    DecodingMarks marks =
         decoding_marks(result.source_info.codec_name, result.source_info.profile, result.distorted_info.codec_name,
                        result.distorted_info.profile);
+    add_grain_marks(marks, result.source_info, result.distorted_info);
+    // A kept score that says nothing of its pair's AV1 grain (a run file's,
+    // which Windows takes) never replaces a saved one of the current format
+    // that says it; any other it replaces as before.
+    const auto overwrites_marks = [&](const MetricRequestSpec& spec, const MetricProvenance& provenance,
+                                      const std::optional<bool>& mark) {
+        if (!(marks.av1_grain || marks.av1_grain_unknown) || mark != false) {
+            return false;
+        }
+        try {
+            const auto saved = read_score(metric_path(directory, stored_spec(spec, provenance)));
+            return saved && current_format(saved->first) &&
+                   saved->first.value(av1_grain_dav1d, nlohmann::json()) == av1_grain_dav1d_version;
+        } catch (const std::exception&) {
+            return false;
+        }
+    };
     for (const MetricRequestSpec& spec : specs) {
         if (const FrameMetricResult* metric = result.metric_results.frame(spec.key)) {
-            if (answers_request(spec, metric->provenance)) {
+            if (answers_request(spec, metric->provenance) &&
+                !overwrites_marks(spec, metric->provenance, metric->av1_grain_dav1d)) {
                 store_metric(directory, *metric, spec, marks);
             }
         } else if (const SequenceMetricResult* sequence = result.metric_results.sequence(spec.key)) {
-            if (answers_request(spec, sequence->provenance)) {
+            if (answers_request(spec, sequence->provenance) &&
+                !overwrites_marks(spec, sequence->provenance, sequence->av1_grain_dav1d)) {
                 store_metric(directory, *sequence, spec, marks);
             }
         }

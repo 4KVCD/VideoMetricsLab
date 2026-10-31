@@ -43,11 +43,7 @@ constexpr unsigned h274 = film_grain_h274, model_1 = film_grain_h274_model_1, af
 TEST(FilmGrainScoring, EachVideoIsScoredWithOrWithoutItsGrainAsItCanBe) {
     const std::string h274_id(score_identity::film_grain_h274), afgs1_id(score_identity::film_grain_afgs1),
         av2_id(score_identity::film_grain_av2), left_out(score_identity::film_grain_left_out);
-#ifdef _WIN32
-    const std::optional<std::string> av1_id;  // every route added it before
-#else
-    const std::optional<std::string> av1_id = std::string(score_identity::film_grain_av1);
-#endif
+    const std::optional<std::string> av1_id;  // every route adds it as dav1d does
     struct Case {
         VideoInfo info;
         GrainScoring scoring;
@@ -85,6 +81,15 @@ TEST(FilmGrainScoring, EachVideoIsScoredWithOrWithoutItsGrainAsItCanBe) {
         EXPECT_EQ(!grain.why_without.empty(), expected.why);
         EXPECT_EQ(only_the_app_adds(grain), expected.only_the_app);
         EXPECT_EQ(film_grain_identity(expected.info), expected.identity);
+        // What the window compares: the same, but outside Windows AV1's grain
+        // added is not grain not known.
+#ifdef _WIN32
+        EXPECT_EQ(film_grain_route_identity(expected.info), expected.identity);
+#else
+        const bool av1_added = expected.info.codec_name == "av1" && grain.scoring == GrainScoring::with;
+        EXPECT_EQ(film_grain_route_identity(expected.info),
+                  av1_added ? std::optional(std::string(score_identity::film_grain_av1)) : expected.identity);
+#endif
         // A choice to make: grain read, and none forced out.
         EXPECT_EQ(film_grain_choosable(expected.info), grain.scoring != GrainScoring::none && !expected.why);
     }
@@ -203,6 +208,20 @@ TEST(FilmGrainScoring, GrainNoGpuDecoderAddsOrLeavesOutIsDecodedInSoftware) {
               "videotoolbox");
     EXPECT_EQ(pick_decode(mac, GpuVendor::automatic, grain_video("av1", "yuv420p10le", av1), MacGpuDecoding::on),
               std::nullopt);
+    // AV1 whose grain is not known: as dav1d decodes it on a Mac (it may have
+    // grain), as before on Windows' routes, which add it alike.
+    const VideoInfo av1_unknown = grain_video("av1", "yuv420p10le", std::nullopt);
+    EXPECT_TRUE(grain_needs_software_decoding(av1_unknown, "videotoolbox"));
+    EXPECT_FALSE(grain_needs_software_decoding(av1_unknown, "d3d11va"));
+    EXPECT_FALSE(grain_needs_software_decoding(grain_video("hevc", "yuv420p10le", std::nullopt), "videotoolbox"));
+    EXPECT_EQ(pick_decode(mac, GpuVendor::automatic, av1_unknown, MacGpuDecoding::on), std::nullopt);
+    EXPECT_EQ(pick_decode(pc, GpuVendor::nvidia, av1_unknown), "cuda");
+#ifdef __APPLE__
+    EXPECT_EQ(software_decoding_reason(av1_unknown, true),
+              "its film grain is not known, and Apple's decoder may leave it out");
+#else
+    EXPECT_EQ(software_decoding_reason(av1_unknown, true), "no GPU decoder here for av1");
+#endif
 }
 
 // A comparison of videos with no grain keeps the identity its saved scores

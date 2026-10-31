@@ -79,10 +79,17 @@ std::vector<std::string> picture_grain_options(const VideoInfo& info);
 // (score_identity.h's film_grain_*): nothing where every score made before
 // the choice existed scored it so too, so that those still answer: no
 // grain, grain not known, grain left out that no decoder added then either
-// (H.274's deeper than 8 bits or of model 1, AFGS1 in H.264), and on Windows
-// AV1's added. Any other was scored one way or another by route, maker and
-// FFmpeg version.
+// (H.274's deeper than 8 bits or of model 1, AFGS1 in H.264), and AV1's
+// added (a Mac's older scores are told apart by a mark, metric_cache.cpp).
+// Any other was scored one way or another by route, maker and FFmpeg version.
 std::optional<std::string> film_grain_identity(const VideoInfo& info);
+
+// What the window compares to keep a row's scores for its reference as read
+// again, or a run's for its row: film_grain_identity, except that outside
+// Windows a video scored with AV1's grain is not one whose grain is not
+// known, which a Mac's run made before 2.3 (a run file) may have decoded
+// without it.
+std::optional<std::string> film_grain_route_identity(const VideoInfo& info);
 
 // Gives `into` the film grain of `from`, as read and as chosen: the videos of
 // a result saved before either was known take those of the run or row whose
