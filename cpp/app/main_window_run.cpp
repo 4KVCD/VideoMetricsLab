@@ -423,19 +423,25 @@ bool MainWindow::confirm_skipping(const std::vector<std::pair<std::shared_ptr<Ro
 
 bool MainWindow::wait_for_gpu_checks(const std::vector<int>& checked) {
     // The GPU checks the run's plan reads (which metrics the GPU takes: the
-    // rows' Vship builds', VMAF on the GPU, and VMAF v1's when a row has it
-    // on the GPU), waited for off the window's thread. The app's default
-    // build's and VMAF's start with the app, but take seconds, and waited for
-    // on it, a run asked for before they were done would hold the window
-    // still until they were.
+    // rows' Vship builds', and VMAF's and VMAF v1's when a row has them on
+    // the GPU), waited for off the window's thread. The app's default build's
+    // and VMAF's start with the app, but take seconds, and waited for on it, a
+    // run asked for before they were done would hold the window still until
+    // they were. A failure of VMAF's check a minute old is checked again
+    // (stale_failure): it may have passed, and kept, the plan would send VMAF
+    // to the CPU for as long as the window stays open.
+    bool vmaf_gpu = false;
     bool v1 = false;
     std::set<VshipBuild> builds;
     for (const int row : checked) {
         const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
-        v1 = v1 || (row_data.options.vmaf_on_gpu && contains(requested_metrics(row_data), "vmaf_v1"));
+        const std::vector<std::string> metrics = requested_metrics(row_data);
+        const bool on_gpu = row_data.options.vmaf_on_gpu;
+        vmaf_gpu = vmaf_gpu || (on_gpu && (contains(metrics, "vmaf") || contains(metrics, "vmaf_neg")));
+        v1 = v1 || (on_gpu && contains(metrics, "vmaf_v1"));
         builds.insert(row_data.options.vship_build);
     }
-    if (std::all_of(builds.begin(), builds.end(), vship_probe_ready) && gpu_vmaf_probe_ready() &&
+    if (std::all_of(builds.begin(), builds.end(), vship_probe_ready) && (!vmaf_gpu || gpu_vmaf_probe_ready()) &&
         (!v1 || v1_probe_ready())) {
         return false;
     }
@@ -447,11 +453,14 @@ bool MainWindow::wait_for_gpu_checks(const std::vector<int>& checked) {
             stop_waiting_for_gpu_checks();
             on_run_clicked();
         });
-        gpu_check_watcher_->setFuture(QtConcurrent::run([v1, builds] {
+        gpu_check_watcher_->setFuture(QtConcurrent::run([vmaf_gpu, v1, builds] {
             for (const VshipBuild build : builds) {
                 detect_vship_device(build, gpu_probes_token());
             }
-            gpu_vmaf_backend(gpu_probes_token());
+            if (vmaf_gpu) {
+                forget_failed_gpu_vmaf_probe();
+                gpu_vmaf_backend(gpu_probes_token());
+            }
             if (v1) {
                 v1_available(gpu_probes_token());
             }

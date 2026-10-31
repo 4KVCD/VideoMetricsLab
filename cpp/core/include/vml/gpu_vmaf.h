@@ -8,6 +8,7 @@
 // them (VML_VMAF_PIPES=canvas).
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -55,18 +56,23 @@ struct GpuVmafBackend {
 
 // The GPU's answer, found once and kept. Each backend is checked in a
 // process of its own where a program to run it is set (isolated.h), as the
-// Python app checks it, under `cancel`: a run's own token inside a run (its
-// Cancel ends a check it asks for again), gpu_probes_token() elsewhere. A
-// check cancelled throws Cancelled and keeps no answer.
+// Python app checks it, under `cancel`: a run's own token inside a run,
+// gpu_probes_token() elsewhere. A check cancelled throws Cancelled and keeps
+// no answer.
 GpuVmafBackend gpu_vmaf_backend(const CancelToken& cancel);
 // Whether gpu_vmaf_backend would answer now, without probing or waiting for a
-// probe in progress.
+// probe in progress, with an answer a run keeps: not a failure the window
+// asks about again (stale_failure).
 bool gpu_vmaf_probe_ready();
 
-// Before a run of the window, which stays open for long: forgets an answer
-// that the CPU scores VMAF found a minute or more ago, so that the run asks
-// again. The failure may have passed (a driver being updated or restarted);
-// kept, VMAF would be calculated on the CPU until the app restarted.
+// Whether an answer found `age` ago is one the window's next run asks about
+// again: that the CPU scores VMAF (`on_cpu`), found a minute or more ago. The
+// failure may have passed (a driver being updated or restarted); kept, VMAF
+// would be calculated on the CPU until the app restarted.
+bool stale_failure(bool on_cpu, std::chrono::steady_clock::duration age);
+
+// The window's check before a run (off its thread): forgets such an answer,
+// so that gpu_vmaf_backend asks again.
 void forget_failed_gpu_vmaf_probe();
 
 // The models a run scores on the GPU (gpu_models), or none when its VMAF is

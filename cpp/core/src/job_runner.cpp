@@ -472,6 +472,13 @@ ComparisonResult JobRun::execute_task(std::size_t task) {
     for (const std::string& key : options_.requested_metrics()) {
         options.set_metric_enabled(key, contains(job_.tasks[task].metric_keys, key));
     }
+    // The CPU's task keeps what the planner gave it: VMAF, NEG or v1 placed
+    // there with the whole family (plan_tasks) stay on the CPU, which the
+    // run's own placement (models_on_gpu), seeing only this task's, might
+    // otherwise move to the GPU.
+    if (job_.tasks[task].backend != gpu_vmaf_task) {
+        options.vmaf_on_gpu = false;
+    }
     ComparisonResult result = scheduler_.runner(
         job_, options,
         [this, task](long long current, long long total, double fps) { report_progress(task, current, total, fps); },
@@ -1048,12 +1055,15 @@ void Scheduler::drain_queue(Pool pool) {
     }
 }
 
-// What the CPU's task says of the metrics a failed check of the GPU sent it
-// (`failures`, each metric's key and why): a note for each reason, with its
-// metrics.
-std::vector<std::string> fallback_notes(const std::vector<std::pair<std::string, std::string>>& failures) {
+}  // namespace
+
+std::vector<std::string> fallback_notes(const std::vector<std::pair<std::string, std::string>>& failures,
+                                        const std::vector<std::string>& calculated) {
     std::vector<std::pair<std::string, std::vector<std::string>>> by_reason;
     for (const auto& [key, why] : failures) {
+        if (!contains(calculated, key)) {
+            continue;  // a saved score: nothing moved to the CPU
+        }
         const auto same = std::find_if(by_reason.begin(), by_reason.end(),
                                        [&why](const auto& reason) { return reason.first == why; });
         (same != by_reason.end() ? same->second : by_reason.emplace_back(why, std::vector<std::string>{}).second)
@@ -1067,8 +1077,6 @@ std::vector<std::string> fallback_notes(const std::vector<std::pair<std::string,
     return notes;
 }
 
-}  // namespace
-
 std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
                                    const std::vector<std::string>& metric_keys,
                                    const PerceptualBackends& perceptual_backends, const MetricResultSet& saved,
@@ -1076,29 +1084,13 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     // Each metric with a saved score is left out (the run's result takes the
     // saved one). Where the others are calculated is decided from every
     // metric asked for, saved or not, so that one calculated alone is
-    // calculated where it would be with the rest, and its score is the same.
-    // VMAF, NEG and v1 are placed together as a run starts (models_on_gpu,
-    // ffmpeg_run.cpp: all of them on the GPU, or none): where VMAF may go to
-    // the GPU but a saved one of them was made on the CPU (VMAF with a model
-    // file of its own, v1 with a model the GPU refused), the one missing,
-    // calculated alone, could go to the GPU, whose scores differ a little.
-    // Those asked for are then calculated again together, as before.
-    const auto vmaf_family = [](const std::string& key) {
-        return key == "vmaf" || key == "vmaf_neg" || key == "vmaf_v1";
-    };
-    const auto made_on_cpu = [&saved](const std::string& key) {
-        const FrameMetricResult* frame = saved.frame(key);
-        return frame != nullptr && frame->provenance.compute_backend != "gpu";
-    };
-    const bool family_again =
-        options.vmaf_on_gpu && !options.resample_test &&
-        std::any_of(metric_keys.begin(), metric_keys.end(),
-                    [&](const std::string& key) { return vmaf_family(key) && !saved.has(key); }) &&
-        std::any_of(metric_keys.begin(), metric_keys.end(),
-                    [&](const std::string& key) { return vmaf_family(key) && made_on_cpu(key); });
+    // calculated where it would be with the rest, and its score is the same:
+    // VMAF, NEG and v1 are placed together, on the GPU or not, as the run of
+    // the whole family would place them, and the CPU's task keeps its place
+    // (JobRun::execute_task).
     std::vector<std::string> keys;
     for (const std::string& key : metric_keys) {
-        if (!saved.has(key) || (family_again && vmaf_family(key))) {
+        if (!saved.has(key)) {
             keys.push_back(key);
         }
     }
@@ -1126,7 +1118,7 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
                                v1, options.model_v1, &check_failures);
     }
     MetricTask ffmpeg{"ffmpeg", {}};
-    ffmpeg.fallbacks = fallback_notes(check_failures);
+    ffmpeg.fallbacks = fallback_notes(check_failures, keys);
     MetricTask gpu{std::string(gpu_vmaf_task), {}};
     // SSIMULACRA2 and Butteraugli chosen for the CPU make a task of their own,
     // in the CPU's queue: in Vship's task they would be calculated after its

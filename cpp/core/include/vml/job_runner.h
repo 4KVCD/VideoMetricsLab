@@ -81,9 +81,9 @@ using PerceptualBackends = std::map<std::string, std::string, std::less<>>;
 // value; `options.model_v1` is empty while VMAF v1's Auto is not resolved.
 //
 // Each metric with a saved score the run keeps (`saved`) is left out, and
-// the others are calculated where they would be with it (the Python app's
-// planner, whose one FFmpeg pass scored all of FFmpeg's metrics, calculated
-// them again together unless all were saved).
+// the others are calculated where they would be with it: a missing VMAF, NEG
+// or v1 goes where the whole family would (the CPU's task keeps that place
+// as it runs: JobRun::execute_task), never calculating a saved one again.
 //
 // With `share_decode` (shares_decode, ffmpeg_run.h), PSNR, SSIM and XPSNR
 // left to run on the CPU beside VMAF on the GPU join the GPU's task
@@ -93,6 +93,13 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
                                    const std::vector<std::string>& metric_keys,
                                    const PerceptualBackends& perceptual_backends = {},
                                    const MetricResultSet& saved = MetricResultSet(), bool share_decode = false);
+
+// What the CPU's task says of the metrics a failed check of the GPU sent it
+// (`failures`, each metric's key and why): a note for each reason, with its
+// metrics, of those calculated (`calculated`) only: a saved score moved
+// nowhere.
+std::vector<std::string> fallback_notes(const std::vector<std::pair<std::string, std::string>>& failures,
+                                        const std::vector<std::string>& calculated);
 
 // One video to compare with its source, with what to calculate.
 struct VmafJob {

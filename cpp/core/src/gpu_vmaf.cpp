@@ -89,8 +89,8 @@ struct Probe {
     std::chrono::steady_clock::time_point found_at;
 };
 
-// How long a failed probe is kept before a run asks again
-// (forget_failed_gpu_vmaf_probe).
+// How long a failed probe is kept before the window's next run asks again
+// (stale_failure).
 constexpr std::chrono::seconds failed_probe_retry{60};
 
 Probe& probe_state() {
@@ -221,17 +221,21 @@ GpuVmafBackend gpu_vmaf_backend(const CancelToken& cancel) {
     return *probe.found;
 }
 
+bool stale_failure(bool on_cpu, std::chrono::steady_clock::duration age) {
+    return on_cpu && age >= failed_probe_retry;
+}
+
 bool gpu_vmaf_probe_ready() {
     Probe& probe = probe_state();
     const std::unique_lock lock(probe.mutex, std::try_to_lock);
-    return lock.owns_lock() && probe.found.has_value();
+    return lock.owns_lock() && probe.found.has_value() &&
+           !stale_failure(probe.found->backend.empty(), std::chrono::steady_clock::now() - probe.found_at);
 }
 
 void forget_failed_gpu_vmaf_probe() {
     Probe& probe = probe_state();
     const std::lock_guard lock(probe.mutex);
-    if (probe.found && probe.found->backend.empty() &&
-        std::chrono::steady_clock::now() - probe.found_at >= failed_probe_retry) {
+    if (probe.found && stale_failure(probe.found->backend.empty(), std::chrono::steady_clock::now() - probe.found_at)) {
         probe.found.reset();
     }
 }

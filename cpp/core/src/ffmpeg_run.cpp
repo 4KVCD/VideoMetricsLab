@@ -1972,8 +1972,7 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> run_crops(const RunEnv
 // their own, apart from FFmpeg's other metrics, and a run that scores both
 // asks for its GPU's part alone (score_gpu_and_cpu). None when one is
 // calculated on the CPU: FFmpeg's libvmaf calculates them all together. A
-// check of the GPU it asks for again (forget_failed_gpu_vmaf_probe) runs
-// under the run's `cancel`.
+// check of the GPU not made yet runs under the run's `cancel`.
 GpuModels models_on_gpu(const VmafOptions& options, const std::string& model, int depth, int width, int height,
                         const CancelToken& cancel) {
     const std::vector<std::string> requested = options.requested_metrics();

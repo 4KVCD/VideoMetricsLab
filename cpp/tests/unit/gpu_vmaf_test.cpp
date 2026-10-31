@@ -142,5 +142,15 @@ TEST(GpuVmaf, ScoresOnTheGpuWhatThePythonAppDoes) {
     EXPECT_TRUE(scores_on_gpu(true, true, "path=C:/models/mine.json", true, 8, std::nullopt, CancelToken()).empty());
 }
 
+// The window asks the GPU again only about a failure a minute old or more: a
+// GPU found is kept, and so is a failure the window's last run just met.
+TEST(GpuVmaf, OnlyAFailureAMinuteOldIsAskedAgain) {
+    using std::chrono::seconds;
+    EXPECT_FALSE(stale_failure(true, seconds(59)));
+    EXPECT_TRUE(stale_failure(true, seconds(60)));
+    EXPECT_TRUE(stale_failure(true, seconds(61)));
+    EXPECT_FALSE(stale_failure(false, seconds(61)));
+}
+
 }  // namespace
 }  // namespace vml

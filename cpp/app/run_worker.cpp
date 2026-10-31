@@ -6,7 +6,6 @@
 
 #include "vml/app_log.h"
 #include "vml/ffmpeg_tools.h"
-#include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
 #include "vml/perceptual.h"
 #include "vml/platform/system.h"
@@ -103,9 +102,6 @@ void RunWorker::run() {
             }
             fail_the_rest(why);
         } else {
-            // A GPU that failed its probe a while ago is asked again: the
-            // failure may have passed.
-            forget_failed_gpu_vmaf_probe();
             // Which decoders this FFmpeg and these GPUs have is only asked
             // when a video may be decoded on the GPU.
             environment_ = RunEnvironment{

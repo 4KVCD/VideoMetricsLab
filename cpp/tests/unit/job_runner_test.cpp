@@ -134,6 +134,7 @@ TEST(JobRunner, AVideosTasksRunAtOnceAndMakeOneResult) {
     std::mutex mutex;
     std::vector<std::vector<std::string>> asked;  // the metrics each task was run with
     bool met = true;
+    bool vmaf_on_gpu_as_planned = true;  // only the GPU's task may place VMAF there
     Reported reported;
     run_jobs(
         jobs, 1, reported.events(),
@@ -144,6 +145,7 @@ TEST(JobRunner, AVideosTasksRunAtOnceAndMakeOneResult) {
             const std::lock_guard lock(mutex);
             asked.push_back(keys);
             met = met && together;
+            vmaf_on_gpu_as_planned = vmaf_on_gpu_as_planned && options.vmaf_on_gpu == options.compute_vmaf;
             if (options.compute_vmaf) {
                 return result_with({{"vmaf", {0, 2, 4}}}, "version=vmaf_v0.6.1");
             }
@@ -153,6 +155,7 @@ TEST(JobRunner, AVideosTasksRunAtOnceAndMakeOneResult) {
         24, CancelToken());
 
     EXPECT_TRUE(met);  // the CPU's lane and the GPU's at once: one parallel job limits only the CPU's
+    EXPECT_TRUE(vmaf_on_gpu_as_planned);
     std::sort(asked.begin(), asked.end());
     EXPECT_EQ(asked, (std::vector<std::vector<std::string>>{{"psnr", "xpsnr"}, {"vmaf"}}));
     EXPECT_EQ(reported.started, std::vector<std::size_t>{0});
@@ -561,8 +564,8 @@ TEST(JobRunner, SavedScoresAreNotCalculatedAgain) {
     EXPECT_EQ(planned[0].metric_keys, (std::vector<std::string>{"vmaf_neg", "xpsnr"}));
 
     // With VMAF on the GPU, NEG missing beside a VMAF saved from the CPU (one
-    // with a model file of its own) is calculated with that VMAF again: alone
-    // it could go to the GPU.
+    // with a model file of its own) is calculated where the two would be, on
+    // the CPU, and alone: the saved VMAF is not calculated again.
     options.vmaf_on_gpu = true;
     options.model = "model_path=C\\:/models/own.json";
     MetricResultSet cpu_vmaf = saved_scores({"vmaf"});
@@ -573,7 +576,19 @@ TEST(JobRunner, SavedScoresAreNotCalculatedAgain) {
     planned = plan_tasks(source, test, options, {"vmaf", "vmaf_neg"}, {}, cpu_vmaf);
     ASSERT_EQ(planned.size(), 1u);
     EXPECT_EQ(planned[0].backend, "ffmpeg");
-    EXPECT_EQ(planned[0].metric_keys, (std::vector<std::string>{"vmaf", "vmaf_neg"}));
+    EXPECT_EQ(planned[0].metric_keys, std::vector<std::string>{"vmaf_neg"});
+}
+
+// The CPU's task says why a failed check of the GPU sent metrics to it, of
+// those it calculates only: one note for each reason, with its metrics.
+TEST(JobRunner, AFallbackNoteNamesOnlyTheMetricsCalculated) {
+    const std::vector<std::pair<std::string, std::string>> failures{
+        {"vmaf", "no Vulkan device"}, {"vmaf_neg", "no Vulkan device"}, {"vmaf_v1", "out of memory"}};
+    EXPECT_EQ(fallback_notes(failures, {"vmaf_neg", "vmaf_v1", "psnr"}),
+              (std::vector<std::string>{
+                  "The GPU check failed (no Vulkan device); calculating VMAF NEG on the CPU\xE2\x80\xA6",
+                  "The GPU check failed (out of memory); calculating VMAF v1 on the CPU\xE2\x80\xA6"}));
+    EXPECT_TRUE(fallback_notes(failures, {"psnr"}).empty());
 }
 
 // A metric calculated alone takes the others from the saved scores: VMAF
