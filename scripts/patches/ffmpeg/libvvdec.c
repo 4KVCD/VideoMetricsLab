@@ -12,7 +12,10 @@
  * VVdeC does not add AOM's AFGS1 grain, which this wrapper adds as FFmpeg's own VVC decoder
  * does (vvc/dec.c): the ITU-T T.35 SEI messages are read with FFmpeg's own SEI code in
  * decoding order, the AFGS1 sets in force when a picture starts are kept with it, and
- * ff_aom_apply_film_grain adds the set av_film_grain_params_select picks for it.
+ * ff_aom_apply_film_grain adds the set av_film_grain_params_select picks for it. That takes
+ * about 15 ms for a 4K picture, longer than VVdeC takes to decode one, so it is done for
+ * several pictures at once on threads of its own (afgs1_threads) while the caller's thread
+ * decodes the next ones, and the pictures go out in their order.
  *
  * This file is part of FFmpeg.
  *
@@ -36,11 +39,13 @@
 
 #include <vvdec/vvdec.h>
 
+#include "libavutil/executor.h"
 #include "libavutil/film_grain_params.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/thread.h"
 
 #include "aom_film_grain.h"
 #include "avcodec.h"
@@ -66,12 +71,32 @@ typedef struct LibvvdecUnit {
     AVFilmGrainAFGS1Params grain;
 } LibvvdecUnit;
 
+// The most AFGS1 grain threads (afgs1_threads), and the pictures that can wait for their grain
+// at once: one more than the threads, so that none of them waits while the caller's thread
+// decodes the next picture.
+#define LIBVVDEC_GRAIN_THREADS_MAX 16
+#define LIBVVDEC_GRAIN_QUEUE (LIBVVDEC_GRAIN_THREADS_MAX + 1)
+
+// A decoded picture on its way out: its AFGS1 grain added into `grain` on a grain thread, or
+// nothing to add (done from the start). That thread writes `grain`'s pixels, then `done` and
+// `result`; the caller's thread reads them only once `done` is set.
+typedef struct LibvvdecPending {
+    AVTask task;                     // what the executor runs (first: it is handed back as this)
+    AVFrame *picture;                // as VVdeC decoded it, its AFGS1 sets attached
+    AVFrame *grain;                  // the picture with its grain, while it is added
+    const AVFilmGrainParams *params; // the set added, side data of `picture`
+    int adding;                      // its grain is (being) added into `grain`, to swap in
+    int done;                        // under the context's grain_lock while `adding`
+    int result;                      // ff_aom_apply_film_grain's
+} LibvvdecPending;
+
 typedef struct LibvvdecContext {
     const AVClass *class;
     vvdecDecoder *decoder;
     vvdecAccessUnit *access_unit;
     AVPacket *packet;
     int draining;      // the input has ended: the pictures still inside are taken out
+    int flushed;       // VVdeC has given its last picture (asked again, it fails)
     int threads;       // AVOption: VVdeC's threads (0: as many as the CPU has)
     int parse_delay;   // AVOption: access units parsed ahead (-1: VVdeC's default)
     // The SEI state FFmpeg's vvc keeps from picture to picture, in decoding order (only its
@@ -81,6 +106,16 @@ typedef struct LibvvdecContext {
     uint64_t units_given;  // the decoding index of the next access unit
     uint8_t *rbsp;         // an SEI NAL unit without its emulation prevention bytes
     int rbsp_size;
+    // The pictures decoded but not yet given out, in output order (pending[first] is the
+    // oldest), and the threads that add their AFGS1 grain (made at the first one).
+    int grain_threads;  // AVOption: AFGS1 grain threads (0: on the caller's thread)
+    LibvvdecPending pending[LIBVVDEC_GRAIN_QUEUE];
+    int pending_first, pending_count;
+    int pending_error;  // an error that came while pictures waited: returned after them
+    AVExecutor *grain_executor;
+    AVMutex grain_lock;
+    AVCond grain_finished;
+    int grain_sync;  // grain_lock and grain_finished made
 } LibvvdecContext;
 
 // VVdeC's messages go to FFmpeg's log. Only an error is logged as one: the app's decoder
@@ -113,7 +148,7 @@ static int libvvdec_open_decoder(AVCodecContext *avctx)
         return AVERROR_EXTERNAL;
     }
     vvdec_set_logging_callback(s->decoder, libvvdec_log);
-    s->draining = 0;
+    s->draining = s->flushed = 0;
     return 0;
 }
 
@@ -122,10 +157,25 @@ static av_cold int libvvdec_init(AVCodecContext *avctx)
     LibvvdecContext *s = avctx->priv_data;
 
     av_log(avctx, AV_LOG_VERBOSE, "VVdeC %s (%s)\n", vvdec_get_version(), LIBVVDEC_BUILD);
+    if (avctx->thread_count == 1)
+        s->grain_threads = 0;  // one thread asked for: the grain on the caller's
     s->packet = av_packet_alloc();
     s->access_unit = vvdec_accessUnit_alloc();
     if (!s->packet || !s->access_unit)
         return AVERROR(ENOMEM);
+    for (int i = 0; i < LIBVVDEC_GRAIN_QUEUE; i++) {
+        s->pending[i].picture = av_frame_alloc();
+        s->pending[i].grain = av_frame_alloc();
+        if (!s->pending[i].picture || !s->pending[i].grain)
+            return AVERROR(ENOMEM);
+    }
+    if (ff_mutex_init(&s->grain_lock, NULL))
+        return AVERROR(ENOMEM);
+    if (ff_cond_init(&s->grain_finished, NULL)) {
+        ff_mutex_destroy(&s->grain_lock);
+        return AVERROR(ENOMEM);
+    }
+    s->grain_sync = 1;
     return libvvdec_open_decoder(avctx);
 }
 
@@ -134,6 +184,30 @@ static void libvvdec_close_decoder(LibvvdecContext *s)
     if (s->decoder) {
         vvdec_decoder_close(s->decoder);
         s->decoder = NULL;
+    }
+}
+
+// Waits until the grain thread adding `pending`'s grain has finished.
+static void libvvdec_wait_for_grain(LibvvdecContext *s, LibvvdecPending *pending)
+{
+    if (!pending->adding)
+        return;
+    ff_mutex_lock(&s->grain_lock);
+    while (!pending->done)
+        ff_cond_wait(&s->grain_finished, &s->grain_lock);
+    ff_mutex_unlock(&s->grain_lock);
+    pending->adding = 0;
+}
+
+// Drops every picture not yet given out, once no grain thread works on it any more.
+static void libvvdec_drop_pending(LibvvdecContext *s)
+{
+    for (; s->pending_count > 0; s->pending_count--) {
+        LibvvdecPending *pending = &s->pending[s->pending_first];
+        libvvdec_wait_for_grain(s, pending);
+        av_frame_unref(pending->picture);
+        av_frame_unref(pending->grain);
+        s->pending_first = (s->pending_first + 1) % LIBVVDEC_GRAIN_QUEUE;
     }
 }
 
@@ -149,6 +223,19 @@ static av_cold int libvvdec_close(AVCodecContext *avctx)
 {
     LibvvdecContext *s = avctx->priv_data;
 
+    // The grain threads first: av_executor_free drops tasks it has not started, so none may be
+    // left (libvvdec_drop_pending waits for each).
+    libvvdec_drop_pending(s);
+    av_executor_free(&s->grain_executor);
+    for (int i = 0; i < LIBVVDEC_GRAIN_QUEUE; i++) {
+        av_frame_free(&s->pending[i].picture);
+        av_frame_free(&s->pending[i].grain);
+    }
+    if (s->grain_sync) {
+        ff_cond_destroy(&s->grain_finished);
+        ff_mutex_destroy(&s->grain_lock);
+        s->grain_sync = 0;
+    }
     libvvdec_close_decoder(s);
     libvvdec_forget_sei(s);
     av_freep(&s->rbsp);
@@ -168,6 +255,8 @@ static void libvvdec_flush(AVCodecContext *avctx)
 {
     LibvvdecContext *s = avctx->priv_data;
 
+    libvvdec_drop_pending(s);  // the pictures from before the seek
+    s->pending_error = 0;
     libvvdec_close_decoder(s);
     av_packet_unref(s->packet);
     libvvdec_forget_sei(s);  // as FFmpeg's vvc resets its SEI on a flush
@@ -395,45 +484,6 @@ static int libvvdec_remember_unit(AVCodecContext *avctx, const AVPacket *packet)
     return 0;
 }
 
-// Adds the picture's AFGS1 grain, as FFmpeg's vvc does (check_film_grain, frame_end and the
-// output in refs.c): the sets attached as side data, the one av_film_grain_params_select
-// picks added by ff_aom_apply_film_grain, and the side data then removed, unless the caller
-// exports the grain instead of having it added.
-static int libvvdec_add_afgs1(AVCodecContext *avctx, const LibvvdecUnit *unit, AVFrame *frame)
-{
-    const int exporting = avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN;
-    const AVFilmGrainParams *params;
-    AVFrame *grain;
-    int ret;
-
-    ret = ff_aom_attach_film_grain_sets(&unit->grain, frame);
-    if (ret < 0 || exporting)
-        return ret;
-    params = av_film_grain_params_select(frame);
-    if (params && params->type == AV_FILM_GRAIN_PARAMS_AV1) {
-        grain = av_frame_alloc();
-        if (!grain)
-            return AVERROR(ENOMEM);
-        grain->format = frame->format;
-        grain->width = frame->width;
-        grain->height = frame->height;
-        ret = ff_get_buffer(avctx, grain, 0);
-        if (ret >= 0)
-            ret = av_frame_copy_props(grain, frame);
-        if (ret >= 0)
-            ret = ff_aom_apply_film_grain(grain, frame, params);
-        if (ret < 0) {
-            av_frame_free(&grain);
-            return ret;
-        }
-        av_frame_unref(frame);
-        av_frame_move_ref(frame, grain);
-        av_frame_free(&grain);
-    }
-    av_frame_remove_side_data(frame, AV_FRAME_DATA_FILM_GRAIN_PARAMS);
-    return 0;
-}
-
 // What VVdeC's answer means for the caller: 1 for a picture, 0 to go on, or an error
 // (AVERROR_EOF once a flush has given every picture). A picture can come with any answer but
 // an error (with VVDEC_EOF too, for an access unit with no data), and is taken whatever came
@@ -462,7 +512,10 @@ static int libvvdec_result(AVCodecContext *avctx, int result, const vvdecFrame *
     return result == VVDEC_EOF ? AVERROR_EOF : 0;
 }
 
-static int libvvdec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
+// Decodes until VVdeC gives a picture, and copies it into `frame` with the access unit's time
+// stamp and, as FFmpeg's vvc attaches them, its AFGS1 sets as side data. AVERROR(EAGAIN) when
+// the next packet is needed first, AVERROR_EOF when the last picture has been given.
+static int libvvdec_decode_picture(AVCodecContext *avctx, AVFrame *frame)
 {
     LibvvdecContext *s = avctx->priv_data;
     vvdecFrame *picture = NULL;
@@ -474,11 +527,17 @@ static int libvvdec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
     // VVdeC's answer and its picture are read in two statements: the call sets `picture`,
     // and C does not say whether an argument beside the call is read before or after it.
     for (;;) {
+        if (s->flushed)
+            return AVERROR_EOF;
         if (s->draining) {
             ret = vvdec_flush(s->decoder, &picture);
+            // VVDEC_EOF: its last picture, or none; asked again, it would fail.
+            s->flushed = ret == VVDEC_EOF;
             ret = libvvdec_result(avctx, ret, picture);
-            if (ret == 0)
-                return AVERROR_EOF;  // flushed with nothing left
+            if (ret == 0) {
+                s->flushed = 1;  // flushed with nothing left
+                return AVERROR_EOF;
+            }
         } else {
             // One access unit in, at most one picture out, as VVdeC's own player feeds it (an
             // access unit with no data would mean the end of the stream to VVdeC).
@@ -522,12 +581,166 @@ static int libvvdec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
     if (ret >= 0 && picture->ctsValid) {
         const LibvvdecUnit *unit = &s->units[picture->cts % LIBVVDEC_UNITS];
         frame->pts = unit->pts;
-        ret = libvvdec_add_afgs1(avctx, unit, frame);
+        ret = ff_aom_attach_film_grain_sets(&unit->grain, frame);
     }
     vvdec_frame_unref(s->decoder, picture);  // on this thread: VVdeC's picture list is not locked
     if (ret < 0)
         av_frame_unref(frame);
     return ret;
+}
+
+static int libvvdec_grain_first(const AVTask *a, const AVTask *b)
+{
+    return 1;  // first come, first added: every task already queued goes before a new one
+}
+
+static int libvvdec_grain_ready(const AVTask *task, void *user_data)
+{
+    return 1;
+}
+
+// A grain thread: the picture's grain added into its `grain` frame (ff_aom_apply_film_grain
+// reads `picture` alone, and writes `grain` alone, for VVC's pictures, whose luma width is
+// even), and the caller's thread told.
+static int libvvdec_grain_run(AVTask *task, void *local_context, void *user_data)
+{
+    LibvvdecContext *s = user_data;
+    LibvvdecPending *pending = (LibvvdecPending *)task;
+    const int result = ff_aom_apply_film_grain(pending->grain, pending->picture, pending->params);
+
+    ff_mutex_lock(&s->grain_lock);
+    pending->result = result;
+    pending->done = 1;
+    ff_cond_broadcast(&s->grain_finished);
+    ff_mutex_unlock(&s->grain_lock);
+    return 0;
+}
+
+// Starts adding the decoded picture's AFGS1 grain, as FFmpeg's vvc adds it (check_film_grain,
+// frame_end and the output in refs.c): the set av_film_grain_params_select picks, added by
+// ff_aom_apply_film_grain into a new frame, unless the caller exports the grain instead. The
+// new frame comes from FFmpeg's buffer pool on this thread; a grain thread then fills it.
+static int libvvdec_start_grain(AVCodecContext *avctx, LibvvdecPending *pending)
+{
+    LibvvdecContext *s = avctx->priv_data;
+    int ret;
+
+    pending->adding = pending->done = 0;
+    if (avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN)
+        return 0;
+    pending->params = av_film_grain_params_select(pending->picture);
+    if (!pending->params || pending->params->type != AV_FILM_GRAIN_PARAMS_AV1)
+        return 0;
+    pending->grain->format = pending->picture->format;
+    pending->grain->width = pending->picture->width;
+    pending->grain->height = pending->picture->height;
+    ret = ff_get_buffer(avctx, pending->grain, 0);
+    if (ret >= 0)
+        ret = av_frame_copy_props(pending->grain, pending->picture);
+    if (ret < 0) {
+        av_frame_unref(pending->grain);
+        return ret;
+    }
+    if (s->grain_threads > 0 && !s->grain_executor) {
+        const AVTaskCallbacks callbacks = {
+            .user_data = s,
+            .priority_higher = libvvdec_grain_first,
+            .ready = libvvdec_grain_ready,
+            .run = libvvdec_grain_run,
+        };
+        s->grain_executor = av_executor_alloc(&callbacks, s->grain_threads);
+        if (!s->grain_executor)
+            s->grain_threads = 0;  // added on this thread instead
+    }
+    pending->adding = 1;
+    if (s->grain_executor) {
+        av_executor_execute(s->grain_executor, &pending->task);
+    } else {
+        pending->result = ff_aom_apply_film_grain(pending->grain, pending->picture, pending->params);
+        pending->done = 1;
+    }
+    return 0;
+}
+
+// Whether the oldest picture can go out without waiting: its grain added, or none to add.
+static int libvvdec_oldest_done(LibvvdecContext *s)
+{
+    LibvvdecPending *pending = &s->pending[s->pending_first];
+    int done;
+
+    if (!pending->adding)
+        return 1;
+    ff_mutex_lock(&s->grain_lock);
+    done = pending->done;
+    ff_mutex_unlock(&s->grain_lock);
+    return done;
+}
+
+// Gives the oldest picture out into `frame`, its grain added (waited for), and its AFGS1 side
+// data removed, as FFmpeg's vvc removes it, unless the caller exports the grain.
+static int libvvdec_give_oldest(AVCodecContext *avctx, AVFrame *frame)
+{
+    LibvvdecContext *s = avctx->priv_data;
+    LibvvdecPending *pending = &s->pending[s->pending_first];
+    int ret = 0;
+
+    if (pending->adding) {
+        libvvdec_wait_for_grain(s, pending);
+        ret = pending->result;
+        av_frame_unref(pending->picture);
+        av_frame_move_ref(pending->picture, pending->grain);
+    }
+    s->pending_first = (s->pending_first + 1) % LIBVVDEC_GRAIN_QUEUE;
+    s->pending_count--;
+    if (ret < 0) {
+        av_frame_unref(pending->picture);
+        return ret;
+    }
+    if (!(avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN))
+        av_frame_remove_side_data(pending->picture, AV_FRAME_DATA_FILM_GRAIN_PARAMS);
+    av_frame_move_ref(frame, pending->picture);
+    return 0;
+}
+
+// The oldest picture goes out once it is ready, or once as many wait as there are grain threads
+// and one more (then its grain is waited for). Until then the next picture is decoded, and its
+// grain started; when VVdeC needs the next packet first, the caller is asked for it
+// (AVERROR(EAGAIN)) rather than waited for, so that it is read while the grain is added. The
+// waiting pictures go out before the end of the stream (AVERROR_EOF), and before an error, as
+// they did when each picture went out as it was decoded.
+static int libvvdec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
+{
+    LibvvdecContext *s = avctx->priv_data;
+    const int queue = s->grain_threads + 1;
+    int ret;
+
+    for (;;) {
+        LibvvdecPending *next;
+        if (s->pending_count > 0 &&
+            (s->pending_count >= queue || s->pending_error || libvvdec_oldest_done(s)))
+            return libvvdec_give_oldest(avctx, frame);
+        if (s->pending_error) {
+            ret = s->pending_error;
+            s->pending_error = 0;
+            return ret;
+        }
+        next = &s->pending[(s->pending_first + s->pending_count) % LIBVVDEC_GRAIN_QUEUE];
+        ret = libvvdec_decode_picture(avctx, next->picture);
+        if (ret >= 0) {
+            ret = libvvdec_start_grain(avctx, next);
+            if (ret < 0)
+                av_frame_unref(next->picture);
+        }
+        if (ret == AVERROR(EAGAIN) || (ret < 0 && s->pending_count == 0))
+            return ret;
+        if (ret == AVERROR_EOF)
+            return libvvdec_give_oldest(avctx, frame);  // the end comes once they are out
+        if (ret < 0) {
+            s->pending_error = ret;  // after the pictures before it
+            continue;
+        }
+        s->pending_count++;
+    }
 }
 
 #define OFFSET(x) offsetof(LibvvdecContext, x)
@@ -538,6 +751,8 @@ static const AVOption libvvdec_options[] = {
     // At most VVdeC's own most: the access units remembered (units) outnumber it with room.
     { "parse_delay", "access units VVdeC parses ahead (-1: VVdeC's default)",
       OFFSET(parse_delay), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 48, VD },
+    { "afgs1_threads", "threads adding AFGS1 film grain, each to a picture of its own (0: on the caller's thread)",
+      OFFSET(grain_threads), AV_OPT_TYPE_INT, { .i64 = 3 }, 0, LIBVVDEC_GRAIN_THREADS_MAX, VD },
     { NULL }
 };
 
@@ -560,7 +775,7 @@ const FFCodec ff_libvvdec_decoder = {
     FF_CODEC_RECEIVE_FRAME_CB(libvvdec_receive_frame),
     .bsfs           = "vvc_mp4toannexb",
     .p.capabilities = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_OTHER_THREADS,
-    .caps_internal  = FF_CODEC_CAP_SETS_FRAME_PROPS | FF_CODEC_CAP_AUTO_THREADS,
+    .caps_internal  = FF_CODEC_CAP_SETS_FRAME_PROPS | FF_CODEC_CAP_AUTO_THREADS | FF_CODEC_CAP_INIT_CLEANUP,
     .p.priv_class   = &libvvdec_class,
     .p.wrapper_name = "libvvdec",
 };
