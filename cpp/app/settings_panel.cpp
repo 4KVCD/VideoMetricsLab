@@ -38,6 +38,7 @@
 #include "vml/metric_cache.h"
 #include "vml/platform/system.h"
 #include "vml/vship.h"
+#include "vship_names.h"
 
 // The panel's text is app::tr's: inside a Q_OBJECT class, tr() is Qt's.
 namespace vml::app {
@@ -252,13 +253,15 @@ QGroupBox* SettingsPanel::build_gpu_box() {
         build_row->addWidget(new QLabel(app::tr("New videos use:")));
         vship_build_default = new QComboBox;
         vship_build_default->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-        vship_build_default->addItem("GPU - Vship-fast", QString::fromUtf8(vship_build_value(VshipBuild::fast)));
-        vship_build_default->addItem("GPU - Vship", QString::fromUtf8(vship_build_value(VshipBuild::stock)));
+        vship_build_default->addItem(vship_choice_label(VshipBuild::fast),
+                                     QString::fromUtf8(vship_build_value(VshipBuild::fast)));
+        vship_build_default->addItem(vship_choice_label(VshipBuild::stock),
+                                     QString::fromUtf8(vship_build_value(VshipBuild::stock)));
         vship_build_default->setCurrentIndex(
             default_vship_build(settings_.default_vship_build) == VshipBuild::stock ? 1 : 0);
         vship_build_default->setToolTip(app::tr(
             "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command "
-            "line without --vship: Vship-fast, the app's own build, or stock Vship 5.1.2. Each video's own is set in "
+            "line without --vship: GPU, the app's own build, or GPU - Vship, stock Vship. Each video's own is set in "
             "the Options panel (Vship compute)."));
         connect(vship_build_default, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
         build_row->addWidget(vship_build_default);

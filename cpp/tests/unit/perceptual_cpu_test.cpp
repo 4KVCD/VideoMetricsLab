@@ -464,7 +464,7 @@ TEST(PerceptualRouting, AMetricThatFailedOnTheGpuMovesToVship51ThenToTheCpuAtAny
         return output;
     };
     const auto on_cpu = [](const auto&, const auto&) { return scored("ssimulacra2", 80.0f, "cpu"); };
-    const std::string on_vship51 = "SSIMULACRA2 failed on the GPU; calculating it with Vship 5.1.2\xE2\x80\xA6";
+    const std::string on_vship51 = "SSIMULACRA2 failed on the GPU; calculating it with stock Vship\xE2\x80\xA6";
     const std::string to_cpu = "SSIMULACRA2 failed on the GPU; calculating it on the CPU\xE2\x80\xA6";
     for (const std::string vship51 : {"not bundled", "scores", "fails"}) {
         SCOPED_TRACE(vship51);
@@ -532,14 +532,14 @@ TEST(PerceptualRouting, AFailedGpuTaskMovesToVship51ThenToTheCpuAtAnyLength) {
         EXPECT_EQ(routed.vship51.empty(), vship51 == "not bundled" || gpu.vship51);
         if (vship51 == "found the GPU") {
             // Vship-fast's failed check is said first, as a GPU fallback.
-            EXPECT_EQ(routed.statuses.front(), "Vship-fast could not use the GPU (a shader failed); calculating "
-                                               "SSIMULACRA2 and CVVDP with Vship 5.1.2\xE2\x80\xA6");
+            EXPECT_EQ(routed.statuses.front(), "The app's own Vship could not use the GPU (a shader failed); "
+                                               "calculating SSIMULACRA2 and CVVDP with stock Vship\xE2\x80\xA6");
             EXPECT_EQ(routed.kinds.front(), StatusKind::gpu_perceptual_failed);
         }
         if (!routed.vship51.empty()) {
             EXPECT_EQ(routed.vship51, (std::vector<std::string>{"ssimulacra2", "cvvdp"}));
-            EXPECT_EQ(routed.statuses.front(), "Vship-fast failed (the frame rates differ); calculating SSIMULACRA2 "
-                                               "and CVVDP with Vship 5.1.2\xE2\x80\xA6");
+            EXPECT_EQ(routed.statuses.front(), "The app's own Vship failed (the frame rates differ); calculating "
+                                               "SSIMULACRA2 and CVVDP with stock Vship\xE2\x80\xA6");
         }
         if (vship51 == "scores") {
             EXPECT_TRUE(routed.cpu.empty());

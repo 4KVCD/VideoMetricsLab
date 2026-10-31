@@ -293,7 +293,7 @@ const VshipLibrary& kept_library(const std::function<platform::DynamicLibrary()>
         loaded.vship51 = vship51;
     } else if (loaded.vship51 != vship51) {
         throw VshipUnavailableError(std::string("this process has loaded ") +
-                                    (loaded.vship51 ? "Vship 5.1.2" : "Vship-fast") + " already");
+                                    (loaded.vship51 ? "stock Vship" : "the app's own Vship") + " already");
     }
     return *loaded.library;
 }
@@ -378,7 +378,7 @@ std::pair<std::optional<VshipDevice>, std::string> probe_isolated(bool vship51, 
                                                                   const CancelToken& cancel) {
     try {
         const nlohmann::json result =
-            run_isolated("vship-probe", vship51 ? "Vship 5.1.2's GPU probe" : "Vship's GPU probe",
+            run_isolated("vship-probe", vship51 ? "stock Vship's GPU probe" : "Vship's GPU probe",
                          {{"vship51", vship51}}, {}, cancel);
         return {vship_device_from(result.at("device")), result.at("reason").get<std::string>()};
     } catch (const IsolatedCrashError& error) {
@@ -527,7 +527,7 @@ std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(bool vship
     const std::filesystem::path path = vship_library_path(vship51);
     std::error_code missing;
     if (!std::filesystem::is_regular_file(path, missing)) {
-        return {std::nullopt, vship51 ? "Vship 5.1.2's Vulkan library is missing" : "Vship's Vulkan library is missing"};
+        return {std::nullopt, vship51 ? "stock Vship's Vulkan library is missing" : "Vship's Vulkan library is missing"};
     }
     if (const std::optional<std::string> unavailable = VulkanLoader().unavailable()) {
         return {std::nullopt, "Vulkan: " + *unavailable};

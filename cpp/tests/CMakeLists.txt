@@ -91,6 +91,7 @@ if(TARGET vml_app)
         app/i18n_test.cpp
         app/main.cpp
         app/playback_test.cpp
+        app/vship_names_test.cpp
         unit/reference.cpp
         unit/test_videos.cpp
     )

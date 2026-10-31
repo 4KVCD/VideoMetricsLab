@@ -409,7 +409,6 @@ private:
     static bool backend_matches(const RowData& row_data, const std::string& key, const MetricProvenance& provenance);
     static QString other_scale_note();
     static std::optional<VshipBuild> other_vship_build(const RowData& row_data, const MetricProvenance& provenance);
-    static QString other_vship_build_note(const RowData& row_data, VshipBuild made);
     static std::optional<double> score_of(CompletedRun& run, int column);
     static QString identical_frames_note(CompletedRun& run, int column);
     QString cvvdp_note(const RowData& row_data) const;

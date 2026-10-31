@@ -163,9 +163,10 @@ options:
                         (default: the app's)
   --vship {vship-fast,vship}
                         the Vship build that calculates SSIMULACRA2,
-                        Butteraugli and CVVDP on the GPU: vship-fast, or vship
-                        (stock Vship 5.1.2), whose scores differ slightly and
-                        are saved apart (default: the app's)
+                        Butteraugli and CVVDP on the GPU: vship-fast (the
+                        app's own; the window's GPU) or vship (stock Vship;
+                        the window's GPU - Vship), whose scores differ
+                        slightly and are saved apart (default: the app's)
   --vship-pass {one,each}
                         one: SSIMULACRA2, Butteraugli and CVVDP in one pass
                         per video, which decodes it once (faster only on a

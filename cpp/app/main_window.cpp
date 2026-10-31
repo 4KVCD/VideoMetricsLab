@@ -76,6 +76,7 @@
 #include "vml/score_identity.h"
 #include "vml/time_format.h"
 #include "vml/vship.h"
+#include "vship_names.h"
 #include "widgets.h"
 #include "window_helpers.h"
 
@@ -1595,12 +1596,14 @@ void MainWindow::show_score_cell(QTableWidgetItem& item, const RowData& row_data
         // implementation is on a different scale from the rest.
         text += " (" + QString::fromStdString(frame_metric->provenance.compute_backend).toUpper() + ")";
     } else if (other_build) {
-        text += *other_build == VshipBuild::stock ? " (Vship)" : " (Vship-fast)";
+        text += vship_build_mark(*other_build);
     }
     item.setText(text);
     // Compared with the others' unless on another scale or by another build.
     item.setData(score_role, other_scale || other_build ? QVariant() : QVariant(score));
-    const QString build_note = other_build ? other_vship_build_note(row_data, *other_build) : QString();
+    const QString build_note =
+        other_build ? other_vship_build_note(*other_build, vship_build_in_use(row_data.options.vship_build))
+                    : QString();
     item.setToolTip(definition.kind == MetricKind::sequence
                         ? cvvdp_note(row_data) + build_note
                         : app::tr("Mean of calculated frame scores.") + identical_frames_note(run, metric.column) +
@@ -2415,8 +2418,8 @@ std::optional<QString> MainWindow::metric_unavailable_reason(const RowData& row_
         }
         if (!vship_available(row_data.options.vship_build)) {
             if (row_data.options.vship_build == VshipBuild::stock && vship_available(VshipBuild::fast)) {
-                return app::tr("CVVDP is calculated on the GPU only, and no GPU that Vship 5.1.2 can use was found; "
-                               "with Vship compute set to GPU - Vship-fast it can be calculated.");
+                return app::tr("CVVDP is calculated on the GPU only, and no GPU that stock Vship can use was found; "
+                               "with Vship compute set to GPU it can be calculated.");
             }
             return app::tr("CVVDP is calculated on the GPU only, and no GPU that Vship can use was found.");
         }
@@ -2658,14 +2661,6 @@ std::optional<VshipBuild> MainWindow::other_vship_build(const RowData& row_data,
                                            : score_identity::is_vship_fast_id(id) ? std::optional(VshipBuild::fast)
                                                                                   : std::nullopt;
     return made != vship_build_in_use(row_data.options.vship_build) ? made : std::nullopt;
-}
-
-QString MainWindow::other_vship_build_note(const RowData& row_data, VshipBuild made) {
-    // The tooltip's word on such a score, marked with its build in the cell.
-    return app::tr("\n\nCalculated by {build}, not this video's {chosen}, whose scores differ slightly, so the next "
-                   "run calculates it again with {chosen}.",
-                   {{"build", qt_text(vship_build_label(made))},
-                    {"chosen", qt_text(vship_build_label(vship_build_in_use(row_data.options.vship_build)))}});
 }
 
 QString MainWindow::other_scale_note() {

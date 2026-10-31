@@ -1481,7 +1481,7 @@ int compare(const CompareArguments& arguments) {
         return exit_usage;
     }
     if (arguments.vship && vship_build_from(*arguments.vship) == VshipBuild::stock && !vship51_bundled()) {
-        print_error("--vship vship: stock Vship 5.1.2 is not bundled with this package.");
+        print_error("--vship vship: stock Vship is not bundled with this package.");
         return exit_usage;
     }
     if (const std::optional<std::string> missing =

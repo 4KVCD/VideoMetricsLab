@@ -1972,14 +1972,14 @@
    }
   },
   {
-   "text": "Vship-fast failed ({error}); calculating {metrics} with Vship 5.1.2…",
+   "text": "The app's own Vship failed ({error}); calculating {metrics} with stock Vship…",
    "values": {
     "error": "<error>",
     "metrics": "<metrics>"
    }
   },
   {
-   "text": "{metrics} failed on the GPU; calculating it with Vship 5.1.2…",
+   "text": "{metrics} failed on the GPU; calculating it with stock Vship…",
    "values": {
     "metrics": "<metrics>"
    }
@@ -2404,12 +2404,12 @@
   "Ready.",
   "",
   "Not a message the window knows.",
-  "Vship-fast failed (Verror); calculating Vmetrics with Vship 5.1.2…",
-  "Vship-fast failed (Verror); calculating Vmetrics with Vship 5.1.2",
-  "Vship-fast failed (Verror); calculating Vmetrics with Vship 5.1.2...",
-  "Vmetrics failed on the GPU; calculating it with Vship 5.1.2…",
-  "Vmetrics failed on the GPU; calculating it with Vship 5.1.2",
-  "Vmetrics failed on the GPU; calculating it with Vship 5.1.2..."
+  "The app's own Vship failed (Verror); calculating Vmetrics with stock Vship…",
+  "The app's own Vship failed (Verror); calculating Vmetrics with stock Vship",
+  "The app's own Vship failed (Verror); calculating Vmetrics with stock Vship...",
+  "Vmetrics failed on the GPU; calculating it with stock Vship…",
+  "Vmetrics failed on the GPU; calculating it with stock Vship",
+  "Vmetrics failed on the GPU; calculating it with stock Vship..."
  ],
  "languages": {
   "de": {
@@ -2626,8 +2626,8 @@
     "<video> ist ein roher <codec>-Stream ohne Zeitstempel, daher ist seine Bildrate unbekannt. Packen Sie ihn zuerst mit seiner Bildrate in einen Container, z. B. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), mit der eigenen Bildrate des Videos.",
     "• <name>: <time>, <metrics> auf der CPU — <duration> Berechnung",
     "• <name><scaled>: 1234.568 JOD",
-    "Vship-fast fehlgeschlagen (<error>); <metrics> wird mit Vship 5.1.2 berechnet…",
-    "<metrics> ist auf der GPU fehlgeschlagen; wird mit Vship 5.1.2 berechnet…"
+    "Eigenes Vship der App fehlgeschlagen (<error>); <metrics> wird mit dem originalen Vship berechnet…",
+    "<metrics> ist auf der GPU fehlgeschlagen; wird mit dem originalen Vship berechnet…"
    ],
    "counted": [
     [
@@ -3174,12 +3174,12 @@
     "Bereit.",
     "",
     "Not a message the window knows.",
-    "Vship-fast fehlgeschlagen (Verror); Vmetrics wird mit Vship 5.1.2 berechnet…",
-    "Vship-fast fehlgeschlagen (Verror); Vmetrics wird mit Vship 5.1.2 berechnet",
-    "Vship-fast fehlgeschlagen (Verror); Vmetrics wird mit Vship 5.1.2 berechnet…",
-    "Vmetrics ist auf der GPU fehlgeschlagen; wird mit Vship 5.1.2 berechnet…",
-    "Vmetrics ist auf der GPU fehlgeschlagen; wird mit Vship 5.1.2 berechnet",
-    "Vmetrics ist auf der GPU fehlgeschlagen; wird mit Vship 5.1.2 berechnet…"
+    "Eigenes Vship der App fehlgeschlagen (Verror); Vmetrics wird mit dem originalen Vship berechnet…",
+    "Eigenes Vship der App fehlgeschlagen (Verror); Vmetrics wird mit dem originalen Vship berechnet",
+    "Eigenes Vship der App fehlgeschlagen (Verror); Vmetrics wird mit dem originalen Vship berechnet…",
+    "Vmetrics ist auf der GPU fehlgeschlagen; wird mit dem originalen Vship berechnet…",
+    "Vmetrics ist auf der GPU fehlgeschlagen; wird mit dem originalen Vship berechnet",
+    "Vmetrics ist auf der GPU fehlgeschlagen; wird mit dem originalen Vship berechnet…"
    ]
   },
   "ru": {
@@ -3396,8 +3396,8 @@
     "<video> — это сырой поток <codec> без временных меток, поэтому его частота кадров неизвестна. Сначала поместите его в контейнер с его частотой кадров, например mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), указав собственную частоту кадров видео.",
     "• <name>: <time>, <metrics> на CPU — <duration> расчёта",
     "• <name><scaled>: 1234.568 JOD",
-    "Ошибка Vship-fast (<error>); <metrics>: вычисление с Vship 5.1.2…",
-    "<metrics>: ошибка на GPU; вычисление с Vship 5.1.2…"
+    "Ошибка собственного Vship приложения (<error>); <metrics>: вычисление с оригинальным Vship…",
+    "<metrics>: ошибка на GPU; вычисление с оригинальным Vship…"
    ],
    "counted": [
     [
@@ -3944,12 +3944,12 @@
     "Готово.",
     "",
     "Not a message the window knows.",
-    "Ошибка Vship-fast (Verror); Vmetrics: вычисление с Vship 5.1.2…",
-    "Ошибка Vship-fast (Verror); Vmetrics: вычисление с Vship 5.1.2",
-    "Ошибка Vship-fast (Verror); Vmetrics: вычисление с Vship 5.1.2…",
-    "Vmetrics: ошибка на GPU; вычисление с Vship 5.1.2…",
-    "Vmetrics: ошибка на GPU; вычисление с Vship 5.1.2",
-    "Vmetrics: ошибка на GPU; вычисление с Vship 5.1.2…"
+    "Ошибка собственного Vship приложения (Verror); Vmetrics: вычисление с оригинальным Vship…",
+    "Ошибка собственного Vship приложения (Verror); Vmetrics: вычисление с оригинальным Vship",
+    "Ошибка собственного Vship приложения (Verror); Vmetrics: вычисление с оригинальным Vship…",
+    "Vmetrics: ошибка на GPU; вычисление с оригинальным Vship…",
+    "Vmetrics: ошибка на GPU; вычисление с оригинальным Vship",
+    "Vmetrics: ошибка на GPU; вычисление с оригинальным Vship…"
    ]
   },
   "ar": {
@@ -4166,8 +4166,8 @@
     "<video> هو تدفق <codec> خام بلا طوابع زمنية، لذا فمعدل إطاراته غير معروف. ضعه أولًا في حاوية بمعدل إطاراته، مثلًا mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix)، مع معدل إطارات الفيديو الفعلي.",
     "• <name>: <time>، <metrics> على المعالج — <duration> من الحساب",
     "• <name><scaled>: 1234.568 JOD",
-    "فشل Vship-fast ‏(<error>)؛ يُحسب <metrics> باستخدام Vship 5.1.2…",
-    "فشل <metrics> على GPU؛ يُحسب باستخدام Vship 5.1.2…"
+    "فشل Vship الخاص بالتطبيق ‏(<error>)؛ يُحسب <metrics> باستخدام Vship الأصلي…",
+    "فشل <metrics> على GPU؛ يُحسب باستخدام Vship الأصلي…"
    ],
    "counted": [
     [
@@ -4714,12 +4714,12 @@
     "جاهز.",
     "",
     "Not a message the window knows.",
-    "فشل Vship-fast ‏(Verror)؛ يُحسب Vmetrics باستخدام Vship 5.1.2…",
-    "فشل Vship-fast ‏(Verror)؛ يُحسب Vmetrics باستخدام Vship 5.1.2",
-    "فشل Vship-fast ‏(Verror)؛ يُحسب Vmetrics باستخدام Vship 5.1.2…",
-    "فشل Vmetrics على GPU؛ يُحسب باستخدام Vship 5.1.2…",
-    "فشل Vmetrics على GPU؛ يُحسب باستخدام Vship 5.1.2",
-    "فشل Vmetrics على GPU؛ يُحسب باستخدام Vship 5.1.2…"
+    "فشل Vship الخاص بالتطبيق ‏(Verror)؛ يُحسب Vmetrics باستخدام Vship الأصلي…",
+    "فشل Vship الخاص بالتطبيق ‏(Verror)؛ يُحسب Vmetrics باستخدام Vship الأصلي",
+    "فشل Vship الخاص بالتطبيق ‏(Verror)؛ يُحسب Vmetrics باستخدام Vship الأصلي…",
+    "فشل Vmetrics على GPU؛ يُحسب باستخدام Vship الأصلي…",
+    "فشل Vmetrics على GPU؛ يُحسب باستخدام Vship الأصلي",
+    "فشل Vmetrics على GPU؛ يُحسب باستخدام Vship الأصلي…"
    ]
   },
   "ja": {
@@ -4936,8 +4936,8 @@
     "<video> はタイムスタンプのない生の <codec> ストリームのため、フレームレートが分かりません。先にフレームレートを指定してコンテナに入れてください。例: mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix)（動画本来のフレームレートで）。",
     "• <name>：<time>、<metrics> を CPU で — 計算に <duration>",
     "• <name><scaled>：1234.568 JOD",
-    "Vship-fast が失敗しました（<error>）。<metrics> を Vship 5.1.2 で計算中…",
-    "<metrics> は GPU で失敗したため、Vship 5.1.2 で計算中…"
+    "アプリ独自の Vship が失敗しました（<error>）。<metrics> をオリジナルの Vship で計算中…",
+    "<metrics> は GPU で失敗したため、オリジナルの Vship で計算中…"
    ],
    "counted": [
     [
@@ -5484,12 +5484,12 @@
     "準備完了。",
     "",
     "Not a message the window knows.",
-    "Vship-fast が失敗しました（Verror）。Vmetrics を Vship 5.1.2 で計算中…",
-    "Vship-fast が失敗しました（Verror）。Vmetrics を Vship 5.1.2 で計算中",
-    "Vship-fast が失敗しました（Verror）。Vmetrics を Vship 5.1.2 で計算中…",
-    "Vmetrics は GPU で失敗したため、Vship 5.1.2 で計算中…",
-    "Vmetrics は GPU で失敗したため、Vship 5.1.2 で計算中",
-    "Vmetrics は GPU で失敗したため、Vship 5.1.2 で計算中…"
+    "アプリ独自の Vship が失敗しました（Verror）。Vmetrics をオリジナルの Vship で計算中…",
+    "アプリ独自の Vship が失敗しました（Verror）。Vmetrics をオリジナルの Vship で計算中",
+    "アプリ独自の Vship が失敗しました（Verror）。Vmetrics をオリジナルの Vship で計算中…",
+    "Vmetrics は GPU で失敗したため、オリジナルの Vship で計算中…",
+    "Vmetrics は GPU で失敗したため、オリジナルの Vship で計算中",
+    "Vmetrics は GPU で失敗したため、オリジナルの Vship で計算中…"
    ]
   },
   "zh_CN": {
@@ -5706,8 +5706,8 @@
     "<video> 是没有时间戳的原始 <codec> 流，因此无法知道其帧率。请先按其帧率将它放入容器，例如 mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix)（使用视频本身的帧率）。",
     "• <name>：<time>，<metrics> 在 CPU 上——计算 <duration>",
     "• <name><scaled>：1234.568 JOD",
-    "Vship-fast 失败（<error>）；正在用 Vship 5.1.2 计算 <metrics>…",
-    "<metrics> 在 GPU 上失败；正在用 Vship 5.1.2 计算…"
+    "应用自己的 Vship 失败（<error>）；正在用原版 Vship 计算 <metrics>…",
+    "<metrics> 在 GPU 上失败；正在用原版 Vship 计算…"
    ],
    "counted": [
     [
@@ -6254,12 +6254,12 @@
     "就绪。",
     "",
     "Not a message the window knows.",
-    "Vship-fast 失败（Verror）；正在用 Vship 5.1.2 计算 Vmetrics…",
-    "Vship-fast 失败（Verror）；正在用 Vship 5.1.2 计算 Vmetrics",
-    "Vship-fast 失败（Verror）；正在用 Vship 5.1.2 计算 Vmetrics…",
-    "Vmetrics 在 GPU 上失败；正在用 Vship 5.1.2 计算…",
-    "Vmetrics 在 GPU 上失败；正在用 Vship 5.1.2 计算",
-    "Vmetrics 在 GPU 上失败；正在用 Vship 5.1.2 计算…"
+    "应用自己的 Vship 失败（Verror）；正在用原版 Vship 计算 Vmetrics…",
+    "应用自己的 Vship 失败（Verror）；正在用原版 Vship 计算 Vmetrics",
+    "应用自己的 Vship 失败（Verror）；正在用原版 Vship 计算 Vmetrics…",
+    "Vmetrics 在 GPU 上失败；正在用原版 Vship 计算…",
+    "Vmetrics 在 GPU 上失败；正在用原版 Vship 计算",
+    "Vmetrics 在 GPU 上失败；正在用原版 Vship 计算…"
    ]
   },
   "th": {
@@ -6476,8 +6476,8 @@
     "<video> เป็นสตรีม <codec> ดิบที่ไม่มีการประทับเวลา จึงไม่ทราบอัตราเฟรม ให้ใส่ลงในคอนเทนเนอร์พร้อมอัตราเฟรมก่อน เช่น mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix) โดยใช้อัตราเฟรมจริงของวิดีโอ",
     "• <name>: <time>, <metrics> บน CPU — คำนวณ <duration>",
     "• <name><scaled>: 1234.568 JOD",
-    "Vship-fast ล้มเหลว (<error>) กำลังคำนวณ <metrics> ด้วย Vship 5.1.2…",
-    "<metrics> ล้มเหลวบน GPU กำลังคำนวณด้วย Vship 5.1.2…"
+    "Vship ของแอปเองล้มเหลว (<error>) กำลังคำนวณ <metrics> ด้วย Vship ต้นฉบับ…",
+    "<metrics> ล้มเหลวบน GPU กำลังคำนวณด้วย Vship ต้นฉบับ…"
    ],
    "counted": [
     [
@@ -7024,12 +7024,12 @@
     "พร้อม",
     "",
     "Not a message the window knows.",
-    "Vship-fast ล้มเหลว (Verror) กำลังคำนวณ Vmetrics ด้วย Vship 5.1.2…",
-    "Vship-fast ล้มเหลว (Verror) กำลังคำนวณ Vmetrics ด้วย Vship 5.1.2",
-    "Vship-fast ล้มเหลว (Verror) กำลังคำนวณ Vmetrics ด้วย Vship 5.1.2…",
-    "Vmetrics ล้มเหลวบน GPU กำลังคำนวณด้วย Vship 5.1.2…",
-    "Vmetrics ล้มเหลวบน GPU กำลังคำนวณด้วย Vship 5.1.2",
-    "Vmetrics ล้มเหลวบน GPU กำลังคำนวณด้วย Vship 5.1.2…"
+    "Vship ของแอปเองล้มเหลว (Verror) กำลังคำนวณ Vmetrics ด้วย Vship ต้นฉบับ…",
+    "Vship ของแอปเองล้มเหลว (Verror) กำลังคำนวณ Vmetrics ด้วย Vship ต้นฉบับ",
+    "Vship ของแอปเองล้มเหลว (Verror) กำลังคำนวณ Vmetrics ด้วย Vship ต้นฉบับ…",
+    "Vmetrics ล้มเหลวบน GPU กำลังคำนวณด้วย Vship ต้นฉบับ…",
+    "Vmetrics ล้มเหลวบน GPU กำลังคำนวณด้วย Vship ต้นฉบับ",
+    "Vmetrics ล้มเหลวบน GPU กำลังคำนวณด้วย Vship ต้นฉบับ…"
    ]
   }
  }

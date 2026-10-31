@@ -2193,7 +2193,7 @@ PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const Pass
     if (!isolation_program()) {
         if (plan.vship51) {
             // This process has Vship-fast's library (vship_library).
-            throw VshipUnavailableError("Vship 5.1.2 runs only in a process of its own");
+            throw VshipUnavailableError("Stock Vship runs only in a process of its own");
         }
         return score_vship_pass(request, plan, on_progress, on_status, cancel);
     }
@@ -2585,8 +2585,9 @@ public:
         if (device_->vship51 && !device_->fast_failure.empty() && hooks_.on_status) {
             // Vship-fast failed its check on this GPU, where stock Vship
             // 5.1.2 passed: a fallback, slower, said as the GPU's failures are.
-            hooks_.on_status({"Vship-fast could not use the GPU (" + device_->fast_failure + "); calculating " +
-                                  metric_labels(gpu_, " and ") + " with Vship 5.1.2\xE2\x80\xA6",
+            // The window names the builds "GPU" and "GPU - Vship" (stock).
+            hooks_.on_status({"The app's own Vship could not use the GPU (" + device_->fast_failure +
+                                  "); calculating " + metric_labels(gpu_, " and ") + " with stock Vship\xE2\x80\xA6",
                               StatusKind::gpu_perceptual_failed});
         }
         const CropPair crops = routes_.find_crops(request_, hooks_.on_status, cancel_);
@@ -2708,8 +2709,8 @@ private:
         logger.warning("Vship-fast failed (" + std::string(error.what()) + "); calculating " +
                        metric_labels(keys, ", ") + " with Vship 5.1.2");
         if (hooks_.on_status) {
-            hooks_.on_status({"Vship-fast failed (" + std::string(error.what()) + "); calculating " +
-                                  metric_labels(keys, " and ") + " with Vship 5.1.2\xE2\x80\xA6",
+            hooks_.on_status({"The app's own Vship failed (" + std::string(error.what()) + "); calculating " +
+                                  metric_labels(keys, " and ") + " with stock Vship\xE2\x80\xA6",
                               StatusKind::gpu_perceptual_failed});
         }
         PerceptualTaskOutput output;
@@ -2777,7 +2778,7 @@ private:
         }
         logger.warning(metric_labels(keys, ", ") + " failed with Vship-fast; calculating it with Vship 5.1.2");
         if (hooks_.on_status) {
-            hooks_.on_status({metric_labels(keys, " and ") + " failed on the GPU; calculating it with Vship 5.1.2\xE2\x80\xA6",
+            hooks_.on_status({metric_labels(keys, " and ") + " failed on the GPU; calculating it with stock Vship\xE2\x80\xA6",
                               StatusKind::gpu_perceptual_failed});
         }
         PerceptualTaskOutput again;

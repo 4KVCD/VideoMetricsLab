@@ -26,6 +26,7 @@
 #include "vml/film_grain_scoring.h"
 #include "vml/model_select.h"
 #include "vml/vship.h"
+#include "vship_names.h"
 
 // The panel's text is app::tr's: inside a Q_OBJECT class, tr() is Qt's.
 namespace vml::app {
@@ -355,15 +356,15 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
     }
 
     // The Vship build, in the VshipBuild order; a choice only where stock
-    // Vship 5.1.2 is bundled.
+    // Vship is bundled.
     vship_build_combo = new QComboBox;
-    vship_build_combo->addItems({"GPU - Vship-fast", "GPU - Vship"});
+    vship_build_combo->addItems({vship_choice_label(VshipBuild::fast), vship_choice_label(VshipBuild::stock)});
     vship_build_combo->setToolTip(app::tr(
-        "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: Vship-fast, the app's own build, or "
-        "stock Vship 5.1.2. Their scores differ slightly, and each one's are saved apart: switching shows that one's "
-        "saved scores, or calculates them on the next run. If Vship-fast fails, Vship 5.1.2 calculates them instead. "
-        "Without a GPU Vship can use, or if Vship 5.1.2 fails too, SSIMULACRA2 and Butteraugli are calculated on the "
-        "CPU (libjxl), and CVVDP is not available."));
+        "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: GPU, the app's own build, or GPU - "
+        "Vship, stock Vship. Their scores differ slightly, and each one's are saved apart: switching shows that one's "
+        "saved scores, or calculates them on the next run. If GPU fails, stock Vship calculates them instead. Without "
+        "a GPU Vship can use, or if stock Vship fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU "
+        "(libjxl), and CVVDP is not available."));
     connect(vship_build_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("vship_build"); });
     form->addRow(app::tr("Vship compute:"), vship_build_combo);
     form->setRowVisible(vship_build_combo, vship51_bundled());
