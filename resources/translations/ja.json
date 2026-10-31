@@ -765,8 +765,7 @@
   "the app's decoder does not decode it: {reason}": "アプリのデコーダーはこれをデコードしません: {reason}",
   "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "アプリ独自のデコーダーがここにありません（または VML_SOFTWARE_DECODE=ffmpeg で無効化されています）",
   "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "動画の途中でサイズが変わります。1 つのサイズで FFmpeg に渡す画像ではこれに追従できません",
-  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "そのピクセル形式または色タグに、FFmpeg 用の rawvideo の対応がありません",
-  "the app decodes a video for FFmpeg on Windows only": "アプリが FFmpeg 用に動画をデコードするのは Windows だけです"
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "そのピクセル形式または色タグに、FFmpeg 用の rawvideo の対応がありません"
  },
  "plurals": {
   "about {count} day": [

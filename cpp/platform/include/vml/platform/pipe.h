@@ -2,7 +2,7 @@
 // which this process reads: how FFmpeg hands its frames over for VMAF on the
 // GPU; a named pipe (\\.\pipe\...) on Windows, a FIFO in the temporary
 // folder elsewhere. OutboundPipe, which this process writes: how FFmpeg gets
-// pictures the app decodes itself; a named pipe, on Windows only.
+// pictures the app decodes itself; a named pipe on Windows, a FIFO elsewhere.
 #pragma once
 
 #include <atomic>
@@ -96,8 +96,8 @@ PipeWriteError pipe_write_error(unsigned long code);
 
 // A pipe this process writes and another program reads, opening it by its
 // path as it opens a file: how pictures the app decodes itself reach an
-// FFmpeg as a rawvideo input. A named pipe; only on Windows (elsewhere making
-// one throws PipeError).
+// FFmpeg as a rawvideo input. A named pipe on Windows, a FIFO in the
+// temporary folder elsewhere.
 class OutboundPipe {
 public:
     // A path unique to this process for a pipe ending in `name`, made before
@@ -130,11 +130,12 @@ public:
     // Opens the pipe at `path` to read and closes it at once: a writer
     // waiting in connect() for a reader that never comes (an FFmpeg that
     // failed before opening its inputs) goes on, and finds it gone. Does
-    // nothing to a pipe whose reader has it.
+    // nothing to a pipe whose reader has it. A FIFO's name goes with it:
+    // only once its reader is done (or never came) may it be touched.
     static void touch(const std::string& path);
 
 private:
-    struct State;  // pipe_windows.cpp
+    struct State;  // each system's own (pipe_windows.cpp, pipe_posix.cpp)
     std::unique_ptr<State> state_;
 };
 

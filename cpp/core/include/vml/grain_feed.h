@@ -37,8 +37,8 @@ bool fed_to_ffmpeg(const VideoInfo& info);
 
 // Why `info`'s pictures cannot be fed (a size or format the app's software
 // decoder does not take, its decoder missing, a video scaled on the way,
-// frames paired by timestamp, another system than Windows), or nothing when
-// they can. FFmpeg's routes refuse the metric with it (FilmGrainRefusal).
+// frames paired by timestamp), or nothing when they can. FFmpeg's routes
+// refuse the metric with it (FilmGrainRefusal).
 std::optional<std::string> feed_refusal(const VideoInfo& info);
 
 // feed_refusal's reasons that concern decoding the video's pictures, without

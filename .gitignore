@@ -8,8 +8,10 @@ tests_scratch/
 # stdout/stderr captured from launching the GUI
 gui_stdout.log
 gui_stderr.log
-# The native libraries, built from native/ by the scripts' build_*.ps1
+# The native libraries, built from native/ by the scripts' build_*.ps1 (and
+# build_software_frames_macos.sh)
 resources/native/*.dll
+resources/native/*.dylib
 # macOS's tools, built by scripts/build_*_macos.sh (the release script runs them)
 resources/tools/libvmaf/libvmaf.dylib
 resources/tools/libjxl/ssimulacra2

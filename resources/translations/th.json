@@ -765,8 +765,7 @@
   "the app's decoder does not decode it: {reason}": "ตัวถอดรหัสของแอปไม่ถอดรหัสวิดีโอนี้: {reason}",
   "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "ไม่มีตัวถอดรหัสของแอปที่นี่ (หรือ VML_SOFTWARE_DECODE=ffmpeg ปิดไว้)",
   "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "ขนาดของวิดีโอเปลี่ยนระหว่างเล่น ซึ่งภาพที่ส่งให้ FFmpeg ด้วยขนาดเดียวตามไม่ได้",
-  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "รูปแบบพิกเซลหรือแท็กสีของวิดีโอนี้ไม่มีรูปแบบ rawvideo ที่เทียบเท่าสำหรับ FFmpeg",
-  "the app decodes a video for FFmpeg on Windows only": "แอปถอดรหัสวิดีโอให้ FFmpeg ได้บน Windows เท่านั้น"
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "รูปแบบพิกเซลหรือแท็กสีของวิดีโอนี้ไม่มีรูปแบบ rawvideo ที่เทียบเท่าสำหรับ FFmpeg"
  },
  "plurals": {
   "about {count} day": [

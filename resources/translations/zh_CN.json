@@ -765,8 +765,7 @@
   "the app's decoder does not decode it: {reason}": "应用的解码器不解码它：{reason}",
   "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "此处没有应用自带的解码器（或已被 VML_SOFTWARE_DECODE=ffmpeg 关闭）",
   "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "其尺寸在视频中途改变，以单一尺寸传给 FFmpeg 的画面无法跟随",
-  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "其像素格式或某个色彩标签在 FFmpeg 的 rawvideo 中没有对应项",
-  "the app decodes a video for FFmpeg on Windows only": "应用仅在 Windows 上为 FFmpeg 解码视频"
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "其像素格式或某个色彩标签在 FFmpeg 的 rawvideo 中没有对应项"
  },
  "plurals": {
   "about {count} day": [

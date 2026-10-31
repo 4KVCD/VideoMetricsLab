@@ -765,8 +765,7 @@
   "the app's decoder does not decode it: {reason}": "az alkalmazás dekódere nem dekódolja: {reason}",
   "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "az alkalmazás saját dekódere nincs itt (vagy a VML_SOFTWARE_DECODE=ffmpeg kikapcsolta)",
   "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "a mérete a videó során változik, amit az FFmpegnek egy méretben átadott képek nem tudnak követni",
-  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "a képpontformátumának vagy egy színcímkéjének nincs rawvideo megfelelője az FFmpeg számára",
-  "the app decodes a video for FFmpeg on Windows only": "az alkalmazás csak Windowson dekódol videót az FFmpeg számára"
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "a képpontformátumának vagy egy színcímkéjének nincs rawvideo megfelelője az FFmpeg számára"
  },
  "plurals": {
   "about {count} day": [

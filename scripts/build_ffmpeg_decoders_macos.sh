@@ -15,8 +15,11 @@
 #   libswresample.7.dylib libswscale.10.dylib
 #   licenses/COPYING.LGPLv2.1.txt licenses/COPYING.vvdec.txt
 #
-# each named @rpath/<itself>, so that they find each other and the window
-# finds them through its run paths (cpp/app/CMakeLists.txt). They are not
+# each named @rpath/<itself>, with a run path of their own folder, so that
+# they find each other wherever they are loaded from (the software decoder's,
+# software_frames.dylib, loads libavcodec by its path in the command line
+# too, which has no run path to them), and the window finds them through its
+# run paths (cpp/app/CMakeLists.txt). They are not
 # committed (.gitignore): the release script runs this. The headers the app
 # compiles against are native/ffmpeg's, Windows' build's, which are the same
 # for this version.
@@ -80,7 +83,7 @@ printf '#define LIBVVDEC_BUILD "VVdeC %s"\n' "$vvdec_version" > "$work/ffmpeg-$v
 cd "$work/ffmpeg-$version"
 ./configure --prefix=/ffmpeg --install-name-dir=@rpath --arch=arm64 --cc=clang \
     --extra-cflags="-arch arm64 -mmacosx-version-min=$deployment_target" \
-    --extra-ldflags="-arch arm64 -mmacosx-version-min=$deployment_target" \
+    --extra-ldflags="-arch arm64 -mmacosx-version-min=$deployment_target -Wl,-rpath,@loader_path" \
     --enable-shared --disable-static --disable-programs --disable-doc --disable-avdevice \
     --disable-avfilter --disable-network --disable-autodetect --disable-everything \
     --enable-decoder="$decoders" --enable-parser="$parsers" --enable-demuxer="$demuxers" --enable-protocol=file \

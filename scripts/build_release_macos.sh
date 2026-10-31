@@ -45,8 +45,9 @@ if [[ -z "$ffmpeg" ]] || ! command -v ffprobe > /dev/null; then
 fi
 
 # 1. The bundled tools, from their pinned releases' source: libvmaf-fast's
-#    libvmaf.dylib, libjxl's two tools, and Video Compare's FFmpeg libraries
-#    and dav1d (not in git).
+#    libvmaf.dylib, libjxl's two tools, Video Compare's FFmpeg libraries
+#    and dav1d, and the software decoder the GPU metrics decode with in the
+#    app (not in git).
 step "Building libvmaf-fast"
 "$project/scripts/build_libvmaf_fast_macos.sh" | sed 's/^/    /'
 step "Building libjxl's ssimulacra2 and butteraugli_main"
@@ -55,6 +56,8 @@ step "Building FFmpeg's libraries for Video Compare"
 "$project/scripts/build_ffmpeg_decoders_macos.sh" | sed 's/^/    /'
 step "Building dav1d"
 "$project/scripts/build_dav1d_macos.sh" | sed 's/^/    /'
+step "Building the software decoder for the GPU metrics"
+"$project/scripts/build_software_frames_macos.sh" | sed 's/^/    /'
 step "Building Vulkan (the loader and MoltenVK) and Vship for the GPU metrics"
 "$project/scripts/build_vship_macos.sh" | sed 's/^/    /'
 step "Building libvmaf-fast's Vulkan engine for VMAF on the GPU"
@@ -143,7 +146,7 @@ EOF
 # (not Windows' .exe and .dll files, which share the folders).
 resources="$contents/Resources/resources"
 mkdir -p "$resources/translations" "$resources/tools/libjxl" "$resources/tools/libvmaf" "$resources/tools/ffmpeg" \
-    "$resources/tools/vship/vulkan" "$resources/tools/vship/vship51" "$resources/tools/vmaf_vulkan"
+    "$resources/tools/vship/vulkan" "$resources/tools/vship/vship51" "$resources/tools/vmaf_vulkan" "$resources/native"
 ditto "$app_files/models" "$resources/models"
 cp "$app_files"/translations/*.json "$resources/translations/"
 cp "$app_files/tools/libjxl/ssimulacra2" "$app_files/tools/libjxl/butteraugli_main" \
@@ -152,6 +155,7 @@ cp "$app_files/tools/libvmaf/libvmaf.dylib" "$app_files/tools/libvmaf/libvmaf-fa
 ditto "$app_files/tools/libvmaf/licenses" "$resources/tools/libvmaf/licenses"
 cp "$app_files"/tools/ffmpeg/*.dylib "$resources/tools/ffmpeg/"
 ditto "$app_files/tools/ffmpeg/licenses" "$resources/tools/ffmpeg/licenses"
+cp "$app_files/native/software_frames.dylib" "$resources/native/"  # decodes with the libraries above
 # The GPU metrics: Vulkan (Khronos' loader with MoltenVK), Vship and VMAF's engine.
 ditto "$app_files/tools/vulkan" "$resources/tools/vulkan"
 cp "$app_files/tools/vship/vulkan/libvship.dylib" "$resources/tools/vship/vulkan/"

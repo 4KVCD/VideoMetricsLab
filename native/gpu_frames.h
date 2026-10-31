@@ -17,11 +17,17 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#if defined(__SSE2__) || defined(_M_X64)
 #include <emmintrin.h>
+#endif
 
 #include "scale/scale_filter.h"
 
+#ifdef _WIN32
 #define NVF_API extern "C" __declspec(dllexport)
+#else
+#define NVF_API extern "C" __attribute__((visibility("default")))
+#endif
 
 enum Status { NVF_FRAME = 1, NVF_END = 0, NVF_ERROR = -1, NVF_ABORTED = -2, NVF_TIMEOUT = 2 };
 
@@ -103,7 +109,10 @@ inline size_t frame_bytes(const Params &p) {
 // are) by streaming stores, which do not read the destination into the cache
 // first: a 4K picture (16 MB) is out of the cache before it is scored, and
 // on an iGPU the CPU's reads compete with the decoder's for the same memory.
-// True when it streamed: the caller fences once it is done.
+// True when it streamed: the caller fences once it is done (stream_fence).
+// Elsewhere than on x86 (the Mac's software_frames) plainly, which the
+// compiler vectorises, and never streamed.
+#if defined(__SSE2__) || defined(_M_X64)
 inline bool shift_row(const uint16_t *src, uint16_t *dst, size_t w, int down, int up) {
     const bool stream = (reinterpret_cast<uintptr_t>(dst) & 15) == 0;
     const __m128i right = _mm_cvtsi32_si128(down), left = _mm_cvtsi32_si128(up);
@@ -119,6 +128,17 @@ inline bool shift_row(const uint16_t *src, uint16_t *dst, size_t w, int down, in
     for (; i < w; i++) dst[i] = static_cast<uint16_t>((src[i] >> down) << up);
     return stream;
 }
+
+// The streamed rows are written before another thread reads them.
+inline void stream_fence() { _mm_sfence(); }
+#else
+inline bool shift_row(const uint16_t *src, uint16_t *dst, size_t w, int down, int up) {
+    for (size_t i = 0; i < w; i++) dst[i] = static_cast<uint16_t>((src[i] >> down) << up);
+    return false;
+}
+
+inline void stream_fence() {}
+#endif
 
 // Copies the crop of a decoded NV12/P010 picture (the luma plane at `y`, U
 // and V interleaved at `uv`, rows `pitch` bytes apart) into `dst`, planes
@@ -184,7 +204,7 @@ inline void convert_frame(const Params &p, const uint8_t *y, const uint8_t *uv, 
             streamed |= shift_row(src, o, w, down, up);
         }
     }
-    if (streamed) _mm_sfence();  // the streamed rows are written before another thread reads them
+    if (streamed) stream_fence();
     if (p.luma_only) return;
     uint16_t *u = out + w * h, *v = u + cw * ch;
     for (size_t row = 0; row < ch; row++) {

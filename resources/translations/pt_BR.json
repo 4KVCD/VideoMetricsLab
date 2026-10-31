@@ -765,8 +765,7 @@
   "the app's decoder does not decode it: {reason}": "o decodificador do app não o decodifica: {reason}",
   "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "o decodificador próprio do app não está aqui (ou VML_SOFTWARE_DECODE=ffmpeg o desativou)",
   "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "o tamanho dele muda durante o vídeo, o que imagens enviadas ao FFmpeg em um só tamanho não conseguem acompanhar",
-  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "o formato de pixel ou uma tag de cor dele não tem equivalente rawvideo para o FFmpeg",
-  "the app decodes a video for FFmpeg on Windows only": "o app decodifica um vídeo para o FFmpeg apenas no Windows"
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "o formato de pixel ou uma tag de cor dele não tem equivalente rawvideo para o FFmpeg"
  },
  "plurals": {
   "about {count} day": [

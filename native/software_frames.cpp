@@ -52,8 +52,12 @@
 // slot when the pool is full; nvf_pop, nvf_download, nvf_slot_planes and
 // nvf_release come from another.
 
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
 
 #include <atomic>
 #include <chrono>
@@ -170,9 +174,15 @@ std::string g_libraries_error = "the decoding libraries were not loaded";
 std::string g_dav2d_missing;
 std::mutex g_libraries_lock;
 
+// `module` as the app loaded it (platform::DynamicLibrary's handle): an
+// HMODULE on Windows, dlopen's elsewhere.
 template <typename T>
-bool bind(HMODULE module, T &target, const char *name, std::string &missing) {
-    target = reinterpret_cast<T>(reinterpret_cast<void *>(GetProcAddress(module, name)));
+bool bind(void *module, T &target, const char *name, std::string &missing) {
+#ifdef _WIN32
+    target = reinterpret_cast<T>(reinterpret_cast<void *>(GetProcAddress(static_cast<HMODULE>(module), name)));
+#else
+    target = reinterpret_cast<T>(dlsym(module, name));
+#endif
     if (!target && missing.empty()) missing = name;
     return target != nullptr;
 }
@@ -248,7 +258,7 @@ void convert_planar(const Params &p, uint8_t *const plane[3], const ptrdiff_t pi
         copy_plane(plane[1], pitch[1], cx, cy, cw, ch, out + w * h);
         copy_plane(plane[2], pitch[2], cx, cy, cw, ch, out + w * h + cw * ch);
     }
-    if (streamed) _mm_sfence();  // the streamed rows are written before another thread reads them
+    if (streamed) stream_fence();
 }
 
 // convert_planar, scaled to the output size on the way, as scale_frame
@@ -558,7 +568,7 @@ bool push_dav(Decoder *d, const Api &api, const unsigned char *data, int size, l
 // Binds dav1d's or dav2d's functions in `module`, by its prefix. True when
 // all are there and its API is the one mirrored; else says why in `problems`.
 template <typename Api>
-bool bind_dav(HMODULE module, Api &api, std::string &problems) {
+bool bind_dav(void *module, Api &api, std::string &problems) {
     const std::string prefix = std::string(api.name) + "_";
     std::string missing;
     bool bound = bind(module, api.version_api, (prefix + "version_api").c_str(), missing)
@@ -649,7 +659,7 @@ NVF_API int nvf_set_libraries(void *avutil, void *avcodec, void *dav1d, void *da
     std::lock_guard<std::mutex> lock(g_libraries_lock);
     std::string missing, problems;
     if (avutil && avcodec) {
-        HMODULE u = static_cast<HMODULE>(avutil), c = static_cast<HMODULE>(avcodec);
+        void *u = avutil, *c = avcodec;
         Ffmpeg &a = g_av;
         bool bound = bind(u, a.avutil_version, "avutil_version", missing)
                      && bind(u, a.av_frame_alloc, "av_frame_alloc", missing)
@@ -686,12 +696,12 @@ NVF_API int nvf_set_libraries(void *avutil, void *avcodec, void *dav1d, void *da
         problems = "FFmpeg's libraries are not bundled";
     }
     if (dav1d) {
-        g_dav1d_ready = bind_dav(static_cast<HMODULE>(dav1d), g_dav1d, problems);
+        g_dav1d_ready = bind_dav(dav1d, g_dav1d, problems);
     } else {
         problems += (problems.empty() ? "" : "; ") + std::string("dav1d is not bundled");
     }
     g_dav2d_missing = dav2d ? "" : "dav2d is not bundled";
-    if (dav2d) g_dav2d_ready = bind_dav(static_cast<HMODULE>(dav2d), g_dav2d, problems);
+    if (dav2d) g_dav2d_ready = bind_dav(dav2d, g_dav2d, problems);
     g_libraries_error = problems.empty() ? "" : problems;
     return problems.empty() ? 0 : NVF_ERROR;
 }

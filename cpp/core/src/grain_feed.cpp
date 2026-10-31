@@ -122,10 +122,6 @@ std::optional<std::string> feed_refusal(const VideoInfo& info) {
 }
 
 std::optional<std::string> decoding_refusal(const VideoInfo& info) {
-#ifndef _WIN32
-    static_cast<void>(info);
-    return "the app decodes a video for FFmpeg on Windows only";
-#else
     if (info.scaled_to) {
         return "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow";
     }
@@ -141,7 +137,6 @@ std::optional<std::string> decoding_refusal(const VideoInfo& info) {
         return "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg";
     }
     return std::nullopt;
-#endif
 }
 
 bool windows_from_the_app(const VideoInfo& info) {

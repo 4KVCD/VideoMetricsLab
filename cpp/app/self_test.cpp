@@ -140,12 +140,11 @@ void check_qt(SelfTestReport& report, const QApplication& app) {
     }
 }
 
-// The GPU metrics' own decoders: each GPU maker's, and the software one.
-// They are built for Windows only (scripts/build_gpu_frames.ps1).
+// The GPU metrics' own decoders: each GPU maker's, Windows' only
+// (scripts/build_gpu_frames.ps1), and the software one
+// (scripts/build_software_frames_macos.sh on macOS).
 void check_frame_decoders(SelfTestReport& report) {
-#ifndef _WIN32
-    report.note("the GPU metrics' frame decoders are Windows' only: FFmpeg decodes their videos");
-#else
+#ifdef _WIN32
     for (const auto& [backend, maker, library] :
          {std::tuple("nvidia", "NVIDIA", "nvdec_frames"), std::tuple("intel", "Intel", "vpl_frames"),
           std::tuple("amd", "AMD", "amf_frames")}) {
@@ -157,6 +156,7 @@ void check_frame_decoders(SelfTestReport& report) {
                         "); FFmpeg decodes the GPU metrics' videos");
         }
     }
+#endif
     // The software decoder uses the app's FFmpeg libraries (tools/ffmpeg) and
     // dav1d beside them, so the codecs it reports say whether those load too.
     const std::string software = platform::shared_library_name("software_frames");
@@ -167,7 +167,6 @@ void check_frame_decoders(SelfTestReport& report) {
         report.warn("software frame decoder absent (" + software + ": " + why +
                     "); FFmpeg's pipes carry the videos it decodes in software");
     }
-#endif
 }
 
 // libjxl's tools for SSIMULACRA2 and Butteraugli on the CPU.

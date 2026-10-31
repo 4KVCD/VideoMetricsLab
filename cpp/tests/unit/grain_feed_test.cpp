@@ -189,7 +189,6 @@ TEST(Pipes, AFailedWriteMeansTheReaderWentTryAgainOrAFailure) {
     EXPECT_EQ(platform::pipe_write_error(5), PipeWriteError::failed);          // ERROR_ACCESS_DENIED
 }
 
-#ifdef _WIN32
 // Everything written, in pieces bigger and smaller than the pipe, is read
 // whole before the reader finds the end.
 TEST(Pipes, WhatIsWrittenIsReadWholeThenItsEnd) {
@@ -220,7 +219,23 @@ TEST(Pipes, AReaderThatNeverReadIsGone) {
     const char picture[16] = {};
     EXPECT_FALSE(pipe.write(picture, sizeof(picture)));
 }
-#endif
+
+// A writer that failed before it waited for its reader (the feeding process,
+// its decoder refusing the video) leaves no reader waiting: it finds the
+// pipe empty, whether it opened it before or after (a FIFO's reader would
+// wait in open() for a writer that never came).
+TEST(Pipes, AWriterThatNeverConnectedLeavesNoReaderWaiting) {
+    const std::string path = platform::OutboundPipe::unique_path("test");
+    std::future<std::vector<char>> read;
+    {
+        platform::OutboundPipe pipe(path, 1 << 20);
+        read = std::async(std::launch::async, [&path] {
+            std::ifstream reader(platform::path_from_text(path), std::ios::binary);
+            return std::vector<char>(std::istreambuf_iterator<char>(reader), std::istreambuf_iterator<char>());
+        });
+    }
+    EXPECT_TRUE(read.get().empty());
+}
 
 }  // namespace
 }  // namespace vml

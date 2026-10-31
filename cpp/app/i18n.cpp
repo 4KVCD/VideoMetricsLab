@@ -439,7 +439,6 @@ const char* const templates[] = {
     "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)",
     "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow",
     "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg",
-    "the app decodes a video for FFmpeg on Windows only",
 };
 
 // Without a closing "...", "…" or full stop: the run line shows some

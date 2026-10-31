@@ -765,8 +765,7 @@
   "the app's decoder does not decode it: {reason}": "앱의 디코더가 이 영상을 디코딩하지 않습니다: {reason}",
   "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "앱 자체 디코더가 여기에 없습니다(또는 VML_SOFTWARE_DECODE=ffmpeg로 꺼졌습니다)",
   "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "영상 도중 크기가 바뀌며, 한 크기로 FFmpeg에 넘기는 화면은 이를 따라갈 수 없습니다",
-  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "픽셀 형식 또는 색상 태그에 FFmpeg용 rawvideo 대응 값이 없습니다",
-  "the app decodes a video for FFmpeg on Windows only": "앱은 Windows에서만 FFmpeg용으로 영상을 디코딩합니다"
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "픽셀 형식 또는 색상 태그에 FFmpeg용 rawvideo 대응 값이 없습니다"
  },
  "plurals": {
   "about {count} day": [

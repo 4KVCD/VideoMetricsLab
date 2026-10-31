@@ -415,13 +415,18 @@ std::filesystem::path library_path(std::string_view backend) {
 
 // The software decoder's libraries: FFmpeg's libavutil and libavcodec with
 // only the decoders it needs (LGPL, built by
-// scripts/build_ffmpeg_decoders.ps1), dav1d for AV1 (dav1d_library_path,
-// built by scripts/build_dav1d.ps1) and dav2d for AV2 (dav2d_library_path,
-// scripts/build_dav2d.ps1), all beside each other. Without dav1d, FFmpeg
-// decodes the AV1 videos FFmpeg would decode in software; without dav2d, no
-// AV2 video is decoded.
+// scripts/build_ffmpeg_decoders.ps1, build_ffmpeg_decoders_macos.sh), dav1d
+// for AV1 (dav1d_library_path, built by scripts/build_dav1d.ps1,
+// build_dav1d_macos.sh) and dav2d for AV2 (dav2d_library_path,
+// scripts/build_dav2d.ps1; Windows only), all beside each other. Without
+// dav1d, FFmpeg decodes the AV1 videos FFmpeg would decode in software;
+// without dav2d, no AV2 video is decoded.
 std::filesystem::path software_folder() { return resource_folder() / "tools" / "ffmpeg"; }
+#ifdef __APPLE__
+constexpr std::array<const char*, 2> ffmpeg_libraries{"libavutil.61.dylib", "libavcodec.63.dylib"};
+#else
 constexpr std::array<const char*, 2> ffmpeg_libraries{"avutil-61.dll", "avcodec-63.dll"};
+#endif
 
 // Loads a decoder library once, and keeps it for the life of the process.
 // Throws GpuDecodeUnavailableError when it is not bundled or will not load.

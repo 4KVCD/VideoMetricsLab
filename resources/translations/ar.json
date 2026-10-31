@@ -765,8 +765,7 @@
   "the app's decoder does not decode it: {reason}": "مفكك ترميز التطبيق لا يفك ترميزه: {reason}",
   "the app's own decoder is not here (or VML_SOFTWARE_DECODE=ffmpeg turned it off)": "مفكك الترميز الخاص بالتطبيق غير موجود هنا (أو أوقفه VML_SOFTWARE_DECODE=ffmpeg)",
   "its size changes during the video, which pictures fed to FFmpeg at one size cannot follow": "يتغيّر حجمه أثناء الفيديو، وهو ما لا تستطيع الصور المُمرَّرة إلى FFmpeg بحجم واحد مجاراته",
-  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "لا يوجد لتنسيق بكسلاته أو لإحدى علامات ألوانه مقابل rawvideo في FFmpeg",
-  "the app decodes a video for FFmpeg on Windows only": "يفك التطبيق ترميز الفيديو لـ FFmpeg على Windows فقط"
+  "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "لا يوجد لتنسيق بكسلاته أو لإحدى علامات ألوانه مقابل rawvideo في FFmpeg"
  },
  "plurals": {
   "about {count} day": [
