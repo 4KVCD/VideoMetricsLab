@@ -45,9 +45,9 @@ if [[ -z "$ffmpeg" ]] || ! command -v ffprobe > /dev/null; then
 fi
 
 # 1. The bundled tools, from their pinned releases' source: libvmaf-fast's
-#    libvmaf.dylib, libjxl's two tools, Video Compare's FFmpeg libraries
-#    and dav1d, and the software decoder the GPU metrics decode with in the
-#    app (not in git).
+#    libvmaf.dylib, libjxl's two tools, Video Compare's FFmpeg libraries,
+#    dav1d and dav2d (a pinned commit: dav2d has no release yet), and the
+#    software decoder the GPU metrics decode with in the app (not in git).
 step "Building libvmaf-fast"
 "$project/scripts/build_libvmaf_fast_macos.sh" | sed 's/^/    /'
 step "Building libjxl's ssimulacra2 and butteraugli_main"
@@ -56,6 +56,8 @@ step "Building FFmpeg's libraries for Video Compare"
 "$project/scripts/build_ffmpeg_decoders_macos.sh" | sed 's/^/    /'
 step "Building dav1d"
 "$project/scripts/build_dav1d_macos.sh" | sed 's/^/    /'
+step "Building dav2d"
+"$project/scripts/build_dav2d_macos.sh" | sed 's/^/    /'
 step "Building the software decoder for the GPU metrics"
 "$project/scripts/build_software_frames_macos.sh" | sed 's/^/    /'
 step "Building Vulkan (the loader and MoltenVK) and Vship for the GPU metrics"

@@ -199,7 +199,8 @@ std::pair<std::vector<std::string>, std::string> software_codecs();
 // build has the Python app's and a development build has none.
 std::filesystem::path dav1d_library_path();
 
-// dav2d's library, which decodes AV2 (scripts/build_dav2d.ps1), beside dav1d.
+// dav2d's library, which decodes AV2 (scripts/build_dav2d.ps1,
+// build_dav2d_macos.sh), beside dav1d.
 std::filesystem::path dav2d_library_path();
 
 // Whether GPU `device`'s decoder takes the plan's codec, bit depth and size,

@@ -417,10 +417,10 @@ std::filesystem::path library_path(std::string_view backend) {
 // only the decoders it needs (LGPL, built by
 // scripts/build_ffmpeg_decoders.ps1, build_ffmpeg_decoders_macos.sh), dav1d
 // for AV1 (dav1d_library_path, built by scripts/build_dav1d.ps1,
-// build_dav1d_macos.sh) and dav2d for AV2 (dav2d_library_path,
-// scripts/build_dav2d.ps1; Windows only), all beside each other. Without
-// dav1d, FFmpeg decodes the AV1 videos FFmpeg would decode in software;
-// without dav2d, no AV2 video is decoded.
+// build_dav1d_macos.sh) and dav2d for AV2 (dav2d_library_path, built by
+// scripts/build_dav2d.ps1, build_dav2d_macos.sh), all beside each other.
+// Without dav1d, FFmpeg decodes the AV1 videos FFmpeg would decode in
+// software; without dav2d, no AV2 video is decoded.
 std::filesystem::path software_folder() { return resource_folder() / "tools" / "ffmpeg"; }
 #ifdef __APPLE__
 constexpr std::array<const char*, 2> ffmpeg_libraries{"libavutil.61.dylib", "libavcodec.63.dylib"};
@@ -1174,7 +1174,13 @@ std::filesystem::path dav1d_library_path() {
 #endif
 }
 
-std::filesystem::path dav2d_library_path() { return software_folder() / platform::shared_library_name("dav2d"); }
+std::filesystem::path dav2d_library_path() {
+#ifdef __APPLE__
+    return software_folder() / "libdav2d.dylib";  // scripts/build_dav2d_macos.sh
+#else
+    return software_folder() / "dav2d.dll";
+#endif
+}
 
 std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan, std::string_view backend) {
     if (!decodes_codec(plan.codec, backend)) {

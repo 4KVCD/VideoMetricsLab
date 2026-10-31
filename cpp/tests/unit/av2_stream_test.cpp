@@ -355,7 +355,7 @@ TEST(Av2Stream, Dav2dsPicturesAreTimedInDisplayOrder) {
     EXPECT_EQ(order.shown(), 8);
 }
 
-// Where dav2d is not bundled (macOS), an AV2 video is refused by that name,
+// Where dav2d is not bundled, an AV2 video is refused by that name,
 // as the software decoder refuses it, not by the loader's error and paths.
 TEST(Av2Stream, AnAppWithoutDav2dSaysSo) {
     const test::Folder folder;
