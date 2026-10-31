@@ -34,7 +34,7 @@ VideoInfo grain_video(const std::string& codec, const std::string& pix_fmt, std:
 }
 
 constexpr unsigned h274 = film_grain_h274, model_1 = film_grain_h274_model_1, afgs1 = film_grain_afgs1,
-                   av1 = film_grain_av1;
+                   av1 = film_grain_av1, av2 = film_grain_av2;
 
 // Each kind of grain, codec, depth and choice: how it is scored, whether a
 // reason is given for leaving it out, whether only the app's decoder may make
@@ -42,7 +42,7 @@ constexpr unsigned h274 = film_grain_h274, model_1 = film_grain_h274_model_1, af
 // made before the choice existed scored it so).
 TEST(FilmGrainScoring, EachVideoIsScoredWithOrWithoutItsGrainAsItCanBe) {
     const std::string h274_id(score_identity::film_grain_h274), afgs1_id(score_identity::film_grain_afgs1),
-        left_out(score_identity::film_grain_left_out);
+        av2_id(score_identity::film_grain_av2), left_out(score_identity::film_grain_left_out);
 #ifdef _WIN32
     const std::optional<std::string> av1_id;  // every route added it before
 #else
@@ -73,6 +73,8 @@ TEST(FilmGrainScoring, EachVideoIsScoredWithOrWithoutItsGrainAsItCanBe) {
         {grain_video("h264", "yuv420p", afgs1), GrainScoring::without, true, false, std::nullopt},
         {grain_video("av1", "yuv420p10le", av1), GrainScoring::with, false, false, av1_id},
         {grain_video("av1", "yuv420p10le", av1, false), GrainScoring::without, false, false, left_out},
+        {grain_video("av2", "yuv420p10le", av2), GrainScoring::with, false, false, av2_id},
+        {grain_video("av2", "yuv420p10le", av2, false), GrainScoring::without, false, false, left_out},
     };
     for (const Case& expected : cases) {
         SCOPED_TRACE(expected.info.codec_name + " " + expected.info.pix_fmt + " " +

@@ -22,6 +22,7 @@ enum FilmGrainKind : unsigned {
     film_grain_h274_model_1 = 2,  // H.274's auto-regression model
     film_grain_afgs1 = 4,         // AOM's AFGS1, in a T.35 SEI message
     film_grain_av1 = 8,           // AV1's own, in its sequence header
+    film_grain_av2 = 16,          // AV2's film grain model (av2_probe.h finds it)
 };
 
 // The kinds' names, as run files keep them ("h274", "h274 model 1", "afgs1",

@@ -8,6 +8,7 @@
 #include <numeric>
 #include <utility>
 
+#include "vml/av2_stream.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
@@ -281,6 +282,54 @@ std::vector<std::string> bitrate_command(const std::string& ffprobe, const std::
             platform::path_text(path)};
 }
 
+namespace {
+
+// An AV2 video's temporal units as packets: each one's size, and a frame's
+// time at its number. That is its place in decoding order: a unit's picture
+// may be shown a few frames from it, as a B-frame's would, but AV2's files
+// do not say where (dav2d's display order is known only by decoding).
+BitrateData av2_bitrate(const VideoInfo& info, const CancelToken& cancel,
+                        const std::function<void(long long, long long)>& on_progress) {
+    if (info.fps <= 0) {
+        throw BitrateError("This AV2 video has no frame rate.");
+    }
+    std::optional<av2::Reader> reader;
+    try {
+        reader.emplace(info.path);
+    } catch (const av2::Av2StreamError& error) {
+        throw BitrateError(std::string("The AV2 video could not be read: ") + error.what());
+    }
+    const double frame = 1.0 / info.fps;
+    const long long total = std::max(1LL, info.estimated_frame_count());
+    std::vector<double> times;
+    std::vector<double> durations;
+    std::vector<long long> sizes;
+    std::vector<bool> keyframes;
+    while (const std::optional<av2::TemporalUnit> unit = reader->next()) {
+        times.push_back(static_cast<double>(unit->number) * frame);
+        durations.push_back(frame);
+        sizes.push_back(static_cast<long long>(unit->data.size()));
+        keyframes.push_back(unit->kind.closed_key);
+        if (times.size() % 500 == 0) {
+            cancel.throw_if_cancelled();
+            if (on_progress) {
+                on_progress(static_cast<long long>(times.size()), total);
+            }
+        }
+    }
+    if (times.empty()) {
+        throw BitrateError("The AV2 video has no picture the app could read.");
+    }
+    BitrateData data = bitrate_data(info.path, std::move(times), std::move(durations), std::move(sizes),
+                                    std::move(keyframes));
+    if (on_progress) {
+        on_progress(data.frame_count(), total);
+    }
+    return data;
+}
+
+}  // namespace
+
 BitrateData analyze_video_bitrate(const std::string& ffprobe, const VideoInfo& info, const CancelToken& cancel,
                                   const std::function<void(long long, long long)>& on_progress) {
     std::error_code error;
@@ -288,6 +337,9 @@ BitrateData analyze_video_bitrate(const std::string& ffprobe, const VideoInfo& i
         throw BitrateError("Video file is missing: " + platform::path_text(info.path));
     }
     cancel.throw_if_cancelled();
+    if (info.codec_name == "av2") {
+        return av2_bitrate(info, cancel, on_progress);
+    }
     // ffprobe's complaints, read as they come, the last 200 lines kept: a
     // damaged file can report one for every packet.
     struct Complaints {

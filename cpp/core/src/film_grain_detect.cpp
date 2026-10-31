@@ -14,11 +14,12 @@ namespace vml {
 
 namespace {
 
-constexpr std::array<std::pair<FilmGrainKind, std::string_view>, 4> kind_names{{
+constexpr std::array<std::pair<FilmGrainKind, std::string_view>, 5> kind_names{{
     {film_grain_h274, "h274"},
     {film_grain_h274_model_1, "h274 model 1"},
     {film_grain_afgs1, "afgs1"},
     {film_grain_av1, "av1"},
+    {film_grain_av2, "av2"},
 }};
 
 // SEI payload types (H.264 Annex D, H.265 and H.266 Annex D: the same numbers).
@@ -374,6 +375,9 @@ std::vector<std::string> film_grain_scan_command(const std::string& ffmpeg, cons
 std::optional<unsigned> detect_film_grain(const VideoInfo& info, const std::string& ffmpeg,
                                           const CancelToken& cancel) {
     const std::string codec = ascii_lower(info.codec_name);
+    if (codec == "av2") {
+        return info.film_grain;  // found as the video was probed (av2_probe.h): FFmpeg cannot read AV2
+    }
     if (codec != "h264" && codec != "hevc" && codec != "vvc" && codec != "av1") {
         return 0u;
     }

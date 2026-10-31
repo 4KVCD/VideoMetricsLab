@@ -76,7 +76,8 @@ previous build's output undeletable. The package therefore goes to
   carry 4K frames at 60-80 a second. Built from `native/software_frames.cpp`
   by `scripts/build_gpu_frames.ps1` with the GPU decoders below, against
   FFmpeg's headers in `native/ffmpeg`. It decodes H.264, HEVC, VVC, VP9,
-  MPEG-2 and FFV1 with FFmpeg 9.0.2's decoders and AV1 with dav1d --
+  MPEG-2 and FFV1 with FFmpeg 9.0.2's decoders, AV1 with dav1d and AV2 with
+  dav2d --
   FFmpeg's decode's pictures, sample for sample, each video's film grain
   added or left out as it is scored -- and a VVC video scored with its
   H.274 grain with VVdeC (FFmpeg's `libvvdec`), the one decoder here that
@@ -105,7 +106,11 @@ previous build's output undeletable. The package therefore goes to
   the headers the decoders are compiled against. Beside them,
   **dav1d 1.5.4** (`dav1d.dll`, BSD), which decodes AV1 in software, as
   FFmpeg's libdav1d decoder does: built from VideoLAN's release source by
-  `scripts/build_dav1d.ps1`. They are committed, as libvmaf-fast's DLLs are:
+  `scripts/build_dav1d.ps1`, and **dav2d** (`dav2d.dll`, BSD), VideoLAN's
+  AV2 decoder, which decodes AV2 (FFmpeg has no AV2 decoder, and no GPU
+  decodes it): dav2d has no release yet, so `scripts/build_dav2d.ps1` builds
+  it from a pinned commit of VideoLAN's repository. They are committed, as
+  libvmaf-fast's DLLs are:
   building the app does not build them. FFmpeg itself (`ffmpeg.exe`) is
   still the user's.
 - **`nvdec_frames.dll`, `vpl_frames.dll`, `amf_frames.dll` and

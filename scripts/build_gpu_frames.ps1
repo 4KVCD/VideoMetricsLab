@@ -8,7 +8,7 @@
 # comes with its driver and is loaded at run time, NVIDIA's kernels are PTX in
 # the source, and the software decoder is compiled against FFmpeg's headers
 # (native/ffmpeg, from scripts/build_ffmpeg_decoders.ps1) and given FFmpeg's
-# and dav1d's libraries at run time. The headers
+# dav1d's and dav2d's libraries at run time. The headers
 # in native/ffnvcodec, native/onevpl, native/amf and native/vulkan are FFmpeg's
 # nv-codec-headers, Intel's oneVPL API, AMD's AMF SDK and Khronos' Vulkan
 # headers (all MIT; amf_frames hands its pictures over to Vulkan on the GPU).

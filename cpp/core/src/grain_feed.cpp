@@ -145,7 +145,8 @@ std::optional<std::string> decoding_refusal(const VideoInfo& info) {
 }
 
 bool windows_from_the_app(const VideoInfo& info) {
-    return app_decoded_codec(ascii_lower(info.codec_name)) != nullptr && !info.is_raw_stream();
+    const AppDecodedCodec* codec = app_decoded_codec(ascii_lower(info.codec_name));
+    return codec != nullptr && (!info.is_raw_stream() || !codec->ffmpeg_decodes);
 }
 
 std::optional<std::string> unfed_failure(const VideoInfo& info, const FilmGrainRefusal& refusal) {

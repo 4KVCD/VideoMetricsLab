@@ -122,8 +122,10 @@ std::vector<std::string> bitrate_command(const std::string& ffprobe, const std::
 
 // Reads the first video stream's packets with `ffprobe`, ordered by
 // presentation time; `on_progress` hears the packets read so far and the
-// frames expected, every 500 packets and at the end. Throws BitrateError
-// when they cannot be read, Cancelled once `cancel` is.
+// frames expected, every 500 packets and at the end. An AV2 video, which
+// ffprobe cannot read, has its temporal units read by the app instead
+// (av2_stream.h). Throws BitrateError when they cannot be read, Cancelled
+// once `cancel` is.
 BitrateData analyze_video_bitrate(const std::string& ffprobe, const VideoInfo& info, const CancelToken& cancel,
                                   const std::function<void(long long, long long)>& on_progress = nullptr);
 

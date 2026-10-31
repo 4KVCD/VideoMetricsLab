@@ -86,6 +86,17 @@ The files must describe corresponding frames. The app rejects several timing
 and geometry mismatches; this is not automatic content alignment. A source with
 a different cut, opening sequence or frame offset must be aligned first.
 
+### AV2 videos
+
+AV2, AOM's codec after AV1 (not yet final), is decoded by dav2d, VideoLAN's
+AV2 decoder, on the CPU: FFmpeg knows no AV2 and no GPU decodes it, so the
+app reads AV2 files itself. It reads them as AOM's AV2 encoder (AVM's
+`avmenc`) writes them: WebM (its default), IVF (`--ivf`) and raw OBU streams
+(`--obu`, `.obu`; on the command line with `--fps`, as other raw streams).
+Their film grain can be scored with it or without it, as AV1's. dav2d's
+pictures are AVM's own decoder's, checked at 8 and 10 bits, with and without
+film grain. A WebM or IVF file's frame rate is found from its timestamps.
+
 ## Interpreting scores
 
 VMAF, VMAF NEG, PSNR, SSIM, XPSNR, SSIMULACRA2 and Butteraugli are different

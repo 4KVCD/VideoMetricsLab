@@ -87,14 +87,18 @@ std::optional<std::string> film_grain_identity(const VideoInfo& info) {
     }
     if (grain.scoring == GrainScoring::without) {
         // Grain some route added before: FFmpeg H.274's model 0 at 8 bits,
-        // AFGS1 outside H.264 and AV1's; GPU decoders AV1's, or not.
+        // AFGS1 outside H.264 and AV1's; GPU decoders AV1's, or not. AV2's,
+        // which dav2d adds unless told not to, is marked left out too.
         const bool h274_8_bit = (grain.kinds & film_grain_h274) != 0 && bit_depth(info.pix_fmt) == 8;
         const bool afgs1_added = (grain.kinds & film_grain_afgs1) != 0 && ascii_lower(info.codec_name) != "h264";
-        const bool added = h274_8_bit || afgs1_added || (grain.kinds & film_grain_av1) != 0;
+        const bool added = h274_8_bit || afgs1_added || (grain.kinds & (film_grain_av1 | film_grain_av2)) != 0;
         return added ? std::optional(std::string(score_identity::film_grain_left_out)) : std::nullopt;
     }
     if (only_the_app_adds(grain)) {
         return std::string(score_identity::film_grain_h274);
+    }
+    if ((grain.kinds & film_grain_av2) != 0) {
+        return std::string(score_identity::film_grain_av2);
     }
     if ((grain.kinds & film_grain_av1) == 0) {
         return std::string(score_identity::film_grain_afgs1);

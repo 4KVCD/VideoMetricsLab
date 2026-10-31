@@ -48,8 +48,9 @@ std::optional<std::string> decoding_refusal(const VideoInfo& info);
 // Whether windows of `info`'s pictures (FeedWindow) are to come from the
 // app's decoder rather than FFmpeg's decoding of the file: a codec
 // app_decoders.h lists, read from a file FFmpeg seeks in (not a raw stream,
-// whose windows start from bytes). Black-bar detection's samples and Frame
-// Compare's stills.
+// whose windows start from bytes), or one FFmpeg does not decode, which the
+// app reads itself (AV2). Black-bar detection's samples and Frame Compare's
+// stills.
 bool windows_from_the_app(const VideoInfo& info);
 
 // Where the app could not feed `info`'s pictures (`refusal`): the message

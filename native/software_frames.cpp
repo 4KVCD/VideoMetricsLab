@@ -12,14 +12,16 @@
 // resources/tools/ffmpeg, from scripts/build_ffmpeg_decoders.ps1). AV1 is
 // decoded by dav1d (BSD; beside them, from scripts/build_dav1d.ps1), because
 // this FFmpeg has no dav1d wrapper and FFmpeg's own AV1 decoder only drives a
-// GPU's. The app loads them (cpp/core/src/gpu_frames.cpp) and hands them
-// over with nvf_set_libraries; this library links neither. It is compiled
-// against FFmpeg's headers
-// (native/ffmpeg) and refuses libraries of another major version; of dav1d
-// it mirrors the few structures it uses (dav1d/dav1d_api.h), checked against
-// its API version. The app feeds the packets FFmpeg copies out of the
-// container with their timestamps (a raw stream's made up), as for the GPU
-// decoders.
+// GPU's; AV2, which FFmpeg does not decode, by dav2d (VideoLAN's AV2 decoder,
+// dav1d's API with other names; scripts/build_dav2d.ps1), through the same
+// code (DavApi). The app loads them (cpp/core/src/gpu_frames.cpp) and hands
+// them over with nvf_set_libraries; this library links none. It is compiled
+// against FFmpeg's headers (native/ffmpeg) and refuses libraries of another
+// major version; of dav1d and dav2d it mirrors the few structures it uses
+// (dav1d/dav1d_api.h, dav2d/dav2d_api.h), checked against their API
+// versions. The app feeds the packets FFmpeg copies out of the container
+// with their timestamps (a raw stream's made up), as for the GPU decoders;
+// AV2's units, which FFmpeg cannot read, come from the app's own reader.
 //
 // Their pictures are the same as FFmpeg's decode, sample for sample. The
 // film grain a stream asks for is as the video is scored (Params::film_grain):
@@ -61,6 +63,7 @@
 #include <cstdio>
 #include <deque>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -75,6 +78,8 @@ extern "C" {
 }
 
 #include "dav1d/dav1d_api.h"
+#include "dav2d/dav2d_api.h"
+#include "dav2d/display_order.h"
 #include "gpu_frames.h"
 #include "grain/grain_decoding.h"
 
@@ -107,23 +112,34 @@ struct Ffmpeg {
     decltype(&::av_packet_unref) av_packet_unref;
 };
 
-// ------------------------------------------------- dav1d's, as mirrored
+// ------------------------------------------ dav1d's and dav2d's, as mirrored
 
-// The structures are in dav1d/dav1d_api.h; its functions, as this library calls them:
-struct Dav1d {
-    unsigned (*version_api)();
-    void (*default_settings)(Dav1dSettings *);
-    int (*open)(void **, const Dav1dSettings *);
-    int (*send_data)(void *, Dav1dData *);
-    int (*get_picture)(void *, Dav1dPicture *);
-    void (*close)(void **);
-    uint8_t *(*data_create)(Dav1dData *, size_t);
-    void (*data_unref)(Dav1dData *);
-    void (*picture_unref)(Dav1dPicture *);
+// dav1d's or dav2d's functions, as this library calls them: one API under two
+// names, each over its own structures (dav1d/dav1d_api.h, dav2d/dav2d_api.h).
+template <typename SettingsT, typename DataT, typename PictureT>
+struct DavApi {
+    using Settings = SettingsT;
+    using Data = DataT;
+    using Picture = PictureT;
+    const char *name;  // "dav1d" or "dav2d": its functions' prefix, and for messages
+    unsigned api_major;
+    unsigned (*version_api)() = nullptr;
+    void (*default_settings)(Settings *) = nullptr;
+    int (*open)(void **, const Settings *) = nullptr;
+    int (*send_data)(void *, Data *) = nullptr;
+    int (*get_picture)(void *, Picture *) = nullptr;
+    void (*close)(void **) = nullptr;
+    uint8_t *(*data_create)(Data *, size_t) = nullptr;
+    void (*data_unref)(Data *) = nullptr;
+    void (*picture_unref)(Picture *) = nullptr;
 };
+using Dav1d = DavApi<Dav1dSettings, Dav1dData, Dav1dPicture>;
+using Dav2d = DavApi<Dav2dSettings, Dav2dData, Dav2dPicture>;
+static_assert(kDav1dAgain == kDav2dAgain && kDav1dI420 == kDav2dI420, "dav1d's and dav2d's codes");
 
 Ffmpeg g_av{};
-Dav1d g_dav1d{};
+Dav1d g_dav1d{"dav1d", kDav1dApiMajor};
+Dav2d g_dav2d{"dav2d", kDav2dApiMajor};
 // Errors libavcodec has reported in this process (its log's error level),
 // and the last one's words, for the failure it ends a decoder with.
 std::atomic<unsigned> g_ffmpeg_errors{0};
@@ -147,8 +163,11 @@ std::string last_ffmpeg_error() {
     std::lock_guard<std::mutex> guard(g_last_error_lock);
     return g_last_error;
 }
-bool g_av_ready = false, g_dav1d_ready = false;
+bool g_av_ready = false, g_dav1d_ready = false, g_dav2d_ready = false;
 std::string g_libraries_error = "the decoding libraries were not loaded";
+// Why AV2 is not decoded where dav2d is not bundled: said to an AV2 video
+// alone, as a library the app may ship without (the others always come).
+std::string g_dav2d_missing;
 std::mutex g_libraries_lock;
 
 template <typename T>
@@ -258,23 +277,31 @@ struct Ready {
     long long pts;
 };
 
-// A decoded picture held for the caller: libavcodec's frame or dav1d's picture.
+// A decoded picture held for the caller: libavcodec's frame, dav1d's or dav2d's picture.
 struct Slot {
     AVFrame *frame = nullptr;
     Dav1dPicture picture{};
+    Dav2dPicture av2_picture{};
     bool held = false;
 };
+
+Dav1dPicture &held_picture(Slot &slot, const Dav1d &) { return slot.picture; }
+Dav2dPicture &held_picture(Slot &slot, const Dav2d &) { return slot.av2_picture; }
+
+// Which library decodes a decoder's video.
+enum class Engine { libavcodec, dav1d, dav2d };
 
 struct Decoder {
     Params params{};
     Info info{};
-    bool av1 = false;
+    Engine engine = Engine::libavcodec;
     std::vector<unsigned char> extradata;  // AV1: the sequence header, before the first packet
     PlaneScaler scaler;                    // when the pictures are scaled
     AVCodecContext *codec_context = nullptr;
     AVPacket *packet = nullptr;
     AVFrame *frame = nullptr;              // received into, then moved into a slot
-    void *dav1d = nullptr;                 // dav1d's context
+    void *dav = nullptr;                   // dav1d's or dav2d's context
+    Dav2dDisplayOrder display_order;       // AV2: the stamps of the units fed, to time its pictures by
     unsigned errors_seen = 0;              // g_ffmpeg_errors when this decoder last looked
 
     std::mutex mutex;
@@ -318,10 +345,10 @@ void queue_picture(Decoder *d, int slot, long long pts) {
 }
 
 void unhold(Decoder *d, Slot &slot) {
-    if (d->av1) {
-        g_dav1d.picture_unref(&slot.picture);
-    } else {
-        g_av.av_frame_unref(slot.frame);
+    switch (d->engine) {
+    case Engine::dav1d: g_dav1d.picture_unref(&slot.picture); break;
+    case Engine::dav2d: g_dav2d.picture_unref(&slot.av2_picture); break;
+    case Engine::libavcodec: g_av.av_frame_unref(slot.frame); break;
     }
     slot.held = false;
 }
@@ -412,8 +439,22 @@ bool send_packet(Decoder *d, const AVPacket *packet) {
     }
 }
 
-// A picture dav1d has decoded, checked and queued. False when decoding has stopped.
-bool deliver_picture(Decoder *d, Dav1dPicture &picture) {
+// When a picture dav1d or dav2d gives is shown: dav1d's carries its own
+// time; dav2d's, in display order, are timed by the units fed
+// (dav2d/display_order.h). Nothing where dav2d gives more pictures than units.
+bool picture_time(Decoder *, const Dav1dPicture &picture, long long &pts) {
+    pts = picture.m.timestamp;
+    return true;
+}
+bool picture_time(Decoder *d, const Dav2dPicture &, long long &pts) {
+    const std::optional<long long> shown = d->display_order.shown();
+    if (shown) pts = *shown;
+    return shown.has_value();
+}
+
+// A picture dav1d or dav2d has decoded, checked and queued. False when decoding has stopped.
+template <typename Api>
+bool deliver_picture(Decoder *d, const Api &api, typename Api::Picture &picture) {
     char text[200];
     const char *wrong = nullptr;
     if (picture.p.w != d->params.width || picture.p.h != d->params.height) {
@@ -423,58 +464,120 @@ bool deliver_picture(Decoder *d, Dav1dPicture &picture) {
     } else if (picture.p.layout != kDav1dI420 || picture.p.bpc != d->params.bit_depth) {
         wrong = "a picture is not 4:2:0 at the video's depth";
     }
+    long long pts = 0;
+    if (!wrong && !picture_time(d, picture, pts)) wrong = "the decoder gave more pictures than packets";
     if (wrong) {
-        g_dav1d.picture_unref(&picture);
+        api.picture_unref(&picture);
         d->fail(wrong);
         return false;
     }
     int slot = take_slot(d);
     if (slot < 0) {
-        g_dav1d.picture_unref(&picture);
+        api.picture_unref(&picture);
         return false;
     }
-    const long long pts = picture.m.timestamp;
-    d->slots[slot].picture = picture;  // the reference moves into the slot
-    picture = Dav1dPicture{};
+    held_picture(d->slots[slot], api) = picture;  // the reference moves into the slot
+    picture = typename Api::Picture{};
     queue_picture(d, slot, pts);
     return true;
 }
 
-// Takes every picture dav1d has ready (at the end: every one it holds).
-// False when decoding has stopped.
-bool get_pictures(Decoder *d) {
+// Takes every picture dav1d or dav2d has ready (at the end: every one it
+// holds). False when decoding has stopped.
+template <typename Api>
+bool get_pictures(Decoder *d, const Api &api) {
     while (true) {
         if (d->stopped()) return false;
-        Dav1dPicture picture{};
-        int result = g_dav1d.get_picture(d->dav1d, &picture);
-        if (result == kDav1dAgain) return true;
+        typename Api::Picture picture{};
+        int result = api.get_picture(d->dav, &picture);
+        if (result == kDav1dAgain || result == kDav2dEof) return true;  // more data wanted; dav2d drained
         if (result < 0) {
-            d->fail("dav1d failed decoding (error " + std::to_string(result) + ")");
+            d->fail(std::string(api.name) + " failed decoding (error " + std::to_string(result) + ")");
             return false;
         }
-        if (!deliver_picture(d, picture)) return false;
+        if (!deliver_picture(d, api, picture)) return false;
     }
 }
 
-bool send_data(Decoder *d, Dav1dData &data) {
+template <typename Api>
+bool send_data(Decoder *d, const Api &api, typename Api::Data &data) {
     while (data.sz > 0) {
         if (d->stopped()) {
-            g_dav1d.data_unref(&data);
+            api.data_unref(&data);
             return false;
         }
-        int result = g_dav1d.send_data(d->dav1d, &data);
+        int result = api.send_data(d->dav, &data);
         if (result < 0 && result != kDav1dAgain) {
-            g_dav1d.data_unref(&data);
-            d->fail("dav1d failed decoding (error " + std::to_string(result) + ")");
+            api.data_unref(&data);
+            d->fail(std::string(api.name) + " failed decoding (error " + std::to_string(result) + ")");
             return false;
         }
-        // Taken (data is empty), or dav1d wants its pictures taken first.
-        if (!get_pictures(d)) {
-            g_dav1d.data_unref(&data);
+        // Taken (data is empty), or the decoder wants its pictures taken first.
+        if (!get_pictures(d, api)) {
+            api.data_unref(&data);
             return false;
         }
     }
     return true;
+}
+
+// Starts dav1d or dav2d as FFmpeg's libdav1d decoder starts dav1d: the
+// operating point's highest spatial layer only, film grain applied unless
+// the video is scored without it; its own threads. False when it cannot.
+template <typename Api>
+bool open_dav(Decoder *d, const Api &api, bool apply_grain) {
+    typename Api::Settings settings{};
+    api.default_settings(&settings);
+    settings.all_layers = 0;
+    settings.n_threads = 0;
+    settings.max_frame_delay = 0;
+    settings.apply_grain = apply_grain ? 1 : 0;
+    settings.logger_callback = nullptr;  // its messages would go to the scoring process's stderr
+    return api.open(&d->dav, &settings) >= 0;
+}
+
+// One packet to dav1d or dav2d (AV1's sequence header before the first, as
+// the GPU decoders are given it). False when decoding has stopped.
+template <typename Api>
+bool push_dav(Decoder *d, const Api &api, const unsigned char *data, int size, long long pts) {
+    typename Api::Data input{};
+    const size_t extra = d->extradata.size();
+    uint8_t *buffer = api.data_create(&input, extra + static_cast<size_t>(size));
+    if (!buffer) {
+        d->fail("out of memory");
+        return false;
+    }
+    if (extra) memcpy(buffer, d->extradata.data(), extra);
+    memcpy(buffer + extra, data, static_cast<size_t>(size));
+    d->extradata.clear();
+    input.m.timestamp = pts;
+    if (d->engine == Engine::dav2d) d->display_order.fed(pts);
+    return send_data(d, api, input);
+}
+
+// Binds dav1d's or dav2d's functions in `module`, by its prefix. True when
+// all are there and its API is the one mirrored; else says why in `problems`.
+template <typename Api>
+bool bind_dav(HMODULE module, Api &api, std::string &problems) {
+    const std::string prefix = std::string(api.name) + "_";
+    std::string missing;
+    bool bound = bind(module, api.version_api, (prefix + "version_api").c_str(), missing)
+                 && bind(module, api.default_settings, (prefix + "default_settings").c_str(), missing)
+                 && bind(module, api.open, (prefix + "open").c_str(), missing)
+                 && bind(module, api.send_data, (prefix + "send_data").c_str(), missing)
+                 && bind(module, api.get_picture, (prefix + "get_picture").c_str(), missing)
+                 && bind(module, api.close, (prefix + "close").c_str(), missing)
+                 && bind(module, api.data_create, (prefix + "data_create").c_str(), missing)
+                 && bind(module, api.data_unref, (prefix + "data_unref").c_str(), missing)
+                 && bind(module, api.picture_unref, (prefix + "picture_unref").c_str(), missing);
+    std::string text;
+    if (!bound) {
+        text = std::string(api.name) + " has no " + missing;
+    } else if (api.version_api() >> 16 != api.api_major) {
+        text = std::string(api.name) + " is not the version this decoder was made for";
+    }
+    if (!text.empty()) problems += (problems.empty() ? "" : "; ") + text;
+    return text.empty();
 }
 
 void destroy(Decoder *d) {
@@ -485,7 +588,8 @@ void destroy(Decoder *d) {
     if (d->codec_context) g_av.avcodec_free_context(&d->codec_context);
     if (d->packet) g_av.av_packet_free(&d->packet);
     if (d->frame) g_av.av_frame_free(&d->frame);
-    if (d->dav1d) g_dav1d.close(&d->dav1d);
+    if (d->dav && d->engine == Engine::dav1d) g_dav1d.close(&d->dav);
+    if (d->dav && d->engine == Engine::dav2d) g_dav2d.close(&d->dav);
     delete d;
 }
 
@@ -509,9 +613,10 @@ const char *decoder_name(int codec) {
 // Whether `codec` is decoded here, or why not.
 bool decodes(int codec, std::string &why) {
     std::lock_guard<std::mutex> lock(g_libraries_lock);
-    if (codec == CODEC_AV1) {
-        if (!g_dav1d_ready) why = g_libraries_error;
-        return g_dav1d_ready;
+    if (codec == CODEC_AV1 || codec == CODEC_AV2) {
+        const bool ready = codec == CODEC_AV1 ? g_dav1d_ready : g_dav2d_ready;
+        if (!ready) why = codec == CODEC_AV2 && !g_dav2d_missing.empty() ? g_dav2d_missing : g_libraries_error;
+        return ready;
     }
     if (!g_av_ready) {
         why = g_libraries_error;
@@ -537,10 +642,10 @@ NVF_API int nvf_libraries_error(char *out, int size) {
 }
 
 // The libraries to decode with, loaded by the app (their module handles):
-// its FFmpeg's libavutil and libavcodec, and GStreamer's dav1d (any may be
-// null). 0 when both work; else what is wrong, in nvf_open's and
-// nvf_supports' refusals.
-NVF_API int nvf_set_libraries(void *avutil, void *avcodec, void *dav1d) {
+// its FFmpeg's libavutil and libavcodec, dav1d and dav2d (any may be null).
+// 0 when all work; else what is wrong, in nvf_open's and nvf_supports'
+// refusals.
+NVF_API int nvf_set_libraries(void *avutil, void *avcodec, void *dav1d, void *dav2d) {
     std::lock_guard<std::mutex> lock(g_libraries_lock);
     std::string missing, problems;
     if (avutil && avcodec) {
@@ -580,27 +685,13 @@ NVF_API int nvf_set_libraries(void *avutil, void *avcodec, void *dav1d) {
     } else {
         problems = "FFmpeg's libraries are not bundled";
     }
-    missing.clear();
     if (dav1d) {
-        HMODULE m = static_cast<HMODULE>(dav1d);
-        Dav1d &v = g_dav1d;
-        bool bound = bind(m, v.version_api, "dav1d_version_api", missing)
-                     && bind(m, v.default_settings, "dav1d_default_settings", missing)
-                     && bind(m, v.open, "dav1d_open", missing) && bind(m, v.send_data, "dav1d_send_data", missing)
-                     && bind(m, v.get_picture, "dav1d_get_picture", missing) && bind(m, v.close, "dav1d_close", missing)
-                     && bind(m, v.data_create, "dav1d_data_create", missing)
-                     && bind(m, v.data_unref, "dav1d_data_unref", missing)
-                     && bind(m, v.picture_unref, "dav1d_picture_unref", missing);
-        if (!bound) {
-            problems += (problems.empty() ? "" : "; ") + std::string("dav1d has no ") + missing;
-        } else if (v.version_api() >> 16 != kDav1dApiMajor) {
-            problems += (problems.empty() ? "" : "; ") + std::string("dav1d is not the version this decoder was made for");
-        } else {
-            g_dav1d_ready = true;
-        }
+        g_dav1d_ready = bind_dav(static_cast<HMODULE>(dav1d), g_dav1d, problems);
     } else {
         problems += (problems.empty() ? "" : "; ") + std::string("dav1d is not bundled");
     }
+    g_dav2d_missing = dav2d ? "" : "dav2d is not bundled";
+    if (dav2d) g_dav2d_ready = bind_dav(static_cast<HMODULE>(dav2d), g_dav2d, problems);
     g_libraries_error = problems.empty() ? "" : problems;
     return problems.empty() ? 0 : NVF_ERROR;
 }
@@ -613,8 +704,9 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     }
     Decoder *d = new Decoder();
     d->params = *params;
-    d->av1 = params->codec == CODEC_AV1;
-    if (d->av1 && params->extradata && params->extradata_size > 0)
+    d->engine = params->codec == CODEC_AV1 ? Engine::dav1d : params->codec == CODEC_AV2 ? Engine::dav2d
+                                                                                       : Engine::libavcodec;
+    if (d->engine == Engine::dav1d && params->extradata && params->extradata_size > 0)
         d->extradata.assign(params->extradata, params->extradata + params->extradata_size);
     d->params.extradata = nullptr;
     d->info.frame_bytes = static_cast<long long>(frame_bytes(d->params));
@@ -632,19 +724,11 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     d->slots.resize(params->pool);
     for (int slot = 0; slot < params->pool; slot++) d->free_slots.push_back(slot);
     const GrainDecoding grain = grain_decoding(params->codec == CODEC_VVC, params->film_grain);
-    if (d->av1) {
-        Dav1dSettings settings{};
-        g_dav1d.default_settings(&settings);
-        // As FFmpeg's libdav1d decoder sets it: the operating point's
-        // highest spatial layer only, film grain applied unless the video is
-        // scored without it; its own threads.
-        settings.all_layers = 0;
-        settings.n_threads = 0;
-        settings.max_frame_delay = 0;
-        settings.apply_grain = grain.apply_grain ? 1 : 0;
-        settings.logger_callback = nullptr;  // its messages would go to the scoring process's stderr
-        if (g_dav1d.open(&d->dav1d, &settings) < 0) {
-            copy_text(error, error_size, "dav1d could not start");
+    if (d->engine != Engine::libavcodec) {
+        const bool opened =
+            d->engine == Engine::dav1d ? open_dav(d, g_dav1d, grain.apply_grain) : open_dav(d, g_dav2d, grain.apply_grain);
+        if (!opened) {
+            copy_text(error, error_size, std::string(d->engine == Engine::dav1d ? "dav1d" : "dav2d") + " could not start");
             destroy(d);
             return nullptr;
         }
@@ -715,20 +799,10 @@ NVF_API int nvf_push(void *handle, const unsigned char *data, int size, long lon
         d->fail("the video has an empty packet");
         return NVF_ERROR;
     }
-    if (d->av1) {
-        // AV1's sequence header before the first packet, as the GPU decoders are given it.
-        Dav1dData input{};
-        const size_t extra = d->extradata.size();
-        uint8_t *buffer = g_dav1d.data_create(&input, extra + static_cast<size_t>(size));
-        if (!buffer) {
-            d->fail("out of memory");
-            return NVF_ERROR;
-        }
-        if (extra) memcpy(buffer, d->extradata.data(), extra);
-        memcpy(buffer + extra, data, static_cast<size_t>(size));
-        d->extradata.clear();
-        input.m.timestamp = pts;
-        send_data(d, input);
+    if (d->engine == Engine::dav1d) {
+        push_dav(d, g_dav1d, data, size, pts);
+    } else if (d->engine == Engine::dav2d) {
+        push_dav(d, g_dav2d, data, size, pts);
     } else {
         if (g_av.av_new_packet(d->packet, size) < 0) {
             d->fail("out of memory");
@@ -747,8 +821,11 @@ NVF_API int nvf_push(void *handle, const unsigned char *data, int size, long lon
 NVF_API int nvf_finish(void *handle) {
     Decoder *d = static_cast<Decoder *>(handle);
     if (!d->stopped()) {
-        if (d->av1) {
-            get_pictures(d);
+        if (d->engine == Engine::dav1d) {
+            get_pictures(d, g_dav1d);
+        } else if (d->engine == Engine::dav2d) {
+            g_dav2d.send_data(d->dav, nullptr);  // the end: dav2d gives the pictures it holds
+            get_pictures(d, g_dav2d);
         } else {
             send_packet(d, nullptr);
         }
@@ -787,10 +864,12 @@ bool held_planes(Decoder *d, int slot, uint8_t *planes[3], ptrdiff_t pitches[3])
         std::lock_guard<std::mutex> guard(d->mutex);
         if (!held.held) return false;
     }
-    if (d->av1) {
-        for (int c = 0; c < 3; c++) planes[c] = static_cast<uint8_t *>(held.picture.data[c]);
-        pitches[0] = held.picture.stride[0];
-        pitches[1] = pitches[2] = held.picture.stride[1];
+    if (d->engine != Engine::libavcodec) {
+        void *const *data = d->engine == Engine::dav1d ? held.picture.data : held.av2_picture.data;
+        const ptrdiff_t *stride = d->engine == Engine::dav1d ? held.picture.stride : held.av2_picture.stride;
+        for (int c = 0; c < 3; c++) planes[c] = static_cast<uint8_t *>(data[c]);
+        pitches[0] = stride[0];
+        pitches[1] = pitches[2] = stride[1];
     } else {
         for (int c = 0; c < 3; c++) {
             planes[c] = held.frame->data[c];

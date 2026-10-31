@@ -33,6 +33,7 @@ QString film_grain_note(const VideoInfo& info) {
                      : name == "h274 model 1" ? tr("H.274 model 1")
                      : name == "afgs1"        ? QStringLiteral("AFGS1")
                      : name == "av1"          ? QStringLiteral("AV1")
+                     : name == "av2"          ? QStringLiteral("AV2")
                                               : QString::fromStdString(name));
     }
     const QString listed = kinds.join(", ");

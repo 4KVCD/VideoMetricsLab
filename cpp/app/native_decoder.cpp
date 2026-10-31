@@ -23,6 +23,7 @@
 #include "i18n.h"
 #include "native_dav1d.h"
 #include "native_device.h"
+#include "vml/av2_stream.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/hardware_decoding.h"
 #include "vml/platform/system.h"
@@ -333,8 +334,15 @@ bool decodes_on_gpu(const AVCodec* codec) {
 struct FfmpegNativeVideo::Decoding {
     AVFormatContext* format = nullptr;
     AVCodecContext* codec = nullptr;
-    // AV1's decoder in software, in place of `codec`.
-    std::unique_ptr<Dav1dVideo> dav1d;
+    // AV1's or AV2's decoder in software (dav1d, dav2d), in place of `codec`.
+    std::unique_ptr<SoftwareVideo> software;
+    // An AV2 video's temporal units, read by the app (av2_stream.h) in place
+    // of `format`: FFmpeg cannot read AV2, and avmenc's IVF frames and WebM
+    // blocks hold several pictures, which dav2d is given a unit at a time so
+    // that each is timed by its number. Its closed-loop keyframes, to seek to
+    // (av2::closed_keyframes: found once for the process).
+    std::optional<av2::Reader> av2_reader;
+    std::shared_ptr<const std::vector<av2::TemporalUnit>> av2_keyframes;
     AVPacket* packet = nullptr;
     AVFrame* frame = nullptr;
     SwsContext* converter = nullptr;
@@ -368,11 +376,32 @@ struct FfmpegNativeVideo::Decoding {
 
     // As avcodec_send_packet, avcodec_receive_frame and avcodec_flush_buffers,
     // with whichever decoder decodes.
-    int send(const AVPacket* given) { return dav1d ? dav1d->send(given) : avcodec_send_packet(codec, given); }
-    int receive(AVFrame* into) { return dav1d ? dav1d->receive(into) : avcodec_receive_frame(codec, into); }
+    // As av_read_frame: the next packet, from the file or the AV2 reader (a
+    // unit, timed by its number, in a time base of one frame).
+    int read(AVPacket* into) {
+        if (!av2_reader) {
+            return av_read_frame(format, into);
+        }
+        const std::optional<av2::TemporalUnit> unit = av2_reader->next();
+        if (!unit) {
+            return AVERROR_EOF;
+        }
+        if (av_new_packet(into, static_cast<int>(unit->data.size())) < 0) {
+            return AVERROR(ENOMEM);
+        }
+        std::memcpy(into->data, unit->data.data(), unit->data.size());
+        into->pts = into->dts = unit->number;
+        into->stream_index = stream;
+        if (unit->kind.closed_key) {
+            into->flags |= AV_PKT_FLAG_KEY;
+        }
+        return 0;
+    }
+    int send(const AVPacket* given) { return software ? software->send(given) : avcodec_send_packet(codec, given); }
+    int receive(AVFrame* into) { return software ? software->receive(into) : avcodec_receive_frame(codec, into); }
     void flush() {
-        if (dav1d) {
-            dav1d->flush();
+        if (software) {
+            software->flush();
         } else {
             avcodec_flush_buffers(codec);
         }
@@ -380,8 +409,8 @@ struct FfmpegNativeVideo::Decoding {
     // Lets the frame last received go.
     void unref_frame() {
         av_frame_unref(frame);
-        if (dav1d) {
-            dav1d->release();
+        if (software) {
+            software->release();
         }
     }
 };
@@ -490,6 +519,38 @@ void FfmpegNativeVideo::fail(const QString& error) {
 
 namespace {
 
+// An AV2 video's decoding: its units from the app's reader, dav2d in
+// software (no GPU decodes AV2), at `fps` (the video's: av2_probe.h), and its
+// closed-loop keyframes found to seek to.
+std::unique_ptr<FfmpegNativeVideo::Decoding> open_av2(const std::filesystem::path& path, bool hardware, double fps,
+                                                       QString& error, const GrainDecoding& grain) {
+    if (hardware) {
+        error = QStringLiteral("no GPU decoder for av2");
+        return nullptr;
+    }
+    auto decoding = std::make_unique<FfmpegNativeVideo::Decoding>();
+    decoding->packet = av_packet_alloc();
+    decoding->frame = av_frame_alloc();
+    if (decoding->packet == nullptr || decoding->frame == nullptr) {
+        error = QStringLiteral("Out of memory");
+        return nullptr;
+    }
+    try {
+        decoding->software = std::make_unique<Dav2dVideo>(grain.apply_grain);
+        decoding->av2_keyframes = av2::closed_keyframes(path);
+        decoding->av2_reader.emplace(path);
+    } catch (const std::exception& problem) {
+        error = QStringLiteral("AV2 cannot be decoded: %1").arg(QString::fromUtf8(problem.what()));
+        return nullptr;
+    }
+    const Rational rate = limit_denominator(fps > 0 ? fps : 25.0);
+    decoding->stream = 0;
+    decoding->time_base = AVRational{static_cast<int>(rate.denominator), static_cast<int>(rate.numerator)};
+    decoding->frame_ns = av_rescale(1'000'000'000, rate.denominator, rate.numerator);
+    decoding->codec_name = "dav2d";
+    return decoding;
+}
+
 // Opens `path` and its video's decoder: with the GPU's video decoding on
 // `device` (`hardware`: Direct3D 11's, VideoToolbox's on macOS), or in
 // software (FFmpeg's decoders, dav1d for AV1); its reading stops when
@@ -497,10 +558,15 @@ namespace {
 // as the scores are made: a VVC video by VVdeC, in software (`vvdec_missing`
 // set where this FFmpeg has no VVdeC and the H.274 grain only VVdeC adds is
 // then left out). Returns nothing, with `error` set, when it cannot.
+// An AV2 video, which FFmpeg cannot read, is opened by open_av2 at `fps`,
+// the frame rate its probe found.
 std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::path& path, NativeDevice& device,
                                                          bool hardware, const AVIOInterruptCB& interrupt,
                                                          QString& error, const GrainDecoding& grain,
-                                                         bool& vvdec_missing) {
+                                                         bool& vvdec_missing, double fps) {
+    if (av2::container_of(path)) {
+        return open_av2(path, hardware, fps, error, grain);  // FFmpeg cannot read AV2
+    }
     auto decoding = std::make_unique<FfmpegNativeVideo::Decoding>();
     decoding->format = avformat_alloc_context();
     if (decoding->format == nullptr) {
@@ -554,7 +620,7 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::p
         // FFmpeg's own AV1 decoder only drives a GPU's: in software, dav1d
         // decodes it.
         try {
-            decoding->dav1d = std::make_unique<Dav1dVideo>(*stream->codecpar, grain.apply_grain);
+            decoding->software = std::make_unique<Dav1dVideo>(*stream->codecpar, grain.apply_grain);
         } catch (const std::exception& problem) {
             error = QStringLiteral("AV1 cannot be decoded in software: %1").arg(QString::fromUtf8(problem.what()));
             return nullptr;
@@ -840,7 +906,7 @@ void FfmpegNativeVideo::Session::run() {
         }
         int result = 0;
         if (!decoding_->draining) {
-            result = av_read_frame(decoding_->format, decoding_->packet);
+            result = decoding_->read(decoding_->packet);
             if (result == AVERROR_EOF) {
                 decoding_->draining = true;
                 result = decoding_->send(nullptr);
@@ -888,10 +954,10 @@ bool FfmpegNativeVideo::Session::open() {
     const bool grain_on_gpu = !grain_needs_software_decoding(info_, "videotoolbox");
 #endif
     if (video_.gpu_decoding_ && grain_on_gpu) {
-        decoding_ = open_video(path_, *video_.device_, true, interrupt_, why_, grain_, vvdec_missing_);
+        decoding_ = open_video(path_, *video_.device_, true, interrupt_, why_, grain_, vvdec_missing_, info_.fps);
     }
     if (!decoding_) {
-        decoding_ = open_video(path_, *video_.device_, false, interrupt_, why_, grain_, vvdec_missing_);
+        decoding_ = open_video(path_, *video_.device_, false, interrupt_, why_, grain_, vvdec_missing_, info_.fps);
     }
     if (!decoding_ && !video_.cancelled()) {
         video_.fail(why_);
@@ -938,7 +1004,7 @@ void FfmpegNativeVideo::Session::make_seek() {
         at_end_ = false;
     } else if (target_ns - counted_time_ns(1) / 2 < counted_time_ns(*counted_)) {
         std::unique_ptr<Decoding> again =
-            open_video(path_, *video_.device_, decoding_->hardware, interrupt_, why_, grain_, vvdec_missing_);
+            open_video(path_, *video_.device_, decoding_->hardware, interrupt_, why_, grain_, vvdec_missing_, info_.fps);
         sought = again != nullptr;
         if (again) {
             decoding_ = std::move(again);
@@ -964,6 +1030,18 @@ void FfmpegNativeVideo::Session::make_seek() {
 bool FfmpegNativeVideo::Session::seek_from(std::int64_t time_ns) {
     seek_from_ns_ = time_ns;
     const std::int64_t stamp = av_rescale_q(*origin_ns_ + time_ns, AVRational{1, 1'000'000'000}, decoding_->time_base);
+    if (decoding_->av2_reader) {
+        // AV2: to the last closed-loop keyframe at or before it (the time base
+        // is a frame: the stamp is the frame's number).
+        const std::vector<av2::TemporalUnit>& keyframes = *decoding_->av2_keyframes;
+        if (keyframes.empty()) {
+            return false;
+        }
+        auto key = std::upper_bound(keyframes.begin(), keyframes.end(), stamp,
+                                    [](std::int64_t number, const av2::TemporalUnit& unit) { return number < unit.number; });
+        decoding_->av2_reader->seek(key == keyframes.begin() ? keyframes.front() : *std::prev(key));
+        return true;
+    }
     return av_seek_frame(decoding_->format, decoding_->stream, stamp, AVSEEK_FLAG_BACKWARD) >= 0;
 }
 
@@ -1068,9 +1146,10 @@ std::optional<std::int64_t> FfmpegNativeVideo::Session::frame_time() {
         video_.first_frame_ms_ = 0;
     } else if (!origin_ns_) {
         origin_ns_ = *time;
-        const AVFormatContext* format = decoding_->format;
-        const std::int64_t file_start =
-            format->start_time == AV_NOPTS_VALUE ? 0 : av_rescale(format->start_time, 1'000'000'000, AV_TIME_BASE);
+        const AVFormatContext* format = decoding_->format;  // none for AV2, whose pictures start at 0
+        const std::int64_t file_start = format == nullptr || format->start_time == AV_NOPTS_VALUE
+                                            ? 0
+                                            : av_rescale(format->start_time, 1'000'000'000, AV_TIME_BASE);
         const std::lock_guard lock(video_.mutex_);
         video_.first_frame_ms_ = static_cast<int>(std::llround(static_cast<double>(*origin_ns_ - file_start) / 1e6));
     }
@@ -1082,7 +1161,7 @@ std::optional<std::int64_t> FfmpegNativeVideo::Session::frame_time() {
 // the start. False when it cannot (fail() then says why).
 bool FfmpegNativeVideo::Session::decode_on_in_software() {
     std::unique_ptr<Decoding> software =
-        open_video(path_, *video_.device_, false, interrupt_, why_, grain_, vvdec_missing_);
+        open_video(path_, *video_.device_, false, interrupt_, why_, grain_, vvdec_missing_, info_.fps);
     if (!software) {
         if (!video_.cancelled()) {
             video_.fail(why_);

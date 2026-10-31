@@ -4,6 +4,7 @@
 # where a change since has edited one on purpose.
 add_executable(vml_tests
     unit/app_log_test.cpp
+    unit/av2_stream_test.cpp
     unit/bitrate_test.cpp
     unit/cancel_test.cpp
     unit/cli_test.cpp
@@ -46,6 +47,7 @@ add_executable(vml_tests
     unit/test_videos.cpp
 )
 target_link_libraries(vml_tests PRIVATE vml_cli vml_core vml_compile_options vml_miniz nlohmann_json gtest gtest_main)
+target_include_directories(vml_tests PRIVATE ../../native)  # the decoders' headers the app shares (dav2d/display_order.h)
 target_compile_definitions(vml_tests PRIVATE
     VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
     VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>"

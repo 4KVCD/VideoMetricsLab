@@ -59,11 +59,12 @@ inline bool is_vship_fast_id(std::string_view id) {
 
 // A video's film grain as a score was made with it, where it records that
 // (film_grain_identity in film_grain_scoring.h): H.274's added by VVdeC,
-// AFGS1 by FFmpeg's decoders, AV1's by the decoders, which all add it alike;
-// or the grain left out.
+// AFGS1 by FFmpeg's decoders, AV1's by the decoders, which all add it alike,
+// AV2's by dav2d; or the grain left out.
 inline constexpr std::string_view film_grain_h274 = "h274-vvdec-v1";
 inline constexpr std::string_view film_grain_afgs1 = "afgs1-ffmpeg-v1";
 inline constexpr std::string_view film_grain_av1 = "av1-v1";
+inline constexpr std::string_view film_grain_av2 = "av2-dav2d-v1";
 inline constexpr std::string_view film_grain_left_out = "without";
 
 // How the videos' colour tags were read, as a score records it. A Vship GPU

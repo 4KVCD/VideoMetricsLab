@@ -25,11 +25,12 @@
 
 enum Status { NVF_FRAME = 1, NVF_END = 0, NVF_ERROR = -1, NVF_ABORTED = -2, NVF_TIMEOUT = 2 };
 
-// The codecs, by NVIDIA's numbers (cudaVideoCodec), for every library; VVC
-// and FFV1, which NVIDIA's decoder does not have, by the app's. The GPU
+// The codecs, by NVIDIA's numbers (cudaVideoCodec), for every library; VVC,
+// FFV1 and AV2, which NVIDIA's decoder does not have, by the app's. The GPU
 // decoders are asked for H.264, HEVC and AV1 only (gpu_frames.py).
 enum Codec {
-    CODEC_MPEG2 = 1, CODEC_H264 = 4, CODEC_HEVC = 8, CODEC_VP9 = 10, CODEC_AV1 = 11, CODEC_VVC = 100, CODEC_FFV1 = 101
+    CODEC_MPEG2 = 1, CODEC_H264 = 4, CODEC_HEVC = 8, CODEC_VP9 = 10, CODEC_AV1 = 11, CODEC_VVC = 100, CODEC_FFV1 = 101,
+    CODEC_AV2 = 102
 };
 
 struct Params {
@@ -59,10 +60,11 @@ struct Params {
     int film_grain_kinds;  // what grain the stream describes: GrainKind bits (grain/grain_decoding.h)
 };
 
-// The Params layout this library was built with. The app refuses a library of
-// another: it would read the fields given as other ones (one built before the
-// film grain fields would leave them unread).
-#define NVF_PARAMS_VERSION 2
+// The Params layout and the library calls this library was built with. The
+// app refuses a library of another: it would read the fields given as other
+// ones (one built before the film grain fields would leave them unread). 3:
+// nvf_set_libraries takes dav2d, and CODEC_AV2.
+#define NVF_PARAMS_VERSION 3
 NVF_API int nvf_params_version() { return NVF_PARAMS_VERSION; }
 
 inline int out_width(const Params &p) { return p.out_w > 0 ? p.out_w : p.crop_w; }

@@ -104,7 +104,9 @@ FFmpeg's decoders built into the app for a video FFmpeg would decode in
 software; FFmpeg only copies the compressed stream out of its container. A
 video it cannot decode is decoded by an FFmpeg of its own. (The software decoder's AV1 decoder is
 dav1d, VideoLAN's, built by `scripts/build_dav1d.ps1` beside FFmpeg's
-libraries in `resources/tools/ffmpeg`.) That work runs in a process of its
+libraries in `resources/tools/ffmpeg`; its AV2 decoder dav2d, built by
+`scripts/build_dav2d.ps1`, decodes AV2 videos, which the app reads itself:
+FFmpeg knows no AV2.) That work runs in a process of its
 own (the
 program again, with `--vml-isolated`), so that a crash in libvmaf, Vship
 or the GPU's driver ends that process and not the run: FFmpeg's filters
@@ -143,7 +145,7 @@ results are saved and loaded as the Python app's are. Metric Graphs draws
 each metric's scores frame by frame, with each video's statistics, and
 exports them (PNG, CSV). Video Compare shows a pair of frames, or plays the
 videos locked together: decoded with FFmpeg's libraries, on the GPU where
-Direct3D 11 can (else in software, AV1 by dav1d), each video's film grain
+Direct3D 11 can (else in software, AV1 by dav1d, AV2 by dav2d), each video's film grain
 added or left out as it is scored (VVC's H.274 by VVdeC), drawn by the
 app's presenter (HDR too) and timed
 by the source's soundtrack when it plays, or, where that cannot play them,

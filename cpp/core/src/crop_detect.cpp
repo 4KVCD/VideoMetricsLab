@@ -1037,8 +1037,9 @@ CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double
     std::vector<CropBox> boxes;
     std::vector<std::string> failures;
     // A raw YUV file's pictures are all one size, so FFmpeg's -ss finds a
-    // window's first frame in it exactly, as in a container.
-    if (info.timed_raw && info.format_name != "rawvideo") {
+    // window's first frame in it exactly, as in a container. A raw stream the
+    // app reads itself (AV2) has its windows from the app's decoder, below.
+    if (info.timed_raw && info.format_name != "rawvideo" && !samples_through_the_app(info)) {
         // Each window from a byte partway through where the stream allows
         // it: a pass from the start reaches the last window only after
         // decoding nine tenths of the video (for a 4K VVC film, still not

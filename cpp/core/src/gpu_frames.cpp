@@ -20,6 +20,7 @@
 #include <thread>
 
 #include "vml/app_log.h"
+#include "vml/av2_stream.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
@@ -79,6 +80,7 @@ constexpr Codec codecs[] = {
     {"vp9", 10, "", false},
     {"mpeg2video", 1, "dump_extra=freq=keyframe", false},
     {"ffv1", 101, "", false},
+    {"av2", 102, "", false},  // read by the app's own AV2 reader (av2_stream.h), FFmpeg having no AV2
 };
 
 const Codec* find_codec(std::string_view name) {
@@ -282,8 +284,9 @@ struct NativeParams {
     int film_grain;
     int film_grain_kinds;
 };
-// The layout above: a library that says another is refused (DecoderLibrary).
-constexpr int native_params_version = 2;
+// The layout above, and nvf_set_libraries with dav2d: a library that says
+// another is refused (DecoderLibrary).
+constexpr int native_params_version = 3;
 
 // A function of `library` that some builds of it lack: nullptr where it has
 // none.
@@ -379,7 +382,7 @@ struct DecoderLibrary {
     // The software decoder's: the libraries it decodes with (their handles),
     // and why it cannot use one of them; a slot's picture in place, in
     // system memory.
-    int (*set_libraries)(void* avutil, void* avcodec, void* dav1d) = nullptr;
+    int (*set_libraries)(void* avutil, void* avcodec, void* dav1d, void* dav2d) = nullptr;
     int (*libraries_error)(char* out, int size) = nullptr;
     int (*slot_planes)(void* decoder, int slot, const void** planes, long long* pitches) = nullptr;
     // Intel's and AMD's, which scale the pictures on the GPU when they can:
@@ -412,9 +415,11 @@ std::filesystem::path library_path(std::string_view backend) {
 
 // The software decoder's libraries: FFmpeg's libavutil and libavcodec with
 // only the decoders it needs (LGPL, built by
-// scripts/build_ffmpeg_decoders.ps1), and dav1d for AV1 (dav1d_library_path,
-// built by scripts/build_dav1d.ps1), all beside each other. Without dav1d,
-// FFmpeg decodes the AV1 videos FFmpeg would decode in software.
+// scripts/build_ffmpeg_decoders.ps1), dav1d for AV1 (dav1d_library_path,
+// built by scripts/build_dav1d.ps1) and dav2d for AV2 (dav2d_library_path,
+// scripts/build_dav2d.ps1), all beside each other. Without dav1d, FFmpeg
+// decodes the AV1 videos FFmpeg would decode in software; without dav2d, no
+// AV2 video is decoded.
 std::filesystem::path software_folder() { return resource_folder() / "tools" / "ffmpeg"; }
 constexpr std::array<const char*, 2> ffmpeg_libraries{"avutil-61.dll", "avcodec-63.dll"};
 
@@ -454,11 +459,11 @@ const DecoderLibrary& load_decoder(std::string_view backend) {
                                         ") is out of date: build it again (scripts/build_gpu_frames.ps1)");
     }
     if (backend == software_decoder) {
-        software_libraries.reserve(3);  // never moved: the decoder keeps their handles
-        std::array<void*, 3> handles{};
-        const std::array<std::filesystem::path, 3> paths{software_folder() / ffmpeg_libraries[0],
+        software_libraries.reserve(4);  // never moved: the decoder keeps their handles
+        std::array<void*, 4> handles{};
+        const std::array<std::filesystem::path, 4> paths{software_folder() / ffmpeg_libraries[0],
                                                          software_folder() / ffmpeg_libraries[1],
-                                                         dav1d_library_path()};
+                                                         dav1d_library_path(), dav2d_library_path()};
         for (std::size_t i = 0; i < paths.size(); ++i) {
             if (std::filesystem::is_regular_file(paths[i], ignored)) {
                 try {
@@ -472,7 +477,7 @@ const DecoderLibrary& load_decoder(std::string_view backend) {
             }
         }
         // What it cannot use, it refuses.
-        if (library->set_libraries(handles[0], handles[1], handles[2]) != 0) {
+        if (library->set_libraries(handles[0], handles[1], handles[2], handles[3]) != 0) {
             std::array<char, 512> said{};
             library->libraries_error(said.data(), static_cast<int>(said.size()));
             logger.info("The software decoder: " + buffer_text(said.data(), said.size()));
@@ -564,12 +569,32 @@ long long listing_int(std::string_view text) {
     throw std::invalid_argument("invalid literal for int() with base 10: '" + std::string(text) + "'");
 }
 
+// Where a stream's packets come from, in decode order, for the feeding
+// thread: FFmpeg copying them out of the file (PacketReader), or the app's
+// own reader of a codec FFmpeg cannot read (Av2PacketSource).
+class PacketSource {
+public:
+    virtual ~PacketSource() = default;
+    // Starts reading. Throws platform::ProcessError.
+    virtual void start() = 0;
+    // The next packet to decode: its bytes into `data`, its timestamp and its
+    // flags (key_flag, discard_flag, no_picture_flag). False at the end.
+    // Throws GpuDecodeFailedError.
+    virtual bool next(std::vector<std::uint8_t>& data, long long& pts, int& flags) = 0;
+    // Stops reading; callable from another thread than next()'s, and twice.
+    // next() then ends without an error.
+    virtual void close() = 0;
+    // The packets' time base: nothing where it is not known (after a minute
+    // at most). Throws Cancelled.
+    virtual std::optional<Rational> wait_time_base(const CancelToken& cancel) = 0;
+};
+
 // An FFmpeg that copies the video's first video stream out of its
 // container. It writes the packets to its standard output (-f data), and
 // each packet's timestamp and size to a framecrc listing on a pipe served
 // here. A thread reads the listing as it arrives, so neither of FFmpeg's
 // outputs waits for the other.
-class PacketReader {
+class PacketReader : public PacketSource {
 public:
     // `untimed`: a raw stream, read with `input_options` (DecodePlan::untimed).
     PacketReader(const std::string& ffmpeg, const std::filesystem::path& video, std::string_view codec,
@@ -580,7 +605,7 @@ public:
           leading_(codec),
           untimed_(untimed) {}
 
-    ~PacketReader() {
+    ~PacketReader() override {
         close();
         if (listing_thread_.joinable()) {
             listing_thread_.join();
@@ -592,7 +617,7 @@ public:
 
     // Starts FFmpeg, and the thread that reads its listing. Throws
     // platform::ProcessError.
-    void start() {
+    void start() override {
         platform::ProcessOptions options;
         options.output_pipe_bytes = packet_pipe_bytes;
         options.on_error_line = [this](std::string_view line) { note_error_line(line); };
@@ -604,7 +629,7 @@ public:
     // timestamp and its flags. The leading pictures FFmpeg's decoding drops
     // are passed over (LeadingPictures). False at the end, once FFmpeg has
     // succeeded without rewriting any timestamp. Throws GpuDecodeFailedError.
-    bool next(std::vector<std::uint8_t>& data, long long& pts, int& flags) {
+    bool next(std::vector<std::uint8_t>& data, long long& pts, int& flags) override {
         while (const std::optional<Listed> item = next_listed()) {
             read_packet(*item, data);  // a packet passed over is read too, keeping the two outputs in step
             const LeadingPictures::Verdict verdict = leading_verdict(data);
@@ -639,7 +664,7 @@ public:
 
     // Ends FFmpeg, and with it the listing's thread; callable from another
     // thread than next()'s, and twice. next() then ends without an error.
-    void close() {
+    void close() override {
         closed_ = true;
         if (ffmpeg_) {
             ffmpeg_->terminate();
@@ -650,7 +675,7 @@ public:
 
     // The packets' time base, once the listing has said it: nothing when it
     // ended without saying it, or after a minute. Throws Cancelled.
-    std::optional<Rational> wait_time_base(const CancelToken& cancel) {
+    std::optional<Rational> wait_time_base(const CancelToken& cancel) override {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
         std::unique_lock lock(mutex_);
         while (!time_base_ && !listing_ended_ && std::chrono::steady_clock::now() < deadline) {
@@ -1144,6 +1169,8 @@ std::filesystem::path dav1d_library_path() {
 #endif
 }
 
+std::filesystem::path dav2d_library_path() { return software_folder() / platform::shared_library_name("dav2d"); }
+
 std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan, std::string_view backend) {
     if (!decodes_codec(plan.codec, backend)) {
         return {false, plan.codec + " is not decoded by the " + std::string(backend) + " decoder"};
@@ -1417,6 +1444,84 @@ void PictureChecks::check_end() {
 
 // ----------------------------------------------------------------- streams
 
+// An AV2 video's temporal units, read by the app (av2_stream.h): FFmpeg 9
+// names no AV2 codec and marks none of its pictures as a keyframe. Each unit
+// decodes one picture and is stamped with its number; the decoder gives the
+// k-th picture it shows the k-th smallest stamp (dav2d/display_order.h), so a
+// picture's stamp is its place, timed at the video's frame rate (`frame_time`
+// a frame's time, as the time base): avmenc's IVF frames and WebM blocks hold
+// several units and time only their first. As FFmpeg's -ss with a stream
+// copy gives a window: from the last closed-loop keyframe at or before
+// `start`, the units stamped from `start` (those before it below 0).
+class Av2PacketSource : public PacketSource {
+public:
+    Av2PacketSource(const std::filesystem::path& video, Rational frame_time, std::optional<double> start)
+        : video_(video), time_base_(frame_time), start_(start) {}
+
+    void start() override {
+        try {
+            reader_.emplace(video_);
+        } catch (const av2::Av2StreamError& error) {
+            throw GpuDecodeFailedError(std::string("the AV2 video could not be read: ") + error.what());
+        }
+        if (start_ && *start_ > 0) {
+            seek(*start_);
+        }
+    }
+
+    bool next(std::vector<std::uint8_t>& data, long long& pts, int& flags) override {
+        if (closed_ || !reader_) {
+            return false;
+        }
+        std::optional<av2::TemporalUnit> unit = reader_->next();
+        if (!unit) {
+            return false;
+        }
+        if (first_ && !unit->kind.closed_key) {
+            throw GpuDecodeFailedError("the video does not start with a keyframe");
+        }
+        first_ = false;
+        data = std::move(unit->data);
+        pts = unit->number - start_ticks_;
+        flags = unit->kind.closed_key ? key_flag : 0;
+        return true;
+    }
+
+    void close() override { closed_ = true; }
+
+    std::optional<Rational> wait_time_base(const CancelToken&) override { return time_base_; }
+
+private:
+    // To the last closed-loop keyframe at or before the start (no form
+    // indexes its keyframes: av2::closed_keyframes scans for them). The units
+    // come in decoding order, but a closed-loop keyframe's picture is shown
+    // before any later unit's, so its number is its picture's.
+    void seek(double seconds) {
+        start_ticks_ = std::llround(seconds * static_cast<double>(time_base_.denominator) /
+                                    static_cast<double>(time_base_.numerator));
+        std::shared_ptr<const std::vector<av2::TemporalUnit>> keyframes;
+        try {
+            keyframes = av2::closed_keyframes(video_);
+        } catch (const av2::Av2StreamError& error) {
+            throw GpuDecodeFailedError(std::string("the AV2 video could not be read: ") + error.what());
+        }
+        const auto after = std::upper_bound(
+            keyframes->begin(), keyframes->end(), start_ticks_,
+            [](long long ticks, const av2::TemporalUnit& unit) { return ticks < unit.number; });
+        if (after != keyframes->begin()) {
+            reader_->seek(*std::prev(after));
+        }
+    }
+
+    std::filesystem::path video_;
+    Rational time_base_;  // a frame's time: a picture's stamp is its time
+    std::optional<double> start_;
+    std::optional<av2::Reader> reader_;
+    long long start_ticks_ = 0;
+    bool first_ = true;
+    std::atomic<bool> closed_{false};
+};
+
 struct GpuFrameStream::State {
     explicit State(std::string_view backend_name)
         : backend(backend_name),
@@ -1444,7 +1549,7 @@ struct GpuFrameStream::State {
     bool lends_planes = false;   // gives_planes()
     bool untimed = false;        // DecodePlan::untimed
     bool software_only = false;  // DecodePlan::software_only
-    std::unique_ptr<PacketReader> reader;
+    std::unique_ptr<PacketSource> reader;
     std::atomic<bool> closing{false};
 
     // Opens the decoder as `params` say with `opening`'s library, or returns
@@ -1522,7 +1627,12 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
         // As the stills' -ss (frame_extract.cpp): FFmpeg reads it to the microsecond.
         reader_options.insert(reader_options.end(), {"-ss", format_fixed(*start, 9)});
     }
-    state.reader = std::make_unique<PacketReader>(ffmpeg, info.path, plan.codec, reader_options, plan.untimed);
+    if (plan.codec == "av2") {
+        const Rational rate = frame_rate(info);
+        state.reader = std::make_unique<Av2PacketSource>(info.path, Rational{rate.denominator, rate.numerator}, start);
+    } else {
+        state.reader = std::make_unique<PacketReader>(ffmpeg, info.path, plan.codec, reader_options, plan.untimed);
+    }
     state.configuration = configuration(ffprobe, info.path, plan.codec);
     state.handover = backend == "nvidia" || (handover && can_hand_over(plan, backend));
     std::string said;

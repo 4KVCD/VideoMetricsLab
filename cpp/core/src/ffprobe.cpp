@@ -11,6 +11,7 @@
 #include <system_error>
 #include <vector>
 
+#include "vml/av2_probe.h"
 #include "vml/number_format.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
@@ -368,6 +369,9 @@ std::string run_ffprobe(const std::vector<std::string>& command, const std::file
 }  // namespace
 
 VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe, const CancelToken& cancel) {
+    if (is_av2_file(path)) {
+        return probe_av2(path, cancel);  // ffprobe cannot read AV2
+    }
     const std::vector<std::string> command{ffprobe, "-v", "error", "-print_format", "json", "-show_format",
                                            "-show_streams", text(path)};
     return video_info_from_probe(path, run_ffprobe(command, path, std::chrono::seconds(60), cancel));
@@ -376,6 +380,16 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
 VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprobe, const CancelToken& cancel) {
     info.timed_raw = true;
     info.fps = fps;
+    if (info.codec_name == "av2") {
+        // Its units were counted as it was probed (av2_probe.h).
+        info.nominal_fps = info.average_fps = fps;
+        info.duration = static_cast<double>(info.nb_frames) / fps;
+        std::error_code unknown;
+        const std::uintmax_t bytes = std::filesystem::file_size(info.path, unknown);
+        info.bit_rate = unknown || info.duration <= 0 ? 0 : std::llround(static_cast<double>(bytes) * 8 / info.duration);
+        info.bit_rate_whole_file = false;  // a raw stream's file is its video and nothing else
+        return info;
+    }
     // ffprobe's parser splits the stream into its frames without decoding
     // them (3.4 s for a 4K VVC film of 151,919 frames, 800 MB), but reads the
     // whole file, so it has as long as a slow disk needs. (The csv format

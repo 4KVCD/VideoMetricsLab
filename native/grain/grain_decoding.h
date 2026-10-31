@@ -8,7 +8,7 @@
 
 // What film grain a stream describes: the app's FilmGrainKind bits
 // (film_grain_detect.h).
-enum GrainKind { GRAIN_H274 = 1, GRAIN_H274_MODEL_1 = 2, GRAIN_AFGS1 = 4, GRAIN_AV1 = 8 };
+enum GrainKind { GRAIN_H274 = 1, GRAIN_H274_MODEL_1 = 2, GRAIN_AFGS1 = 4, GRAIN_AV1 = 8, GRAIN_AV2 = 16 };
 
 struct GrainDecoding {
     // FFmpeg's decoder to open by name, or nothing for the stream's own.
@@ -16,7 +16,7 @@ struct GrainDecoding {
     // FFmpeg's decoders give the grain's parameters as side data instead of
     // adding it (AV_CODEC_EXPORT_DATA_FILM_GRAIN).
     bool export_grain = false;
-    // dav1d adds AV1's grain (Dav1dSettings::apply_grain).
+    // dav1d adds AV1's grain and dav2d AV2's (their settings' apply_grain).
     bool apply_grain = true;
     // The grain added is one only `decoder` adds (H.274's, by VVdeC): an
     // FFmpeg without that decoder leaves it out rather than add it otherwise.

@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "vml/app_log.h"
+#include "vml/av2_probe.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/gpu_frames.h"
@@ -364,6 +365,8 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
             result = {{"available", probe.available}, {"text", probe.text}};
         } else if (task == "vship-pass") {
             result = vship_pass_task(request, request_file.parent_path());
+        } else if (task == "av2-probe") {
+            result = av2_probe_task(request);
         } else if (task == "nvdec-probe") {
             result = {{"h264_10bit", nvidia_decodes_10bit_h264()}};
         } else if (task == "vship-probe") {
