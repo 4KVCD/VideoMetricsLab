@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cmath>
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <string>
@@ -63,7 +64,13 @@ struct Dav2dCalls {
 // The first picture dav2d decodes from the stream's first units: its size,
 // depth, layout, colour and whether it carries a film grain model.
 nlohmann::json first_picture(const std::filesystem::path& path) {
-    const platform::DynamicLibrary library(dav2d_library_path());
+    // Missing (macOS bundles none), it is named as the software decoder's
+    // refusal names it, not by the loader's error and paths.
+    const std::filesystem::path dav2d_path = dav2d_library_path();
+    if (std::error_code ignored; !std::filesystem::is_regular_file(dav2d_path, ignored)) {
+        throw std::runtime_error("dav2d is not bundled");
+    }
+    const platform::DynamicLibrary library(dav2d_path);
     const Dav2dCalls dav2d(library);
     if (dav2d.version_api() >> 16 != kDav2dApiMajor) {
         throw std::runtime_error("dav2d is not the version the app was made for");

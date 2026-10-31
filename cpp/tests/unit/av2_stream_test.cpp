@@ -1,17 +1,21 @@
 // The AV2 reader (av2_stream.h) on streams made here: the OBUs of four
 // temporal units, in AOM's IVF and in WebM (two of them in one frame or
-// block, as avmenc writes them) and as a Section 5 stream; and the display
-// times of dav2d's pictures (dav2d/display_order.h).
+// block, as avmenc writes them) and as a Section 5 stream; the display
+// times of dav2d's pictures (dav2d/display_order.h); and the probe's
+// refusal where dav2d is not bundled (av2_probe.h).
 #include <gtest/gtest.h>
 
 #include <cstdint>
 #include <fstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "dav2d/display_order.h"
 #include "test_videos.h"
+#include "vml/av2_probe.h"
 #include "vml/av2_stream.h"
+#include "vml/platform/system.h"
 
 using namespace vml;
 using Bytes = std::vector<std::uint8_t>;
@@ -349,4 +353,19 @@ TEST(Av2Stream, Dav2dsPicturesAreTimedInDisplayOrder) {
     EXPECT_EQ(order.shown(), std::nullopt);  // more pictures than units
     order.fed(8);
     EXPECT_EQ(order.shown(), 8);
+}
+
+// Where dav2d is not bundled (macOS), an AV2 video is refused by that name,
+// as the software decoder refuses it, not by the loader's error and paths.
+TEST(Av2Stream, AnAppWithoutDav2dSaysSo) {
+    const test::Folder folder;
+    std::filesystem::create_directories(folder / "resources");
+    write(folder / "a.ivf", ivf({key_unit, inter_unit}));
+    const test::ScopedVariable resources("VML_RESOURCES", platform::path_text(folder / "resources"));
+    try {
+        av2_probe_task({{"path", platform::path_text(folder / "a.ivf")}});
+        FAIL() << "probed without dav2d";
+    } catch (const std::runtime_error& error) {
+        EXPECT_STREQ(error.what(), "dav2d is not bundled");
+    }
 }
