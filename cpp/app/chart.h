@@ -1,8 +1,10 @@
 // A line chart made for per-frame metric scores (the Python app's
 // vmaf_app/ui/chart.py). It is drawn by hand, as there:
-// - each line is reduced to one min/max pair per pixel column before it is
-//   drawn, so the cost of drawing depends on the window's width, not the
-//   video's length, and no dip is lost;
+// - each line is reduced to one min/max pair per column of about a pixel of
+//   the mouse (a whole number of screen pixels) before it is drawn, so the
+//   cost of drawing depends on the window's width, not the video's length,
+//   and no dip is lost; the columns are fixed to the time axis, so a drag
+//   moves the lines without changing them;
 // - the drawing is kept in a pixmap, so moving the crosshair repaints only
 //   the few pixel columns that changed.
 #pragma once
@@ -122,6 +124,15 @@ private:
     friend class GraphPanelTest;    // and the graph's
     friend class BitratePanelTest;  // and the Bitrate tab's
 
+    // The time range in view, as where it starts and how long it is: a drag
+    // moves the start alone, so that the seconds a pixel holds, on which
+    // draw_series' grid of pixels rests, stay exactly the same (an end moved
+    // with the start would change the length by a rounding).
+    struct View {
+        double start = 0.0;
+        double span = 1.0;
+    };
+    View current_view() const;  // view_, or all of the data
     std::vector<const ChartSeries*> visible_series() const;
     void recompute_y_range();
     double height_fraction(double value_fraction) const { return invert_y_ ? 1.0 - value_fraction : value_fraction; }
@@ -146,10 +157,10 @@ private:
     bool cache_dark_ = false;  // the theme the cache was drawn in
     int renders_ = 0;          // how many times the cache has been drawn (for the tests)
     std::optional<int> cursor_x_;
-    std::optional<std::pair<double, double>> view_x_;  // nothing: all of the data
+    std::optional<View> view_;  // nothing: all of the data
     std::pair<double, double> y_range_{0.0, 1.0};
     std::optional<QPoint> pan_origin_;
-    std::optional<std::pair<double, double>> pan_view_;
+    std::optional<View> pan_view_;
     // While the size keeps changing (the window dragged by an edge), the last
     // drawing is shown stretched, and drawn again once the size settles.
     // Drawn at every size, a dozen two-hour lines took 54 ms a step.

@@ -4,13 +4,19 @@
 #include "chart.h"
 
 #include <QColor>
+#include <QCoreApplication>
 #include <QImage>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QStringList>
 #include <QTimer>
 
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
+#include <cmath>
+#include <cstring>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -28,6 +34,20 @@ protected:
     static int drawn_width(const ChartWidget& chart) { return chart.cache_ ? chart.cache_->width() : 0; }
     // The window's size has settled: the wait for it is over.
     static void settle(ChartWidget& chart) { chart.resize_settle_->stop(); }
+    static void zoom_to(ChartWidget& chart, double start, double span) { chart.view_ = ChartWidget::View{start, span}; }
+    // The chart's lines alone, on white, where the chart draws them, as a
+    // screen at `ratio` gets them.
+    static QImage lines(const ChartWidget& chart, double ratio) {
+        QImage image(static_cast<int>(std::ceil(chart.width() * ratio)),
+                     static_cast<int>(std::ceil(chart.height() * ratio)), QImage::Format_RGB32);
+        image.setDevicePixelRatio(ratio);
+        image.fill(Qt::white);
+        QPainter painter(&image);
+        for (const ChartSeries* series : chart.visible_series()) {
+            chart.draw_series(painter, chart.plot_rect(), *series);
+        }
+        return image;
+    }
 };
 
 namespace {
@@ -163,6 +183,116 @@ TEST_F(ChartTest, ANarrowDipSurvivesAndASettledSizeIsDrawnOnce) {
     chart.grab();
     EXPECT_EQ(renders(chart), 3);
     EXPECT_EQ(drawn_width(chart), 900);
+}
+
+// Drags the chart `dx` pixels to the left, as the mouse does.
+void drag_left(ChartWidget& chart, int dx) {
+    const QPointF from = chart.plot_rect().center();
+    const QPointF to = from - QPointF(dx, 0);
+    QMouseEvent press(QEvent::MouseButtonPress, from, from, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent move(QEvent::MouseMove, to, to, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent release(QEvent::MouseButtonRelease, to, to, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(&chart, &press);
+    QCoreApplication::sendEvent(&chart, &move);
+    QCoreApplication::sendEvent(&chart, &release);
+}
+
+// The screen's pixel columns inside the plot, away from its edges (where
+// lines come into view and leave it).
+std::pair<int, int> inner_columns(const QRect& plot, double ratio) {
+    constexpr int edge = 3;
+    return {static_cast<int>(std::ceil(plot.left() * ratio)) + edge,
+            static_cast<int>(std::floor((plot.right() + 1) * ratio)) - edge};
+}
+
+// Whether, within `columns`, `after` is `before` moved `shift` pixels to the
+// left.
+bool moved_left(const QImage& before, const QImage& after, std::pair<int, int> columns, int shift) {
+    const int old_start = columns.first + std::max(0, shift);
+    const int new_start = columns.first + std::max(0, -shift);
+    const int width = columns.second - columns.first - std::abs(shift);
+    for (int y = 0; y < before.height(); ++y) {
+        const auto* old_row = reinterpret_cast<const QRgb*>(before.constScanLine(y));
+        const auto* new_row = reinterpret_cast<const QRgb*>(after.constScanLine(y));
+        if (std::memcmp(old_row + old_start, new_row + new_start, sizeof(QRgb) * width) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// The middle of the inked pixels within two rows of `row`, or -1.
+double ink_middle(const QImage& image, int row) {
+    int first = -1;
+    int last = -1;
+    for (int y = std::max(0, row - 2); y <= std::min(image.height() - 1, row + 2); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            if (image.pixel(x, y) != qRgb(255, 255, 255)) {
+                first = first < 0 ? x : std::min(first, x);
+                last = std::max(last, x);
+            }
+        }
+    }
+    return first < 0 ? -1.0 : (first + last + 1) / 2.0;
+}
+
+TEST_F(ChartTest, DraggingMovesTheLinesWithoutChangingThem) {
+    // Dragged left and right, the lines move as they are: the frames a
+    // pixel column sums up, and where a point falls within a pixel, do not
+    // depend on where the view starts. Zoomed to many frames a column, to
+    // about as many frames as a line is drawn point by point, and to few;
+    // on a screen at 100%, 125% and 175% (where a pixel of the mouse is 1.75
+    // of the screen's). A line with a gap; one low frame, at the axis's
+    // bottom, and one at VMAF's 100, drawn on the row above the plot, each
+    // within a pixel or two of where its time is.
+    constexpr int count = 20'000;
+    constexpr int low_frame = 3000;   // 125 s: in every view below
+    constexpr int high_frame = 3050;  // 127 s
+    std::vector<double> times(count);
+    std::vector<float> values(count);
+    unsigned noise = 12345;
+    for (int i = 0; i < count; ++i) {
+        times[i] = i / 24.0;
+        noise = noise * 1103515245U + 12345U;
+        values[i] = static_cast<float>(70.0 + 20.0 * std::sin(i * 0.05) + (noise >> 16) % 17 - 8.0);
+    }
+    values[low_frame] = 20.0F;  // the others are 42 to 98
+    values[high_frame] = 100.0F;
+    for (int i = 3100; i < 3105; ++i) {
+        values[i] = std::numeric_limits<float>::quiet_NaN();
+    }
+    ChartWidget chart(QStringLiteral("VMAF"), 100.0);
+    chart.resize(800, 400);
+    chart.set_series(0, line_of(std::move(times), std::move(values)));
+    const QRect plot = chart.plot_rect();
+    ASSERT_EQ(chart.y_range(), std::pair(20.0, 100.0));
+    for (const double frames_in_view : {3000.0, 2.0 * plot.width() - 1, 300.0}) {
+        for (const double ratio : {1.0, 1.25, 1.75}) {
+            const std::pair<int, int> columns = inner_columns(plot, ratio);
+            const std::string where = std::to_string(frames_in_view) + " frames in view at " + std::to_string(ratio);
+            const auto expect_frame_at = [&](const QImage& image, int frame, double row) {
+                const auto [x0, x1] = chart.x_range();
+                const double x = (plot.left() + (frame / 24.0 - x0) / (x1 - x0) * plot.width()) * ratio;
+                EXPECT_NEAR(ink_middle(image, static_cast<int>(row * ratio)), x, 2.0) << where << ", frame " << frame;
+            };
+            zoom_to(chart, 120.123457, frames_in_view / 24.0);
+            QImage before = lines(chart, ratio);
+            for (const int dx : {1, 3, 10, -7}) {
+                drag_left(chart, dx);
+                const QImage after = lines(chart, ratio);
+                // The drawing moves by the whole screen pixels the drag's
+                // 1.75-pixel steps add up to: down or up.
+                const auto shift_down = static_cast<int>(std::floor(dx * ratio));
+                const auto shift_up = static_cast<int>(std::ceil(dx * ratio));
+                EXPECT_TRUE(moved_left(before, after, columns, shift_down) ||
+                            moved_left(before, after, columns, shift_up))
+                    << where << ", dragged " << dx;
+                expect_frame_at(after, low_frame, plot.bottom());
+                expect_frame_at(after, high_frame, plot.top() - 1);
+                before = after;
+            }
+        }
+    }
 }
 
 }  // namespace

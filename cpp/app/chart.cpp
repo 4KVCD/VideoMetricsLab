@@ -18,6 +18,9 @@
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <optional>
+#include <span>
+#include <vector>
 
 #include "theme.h"
 #include "window_helpers.h"
@@ -39,6 +42,101 @@ constexpr std::array<double, 15> time_steps{1, 2, 5, 10, 15, 30, 60, 120, 300, 6
 constexpr double target_ticks = 8;
 
 QString time_text(double seconds) { return QString::fromStdString(format_hms(seconds)); }
+
+// A line's frames drawn point by point, a finite stretch at a time: joined
+// across a missing frame, it would invent a line through it, and an
+// infinity in a QPointF is undefined. Drawn as segments, not as one
+// polyline: with display scaling, which makes the pen wider than a pixel,
+// Qt outlines a polyline as a shape and fills it, 19 times slower (three
+// lines of 720 frames: 13.7 ms against 0.73 ms at 175%); the segments differ
+// from it only by a pixel at the tip of some sharp turns.
+template <typename ToX, typename ToY>
+void draw_points(QPainter& painter, std::span<const double> times, std::span<const float> values, ToX to_x,
+                 ToY to_y) {
+    std::vector<QLineF> segments;
+    segments.reserve(times.size());
+    std::optional<QPointF> previous;  // the stretch's last point
+    bool joined = false;              // whether it is in a segment
+    const auto end_stretch = [&painter, &previous, &joined] {
+        if (previous && !joined) {
+            painter.drawPoint(*previous);  // a stretch of one frame
+        }
+        previous.reset();
+        joined = false;
+    };
+    for (std::size_t i = 0; i < times.size(); ++i) {
+        const auto value = static_cast<double>(values[i]);
+        if (!std::isfinite(value)) {
+            end_stretch();
+            continue;
+        }
+        const QPointF point(to_x(times[i]), to_y(value));
+        if (previous) {
+            segments.emplace_back(*previous, point);
+        }
+        joined = previous.has_value();
+        previous = point;
+    }
+    end_stretch();
+    painter.drawLines(segments.data(), static_cast<int>(segments.size()));
+}
+
+// More frames than pixels: one min/max stroke per column, so that drawing
+// costs what the width does and no dip is lost. A column is `cell` pixels of
+// the screen wide, about a pixel of the mouse (2 at 175 %: one a screen
+// pixel wide would draw twice the strokes, 23 -> 36 ms for twelve two-hour
+// lines), and a whole number of them, so that a drag moves it by
+// whole pixels. A frame's column is its time's on the grid of columns that
+// starts at time 0; on the screen, a time's x is its grid position in screen
+// pixels less `origin`, a whole number of pixels. Each stroke also reaches
+// the frame before its column, so that the line stays joined where a column
+// holds about one frame, and across a jump. An infinity counts as a gap, not
+// as a huge value that would hide the line, and is not joined across.
+template <typename ToY>
+void draw_columns(QPainter& painter, std::span<const double> times, std::span<const float> values,
+                  double seconds_per_screen_pixel, int cell, double origin, ToY to_y) {
+    const double seconds_per_column = seconds_per_screen_pixel * cell;
+    constexpr float infinity = std::numeric_limits<float>::infinity();
+    std::vector<QLineF> lines;
+    lines.reserve(static_cast<std::size_t>((times.back() - times.front()) / seconds_per_column) + 2);
+    std::optional<double> column;  // the column being summed up
+    std::optional<float> before;   // the last finite frame so far, unless a gap came after it
+    bool inked = false;            // whether the column has a finite frame of its own
+    float low = infinity;
+    float high = -infinity;
+    const auto end_column = [&] {
+        if (column && inked) {
+            // The column's middle: the stroke covers its `cell` pixels wherever it falls.
+            const double x = *column * cell - origin + cell / 2.0;
+            lines.emplace_back(x, to_y(high), x, to_y(low));
+        }
+    };
+    for (std::size_t i = 0; i < times.size(); ++i) {
+        const double at = std::floor(times[i] / seconds_per_column);
+        if (at != column) {
+            end_column();
+            column = at;
+            inked = false;
+            low = before.value_or(infinity);
+            high = before.value_or(-infinity);
+        }
+        const float value = values[i];
+        if (!std::isfinite(value)) {
+            before.reset();
+            if (!inked) {  // the gap comes between the frame before and this column's
+                low = infinity;
+                high = -infinity;
+            }
+            continue;
+        }
+        low = std::min(low, value);
+        high = std::max(high, value);
+        before = value;
+        inked = true;
+    }
+    end_column();
+    painter.drawLines(lines.data(), static_cast<int>(lines.size()));
+}
 
 }  // namespace
 
@@ -187,10 +285,20 @@ std::pair<double, double> ChartWidget::data_x_range() const {
     return hi > lo ? std::pair(lo, hi) : std::pair(lo, lo + 1.0);
 }
 
-std::pair<double, double> ChartWidget::x_range() const { return view_x_ ? *view_x_ : data_x_range(); }
+ChartWidget::View ChartWidget::current_view() const {
+    if (view_) {
+        return *view_;
+    }
+    const auto [lo, hi] = data_x_range();
+    return {lo, hi - lo};
+}
+
+std::pair<double, double> ChartWidget::x_range() const {
+    return view_ ? std::pair(view_->start, view_->start + view_->span) : data_x_range();
+}
 
 void ChartWidget::reset_view() {
-    view_x_.reset();
+    view_.reset();
     invalidate(true);
     emit view_changed();
 }
@@ -452,101 +560,63 @@ void ChartWidget::draw_axes(QPainter& painter, const QRect& rect, bool dark) con
 
 void ChartWidget::draw_series(QPainter& painter, const QRect& rect, const ChartSeries& series) const {
     // One line: point by point when there are few, else one min/max stroke
-    // per pixel column.
-    const auto [x0, x1] = x_range();
+    // per column of about a pixel of the mouse (draw_columns).
+    //
+    // Dragged left or right, the line must move without changing shape. So
+    // it is drawn in the screen's own pixels (at 175 %, a pixel of the mouse
+    // is 1.75 of the screen's), on a grid of pixels that starts at time 0,
+    // not at the view's start: a frame's place within its pixel, and the
+    // frames a column sums up, are the same wherever the view starts, and a
+    // drag moves the whole drawing by whole pixels.
+    const View view = current_view();
     const double y0 = y_range_.first;  // not a structured binding: the lambda below takes it
     const double y1 = y_range_.second;
+    const double ratio = painter.device()->devicePixelRatioF();
+    const double seconds_per_screen_pixel = std::max(1e-12, view.span) / (rect.width() * ratio);
+    const int cell = std::max(1, static_cast<int>(std::lround(ratio)));  // a column's width (draw_columns)
+    // A time's x on the screen: its pixel on the grid, less the grid's pixel
+    // at the plot's left edge (a whole number). The view's start falls within
+    // half a pixel of the edge.
+    const double origin = std::nearbyint(view.start / seconds_per_screen_pixel - rect.left() * ratio);
+    const auto to_x = [=](double t) { return t / seconds_per_screen_pixel - origin; };
+    const double y_span = std::max(1e-9, y1 - y0);
+    const auto to_y = [&](double value) {
+        return (rect.bottom() - height_fraction((value - y0) / y_span) * rect.height()) * ratio;
+    };
+    // The frames in view, those of the edge columns' pixels outside it, and
+    // one more each side, which a line in view is joined to.
     const std::span<const double> times = series.times;
-    const std::span<const float> values = series.values;
     const auto count_all = static_cast<std::ptrdiff_t>(times.size());
-    std::ptrdiff_t lo = std::lower_bound(times.begin(), times.end(), x0) - times.begin();
-    std::ptrdiff_t hi = std::upper_bound(times.begin(), times.end(), x1) - times.begin();
+    const double margin = (cell + 1) * seconds_per_screen_pixel;
+    std::ptrdiff_t lo = std::lower_bound(times.begin(), times.end(), view.start - margin) - times.begin();
+    std::ptrdiff_t hi = std::upper_bound(times.begin(), times.end(), view.start + view.span + margin) - times.begin();
     lo = std::max<std::ptrdiff_t>(0, lo - 1);
     hi = std::min(count_all, hi + 1);
     if (hi - lo < 1) {
         return;
     }
-    const int width = rect.width();
-    painter.setPen(QPen(series.color, 1));
-    const double y_span = std::max(1e-9, y1 - y0);
-    const auto to_py = [&](double value) {
-        return rect.bottom() - height_fraction((value - y0) / y_span) * rect.height();
-    };
+    const std::span<const double> shown_times = times.subspan(lo, hi - lo);
+    const std::span<const float> shown_values = series.values.subspan(lo, hi - lo);
+    painter.save();
+    // What lies outside the view stays out of the side margins. Not clipped
+    // above and below: the axis's top value is drawn on the row above the
+    // plot (to_y), and a VMAF line at 100 would be lost.
+    painter.setClipRect(QRect(rect.left(), 0, rect.width(), height()));
+    painter.scale(1.0 / ratio, 1.0 / ratio);
+    painter.setPen(QPen(series.color, ratio));  // a pixel of the mouse wide, as before
 
-    if (hi - lo <= static_cast<std::ptrdiff_t>(width) * 2) {
-        // Few enough points to draw honestly as a line, a finite stretch at a
-        // time: joined across a missing frame, it would invent a line through
-        // it, and an infinity in a QPointF is undefined. Drawn as segments,
-        // not as one polyline: with display scaling, which makes the 1 px pen
-        // wider than a pixel, Qt outlines a polyline as a shape and fills it,
-        // 19 times slower (three lines of 720 frames: 13.7 ms against 0.73 ms
-        // at 175%); the segments differ from it only by a pixel at the tip
-        // of some sharp turns.
-        const double x_span = std::max(1e-9, x1 - x0);
-        std::vector<QLineF> segments;
-        segments.reserve(static_cast<std::size_t>(hi - lo));
-        std::optional<QPointF> previous;  // the stretch's last point
-        bool joined = false;              // whether it is in a segment
-        const auto end_stretch = [&painter, &previous, &joined] {
-            if (previous && !joined) {
-                painter.drawPoint(*previous);  // a stretch of one frame
-            }
-            previous.reset();
-            joined = false;
-        };
-        for (std::ptrdiff_t i = lo; i < hi; ++i) {
-            const auto value = static_cast<double>(values[static_cast<std::size_t>(i)]);
-            if (!std::isfinite(value)) {
-                end_stretch();
-                continue;
-            }
-            const QPointF point(rect.left() + (times[static_cast<std::size_t>(i)] - x0) / x_span * width, to_py(value));
-            if (previous) {
-                segments.emplace_back(*previous, point);
-            }
-            joined = previous.has_value();
-            previous = point;
-        }
-        end_stretch();
-        painter.drawLines(segments.data(), static_cast<int>(segments.size()));
-        return;
+    // Point by point while the view holds at most two frames a pixel of the
+    // mouse. Counted from the line's frame rate, not from the frames in
+    // view, which a drag changes by one or two: near the threshold, each
+    // drag would switch between the two ways of drawing.
+    const double data_span = times.back() - times.front();
+    const double frames_in_view = data_span > 0 ? static_cast<double>(count_all - 1) / data_span * view.span : 0.0;
+    if (frames_in_view <= rect.width() * 2.0) {
+        draw_points(painter, shown_times, shown_values, to_x, to_y);
+    } else {
+        draw_columns(painter, shown_times, shown_values, seconds_per_screen_pixel, cell, origin, to_y);
     }
-
-    // More frames than pixels: one min/max pair per pixel column, so that
-    // drawing costs what the width does and no dip is lost. The columns'
-    // first frames are numpy's linspace(lo, hi, width + 1), truncated; a
-    // column whose first frame is the one before's has none of its own. An
-    // infinity counts as a gap, not as a huge value that would hide the line.
-    const double step = static_cast<double>(hi - lo) / width;
-    std::vector<std::pair<int, std::ptrdiff_t>> columns;  // (column, its first frame)
-    std::ptrdiff_t previous = -1;
-    for (int column = 0; column < width; ++column) {
-        const auto first = static_cast<std::ptrdiff_t>(column * step + static_cast<double>(lo));
-        if (column == 0 || first > previous) {
-            columns.emplace_back(column, first);
-        }
-        previous = first;
-    }
-    std::vector<QLineF> lines;
-    lines.reserve(columns.size());
-    for (std::size_t j = 0; j < columns.size(); ++j) {
-        const std::ptrdiff_t end = j + 1 < columns.size() ? columns[j + 1].second : hi;
-        float low = std::numeric_limits<float>::infinity();
-        float high = -std::numeric_limits<float>::infinity();
-        for (std::ptrdiff_t i = columns[j].second; i < end; ++i) {
-            const float value = values[static_cast<std::size_t>(i)];
-            if (std::isfinite(value)) {
-                low = std::min(low, value);
-                high = std::max(high, value);
-            }
-        }
-        if (!std::isfinite(low) || !std::isfinite(high)) {
-            continue;
-        }
-        const double x = rect.left() + columns[j].first;
-        lines.emplace_back(x, to_py(high), x, to_py(low));
-    }
-    painter.drawLines(lines.data(), static_cast<int>(lines.size()));
+    painter.restore();
 }
 
 // ------------------------------------------------------------------- cursor
@@ -592,10 +662,10 @@ void ChartWidget::mouseMoveEvent(QMouseEvent* event) {
     // pointer.
     const QPoint pos = event->position().toPoint();
     if (pan_origin_ && pan_view_) {
-        const double span = pan_view_->second - pan_view_->first;
+        const double span = pan_view_->span;
         const double shift =
             (pan_origin_->x() - pos.x()) / static_cast<double>(std::max(1, plot_rect().width())) * span;
-        view_x_ = std::pair(pan_view_->first + shift, pan_view_->second + shift);
+        view_ = View{pan_view_->start + shift, span};
         invalidate();
         emit view_changed();
         return;
@@ -637,7 +707,7 @@ void ChartWidget::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         forget_hover();
         pan_origin_ = event->position().toPoint();
-        pan_view_ = x_range();
+        pan_view_ = current_view();
         setCursor(Qt::ClosedHandCursor);
     }
 }
@@ -666,28 +736,25 @@ void ChartWidget::wheelEvent(QWheelEvent* event) {
         return;
     }
     const double factor = std::pow(0.8, steps);
-    const auto [x0, x1] = x_range();
+    const View view = current_view();
     const double anchor = time_at(event->position().toPoint().x());
-    double new_span = (x1 - x0) * factor;
+    double new_span = view.span * factor;
     const auto [data_lo, data_hi] = data_x_range();
     if (new_span >= data_hi - data_lo) {
         reset_view();
         return;
     }
     new_span = std::max(new_span, seconds_per_pixel() * 8);  // not past a few pixels of data
-    const double left_share = (anchor - x0) / std::max(1e-9, x1 - x0);
+    const double left_share = (anchor - view.start) / std::max(1e-9, view.span);
     double new_x0 = anchor - left_share * new_span;
-    double new_x1 = new_x0 + new_span;
     // Over the data, not drifting off its ends.
     if (new_x0 < data_lo) {
         new_x0 = data_lo;
-        new_x1 = data_lo + new_span;
     }
-    if (new_x1 > data_hi) {
+    if (new_x0 + new_span > data_hi) {
         new_x0 = data_hi - new_span;
-        new_x1 = data_hi;
     }
-    view_x_ = std::pair(new_x0, new_x1);
+    view_ = View{new_x0, new_span};
     invalidate();
     emit view_changed();
 }

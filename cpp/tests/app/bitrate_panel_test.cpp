@@ -56,7 +56,9 @@ protected:
     static QColor line_color(const BitratePanel& panel, std::size_t row) {
         return panel.chart->series_.at(entry(panel, row).series).color;
     }
-    static void zoom_to(BitratePanel& panel, std::pair<double, double> view) { panel.chart->view_x_ = view; }
+    static void zoom_to(BitratePanel& panel, std::pair<double, double> view) {
+        panel.chart->view_ = ChartWidget::View{view.first, view.second - view.first};
+    }
     static QString cell(const BitratePanel& panel, int row, int column) {
         return panel.table->item(row, column)->text();
     }
