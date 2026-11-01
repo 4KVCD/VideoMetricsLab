@@ -2,38 +2,41 @@
 
 Calculate VMAF, VMAF NEG, VMAF v1, SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD, Intel and Apple GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly to easily spot differences.
 
-New in v2.2.1: VideoMetricsLab now runs on macOS (Apple silicon), and SSIMULACRA2, Butteraugli and ColorVideo VDP use [Vship-fast](https://github.com/4KVCD/Vship-fast): Butteraugli **1.75x-2.5x**, ColorVideo VDP **1.6x-2.4x** and SSIMULACRA2 up to **1.6x** faster, and as accurate as libjxl and pycvvdp. See the [changelog](CHANGELOG.md).
+v2.3 adds VVC film grain support, adds AV2 decoding, improves VVC scoring speed up to **2x**, AMD GPU speed **1.3x-2x**, and adds back Vship as an option. Various bug fixes including wrong scoring for H.264 lossless, MPEG-2, and MPEG-4 Part 2 on certain GPUs. See the [changelog](CHANGELOG.md).
 
 ## Features
 
 **Metrics**
 - VMAF v0.6.1, VMAF NEG, VMAF v1, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli and ColorVideo VDP, for many test videos at once.
 - VMAF models for standard, phone, 4K and HFR viewing.
+- Film grain scored as viewers see it, or without it: VVC, AV1 and AFGS1 grain, at any bit depth.
 
 **Fast on any GPU**
-- VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD, Intel and Apple GPUs with [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast): VMAF v1 up to **17x** faster.
-- SSIMULACRA2, Butteraugli and ColorVideo VDP on any GPU with [Vship-fast](https://github.com/4KVCD/Vship-fast) (Vulkan); libjxl on the CPU when no GPU can be used, for SSIMULACRA2 and Butteraugli.
+- VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD, Intel and Apple GPUs with [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast): VMAF and VMAF NEG **3.2x-4.4x** faster than with CUDA on NVIDIA, and VMAF v1 up to **17x** faster.
+- SSIMULACRA2, Butteraugli and ColorVideo VDP on any GPU with [Vship-fast](https://github.com/4KVCD/Vship-fast) (Vulkan), as accurate as libjxl and pycvvdp; stock Vship for any video you choose or when Vship-fast fails, and libjxl on the CPU calculates SSIMULACRA2 and Butteraugli when no GPU can.
 - PSNR, SSIM and XPSNR **2.7x-11x** faster, calculated in the app.
-- GPU video decoding, with software decoding for formats the GPU can't handle, such as VVC.
+- GPU video decoding, with software decoding for the rest: VVC with Fraunhofer's VVdeC, and AV2 with VideoLAN's dav2d.
 
 **Compare and inspect**
-- Frame-exact playback that switches instantly between the source and each encode (hold **S**), with zoom, at up to 120 fps in 4K HDR.
+- Frame-exact playback that switches instantly between the source and each encode (hold **S**), with zoom, at up to 120 fps in 4K HDR, with film grain shown as it is scored.
 - Metric curves, statistics and per-frame scores (per second for ColorVideo VDP), with each metric's best and worst results highlighted.
 - Bitrate by frame, second or GOP.
 
 **Workflow**
 - Black bars and resolution mismatches handled automatically.
-- Results saved and reloaded automatically.
+- Results saved and reloaded automatically; a metric added later is the only one calculated.
+- Scores and statistics exported as CSV or JSON.
 - Drag and drop videos, sort and reorder the list, and a dark theme.
-- A command line, `VideoMetricsLab-cli`, for scripts.
+- A command line, `VideoMetricsLab-cli`, for scripts, which also reads raw video streams and .yuv files.
 - Two test videos calculated in parallel on many-core CPUs.
+- A native C++ app: a 34 MB download on Windows.
 
 ## Videos
 
 Configure each test independently, inspect its codec and bitrate, and calculate
 multiple quality metrics in one run.
 
-![Videos tab with H.264 and HEVC test encodes](docs/screenshots/01-videos.png)
+![Videos tab with H.264, HEVC, AV1 and VVC test encodes, and the Film grain option](docs/screenshots/01-videos.png)
 
 ## Metric graphs
 
@@ -78,7 +81,7 @@ Settings > Privacy & Security > Open Anyway.
 
 The app requires **FFmpeg 9 or newer with libvmaf**. FFmpeg is not bundled; the
 app prompts for its location if it is not available on `PATH`. On macOS,
-`brew install ffmpeg` installs it.
+`brew install ffmpeg-full` installs it (with zscale, which HDR video needs to be shown in SDR).
 
 ### Build from source
 

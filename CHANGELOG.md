@@ -1,5 +1,75 @@
 # Changelog
 
+## v2.3
+
+v2.3 adds VVC film grain support, adds AV2 decoding, improves VVC scoring speed up to **2x**, AMD GPU speed
+**1.3x-2x**, and adds back Vship as an option. Various bug fixes including wrong scoring for H.264 lossless, MPEG-2,
+and MPEG-4 Part 2 on certain GPUs.
+
+### New features
+
+- Film grain support: score each video with its film grain, as viewers see it, or without it, for VVC (including
+  10-bit VVenC `--fga` encodes), AV1 and AFGS1 grain (Options, Settings, `--film-grain`).
+- AV2 decoding (WebM, IVF and .obu) for scores, Video Compare and Bitrate Viewer.
+- Vship is back as an option: choose GPU or GPU - Vship for each video's SSIMULACRA2,
+  Butteraugli and CVVDP (Options, Settings, `--vship`).
+- Export scores and statistics as CSV or JSON from the right-click menus (#8).
+- CVVDP's default display is now Automatic: the HDR display for HDR video, the SDR display for SDR video.
+- The window and the command line now say when a GPU metric falls back, and why.
+- The update check offers only a release that has the package for the user's system.
+- Command line: added `--vship-pass`, `--model-v1`, `--gpu-decode` and `--cvvdp-fill`.
+
+### Metric performance
+
+- A video decoded on the CPU, such as VVC, is decoded once for both the CPU and GPU metrics: up to **2x** faster.
+- VVC decoding **1.4x-2.3x** faster: Fraunhofer's VVdeC decodes VVC instead of FFmpeg's VVC decoder.
+- VMAF and VMAF NEG on AMD GPUs **1.3x-2x** faster, with 5x-9x less CPU.
+
+### System performance
+
+- Black-bar detection **2.7x** faster for videos under 17 seconds.
+
+### macOS
+
+The Mac version now has the same features as the Windows version:
+
+- VVC film grain and AV2 decoding, as on Windows.
+- Video Compare shows HDR10 and HLG in HDR on an HDR display.
+- Video Compare plays a 5.1 or 7.1 soundtrack in the output device's own speakers, and keeps the picture in step
+  with the device's delay (such as Bluetooth's).
+- Control+Tab and Control+Shift+Tab switch tabs.
+- Options offers the Mac's own GPU decoding (Apple VideoToolbox) and names the Mac's chip.
+- The app finds Homebrew's `ffmpeg-full`, and says when FFmpeg lacks zscale, which HDR stills and playback need.
+- The programs the app starts now end with it, however it ends.
+- Fixed a paused program being ended when the app waited for it.
+- Fixed AV1 scores with film grain saved on a Mac and on Windows not being shared.
+- Command line: `--gpu-decode nvidia`, `intel` and `amd` are refused, as a Mac decodes with its own GPU.
+
+### Bug fixes
+
+- Fixed wrong scores against lossless H.264 references (x264 `-qp 0`) on Intel and AMD GPUs and NVIDIA GPUs before
+  the RTX 50 series.
+- Fixed wrong scores for MPEG-2 and MPEG-4 Part 2 videos with GPU decoding.
+- Fixed 10-bit VVenC `--fga 3` encodes scoring far too low without their grain.
+- Fixed metrics with saved scores being calculated again when another metric was added.
+- Fixed CPU SSIMULACRA2 and Butteraugli scoring an 8-bit source against a 10-bit encode 15-20% worse.
+- Fixed videos whose picture size changes partway through failing or scoring wrongly.
+- Fixed Video Compare showing the wrong frame in some MP4 videos, such as VVenC encodes.
+- Fixed Video Compare's VVC film grain darkening the picture.
+- Fixed GPU runs on a busy PC failing or falling back to slower decoding.
+- Fixed a busy PC stopping a comparison with "ffprobe could not be run".
+- Fixed SSIMULACRA2, Butteraugli and CVVDP switching to stock Vship after one failed read of a video.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP of scaled 8-bit videos changing slightly with GPU decoding.
+- Fixed VMAF v1 on AMD GPUs decoding some videos twice, and VC-1 retrying GPU decoding six times.
+- Fixed 10-bit H.264 failing on the first try with GPU decoding on NVIDIA GPUs before the RTX 50 series.
+- Fixed HEVC stream copies cut at an open-GOP frame falling back to slower decoding.
+- Fixed Video Compare showing the Videos tab at the first switch after black bars change the crop.
+- Fixed results from saved scores not naming the version that made each score.
+- Fixed Cancel and closing the window waiting for a GPU check, and the app staying open 5 seconds when closed right
+  after it starts.
+- Command line: fixed closing the console window losing the `--json` and `--csv` files, and a cancelled video being
+  reported as done.
+
 ## v2.2.1
 
 v2.2.1 replaces v2.2: the changes below, and every change of v2.2.
