@@ -727,7 +727,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     }
     // v2.4's first step (VML_VVDEC_HANDOVER=1): an 8- or 10-bit VVC test video, unscaled and scored without film grain,
     // decoded on the GPU by vvdec-vulkan and handed over to the engine, the reference written into its slots by the CPU
-    // (no CPU metrics beside: the test video's pictures have no samples in host memory)
+    // (no CPU metrics beside: a handed-over frame's planes may not be read, vvdec.h's hand-over)
     const DecodePlan& test_plan = plans[0];
     const std::string test_library =
         !cuda && plan.beside.empty() && vvdec_chosen(test_plan) ? std::string(vvdec_decoder) : test_backend;

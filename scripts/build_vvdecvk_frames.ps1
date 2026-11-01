@@ -1,7 +1,7 @@
 # Builds resources/native/vvdecvk_frames.dll (native/vvdecvk_frames.cpp): VVC decoded on the GPU by vvdec-vulkan
-# (github.com/4KVCD/vvdec-vulkan, Fraunhofer's VVdeC with its reconstruction and parse on the GPU in Vulkan), its
-# pictures handed over on the GPU to Vulkan VMAF (vvdec_handover_*). v2.4's first step: the app takes it only with
-# VML_VVDEC_HANDOVER=1.
+# (github.com/4KVCD/vvdec-vulkan, Fraunhofer's VVdeC with its reconstruction on the GPU in Vulkan, its parse on the
+# CPU), its pictures handed over on the GPU to Vulkan VMAF (vvdec_handover_*). v2.4's first step: the app takes it only
+# with VML_VVDEC_HANDOVER=1.
 #
 # The decoder is built with MinGW-w64 (as the other native decoders, which link it statically) from a checkout of
 # vvdec-vulkan with the hand-over (branch gpu-handover), its shaders compiled with Slang (slangc) and Khronos' Vulkan

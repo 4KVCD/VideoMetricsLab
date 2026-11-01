@@ -1,5 +1,5 @@
-// vvdecvk_frames.dll: VVC decoded on the GPU by vvdec-vulkan (github.com/4KVCD/vvdec-vulkan, the GPU's parse), its
-// pictures handed over on the GPU without a download to host memory of the decoder's own (vvdec_handover_*):
+// vvdecvk_frames.dll: VVC decoded by vvdec-vulkan (github.com/4KVCD/vvdec-vulkan: the CPU's parse, the GPU's
+// reconstruction), its pictures handed over on the GPU, with no copy by the CPU (vvdec_handover_*):
 // - into Vulkan VMAF's slots: the slots' memory is imported into the decoder's Vulkan device, and each picture's luma
 //   is copied there by a compute pass that signals the decoder's timeline semaphore, which Vulkan VMAF waits for
 //   (vv_commit_after);
@@ -8,9 +8,9 @@
 // The C API is gpu_frames.h's, as amf_frames.dll's hand-over has it.
 //
 // What it takes (else nvf_open refuses, and the video is decoded another way): VVC, 8 or 10 bits, its pictures not
-// scaled or widened, no film grain added. nvf_download takes only buffers pinned here: the pictures have no samples
-// in host memory to copy from. The decoder's calls (decode, copy, give back) run one at a time, under the decoder's
-// mutex.
+// scaled or widened, no film grain added. nvf_download takes only buffers pinned here: a handed-over frame's planes
+// may not be read (vvdec.h's hand-over). The decoder's calls (decode, copy, give back) run one at a time, under the
+// decoder's mutex.
 
 #include "gpu_frames.h"
 
@@ -83,12 +83,13 @@ void copy_text(char *out, int size, const std::string &text) {
     if (out && size > 0) snprintf(out, size, "%s", text.c_str());
 }
 
-// The process's vvdec-vulkan settings, before its first decoder: the GPU's parse (which the hand-over needs) and the
-// GPU (its Vulkan device index), unless already set. vvdec reads them once per process.
+// The process's vvdec-vulkan settings, before its first decoder: the GPU (its Vulkan device index), unless already
+// set. vvdec reads them once per process. The parse stays the CPU's, faster than the GPU's (VVDEC_GPU_PARSE=2,
+// honoured when set) except at very low bitrates: 95.0 against 39.8 fps on a 1080p stream, 74 against 233 on a 2 Mbps
+// 4K one.
 void set_environment(int device) {
     static std::once_flag once;
     std::call_once(once, [device] {
-        if (!getenv("VVDEC_GPU_PARSE")) _putenv_s("VVDEC_GPU_PARSE", "2");
         if (!getenv("VVDEC_GPU_DEVICE")) _putenv_s("VVDEC_GPU_DEVICE", std::to_string(device).c_str());
     });
 }
