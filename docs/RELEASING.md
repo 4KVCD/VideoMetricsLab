@@ -69,8 +69,14 @@
 10. Update the changelog, choose a version/tag, and write release notes with
     known issues, requirements and tested hardware. Do not invent a release
     version from the development commit count.
-11. Compute a SHA-256 checksum for the final zip using `Get-FileHash -Algorithm SHA256`.
-12. Upload the zip and checksum to a GitHub Release only after approval.
+11. Compute a SHA-256 checksum for each final zip using `Get-FileHash -Algorithm SHA256`
+    (`shasum -a 256` on the Mac).
+12. Upload both packages and their checksums to a GitHub Release only after
+    approval, under exactly these names: `VideoMetricsLab-windows.zip` and
+    `VideoMetricsLab-macos-arm64.zip` (what `scripts/build_release.ps1` and
+    `scripts/build_release_macos.sh` make). The app's update check offers a
+    release only when it has the package for the user's system, by that name, so
+    publish the release (as Latest) only after both have finished uploading.
 
 The CI workflow checks code and offscreen tests, not GPU correctness or complete
 binary licensing. A source upload and a redistributable Windows release are
