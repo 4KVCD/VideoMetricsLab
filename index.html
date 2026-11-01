@@ -20,7 +20,7 @@
   "name": "VideoMetricsLab",
   "applicationCategory": "MultimediaApplication",
   "operatingSystem": "Windows 10, Windows 11, macOS 14.4",
-  "softwareVersion": "2.2.1",
+  "softwareVersion": "2.3",
   "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
   "license": "https://opensource.org/licenses/MIT",
   "url": "https://4kvcd.github.io/VideoMetricsLab/",
@@ -84,12 +84,9 @@ before it ships.</p>
 libvmaf, installed separately. Free and open source, under the MIT licence.</p>
 
 <section class="news">
-<h2>New in v2.2.1</h2>
-<p>VideoMetricsLab now runs on macOS (Apple silicon), and SSIMULACRA2, Butteraugli and ColorVideo VDP use
-<a href="https://github.com/4KVCD/Vship-fast">Vship-fast</a>: Butteraugli <strong>1.75x-2.5x</strong>, ColorVideo
-VDP <strong>1.6x-2.4x</strong> and SSIMULACRA2 up to <strong>1.6x</strong> faster, and as accurate as libjxl and
-pycvvdp. See the
-<a href="https://github.com/4KVCD/VideoMetricsLab/releases/tag/v2.2.1">release notes</a>.</p>
+<h2>New in v2.3</h2>
+<p>v2.3 adds VVC film grain support, adds AV2 decoding, improves VVC scoring speed up to <strong>2x</strong>, AMD GPU speed <strong>1.3x-2x</strong>, and adds back Vship as an option. Various bug fixes including wrong scoring for H.264 lossless, MPEG-2, and MPEG-4 Part 2 on certain GPUs. See the
+<a href="https://github.com/4KVCD/VideoMetricsLab/releases/tag/v2.3">release notes</a>.</p>
 </section>
 
 <h2>Features</h2>
@@ -98,19 +95,20 @@ pycvvdp. See the
 <ul>
 <li>VMAF v0.6.1, VMAF NEG, VMAF v1, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli and ColorVideo VDP, for many test videos at once.</li>
 <li>VMAF models for standard, phone, 4K and HFR viewing.</li>
+<li>Film grain scored as viewers see it, or without it: VVC, AV1 and AFGS1 grain, at any bit depth.</li>
 </ul>
 
 <h3>Fast on any GPU</h3>
 <ul>
-<li>VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD, Intel and Apple GPUs with <a href="https://github.com/4KVCD/libvmaf-fast">libvmaf-fast</a>: VMAF v1 up to <strong>17x</strong> faster.</li>
-<li>SSIMULACRA2, Butteraugli and ColorVideo VDP on any GPU with <a href="https://github.com/4KVCD/Vship-fast">Vship-fast</a> (Vulkan); libjxl on the CPU when no GPU can be used, for SSIMULACRA2 and Butteraugli.</li>
+<li>VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD, Intel and Apple GPUs with <a href="https://github.com/4KVCD/libvmaf-fast">libvmaf-fast</a>: VMAF and VMAF NEG <strong>3.2x-4.4x</strong> faster than with CUDA on NVIDIA, and VMAF v1 up to <strong>17x</strong> faster.</li>
+<li>SSIMULACRA2, Butteraugli and ColorVideo VDP on any GPU with <a href="https://github.com/4KVCD/Vship-fast">Vship-fast</a> (Vulkan), as accurate as libjxl and pycvvdp; stock Vship for any video you choose or when Vship-fast fails, and libjxl on the CPU calculates SSIMULACRA2 and Butteraugli when no GPU can.</li>
 <li>PSNR, SSIM and XPSNR <strong>2.7x-11x</strong> faster, calculated in the app.</li>
-<li>GPU video decoding, with software decoding for formats the GPU can't handle, such as VVC.</li>
+<li>GPU video decoding, with software decoding for the rest: VVC with Fraunhofer's VVdeC, and AV2 with VideoLAN's dav2d.</li>
 </ul>
 
 <h3>Compare and inspect</h3>
 <ul>
-<li>Frame-exact playback that switches instantly between the source and each encode (hold <strong>S</strong>), with zoom, at up to 120 fps in 4K HDR.</li>
+<li>Frame-exact playback that switches instantly between the source and each encode (hold <strong>S</strong>), with zoom, at up to 120 fps in 4K HDR, with film grain shown as it is scored.</li>
 <li>Metric curves, statistics and per-frame scores (per second for ColorVideo VDP), with each metric's best and worst results highlighted.</li>
 <li>Bitrate by frame, second or GOP.</li>
 </ul>
@@ -118,15 +116,17 @@ pycvvdp. See the
 <h3>Workflow</h3>
 <ul>
 <li>Black bars and resolution mismatches handled automatically.</li>
-<li>Results saved and reloaded automatically.</li>
+<li>Results saved and reloaded automatically; a metric added later is the only one calculated.</li>
+<li>Scores and statistics exported as CSV or JSON.</li>
 <li>Drag and drop videos, sort and reorder the list, and a dark theme.</li>
-<li>A command line, <code>VideoMetricsLab-cli</code>, for scripts.</li>
+<li>A command line, <code>VideoMetricsLab-cli</code>, for scripts, which also reads raw video streams and .yuv files.</li>
 <li>Two test videos calculated in parallel on many-core CPUs.</li>
+<li>A native C++ app: a 34 MB download on Windows.</li>
 </ul>
 
 <h2>Screenshots</h2>
 <figure>
-<img src="img/01-videos.png" width="3500" height="2013" loading="lazy" alt="VideoMetricsLab's Videos tab with H.264 and HEVC test encodes and their VMAF, PSNR, SSIM and XPSNR scores">
+<img src="img/01-videos.png" width="3500" height="2013" loading="lazy" alt="VideoMetricsLab's Videos tab with H.264, HEVC, AV1 and VVC test encodes, their scores in every metric, and the Film grain option">
 <figcaption>Videos: configure each test encode, inspect its codec and bitrate, and calculate many metrics in one run.</figcaption>
 </figure>
 <figure>
