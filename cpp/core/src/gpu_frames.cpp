@@ -1035,6 +1035,32 @@ std::string decoding_failed_status(const GpuDecodeFailedError& error, std::strin
     return what + " failed (" + error.what() + "); decoding " + std::string(instead) + " instead…";
 }
 
+namespace {
+
+// distrust_gpu_decoding's state: the first reason, once tripped
+std::mutex distrust_mutex;
+std::optional<std::string> distrust_reason;
+
+}  // namespace
+
+void distrust_gpu_decoding(const std::string& reason) {
+    const std::lock_guard lock(distrust_mutex);
+    if (!distrust_reason) {
+        distrust_reason = reason;
+        logger.warning("The GPU's video decoding failed (" + reason + "): nothing more of this run decodes on the GPU");
+    }
+}
+
+std::optional<std::string> gpu_decoding_distrusted() {
+    const std::lock_guard lock(distrust_mutex);
+    return distrust_reason;
+}
+
+void trust_gpu_decoding() {
+    const std::lock_guard lock(distrust_mutex);
+    distrust_reason.reset();
+}
+
 std::size_t DecodePlan::frame_bytes() const {
     const auto [columns, rows] = output_size();
     const auto sample = static_cast<std::size_t>(bytes_per_sample());
@@ -1764,7 +1790,7 @@ std::optional<GpuFrameStream::Picture> GpuFrameStream::next_picture(const Cancel
                 discarded = state.checks.take(pts);
             } catch (const GpuDecodeFailedError& error) {
                 release(slot);
-                throw GpuDecodeFailedError(error.what(), state.backend);
+                throw GpuDecodeFailedError(error.what(), state.backend, state.backend != software_decoder);
             }
             if (!discarded) {
                 return Picture{slot, pts};
@@ -1778,7 +1804,7 @@ std::optional<GpuFrameStream::Picture> GpuFrameStream::next_picture(const Cancel
             try {
                 state.checks.check_end();
             } catch (const GpuDecodeFailedError& error) {
-                throw GpuDecodeFailedError(error.what(), state.backend);
+                throw GpuDecodeFailedError(error.what(), state.backend, state.backend != software_decoder);
             }
             return std::nullopt;
         }
@@ -1792,7 +1818,8 @@ std::optional<GpuFrameStream::Picture> GpuFrameStream::next_picture(const Cancel
             throw GpuDecodeFailedError("decoding was stopped", state.backend);
         }
         const std::string said = state.error_text();
-        throw GpuDecodeFailedError(said.empty() ? state.decoder + " failed" : said, state.backend);
+        throw GpuDecodeFailedError(said.empty() ? state.decoder + " failed" : said, state.backend,
+                                   state.backend != software_decoder);
     }
 }
 
@@ -1814,7 +1841,8 @@ void GpuFrameStream::download(int slot, void* host) {
     State& state = *state_;
     if (state.library->download(state.handle, slot, host) != 0) {
         const std::string said = state.error_text();
-        const GpuDecodeFailedError error(said.empty() ? state.decoder + " failed" : said, state.backend);
+        const GpuDecodeFailedError error(said.empty() ? state.decoder + " failed" : said, state.backend,
+                                         state.backend != software_decoder);
         throw_final_if_software_only(error);
         throw error;
     }
@@ -1831,7 +1859,8 @@ FramePlanes GpuFrameStream::slot_planes(int slot) {
     std::array<long long, 3> pitches{};
     if (state.library->slot_planes(state.handle, slot, planes.data(), pitches.data()) != 0) {
         const std::string said = state.error_text();
-        const GpuDecodeFailedError error(said.empty() ? state.decoder + " failed" : said, state.backend);
+        const GpuDecodeFailedError error(said.empty() ? state.decoder + " failed" : said, state.backend,
+                                         state.backend != software_decoder);
         throw_final_if_software_only(error);
         throw error;
     }
@@ -1847,7 +1876,8 @@ void GpuFrameStream::copy_luma(int slot, std::uint64_t address, std::int64_t pit
     State& state = *state_;
     if (state.library->copy_luma(state.handle, slot, address, pitch) != 0) {
         const std::string said = state.error_text();
-        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said);
+        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said, state.backend,
+                                   state.backend != software_decoder);
     }
 }
 
@@ -1861,7 +1891,8 @@ void GpuFrameStream::copy_planes(int slot, const std::array<std::uint64_t, 3>& a
     if (state.library->copy_planes == nullptr ||
         state.library->copy_planes(state.handle, slot, places.data(), rows.data()) != 0) {
         const std::string said = state.library->copy_planes == nullptr ? std::string() : state.error_text();
-        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said);
+        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said, state.backend,
+                                   state.library->copy_planes != nullptr && state.backend != software_decoder);
     }
 }
 
@@ -1883,7 +1914,8 @@ std::uint64_t GpuFrameStream::copy_luma_async(int slot, std::uint64_t address, s
     if (state.library->copy_luma_async == nullptr ||
         state.library->copy_luma_async(state.handle, slot, address, pitch, &value) != 0) {
         const std::string said = state.library->copy_luma_async == nullptr ? std::string() : state.error_text();
-        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said);
+        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said, state.backend,
+                                   state.library->copy_luma_async != nullptr && state.backend != software_decoder);
     }
     return value;
 }
@@ -1897,7 +1929,8 @@ std::uint64_t GpuFrameStream::copy_planes_async(int slot, const std::array<std::
     if (state.library->copy_planes_async == nullptr ||
         state.library->copy_planes_async(state.handle, slot, places.data(), rows.data(), &value) != 0) {
         const std::string said = state.library->copy_planes_async == nullptr ? std::string() : state.error_text();
-        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said);
+        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said, state.backend,
+                                   state.library->copy_planes_async != nullptr && state.backend != software_decoder);
     }
     return value;
 }
@@ -1911,7 +1944,8 @@ GpuFrameStream::Texture GpuFrameStream::slot_texture(int slot) {
         state.library->slot_texture(state.handle, slot, &texture.handle, &texture.width, &texture.height, &texture.x,
                                     &texture.y) != 0) {
         const std::string said = state.library->slot_texture == nullptr ? std::string() : state.error_text();
-        throw GpuDecodeFailedError(said.empty() ? "the decoder's picture is not a texture" : said);
+        throw GpuDecodeFailedError(said.empty() ? "the decoder's picture is not a texture" : said, state.backend,
+                                   state.library->slot_texture != nullptr && state.backend != software_decoder);
     }
     return texture;
 }
@@ -1971,7 +2005,8 @@ void GpuFrameStream::download_planes(int slot, const std::array<void*, 3>& plane
     if (state.library->download_planes == nullptr ||
         state.library->download_planes(state.handle, slot, planes.data(), rows.data()) != 0) {
         const std::string said = state.library->download_planes == nullptr ? std::string() : state.error_text();
-        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said);
+        throw GpuDecodeFailedError(said.empty() ? "the GPU's decoder failed" : said, state.backend,
+                                   state.library->download_planes != nullptr && state.backend != software_decoder);
     }
 }
 

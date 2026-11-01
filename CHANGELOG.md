@@ -47,6 +47,8 @@ The Mac version now has the same features as the Windows version:
 
 ### Bug fixes
 
+- Fixed wrong scores, with no warning, when another program loaded the GPU heavily: once the GPU's video decoder
+  fails, the video is decoded again on the CPU, with a note.
 - Fixed wrong scores against lossless H.264 references (x264 `-qp 0`) on Intel and AMD GPUs and NVIDIA GPUs before
   the RTX 50 series.
 - Fixed wrong scores for MPEG-2 and MPEG-4 Part 2 videos with GPU decoding.

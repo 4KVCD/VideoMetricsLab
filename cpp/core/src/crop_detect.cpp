@@ -29,6 +29,7 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
+#include "vml/gpu_frames.h"
 #include "vml/grain_feed.h"
 #include "vml/hardware_decoding.h"
 #include "vml/hevc.h"
@@ -120,6 +121,17 @@ public:
         const std::lock_guard lock(mutex_);
         boxes_.clear();
         store_read_.reset();
+    }
+
+    // Forgets one answer, in the store too (read first, so that its other
+    // answers stay); nothing is written when it had none.
+    void drop(const AnswerKey& key) {
+        const std::lock_guard lock(mutex_);
+        read_store();
+        if (const auto found = find(key); found != boxes_.end()) {
+            boxes_.erase(found);
+            write_store();
+        }
     }
 
     // The kept box, or nothing once this caller has been given the job of
@@ -1165,6 +1177,13 @@ void set_crop_store(std::function<std::filesystem::path()> store) { answers().se
 
 void forget_crop_answers() { answers().forget(); }
 
+void forget_crop_answer(const VideoInfo& info) {
+    // (a video whose size changes keeps no answer, but one found before it was seen to change may be kept)
+    if (const std::optional<AnswerKey> key = answer_key(info.path, info.duration)) {
+        answers().drop(*key);
+    }
+}
+
 CropBox detect_crop(const std::string& ffmpeg, const VideoInfo& info, const CancelToken& cancel,
                     const std::optional<std::string>& hwaccel, const std::string& scale_algorithm) {
     const double sampled_duration = info.duration;  // the whole video: the runs give no limit
@@ -1196,7 +1215,10 @@ CropBox detect_crop(const std::string& ffmpeg, const VideoInfo& info, const Canc
         throw;
     }
     if (key) {
-        answers().settle(*key, box);
+        // Not kept when it was found from the GPU's pictures while its decoding was being found wrong: the run is
+        // made again on the CPU, and finds it again there
+        const bool spoiled = hwaccel.has_value() && gpu_decoding_distrusted().has_value();
+        answers().settle(*key, spoiled ? std::nullopt : box);
     }
     return *box;
 }

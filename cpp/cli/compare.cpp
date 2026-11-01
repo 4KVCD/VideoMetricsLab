@@ -29,6 +29,7 @@
 #include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
+#include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
 #include "vml/isolated.h"
@@ -1556,6 +1557,7 @@ int compare(const CompareArguments& arguments) {
                 remove_leftovers(folder);
             }
         });
+        trust_gpu_decoding();  // a run of its own (distrust_gpu_decoding)
         run(run_environment(tools, planner.jobs), planner.job_targets(), planner.jobs,
             arguments.parallel.value_or(settings.parallel_jobs),
             arguments.vship_pass ? *arguments.vship_pass == "one" : settings.gpu_metrics_together, cache_folder,

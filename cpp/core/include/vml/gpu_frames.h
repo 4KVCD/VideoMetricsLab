@@ -64,15 +64,33 @@ public:
 
 // Decoding failed after it had started; the caller decodes the video again
 // through FFmpeg. backend() names the decoder, where it is known.
+// gpu_decoder(): a GPU's decoder failed, or its pictures failed the checks
+// (out of order, too many or too few), rather than the reading of the file:
+// the GPU's video decoding is not to be trusted again in this run
+// (distrust_gpu_decoding).
 class GpuDecodeFailedError : public std::runtime_error {
 public:
-    explicit GpuDecodeFailedError(const std::string& message, std::string backend = "")
-        : std::runtime_error(message), backend_(std::move(backend)) {}
+    explicit GpuDecodeFailedError(const std::string& message, std::string backend = "", bool gpu_decoder = false)
+        : std::runtime_error(message), backend_(std::move(backend)), gpu_decoder_(gpu_decoder) {}
     const std::string& backend() const { return backend_; }
+    bool gpu_decoder() const { return gpu_decoder_; }
 
 private:
     std::string backend_;
+    bool gpu_decoder_;
 };
+
+// The GPU's video decoding found wrong in this run: another program loading
+// the GPU heavily can make its decoder give wrong pictures, which FFmpeg's
+// -hwaccel decoding does not notice at all (an RTX 5090: NVDEC's pictures
+// wrong under a long compute dispatch of another process, FFmpeg's and
+// D3D11VA's too). Once the app's decoder has seen it fail, nothing more of
+// the run decodes on the GPU (ffmpeg_run.cpp's and vship_run.cpp's re-runs).
+// Process-wide, as the GPU is; `reason`: what the decoder said, the first one
+// kept. Reset when a run starts.
+void distrust_gpu_decoding(const std::string& reason);
+std::optional<std::string> gpu_decoding_distrusted();
+void trust_gpu_decoding();
 
 // The status shown when decoding in the app failed after it had started,
 // naming the GPU's decoder or the app's own, and what decodes the video
