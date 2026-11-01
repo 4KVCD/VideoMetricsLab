@@ -126,8 +126,9 @@ std::string chip_name();
 #endif
 
 // Lets the calling thread run ahead of ordinary work (Windows'
-// THREAD_PRIORITY_HIGHEST), for a light thread whose timing matters. It does
-// nothing on other systems, as in the Python app, or if Windows refuses.
+// THREAD_PRIORITY_HIGHEST; macOS's user-interactive quality of service), for
+// a light thread whose timing matters. It does nothing on Linux, as in the
+// Python app, or if the system refuses.
 void raise_thread_priority();
 
 // Holds (`awake`) or releases Windows' "system required" request, which

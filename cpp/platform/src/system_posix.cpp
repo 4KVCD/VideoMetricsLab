@@ -13,6 +13,7 @@
 #include <IOKit/pwr_mgt/IOPMLib.h>
 #include <mach-o/dyld.h>
 #include <mach/mach.h>
+#include <pthread.h>
 #include <sys/sysctl.h>
 #endif
 
@@ -133,7 +134,15 @@ std::string processor_description() {
 
 DisplayHdrInfo query_display_hdr(void* /*window*/) { return {}; }  // not known here: SDR at 100 nits
 
+#ifdef __APPLE__
+void raise_thread_priority() {
+    // The class of work the user waits on: macOS runs it ahead of the default
+    // class (libvmaf's and FFmpeg's threads). Refused, the thread runs as before.
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+}
+#else
 void raise_thread_priority() {}
+#endif
 
 #ifdef __APPLE__
 bool keep_system_awake(bool awake) {

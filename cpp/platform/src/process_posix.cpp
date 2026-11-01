@@ -3,8 +3,11 @@
 // started together (or, in a process that start_programs_in_this_group()
 // was called in, in that process's group, which its parent ends).
 //
-// Still to do (for the Linux and macOS releases): a program is not yet ended
-// when the app crashes, as Windows' job objects do.
+// However this process ends -- a crash or a Force Quit too -- the groups of
+// the programs it leaves running end with it, as a Windows job's programs
+// do: a reaper (a shell started with the first of them) is told of each
+// group as it starts and ends, and ends those still listed when this
+// process's end of their pipe closes, which the system does as it ends.
 #include "vml/platform/process.h"
 
 #include <fcntl.h>
@@ -16,10 +19,13 @@
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <condition_variable>
+#include <csignal>
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <utility>
 
@@ -90,6 +96,116 @@ Pipe make_pipe() {
 // Whether programs join this process's group (start_programs_in_this_group).
 std::atomic<bool> programs_in_this_group{false};
 
+// The reaper's script: it keeps the groups it is told of ("+ID" a line, "-ID"
+// gone), and when its input ends ends those left. The signals a terminal or a
+// logout sends are ignored: only the end of its input ends it. POSIX sh, as
+// macOS's /bin/sh (bash) and Debian's (dash) both run it.
+constexpr const char* reaper_script =
+    "trap '' HUP INT TERM PIPE; groups=; "
+    "while IFS= read -r line; do case $line in "
+    "+*) groups=\"$groups ${line#+}\";; "
+    "-*) rest=; for g in $groups; do [ \"$g\" = \"${line#-}\" ] || rest=\"$rest $g\"; done; groups=$rest;; "
+    "esac; done; "
+    "for g in $groups; do kill -s KILL -- \"-$g\" 2>/dev/null; done";
+
+// This process's reaper: the write end of its input, never closed (its
+// closing must mean this process has ended), and its id. Not destroyed at
+// exit, when a program's destructor may still tell it of its group.
+struct Reaper {
+    int input = -1;
+    pid_t id = -1;
+};
+Reaper& reaper() {
+    static Reaper* const made = new Reaper;
+    return *made;
+}
+
+// Starts the reaper, once; without it (no /bin/sh) programs start as before.
+void start_reaper() {
+    // Neither end survives into another program (close on exec), as
+    // make_pipe's: a program holding the write end would keep the reaper
+    // from ever ending its groups.
+    int ends[2];
+#ifdef __linux__
+    if (pipe2(ends, O_CLOEXEC) != 0) {
+        return;
+    }
+#else
+    if (pipe(ends) != 0) {
+        return;
+    }
+    for (const int end : ends) {
+        fcntl(end, F_SETFD, FD_CLOEXEC);
+    }
+#endif
+    // A line that would wait fails at once (tell_reaper then ends the
+    // reaper), and one to a reaper gone fails instead of ending this process.
+    fcntl(ends[1], F_SETFL, fcntl(ends[1], F_GETFL) | O_NONBLOCK);
+#ifdef F_SETNOSIGPIPE
+    fcntl(ends[1], F_SETNOSIGPIPE, 1);
+#else
+    std::signal(SIGPIPE, SIG_IGN);  // programs get it back (posix_spawnattr_setsigdefault)
+#endif
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_adddup2(&actions, ends[0], STDIN_FILENO);
+    posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
+    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+    // None of this process's other descriptors (another program's pipe would
+    // last as long as the reaper), in a group of its own, which a terminal's
+    // Ctrl+C or a program's group does not reach.
+    short flags = POSIX_SPAWN_SETPGROUP;
+#ifdef __APPLE__
+    flags |= POSIX_SPAWN_CLOEXEC_DEFAULT;
+#elif defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 34))
+    posix_spawn_file_actions_addclosefrom_np(&actions, STDERR_FILENO + 1);
+#endif
+    posix_spawnattr_t attributes;
+    posix_spawnattr_init(&attributes);
+    posix_spawnattr_setflags(&attributes, flags);
+    posix_spawnattr_setpgroup(&attributes, 0);
+    char shell[] = "/bin/sh";
+    char option[] = "-c";
+    char* argv[] = {shell, option, const_cast<char*>(reaper_script), nullptr};  // not written to
+    pid_t id = -1;
+    const int spawned = posix_spawn(&id, shell, &actions, &attributes, argv, environ);
+    posix_spawn_file_actions_destroy(&actions);
+    posix_spawnattr_destroy(&attributes);
+    close(ends[0]);
+    if (spawned != 0) {
+        close(ends[1]);
+        return;
+    }
+    reaper().input = ends[1];
+    reaper().id = id;
+}
+
+// Tells the reaper that the group `id` started ('+') or is gone ('-'); with
+// running_mutex held, so that it hears them in order. A line it cannot take
+// whole ends it: one lost could leave it a group that is gone, whose id
+// another process may then have.
+void tell_reaper(char what, pid_t id) {
+    Reaper& known = reaper();
+    if (known.input < 0) {
+        return;
+    }
+    const std::string line = what + std::to_string(id) + "\n";  // shorter than PIPE_BUF: written whole or not
+    ssize_t written = -1;
+    do {
+        written = ::write(known.input, line.data(), line.size());
+    } while (written < 0 && errno == EINTR);
+    if (written != static_cast<ssize_t>(line.size())) {
+        kill(known.id, SIGKILL);  // never reaped here: its id stays ours
+        known.input = -1;         // left open: its end would end every group listed
+    }
+}
+
+// How a program waitid found ended, rather than stopped (as macOS's waitid
+// says a program SIGSTOP stopped is, until SIGCONT).
+bool exited(const siginfo_t& info) {
+    return info.si_code == CLD_EXITED || info.si_code == CLD_KILLED || info.si_code == CLD_DUMPED;
+}
+
 // The programs started and not yet reaped, and whether each leads a group
 // of its own, for end_programs_now.
 std::mutex running_mutex;
@@ -138,35 +254,69 @@ struct ChildProcess::State {
     // The leader of a group of its own takes the rest of its group with it:
     // what it started and left running (FFmpeg, after a crash) is ended
     // first, while its id, the group's, is still its own (not yet reaped).
+    // A program stopped (suspend) is not ended, though macOS's waitid says
+    // so too. Waiting holds no lock: suspend(), resume() and terminate() may
+    // be what lets it end.
     bool reap(bool block) {
-        const std::lock_guard lock(wait_mutex);
-        if (ended) {
-            return true;
-        }
-        if (own_group) {
+        std::unique_lock lock(wait_mutex);
+        while (true) {
+            if (ended) {
+                return true;
+            }
             siginfo_t info{};
-            int waited = waitid(P_PID, static_cast<id_t>(id), &info, WEXITED | WNOWAIT | (block ? 0 : WNOHANG));
-            while (waited < 0 && errno == EINTR) {
-                waited = waitid(P_PID, static_cast<id_t>(id), &info, WEXITED | WNOWAIT | (block ? 0 : WNOHANG));
+            int waited = 0;
+            do {
+                waited = waitid(P_PID, static_cast<id_t>(id), &info, WEXITED | WNOWAIT | WNOHANG);
+            } while (waited < 0 && errno == EINTR);
+            if (waited == 0 && info.si_pid == id && exited(info)) {
+                finish(true, block);
+                return ended;
             }
-            if (waited == 0 && info.si_pid == id) {
-                kill(-id, SIGKILL);
-            } else if (!block) {
-                return false;  // still running
+            if (waited < 0) {
+                finish(false, block);  // waitid cannot wait for it: waitpid says, as before
+                return ended;
             }
+            if (!block) {
+                return false;  // running, or stopped
+            }
+            lock.unlock();
+            info = siginfo_t{};
+            do {
+                waited = waitid(P_PID, static_cast<id_t>(id), &info, WEXITED | WNOWAIT);
+            } while (waited < 0 && errno == EINTR);
+            if (waited == 0 && info.si_pid == id && !exited(info)) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));  // stopped: again once it may run
+            }
+            lock.lock();  // another thread may have reaped it meanwhile
+        }
+    }
+
+    // Reaps the program, with wait_mutex held, once waitid saw it end
+    // (`seen`), or to learn what waitpid says (waiting, with `block`) when
+    // waitid could not wait. Its group is ended and the reaper told before
+    // the leader is reaped: until then its id cannot be another process's.
+    void finish(bool seen, bool block) {
+        if (seen && own_group) {
+            kill(-id, SIGKILL);
+            const std::lock_guard running_lock(running_mutex);
+            tell_reaper('-', id);
         }
         int status = 0;
-        pid_t done = waitpid(id, &status, block ? 0 : WNOHANG);
+        const int options = seen || block ? 0 : WNOHANG;
+        pid_t done = waitpid(id, &status, options);
         while (done < 0 && errno == EINTR) {  // a signal (Ctrl+C) came while it waited
-            done = waitpid(id, &status, block ? 0 : WNOHANG);
+            done = waitpid(id, &status, options);
         }
-        if (done == id) {
+        if (done == id || (done < 0 && errno == ECHILD)) {
+            // ECHILD: reaped by something else, and so no longer ours to signal.
             ended = true;
-            exit_code = exit_code_of(status);
+            exit_code = done == id ? exit_code_of(status) : -1;
             const std::lock_guard running_lock(running_mutex);
             running_programs().erase(id);
+            if (!seen && own_group) {
+                tell_reaper('-', id);  // only now known to be gone
+            }
         }
-        return ended;
     }
 
     // Sends `signal` to the program's process group: the program and what it
@@ -220,6 +370,10 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     // A process group of its own, which terminate() ends as one, unless
     // this process's own group holds the programs it starts.
     const bool own_group = !programs_in_this_group.load();
+    if (own_group) {
+        static std::once_flag started;
+        std::call_once(started, [] { start_reaper(); });
+    }
     short flags = own_group ? POSIX_SPAWN_SETPGROUP : 0;
 #ifdef __APPLE__
     flags |= POSIX_SPAWN_CLOEXEC_DEFAULT;
@@ -258,6 +412,9 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     {
         const std::lock_guard running_lock(running_mutex);
         running_programs()[id] = own_group;
+        if (own_group) {
+            tell_reaper('+', id);
+        }
     }
     // The program has its copies; ours must close, or the pipes never end.
     output.write.reset();

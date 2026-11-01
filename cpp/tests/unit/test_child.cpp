@@ -4,6 +4,12 @@
 //                                  CR LF, in UTF-8; "to standard error" on
 //                                  standard error; then exits with code 3
 //     vml_test_child sleep         sleeps for a minute
+//     vml_test_child hold FIFO     (not Windows) writes a byte into the FIFO,
+//                                  keeps it open for a minute, then exits
+//     vml_test_child spawn-hold FIFO  (not Windows) starts "hold FIFO" as the
+//                                  app starts its programs (a group of its
+//                                  own, the reaper told), then sleeps for a
+//                                  minute
 //     vml_test_child warn N        "warning i of N" on N lines of standard
 //                                  error, then "the last line"
 //     vml_test_child data N        N bytes on standard output, byte i being
@@ -58,6 +64,13 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#ifndef _WIN32
+#include <fcntl.h>
+#include <unistd.h>
+
+#include "vml/platform/process.h"
+#endif
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -263,6 +276,22 @@ int run(const std::vector<std::string>& arguments) {
         std::this_thread::sleep_for(std::chrono::minutes(1));
         return 0;
     }
+#ifndef _WIN32
+    if (arguments.size() >= 3 && arguments[1] == "hold") {
+        const int fifo = open(arguments[2].c_str(), O_WRONLY);
+        if (fifo < 0 || write(fifo, "h", 1) != 1) {
+            return 1;
+        }
+        std::this_thread::sleep_for(std::chrono::minutes(1));
+        return 0;
+    }
+    if (arguments.size() >= 3 && arguments[1] == "spawn-hold") {
+        const vml::platform::ChildProcess held =
+            vml::platform::ChildProcess::start({arguments[0], "hold", arguments[2]});
+        std::this_thread::sleep_for(std::chrono::minutes(1));
+        return 0;
+    }
+#endif
     if (arguments.size() >= 3 && arguments[1] == "warn") {
         const int count = std::stoi(arguments[2]);
         for (int i = 0; i < count; ++i) {

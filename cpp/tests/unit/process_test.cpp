@@ -3,10 +3,14 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <thread>
 #include <vector>
+
+#include "test_videos.h"
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -17,7 +21,11 @@
 #endif
 #include <windows.h>
 #else
+#include <fcntl.h>
 #include <poll.h>
+#include <signal.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #endif
 
@@ -118,6 +126,56 @@ TEST(Process, AProgramGetsNoneOfTheAppsHandlesButItsOwn) {
 #endif
     child.terminate();
 }
+
+#ifndef _WIN32
+// The program a program started is ended with it, however that ends -- a
+// crash or a Force Quit too, which nothing in it sees -- as Windows' jobs end
+// theirs: the test's child starts a program (its group its own) that holds a
+// FIFO open, and is killed; the FIFO's end says that program ended too.
+TEST(Process, WhatAProgramStartedEndsWithItHoweverItEnds) {
+    const test::Folder folder;
+    const std::string fifo = (folder / "held").string();
+    ASSERT_EQ(mkfifo(fifo.c_str(), 0600), 0);
+    const int reader = open(fifo.c_str(), O_RDONLY | O_NONBLOCK);
+    ASSERT_GE(reader, 0);
+    ChildProcess child = ChildProcess::start({VML_TEST_CHILD, "spawn-hold", fifo});
+    // Read returns nothing until the grandchild has written its byte (no
+    // writer yet: 0; one with nothing written: EAGAIN), then the byte.
+    const auto deadline = std::chrono::steady_clock::now() + 10s;
+    char byte = 0;
+    while (read(reader, &byte, 1) != 1 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(10ms);
+    }
+    ASSERT_EQ(byte, 'h');
+    child.terminate();  // SIGKILL: the child cannot end what it started
+    child.wait();
+    // The grandchild held the FIFO open: EAGAIN while it runs, 0 once it is gone.
+    ssize_t got = -1;
+    while ((got = read(reader, &byte, 1)) < 0 && errno == EAGAIN && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(10ms);
+    }
+    close(reader);
+    EXPECT_EQ(got, 0);
+}
+
+// A program suspended (Pause) is not taken for ended: a wait that does not
+// wait leaves it be, and one that waits lets it be resumed meanwhile (when
+// the waiting thread is in its wait by then, as it mostly is).
+TEST(Process, ASuspendedProgramIsNotEndedByWaitingForIt) {
+    ChildProcess child = ChildProcess::start({VML_TEST_CHILD, "sleep"});
+    child.suspend();
+    siginfo_t info{};
+    ASSERT_EQ(waitid(P_PID, static_cast<id_t>(child.process_id()), &info, WSTOPPED | WNOWAIT), 0);  // stopped now
+    EXPECT_FALSE(child.wait_for(0ms));
+    EXPECT_EQ(kill(child.process_id(), 0), 0);  // still there
+    std::atomic<int> code{0};
+    std::thread waiting([&] { code = child.wait(); });
+    child.resume();     // not held up by the wait
+    child.terminate();  // which then ends
+    waiting.join();
+    EXPECT_EQ(code.load(), -SIGKILL);
+}
+#endif
 
 }  // namespace
 }  // namespace vml::platform
