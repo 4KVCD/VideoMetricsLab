@@ -68,7 +68,10 @@
    VVdeC, dav1d, libvmaf-fast, Vship and libjxl's tools.
 10. Update the changelog, choose a version/tag, and write release notes with
     known issues, requirements and tested hardware. Do not invent a release
-    version from the development commit count.
+    version from the development commit count. List under bug fixes only
+    bugs a released version had: trace each fix to the change that caused
+    the bug, and leave out any fix of a bug made and caught while the new
+    version was in development, as no user of a released version met it.
 11. Compute a SHA-256 checksum for each final zip using `Get-FileHash -Algorithm SHA256`
     (`shasum -a 256` on the Mac).
 12. Upload both packages and their checksums to a GitHub Release only after
