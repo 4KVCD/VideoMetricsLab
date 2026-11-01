@@ -1,5 +1,5 @@
 {
-  "about": "Short clips of real test videos, cut by stream copy so they keep their codecs, containers and colour tags, or re-encoded where a copy's timestamps would be wrong. `golden.py clips` makes them from these sources.",
+  "about": "Short clips of real test videos, cut by stream copy so they keep their codecs, containers and colour tags, or re-encoded where a copy's timestamps would be wrong, or copied whole (as_is) where the source is a short clip already and re-encoding would lose what it tests. `golden.py clips` makes them from these sources.",
   "seconds": 2,
   "clips": [
     { "name": "videoq_src.mp4", "source": "E:/Video encodings/VideoQ_HDR10_UHD_120fps_4m00s.mp4",
@@ -21,6 +21,15 @@
     { "name": "honeybee_h264.mkv", "source": "E:/Video encodings/HoneyBee H264 slow CRF20.mkv",
       "what": "4K H.264 10-bit, no colour tags: software decoding, a bit depth other than the reference's" },
     { "name": "honeybee_h265.mkv", "source": "E:/Video encodings/HoneyBee H265 slow CRF22.mkv",
-      "what": "4K HEVC 10-bit, no colour tags" }
+      "what": "4K HEVC 10-bit, no colour tags" },
+    { "name": "beekeeper_vvc_plain.mkv", "source": "E:/Video encodings/VML Mac v2.3 tests/clips/beekeeper_plain.mkv",
+      "as_is": true,
+      "what": "4K VVC 10-bit (VVenC QP 23), 14 s, no film grain: the reference for the film grain encodes. Copied whole: a stream-copy cut of it loses its timestamps (pts 0.001 over and over, FFmpeg 9.0.1)" },
+    { "name": "beekeeper_vvc_afgs1.mkv", "source": "E:/Video encodings/VML Mac v2.3 tests/clips/beekeeper_afgs1.mkv",
+      "as_is": true,
+      "what": "the same 4K VVC with AFGS1 film grain, which the app's VVdeC wrapper adds as FFmpeg's own VVC decoder does" },
+    { "name": "beekeeper_vvc_fga1.mkv", "source": "E:/Video encodings/VML Mac v2.3 tests/clips/beekeeper_fga1.mkv",
+      "as_is": true,
+      "what": "the same 4K VVC with H.274 film grain (VVenC --fga 1), which VVdeC adds" }
   ]
 }

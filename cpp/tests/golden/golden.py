@@ -34,6 +34,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -60,7 +61,8 @@ def load(name: str) -> dict:
 
 def make_clips() -> int:
     """Cuts each clip in clips.json from its source: the first `seconds`,
-    video only, by stream copy, or encoded as the clip's "encode" says.
+    video only, by stream copy, or encoded as the clip's "encode" says; or,
+    for a clip "as_is", copies the whole source (already a short clip).
     Clips already made are kept."""
     spec = load("clips.json")
     folder = clips_folder()
@@ -69,6 +71,18 @@ def make_clips() -> int:
         target = folder / clip["name"]
         if target.exists():
             print(f"{target.name}: already made")
+            continue
+        if clip.get("as_is"):
+            # Copied under another name first, so that a copy cut short is never taken for a clip.
+            partial = target.with_name(target.name + ".part")
+            try:
+                shutil.copyfile(clip["source"], partial)
+                partial.replace(target)
+            except OSError as error:
+                partial.unlink(missing_ok=True)
+                print(f"{target.name}: FAILED\n{error}")
+                return 1
+            print(f"{target.name}: copied from {clip['source']}")
             continue
         command = ["ffmpeg", "-hide_banner", "-v", "error", "-y", *clip.get("input_options", []),
                    "-i", clip["source"], "-map", "0:v:0", "-t", str(spec["seconds"]),
