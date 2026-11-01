@@ -3,7 +3,7 @@
 # describes the layout, how to build, and the rules the code follows.
 cmake_minimum_required(VERSION 3.25)
 # C only for miniz (third_party/miniz): the app itself is C++.
-project(VideoMetricsLab VERSION 2.3 LANGUAGES C CXX)
+project(VideoMetricsLab VERSION 2.4 LANGUAGES C CXX)
 # Objective-C++ on macOS for the window's AppKit parts (cpp/app's .mm files),
 # enabled here, where every target that links them is below.
 if(APPLE)
