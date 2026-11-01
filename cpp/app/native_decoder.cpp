@@ -23,6 +23,7 @@
 #include "i18n.h"
 #include "native_dav1d.h"
 #include "native_device.h"
+#include "native_probe.h"
 #include "vml/av2_stream.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/hardware_decoding.h"
@@ -569,7 +570,7 @@ std::unique_ptr<FfmpegNativeVideo::Decoding> open_video(const std::filesystem::p
     }
     auto decoding = std::make_unique<FfmpegNativeVideo::Decoding>();
     decoding->format = avformat_alloc_context();
-    if (decoding->format == nullptr) {
+    if (decoding->format == nullptr || !restrict_probe_decoders(*decoding->format)) {
         error = QStringLiteral("Out of memory");
         return nullptr;
     }

@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "ffmpeg_api.h"
+#include "native_probe.h"
 #include "vml/app_log.h"
 #include "vml/platform/system.h"
 
@@ -494,7 +495,7 @@ void FfmpegSoundtrack::Player::fail(const QString& why) {
 
 bool FfmpegSoundtrack::Player::open_file() {
     reader_.format = avformat_alloc_context();
-    if (reader_.format == nullptr) {
+    if (reader_.format == nullptr || !restrict_probe_decoders(*reader_.format)) {
         fail(QStringLiteral("Out of memory"));
         return false;
     }

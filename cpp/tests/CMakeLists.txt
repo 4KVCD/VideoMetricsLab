@@ -103,13 +103,15 @@ if(TARGET vml_app)
     target_link_libraries(vml_app_tests PRIVATE vml_app Qt6::Test vml_compile_options nlohmann_json gtest)
     target_compile_definitions(vml_app_tests PRIVATE
         VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
+        VML_TEST_MEDIA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/media"  # small crafted streams (media/README.md)
         VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>"
         VML_CLI="$<TARGET_FILE:vml-cli>")  # the program isolated work runs in
     add_dependencies(vml_app_tests vml-cli vml_test_child)
     if(WIN32 AND MSVC)
-        # Native playback, where it is built (app/CMakeLists.txt); no min and
-        # max macros from Windows' headers.
-        target_sources(vml_app_tests PRIVATE app/native_pool_test.cpp)
+        # Native playback, where it is built (app/CMakeLists.txt), with
+        # FFmpeg's headers; no min and max macros from Windows' headers.
+        target_sources(vml_app_tests PRIVATE app/native_pool_test.cpp app/native_probe_test.cpp)
+        target_include_directories(vml_app_tests SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/../native/ffmpeg/include)
         target_compile_definitions(vml_app_tests PRIVATE NOMINMAX)
     endif()
     if(APPLE)
@@ -119,7 +121,7 @@ if(TARGET vml_app)
     if(APPLE AND native_playback_macos)
         # Native playback on macOS, where FFmpeg's libraries are built
         # (app/CMakeLists.txt).
-        target_sources(vml_app_tests PRIVATE app/native_pool_test.cpp app/soundtrack_test.cpp)
+        target_sources(vml_app_tests PRIVATE app/native_pool_test.cpp app/native_probe_test.cpp app/soundtrack_test.cpp)
         target_include_directories(vml_app_tests SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/../native/ffmpeg/include)
     endif()
     if(WIN32)
