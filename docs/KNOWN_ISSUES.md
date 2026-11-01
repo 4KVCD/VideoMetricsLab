@@ -14,6 +14,12 @@ behavior on every GPU, display, driver or media format.
   path does not offer all native presentation guarantees.
 - Timing checks do not detect every content mismatch. Different edits/offsets
   are not automatically synchronized by scene content.
+- Another program loading the GPU very heavily can make its video decoder give
+  wrong pictures without any error (seen on an RTX 5090 with NVDEC and D3D11VA).
+  When the app's own decoder notices, the run is scored again with its decoding
+  on the CPU, and the rest of the run decodes there too (a note says so);
+  FFmpeg's GPU decoding alone does not notice. Avoid scoring while another
+  program saturates the GPU, or turn GPU decoding off.
 - XPSNR-only retains all frames; libvmaf-backed runs can be subsampled.
 - Quality bands outside VMAF are heuristic, not standardized equivalents.
 - Unsigned builds can trigger Windows warnings. Verify provenance rather than

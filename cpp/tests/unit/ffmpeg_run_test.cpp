@@ -5,11 +5,17 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <map>
+#include <random>
 #include <string>
+#include <vector>
 
 #include "reference.h"
+#include "vml/crop_detect.h"
+#include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/platform/system.h"
 #include "vml/size_changes.h"
@@ -257,6 +263,75 @@ TEST(SizeChanges, ReadsFfmpegsLines) {
                                        "Error opening input file E:\\nonexistent.mkv.\n"
                                        "Error opening input files: No such file or directory\n"
                                        "no level\n");
+}
+
+// A GPU decoder's failure trips the run without a note of its own (each
+// process's would name its own error); the note is the re-run's, one text for
+// the whole run, and goes between processes with its kind.
+TEST(FfmpegRun, AFailedGpuDecoderTripsTheRunAndOnlyItsReRunIsNoted) {
+    trust_gpu_decoding();
+    struct TrustedAgain {  // the process-wide latch left as it was, however the test ends
+        ~TrustedAgain() { trust_gpu_decoding(); }
+    } trusted_again;
+    std::vector<RunStatus> sent;
+    const StatusCallback keep = [&sent](const RunStatus& status) { sent.push_back(status); };
+    distrust_failed_decoder(GpuDecodeFailedError("a packet has no timestamp"), keep);
+    distrust_failed_decoder(GpuDecodeFailedError("VVdeC failed", std::string(software_decoder), false), keep);
+    EXPECT_TRUE(sent.empty());
+    EXPECT_FALSE(gpu_decoding_distrusted());
+    distrust_failed_decoder(GpuDecodeFailedError("the GPU's decoder found an error in the video", "nvidia", true),
+                            keep);
+    ASSERT_EQ(sent.size(), 1u);
+    EXPECT_EQ(sent[0].kind, StatusKind::gpu_decoder_failed);
+    EXPECT_FALSE(is_gpu_fallback(sent[0].kind));
+    EXPECT_EQ(gpu_decoding_distrusted(), "the GPU's decoder found an error in the video");
+
+    const RunStatus note = gpu_decoding_off_status(*gpu_decoding_distrusted());
+    EXPECT_TRUE(is_gpu_fallback(note.kind));
+    EXPECT_EQ(fallback_note(note.text), "The GPU's video decoding failed (the GPU's decoder found an error in the "
+                                        "video); the videos were decoded on the CPU");
+    for (const RunStatus& status : {sent[0], note}) {
+        const RunStatus back = status_from_json(status_json(status));
+        EXPECT_EQ(back.kind, status.kind);
+        EXPECT_EQ(back.text, status.text);
+    }
+}
+
+// Forgetting a video's black bars takes its answer out of the store and keeps
+// the store's others (it is read first); with none for it, nothing is
+// written.
+TEST(FfmpegRun, ForgettingAVideosBlackBarsKeepsTheOthers) {
+    const std::filesystem::path folder =
+        std::filesystem::temp_directory_path() / ("vml_crop_store_test_" + std::to_string(std::random_device{}()));
+    std::filesystem::create_directories(folder);
+    const std::filesystem::path store = folder / "black_bars.json";
+    const std::filesystem::path video = folder / "video.mkv";
+    std::ofstream(video, std::ios::binary) << "not a video";
+    // The keys as crop_detect.cpp's answer_key makes them: the file, its size and time, the duration sampled and
+    // the black limit (24 / 255), rounded
+    const std::filesystem::path resolved = std::filesystem::weakly_canonical(std::filesystem::absolute(video));
+    const auto size = static_cast<long long>(std::filesystem::file_size(resolved));
+    const Json ours = {{platform::path_text(resolved), size, *platform::modified_ns(resolved), 10.0, 0.094118},
+                       {1920, 800, 0, 140}};
+    const Json other = {{"E:\\other.mkv", 10, 20, 30.0, 0.094118}, {1920, 816, 0, 132}};
+    std::ofstream(store, std::ios::binary) << Json{{"version", 3}, {"boxes", {other, ours}}}.dump();
+    const auto read_store = [&store] {
+        std::ifstream file(store, std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    };
+    forget_crop_answers();  // nothing of other tests' in this process's answers
+    set_crop_store([store] { return store; });
+    VideoInfo info;
+    info.path = video;
+    info.duration = 10.0;
+    forget_crop_answer(info);
+    const std::string after = read_store();
+    EXPECT_EQ(Json::parse(after)["boxes"], Json::array({other}));
+    forget_crop_answer(info);  // none left for it
+    EXPECT_EQ(read_store(), after);
+    set_crop_store({});
+    forget_crop_answers();
+    std::filesystem::remove_all(folder);
 }
 
 }  // namespace

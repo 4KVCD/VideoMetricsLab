@@ -27,6 +27,8 @@
 
 namespace vml {
 
+class GpuDecodeFailedError;  // gpu_frames.h
+
 // A run failed. stderr_tail() is the end of FFmpeg's error output, when
 // there is one.
 class VmafRunError : public std::runtime_error {
@@ -56,14 +58,23 @@ enum class StatusKind {
     // or Vship's check did: stock Vship 5.1.2 or the CPU takes over within
     // the same task.
     gpu_perceptual_failed,
+    // Kinds go between processes as numbers: new ones go last.
+    // A GPU's video decoder failed (distrust_gpu_decoding; the text is what it
+    // said): it trips the run's process when a process of its own sends it.
+    // Logged, not shown as a step (JobRun::report_status).
+    gpu_decoder_failed,
+    // A video is scored with its decoding on the CPU because the GPU's video
+    // decoding failed in this run (gpu_decoding_off_status): a note.
+    gpu_decoding_off,
 };
 
 // Whether a status says that a GPU route failed (or its check did) and its
-// metrics went elsewhere: to the CPU, or to stock Vship 5.1.2. Each such is a
-// note of the video's (fallback_note), in the command line's output and on
-// the window's row.
+// metrics went elsewhere: to the CPU, or to stock Vship 5.1.2; or that the
+// videos' decoding did. Each such is a note of the video's (fallback_note),
+// in the command line's output and on the window's row.
 inline bool is_gpu_fallback(StatusKind kind) {
-    return kind == StatusKind::gpu_vmaf_failed || kind == StatusKind::gpu_perceptual_failed;
+    return kind == StatusKind::gpu_vmaf_failed || kind == StatusKind::gpu_perceptual_failed ||
+           kind == StatusKind::gpu_decoding_off;
 }
 
 // A fallback's status text as a note: without the "…" it ends with, as the
@@ -93,6 +104,17 @@ RunStatus decoding_status(const std::string& brief, const HardwareDecoding& deco
 // back.
 nlohmann::json status_json(const RunStatus& status);
 RunStatus status_from_json(const nlohmann::json& json);
+
+// Where a GPU's decoder failed (error.gpu_decoder()): the GPU's video decoding
+// is not trusted again in this run (distrust_gpu_decoding), and a
+// gpu_decoder_failed status says so, which trips the run's process too where
+// this runs in a process of its own.
+void distrust_failed_decoder(const GpuDecodeFailedError& error, const StatusCallback& on_status);
+
+// The note of a video scored with its decoding on the CPU because the GPU's
+// video decoding failed in this run: one text for the whole run (the first
+// failure's), so that a video's tasks give it once.
+RunStatus gpu_decoding_off_status(const std::string& reason);
 
 // The status a run sends when VMAF on the GPU fails, after which FFmpeg's
 // libvmaf calculates it, starts with this.

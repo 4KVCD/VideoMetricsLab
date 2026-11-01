@@ -677,6 +677,7 @@
   "{metrics} in the app failed ({error}); calculating them with FFmpeg…": "{metrics} ในแอปล้มเหลว ({error}) กำลังคำนวณด้วย FFmpeg…",
   "Decoding in the app failed ({error}); decoding through FFmpeg instead…": "การถอดรหัสในแอปล้มเหลว ({error}) กำลังถอดรหัสผ่าน FFmpeg แทน…",
   "GPU decoding failed ({error}); decoding through FFmpeg instead…": "การถอดรหัสด้วย GPU ล้มเหลว ({error}) กำลังถอดรหัสผ่าน FFmpeg แทน…",
+  "The GPU's video decoding failed ({error}); the videos were decoded on the CPU…": "การถอดรหัสวิดีโอด้วย GPU ล้มเหลว ({error}) ถอดรหัสวิดีโอด้วย CPU แทน…",
   "Reading the videos failed ({error}); trying again…": "การอ่านวิดีโอล้มเหลว ({error}) กำลังลองอีกครั้ง…",
   "GPU metric {number}/{count}: {metrics}": "เมตริก GPU {number}/{count}: {metrics}",
   "VMAF on the GPU failed ({error}); calculating it on the CPU…": "VMAF บน GPU ล้มเหลว ({error}) กำลังคำนวณบน CPU…",

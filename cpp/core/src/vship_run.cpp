@@ -20,6 +20,7 @@
 
 #include "vml/app_log.h"
 #include "vml/colour.h"
+#include "vml/crop_detect.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
@@ -1874,8 +1875,15 @@ PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const Pass
                     const nlohmann::json& counts = message["progress"];
                     on_progress(counts.at(0).get<long long>(), counts.at(1).get<long long>(),
                                 counts.at(2).get<double>());
-                } else if (message.contains("status") && on_status) {
-                    on_status(status_from_json(message["status"]));
+                } else if (message.contains("status")) {
+                    const RunStatus status = status_from_json(message["status"]);
+                    // The pass's GPU decoder failed: not to be trusted in this process either, shown or not
+                    if (status.kind == StatusKind::gpu_decoder_failed) {
+                        distrust_gpu_decoding(status.text);
+                    }
+                    if (on_status) {
+                        on_status(status);
+                    }
                 }
             },
             cancel, [&](const nlohmann::json& result, const std::filesystem::path& folder) {
@@ -2650,17 +2658,57 @@ PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const
                                          const PerceptualRoutes& routes) {
     PerceptualRequest scored = request;
     SizeChangeMarks marks(scored.source, scored.distorted);
+    // The task's scores may come from the GPU's pictures: its Vship passes decode where run_pass plans it, and its
+    // black bars may be a box found from them (another task's)
+    const auto from_gpu = [&scored] {
+        return scored.options.crop_mode == CropMode::automatic ||
+               (scored.options.gpu_decode && plan_hardware_decoding(scored.environment.decoding,
+                                                                    scored.options.gpu_vendor, scored.source,
+                                                                    scored.distorted, MacGpuDecoding::on)
+                                                 .uses_gpu());
+    };
+    // Where the GPU's video decoding was found wrong (gpu_decoding_distrusted, as ffmpeg_run.cpp's run_vmaf): the
+    // task decodes on the CPU, its black-bar answers found again, and the video is noted
+    const auto decode_on_cpu = [&scored, &hooks](const std::string& reason) {
+        scored.options.gpu_decode = false;
+        forget_crop_answer(scored.source);
+        forget_crop_answer(scored.distorted);
+        if (hooks.on_status) {
+            hooks.on_status(gpu_decoding_off_status(reason));
+        }
+    };
+    bool off = false;  // decoding on the CPU already, the GPU's having been found wrong
     while (true) {
+        if (const std::optional<std::string> distrusted = gpu_decoding_distrusted(); !off && distrusted && from_gpu()) {
+            decode_on_cpu(*distrusted);
+            off = true;
+        }
+        // Made again if the GPU's decoding is found wrong while it runs
+        const bool watched = !off && from_gpu();
         try {
             PerceptualTaskOutput output = MetricRouting(scored, keys, together, hooks, cancel, routes).run();
-            marks.finished();
-            return output;
+            if (!watched || !gpu_decoding_distrusted()) {
+                marks.finished();
+                return output;
+            }
         } catch (const VideoSizeChanged& changed) {
             cancel.throw_if_cancelled();  // not made again after a Cancel
             if (!marks.after(changed, scored.options.scale_algorithm)) {
                 throw PerceptualRunError(size_change_unfixed);
             }
+            continue;
+        } catch (const Cancelled&) {
+            throw;
+        } catch (const std::exception&) {
+            // Its failure may come from the GPU's wrong pictures: made again on the CPU where they were found wrong
+            if (!watched || !gpu_decoding_distrusted()) {
+                throw;
+            }
         }
+        // Found wrong while it ran, maybe by another video: scored again on the CPU
+        cancel.throw_if_cancelled();
+        decode_on_cpu(*gpu_decoding_distrusted());
+        off = true;
     }
 }
 
@@ -2692,6 +2740,7 @@ PerceptualTaskOutput remade_vship_pass(const std::function<PerceptualTaskOutput(
             if (on_status) {
                 on_status({decoding_failed_status(error)});
             }
+            distrust_failed_decoder(error, on_status);
             native = false;
         }
     }

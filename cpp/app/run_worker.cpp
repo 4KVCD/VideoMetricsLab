@@ -6,6 +6,7 @@
 
 #include "vml/app_log.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/gpu_frames.h"
 #include "vml/hardware_decoding.h"
 #include "vml/perceptual.h"
 #include "vml/platform/system.h"
@@ -108,6 +109,7 @@ void RunWorker::run() {
                 tools.ffmpeg.path, format_version(tools.ffmpeg.version), tools.ffprobe.path,
                 gpu_decode_ ? DecodingCapabilities::detect(tools.ffmpeg.path) : DecodingCapabilities{},
                 platform::logical_cores()};
+            trust_gpu_decoding();  // found wrong in an earlier run, maybe under another program's load: asked again
             scheduler_->run();
         }
     } catch (const std::exception& error) {

@@ -1092,6 +1092,7 @@ ParsedScores score_plan(const RunEnvironment& environment, const VideoInfo& sour
             if (on_status) {
                 on_status({decoding_failed_status(error)});
             }
+            distrust_failed_decoder(error, on_status);
         }
     }
     return execute_gpu_run(environment, source, distorted, options, source_crop, distorted_crop, plan, fps,
@@ -1358,8 +1359,15 @@ ParsedScores score_plan_apart(std::string_view task, const RunEnvironment& envir
             if (message.contains("progress") && on_progress) {
                 const nlohmann::json& counts = message["progress"];
                 on_progress(counts.at(0).get<long long>(), counts.at(1).get<long long>(), counts.at(2).get<double>());
-            } else if (message.contains("status") && on_status) {
-                on_status(status_from_json(message["status"]));
+            } else if (message.contains("status")) {
+                const RunStatus status = status_from_json(message["status"]);
+                // The child's GPU decoder failed: not to be trusted in this process either, shown or not
+                if (status.kind == StatusKind::gpu_decoder_failed) {
+                    distrust_gpu_decoding(status.text);
+                }
+                if (on_status) {
+                    on_status(status);
+                }
             }
         },
         cancel,
@@ -1639,6 +1647,21 @@ std::string fallback_note(const std::string& status_text) {
 RunStatus decoding_status(const std::string& brief, const HardwareDecoding& decoding, StatusKind kind,
                           std::string_view ending) {
     return {brief + " (GPU decode: " + decoding.describe() + ")" + std::string(ending), kind, brief, decoding};
+}
+
+void distrust_failed_decoder(const GpuDecodeFailedError& error, const StatusCallback& on_status) {
+    if (!error.gpu_decoder()) {
+        return;  // the file's reading failed, or the app's own software decoder: nothing says the GPU is wrong
+    }
+    distrust_gpu_decoding(error.what());
+    if (on_status) {
+        on_status({error.what(), StatusKind::gpu_decoder_failed});
+    }
+}
+
+RunStatus gpu_decoding_off_status(const std::string& reason) {
+    return {"The GPU's video decoding failed (" + reason + "); the videos were decoded on the CPU\xE2\x80\xA6",
+            StatusKind::gpu_decoding_off};
 }
 
 nlohmann::json status_json(const RunStatus& status) {
@@ -2353,6 +2376,21 @@ ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInf
     return result;
 }
 
+// `options` with the videos decoded on the CPU, the GPU's video decoding
+// having been found wrong in this run (`reason`: gpu_decoding_distrusted):
+// their black-bar answers, which may come from its pictures, forgotten, and
+// the video's note sent.
+void decode_on_cpu(VmafOptions& options, const std::string& reason, std::initializer_list<const VideoInfo*> videos,
+                   const StatusCallback& on_status) {
+    options.gpu_decode = false;
+    for (const VideoInfo* video : videos) {
+        forget_crop_answer(*video);
+    }
+    if (on_status) {
+        on_status(gpu_decoding_off_status(reason));
+    }
+}
+
 }  // namespace
 
 ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
@@ -2363,17 +2401,41 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
     VideoInfo scored_test = distorted;
     SizeChangeMarks marks(scored_source, scored_test);
     while (true) {
+        // The GPU decodes the pair: by FFmpeg's -hwaccel, or by the app's decoders, which take the videos FFmpeg
+        // would decode there
+        const bool on_gpu = options.gpu_decode && plan_hardware_decoding(environment.decoding, options.gpu_vendor,
+                                                                         scored_source, scored_test)
+                                                      .uses_gpu();
+        const std::optional<std::string> distrusted = gpu_decoding_distrusted();
+        if (on_gpu && distrusted) {  // found wrong earlier in the run
+            decode_on_cpu(options, *distrusted, {&scored_source, &scored_test}, on_status);
+            continue;
+        }
         try {
             ComparisonResult result = run_vmaf_once(environment, scored_source, scored_test, options, on_progress,
                                                     on_status, cancel, result_distorted_path);
-            marks.finished();
-            return result;
+            if (!on_gpu || !gpu_decoding_distrusted()) {
+                marks.finished();
+                return result;
+            }
         } catch (const VideoSizeChanged& changed) {
             cancel.throw_if_cancelled();  // not made again after a Cancel
             if (!marks.after(changed, options.scale_algorithm)) {
                 throw VmafRunError(size_change_unfixed);
             }
+            continue;
+        } catch (const Cancelled&) {
+            throw;
+        } catch (const std::exception&) {
+            // Its failure may come from the GPU's wrong pictures: made again on the CPU where they were found wrong
+            if (!on_gpu || !gpu_decoding_distrusted()) {
+                throw;
+            }
         }
+        // The GPU's video decoding was found wrong while the pair was scored, maybe by another video: its scores
+        // may come from wrong pictures (FFmpeg's -hwaccel does not notice them), so the pair is scored again
+        cancel.throw_if_cancelled();
+        decode_on_cpu(options, *gpu_decoding_distrusted(), {&scored_source, &scored_test}, on_status);
     }
 }
 
@@ -2458,12 +2520,33 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
 ComparisonResult run_resample_test(const RunEnvironment& environment, const VideoInfo& source, VmafOptions options,
                                    const ProgressCallback& on_progress, const StatusCallback& on_status,
                                    const CancelToken& cancel) {
-    try {
-        return resample_test_run(environment, source, std::move(options), on_progress, on_status, cancel);
-    } catch (const VideoSizeChanged&) {
-        // Its frames are scaled down and up again at the size they come in.
-        throw VmafRunError("The video's picture size changes partway through; a resolution round-trip test needs "
-                           "a video of one size.");
+    while (true) {
+        const bool on_gpu =
+            options.gpu_decode && pick_decode(environment.decoding, options.gpu_vendor, source).has_value();
+        const std::optional<std::string> distrusted = gpu_decoding_distrusted();
+        if (on_gpu && distrusted) {  // found wrong earlier in the run (run_vmaf)
+            decode_on_cpu(options, *distrusted, {&source}, on_status);
+            continue;
+        }
+        try {
+            ComparisonResult result = resample_test_run(environment, source, options, on_progress, on_status, cancel);
+            if (!on_gpu || !gpu_decoding_distrusted()) {
+                return result;
+            }
+        } catch (const VideoSizeChanged&) {
+            // Its frames are scaled down and up again at the size they come in.
+            throw VmafRunError("The video's picture size changes partway through; a resolution round-trip test "
+                               "needs a video of one size.");
+        } catch (const Cancelled&) {
+            throw;
+        } catch (const std::exception&) {
+            if (!on_gpu || !gpu_decoding_distrusted()) {
+                throw;
+            }
+        }
+        // Found wrong while it ran: scored again on the CPU (run_vmaf)
+        cancel.throw_if_cancelled();
+        decode_on_cpu(options, *gpu_decoding_distrusted(), {&source}, on_status);
     }
 }
 

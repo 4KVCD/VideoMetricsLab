@@ -44,6 +44,11 @@ inline constexpr std::string_view black_bars_file = "black_bars.json";
 // starts afresh.
 void forget_crop_answers();
 
+// Forgets the answer kept for one video, in the store too: a run that found
+// it from the GPU's pictures while the GPU's video decoding was found wrong
+// (gpu_decoding_distrusted) finds it again on the CPU.
+void forget_crop_answer(const VideoInfo& info);
+
 // The box that cuts the video's black bars. `hwaccel` is the decoder the
 // run will use for this video (only how fast the answer comes depends on
 // it). A video whose size changes (VideoInfo::scaled_to) is sampled scaled
