@@ -42,7 +42,6 @@ The Mac version now has the same features as the Windows version:
 - The app finds Homebrew's `ffmpeg-full`, and says when FFmpeg lacks zscale, which HDR stills and playback need.
 - The programs the app starts now end with it, however it ends.
 - Fixed a paused program being ended when the app waited for it.
-- Fixed AV1 scores with film grain saved on a Mac and on Windows not being shared.
 - Command line: `--gpu-decode nvidia`, `intel` and `amd` are refused, as a Mac decodes with its own GPU.
 
 ### Bug fixes
