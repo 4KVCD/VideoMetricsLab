@@ -330,8 +330,10 @@ static av_cold int libvvdec_close(AVCodecContext *avctx)
     return 0;
 }
 
-// A seek: VVdeC cannot drop what it holds without decoding it (vvdec_flush decodes every
-// access unit still parsed ahead), so a new decoder is started.
+// A seek: a new decoder is started. VVdeC cannot drop what it holds without decoding it:
+// vvdec_flush, and closing it too (vvdec_decoder_close resets it, which flushes), decode every
+// access unit still parsed ahead, so a seek costs about the decoding of the parse delay's
+// pictures (4K, a Core Ultra 9 285K: 58 ms at a parse delay of 8, 135 ms at 24).
 static void libvvdec_flush(AVCodecContext *avctx)
 {
     LibvvdecContext *s = avctx->priv_data;
