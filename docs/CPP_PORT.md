@@ -99,7 +99,7 @@ CVVDP runs, on the CPU.
   from the Finder does not have Homebrew on its PATH, so the app also looks
   in Homebrew's and MacPorts' folders, ffmpeg-full's (keg-only) first.
 - **The bundled tools** are built from their pinned releases' source,
-  because neither project publishes macOS builds: libvmaf-fast v1.2's
+  because neither project publishes macOS builds: libvmaf-fast v1.3's
   `libvmaf.dylib` and libjxl 0.12.0's `ssimulacra2` and `butteraugli_main`,
   linked statically (`scripts/build_libvmaf_fast_macos.sh`,
   `scripts/build_libjxl_macos.sh`). They link only the system's libraries,

@@ -26,13 +26,14 @@ TEST(Libvmaf, PredictsVmafFromFeaturesAsThePythonApp) {
     if (!std::filesystem::exists(libvmaf_folder() / platform::shared_library_name("libvmaf"))) {
         GTEST_SKIP() << "the app ships no libvmaf-fast for this system yet";
     }
-    // The headers in third_party/libvmaf-fast are release v1's, which v1.1
-    // and v1.2 left as they were (they changed only the Vulkan engine). A
-    // local build after one ("v1.2-2-g...") has the same while the fork keeps
+    // The headers in third_party/libvmaf-fast are release v1's, which v1.1,
+    // v1.2 and v1.3 left as they were (they changed only the Vulkan engine). A
+    // local build after one ("v1.3-2-g...") has the same while the fork keeps
     // libvmaf's headers as they are; another release needs its own.
     const std::string bundled = libvmaf_fast_version();
-    EXPECT_TRUE(bundled == "v1" || bundled == "v1.1" || bundled == "v1.2" || bundled.starts_with("v1-") ||
-                bundled.starts_with("v1.1-") || bundled.starts_with("v1.2-"))
+    EXPECT_TRUE(bundled == "v1" || bundled == "v1.1" || bundled == "v1.2" || bundled == "v1.3" ||
+                bundled.starts_with("v1-") || bundled.starts_with("v1.1-") || bundled.starts_with("v1.2-") ||
+                bundled.starts_with("v1.3-"))
         << bundled << ": the headers in third_party/libvmaf-fast are release v1's; copy this library's with it";
     const nlohmann::json reference = test::load_reference("predict.json");
     ASSERT_FALSE(reference.empty());

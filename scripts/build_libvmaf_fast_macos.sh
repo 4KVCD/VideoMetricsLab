@@ -10,8 +10,8 @@
 # committed (.gitignore): the release script runs this.
 set -euo pipefail
 
-version="${1:-v1.2}"
-commit_expected="71b7b9bebb0c0ac78ec92fbd289dc25e9fc13b7a"  # libvmaf-fast-v1.2
+version="${1:-v1.3}"
+commit_expected="287766520c60380899bdd021b079d49c9ef9f978"  # libvmaf-fast-v1.3
 deployment_target="14.4"
 
 project="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,7 +21,7 @@ trap 'rm -rf "$work"' EXIT
 
 git -c advice.detachedHead=false clone --quiet --depth 1 --branch "libvmaf-fast-$version" https://github.com/4KVCD/libvmaf-fast.git "$work/src"
 commit="$(git -C "$work/src" rev-parse HEAD)"
-if [[ "$version" == "v1.2" && "$commit" != "$commit_expected" ]]; then
+if [[ "$version" == "v1.3" && "$commit" != "$commit_expected" ]]; then
     echo "libvmaf-fast-$version is commit $commit, expected $commit_expected" >&2
     exit 1
 fi
