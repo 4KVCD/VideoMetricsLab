@@ -102,7 +102,9 @@ previous build's output undeletable. The package therefore goes to
   decoder `libvvdec` (`scripts/patches/ffmpeg`), which the app asks for by
   name (FFmpeg's own VVC decoder stays the default). Built from FFmpeg's
   release source by `scripts/build_ffmpeg_decoders.ps1` (MinGW-w64 GCC,
-  NASM and CMake; the source is pinned by its SHA-256), which also vendors
+  NASM and CMake; the source is pinned by its SHA-256, and its archive kept,
+  once downloaded, in `%LOCALAPPDATA%\VideoMetricsLab-build\downloads`, as
+  dav1d's is), which also vendors
   the headers the decoders are compiled against. Beside them,
   **dav1d 1.5.4** (`dav1d.dll`, BSD), which decodes AV1 in software, as
   FFmpeg's libdav1d decoder does: built from VideoLAN's release source by

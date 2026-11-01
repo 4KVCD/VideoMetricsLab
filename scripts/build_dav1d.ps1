@@ -6,7 +6,8 @@
 #   licenses/COPYING.dav1d.txt    its licence (BSD 2-clause)
 #
 # dav1d's release source is pinned by its version and the SHA-256 of its
-# archive, from VideoLAN's own server. It is built with MinGW-w64's gcc and
+# archive, from VideoLAN's own server, kept, once downloaded, in
+# %LOCALAPPDATA%\VideoMetricsLab-build\downloads (fetch_source.ps1). It is built with MinGW-w64's gcc and
 # NASM's assembly, without dav1d's tools, tests or examples, and with the C
 # runtime's support linked in, so the DLL needs only Windows. AV1's decoding
 # is defined exactly, so any dav1d release decodes the same pictures. The DLL
@@ -22,7 +23,7 @@ param(
     [string]$MesonVersion = '1.12.1',
     # The Python that Meson's own folder is made with.
     [string]$Python = '',
-    [string]$Archive = ''  # a copy of the source archive on disk, instead of downloading it
+    [string]$Archive = ''  # a copy of the source archive on disk, kept in the downloads folder instead of downloading it
 )
 $ErrorActionPreference = 'Stop'
 
@@ -52,16 +53,12 @@ foreach ($tool in @('gcc', 'nasm', 'ninja')) {
 if (-not $Python) { $Python = Join-Path $projectDirectory '.venv/Scripts/python.exe' }
 if (-not (Test-Path $Python)) { throw "no Python at $Python for Meson: name one with -Python" }
 
+# The verified archive first, before the last build's work folder goes: a failed download leaves that as it was
+. (Join-Path $PSScriptRoot 'fetch_source.ps1')
+$Archive = Get-PinnedArchive -Url "https://downloads.videolan.org/pub/videolan/dav1d/$Version/dav1d-$Version.tar.xz" `
+    -Name "dav1d-$Version.tar.xz" -Sha256 $Sha256 -Given $Archive
 if (Test-Path $work) { Remove-Item -Recurse -Force $work }
 New-Item -ItemType Directory -Path $work | Out-Null
-if (-not $Archive) {
-    $Archive = Join-Path $work "dav1d-$Version.tar.xz"
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri "https://downloads.videolan.org/pub/videolan/dav1d/$Version/dav1d-$Version.tar.xz" `
-        -OutFile $Archive -UseBasicParsing
-}
-$hash = (Get-FileHash $Archive -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($hash -ne $Sha256) { throw "dav1d-$Version.tar.xz has SHA-256 $hash, expected $Sha256" }
 Invoke-Program "unpacking dav1d-$Version.tar.xz" { tar -xf $Archive -C $work }
 
 # Meson, pinned, in a folder of its own.

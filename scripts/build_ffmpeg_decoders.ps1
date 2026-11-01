@@ -14,8 +14,12 @@
 # and the headers software_frames.cpp is compiled against into native/ffmpeg.
 #
 # FFmpeg's release source is pinned by its version and the SHA-256 of its
-# archive. It is configured LGPL (no --enable-gpl, no --enable-nonfree), with
-# no external library, program, filter or network: only the decoders, parsers
+# archive, which is kept, once downloaded, in
+# %LOCALAPPDATA%\VideoMetricsLab-build\downloads (fetch_source.ps1): a
+# rebuild does not download it again (VVdeC is still cloned from GitHub).
+# It is configured LGPL (no --enable-gpl, no
+# --enable-nonfree), with no external library, program, filter or network:
+# only the decoders, parsers
 # and demuxers listed below (the videos and soundtracks the Python app's
 # GStreamer played), Direct3D 11's video decoding for H.264, HEVC, VP9, AV1 and
 # MPEG-2, NASM's assembly, Windows' threads, and the C runtime's support
@@ -41,7 +45,7 @@
 param(
     [string]$Version = '9.0.2',
     [string]$Sha256 = '8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e',
-    [string]$Archive = '',  # a copy of the source archive on disk, instead of downloading it
+    [string]$Archive = '',  # a copy of the source archive on disk, kept in the downloads folder instead of downloading it
     # VVdeC's master on 2026-10-28 (3.3.0-dev), as Brian chose: master, not its last
     # release, with 4KVCD's open pull requests (see above).
     [string]$VvdecCommit = '17e0f2f2089c5c0553f1bfc486b1b7aa551e7819'
@@ -77,15 +81,12 @@ $bash = (Get-Command bash -ErrorAction SilentlyContinue).Source
 if (-not $bash) { $bash = Join-Path $env:ProgramFiles 'Git/bin/bash.exe' }
 if (-not (Test-Path $bash)) { throw "Git for Windows' bash is needed for FFmpeg's configure" }
 
+# The verified archive first, before the last build's work folder goes: a failed download leaves that as it was
+. (Join-Path $PSScriptRoot 'fetch_source.ps1')
+$Archive = Get-PinnedArchive -Url "https://ffmpeg.org/releases/ffmpeg-$Version.tar.xz" -Name "ffmpeg-$Version.tar.xz" `
+    -Sha256 $Sha256 -Given $Archive
 if (Test-Path $work) { Remove-Item -Recurse -Force $work }
 New-Item -ItemType Directory -Path $work | Out-Null
-if (-not $Archive) {
-    $Archive = Join-Path $work "ffmpeg-$Version.tar.xz"
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri "https://ffmpeg.org/releases/ffmpeg-$Version.tar.xz" -OutFile $Archive -UseBasicParsing
-}
-$hash = (Get-FileHash $Archive -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($hash -ne $Sha256) { throw "ffmpeg-$Version.tar.xz has SHA-256 $hash, expected $Sha256" }
 & tar -xf $Archive -C $work
 if ($LASTEXITCODE -ne 0) { throw "unpacking ffmpeg-$Version.tar.xz failed" }
 
