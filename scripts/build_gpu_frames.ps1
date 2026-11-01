@@ -26,8 +26,11 @@ foreach ($build in @(
             Includes = @('-I', (Join-Path $native 'vulkan')) },
         @{ Name = 'software_frames'; Libraries = @()
             Includes = @('-I', (Join-Path $native 'ffmpeg/include')) })) {
+    # Reproducible in any folder: no link time, and the image base not made from the output's path (MinGW's ld
+    # picks it from a hash of that path otherwise, which moves every absolute address)
     & g++ -std=c++17 -O3 -Wall -Wextra -shared -static -s -I $native @($build.Includes) `
         (Join-Path $native "$($build.Name).cpp") `
-        -o (Join-Path $outputDirectory "$($build.Name).dll") @($build.Libraries) '-Wl,--no-insert-timestamp'
+        -o (Join-Path $outputDirectory "$($build.Name).dll") @($build.Libraries) '-Wl,--no-insert-timestamp' `
+        '-Wl,--disable-auto-image-base'
     if ($LASTEXITCODE -ne 0) { throw "$($build.Name).dll build failed" }
 }
