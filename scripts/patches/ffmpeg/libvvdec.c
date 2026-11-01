@@ -90,8 +90,26 @@ typedef struct LibvvdecPending {
     int result;                      // ff_aom_apply_film_grain's
 } LibvvdecPending;
 
+// VVdeC decodes into FFmpeg's buffers (its allocator callbacks), so that a picture is given out
+// by reference rather than copied: no copy of each picture (25 MB at 4K 10-bit) on the decoding
+// thread. VVdeC asks for each plane's memory at more than one size (a picture's buffers have
+// margins; its 8-bit output copies and the frames it adds film grain into do not), so each plane
+// keeps a pool per size, LIBVVDEC_POOL_SIZES at most, the oldest made again for a new size: one
+// pool at a time would be made again at nearly every picture of a stream with film grain. VVdeC
+// calls back on the thread that calls vvdec_decode or vvdec_flush, and in vvdec_decoder_close;
+// its API promises nothing about threads, so finding or making a pool is done under `lock` (the
+// pools themselves are thread-safe).
+#define LIBVVDEC_POOL_SIZES 4
+typedef struct LibvvdecPools {
+    AVMutex lock;
+    AVBufferPool *pool[3][LIBVVDEC_POOL_SIZES];
+    size_t size[3][LIBVVDEC_POOL_SIZES];  // the size VVdeC asked for (each buffer is padded)
+    int oldest[3];                        // each plane's pool made again next
+} LibvvdecPools;
+
 typedef struct LibvvdecContext {
     const AVClass *class;
+    LibvvdecPools *pools;
     vvdecDecoder *decoder;
     vvdecAccessUnit *access_unit;
     AVPacket *packet;
@@ -118,6 +136,54 @@ typedef struct LibvvdecContext {
     int grain_sync;  // grain_lock and grain_finished made
 } LibvvdecContext;
 
+// VVdeC asks for a plane's memory: a buffer from that plane's pool of this size. `*allocator`
+// is the buffer's reference, which VVdeC gives back through libvvdec_unref_plane. The plane
+// starts at the first address in the buffer aligned as VVdeC asks (32 bytes; av_malloc's own
+// alignment depends on the build's SIMD: 16 bytes on arm64), as libdav1d.c does, so each buffer
+// has LIBVVDEC_PLANE_ALIGN bytes more; and is padded, as FFmpeg's own frames are, as readers such
+// as swscale may read a little past a plane's end.
+#define LIBVVDEC_PLANE_ALIGN 64
+static void *libvvdec_create_plane(void *opaque, vvdecComponentType component, uint32_t size,
+                                   uint32_t alignment, void **allocator)
+{
+    LibvvdecPools *pools = opaque;
+    const int plane = component < 3 ? (int)component : 0;
+    AVBufferRef *buffer = NULL;
+    int found = 0;
+
+    *allocator = NULL;
+    if (alignment > LIBVVDEC_PLANE_ALIGN)
+        return NULL;  // VVdeC then fails the picture
+    ff_mutex_lock(&pools->lock);
+    while (found < LIBVVDEC_POOL_SIZES && !(pools->pool[plane][found] && pools->size[plane][found] == size))
+        found++;
+    if (found == LIBVVDEC_POOL_SIZES) {
+        found = pools->oldest[plane];
+        pools->oldest[plane] = (found + 1) % LIBVVDEC_POOL_SIZES;
+        // The pool replaced goes when the last of its buffers comes back.
+        av_buffer_pool_uninit(&pools->pool[plane][found]);
+        pools->pool[plane][found] = av_buffer_pool_init(
+            (size_t)size + LIBVVDEC_PLANE_ALIGN + AV_INPUT_BUFFER_PADDING_SIZE, av_buffer_allocz);
+        pools->size[plane][found] = pools->pool[plane][found] ? size : 0;
+    }
+    if (pools->pool[plane][found])
+        buffer = av_buffer_pool_get(pools->pool[plane][found]);
+    ff_mutex_unlock(&pools->lock);
+    if (!buffer)
+        return NULL;
+    *allocator = buffer;
+    // In uintptr_t: FFALIGN's mask, ~(alignment - 1), would be 32 bits wide from a uint32_t and
+    // clear a pointer's upper half.
+    return alignment ? (void *)FFALIGN((uintptr_t)buffer->data, (uintptr_t)alignment) : buffer->data;
+}
+
+// VVdeC no longer needs a plane: its reference goes (a frame still given out keeps the buffer).
+static void libvvdec_unref_plane(void *opaque, void *allocator)
+{
+    AVBufferRef *buffer = allocator;
+    av_buffer_unref(&buffer);
+}
+
 // VVdeC's messages go to FFmpeg's log. Only an error is logged as one: the app's decoder
 // library takes any error FFmpeg logs for a failed decode. VVdeC keeps one callback for
 // the whole process (each decoder sets this same one), so it logs without a context.
@@ -142,7 +208,8 @@ static int libvvdec_open_decoder(AVCodecContext *avctx)
     params.verifyPictureHash = false;
     params.filmGrainSynthesis = !(avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN);
 
-    s->decoder = vvdec_decoder_open(&params);
+    params.opaque = s->pools;
+    s->decoder = vvdec_decoder_open_with_allocator(&params, libvvdec_create_plane, libvvdec_unref_plane);
     if (!s->decoder) {
         av_log(avctx, AV_LOG_ERROR, "VVdeC could not start\n");
         return AVERROR_EXTERNAL;
@@ -176,6 +243,13 @@ static av_cold int libvvdec_init(AVCodecContext *avctx)
         return AVERROR(ENOMEM);
     }
     s->grain_sync = 1;
+    s->pools = av_mallocz(sizeof(*s->pools));
+    if (!s->pools)
+        return AVERROR(ENOMEM);
+    if (ff_mutex_init(&s->pools->lock, NULL)) {
+        av_freep(&s->pools);
+        return AVERROR(ENOMEM);
+    }
     return libvvdec_open_decoder(avctx);
 }
 
@@ -236,7 +310,14 @@ static av_cold int libvvdec_close(AVCodecContext *avctx)
         ff_mutex_destroy(&s->grain_lock);
         s->grain_sync = 0;
     }
-    libvvdec_close_decoder(s);
+    libvvdec_close_decoder(s);  // VVdeC gives back its references to the pools' buffers first
+    if (s->pools) {
+        for (int plane = 0; plane < 3; plane++)
+            for (int i = 0; i < LIBVVDEC_POOL_SIZES; i++)
+                av_buffer_pool_uninit(&s->pools->pool[plane][i]);  // goes when its frames come back
+        ff_mutex_destroy(&s->pools->lock);
+        av_freep(&s->pools);
+    }
     libvvdec_forget_sei(s);
     av_freep(&s->rbsp);
     s->rbsp_size = 0;
@@ -307,7 +388,49 @@ static void libvvdec_take_vui(AVCodecContext *avctx, const vvdecVui *vui)
     }
 }
 
-// Copies VVdeC's picture into `frame`, from FFmpeg's buffer pool.
+// Gives `frame` VVdeC's picture by reference when all its planes are in the pools' buffers
+// (libvvdec_create_plane): 1 when it did, 0 when the picture must be copied, or an error.
+// VVdeC keeps its own reference while it may still use the picture, so the frame is not writable
+// until then (av_frame_make_writable copies it). VVdeC does not write a picture's samples again
+// once it is given out, but may still extend a reference picture's margins, outside the picture:
+// readers read the picture only. libvvdec has no AV_CODEC_CAP_DR1, and must not: its frames are
+// not from get_buffer2.
+static int libvvdec_reference_planes(AVCodecContext *avctx, const vvdecFrame *picture, enum AVPixelFormat format,
+                                     AVFrame *frame)
+{
+    const uint32_t bytes_per_sample = picture->bitDepth > 8 ? 2 : 1;
+    int ret;
+
+    if (picture->numPlanes != 3)
+        return 0;
+    for (int plane = 0; plane < 3; plane++)
+        if (!picture->planes[plane].allocator)
+            return 0;
+    ret = av_image_check_size2(picture->width, picture->height, avctx->max_pixels, format, 0, avctx);
+    if (ret < 0)
+        return ret;
+    frame->format = format;
+    frame->width = picture->width;
+    frame->height = picture->height;
+    avctx->sw_pix_fmt = avctx->pix_fmt;  // as ff_get_buffer sets it
+    for (int plane = 0; plane < 3; plane++) {
+        const vvdecPlane *in = &picture->planes[plane];
+        if (in->bytesPerSample != bytes_per_sample)
+            return AVERROR_BUG;
+        frame->buf[plane] = av_buffer_ref(in->allocator);
+        if (!frame->buf[plane])
+            return AVERROR(ENOMEM);
+        frame->data[plane] = in->ptr;
+        frame->linesize[plane] = in->stride;
+    }
+    // The rest of what ff_get_buffer does for a decoder's frame: the colour fields, the aspect
+    // ratio and the container's side data (mastering display, content light).
+    ret = ff_decode_frame_props(avctx, frame);
+    return ret < 0 ? ret : 1;
+}
+
+// Gives VVdeC's picture to `frame`: by reference where it can (libvvdec_reference_planes), else
+// copied into a buffer from FFmpeg's pool.
 static int libvvdec_output(AVCodecContext *avctx, const vvdecFrame *picture, AVFrame *frame)
 {
     const enum AVPixelFormat format = libvvdec_pixel_format(picture);
@@ -330,15 +453,20 @@ static int libvvdec_output(AVCodecContext *avctx, const vvdecFrame *picture, AVF
             return ret;
     }
 
-    ret = ff_get_buffer(avctx, frame, 0);
+    ret = libvvdec_reference_planes(avctx, picture, format, frame);
     if (ret < 0)
-        return ret;
-    for (uint32_t plane = 0; plane < picture->numPlanes && plane < 3; plane++) {
-        const vvdecPlane *in = &picture->planes[plane];
-        if (in->bytesPerSample != (uint32_t)bytes_per_sample)
-            return AVERROR_BUG;
-        av_image_copy_plane(frame->data[plane], frame->linesize[plane], in->ptr, in->stride,
-                            in->width * bytes_per_sample, in->height);
+        return ret;  // the caller unrefs the frame
+    if (ret == 0) {
+        ret = ff_get_buffer(avctx, frame, 0);
+        if (ret < 0)
+            return ret;
+        for (uint32_t plane = 0; plane < picture->numPlanes && plane < 3; plane++) {
+            const vvdecPlane *in = &picture->planes[plane];
+            if (in->bytesPerSample != (uint32_t)bytes_per_sample)
+                return AVERROR_BUG;
+            av_image_copy_plane(frame->data[plane], frame->linesize[plane], in->ptr, in->stride,
+                                in->width * bytes_per_sample, in->height);
+        }
     }
 
     frame->pts = AV_NOPTS_VALUE;  // the access unit's, given by the caller
