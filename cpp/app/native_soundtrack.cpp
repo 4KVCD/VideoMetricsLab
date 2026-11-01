@@ -6,17 +6,24 @@
 #include <wrl/client.h>
 #else
 #include <AudioToolbox/AudioToolbox.h>
+#include <Block.h>
+#include <CoreAudio/CoreAudio.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <dispatch/dispatch.h>
 #endif
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cmath>
 #include <cstring>
+#include <memory>
 #include <vector>
 
 #include "ffmpeg_api.h"
+#include "vml/app_log.h"
 #include "vml/platform/system.h"
 
 #ifdef _WIN32
@@ -92,7 +99,177 @@ struct EventHandle {
 };
 #endif
 
+#ifdef __APPLE__
+// CoreAudio's speakers and FFmpeg's names for them, paired as FFmpeg's own
+// AudioToolbox code pairs them (its side channels are CoreAudio's surround).
+constexpr std::array<std::pair<AudioChannelLabel, AVChannel>, 11> speakers{{
+    {kAudioChannelLabel_Left, AV_CHAN_FRONT_LEFT},
+    {kAudioChannelLabel_Right, AV_CHAN_FRONT_RIGHT},
+    {kAudioChannelLabel_Center, AV_CHAN_FRONT_CENTER},
+    {kAudioChannelLabel_LFEScreen, AV_CHAN_LOW_FREQUENCY},
+    {kAudioChannelLabel_LeftSurround, AV_CHAN_SIDE_LEFT},
+    {kAudioChannelLabel_RightSurround, AV_CHAN_SIDE_RIGHT},
+    {kAudioChannelLabel_RearSurroundLeft, AV_CHAN_BACK_LEFT},
+    {kAudioChannelLabel_RearSurroundRight, AV_CHAN_BACK_RIGHT},
+    {kAudioChannelLabel_CenterSurround, AV_CHAN_BACK_CENTER},
+    {kAudioChannelLabel_LeftCenter, AV_CHAN_FRONT_LEFT_OF_CENTER},
+    {kAudioChannelLabel_RightCenter, AV_CHAN_FRONT_RIGHT_OF_CENTER},
+}};
+
+// Whether a channel's label names no speaker: the Mac's own devices label
+// theirs so.
+bool unlabelled(AudioChannelLabel label) {
+    return label == kAudioChannelLabel_Unknown || label == kAudioChannelLabel_Unused ||
+           label == kAudioChannelLabel_UseCoordinates || label == kAudioChannelLabel_Discrete ||
+           (label >> 16) == 1;  // kAudioChannelLabel_Discrete_N
+}
+
+// The default output device as the soundtrack plays to it: its channels'
+// labels, in its order, and its latency.
+struct OutputDevice {
+    std::vector<unsigned> labels;
+    double latency_ms = 0;
+};
+
+std::optional<AudioObjectID> default_output_device() {
+    const AudioObjectPropertyAddress where{kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal,
+                                           kAudioObjectPropertyElementMain};
+    AudioObjectID device = kAudioObjectUnknown;
+    UInt32 size = sizeof device;
+    if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &where, 0, nullptr, &size, &device) != noErr ||
+        device == kAudioObjectUnknown) {
+        return std::nullopt;
+    }
+    return device;
+}
+
+// A property of `object` that is one UInt32; 0 where it has none.
+UInt32 number_of(AudioObjectID object, AudioObjectPropertySelector selector, AudioObjectPropertyScope scope) {
+    const AudioObjectPropertyAddress where{selector, scope, kAudioObjectPropertyElementMain};
+    UInt32 value = 0;
+    UInt32 size = sizeof value;
+    return AudioObjectGetPropertyData(object, &where, 0, nullptr, &size, &value) == noErr ? value : 0;
+}
+
+// A channel layout's labels (`bytes` long): from its descriptions, or from
+// its tag or bitmap, as CoreAudio spells those out; never more descriptions
+// than the bytes hold, whatever the layout counts.
+std::vector<unsigned> labels_of(const AudioChannelLayout& layout, std::size_t bytes) {
+    const AudioChannelLayout* spelled = &layout;
+    std::vector<char> expanded;
+    if (layout.mChannelLayoutTag != kAudioChannelLayoutTag_UseChannelDescriptions) {
+        const bool bitmap = layout.mChannelLayoutTag == kAudioChannelLayoutTag_UseChannelBitmap;
+        const AudioFormatPropertyID property =
+            bitmap ? kAudioFormatProperty_ChannelLayoutForBitmap : kAudioFormatProperty_ChannelLayoutForTag;
+        const void* given = bitmap ? static_cast<const void*>(&layout.mChannelBitmap)
+                                   : static_cast<const void*>(&layout.mChannelLayoutTag);
+        UInt32 size = 0;
+        if (AudioFormatGetPropertyInfo(property, sizeof(UInt32), given, &size) != noErr || size == 0) {
+            return {};
+        }
+        expanded.resize(size);
+        if (AudioFormatGetProperty(property, sizeof(UInt32), given, &size, expanded.data()) != noErr) {
+            return {};
+        }
+        spelled = reinterpret_cast<const AudioChannelLayout*>(expanded.data());
+        bytes = size;
+    }
+    constexpr std::size_t head = offsetof(AudioChannelLayout, mChannelDescriptions);
+    const std::size_t held = bytes < head ? 0 : (bytes - head) / sizeof(AudioChannelDescription);
+    std::vector<unsigned> labels;
+    for (std::size_t i = 0; i < std::min<std::size_t>(spelled->mNumberChannelDescriptions, held); ++i) {
+        labels.push_back(spelled->mChannelDescriptions[i].mChannelLabel);
+    }
+    return labels;
+}
+
+OutputDevice default_output() {
+    OutputDevice found;
+    const std::optional<AudioObjectID> device = default_output_device();
+    if (!device) {
+        return found;
+    }
+    const AudioObjectPropertyAddress layout_at{kAudioDevicePropertyPreferredChannelLayout,
+                                               kAudioObjectPropertyScopeOutput, kAudioObjectPropertyElementMain};
+    UInt32 size = 0;
+    if (AudioObjectGetPropertyDataSize(*device, &layout_at, 0, nullptr, &size) == noErr &&
+        size >= offsetof(AudioChannelLayout, mChannelDescriptions)) {
+        std::vector<char> bytes(size);
+        if (AudioObjectGetPropertyData(*device, &layout_at, 0, nullptr, &size, bytes.data()) == noErr) {
+            found.labels = labels_of(*reinterpret_cast<const AudioChannelLayout*>(bytes.data()),
+                                     std::min<std::size_t>(size, bytes.size()));
+        }
+    }
+    // The latencies (the queue's clock is where the device is, before them):
+    // the device's and its first output stream's, at its own rate.
+    const AudioObjectPropertyAddress streams_at{kAudioDevicePropertyStreams, kAudioObjectPropertyScopeOutput,
+                                                kAudioObjectPropertyElementMain};
+    AudioStreamID stream = kAudioObjectUnknown;
+    UInt32 stream_size = sizeof stream;  // the first one is all it takes
+    UInt32 stream_frames = 0;
+    if (AudioObjectGetPropertyData(*device, &streams_at, 0, nullptr, &stream_size, &stream) == noErr &&
+        stream_size >= sizeof stream) {
+        stream_frames = number_of(stream, kAudioStreamPropertyLatency, kAudioObjectPropertyScopeGlobal);
+    }
+    const AudioObjectPropertyAddress rate_at{kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal,
+                                             kAudioObjectPropertyElementMain};
+    Float64 rate = 0;
+    UInt32 rate_size = sizeof rate;
+    if (AudioObjectGetPropertyData(*device, &rate_at, 0, nullptr, &rate_size, &rate) != noErr) {
+        rate = 0;
+    }
+    found.latency_ms = output_latency_ms(
+        number_of(*device, kAudioDevicePropertyLatency, kAudioObjectPropertyScopeOutput), stream_frames, rate);
+    return found;
+}
+#endif
+
 }  // namespace
+
+#ifdef __APPLE__
+std::vector<unsigned> soundtrack_output_labels(const std::vector<unsigned>& device_labels) {
+    std::vector<unsigned> speakers_found;
+    for (const unsigned label : device_labels) {
+        if (unlabelled(label)) {
+            continue;  // a channel the queue cannot be told where it goes
+        }
+        if (ffmpeg_channel_of(label) < 0) {
+            return {};  // a speaker FFmpeg has no name for: stereo, rather than sound in the wrong place
+        }
+        if (std::find(speakers_found.begin(), speakers_found.end(), label) != speakers_found.end()) {
+            return {};  // a speaker named twice (L R L R): the resampler would leave the second silent
+        }
+        speakers_found.push_back(label);
+    }
+    if (speakers_found.size() < 3 || speakers_found.size() > 8) {
+        return {};
+    }
+    return speakers_found;
+}
+
+int ffmpeg_channel_of(unsigned label) {
+    for (const auto& [speaker, channel] : speakers) {
+        if (speaker == label) {
+            return static_cast<int>(channel);
+        }
+    }
+    return -1;
+}
+
+void soundtrack_output_layout(const std::vector<unsigned>& output, AVChannelLayout* layout) {
+    if (output.empty() || av_channel_layout_custom_init(layout, static_cast<int>(output.size())) < 0) {
+        av_channel_layout_default(layout, 2);
+        return;
+    }
+    for (std::size_t i = 0; i < output.size(); ++i) {
+        layout->u.map[i].id = static_cast<AVChannel>(ffmpeg_channel_of(output[i]));
+    }
+}
+
+double output_latency_ms(unsigned device_frames, unsigned stream_frames, double rate) {
+    return rate > 0 ? (static_cast<double>(device_frames) + stream_frames) * 1000 / rate : 0;
+}
+#endif
 
 FfmpegSoundtrack::FfmpegSoundtrack(std::filesystem::path path, int start_ms, bool enabled) : path_(std::move(path)) {
     enabled_ = enabled;
@@ -191,7 +368,17 @@ public:
 
     // Opens the soundtrack and the sound device; false when either cannot
     // be (fail() then says why).
-    bool open() { return open_file() && open_device(); }
+    bool open() {
+        if (!open_file()) {
+            return false;
+        }
+#ifndef _WIN32
+        // Before the device is read: a change while it opens is followed
+        // (the play loop's first pass), not missed.
+        watch_device();
+#endif
+        return open_device();
+    }
     // Plays until stopped, or until the device or the file fails.
     void play();
 
@@ -244,6 +431,20 @@ private:
     // that much later, so the clock leaves the gap out (read_clock).
     double given_frames_ = 0;
     double starved_frames_ = 0;
+    // The speakers of the channels played, in their order (none: stereo), as
+    // soundtrack_output_labels gives them for the device; and how far behind
+    // the queue's clock its sound is heard.
+    std::vector<unsigned> output_;
+    double latency_ms_ = 0;
+    // Another default output device chosen (the listener, on its own queue):
+    // its latency taken, and the queue made again for other channels
+    // (follow_device). Shared with the listener's block, so a call its
+    // removal did not wait for cannot outlive it.
+    std::shared_ptr<std::atomic<bool>> device_changed_ = std::make_shared<std::atomic<bool>>(false);
+    AudioObjectPropertyListenerBlock listener_ = nullptr;
+    dispatch_queue_t listener_queue_ = nullptr;
+    void watch_device();
+    bool follow_device();
     int channels_ = 0;
     int rate_ = 0;
     std::size_t frame_bytes_ = 0;
@@ -376,25 +577,62 @@ bool FfmpegSoundtrack::Player::open_device() {
     const AVSampleFormat sample_format = floats ? AV_SAMPLE_FMT_FLT : AV_SAMPLE_FMT_S16;
     frame_bytes_ = static_cast<std::size_t>(channels_) * (floats ? 4 : 2);
 #else
-    channels_ = 2;
+    const OutputDevice device = default_output();
+    output_ = soundtrack_output_labels(device.labels);
+    latency_ms_ = device.latency_ms;
     rate_ = reader_.codec->sample_rate > 0 ? reader_.codec->sample_rate : 48000;
     const AVSampleFormat sample_format = AV_SAMPLE_FMT_FLT;
-    frame_bytes_ = static_cast<std::size_t>(channels_) * 4;
-    AudioStreamBasicDescription format{};
-    format.mSampleRate = rate_;
-    format.mFormatID = kAudioFormatLinearPCM;
-    format.mFormatFlags = kLinearPCMFormatFlagIsFloat | kLinearPCMFormatFlagIsPacked;
-    format.mBytesPerPacket = static_cast<UInt32>(frame_bytes_);
-    format.mFramesPerPacket = 1;
-    format.mBytesPerFrame = static_cast<UInt32>(frame_bytes_);
-    format.mChannelsPerFrame = static_cast<UInt32>(channels_);
-    format.mBitsPerChannel = 32;
-    // Called back on this thread, in play()'s run loop.
-    if (AudioQueueNewOutput(&format, &Player::played, this, CFRunLoopGetCurrent(), kCFRunLoopCommonModes, 0, &sound_queue_) !=
-        noErr) {
+    // The queue, in the device's channels where it names their speakers, told
+    // which speaker each is (before its buffers: told later, its clock never
+    // starts); in stereo where it does not, or will not be told.
+    const auto make_queue = [this]() {
+        channels_ = output_.empty() ? 2 : static_cast<int>(output_.size());
+        frame_bytes_ = static_cast<std::size_t>(channels_) * 4;
+        AudioStreamBasicDescription format{};
+        format.mSampleRate = rate_;
+        format.mFormatID = kAudioFormatLinearPCM;
+        format.mFormatFlags = kLinearPCMFormatFlagIsFloat | kLinearPCMFormatFlagIsPacked;
+        format.mBytesPerPacket = static_cast<UInt32>(frame_bytes_);
+        format.mFramesPerPacket = 1;
+        format.mBytesPerFrame = static_cast<UInt32>(frame_bytes_);
+        format.mChannelsPerFrame = static_cast<UInt32>(channels_);
+        format.mBitsPerChannel = 32;
+        // Called back on this thread, in play()'s run loop.
+        if (AudioQueueNewOutput(&format, &Player::played, this, CFRunLoopGetCurrent(), kCFRunLoopCommonModes, 0,
+                                &sound_queue_) != noErr) {
+            sound_queue_ = nullptr;
+            output_.clear();  // tried again in stereo
+            return false;
+        }
+        if (output_.empty()) {
+            return true;
+        }
+        std::vector<char> bytes(offsetof(AudioChannelLayout, mChannelDescriptions) +
+                                output_.size() * sizeof(AudioChannelDescription));
+        auto* layout = reinterpret_cast<AudioChannelLayout*>(bytes.data());
+        layout->mChannelLayoutTag = kAudioChannelLayoutTag_UseChannelDescriptions;
+        layout->mNumberChannelDescriptions = static_cast<UInt32>(output_.size());
+        for (std::size_t i = 0; i < output_.size(); ++i) {
+            layout->mChannelDescriptions[i].mChannelLabel = output_[i];
+        }
+        if (AudioQueueSetProperty(sound_queue_, kAudioQueueProperty_ChannelLayout, layout,
+                                  static_cast<UInt32>(bytes.size())) == noErr) {
+            return true;
+        }
+        AudioQueueDispose(sound_queue_, true);
+        sound_queue_ = nullptr;
+        output_.clear();  // stereo, rather than channels in unknown places
+        return false;
+    };
+    // A queue that could not be made in the device's channels, or would not
+    // be told its speakers, is made again in stereo.
+    if (!make_queue() && !make_queue()) {
         fail(QStringLiteral("No sound device"));
         return false;
     }
+    app_log::write(app_log::Level::info, "vml.native_playback",
+                   "Soundtrack: " + std::to_string(channels_) + " channels to the default output, heard " +
+                       std::to_string(std::lround(latency_ms_)) + " ms after the queue plays them");
     buffer_frames_ = static_cast<std::size_t>(std::llround(queue_buffer_ms * rate_ / 1000));
     for (AudioQueueBufferRef& buffer : buffers_) {
         if (AudioQueueAllocateBuffer(sound_queue_, static_cast<UInt32>(buffer_frames_ * frame_bytes_), &buffer) != noErr) {
@@ -404,7 +642,12 @@ bool FfmpegSoundtrack::Player::open_device() {
     }
 #endif
     AVChannelLayout out_layout{};
+#ifdef _WIN32
     av_channel_layout_default(&out_layout, channels_);
+#else
+    // The device's speakers, in its order (as the queue was told), or stereo.
+    soundtrack_output_layout(output_, &out_layout);
+#endif
     AVChannelLayout in_layout{};
     if (reader_.codec->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC) {
         av_channel_layout_default(&in_layout, reader_.codec->ch_layout.nb_channels);
@@ -424,13 +667,77 @@ bool FfmpegSoundtrack::Player::open_device() {
 
 #ifndef _WIN32
 FfmpegSoundtrack::Player::~Player() {
+    if (listener_ != nullptr) {
+        // The same block and queue it was added with; then a block running
+        // now finishes before the player goes.
+        const AudioObjectPropertyAddress where{kAudioHardwarePropertyDefaultOutputDevice,
+                                               kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
+        AudioObjectRemovePropertyListenerBlock(kAudioObjectSystemObject, &where, listener_queue_, listener_);
+        dispatch_sync(listener_queue_, ^{
+                      });
+        Block_release(listener_);
+        dispatch_release(listener_queue_);
+    }
     if (sound_queue_ != nullptr) {
         AudioQueueDispose(sound_queue_, true);  // its buffers with it
     }
 }
 
-void FfmpegSoundtrack::Player::played(void* self, AudioQueueRef /*queue*/, AudioQueueBufferRef buffer) {
+void FfmpegSoundtrack::Player::watch_device() {
+    // Another default output (headphones, AirPods, a display): the queue
+    // follows it by itself; its latency, or its channels, are the player's
+    // to follow (follow_device).
+    listener_queue_ = dispatch_queue_create("vml.soundtrack.device", DISPATCH_QUEUE_SERIAL);
+    std::shared_ptr<std::atomic<bool>> changed = device_changed_;
+    listener_ = Block_copy(^(UInt32, const AudioObjectPropertyAddress*) {
+      changed->store(true);
+    });
+    const AudioObjectPropertyAddress where{kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal,
+                                           kAudioObjectPropertyElementMain};
+    if (AudioObjectAddPropertyListenerBlock(kAudioObjectSystemObject, &where, listener_queue_, listener_) != noErr) {
+        Block_release(listener_);
+        dispatch_release(listener_queue_);
+        listener_ = nullptr;
+        listener_queue_ = nullptr;
+    }
+}
+
+bool FfmpegSoundtrack::Player::follow_device() {
+    // Played in the same channels: only the new device's latency. In others:
+    // the queue made again, and the sound taken up again where it was.
+    const OutputDevice device = default_output();
+    if (soundtrack_output_labels(device.labels) == output_) {
+        latency_ms_ = device.latency_ms;
+        return true;
+    }
+    std::optional<double> position;
+    {
+        // A seek asked for is made next anyway.
+        const std::lock_guard lock(soundtrack_.mutex_);
+        if (!soundtrack_.wanted_ms_) {
+            position = soundtrack_.clock_ms_.value_or(target_ms_);
+        }
+    }
+    AudioQueueDispose(sound_queue_, true);
+    sound_queue_ = nullptr;
+    buffers_ = {};
+    queued_.fill(false);
+    started_ = false;
+    swr_free(&reader_.resampler);
+    if (!open_device()) {
+        return false;
+    }
+    if (position) {
+        make_seek(*position);
+    }
+    return true;
+}
+
+void FfmpegSoundtrack::Player::played(void* self, AudioQueueRef queue, AudioQueueBufferRef buffer) {
     auto* player = static_cast<Player*>(self);
+    if (queue != player->sound_queue_) {
+        return;  // one made before another device's
+    }
     for (std::size_t index = 0; index < player->buffers_.size(); ++index) {
         if (player->buffers_[index] == buffer) {
             player->queued_[index] = false;
@@ -441,6 +748,11 @@ void FfmpegSoundtrack::Player::played(void* self, AudioQueueRef /*queue*/, Audio
 
 void FfmpegSoundtrack::Player::play() {
     while (!soundtrack_.stopping()) {
+#ifndef _WIN32
+        if (device_changed_->exchange(false) && !follow_device()) {
+            return;
+        }
+#endif
         std::optional<double> seek;
         bool want_playing = false;
         bool enabled = true;
@@ -718,9 +1030,11 @@ void FfmpegSoundtrack::Player::read_clock() {
         // The sound played, less the silence the queue went on in while it
         // had none, and never past the sound given.
         const double frames = std::clamp(played.mSampleTime - starved_frames_, 0.0, given_frames_);
+        // Heard the device's latency later; never before the start or seek.
+        const double heard_ms = std::max(0.0, frames * 1000 / rate_ - latency_ms_);
         const std::lock_guard lock(soundtrack_.mutex_);
         if (!soundtrack_.wanted_ms_) {
-            soundtrack_.clock_ms_ = base_ms_ + frames * 1000 / rate_;
+            soundtrack_.clock_ms_ = base_ms_ + heard_ms;
         }
     }
 #else

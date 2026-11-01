@@ -13,8 +13,11 @@
 #include <optional>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "vml/soundtrack_clock.h"
+
+struct AVChannelLayout;
 
 namespace vml::app {
 
@@ -92,5 +95,29 @@ private:
 
     std::thread thread_;
 };
+
+#ifdef __APPLE__
+// The sound device's side on macOS (native_soundtrack.cpp), for its tests.
+
+// The channels the soundtrack is played in on a device whose channels carry
+// these CoreAudio labels (AudioChannelLabel), in its order: those labels, for
+// three to eight channels each with a speaker FFmpeg names; none -- stereo,
+// as a stereo device is played -- for any other (unlabelled channels, as
+// the Mac's own devices have, a speaker FFmpeg has no name for, more than
+// eight).
+std::vector<unsigned> soundtrack_output_labels(const std::vector<unsigned>& device_labels);
+
+// FFmpeg's channel (AVChannel) for a CoreAudio speaker label; -1 for none.
+int ffmpeg_channel_of(unsigned label);
+
+// The resampler's output layout for a queue in these channels
+// (soundtrack_output_labels): the speakers in the device's order, or stereo
+// for none. The caller uninitialises it (av_channel_layout_uninit).
+void soundtrack_output_layout(const std::vector<unsigned>& output, AVChannelLayout* layout);
+
+// How far behind the sound queue's clock the sound is heard: the device's
+// and its output stream's latencies, in frames at the device's `rate`.
+double output_latency_ms(unsigned device_frames, unsigned stream_frames, double rate);
+#endif
 
 }  // namespace vml::app

@@ -117,7 +117,8 @@ if(TARGET vml_app)
     if(APPLE AND native_playback_macos)
         # Native playback on macOS, where FFmpeg's libraries are built
         # (app/CMakeLists.txt).
-        target_sources(vml_app_tests PRIVATE app/native_pool_test.cpp)
+        target_sources(vml_app_tests PRIVATE app/native_pool_test.cpp app/soundtrack_test.cpp)
+        target_include_directories(vml_app_tests SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/../native/ffmpeg/include)
     endif()
     if(WIN32)
         # Qt beside the tests, with the platform they run on, and Qt's
