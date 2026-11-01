@@ -323,9 +323,12 @@ struct DecoderLibrary {
             } else {
                 import_memory = library.function<decltype(import_memory)>("nvf_import");
             }
-        } else if (backend == vvdec_decoder) {  // the luma alone, copied on the GPU into Vulkan VMAF's memory
+        } else if (backend == vvdec_decoder) {
+            // Copied on the GPU: the luma into Vulkan VMAF's memory, the whole picture into Vship's (pinned)
             unimport = library.function<decltype(unimport)>("nvf_unimport");
             import_vulkan = library.function<decltype(import_vulkan)>("nvf_import_vulkan");
+            pin = library.function<decltype(pin)>("nvf_pin");
+            unpin = library.function<decltype(unpin)>("nvf_unpin");
         }
         // AMD's: copies the GPU waits for, rather than the CPU; and a slot's
         // picture in place (Windows' decoder).
@@ -1027,9 +1030,9 @@ bool vvdec_handover_wanted() {
     return platform::environment_variable("VML_VVDEC_HANDOVER").value_or("") == "1";
 }
 
-std::string decoding_failed_status(const GpuDecodeFailedError& error) {
+std::string decoding_failed_status(const GpuDecodeFailedError& error, std::string_view instead) {
     const std::string what = error.backend() == software_decoder ? "Decoding in the app" : "GPU decoding";
-    return what + " failed (" + error.what() + "); decoding through FFmpeg instead…";
+    return what + " failed (" + error.what() + "); decoding " + std::string(instead) + " instead…";
 }
 
 std::size_t DecodePlan::frame_bytes() const {
@@ -1135,6 +1138,14 @@ bool can_hand_over(const DecodePlan& plan, std::string_view backend) {
         return true;
     }
     return (backend == "amd" || backend == vvdec_decoder) && !plan.scaled() && plan.widen == 0;
+}
+
+bool vvdec_takes(const DecodePlan& plan) {
+    return plan.codec == "vvc" && can_hand_over(plan, vvdec_decoder) && !(plan.film_grain != 0 && plan.film_grain_kinds);
+}
+
+bool vvdec_chosen(const DecodePlan& plan) {
+    return vvdec_handover_wanted() && vvdec_takes(plan) && decoder_available(vvdec_decoder);
 }
 
 bool can_lend_planes(const DecodePlan& plan, std::string_view backend) {
@@ -1683,6 +1694,10 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
     }
     if (state.handover && backend != "nvidia" && state.handle == nullptr) {
         state.handle = state.open(*state.library, native_params(plan, device, pool, state.configuration, true), said);
+        if (state.handle == nullptr && backend == vvdec_decoder) {
+            // It has no system-memory route: its own reason, not a second open's refusal
+            throw GpuDecodeUnavailableError(said.empty() ? state.decoder + " could not start" : said);
+        }
         if (state.handle == nullptr) {
             logger.info(state.file_name + ": the GPU's pictures go through system memory (" + said + ")");
             state.handover = false;

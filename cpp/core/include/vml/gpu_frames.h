@@ -75,14 +75,16 @@ private:
 };
 
 // The status shown when decoding in the app failed after it had started,
-// naming the GPU's decoder or the app's own.
-std::string decoding_failed_status(const GpuDecodeFailedError& error);
+// naming the GPU's decoder or the app's own, and what decodes the video
+// instead (`instead`: the caller's fallback, e.g. "through FFmpeg").
+std::string decoding_failed_status(const GpuDecodeFailedError& error, std::string_view instead);
 
 // The decoder for the videos FFmpeg would decode in software.
 inline constexpr std::string_view software_decoder = "software";
-// VVC decoded on the GPU by vvdec-vulkan (native/vvdecvk_frames.cpp), its pictures handed over on the GPU to Vulkan
-// VMAF: the unscaled, grain-free test video of a pair (8 or 10 bits), beside a reference the CPU writes into the slot
-// (VulkanScorer::add_shared_mixed). v2.4's first step: only with VML_VVDEC_HANDOVER=1 (vvdec_handover_wanted).
+// VVC decoded on the GPU by vvdec-vulkan (native/vvdecvk_frames.cpp), its pictures handed over on the GPU: to Vulkan
+// VMAF (the test video of a pair, beside a reference the CPU writes into the slot: VulkanScorer::add_shared_mixed),
+// and into Vship's frame buffers (pinned, NativeFrameStream). v2.4's first step: only with VML_VVDEC_HANDOVER=1
+// (vvdec_handover_wanted).
 inline constexpr std::string_view vvdec_decoder = "vvdec";
 bool vvdec_handover_wanted();
 
@@ -171,6 +173,12 @@ inline constexpr std::string_view media_foundation_decoder = "amd-mf";
 // (GpuFrameStream's handover): NVIDIA's always, and AMD's when they are
 // neither scaled nor widened (native/amf_handover.h).
 bool can_hand_over(const DecodePlan& plan, std::string_view backend);
+
+// Whether vvdec-vulkan can decode the plan's video and hand it over: VVC, neither scaled nor widened, no film grain
+// added (its pictures have no samples in host memory to add grain to). vvdec_chosen: and it is wanted
+// (vvdec_handover_wanted) and bundled (decoder_available), asked in that order.
+bool vvdec_takes(const DecodePlan& plan);
+bool vvdec_chosen(const DecodePlan& plan);
 
 // Whether `backend`'s decoder may let the plan's pictures be read where it
 // holds them in system memory (GpuFrameStream::slot_planes): the software

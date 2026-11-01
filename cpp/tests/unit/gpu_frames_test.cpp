@@ -120,6 +120,35 @@ TEST(GpuFrames, OnlyTheSoftwareDecoderLendsThePicturesItWouldOnlyCopy) {
     EXPECT_FALSE(can_lend_planes(eight, software_decoder));
 }
 
+// vvdec-vulkan takes a VVC video it can hand over as it is: not another codec,
+// not scaled or widened, and not one whose film grain the app adds (its
+// pictures have no samples in host memory to add it to).
+TEST(GpuFrames, VvdecVulkanTakesUnchangedVvcWithoutAddedGrain) {
+    DecodePlan plan;
+    plan.codec = "vvc";
+    plan.bit_depth = 10;
+    plan.width = plan.crop_w = 1920;
+    plan.height = plan.crop_h = 1080;
+    EXPECT_TRUE(vvdec_takes(plan));
+    DecodePlan hevc = plan;
+    hevc.codec = "hevc";
+    EXPECT_FALSE(vvdec_takes(hevc));
+    DecodePlan scaled = plan;
+    scaled.out_w = 1280;
+    scaled.out_h = 720;
+    EXPECT_FALSE(vvdec_takes(scaled));
+    DecodePlan widened = plan;
+    widened.bit_depth = 8;
+    widened.widen = widen_shift;
+    EXPECT_FALSE(vvdec_takes(widened));
+    DecodePlan grain = plan;
+    grain.film_grain = 1;
+    grain.film_grain_kinds = 1;
+    EXPECT_FALSE(vvdec_takes(grain));
+    grain.film_grain_kinds = 0;  // grain asked for, but the video has none
+    EXPECT_TRUE(vvdec_takes(grain));
+}
+
 TEST(GpuFrames, CopiesThePacketsWithThePythonAppsCommand) {
     const Json reference = test::load_reference("decoding.json");
     ASSERT_FALSE(reference["packet_commands"].empty());

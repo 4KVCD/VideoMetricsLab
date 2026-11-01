@@ -1090,7 +1090,7 @@ ParsedScores score_plan(const RunEnvironment& environment, const VideoInfo& sour
             logger.warning("Decoding for " + (plan.backend == "cpu" ? metric_names(plan) : "VMAF on the GPU") +
                            " failed; decoding through FFmpeg instead: " + error.what());
             if (on_status) {
-                on_status({decoding_failed_status(error)});
+                on_status({decoding_failed_status(error, "through FFmpeg")});
             }
         }
     }

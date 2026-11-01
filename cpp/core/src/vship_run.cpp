@@ -85,12 +85,19 @@ std::string exit_code_for_log(int code) {
 
 // ------------------------------------------------------------ frame memory
 
-// One frame's buffer in Vship's pinned (page-locked) memory.
+// One frame's buffer in Vship's pinned (page-locked) memory, its size rounded
+// up to whole 64 KiB, so that a GPU decoder can import all of it
+// (vvdec-vulkan: host memory imported in multiples of the device's alignment,
+// 4 KiB on the GPUs tried, at most 64 KiB).
 class PinnedBuffer {
 public:
+    static constexpr std::size_t import_alignment = 64 * 1024;
+
     PinnedBuffer(const VshipLibrary& library, std::size_t bytes, int gpu_id)
-        : library_(library), gpu_id_(gpu_id) {
-        const int error = library_.pinned_malloc(&address_, bytes, gpu_id);
+        : library_(library),
+          capacity_((bytes + import_alignment - 1) / import_alignment * import_alignment),
+          gpu_id_(gpu_id) {
+        const int error = library_.pinned_malloc(&address_, capacity_, gpu_id);
         if (error != 0 || address_ == nullptr) {
             address_ = nullptr;
             throw VshipUnavailableError("Could not allocate Vship pinned frame memory: " + library_.message(error));
@@ -105,6 +112,10 @@ public:
     PinnedBuffer& operator=(const PinnedBuffer&) = delete;
 
     std::uint8_t* data() const { return static_cast<std::uint8_t*>(address_); }
+    std::size_t capacity() const { return capacity_; }
+    // Whether a GPU decoder can import the whole buffer (Vship's allocations
+    // have started 64 KiB aligned on every GPU tried)
+    bool importable() const { return reinterpret_cast<std::uintptr_t>(address_) % import_alignment == 0; }
 
     // The frame's three planes, in the order Vship reads them.
     std::array<const std::uint8_t*, 3> planes(const VshipImageFormat& format,
@@ -119,6 +130,7 @@ public:
 
 private:
     const VshipLibrary& library_;
+    std::size_t capacity_;
     void* address_ = nullptr;
     int gpu_id_;
 };
@@ -490,11 +502,12 @@ private:
 // One video decoded in this process by the GPU's decoder or the software
 // decoder (gpu_frames.h), feeding a ring as FrameStream does (the Python
 // app's _NativeFrameStream): each picture FFmpeg's chain would send goes
-// straight into a free slot, copied there by the GPU from NVIDIA's decoder,
-// or by the CPU from the others. FFmpeg's chain numbers the frames, keeps
-// every `step`-th, and its -t keeps the first `limit` numbered ones (none:
-// all). A decoding failure after the start is thrown from next() as
-// GpuDecodeFailedError, and the pass is then made again through FFmpeg.
+// straight into a free slot, copied there by the GPU from NVIDIA's decoder
+// and vvdec-vulkan, or by the CPU from the others. FFmpeg's chain numbers
+// the frames, keeps every `step`-th, and its -t keeps the first `limit`
+// numbered ones (none: all). A decoding failure after the start is thrown
+// from next() as GpuDecodeFailedError, and the pass is then made again
+// without decoding here (remade_vship_pass).
 class NativeFrameStream : public FrameRing {
 public:
     NativeFrameStream(const VshipLibrary& library, std::size_t frame_bytes, std::unique_ptr<GpuFrameStream> decoder,
@@ -508,6 +521,22 @@ public:
     ~NativeFrameStream() override { close(); }
 
     void start() override {
+        // vvdec-vulkan copies each picture on the GPU straight into Vship's
+        // memory, which it must import first: before it starts decoding, so
+        // that a buffer it cannot take starts nothing. It has no other way to
+        // hand its pictures out, so the pass is then made again with the
+        // app's VVdeC on the CPU (GpuDecodeFailedError).
+        if (decoder_->backend() == vvdec_decoder) {
+            for (const std::unique_ptr<PinnedBuffer>& buffer : buffers_) {
+                if (!buffer->importable() || !decoder_->pin(buffer->data(), buffer->capacity())) {
+                    throw GpuDecodeFailedError("vvdec-vulkan could not import Vship's frame memory",
+                                               std::string(vvdec_decoder));
+                }
+                pinned_.push_back(buffer->data());
+            }
+            logger.info("Vship: " + std::to_string(pinned_.size()) +
+                        " frame buffers imported by vvdec-vulkan, which copies the pictures into them on the GPU");
+        }
         decoder_->start();
         // NVIDIA's decoder copies each picture with the GPU: straight into
         // Vship's memory once CUDA has page-locked it too; else CUDA stages
@@ -590,7 +619,7 @@ private:
 
     std::unique_ptr<GpuFrameStream> decoder_;
     std::size_t frame_bytes_;
-    std::vector<void*> pinned_;  // the buffers CUDA page-locked, unpinned before the decoder closes
+    std::vector<void*> pinned_;  // the buffers CUDA page-locked or vvdec-vulkan imported, unpinned before the decoder closes
     int step_;
     std::optional<long long> limit_;
     std::atomic<bool> stopping_{false};
@@ -1216,29 +1245,42 @@ private:
                     throw GpuDecodeUnavailableError("its frames would be " + std::to_string(decode.frame_bytes()) +
                                                     " bytes, not " + std::to_string(video.layout.frame_bytes));
                 }
-                // NVIDIA's decoder on CUDA's first GPU, where FFmpeg's
-                // -hwaccel cuda decodes too: Vship's number is Vulkan's, a
-                // list in another order.
-                const int device = backend == "nvidia" ? 0 : plan_.device.gpu_id;
-                // Asked first, because a stream the decoder refuses once the
-                // pass has started (10-bit H.264, say) means making the
-                // whole pass again.
-                const auto [supported, refusal] = decoder_supports(device, decode, backend);
-                if (!supported) {
-                    throw GpuDecodeUnavailableError(refusal);
+                // VVC on the GPU (vvdec-vulkan), its pictures copied there into Vship's memory; not in a pass made
+                // again after a decoder failed (native_ off), and where it cannot start, the app's VVdeC on the CPU
+                if (backend == software_decoder && native_ && vvdec_chosen(decode)) {
+                    try {
+                        return open_decoder(video, decode, std::string(vvdec_decoder));
+                    } catch (const GpuDecodeUnavailableError& error) {
+                        logger.info("Vship: the " + video.label + " is not decoded by vvdec-vulkan (" + error.what() +
+                                    ")");
+                    }
                 }
-                auto decoder = std::make_unique<GpuFrameStream>(video.info, decode, device, 4, backend,
-                                                                request_.environment.ffmpeg,
-                                                                request_.environment.ffprobe);
-                logger.info("Vship: the " + video.label + " is decoded by the " + backend +
-                            " decoder in the scoring process");
-                return decoder;
+                return open_decoder(video, decode, backend);
             } catch (const GpuDecodeUnavailableError& error) {
                 reason = error.what();
             }
         }
         logger.info("Vship: the " + video.label + " is not decoded in the scoring process (" + reason + ")");
         return nullptr;
+    }
+
+    // `backend`'s decoder for the video, as plan_decode laid its frames out;
+    // GpuDecodeUnavailableError where it cannot decode it.
+    std::unique_ptr<GpuFrameStream> open_decoder(const VideoPlan& video, const DecodePlan& decode,
+                                                 const std::string& backend) const {
+        // NVIDIA's decoder on CUDA's first GPU, where FFmpeg's -hwaccel cuda
+        // decodes too: Vship's number is Vulkan's, a list in another order.
+        const int device = backend == "nvidia" ? 0 : plan_.device.gpu_id;
+        // Asked first, because a stream the decoder refuses once the pass has
+        // started (10-bit H.264, say) means making the whole pass again.
+        const auto [supported, refusal] = decoder_supports(device, decode, backend);
+        if (!supported) {
+            throw GpuDecodeUnavailableError(refusal);
+        }
+        auto decoder = std::make_unique<GpuFrameStream>(video.info, decode, device, 4, backend,
+                                                        request_.environment.ffmpeg, request_.environment.ffprobe);
+        logger.info("Vship: the " + video.label + " is decoded by the " + backend + " decoder in the scoring process");
+        return decoder;
     }
 
     // One video's frame stream: decoded in this process where it can be, by
@@ -2687,10 +2729,12 @@ PerceptualTaskOutput remade_vship_pass(const std::function<PerceptualTaskOutput(
             if (!native) {
                 throw VshipUnavailableError(error.what());
             }
-            logger.warning(std::string("Decoding in the Vship pass failed; decoding through FFmpeg instead: ") +
+            // The pass made again decodes VVC with the app's VVdeC on the CPU (open_stream), the rest through FFmpeg
+            const std::string_view instead = error.backend() == vvdec_decoder ? "with VVdeC on the CPU" : "through FFmpeg";
+            logger.warning("Decoding in the Vship pass failed; decoding " + std::string(instead) + " instead: " +
                            error.what());
             if (on_status) {
-                on_status({decoding_failed_status(error)});
+                on_status({decoding_failed_status(error, instead)});
             }
             native = false;
         }

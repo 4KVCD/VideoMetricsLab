@@ -730,11 +730,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     // (no CPU metrics beside: the test video's pictures have no samples in host memory)
     const DecodePlan& test_plan = plans[0];
     const std::string test_library =
-        !cuda && plan.beside.empty() && vvdec_handover_wanted() && test_plan.codec == "vvc" &&
-                !test_plan.scaled() && test_plan.widen == 0 && !(test_plan.film_grain != 0 && test_plan.film_grain_kinds) &&
-                decoder_available(std::string(vvdec_decoder))
-            ? std::string(vvdec_decoder)
-            : test_backend;
+        !cuda && plan.beside.empty() && vvdec_chosen(test_plan) ? std::string(vvdec_decoder) : test_backend;
     // AMD's decoder hands its pictures over on the GPU where neither video is
     // scaled or widened for the other (can_hand_over); NVIDIA's always does.
     const bool hand_over = can_hand_over(plans[0], test_library) && can_hand_over(plans[1], source_backend);
