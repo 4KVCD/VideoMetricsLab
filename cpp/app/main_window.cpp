@@ -966,6 +966,11 @@ void MainWindow::on_update_answer(const std::string& body, const QString& error)
         logger.info("Update check: VideoMetricsLab " VML_APP_VERSION " is the latest release");
         return;
     }
+    if (!offers_package_here(*release)) {
+        logger.info("Update check: VideoMetricsLab " + release->version +
+                    " is available, but not yet for this system (this is " VML_APP_VERSION ")");
+        return;
+    }
     logger.info("Update check: VideoMetricsLab " + release->version + " is available (this is " VML_APP_VERSION ")");
     offer_update(*release);
 }
@@ -996,7 +1001,9 @@ void MainWindow::offer_update(const Release& release) {
     box->setDefaultButton(download);
     connect(box, &QMessageBox::finished, this, [this, box, download, skip, release] {
         if (box->clickedButton() == download) {
-            QDesktopServices::openUrl(QUrl(QString::fromStdString(release.page_url)));
+            // This system's package itself, where the release names it (the
+            // Python app opened the page).
+            QDesktopServices::openUrl(QUrl(QString::fromStdString(release.download_url.value_or(release.page_url))));
         } else if (box->clickedButton() == skip) {
             settings_.skipped_update_version = release.version;
             save_settings();

@@ -27,13 +27,26 @@ public:
     using std::runtime_error::runtime_error;
 };
 
-// A release on GitHub: its version ("1.3", from the tag "v1.3"), its page
-// and its notes.
+// A release on GitHub: its version ("1.3", from the tag "v1.3"), its page,
+// its notes, and this system's package to download, if it has one
+// (package_name_here).
 struct Release {
     std::string version;
     std::string page_url;
     std::string notes;
+    std::optional<std::string> download_url = std::nullopt;
 };
+
+// The file of a release that is this system's package, as the release
+// scripts name it (scripts/build_release.ps1, build_release_macos.sh):
+// Windows' zip, or Apple silicon Macs'; nothing where none is published
+// (Linux, an Intel Mac's own build).
+std::optional<std::string_view> package_name_here();
+
+// Whether `release` is one to offer here: one with this system's package,
+// or any where no package is published. GitHub names only the latest
+// release, so one before it that has the package is not seen.
+bool offers_package_here(const Release& release);
 
 // "v1.2.1" -> {1, 2, 1}; trailing zeros dropped, so 1.3 and 1.3.0 are the
 // same version. Nothing for anything that is not a plain version.

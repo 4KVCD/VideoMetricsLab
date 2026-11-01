@@ -65,8 +65,39 @@ Release release_from_answer(std::string_view body) {
     if (version.starts_with('v')) {
         version.remove_prefix(1);
     }
-    return Release{std::string(version), field("html_url", "https://github.com/4KVCD/VideoMetricsLab/releases/latest"),
-                   field("body", "")};
+    Release release{std::string(version),
+                    field("html_url", "https://github.com/4KVCD/VideoMetricsLab/releases/latest"), field("body", "")};
+    // This system's package: the file of that name, uploaded whole (an
+    // upload still under way is "open"), at an https address.
+    const nlohmann::json assets = data.is_object() ? data.value("assets", nlohmann::json()) : nlohmann::json();
+    if (const std::optional<std::string_view> wanted = package_name_here(); wanted && assets.is_array()) {
+        for (const nlohmann::json& asset : assets) {
+            if (!asset.is_object()) {
+                continue;
+            }
+            const nlohmann::json name = asset.value("name", nlohmann::json());
+            const nlohmann::json url = asset.value("browser_download_url", nlohmann::json());
+            const nlohmann::json state = asset.value("state", nlohmann::json("uploaded"));
+            if (name.is_string() && name.get<std::string>() == *wanted && url.is_string() &&
+                url.get<std::string>().starts_with("https://") && state == "uploaded") {
+                release.download_url = url.get<std::string>();
+                break;
+            }
+        }
+    }
+    return release;
 }
+
+std::optional<std::string_view> package_name_here() {
+#ifdef _WIN32
+    return "VideoMetricsLab-windows.zip";
+#elif defined(__APPLE__) && defined(__aarch64__)
+    return "VideoMetricsLab-macos-arm64.zip";
+#else
+    return std::nullopt;
+#endif
+}
+
+bool offers_package_here(const Release& release) { return !package_name_here() || release.download_url.has_value(); }
 
 }  // namespace vml

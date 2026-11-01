@@ -253,6 +253,8 @@ step "Command line"
 # 5. Zip it, as the Finder would (ditto keeps the bundle's links and
 #    signatures).
 step "Packaging"
+# The update check looks for this name among a release's files
+# (package_name_here, cpp/core/src/update_check.cpp).
 zip="$output_root/VideoMetricsLab-macos-arm64.zip"
 rm -f "$zip"
 ditto -c -k --keepParent "$app" "$zip"

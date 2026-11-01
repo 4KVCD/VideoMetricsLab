@@ -269,6 +269,8 @@ Remove-Item $profileFolder -Recurse -Force
 #    them: Compress-Archive (Windows PowerShell 5.1) wrote backslashes,
 #    which other unzip tools took for part of one long file name.
 Write-Host '==> Packaging' -ForegroundColor Cyan
+# The update check looks for this name among a release's files
+# (package_name_here, cpp/core/src/update_check.cpp).
 $zip = Join-Path $OutputRoot 'VideoMetricsLab-windows.zip'
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
