@@ -196,6 +196,9 @@ private:
 // LayoutRequest, and repaints the whole of itself with it, so a label's text
 // changing on one of its pages (a run line, a playback time) would repaint
 // every control on the tab.
+//
+// On the Mac, Control+Tab and Control+Shift+Tab switch its tabs, as Ctrl+Tab
+// does on Windows (Qt's own is Command+Tab there, the system's app switcher).
 class QuietTabWidget : public QTabWidget {
     Q_OBJECT
 
@@ -204,6 +207,9 @@ public:
 
 protected:
     bool event(QEvent* event) override;
+#ifdef Q_OS_MACOS
+    bool eventFilter(QObject* watched, QEvent* event) override;
+#endif
 
 private:
     using Shape = std::tuple<QSize, QSize, QSize, std::optional<QSize>, std::optional<QSize>>;

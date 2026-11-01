@@ -7,6 +7,7 @@
 #include <QDropEvent>
 #include <QFileInfo>
 #include <QFrame>
+#include <QKeyEvent>
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
@@ -452,7 +453,13 @@ void ReadoutLabel::remeasure() {
 
 // --------------------------------------------------------------- QuietTabWidget
 
-QuietTabWidget::QuietTabWidget(QWidget* parent) : QTabWidget(parent) {}
+QuietTabWidget::QuietTabWidget(QWidget* parent) : QTabWidget(parent) {
+#ifdef Q_OS_MACOS
+    // Control+Tab reaches the window, not the focused control, and only as
+    // a ShortcutOverride (no KeyPress follows): seen before either takes it.
+    qApp->installEventFilter(this);
+#endif
+}
 
 bool QuietTabWidget::event(QEvent* event) {
     if (event->type() == QEvent::LayoutRequest) {
@@ -471,6 +478,78 @@ bool QuietTabWidget::event(QEvent* event) {
     }
     return QTabWidget::event(event);
 }
+
+#ifdef Q_OS_MACOS
+namespace {
+
+// Whether `tabs` has a tab to go to: another one enabled and shown.
+bool has_another_tab(const QuietTabWidget& tabs) {
+    for (int index = 0; index < tabs.count(); ++index) {
+        if (index != tabs.currentIndex() && tabs.isTabEnabled(index) && tabs.isTabVisible(index)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The tabs Control+Tab switches, as Ctrl+Tab's on Windows: the innermost
+// with a tab to go to holding the focus, in its own window (not the window
+// a dialog was opened from); with the focus elsewhere in the active window
+// (a click on the Mac focuses no button), the window's outermost. None while
+// a popup is open (a combo box's list), as with Qt's own.
+QuietTabWidget* tabs_for_keys() {
+    QWidget* const window = QApplication::activeWindow();
+    if (window == nullptr || QApplication::activePopupWidget() != nullptr) {
+        return nullptr;
+    }
+    for (QWidget* widget = QApplication::focusWidget(); widget != nullptr && !widget->isWindow();
+         widget = widget->parentWidget()) {
+        auto* tabs = qobject_cast<QuietTabWidget*>(widget);
+        if (tabs != nullptr && has_another_tab(*tabs)) {
+            return tabs;
+        }
+    }
+    for (QuietTabWidget* tabs : window->findChildren<QuietTabWidget*>()) {
+        QWidget* above = tabs->parentWidget();
+        while (above != nullptr && above != window && qobject_cast<QuietTabWidget*>(above) == nullptr) {
+            above = above->parentWidget();
+        }
+        if (above == window && tabs->window() == window && tabs->isVisible() && has_another_tab(*tabs)) {
+            return tabs;
+        }
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+bool QuietTabWidget::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() != QEvent::ShortcutOverride && event->type() != QEvent::KeyPress) {
+        return QTabWidget::eventFilter(watched, event);
+    }
+    const auto* key = static_cast<QKeyEvent*>(event);
+    const Qt::KeyboardModifiers held = key->modifiers();
+    if ((key->key() != Qt::Key_Tab && key->key() != Qt::Key_Backtab) || !held.testFlag(Qt::MetaModifier) ||
+        held.testAnyFlags(Qt::ControlModifier | Qt::AltModifier) || tabs_for_keys() != this) {
+        return QTabWidget::eventFilter(watched, event);
+    }
+    // Switched at the override; a KeyPress after it (a test's) is only taken,
+    // or it would move the focus as Tab.
+    if (event->type() == QEvent::ShortcutOverride) {
+        const bool back = key->key() == Qt::Key_Backtab || held.testFlag(Qt::ShiftModifier);
+        const int tabs = count();
+        for (int step = 1; step < tabs; ++step) {
+            const int index = (currentIndex() + (back ? tabs - step : step)) % tabs;
+            if (isTabEnabled(index) && isTabVisible(index)) {
+                setCurrentIndex(index);
+                break;
+            }
+        }
+    }
+    event->accept();
+    return true;
+}
+#endif
 
 // ---------------------------------------------------------------- ScrollingPage
 

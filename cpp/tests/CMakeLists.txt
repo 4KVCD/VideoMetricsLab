@@ -113,6 +113,9 @@ if(TARGET vml_app)
         target_sources(vml_app_tests PRIVATE app/native_pool_test.cpp)
         target_compile_definitions(vml_app_tests PRIVATE NOMINMAX)
     endif()
+    if(APPLE)
+        target_sources(vml_app_tests PRIVATE app/tab_keys_test.cpp)  # Control+Tab, the Mac's
+    endif()
     get_property(native_playback_macos GLOBAL PROPERTY vml_native_playback_macos)
     if(APPLE AND native_playback_macos)
         # Native playback on macOS, where FFmpeg's libraries are built
