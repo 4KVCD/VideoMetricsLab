@@ -12,7 +12,9 @@
  * VVdeC does not add AOM's AFGS1 grain, which this wrapper adds as FFmpeg's own VVC decoder
  * does (vvc/dec.c): the ITU-T T.35 SEI messages are read with FFmpeg's own SEI code in
  * decoding order, the AFGS1 sets in force when a picture starts are kept with it, and
- * ff_aom_apply_film_grain adds the set av_film_grain_params_select picks for it. That takes
+ * ff_aom_apply_film_grain adds the set av_film_grain_params_select picks for it (to a 4:0:0
+ * picture its luma grain alone, as AV1 has it for monochrome video, where vvc/dec.c would write
+ * chroma planes such a picture has not). That takes
  * about 15 ms for a 4K picture, longer than VVdeC takes to decode one, so it is done for
  * several pictures at once on threads of its own (afgs1_threads) while the caller's thread
  * decodes the next ones, and the pictures go out in their order.
@@ -85,7 +87,7 @@ typedef struct LibvvdecPending {
     AVFrame *picture;                // as VVdeC decoded it, its AFGS1 sets attached
     AVFrame *grain;                  // the picture with its grain, while it is added (laid out as
                                      // `picture`: libvvdec_lay_out_grain)
-    const AVFilmGrainParams *params; // the set added, side data of `picture` (kept until it goes out)
+    AVFilmGrainParams params;        // the set added: a copy of `picture`'s (libvvdec_start_grain)
     int adding;                      // its grain is (being) added into `grain`, to swap in
     int done;                        // under the context's grain_lock while `adding`
     int result;                      // ff_aom_apply_film_grain's
@@ -784,7 +786,7 @@ static int libvvdec_lay_out_grain(LibvvdecContext *s, AVFrame *grain, const AVFr
 // are the same (a build with --assert-level 1 or more would abort there).
 static int libvvdec_add_grain(LibvvdecPending *pending)
 {
-    return ff_aom_apply_film_grain(pending->grain, pending->picture, pending->params);
+    return ff_aom_apply_film_grain(pending->grain, pending->picture, &pending->params);
 }
 
 // A grain thread: the picture's grain added (libvvdec_add_grain), and the caller's thread told.
@@ -812,15 +814,29 @@ static int libvvdec_start_grain(AVCodecContext *avctx, LibvvdecPending *pending)
 {
     LibvvdecContext *s = avctx->priv_data;
     const AVFrame *picture = pending->picture;
+    const AVFilmGrainParams *selected;
     const AVPixFmtDescriptor *desc;
     int ret;
 
     pending->adding = pending->done = 0;
     if (avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN)
         return 0;
-    pending->params = av_film_grain_params_select(picture);
-    if (!pending->params || pending->params->type != AV_FILM_GRAIN_PARAMS_AV1)
+    selected = av_film_grain_params_select(picture);
+    if (!selected || selected->type != AV_FILM_GRAIN_PARAMS_AV1)
         return 0;
+    // A copy (values only; sizeof is this build's, the size av_film_grain_params_alloc gave the side
+    // data) the grain thread reads: the side data is shared with other pictures, so the 4:0:0 rule
+    // below cannot be applied there
+    pending->params = *selected;
+    // 4:0:0: an AFGS1 set that is not luma-only and declares no chroma subsampling (a monochrome
+    // picture selects only sets declaring subsampling 0,0) would make the template write chroma
+    // planes the frame has not: its luma grain alone, as AV1's parser leaves a monochrome set (and
+    // as FFmpeg's AFGS1 parser leaves a luma-only one). The planes it then skips need no copy:
+    // av_image_copy_plane returns for absent ones.
+    if (av_pix_fmt_count_planes(picture->format) < 3) {
+        pending->params.codec.aom.num_uv_points[0] = pending->params.codec.aom.num_uv_points[1] = 0;
+        pending->params.codec.aom.chroma_scaling_from_luma = 0;
+    }
     // What reading the picture in place takes, which every picture VVdeC gives has: the template
     // walks both chroma planes with the first's stride, and for an odd width where chroma is halved
     // it writes the sample past the luma's last one into the picture it reads (VVC's conformance
