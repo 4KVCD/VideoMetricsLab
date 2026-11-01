@@ -6,8 +6,8 @@ behavior on every GPU, display, driver or media format.
 ## Media and platform limits
 
 - Windows is the primary tested platform. Video Compare shows HDR10 and HLG in
-  HDR on Windows with Windows HDR on (D3D11) and on a Mac whose display has EDR
-  headroom (Metal); elsewhere they are tone-mapped to SDR.
+  HDR on Windows with Windows HDR on (D3D11) and on a Mac's HDR display (Metal);
+  elsewhere they are tone-mapped to SDR.
 - Codec and GPU support depend on the GPU, its driver and the installed FFmpeg build.
   H.266 may require software decoding; real-time playback is not guaranteed.
 - HDR appearance depends on metadata and display configuration. The fallback
