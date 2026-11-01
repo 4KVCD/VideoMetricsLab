@@ -161,6 +161,15 @@ void keep_keys(NSWindow* window) {
     }
 }
 
+// What the layer's colours are for a frame: PQ in BT.2020 for one the shader
+// keeps HDR or that comes so, SDR otherwise.
+Space space_of(const NativeFrame& frame, const std::optional<std::array<float, 16>>& shading) {
+    if (shading) {
+        return (*shading)[0] == 2.0f ? Space::hdr10 : Space::sdr;
+    }
+    return frame.hdr10 ? Space::hdr10 : Space::sdr;
+}
+
 // Tells the layer what its colours are, when that changes.
 void set_space(Presenter& presenter, Space space) {
     if (presenter.asked == space) {
@@ -350,6 +359,23 @@ void NativePresentation::present_paced() {
             continue;
         }
         @autoreleasepool {
+            // The layer's colours as the next frame's, before its drawable is
+            // taken: a drawable keeps the colour space it was taken with, so a
+            // frame drawn into one taken before (a paused frame after the
+            // preview changed between SDR and HDR) would show PQ as SDR.
+            const bool spaces = presenter->layer.pixelFormat == MTLPixelFormatBGR10A2Unorm;
+            if (spaces) {
+                std::optional<Space> next;
+                {
+                    const std::lock_guard lock(mutex_);
+                    if (!due_.empty()) {
+                        next = space_of(*due_.front().frame, due_.front().shading);
+                    }
+                }
+                if (next) {
+                    set_space(*presenter, *next);
+                }
+            }
             // Waits at most a second (the layer's own limit): nil for a hidden
             // view, say, and then it waits again.
             id<CAMetalDrawable> drawable = [presenter->layer nextDrawable];
@@ -361,6 +387,12 @@ void NativePresentation::present_paced() {
                 const std::lock_guard lock(mutex_);
                 if (stopping_ || due_.empty()) {
                     return;
+                }
+                // A frame of the other colours came first meanwhile (one
+                // dropped while the drawable was awaited): the layer is told,
+                // and a drawable taken again for it.
+                if (spaces && space_of(*due_.front().frame, due_.front().shading) != presenter->asked) {
+                    continue;
                 }
                 due = std::move(due_.front());
                 due_.pop_front();
@@ -395,15 +427,8 @@ void NativePresentation::draw(const Due& due) {
         fail(QStringLiteral("a picture in a layout the presenter does not draw"));
         return;
     }
-    Space space = frame.hdr10 ? Space::hdr10 : Space::sdr;
-    if (due.shading) {
-        // The layer is told whether the shader maps the frame to SDR or keeps
-        // it HDR, as PQ in BT.2020.
-        space = (*due.shading)[0] == 2.0f ? Space::hdr10 : Space::sdr;
-    }
-    if (presenter->layer.pixelFormat == MTLPixelFormatBGR10A2Unorm) {
-        set_space(*presenter, space);
-    }
+    // The layer's colours are the frame's already: present_paced told it
+    // before taking the drawable, which keeps the colours it was taken with.
     std::vector<CVMetalTextureRef> held;
     id<MTLTexture> planes[2] = {nil, nil};
     {

@@ -440,9 +440,9 @@ void FrameComparePanel::add_colour_row(QVBoxLayout* root) {
     color_mode_combo->setCurrentIndex(
         std::max(0, color_mode_combo->findData(qt_text(std::string(preview_color_mode_value(color_mode_))))));
 #ifdef __APPLE__
-    color_mode_combo->setToolTip(app::tr("Display-aware detects PQ/HLG tags and shows them in HDR where macOS gives "
-                                         "the display EDR headroom, otherwise tone-mapped to SDR. The fixed mode can "
-                                         "recover an untagged PQ file."));
+    color_mode_combo->setToolTip(app::tr("Display-aware detects PQ/HLG tags and shows them in HDR on an HDR display, "
+                                         "tone-mapped to SDR on an SDR display. The fixed mode can recover an untagged "
+                                         "PQ file."));
 #else
     color_mode_combo->setToolTip(app::tr("Display-aware detects PQ/HLG tags and uses the Windows monitor's "
                                          "SDR-white setting. The fixed mode can recover an untagged PQ file."));
@@ -1328,9 +1328,6 @@ void FrameComparePanel::update_color_status() {
         return;
     }
     const PreviewColorSettings settings = color_settings();
-#ifdef __APPLE__
-    const double headroom = display_hdr_.edr_headroom.value_or(1.0);
-#endif
     if (color_mode_ == PreviewColorMode::hdr_to_sdr) {
         QString source = kind ? qt_text(*kind) : app::tr("Untagged input (assuming HDR10 / PQ)");
         if (video) {
@@ -1352,10 +1349,9 @@ void FrameComparePanel::update_color_status() {
         const bool wide_gamut = primaries == "bt2020" || primaries == "bt.2020";
         if (video && wide_gamut && display_hdr_.hdr_enabled == true && !ffmpeg_playback) {
 #ifdef __APPLE__
-            color_status_label->setText(
-                app::tr("{prefix}BT.2020 wide-gamut input \xC2\xB7 macOS EDR on ({headroom:g}\xC3\x97 SDR white) "
-                        "\xC2\xB7 native 10-bit Metal presentation",
-                        {{"prefix", prefix}, {"headroom", headroom}}));
+            color_status_label->setText(app::tr(
+                "{prefix}BT.2020 wide-gamut input \xC2\xB7 HDR display \xC2\xB7 native 10-bit Metal presentation",
+                {{"prefix", prefix}}));
 #else
             color_status_label->setText(app::tr(
                 "{prefix}BT.2020 wide-gamut input \xC2\xB7 Windows HDR on \xC2\xB7 native 10-bit D3D11 presentation",
@@ -1376,10 +1372,9 @@ void FrameComparePanel::update_color_status() {
                 return;
             }
 #ifdef __APPLE__
-            color_status_label->setText(
-                app::tr("{prefix}{kind} \xC2\xB7 macOS EDR on ({headroom:g}\xC3\x97 SDR white) \xC2\xB7 native 10-bit "
-                        "Metal presentation \xC2\xB7 tone mapping off",
-                        {{"prefix", prefix}, {"kind", qt_text(*kind)}, {"headroom", headroom}}));
+            color_status_label->setText(app::tr(
+                "{prefix}{kind} \xC2\xB7 HDR display \xC2\xB7 native 10-bit Metal presentation \xC2\xB7 tone mapping off",
+                {{"prefix", prefix}, {"kind", qt_text(*kind)}}));
 #else
             color_status_label->setText(app::tr(
                 "{prefix}{kind} \xC2\xB7 Windows HDR on \xC2\xB7 native 10-bit D3D11 presentation \xC2\xB7 tone "
@@ -1390,8 +1385,8 @@ void FrameComparePanel::update_color_status() {
         }
 #ifdef __APPLE__
         color_status_label->setText(
-            app::tr("{prefix}{kind} \xC2\xB7 display-aware HDR \xE2\x86\x92 SDR at {target_nits:g} nit \xC2\xB7 macOS "
-                    "EDR on",
+            app::tr("{prefix}{kind} \xC2\xB7 display-aware HDR \xE2\x86\x92 SDR at {target_nits:g} nit \xC2\xB7 HDR "
+                    "display",
                     {{"prefix", prefix}, {"kind", qt_text(*kind)}, {"target_nits", settings.target_nits()}}));
 #else
         color_status_label->setText(app::tr(
@@ -1402,7 +1397,7 @@ void FrameComparePanel::update_color_status() {
     } else if (display_hdr_.hdr_enabled == false) {
 #ifdef __APPLE__
         color_status_label->setText(
-            app::tr("{prefix}{kind} \xC2\xB7 HDR \xE2\x86\x92 {target} \xC2\xB7 no macOS EDR headroom on this display",
+            app::tr("{prefix}{kind} \xC2\xB7 HDR \xE2\x86\x92 {target} \xC2\xB7 SDR display",
                     {{"prefix", prefix}, {"kind", qt_text(*kind)}, {"target", target}}));
 #else
         color_status_label->setText(

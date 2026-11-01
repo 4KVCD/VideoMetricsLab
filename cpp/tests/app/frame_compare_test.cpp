@@ -220,9 +220,9 @@ TEST_F(FramePanelTest, HoldingSShowsTheSource) {
     panel->cancel();
 }
 
-// Display-aware playback says how the display shows HDR: on macOS its EDR
-// headroom (HDR above SDR white, or none on this display), never Windows'
-// HDR setting or D3D11; on Windows as before.
+// Display-aware playback says how the display shows HDR: on macOS whether it
+// is an HDR or an SDR display, never Windows' HDR setting or D3D11; on Windows
+// as before.
 TEST_F(FramePanelTest, TheColourStatusNamesTheSystemsHdr) {
     const test::Folder folder;
     const auto panel = make_panel();
@@ -236,17 +236,16 @@ TEST_F(FramePanelTest, TheColourStatusNamesTheSystemsHdr) {
     const platform::DisplayHdrInfo sdr = platform::display_hdr_from_edr(1.0, "GP01");
     const std::vector<std::pair<std::string, std::string>> shown{
         {status("smpte2084", "bt2020", xdr),
-         "Video playback \xC2\xB7 HDR10 / PQ \xC2\xB7 macOS EDR on (16\xC3\x97 SDR white) \xC2\xB7 native 10-bit Metal "
-         "presentation \xC2\xB7 tone mapping off"},
+         "Video playback \xC2\xB7 HDR10 / PQ \xC2\xB7 HDR display \xC2\xB7 native 10-bit Metal presentation \xC2\xB7 "
+         "tone mapping off"},
         {status("arib-std-b67", "bt2020", xdr),
-         "Video playback \xC2\xB7 HLG \xC2\xB7 macOS EDR on (16\xC3\x97 SDR white) \xC2\xB7 native 10-bit Metal "
-         "presentation \xC2\xB7 tone mapping off"},
+         "Video playback \xC2\xB7 HLG \xC2\xB7 HDR display \xC2\xB7 native 10-bit Metal presentation \xC2\xB7 tone "
+         "mapping off"},
         {status("bt709", "bt2020", xdr),
-         "Video playback \xC2\xB7 BT.2020 wide-gamut input \xC2\xB7 macOS EDR on (16\xC3\x97 SDR white) \xC2\xB7 "
-         "native 10-bit Metal presentation"},
+         "Video playback \xC2\xB7 BT.2020 wide-gamut input \xC2\xB7 HDR display \xC2\xB7 native 10-bit Metal "
+         "presentation"},
         {status("smpte2084", "bt2020", sdr),
-         "Video playback \xC2\xB7 HDR10 / PQ \xC2\xB7 HDR \xE2\x86\x92 SDR preview \xC2\xB7 no macOS EDR headroom on "
-         "this display"},
+         "Video playback \xC2\xB7 HDR10 / PQ \xC2\xB7 HDR \xE2\x86\x92 SDR preview \xC2\xB7 SDR display"},
     };
     for (const auto& [text, expected] : shown) {
         EXPECT_EQ(text, expected);

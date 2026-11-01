@@ -112,21 +112,18 @@ TEST(NativePlayback, MacOSShowsHdrWhereTheDisplayHasEdrHeadroom) {
     EXPECT_EQ(xdr.device_name, "Built-in Retina Display");
     EXPECT_EQ(xdr.hdr_enabled, true);
     EXPECT_EQ(xdr.hdr_supported, true);
-    EXPECT_EQ(xdr.edr_headroom, 16.0);
     EXPECT_FALSE(xdr.sdr_white_nits);
     EXPECT_EQ(platform::display_hdr_from_edr(2.0, "").hdr_enabled, true);
     for (const double none : {1.0, 0.5}) {
         const platform::DisplayHdrInfo sdr = platform::display_hdr_from_edr(none, "GP01");
         EXPECT_EQ(sdr.hdr_enabled, false) << none;
         EXPECT_FALSE(sdr.hdr_supported) << none;
-        EXPECT_EQ(sdr.edr_headroom, 1.0) << none;
     }
     for (const double unknown : {0.0, -1.0, std::numeric_limits<double>::quiet_NaN(),
                                  std::numeric_limits<double>::infinity()}) {
         const platform::DisplayHdrInfo info = platform::display_hdr_from_edr(unknown, "");
         EXPECT_FALSE(info.hdr_enabled) << unknown;
         EXPECT_FALSE(info.hdr_supported) << unknown;
-        EXPECT_FALSE(info.edr_headroom) << unknown;
     }
 
     PreviewColorSettings colours;

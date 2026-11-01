@@ -1,7 +1,6 @@
 // What every system's part of system.h shares.
 #include "vml/platform/system.h"
 
-#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <system_error>
@@ -32,7 +31,6 @@ DisplayHdrInfo display_hdr_from_edr(double potential_headroom, std::string devic
     if (*info.hdr_enabled) {
         info.hdr_supported = true;
     }
-    info.edr_headroom = std::max(1.0, potential_headroom);
     return info;
 }
 

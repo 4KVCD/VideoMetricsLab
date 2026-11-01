@@ -100,9 +100,6 @@ struct DisplayHdrInfo {
     // Windows' SDR content brightness: the white SDR is shown at while HDR
     // is on.
     std::optional<double> sdr_white_nits;
-    // macOS's EDR headroom: how many times SDR white the display can show
-    // at most (display_hdr_from_edr); unknown on Windows.
-    std::optional<double> edr_headroom;
     bool operator==(const DisplayHdrInfo&) const = default;
 };
 
