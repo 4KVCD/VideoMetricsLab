@@ -83,11 +83,9 @@ typedef struct LibvvdecUnit {
 typedef struct LibvvdecPending {
     AVTask task;                     // what the executor runs (first: it is handed back as this)
     AVFrame *picture;                // as VVdeC decoded it, its AFGS1 sets attached
-    AVFrame *grain;                  // the picture with its grain, while it is added
-    AVFrame *source;                 // `picture` copied, laid out as `grain`, where it is not
-                                     // (`picture` then released)
-    const AVFilmGrainParams *params; // the set added, side data of `picture`, or of `grain` once
-                                     // `picture` is copied
+    AVFrame *grain;                  // the picture with its grain, while it is added (laid out as
+                                     // `picture`: libvvdec_lay_out_grain)
+    const AVFilmGrainParams *params; // the set added, side data of `picture` (kept until it goes out)
     int adding;                      // its grain is (being) added into `grain`, to swap in
     int done;                        // under the context's grain_lock while `adding`
     int result;                      // ff_aom_apply_film_grain's
@@ -95,7 +93,7 @@ typedef struct LibvvdecPending {
 
 // VVdeC decodes into FFmpeg's buffers (its allocator callbacks), so that a picture is given out
 // by reference rather than copied: no copy of each picture (25 MB at 4K 10-bit) on the decoding
-// thread (one that gets AFGS1 grain is copied, where its strides differ: libvvdec_start_grain).
+// thread (one that gets AFGS1 grain is read in place too: libvvdec_lay_out_grain).
 // VVdeC asks for each plane's memory at more than one size (a picture's buffers have margins;
 // its 8-bit output copies and the frames it adds film grain into do not), so each plane keeps a
 // pool per size, LIBVVDEC_POOL_SIZES at most, the oldest made again for a new size: one
@@ -138,6 +136,10 @@ typedef struct LibvvdecContext {
     AVMutex grain_lock;
     AVCond grain_finished;
     int grain_sync;  // grain_lock and grain_finished made
+    // The grain frames' buffers (libvvdec_lay_out_grain), made on the caller's thread, made again
+    // when the size a frame needs changes (the buffers are only bytes: their layout is each picture's)
+    AVBufferPool *grain_pool;
+    size_t grain_pool_size;
 } LibvvdecContext;
 
 // VVdeC asks for a plane's memory: a buffer from that plane's pool of this size. `*allocator`
@@ -237,8 +239,7 @@ static av_cold int libvvdec_init(AVCodecContext *avctx)
     for (int i = 0; i < LIBVVDEC_GRAIN_QUEUE; i++) {
         s->pending[i].picture = av_frame_alloc();
         s->pending[i].grain = av_frame_alloc();
-        s->pending[i].source = av_frame_alloc();
-        if (!s->pending[i].picture || !s->pending[i].grain || !s->pending[i].source)
+        if (!s->pending[i].picture || !s->pending[i].grain)
             return AVERROR(ENOMEM);
     }
     if (ff_mutex_init(&s->grain_lock, NULL))
@@ -286,7 +287,6 @@ static void libvvdec_drop_pending(LibvvdecContext *s)
         libvvdec_wait_for_grain(s, pending);
         av_frame_unref(pending->picture);
         av_frame_unref(pending->grain);
-        av_frame_unref(pending->source);
         s->pending_first = (s->pending_first + 1) % LIBVVDEC_GRAIN_QUEUE;
     }
 }
@@ -310,13 +310,13 @@ static av_cold int libvvdec_close(AVCodecContext *avctx)
     for (int i = 0; i < LIBVVDEC_GRAIN_QUEUE; i++) {
         av_frame_free(&s->pending[i].picture);
         av_frame_free(&s->pending[i].grain);
-        av_frame_free(&s->pending[i].source);
     }
     if (s->grain_sync) {
         ff_cond_destroy(&s->grain_finished);
         ff_mutex_destroy(&s->grain_lock);
         s->grain_sync = 0;
     }
+    av_buffer_pool_uninit(&s->grain_pool);  // goes when its frames come back
     libvvdec_close_decoder(s);  // VVdeC gives back its references to the pools' buffers first
     if (s->pools) {
         for (int plane = 0; plane < 3; plane++)
@@ -736,25 +736,55 @@ static int libvvdec_grain_ready(const AVTask *task, void *user_data)
     return 1;
 }
 
-// Whether two frames' planes are laid out with different strides.
-static int libvvdec_laid_out_otherwise(const AVFrame *a, const AVFrame *b)
+// The `grain` frame laid out as `picture`, with the same linesizes, in one buffer of the context's
+// pool: ff_aom_apply_film_grain walks the picture it reads and the frame it writes with one stride
+// per plane (aom_film_grain_template.c), so the grain is added straight from VVdeC's picture, with
+// no copy of it. Planes 1 and 2 start at 64-byte offsets into the buffer (their addresses have
+// av_malloc's alignment; the picture's own planes need not be aligned either). Called on the
+// caller's thread.
+static int libvvdec_lay_out_grain(LibvvdecContext *s, AVFrame *grain, const AVFrame *picture)
 {
-    for (int plane = 0; plane < 3; plane++)
-        if (a->linesize[plane] != b->linesize[plane])
-            return 1;
+    const int planes = av_pix_fmt_count_planes(picture->format);
+    ptrdiff_t linesizes[4] = { 0 };
+    size_t sizes[4], offsets[4] = { 0 }, bytes;
+    int ret;
+
+    for (int plane = 0; plane < planes; plane++)
+        linesizes[plane] = picture->linesize[plane];
+    ret = av_image_fill_plane_sizes(sizes, picture->format, picture->height, linesizes);  // each checked
+    if (ret < 0)
+        return ret;
+    // A size_t 64: FFALIGN's mask, ~(a - 1), would be 32 bits wide from a 32-bit constant and
+    // clear a size's upper half
+    for (int plane = 1; plane < planes; plane++)
+        offsets[plane] = FFALIGN(offsets[plane - 1] + sizes[plane - 1], (size_t)64);
+    bytes = offsets[planes - 1] + sizes[planes - 1] + AV_INPUT_BUFFER_PADDING_SIZE;
+    if (!s->grain_pool || s->grain_pool_size != bytes) {
+        av_buffer_pool_uninit(&s->grain_pool);  // goes when its last buffer comes back
+        s->grain_pool = av_buffer_pool_init(bytes, av_buffer_allocz);
+        s->grain_pool_size = s->grain_pool ? bytes : 0;
+        if (!s->grain_pool)
+            return AVERROR(ENOMEM);
+    }
+    grain->buf[0] = av_buffer_pool_get(s->grain_pool);
+    if (!grain->buf[0])
+        return AVERROR(ENOMEM);
+    for (int plane = 0; plane < planes; plane++) {
+        grain->data[plane] = grain->buf[0]->data + offsets[plane];
+        grain->linesize[plane] = picture->linesize[plane];
+    }
     return 0;
 }
 
-// The picture's grain added into its `grain` frame. ff_aom_apply_film_grain walks the picture
-// it reads and the frame it writes with one stride (aom_film_grain_template.c), so a picture in
-// VVdeC's buffers, whose strides differ, is read from its copy in `source`, laid out as `grain`
-// (libvvdec_start_grain made it). It reads that picture alone, and writes `grain` alone, for VVC's
-// pictures, whose luma width is even.
+// The picture's grain added into its `grain` frame, laid out as the picture
+// (libvvdec_lay_out_grain): it reads the picture alone and writes `grain` alone. The template's
+// av_assert1 on each stride being a multiple of 32 samples does not hold for every picture (an 8-bit
+// one of 1366 samples a row: VVdeC's copy is packed); it is compiled out in this build (no
+// ASSERT_LEVEL), and the walk clips each block and steps rows by the stride alone, so the samples
+// are the same (a build with --assert-level 1 or more would abort there).
 static int libvvdec_add_grain(LibvvdecPending *pending)
 {
-    const AVFrame *in = pending->source->buf[0] ? pending->source : pending->picture;
-
-    return ff_aom_apply_film_grain(pending->grain, in, pending->params);
+    return ff_aom_apply_film_grain(pending->grain, pending->picture, pending->params);
 }
 
 // A grain thread: the picture's grain added (libvvdec_add_grain), and the caller's thread told.
@@ -775,50 +805,37 @@ static int libvvdec_grain_run(AVTask *task, void *local_context, void *user_data
 // Starts adding the decoded picture's AFGS1 grain, as FFmpeg's vvc adds it (check_film_grain,
 // frame_end and the output in refs.c): the set av_film_grain_params_select picks, added by
 // ff_aom_apply_film_grain into a new frame, unless the caller exports the grain instead. The
-// new frame, and `source` where the picture is laid out otherwise, come from FFmpeg's buffer pool
-// on this thread, and the picture is copied into `source` here; libvvdec_add_grain then fills the
-// new frame, on a grain thread where there is one.
+// new frame is laid out as the picture here (libvvdec_lay_out_grain), with the picture's
+// properties and side data (once: ff_get_buffer's frame had the container's twice); then
+// libvvdec_add_grain fills it, on a grain thread where there is one, from the picture itself.
 static int libvvdec_start_grain(AVCodecContext *avctx, LibvvdecPending *pending)
 {
     LibvvdecContext *s = avctx->priv_data;
+    const AVFrame *picture = pending->picture;
+    const AVPixFmtDescriptor *desc;
     int ret;
 
     pending->adding = pending->done = 0;
     if (avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN)
         return 0;
-    pending->params = av_film_grain_params_select(pending->picture);
+    pending->params = av_film_grain_params_select(picture);
     if (!pending->params || pending->params->type != AV_FILM_GRAIN_PARAMS_AV1)
         return 0;
-    pending->grain->format = pending->picture->format;
-    pending->grain->width = pending->picture->width;
-    pending->grain->height = pending->picture->height;
-    ret = ff_get_buffer(avctx, pending->grain, 0);
+    // What reading the picture in place takes, which every picture VVdeC gives has: the template
+    // walks both chroma planes with the first's stride, and for an odd width where chroma is halved
+    // it writes the sample past the luma's last one into the picture it reads (VVC's conformance
+    // window steps by two there)
+    desc = av_pix_fmt_desc_get(picture->format);
+    if (!desc || picture->linesize[1] != picture->linesize[2] || (picture->width & desc->log2_chroma_w))
+        return AVERROR_BUG;
+    pending->grain->format = picture->format;
+    pending->grain->width = picture->width;  // before the properties: copy_props keeps the pan-scan
+    pending->grain->height = picture->height;  // side data of a frame of the same size
+    ret = libvvdec_lay_out_grain(s, pending->grain, picture);
     if (ret >= 0)
-        ret = av_frame_copy_props(pending->grain, pending->picture);
-    if (ret >= 0 && libvvdec_laid_out_otherwise(pending->picture, pending->grain)) {
-        pending->source->format = pending->picture->format;
-        pending->source->width = pending->picture->width;
-        pending->source->height = pending->picture->height;
-        ret = ff_get_buffer(avctx, pending->source, 0);
-        // Both from the same pool: laid out otherwise, one would be walked with the other's stride.
-        if (ret >= 0 && libvvdec_laid_out_otherwise(pending->source, pending->grain))
-            ret = AVERROR_BUG;
-        // Copied here, not on a grain thread: the grain threads are what limits a stream with
-        // grain (4K AFGS1, a Core Ultra 9 285K: 96 fps with the copy on them, 106 with it here).
-        if (ret >= 0)
-            ret = av_frame_copy(pending->source, pending->picture);
-        if (ret >= 0) {
-            // VVdeC's buffers go back to its pools now: the set is picked again from `grain`, which
-            // has the picture's side data and properties, and the grain is added from `source`.
-            pending->params = av_film_grain_params_select(pending->grain);
-            av_frame_unref(pending->picture);
-            if (!pending->params)
-                ret = AVERROR_BUG;
-        }
-    }
+        ret = av_frame_copy_props(pending->grain, picture);
     if (ret < 0) {
         av_frame_unref(pending->grain);
-        av_frame_unref(pending->source);
         return ret;
     }
     if (s->grain_threads > 0 && !s->grain_executor) {
@@ -868,7 +885,6 @@ static int libvvdec_give_oldest(AVCodecContext *avctx, AVFrame *frame)
         libvvdec_wait_for_grain(s, pending);
         ret = pending->result;
         av_frame_unref(pending->picture);
-        av_frame_unref(pending->source);
         av_frame_move_ref(pending->picture, pending->grain);
     }
     s->pending_first = (s->pending_first + 1) % LIBVVDEC_GRAIN_QUEUE;
