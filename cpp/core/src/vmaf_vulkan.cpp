@@ -122,7 +122,8 @@ VulkanEngine::VulkanEngine(const std::filesystem::path& path)
       import_timeline(optional_function<decltype(import_timeline)>(library, "vv_import_timeline")),
       commit_after(optional_function<decltype(commit_after)>(library, "vv_commit_after")),
       pictures(optional_function<decltype(pictures)>(library, "vv_pictures")),
-      pictures_mode(optional_function<decltype(pictures_mode)>(library, "vv_pictures_mode")) {}
+      pictures_mode(optional_function<decltype(pictures_mode)>(library, "vv_pictures_mode")),
+      shared_host_plane(optional_function<decltype(shared_host_plane)>(library, "vv_shared_host_plane")) {}
 
 void check_vulkan(const VulkanEngine& engine, int error, const std::string& what) {
     if (error < 0) {
@@ -246,6 +247,13 @@ VulkanScorer::VulkanScorer(int width, int height, int bit_depth,
             release();
             throw;
         }
+        // vvdec-vulkan's copies signal a timeline the GPU waits for (add_shared_mixed)
+        if (shared->backend() == vvdec_decoder && engine_.import_timeline != nullptr && engine_.commit_after != nullptr) {
+            if (void* const timeline = shared->timeline(); timeline != nullptr) {
+                waits_on_decoder_ = engine_.import_timeline(context_, timeline) == 0;
+                platform::close_native_handle(timeline);
+            }
+        }
     }
     const std::size_t sample = bit_depth <= 8 ? 1 : 2;
     const auto columns = static_cast<std::size_t>(width), rows = static_cast<std::size_t>(height);
@@ -323,6 +331,36 @@ void VulkanScorer::add_shared(const std::function<void(std::uint64_t, std::int64
     reference(next.reference, next.pitch);
     if (score) {
         distorted(next.distorted, next.pitch);
+    }
+    if (engine_.commit(context_, score ? 1 : 0) < 0) {
+        fail(engine_, "Scoring frame " + std::to_string(count_));
+    }
+    ++count_;
+}
+
+bool VulkanScorer::takes_host_planes() const { return shared_.has_value() && engine_.shared_host_plane != nullptr; }
+
+void VulkanScorer::add_shared_mixed(const std::function<void(std::uint8_t*)>& reference,
+                                    const std::function<std::uint64_t(std::uint64_t, std::int64_t)>& distorted) {
+    const bool score = count_ % step_ == 0;
+    const SharedSlots::Next next = shared_->next();
+    std::uint8_t* plane = nullptr;
+    std::uint32_t stride = 0;
+    check_vulkan(engine_, engine_.shared_host_plane(context_, 0, &plane, &stride), "Scoring frame " + std::to_string(count_));
+    if (static_cast<std::ptrdiff_t>(stride) == luma_stride_) {
+        reference(plane);
+    } else {  // rows the engine pads to four bytes: written packed, then copied row by row
+        packed_.resize(luma_bytes_);
+        reference(packed_.data());
+        const auto row_bytes = static_cast<std::size_t>(luma_stride_);
+        for (std::size_t row = 0; row < luma_bytes_ / row_bytes; ++row) {
+            std::copy_n(packed_.data() + row * row_bytes, row_bytes, plane + row * stride);
+        }
+    }
+    if (score) {
+        if (const std::uint64_t copied = distorted(next.distorted, next.pitch); copied != 0) {
+            check_vulkan(engine_, engine_.commit_after(context_, copied), "Scoring frame " + std::to_string(count_));
+        }
     }
     if (engine_.commit(context_, score ? 1 : 0) < 0) {
         fail(engine_, "Scoring frame " + std::to_string(count_));

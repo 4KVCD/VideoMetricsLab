@@ -323,6 +323,9 @@ struct DecoderLibrary {
             } else {
                 import_memory = library.function<decltype(import_memory)>("nvf_import");
             }
+        } else if (backend == vvdec_decoder) {  // the luma alone, copied on the GPU into Vulkan VMAF's memory
+            unimport = library.function<decltype(unimport)>("nvf_unimport");
+            import_vulkan = library.function<decltype(import_vulkan)>("nvf_import_vulkan");
         }
         // AMD's: copies the GPU waits for, rather than the CPU; and a slot's
         // picture in place (Windows' decoder).
@@ -405,6 +408,7 @@ std::filesystem::path library_path(std::string_view backend) {
                        : backend == "amd"                    ? "amf_frames"
                        : backend == media_foundation_decoder ? "mf_frames"
                        : backend == software_decoder         ? "software_frames"
+                       : backend == vvdec_decoder            ? "vvdecvk_frames"
                                                              : nullptr;
     if (name == nullptr) {
         throw std::invalid_argument("there is no decoder " + std::string(backend));
@@ -1019,6 +1023,10 @@ std::vector<unsigned char> configuration(const std::string& ffprobe, const std::
 
 }  // namespace
 
+bool vvdec_handover_wanted() {
+    return platform::environment_variable("VML_VVDEC_HANDOVER").value_or("") == "1";
+}
+
 std::string decoding_failed_status(const GpuDecodeFailedError& error) {
     const std::string what = error.backend() == software_decoder ? "Decoding in the app" : "GPU decoding";
     return what + " failed (" + error.what() + "); decoding through FFmpeg instead…";
@@ -1100,7 +1108,7 @@ DecodePlan plan_decode(const VideoInfo& info, const std::optional<CropBox>& crop
 
 bool decodes_codec(std::string_view codec, std::string_view backend) {
     const Codec* found = find_codec(codec);
-    return found != nullptr && (backend == software_decoder || found->gpu);
+    return found != nullptr && (backend == software_decoder || found->gpu || (backend == vvdec_decoder && codec == "vvc"));
 }
 
 bool software_decoder_bundled() {
@@ -1126,7 +1134,7 @@ bool can_hand_over(const DecodePlan& plan, std::string_view backend) {
     if (backend == "nvidia") {
         return true;
     }
-    return backend == "amd" && !plan.scaled() && plan.widen == 0;
+    return (backend == "amd" || backend == vvdec_decoder) && !plan.scaled() && plan.widen == 0;
 }
 
 bool can_lend_planes(const DecodePlan& plan, std::string_view backend) {
@@ -1644,7 +1652,8 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
         state.reader = std::make_unique<PacketReader>(ffmpeg, info.path, plan.codec, reader_options, plan.untimed);
     }
     state.configuration = configuration(ffprobe, info.path, plan.codec);
-    state.handover = backend == "nvidia" || (handover && can_hand_over(plan, backend));
+    // vvdec-vulkan's decoder only hands over (it is chosen for that alone)
+    state.handover = backend == "nvidia" || backend == vvdec_decoder || (handover && can_hand_over(plan, backend));
     std::string said;
     if (state.handover && backend == "amd") {
         // Windows' own decoder first (native/mf_frames.cpp): the same decoder

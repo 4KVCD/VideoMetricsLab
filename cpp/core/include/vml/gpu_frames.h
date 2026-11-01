@@ -80,6 +80,11 @@ std::string decoding_failed_status(const GpuDecodeFailedError& error);
 
 // The decoder for the videos FFmpeg would decode in software.
 inline constexpr std::string_view software_decoder = "software";
+// VVC decoded on the GPU by vvdec-vulkan (native/vvdecvk_frames.cpp), its pictures handed over on the GPU to Vulkan
+// VMAF: the unscaled, grain-free test video of a pair (8 or 10 bits), beside a reference the CPU writes into the slot
+// (VulkanScorer::add_shared_mixed). v2.4's first step: only with VML_VVDEC_HANDOVER=1 (vvdec_handover_wanted).
+inline constexpr std::string_view vvdec_decoder = "vvdec";
+bool vvdec_handover_wanted();
 
 // The environment variable that, set to "ffmpeg", sends the videos FFmpeg
 // decodes in software through FFmpeg's pipes instead of the software

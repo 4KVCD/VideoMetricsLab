@@ -187,6 +187,13 @@ foreach ($notice in @('ffnvcodec/LICENSE.nv-codec-headers.txt', 'onevpl/LICENSE.
         'vulkan/LICENSE.vulkan-headers.txt')) {
     Copy-Item (Join-Path $projectDirectory "native/$notice") (Join-Path $native 'licenses')
 }
+# vvdec-vulkan's decoder (VVC on the GPU, handed over to Vulkan VMAF; v2.4, VML_VVDEC_HANDOVER=1), where
+# scripts/build_vvdecvk_frames.ps1 built it, with VVdeC's licence (vvdec-vulkan's is the same, BSD-3-Clause-Clear)
+$vvdecVulkan = Join-Path $appFiles 'native/vvdecvk_frames.dll'
+if (Test-Path $vvdecVulkan) {
+    Copy-Item $vvdecVulkan $native
+    Copy-Item (Join-Path $projectDirectory 'resources/tools/ffmpeg/licenses/COPYING.vvdec.txt') (Join-Path $native 'licenses')
+}
 
 # The project's terms, the notices of what it bundles, the licence of Qt's
 # libraries (the LGPL 3, with the GPL 3 it adds to), and the MIT notices of

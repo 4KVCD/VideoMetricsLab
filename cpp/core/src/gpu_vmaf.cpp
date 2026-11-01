@@ -725,10 +725,20 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
         return score_decoded_cuda(source, distorted, plans, plan, n_subsample, duration_limit, total_frames,
                                   decoders, ffmpeg, ffprobe, on_progress, cancel);
     }
+    // v2.4's first step (VML_VVDEC_HANDOVER=1): an 8- or 10-bit VVC test video, unscaled and scored without film grain,
+    // decoded on the GPU by vvdec-vulkan and handed over to the engine, the reference written into its slots by the CPU
+    // (no CPU metrics beside: the test video's pictures have no samples in host memory)
+    const DecodePlan& test_plan = plans[0];
+    const std::string test_library =
+        !cuda && plan.beside.empty() && vvdec_handover_wanted() && test_plan.codec == "vvc" &&
+                !test_plan.scaled() && test_plan.widen == 0 && !(test_plan.film_grain != 0 && test_plan.film_grain_kinds) &&
+                decoder_available(std::string(vvdec_decoder))
+            ? std::string(vvdec_decoder)
+            : test_backend;
     // AMD's decoder hands its pictures over on the GPU where neither video is
     // scaled or widened for the other (can_hand_over); NVIDIA's always does.
-    const bool hand_over = can_hand_over(plans[0], test_backend) && can_hand_over(plans[1], source_backend);
-    GpuFrameStream test(distorted, plans[0], 0, 4, test_backend, ffmpeg, ffprobe, hand_over);
+    const bool hand_over = can_hand_over(plans[0], test_library) && can_hand_over(plans[1], source_backend);
+    GpuFrameStream test(distorted, plans[0], 0, 4, test_library, ffmpeg, ffprobe, hand_over);
     GpuFrameStream reference(source, plans[1], 0, 4, source_backend, ffmpeg, ffprobe, hand_over);
     // Declared after the streams so that it goes first: it holds on to the
     // decoder's memory.
@@ -738,7 +748,25 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     // (the scorer's memory is imported by the test video's decoder, and the
     // source's copies go into it).
     bool shared = false;
-    if (test.handover() && reference.handover() && !test.shares_gpu_memory_with(reference)) {
+    // The test video's pictures handed over, the reference's written by the CPU (whatever decodes it: its pictures
+    // are downloaded, as without the hand-over)
+    bool mixed = false;
+    if (test.backend() == vvdec_decoder) {
+        try {
+            scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.device, &test);
+            mixed = scorer->takes_host_planes();
+            shared = mixed;
+            if (!mixed) {
+                scorer.reset();
+                throw VmafVulkanError("this libvmaf-fast takes no host planes beside a decoder's");
+            }
+            app_log::write(app_log::Level::info, "vml.vmaf_vulkan",
+                           "VMAF with Vulkan: the test video decoded by vvdec-vulkan on the GPU and handed over there, "
+                           "the source's frames through system memory");
+        } catch (const VmafVulkanError& error) {
+            throw GpuDecodeUnavailableError(std::string("vvdec-vulkan's hand-over: ") + error.what());
+        }
+    } else if (test.handover() && reference.handover() && !test.shares_gpu_memory_with(reference)) {
         // Windows' own decoder for one video and AMF's for the other.
         app_log::write(app_log::Level::info, "vml.vmaf_vulkan",
                        "VMAF with Vulkan: the frames go through system memory (the videos' decoders share no GPU "
@@ -790,7 +818,16 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
             if (beside) {
                 beside->add_decoded(reference, reference_slot, test, test_slot);
             }
-            if (shared) {
+            if (mixed) {
+                scorer->add_shared_mixed([&](std::uint8_t* plane) { reference.download(reference_slot, plane); },
+                                         [&](std::uint64_t address, std::int64_t pitch) -> std::uint64_t {
+                                             if (scorer->waits_on_decoder()) {
+                                                 return test.copy_luma_async(test_slot, address, pitch);
+                                             }
+                                             test.copy_luma(test_slot, address, pitch);
+                                             return 0;
+                                         });
+            } else if (shared) {
                 scorer->add_shared(
                     [&](std::uint64_t address, std::int64_t pitch) {
                         reference.copy_luma(reference_slot, address, pitch);

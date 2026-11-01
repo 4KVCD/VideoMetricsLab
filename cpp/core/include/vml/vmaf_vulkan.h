@@ -104,6 +104,11 @@ struct VulkanEngine {
                     std::uint32_t reference_height, int reference_x, int reference_y, void* distorted,
                     std::uint32_t distorted_width, std::uint32_t distorted_height, int distorted_x, int distorted_y);
     int (*pictures_mode)(VulkanContext* context);
+    // For a pair of which one video is decoded on the GPU and handed over:
+    // host memory for the other's luma plane of the frame begun (`which` 0
+    // the reference's, 1 the distorted's), copied into the slot on the GPU at
+    // the commit (nullptr in an engine without it).
+    int (*shared_host_plane)(VulkanContext* context, int which, std::uint8_t** plane, std::uint32_t* stride);
 };
 
 // How many frames the engine works on at once, as the Python app asks for
@@ -232,6 +237,17 @@ public:
     void add_shared(const std::function<void(std::uint64_t, std::int64_t)>& reference,
                     const std::function<void(std::uint64_t, std::int64_t)>& distorted);
 
+    // As add_shared, for a pair whose test video alone the decoder given as
+    // `shared` copies on the GPU: `reference` writes the reference's luma
+    // plane, packed, into the host memory it is given (the engine copies it
+    // into the slot on the GPU). Only where takes_host_planes().
+    // `distorted` copies the test video's plane and returns the decoder's timeline value the copy signals (0: it was
+    // waited for); with waits_on_decoder(), the frame waits for it on the GPU.
+    bool takes_host_planes() const;
+    bool waits_on_decoder() const { return waits_on_decoder_; }
+    void add_shared_mixed(const std::function<void(std::uint8_t*)>& reference,
+                          const std::function<std::uint64_t(std::uint64_t, std::int64_t)>& distorted);
+
     // The frames scored and their features. Call it once every frame has
     // been given.
     VulkanFeatures features();
@@ -260,6 +276,9 @@ private:
     std::size_t frame_bytes_ = 0;
     // With frames from GPU memory: the memory the decoder imported.
     std::optional<SharedSlots> shared_;
+    // The shared decoder's timeline semaphore is imported: a frame waits on the GPU for its copies (add_shared_mixed's
+    // values), not the CPU
+    bool waits_on_decoder_ = false;
     // add_decoded's plane, written packed for a width whose rows the engine
     // pads.
     std::vector<std::uint8_t> packed_;
