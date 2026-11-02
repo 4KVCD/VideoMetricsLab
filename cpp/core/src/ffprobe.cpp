@@ -394,9 +394,9 @@ VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprob
     // them (3.4 s for a 4K VVC film of 151,919 frames, 800 MB), but reads the
     // whole file, so it has as long as a slow disk needs. (The csv format
     // adds a comma after some streams' count: "480,".) A raw YUV file is
-    // read with its size and pixel format (input_options).
+    // read with its size and pixel format (probe_options).
     std::vector<std::string> command{ffprobe, "-v", "error"};
-    const std::vector<std::string> input = info.input_options();
+    const std::vector<std::string> input = info.probe_options();
     command.insert(command.end(), input.begin(), input.end());
     command.insert(command.end(), {"-select_streams", "v:0", "-count_packets", "-show_entries",
                                    "stream=nb_read_packets", "-of", "default=noprint_wrappers=1:nokey=1",

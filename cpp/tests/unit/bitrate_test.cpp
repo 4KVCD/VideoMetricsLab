@@ -97,5 +97,46 @@ TEST(Bitrate, ReadsThePacketsAndDrawsTheGraphsAsThePythonAppDoes) {
     }
 }
 
+// A raw stream timed by --fps is read at that rate: ffprobe would take a raw
+// 120 fps HEVC stream as 25 frames a second (its packets 0.04 s long, the
+// bitrate 4.8 times too low). A video scaled to one size reads as any other:
+// ffprobe has no -reinit_filter.
+TEST(Bitrate, ReadsARawStreamAtItsFrameRate) {
+    VideoInfo raw;
+    raw.path = "clip.hevc";
+    raw.format_name = "hevc";
+    raw.timed_raw = true;
+    raw.fps = 120;
+    const std::vector<std::string> timed = bitrate_command("ffprobe", raw);
+    const auto rate = std::find(timed.begin(), timed.end(), "-framerate");
+    ASSERT_NE(rate, timed.end());
+    EXPECT_EQ(*(rate + 1), "120.0");
+    EXPECT_EQ(timed.back(), "clip.hevc");
+
+    // Its packets' times are frames at that rate: ffprobe's raw HEVC parser
+    // gives most of them 1 microsecond (HoneyBee's 4K stream: 550 of 600).
+    PacketList packets(120, true);
+    for (const char* duration : {"0.008333", "0.000001", "0.000001"}) {
+        packets.add(std::string("pts_time=N/A|dts_time=N/A|duration_time=") + duration + "|size=1000|pos=0|flags=___");
+    }
+    const BitrateData data = packets.finish("clip.hevc");
+    EXPECT_DOUBLE_EQ(data.duration(), 3.0 / 120);
+    EXPECT_DOUBLE_EQ(data.times.back(), 2.0 / 120);
+    // 5 s of it are 5 seconds, not 6 (the durations summed came to
+    // 5.000000000000038).
+    PacketList five_seconds(120, true);
+    for (int frame = 0; frame < 600; ++frame) {
+        five_seconds.add("pts_time=N/A|dts_time=N/A|duration_time=0.000001|size=1000|pos=0|flags=___");
+    }
+    EXPECT_EQ(second_bins(five_seconds.finish("clip.hevc"), true).starts.size(), 5U);
+
+    VideoInfo scaled;
+    scaled.path = "clip.mkv";
+    scaled.scaled_to = std::pair(1920, 1080);
+    const std::vector<std::string> plain = bitrate_command("ffprobe", scaled);
+    EXPECT_EQ(std::find(plain.begin(), plain.end(), "-reinit_filter"), plain.end());
+    EXPECT_EQ(std::find(plain.begin(), plain.end(), "-framerate"), plain.end());
+}
+
 }  // namespace
 }  // namespace vml

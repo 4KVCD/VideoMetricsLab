@@ -95,7 +95,12 @@ BitratePlot gop_plot(const BitrateData& data, bool adjust_start = true);
 class PacketList {
 public:
     // A packet with no duration is given one frame's at `fps` (none if 0).
-    explicit PacketList(double fps);
+    // With `frame_rate_only` (a raw stream timed by its frame rate,
+    // VideoInfo::timed_raw) each packet is a frame at that rate, timed by
+    // its number in decode order: ffprobe gives such a stream's packets no
+    // times, and its HEVC parser most of them 1 microsecond (all but one in
+    // 12).
+    explicit PacketList(double fps, bool frame_rate_only = false);
     // Reads one line; a line that is not a packet (no whole size) is left.
     void add(std::string_view line);
     std::size_t size() const { return packets_.size(); }
@@ -112,13 +117,17 @@ private:
         long long position;
         bool keyframe;
     };
+    double fps_;
     double fallback_duration_;
+    bool frame_rate_only_;
     std::vector<Packet> packets_;
 };
 
 // The command reading a video's packets: its first video stream's, each
-// one's times, size, position and flags.
-std::vector<std::string> bitrate_command(const std::string& ffprobe, const std::filesystem::path& path);
+// one's times, size, position and flags; a timed raw stream at its frame
+// rate (VideoInfo::probe_options), which ffprobe would otherwise take as 25
+// frames a second.
+std::vector<std::string> bitrate_command(const std::string& ffprobe, const VideoInfo& info);
 
 // Reads the first video stream's packets with `ffprobe`, ordered by
 // presentation time; `on_progress` hears the packets read so far and the

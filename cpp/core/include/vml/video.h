@@ -121,19 +121,22 @@ struct VideoInfo {
     // the limited one (16-235 for luma): tagged so, or untagged in a "yuvj"
     // pixel format.
     bool full_range() const;
-    // FFmpeg's options before the video's -i: a timed raw stream's frame
-    // rate (-framerate), so that FFmpeg's times for its frames are right,
-    // after a raw YUV file's format, picture size and pixel format; and for
-    // one scaled_to a size, -reinit_filter 0, so that FFmpeg keeps its
-    // filters (and their scale) as the size changes. Nothing for any other
-    // video.
+    // FFmpeg's options before the video's -i: probe_options(); and for one
+    // scaled_to a size, -reinit_filter 0, so that FFmpeg keeps its filters
+    // (and their scale) as the size changes. Nothing for any other video.
     std::vector<std::string> input_options() const;
+    // How the input is read, for ffprobe as for FFmpeg (ffprobe has no
+    // -reinit_filter): a timed raw stream's frame rate (-framerate), so that
+    // the times of its frames are right, after a raw YUV file's format,
+    // picture size and pixel format. Nothing for any other video.
+    std::vector<std::string> probe_options() const;
     // input_options() for an FFmpeg that decodes its pictures to score them,
     // with -export_side_data film_grain for a video scored without its film
     // grain (FFmpeg then adds none). Throws FilmGrainRefusal for one scored
     // with grain FFmpeg does not add as the app does (H.274's: FFmpeg adds it
     // at 8 bits only, rounded down): it is decoded in the app or not at all.
-    // Stream copies, ffprobe and black-bar detection take input_options().
+    // Stream copies and black-bar detection take input_options(), ffprobe
+    // probe_options().
     std::vector<std::string> decode_options() const;
     // Whether the nominal and the average frame rate differ by more than
     // rounding.

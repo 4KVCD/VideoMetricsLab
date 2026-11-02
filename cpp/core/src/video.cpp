@@ -95,6 +95,13 @@ std::vector<std::string> VideoInfo::input_options() const {
         // starting a metric's filter again, or its own scale.
         options = {"-reinit_filter", "0"};
     }
+    const std::vector<std::string> reading = probe_options();
+    options.insert(options.end(), reading.begin(), reading.end());
+    return options;
+}
+
+std::vector<std::string> VideoInfo::probe_options() const {
+    std::vector<std::string> options;
     if (!timed_raw) {
         return options;
     }

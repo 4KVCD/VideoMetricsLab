@@ -216,7 +216,8 @@ BitratePlot gop_plot(const BitrateData& data, bool adjust_start) {
 
 // ------------------------------------------------------------- the packets
 
-PacketList::PacketList(double fps) : fallback_duration_(fps > 0 ? 1.0 / fps : 0.0) {}
+PacketList::PacketList(double fps, bool frame_rate_only)
+    : fps_(fps), fallback_duration_(fps > 0 ? 1.0 / fps : 0.0), frame_rate_only_(frame_rate_only && fps > 0) {}
 
 void PacketList::add(std::string_view line) {
     const std::optional<long long> size = python_int(field(line, "size").value_or(""));
@@ -225,13 +226,17 @@ void PacketList::add(std::string_view line) {
     }
     // A duration of nothing, or of 0, is one frame's.
     const std::optional<double> given = number(field(line, "duration_time"));
-    const double duration = given && *given != 0.0 ? *given : fallback_duration_;
+    const double duration = !frame_rate_only_ && given && *given != 0.0 ? *given : fallback_duration_;
     const auto count = static_cast<long long>(packets_.size());
     const std::optional<std::string_view> pos = field(line, "pos");
     const long long position = pos ? python_int(*pos).value_or(count) : count;
     const std::string_view flags = field(line, "flags").value_or("");
-    packets_.push_back({number(field(line, "pts_time")), number(field(line, "dts_time")), std::max(0.0, duration),
-                        *size, position, flags.find('K') != std::string_view::npos});
+    // A stream that has only its frame rate: each packet a frame, at its number over the rate (not the sum of the
+    // durations before it, whose rounding grew a 5 s stream at 120 fps into a sixth second)
+    const std::optional<double> pts =
+        frame_rate_only_ ? std::optional(static_cast<double>(count) / fps_) : number(field(line, "pts_time"));
+    const std::optional<double> dts = frame_rate_only_ ? std::nullopt : number(field(line, "dts_time"));
+    packets_.push_back({pts, dts, std::max(0.0, duration), *size, position, flags.find('K') != std::string_view::npos});
 }
 
 BitrateData PacketList::finish(const std::filesystem::path& path) const {
@@ -275,11 +280,14 @@ BitrateData PacketList::finish(const std::filesystem::path& path) const {
 
 // ------------------------------------------------------------- reading a video
 
-std::vector<std::string> bitrate_command(const std::string& ffprobe, const std::filesystem::path& path) {
-    return {ffprobe,       "-v",          "error", "-select_streams",
-            std::string(video_stream), "-show_packets", "-show_entries",
-            "packet=pts_time,dts_time,duration_time,size,pos,flags", "-of", "compact=p=0:nk=0",
-            platform::path_text(path)};
+std::vector<std::string> bitrate_command(const std::string& ffprobe, const VideoInfo& info) {
+    std::vector<std::string> command{ffprobe, "-v", "error"};
+    const std::vector<std::string> input = info.probe_options();
+    command.insert(command.end(), input.begin(), input.end());
+    command.insert(command.end(), {"-select_streams", std::string(video_stream), "-show_packets", "-show_entries",
+                                   "packet=pts_time,dts_time,duration_time,size,pos,flags", "-of",
+                                   "compact=p=0:nk=0", platform::path_text(info.path)});
+    return command;
 }
 
 namespace {
@@ -357,11 +365,11 @@ BitrateData analyze_video_bitrate(const std::string& ffprobe, const VideoInfo& i
     };
     std::optional<platform::ChildProcess> process;
     try {
-        process.emplace(platform::ChildProcess::start(bitrate_command(ffprobe, info.path), options));
+        process.emplace(platform::ChildProcess::start(bitrate_command(ffprobe, info), options));
     } catch (const platform::ProcessError& failure) {
         throw BitrateError(std::string("Could not start ffprobe: ") + failure.what());
     }
-    PacketList packets(info.fps);
+    PacketList packets(info.fps, info.timed_raw);
     const long long total = std::max(1LL, info.estimated_frame_count());
     int exit_code = 0;
     {
