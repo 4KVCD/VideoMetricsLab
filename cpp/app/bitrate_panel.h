@@ -172,7 +172,7 @@ private:
     void update_buttons();
     std::string view_name() const;
     std::shared_ptr<const BitratePlot> entry_plot(BitrateEntry& entry) const;
-    void refresh_plot();
+    void refresh_plot();  // the lines drawn again, the zoom kept
     void on_hovered(double time);
     void on_hover_left();
     void on_export_png();

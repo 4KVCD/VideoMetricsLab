@@ -177,4 +177,34 @@ TEST_F(BitratePanelTest, ALinesColourIsTheSessionsForItsVideo) {
     EXPECT_EQ(line_color(*panel, 1), second_colour);
 }
 
+// The graph's zoom stays while lines come and go: a file ticked off or on,
+// read again or removed (the zoom reset at each, as the lines are drawn
+// again). Another graph shows all of the time range again.
+TEST_F(BitratePanelTest, ALineTickedReadOrRemovedKeepsTheZoom) {
+    VideoColors colors;
+    const test::Folder folder;
+    const std::filesystem::path first = folder / "first.mkv";
+    const std::filesystem::path second = folder / "second.mkv";
+    const auto panel = make_panel(colors);
+    panel->add_files({first, second});
+    analyzed(*panel, first, two_seconds(first));
+    analyzed(*panel, second, two_seconds(second));
+    const std::pair<double, double> zoomed{0.5, 1.5};
+    zoom_to(*panel, zoomed);
+
+    panel->table->item(0, col_use)->setCheckState(Qt::Unchecked);
+    EXPECT_EQ(panel->chart->x_range(), zoomed);
+    panel->table->item(0, col_use)->setCheckState(Qt::Checked);
+    EXPECT_EQ(panel->chart->x_range(), zoomed);
+    analyzed(*panel, second, two_seconds(second));
+    EXPECT_EQ(panel->chart->x_range(), zoomed);
+    panel->table->selectRow(0);
+    panel->remove_button->click();
+    ASSERT_EQ(panel->table->rowCount(), 1);
+    EXPECT_EQ(panel->chart->x_range(), zoomed);
+
+    panel->frame_radio->click();
+    EXPECT_NE(panel->chart->x_range(), zoomed);
+}
+
 }  // namespace vml::app

@@ -197,10 +197,17 @@ void BitratePanel::add_plot_controls(QVBoxLayout* root) {
         views->addButton(button, id++);
         plot_controls->addWidget(button);
     }
-    connect(views, &QButtonGroup::idClicked, this, [this](int /*id*/) { refresh_plot(); });
+    // Another graph, or times shifted: all of it shown again
+    connect(views, &QButtonGroup::idClicked, this, [this](int /*id*/) {
+        refresh_plot();
+        chart->reset_view();
+    });
     adjust_start_checkbox = new QCheckBox(app::tr("Adjust stream start time to zero"));
     adjust_start_checkbox->setChecked(true);
-    connect(adjust_start_checkbox, &QCheckBox::toggled, this, [this](bool /*checked*/) { refresh_plot(); });
+    connect(adjust_start_checkbox, &QCheckBox::toggled, this, [this](bool /*checked*/) {
+        refresh_plot();
+        chart->reset_view();
+    });
     plot_controls->addSpacing(18);
     plot_controls->addWidget(adjust_start_checkbox);
     plot_controls->addStretch(1);
@@ -707,7 +714,8 @@ std::shared_ptr<const BitratePlot> BitratePanel::entry_plot(BitrateEntry& entry)
 }
 
 void BitratePanel::refresh_plot() {
-    // Every ticked file's line, for the graph chosen.
+    // Every ticked file's line, for the graph chosen. The zoom is kept, as in Metric Graphs: a line ticked, read or
+    // removed leaves the time range in view; another graph or Adjust start resets it.
     chart->clear();
     current_plots_.clear();
     std::vector<std::pair<const BitrateEntry*, std::shared_ptr<const BitratePlot>>> plots;
@@ -759,7 +767,6 @@ void BitratePanel::refresh_plot() {
         current_plots_.emplace_back(file_name(entry->path), plot);
     }
     hover_label->reserve_lines(1 + static_cast<int>(current_plots_.size()));  // the time, then each line
-    chart->reset_view();
     on_hover_left();
     update_buttons();
 }
