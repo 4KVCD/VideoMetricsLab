@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -37,11 +38,13 @@ struct Probed {
 
 // What to look up for a row in the saved scores: the file its comparison is
 // filed under (RowData::identity_path), its request, and every other score
-// it can show (displayable_metric_specs).
+// it can show (displayable_metric_specs), and the metrics never to take from
+// another recipe's saved scores (RowData::forgotten_metrics).
 struct SavedScoresQuery {
     std::filesystem::path identity;
     AnalysisRequest request;
     std::vector<MetricRequestSpec> supplemental;
+    std::set<std::string> not_from_other_recipes;
 };
 
 // The saved scores found for a row, with the result's label and the token

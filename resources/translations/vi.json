@@ -775,7 +775,11 @@
   "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "định dạng điểm ảnh hoặc một thẻ màu của nó không có tương đương rawvideo cho FFmpeg",
   "  Install it with Homebrew: brew install ffmpeg-full.": "  Cài bằng Homebrew: brew install ffmpeg-full.",
   "FFmpeg has no zscale filter: HDR video cannot be converted to SDR": "FFmpeg không có bộ lọc zscale: không thể chuyển video HDR sang SDR",
-  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)": "FFmpeg không có bộ lọc zscale: không thể chuyển video HDR sang SDR (brew install ffmpeg-full)"
+  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)": "FFmpeg không có bộ lọc zscale: không thể chuyển video HDR sang SDR (brew install ffmpeg-full)",
+  "Source only (test video already cropped)": "Chỉ nguồn (video thử đã được cắt sẵn)",
+  "The source's black bars are detected and cut; the test video is compared at its full frame, for an encode cropped when it was made.": "Các dải đen của nguồn được phát hiện và cắt bỏ; video thử được so sánh với toàn khung hình, cho bản mã hóa đã được cắt khi tạo.",
+  "Source only": "Chỉ nguồn",
+  "The test video is compared at its full frame.": "Video thử được so sánh với toàn khung hình."
  },
  "plurals": {
   "about {count} day": [

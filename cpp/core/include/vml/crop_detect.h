@@ -85,4 +85,15 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const V
                                                                          std::optional<CropBox> source_crop,
                                                                          std::optional<CropBox> distorted_crop);
 
+// The two videos' crops as `mode` asks: none for CropMode::none; for automatic, both videos' boxes (detect_pair)
+// made to cover the same picture (common_picture); for source_only, the source's box (detect_crop) and the test
+// video's full frame, as an encode cropped when it was made shows the source's picture without its bars.
+std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_for(CropMode mode, const std::string& ffmpeg,
+                                                                    const VideoInfo& source,
+                                                                    const VideoInfo& distorted,
+                                                                    const CancelToken& cancel,
+                                                                    const std::optional<std::string>& source_hwaccel,
+                                                                    const std::optional<std::string>& distorted_hwaccel,
+                                                                    const std::string& scale_algorithm);
+
 }  // namespace vml

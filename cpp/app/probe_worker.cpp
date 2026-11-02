@@ -71,11 +71,11 @@ void ProbeWorker::look_up(const QString& path) {
         // and the window refuses the scores found under the old one.
         const std::string token = lookup_token(source_, query.identity, request);
         if (auto found = load_result(base_, source_, query.identity, request.recipe, request.metrics,
-                                     request.perceptual_backends, query.supplemental)) {
+                                     request.perceptual_backends, query.supplemental, query.not_from_other_recipes)) {
             emit saved_found({path, std::move(found->first), QString::fromStdString(found->second), token});
         }
         if (auto others = other_cvvdp_scores(base_, source_, query.identity, request.recipe, request.metrics,
-                                             query.supplemental)) {
+                                             query.supplemental, query.not_from_other_recipes)) {
             emit other_displays_found({path, std::move(others->scores), std::move(others->parameters)});
         }
     } catch (const std::exception&) {

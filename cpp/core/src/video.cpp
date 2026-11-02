@@ -14,6 +14,18 @@
 
 namespace vml {
 
+const char* crop_mode_text(CropMode mode) {
+    switch (mode) {
+    case CropMode::automatic:
+        return "auto";
+    case CropMode::source_only:
+        return "source";
+    case CropMode::none:
+        break;
+    }
+    return "none";
+}
+
 GpuVendor vendor_of_pci_id(unsigned id) {
     if (id == platform::nvidia_pci_vendor) {
         return GpuVendor::nvidia;

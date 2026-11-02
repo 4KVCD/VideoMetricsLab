@@ -7,6 +7,7 @@
 #include <random>
 #include <regex>
 #include <stdexcept>
+#include <string_view>
 #include <system_error>
 #include <tuple>
 #include <variant>
@@ -300,6 +301,10 @@ bool stale_score(const MetricProvenance& provenance, const std::vector<ColourTag
                is_untagged_tag(transfer);
     });
 }
+
+// Whether a SSIMULACRA2 or Butteraugli score's compatibility id is a Vship
+// build's (the GPU's), which comes before the CPU's.
+bool is_vship_id(std::string_view id) { return id.find("-vship-") != std::string_view::npos; }
 
 // Whether a request is a SSIMULACRA2 or Butteraugli one that does not fix
 // where the metric is calculated: on the GPU by its Vship build, or on the
@@ -704,7 +709,7 @@ std::vector<std::pair<std::filesystem::path, MetricRequestSpec>> auto_perceptual
             if (request != concrete.identity()) {
                 continue;
             }
-            const int rank = value.find("-vship-") != std::string::npos ? 0 : 1;
+            const int rank = is_vship_id(value) ? 0 : 1;
             ranked.push_back({rank, {path, concrete}});
         } catch (const nlohmann::json::exception&) {
             continue;
@@ -964,7 +969,7 @@ std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, 
     const auto stale = [&infos](const LoadedMetric& metric) { return stale_score(provenance_of(metric), infos); };
     if (is_auto_perceptual(spec)) {
         for (const auto& [path, concrete] : auto_perceptual_candidates(directory, spec)) {
-            if (backend == "cpu" && concrete.implementation_compatibility_id.find("-vship-") != std::string::npos) {
+            if (backend == "cpu" && is_vship_id(concrete.implementation_compatibility_id)) {
                 continue;
             }
             std::optional<LoadedMetric> result = load_metric_file(path, concrete, marks);
@@ -1201,69 +1206,126 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
     return directory;
 }
 
-std::optional<std::pair<ComparisonResult, std::string>> load_result(
-    const std::filesystem::path& base, const std::filesystem::path& source, const std::filesystem::path& distorted,
-    const ComparisonRecipe& recipe, const std::vector<MetricRequestSpec>& specs,
-    const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental) {
-    const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
-    const std::optional<nlohmann::json> context = read_json(directory / "context.json");
-    if (!context || !context->is_object() || !current_format(*context)) {
+namespace {
+
+// A folder's context.json, when it is one this app reads.
+std::optional<nlohmann::json> current_context(const std::filesystem::path& directory) {
+    std::optional<nlohmann::json> context = read_json(directory / "context.json");
+    if (context && (!context->is_object() || !current_format(*context))) {
         return std::nullopt;
     }
-    MetricResultSet results;
-    const auto load = [&](const MetricRequestSpec& spec) {
-        const auto backend = backends.find(spec.key);
-        if (std::optional<LoadedMetric> metric =
-                load_metric(directory, spec, backend == backends.end() ? "gpu" : backend->second, *context)) {
-            std::visit([&results](auto&& loaded) { results.add(std::move(loaded)); }, std::move(*metric));
-        }
-    };
-    for (const MetricRequestSpec& spec : specs) {
-        load(spec);
-    }
-    for (const MetricRequestSpec& spec : supplemental) {
-        const bool asked = std::any_of(specs.begin(), specs.end(),
-                                       [&spec](const MetricRequestSpec& other) { return other.key == spec.key; });
-        if (!asked && !results.has(spec.key)) {
-            load(spec);
-        }
-    }
-    if (results.empty()) {
+    return context;
+}
+
+// A recipe's folder found for another recipe's lookup, with its context.json.
+struct OtherRecipeFolder {
+    std::filesystem::path directory;
+    nlohmann::json context;
+};
+
+// Black bars "Source only": Auto's saved scores of the same comparison,
+// where they are Source only's. They are when Auto
+// compared the test video at its whole frame: every route treats a box of
+// the whole frame as no box (CropBox::is_noop), and common_picture then
+// leaves the source's box as detected, the box Source only cuts. A
+// resolution test runs the same code in both modes (both its crops are the
+// source's). Where this recipe saved a comparison of its own, Auto's must
+// have cut the same source box. The folder by its hash, not recipe_directory:
+// a lookup must not move Auto's legacy folder while a save may write to it.
+std::optional<OtherRecipeFolder> auto_folder_for_source_only(const std::filesystem::path& base,
+                                                             const std::filesystem::path& source,
+                                                             const std::filesystem::path& distorted,
+                                                             const ComparisonRecipe& recipe,
+                                                             const std::optional<nlohmann::json>& own_context) {
+    if (recipe.crop_mode != CropMode::source_only) {
         return std::nullopt;
     }
-    std::vector<MetricRequestSpec> loaded_for = specs;  // the requests a loaded score answers
-    loaded_for.insert(loaded_for.end(), supplemental.begin(), supplemental.end());
+    ComparisonRecipe automatic = recipe;
+    automatic.crop_mode = CropMode::automatic;
+    std::filesystem::path directory = base / format_folder / recipe_hash(source, distorted, automatic);
+    std::optional<nlohmann::json> context = current_context(directory);
+    if (!context) {
+        return std::nullopt;
+    }
+    try {
+        const std::optional<CropBox> source_crop = crop_from_dict(context->value("source_crop", nlohmann::json()));
+        if (own_context && crop_from_dict(own_context->value("source_crop", nlohmann::json())) != source_crop) {
+            return std::nullopt;
+        }
+        if (!recipe.resample_test) {
+            const std::optional<CropBox> test_crop = crop_from_dict(context->value("distorted_crop", nlohmann::json()));
+            const auto [width, height] = video_info_from_dict(context->at("distorted_info")).frame_size();
+            if (test_crop && !test_crop->is_noop(width, height)) {
+                return std::nullopt;
+            }
+        }
+    } catch (const nlohmann::json::exception&) {
+        return std::nullopt;
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    }
+    return OtherRecipeFolder{std::move(directory), std::move(*context)};
+}
+
+// Whether a SSIMULACRA2 or Butteraugli score is Vship's, as
+// auto_perceptual_candidates ranks them.
+bool made_by_vship(const LoadedMetric& metric) { return is_vship_id(provenance_of(metric).implementation_compatibility_id); }
+
+// This recipe's own score for `spec` (`own`), or the other folder's where
+// this recipe has none, or where its own is the CPU's and the other's is
+// Vship's for SSIMULACRA2 or Butteraugli set to the GPU: one folder's
+// candidates rank Vship's first (auto_perceptual_candidates), and so do two.
+std::optional<LoadedMetric> better_of(std::optional<LoadedMetric> own, const std::filesystem::path& directory,
+                                      const nlohmann::json& context, const MetricRequestSpec& spec,
+                                      const std::string& backend) {
+    const bool ranked = is_auto_perceptual(spec) && backend == "gpu";
+    if (own && (!ranked || made_by_vship(*own))) {
+        return own;
+    }
+    std::optional<LoadedMetric> other = load_metric(directory, spec, backend, context);
+    if (other && (!own || made_by_vship(*other))) {
+        return other;
+    }
+    return own;
+}
+
+// The comparison a recipe's folder holds, from its context.json, with the
+// scores loaded from it (`results`, for the requests `loaded_for`), and its
+// label; nothing when the context cannot be read.
+std::optional<std::pair<ComparisonResult, std::string>> comparison_from(
+    const nlohmann::json& context, const ComparisonRecipe& recipe, MetricResultSet results,
+    const std::vector<MetricRequestSpec>& loaded_for) {
     try {
         // A context saved before some of these fields were recorded lacks
         // them: the recipe's values stand in, the comparison found under the
         // recipe being the same one.
         ComparisonResult result;
-        result.source = platform::path_from_text(context->at("source").get<std::string>());
-        result.distorted = platform::path_from_text(context->at("distorted").get<std::string>());
-        result.fps = context->at("fps").get<double>();
-        const nlohmann::json model = context->value("model", nlohmann::json(""));
+        result.source = platform::path_from_text(context.at("source").get<std::string>());
+        result.distorted = platform::path_from_text(context.at("distorted").get<std::string>());
+        result.fps = context.at("fps").get<double>();
+        const nlohmann::json model = context.value("model", nlohmann::json(""));
         result.model = model.is_string() ? model.get<std::string>() : std::string();
-        result.source_crop = crop_from_dict(context->value("source_crop", nlohmann::json()));
-        result.distorted_crop = crop_from_dict(context->value("distorted_crop", nlohmann::json()));
-        result.source_info = video_info_from_dict(context->at("source_info"));
-        result.distorted_info = video_info_from_dict(context->at("distorted_info"));
+        result.source_crop = crop_from_dict(context.value("source_crop", nlohmann::json()));
+        result.distorted_crop = crop_from_dict(context.value("distorted_crop", nlohmann::json()));
+        result.source_info = video_info_from_dict(context.at("source_info"));
+        result.distorted_info = video_info_from_dict(context.at("distorted_info"));
         result.scale_direction = scale_direction_from(
-            context->value("scale_direction", std::string(scale_direction_value(recipe.scale_direction))));
-        const nlohmann::json algorithm = context->value("scale_algorithm", nlohmann::json());
+            context.value("scale_direction", std::string(scale_direction_value(recipe.scale_direction))));
+        const nlohmann::json algorithm = context.value("scale_algorithm", nlohmann::json());
         result.scale_algorithm = algorithm.is_string() && !algorithm.get<std::string>().empty()
                                      ? algorithm.get<std::string>()
                                      : recipe.scale_algorithm;
         result.resample_target = recipe.resample_test;
-        if (const nlohmann::json target = context->value("resample_target", nlohmann::json()); python_truthy(target)) {
+        if (const nlohmann::json target = context.value("resample_target", nlohmann::json()); python_truthy(target)) {
             // As Python's ResampleTarget(**target): its two fields, no more.
             if (!target.is_object() || target.size() != 2) {
                 return std::nullopt;
             }
             result.resample_target = ResampleTarget{target.at("width").get<int>(), target.at("label").get<std::string>()};
         }
-        result.compared_frame_count = context->value("compared_frame_count", 0LL);
+        result.compared_frame_count = context.value("compared_frame_count", 0LL);
         const auto optional_string = [&context](const char* name) -> std::optional<std::string> {
-            const nlohmann::json value = context->value(name, nlohmann::json());
+            const nlohmann::json value = context.value(name, nlohmann::json());
             if (!value.is_string()) {
                 return std::nullopt;
             }
@@ -1287,12 +1349,70 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
     }
 }
 
+}  // namespace
+
+std::optional<std::pair<ComparisonResult, std::string>> load_result(
+    const std::filesystem::path& base, const std::filesystem::path& source, const std::filesystem::path& distorted,
+    const ComparisonRecipe& recipe, const std::vector<MetricRequestSpec>& specs,
+    const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental,
+    const std::set<std::string>& not_from_other_recipes) {
+    const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
+    const std::optional<nlohmann::json> context = current_context(directory);  // none: its scores are not read
+    const std::optional<OtherRecipeFolder> automatic = auto_folder_for_source_only(base, source, distorted, recipe, context);
+    if (!context && !automatic) {
+        return std::nullopt;
+    }
+    MetricResultSet results;
+    const auto load = [&](const MetricRequestSpec& spec) {
+        const auto chosen = backends.find(spec.key);
+        const std::string backend = chosen == backends.end() ? "gpu" : chosen->second;
+        std::optional<LoadedMetric> metric;
+        if (context) {
+            metric = load_metric(directory, spec, backend, *context);
+        }
+        if (automatic && !not_from_other_recipes.contains(spec.key)) {
+            metric = better_of(std::move(metric), automatic->directory, automatic->context, spec, backend);
+        }
+        if (metric) {
+            std::visit([&results](auto&& loaded) { results.add(std::move(loaded)); }, std::move(*metric));
+        }
+    };
+    for (const MetricRequestSpec& spec : specs) {
+        load(spec);
+    }
+    for (const MetricRequestSpec& spec : supplemental) {
+        const bool asked = std::any_of(specs.begin(), specs.end(),
+                                       [&spec](const MetricRequestSpec& other) { return other.key == spec.key; });
+        if (!asked && !results.has(spec.key)) {
+            load(spec);
+        }
+    }
+    if (results.empty()) {
+        return std::nullopt;
+    }
+    std::vector<MetricRequestSpec> loaded_for = specs;  // the requests a loaded score answers
+    loaded_for.insert(loaded_for.end(), supplemental.begin(), supplemental.end());
+    if (context) {
+        return comparison_from(*context, recipe, std::move(results), loaded_for);
+    }
+    // This recipe's folder has no context this app reads: Auto's comparison,
+    // as a Source-only run gives it (the test video at its full frame, which
+    // Auto's box is; a resolution test's crops are both the source's in
+    // either mode).
+    auto found = comparison_from(automatic->context, recipe, std::move(results), loaded_for);
+    if (found && !recipe.resample_test) {
+        found->first.distorted_crop.reset();
+    }
+    return found;
+}
+
 std::optional<OtherCvvdpScores> other_cvvdp_scores(const std::filesystem::path& base,
                                                    const std::filesystem::path& source,
                                                    const std::filesystem::path& distorted,
                                                    const ComparisonRecipe& recipe,
                                                    const std::vector<MetricRequestSpec>& specs,
-                                                   const std::vector<MetricRequestSpec>& supplemental) {
+                                                   const std::vector<MetricRequestSpec>& supplemental,
+                                                   const std::set<std::string>& not_from_other_recipes) {
     const MetricRequestSpec* spec = nullptr;
     for (const std::vector<MetricRequestSpec>* list : {&specs, &supplemental}) {
         for (const MetricRequestSpec& asked : *list) {
@@ -1304,8 +1424,25 @@ std::optional<OtherCvvdpScores> other_cvvdp_scores(const std::filesystem::path& 
     if (spec == nullptr) {
         return std::nullopt;
     }
+    const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
+    std::vector<std::pair<nlohmann::json, double>> saved = other_parameters(directory, *spec);
+    const bool other_recipes = recipe.crop_mode == CropMode::source_only && !not_from_other_recipes.contains("cvvdp");
+    const auto automatic = other_recipes ? auto_folder_for_source_only(base, source, distorted, recipe,
+                                                                       current_context(directory))
+                                         : std::nullopt;
+    if (automatic) {
+        // Auto's other displays too, where this recipe has none of its own:
+        // load_result would take them (not after a Recalculate of CVVDP).
+        for (auto& [parameters, score] : other_parameters(automatic->directory, *spec)) {
+            const bool known = std::any_of(saved.begin(), saved.end(),
+                                           [&parameters](const auto& own) { return own.first == parameters; });
+            if (!known) {
+                saved.emplace_back(std::move(parameters), score);
+            }
+        }
+    }
     OtherCvvdpScores found{spec->parameters, {}};
-    for (const auto& [parameters, score] : other_parameters(recipe_directory(base, source, distorted, recipe), *spec)) {
+    for (const auto& [parameters, score] : saved) {
         try {
             found.scores.emplace_back(CvvdpSettings::from_parameters(parameters), score);
         } catch (const std::invalid_argument&) {

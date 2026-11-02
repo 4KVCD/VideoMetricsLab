@@ -5,16 +5,23 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <optional>
 #include <string>
+#include <tuple>
+#include <utility>
 
 #include "reference.h"
 #include "vml/crop_detect.h"
+#include "vml/ffmpeg_run.h"
 #include "vml/film_grain_detect.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
+#include "vml/gpu_frames.h"
 #include "vml/hardware_decoding.h"
 #include "vml/model_select.h"
+#include "vml/perceptual_cpu.h"
 #include "vml/platform/system.h"
+#include "vml/vship.h"
 
 namespace vml {
 namespace {
@@ -314,6 +321,58 @@ TEST(Decisions, BlackBarBoxesCoverTheSamePictureAsThePythonAppMakesThem) {
         EXPECT_EQ(shared_source, box(item["shared"][0])) << item.dump();
         EXPECT_EQ(shared_test, box(item["shared"][1])) << item.dump();
     }
+}
+
+// Black bars Source only takes Auto's saved scores where Auto kept the test
+// video's whole frame (metric_cache.cpp, auto_folder_for_source_only): so a
+// box of the whole frame must be no box to every route that crops, and Auto
+// must give one only with the source's box as detected (an encode cropped
+// when it was made, or a picture with no bars at all).
+TEST(Decisions, AWholeFrameBoxIsNoBoxOnEveryRoute) {
+    VideoInfo source;
+    source.path = "source.mkv";
+    source.codec_name = "hevc";
+    source.pix_fmt = "yuv420p10le";
+    source.width = 3840;
+    source.height = 2160;
+    source.fps = 24.0;
+    source.duration = 10.0;
+    VideoInfo test = source;
+    test.path = "test.mkv";
+    test.height = 1608;
+    const CropBox bars{3840, 1608, 0, 276};
+    const CropBox whole{3840, 1608, 0, 0};
+    const VmafOptions options;
+    const auto graph = [&](const std::optional<CropBox>& test_box) {
+        return build_filtergraph(source, test, options, bars, test_box, HardwareDecoding{}, "vmaf.json",
+                                 "version=vmaf_v0.6.1", "xpsnr.log", 8);
+    };
+    EXPECT_EQ(graph(whole), graph(std::nullopt));
+    EXPECT_EQ(image_filtergraph(source, test, options, bars, whole, 1),
+              image_filtergraph(source, test, options, bars, std::nullopt, 1));
+    const auto chain = [&](const std::optional<CropBox>& box) {
+        return vship_filter_chain(test, box, {3840, 1608}, "p010le", 1, "bicubic", std::nullopt, Rational{24, 1}, false);
+    };
+    EXPECT_EQ(chain(whole), chain(std::nullopt));
+    const auto planned = [&](const std::optional<CropBox>& box) {
+        const DecodePlan plan = plan_decode(test, box);
+        return std::tuple(plan.crop_x, plan.crop_y, plan.crop_w, plan.crop_h, plan.out_w, plan.out_h);
+    };
+    EXPECT_EQ(planned(whole), planned(std::nullopt));
+
+    // Sizes not one factor apart (the cropped encode): both boxes as detected.
+    EXPECT_EQ(common_picture(source, test, bars, whole), std::pair(std::optional(bars), std::optional(whole)));
+    // One factor apart: the source's bars cut from the test video too, unless the source has none.
+    VideoInfo half = source;
+    half.width = 1920;
+    half.height = 1080;
+    const CropBox half_whole{1920, 1080, 0, 0};
+    const std::optional<CropBox> test_cut = common_picture(source, half, bars, half_whole).second;
+    ASSERT_TRUE(test_cut);
+    EXPECT_FALSE(test_cut->is_noop(1920, 1080));
+    const CropBox source_whole{3840, 2160, 0, 0};
+    EXPECT_EQ(common_picture(source, half, source_whole, half_whole),
+              std::pair(std::optional(source_whole), std::optional(half_whole)));
 }
 
 // The black bars of a video whose codec the app's own decoder decodes

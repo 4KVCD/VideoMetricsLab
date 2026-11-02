@@ -775,7 +775,11 @@
   "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "รูปแบบพิกเซลหรือแท็กสีของวิดีโอนี้ไม่มีรูปแบบ rawvideo ที่เทียบเท่าสำหรับ FFmpeg",
   "  Install it with Homebrew: brew install ffmpeg-full.": "  ติดตั้งด้วย Homebrew: brew install ffmpeg-full",
   "FFmpeg has no zscale filter: HDR video cannot be converted to SDR": "FFmpeg ไม่มีฟิลเตอร์ zscale: แปลงวิดีโอ HDR เป็น SDR ไม่ได้",
-  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)": "FFmpeg ไม่มีฟิลเตอร์ zscale: แปลงวิดีโอ HDR เป็น SDR ไม่ได้ (brew install ffmpeg-full)"
+  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)": "FFmpeg ไม่มีฟิลเตอร์ zscale: แปลงวิดีโอ HDR เป็น SDR ไม่ได้ (brew install ffmpeg-full)",
+  "Source only (test video already cropped)": "เฉพาะต้นฉบับ (วิดีโอทดสอบครอปไว้แล้ว)",
+  "The source's black bars are detected and cut; the test video is compared at its full frame, for an encode cropped when it was made.": "ตรวจหาและตัดแถบดำของต้นฉบับ ส่วนวิดีโอทดสอบจะเปรียบเทียบเต็มเฟรม สำหรับไฟล์เข้ารหัสที่ครอปไว้ตั้งแต่ตอนสร้าง",
+  "Source only": "เฉพาะต้นฉบับ",
+  "The test video is compared at its full frame.": "วิดีโอทดสอบเปรียบเทียบเต็มเฟรม"
  },
  "plurals": {
   "about {count} day": [

@@ -775,7 +775,11 @@
   "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "a képpontformátumának vagy egy színcímkéjének nincs rawvideo megfelelője az FFmpeg számára",
   "  Install it with Homebrew: brew install ffmpeg-full.": "  Telepítse Homebrew-val: brew install ffmpeg-full.",
   "FFmpeg has no zscale filter: HDR video cannot be converted to SDR": "Az FFmpeg-ben nincs zscale szűrő: a HDR-videó nem alakítható SDR-ré",
-  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)": "Az FFmpeg-ben nincs zscale szűrő: a HDR-videó nem alakítható SDR-ré (brew install ffmpeg-full)"
+  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)": "Az FFmpeg-ben nincs zscale szűrő: a HDR-videó nem alakítható SDR-ré (brew install ffmpeg-full)",
+  "Source only (test video already cropped)": "Csak a forrás (a tesztvideó már körbe van vágva)",
+  "The source's black bars are detected and cut; the test video is compared at its full frame, for an encode cropped when it was made.": "A forrás fekete sávjait felismeri és levágja; a tesztvideó teljes képkockával kerül összehasonlításra, a már készítéskor körbevágott kódoláshoz.",
+  "Source only": "Csak a forrás",
+  "The test video is compared at its full frame.": "A tesztvideó teljes képkockával kerül összehasonlításra."
  },
  "plurals": {
   "about {count} day": [

@@ -213,7 +213,7 @@ $run.videos[0].metrics.vmaf.score
 | `-m`, `--metrics LIST` | Comma-separated: `vmaf`, `vmaf_neg`, `vmaf_v1`, `psnr`, `ssim`, `xpsnr`, `ssimulacra2`, `butteraugli`, `cvvdp`, or `all`. Left out: the metrics a video added to the app starts with. |
 | `--model auto\|standard\|4k\|FILE` | VMAF v0.6.1's model. `auto` uses the 4K model for a 4K comparison. |
 | `--model-v1 MODEL` | VMAF v1's model, as the Options panel's **VMAF v1 model**: `auto` (the one for the size frames are compared at), or a bundled one by its name: `vmaf_v1_3d0h`, `vmaf_v1_5d0h` (1080p), `vmaf_v1_1d5h_2160`, `vmaf_v1_3d0h_2160` (4K), or their high frame rate models `vmaf_v1_hfr_3d0h`, `vmaf_v1_hfr_5d0h`, `vmaf_v1_hfr_1d5h_2160`, `vmaf_v1_hfr_3d0h_2160`. |
-| `--black-bars auto\|none` | Detect and cut black bars, or compare whole pictures. |
+| `--black-bars auto\|source\|none` | Detect and cut black bars; `source`: cut the source's only and compare the test video's full frame (an encode cropped when it was made), as the Options panel's **Source only (test video already cropped)**, which takes the scores saved by `auto` where `auto` compared the test video's full frame too; or compare whole pictures. |
 | `--scale-to test\|reference` | Which video's size the other is scaled to when they differ. |
 | `--scaler bicubic\|bilinear\|lanczos\|spline` | Scaling algorithm. |
 | `--duration SECONDS` | Compare only the start of each video. |

@@ -775,7 +775,11 @@
   "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "そのピクセル形式または色タグに、FFmpeg 用の rawvideo の対応がありません",
   "  Install it with Homebrew: brew install ffmpeg-full.": "  Homebrew でインストールしてください: brew install ffmpeg-full。",
   "FFmpeg has no zscale filter: HDR video cannot be converted to SDR": "FFmpeg に zscale フィルターがありません: HDR ビデオを SDR に変換できません",
-  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)": "FFmpeg に zscale フィルターがありません: HDR ビデオを SDR に変換できません (brew install ffmpeg-full)"
+  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)": "FFmpeg に zscale フィルターがありません: HDR ビデオを SDR に変換できません (brew install ffmpeg-full)",
+  "Source only (test video already cropped)": "ソースのみ（テスト動画はトリミング済み）",
+  "The source's black bars are detected and cut; the test video is compared at its full frame, for an encode cropped when it was made.": "ソースの黒帯を検出して切り取り、テスト動画はフルフレームのまま比較します。作成時にトリミングされたエンコード向けです。",
+  "Source only": "ソースのみ",
+  "The test video is compared at its full frame.": "テスト動画はフルフレームのまま比較されます。"
  },
  "plurals": {
   "about {count} day": [

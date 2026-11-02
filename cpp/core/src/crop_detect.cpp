@@ -1327,4 +1327,24 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const V
     return {shared_source, shared_distorted};
 }
 
+std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_for(CropMode mode, const std::string& ffmpeg,
+                                                                    const VideoInfo& source,
+                                                                    const VideoInfo& distorted,
+                                                                    const CancelToken& cancel,
+                                                                    const std::optional<std::string>& source_hwaccel,
+                                                                    const std::optional<std::string>& distorted_hwaccel,
+                                                                    const std::string& scale_algorithm) {
+    switch (mode) {
+    case CropMode::none:
+        return {};
+    case CropMode::source_only:  // (the run's settings line says so: "black bars source")
+        return {detect_crop(ffmpeg, source, cancel, source_hwaccel, scale_algorithm), std::nullopt};
+    case CropMode::automatic:
+        break;
+    }
+    const auto [source_box, distorted_box] =
+        detect_pair(ffmpeg, source, distorted, cancel, source_hwaccel, distorted_hwaccel, scale_algorithm);
+    return common_picture(source, distorted, source_box, distorted_box);
+}
+
 }  // namespace vml

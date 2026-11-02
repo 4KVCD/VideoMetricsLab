@@ -71,6 +71,9 @@ struct FrameComparison {
     // Auto black bars are chosen but not yet detected: the frames are shown
     // uncropped, and the window says so.
     bool auto_crop_pending = false;
+    // Black bars detected in the source only (CropMode::source_only): the
+    // test video's full frame is compared, its own bars not looked for.
+    bool test_full_frame = false;
 
     // The geometry a finished run used.
     static FrameComparison from_result(const ComparisonResult& result);

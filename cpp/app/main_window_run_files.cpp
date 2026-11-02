@@ -265,6 +265,7 @@ void MainWindow::take_profile(const Probed& probed) {
 void MainWindow::adopt_source_from_run(const ComparisonResult& result) {
     // Makes the reference a loaded run was measured against the window's, as
     // choosing it would: the rows are checked against it again.
+    forget_recalculations_unless(result.source);
     source_info_ = result.source_info;
     source_edit_->setText(text_of(result.source));
     const VideoInfo& info = result.source_info;

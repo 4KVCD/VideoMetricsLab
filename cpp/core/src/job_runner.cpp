@@ -400,7 +400,7 @@ std::string JobRun::describe() const {
         kept = metric_labels(keys);
     }
     const VmafOptions& options = job_.options;
-    std::string settings = std::string("black bars ") + (options.crop_mode == CropMode::automatic ? "auto" : "none") +
+    std::string settings = std::string("black bars ") + crop_mode_text(options.crop_mode) +
                            ", duration limit " + format_general(options.duration_limit) + " s, resolution mismatch " +
                            scale_direction_value(options.scale_direction) + " (" + options.scale_algorithm +
                            "), VMAF v0.6.1 model " + options.model_choice + ", VMAF v1 model " +

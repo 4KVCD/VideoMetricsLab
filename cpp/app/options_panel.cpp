@@ -164,7 +164,14 @@ OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* p
 void OptionsPanel::build_preparation(QFormLayout* form) {
     // Black bars, duration, scaling algorithm and resolution mismatch.
     crop_combo = new QComboBox;
-    crop_combo->addItems({app::tr("Auto-detect (recommended)"), app::tr("None (use full frame)")});
+    // The entries' data: the CropMode's number.
+    crop_combo->addItem(app::tr("Auto-detect (recommended)"), static_cast<int>(CropMode::automatic));
+    crop_combo->addItem(app::tr("Source only (test video already cropped)"), static_cast<int>(CropMode::source_only));
+    crop_combo->addItem(app::tr("None (use full frame)"), static_cast<int>(CropMode::none));
+    crop_combo->setItemData(1,
+                            app::tr("The source's black bars are detected and cut; the test video is compared at its "
+                                    "full frame, for an encode cropped when it was made."),
+                            Qt::ToolTipRole);
     connect(crop_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("crop_mode"); });
     form->addRow(app::tr("Black-bar handling:"), crop_combo);
 
@@ -436,7 +443,7 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::vector<Vm
     show_vmaf_backend(options.vmaf_on_gpu);
     vship_build_combo->setCurrentIndex(options.vship_build == VshipBuild::stock ? 1 : 0);
 
-    crop_combo->setCurrentIndex(options.crop_mode == CropMode::automatic ? 0 : 1);
+    crop_combo->setCurrentIndex(std::max(0, crop_combo->findData(static_cast<int>(options.crop_mode))));
     threads_spin->setValue(options.n_threads);
     subsample_spin->setValue(options.n_subsample);
     scale_algo_combo->setCurrentIndex(
@@ -545,7 +552,7 @@ VmafOptions OptionsPanel::read_options(const std::vector<std::string>& extra_fea
                              : GpuVendor::none;
     options.vmaf_on_gpu = vmaf_backend_combo->currentIndex() == 0;
     options.vship_build = vship_build_combo->currentIndex() == 1 ? VshipBuild::stock : VshipBuild::fast;
-    options.crop_mode = crop_combo->currentIndex() == 0 ? CropMode::automatic : CropMode::none;
+    options.crop_mode = static_cast<CropMode>(crop_combo->currentData().toInt());
     return options;
 }
 

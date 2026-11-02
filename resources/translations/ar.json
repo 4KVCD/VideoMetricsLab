@@ -775,7 +775,11 @@
   "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "لا يوجد لتنسيق بكسلاته أو لإحدى علامات ألوانه مقابل rawvideo في FFmpeg",
   "  Install it with Homebrew: brew install ffmpeg-full.": "  ثبّته باستخدام Homebrew: brew install ffmpeg-full.",
   "FFmpeg has no zscale filter: HDR video cannot be converted to SDR": "لا يحتوي FFmpeg على مرشح zscale: لا يمكن تحويل فيديو HDR إلى SDR",
-  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)": "لا يحتوي FFmpeg على مرشح zscale: لا يمكن تحويل فيديو HDR إلى SDR (brew install ffmpeg-full)"
+  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)": "لا يحتوي FFmpeg على مرشح zscale: لا يمكن تحويل فيديو HDR إلى SDR (brew install ffmpeg-full)",
+  "Source only (test video already cropped)": "المصدر فقط (فيديو الاختبار مقصوص مسبقًا)",
+  "The source's black bars are detected and cut; the test video is compared at its full frame, for an encode cropped when it was made.": "تُكتشف الأشرطة السوداء في المصدر وتُقص؛ ويُقارَن فيديو الاختبار بإطاره الكامل، لترميز قُصّ عند إنشائه.",
+  "Source only": "المصدر فقط",
+  "The test video is compared at its full frame.": "يُقارَن فيديو الاختبار بإطاره الكامل."
  },
  "plurals": {
   "about {count} day": [

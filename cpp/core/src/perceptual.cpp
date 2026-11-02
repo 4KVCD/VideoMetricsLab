@@ -60,15 +60,14 @@ CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const
             // Worded as for FFmpeg's metrics, because a video's tasks share
             // one detection (crop_detect waits for the other task's answer),
             // and their parts of the run line sit side by side.
-            on_status({"Detecting black bars in source and distorted\xE2\x80\xA6"});
+            on_status({crop_mode == CropMode::source_only ? "Detecting black bars in source\xE2\x80\xA6"
+                                                          : "Detecting black bars in source and distorted\xE2\x80\xA6"});
         }
         // Black bars are detected from samples across the whole file, not
         // only the part compared: a short duration limit may fall entirely in
         // a dark intro, which must not decide the crop. Decoded in software,
         // as the Python app's perceptual metrics detect them.
-        const auto [source_box, distorted_box] =
-            detect_pair(ffmpeg, source, distorted, cancel, std::nullopt, std::nullopt, scale_algorithm);
-        crops = common_picture(source, distorted, source_box, distorted_box);
+        crops = crops_for(crop_mode, ffmpeg, source, distorted, cancel, std::nullopt, std::nullopt, scale_algorithm);
     }
     // As FFmpeg's metrics refuse them (validate_display_geometry).
     if (const std::optional<std::string> problem = shape_problem(source, distorted, crops.first, crops.second)) {

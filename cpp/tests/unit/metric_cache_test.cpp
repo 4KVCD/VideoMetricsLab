@@ -37,7 +37,9 @@ VmafOptions options_from(const nlohmann::json& fields) {
     options.n_subsample = fields.at("n_subsample").get<int>();
     options.model_choice = fields.at("model_choice").get<std::string>();
     options.model_choice_v1 = fields.at("model_choice_v1").get<std::string>();
-    options.crop_mode = fields.at("crop_mode") == "none" ? CropMode::none : CropMode::automatic;
+    options.crop_mode = fields.at("crop_mode") == "none"     ? CropMode::none
+                        : fields.at("crop_mode") == "source" ? CropMode::source_only
+                                                             : CropMode::automatic;
     options.scale_direction = fields.at("scale_direction") == "distorted_to_source" ? ScaleDirection::distorted_to_source
                                                                                     : ScaleDirection::source_to_distorted;
     options.scale_algorithm = fields.at("scale_algorithm").get<std::string>();
@@ -143,6 +145,149 @@ TEST(MetricCache, FilesRequestsAndRecipesAsThePythonApp) {
             EXPECT_EQ(metric_identity_hash(request.metrics[i]), item.at("specs")[i].at("hash").get<std::string>());
         }
     }
+}
+
+// Black bars in the source only are a recipe of their own ("source"), so its scores are saved apart from Auto's and
+// None's, whose identities stay as they were.
+TEST(MetricCache, SourceOnlyBlackBarsAreARecipeOfTheirOwn) {
+    ComparisonRecipe recipe;
+    EXPECT_EQ(recipe.identity().at("crop_mode"), "auto");
+    recipe.crop_mode = CropMode::none;
+    EXPECT_EQ(recipe.identity().at("crop_mode"), "none");
+    recipe.crop_mode = CropMode::source_only;
+    EXPECT_EQ(recipe.identity().at("crop_mode"), "source");
+}
+
+// Black bars Source only takes Auto's saved scores where Auto compared the
+// test video at its whole frame (an encode cropped when it was made), as a
+// Source-only run gives them. The comparison saved in metric_cache.json,
+// under both recipes.
+class SourceOnlyReuse : public ::testing::Test {
+protected:
+    SourceOnlyReuse() {
+        touch(folder / "s.mp4", "s");
+        touch(folder / "t.mp4", "t");
+        source_only.crop_mode = CropMode::source_only;
+        const auto [width, height] = made.distorted_info.frame_size();
+        whole_test.distorted_crop = CropBox{width, height, 0, 0};
+    }
+
+    std::filesystem::path save(const std::string& cache, const ComparisonRecipe& recipe,
+                               const ComparisonResult& result) const {
+        return store_result(folder / cache, folder / "s.mp4", folder / "t.mp4", recipe, result, "t", request.metrics);
+    }
+    std::optional<std::pair<ComparisonResult, std::string>> load(const std::string& cache, const ComparisonRecipe& recipe,
+                                                                 const std::set<std::string>& again = {}) const {
+        return load_result(folder / cache, folder / "s.mp4", folder / "t.mp4", recipe, request.metrics,
+                           request.perceptual_backends, {}, again);
+    }
+    static std::size_t found(const std::optional<std::pair<ComparisonResult, std::string>>& loaded) {
+        return loaded ? loaded->first.metric_results.keys().size() : 0U;
+    }
+    // `made` with only `score`.
+    ComparisonResult only(const FrameMetricResult& score) const {
+        ComparisonResult result = made;
+        result.metric_results = MetricResultSet();
+        result.metric_results.add(score);
+        return result;
+    }
+
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    const AnalysisRequest request = request_from(stored);
+    const ComparisonRecipe automatic = request.recipe;  // Auto: the reference's
+    ComparisonRecipe source_only = request.recipe;
+    const ComparisonResult made = test::result_from(stored.at("result"));  // the source cropped
+    ComparisonResult whole_test = made;                                      // with the test video's whole frame
+};
+
+// Where Auto kept the test video's whole frame, and with its source box,
+// with no test crop; not for the metrics asked for again, not when its own
+// comparison cut another source box; not where Auto cropped the test video;
+// never the other way round. A resolution test's Auto answers with its crops
+// as saved.
+TEST_F(SourceOnlyReuse, AutosScoresAnswerWhereAutoKeptTheTestVideosWholeFrame) {
+    ASSERT_EQ(automatic.crop_mode, CropMode::automatic);
+    save("whole", automatic, whole_test);
+    const auto loaded = load("whole", source_only);
+    ASSERT_EQ(found(loaded), request.metrics.size());
+    EXPECT_FALSE(loaded->first.distorted_crop.has_value());
+    EXPECT_EQ(loaded->first.source_crop, made.source_crop);
+    const auto again = load("whole", source_only, {"vmaf"});
+    EXPECT_EQ(found(again), request.metrics.size() - 1);
+    EXPECT_FALSE(again->first.metric_results.has("vmaf"));
+    // Its own comparison, of PSNR alone (its own value): Auto's answer the
+    // rest only with the same source box, and its own PSNR comes first.
+    FrameMetricResult own_psnr = *made.metric_results.frame("psnr");
+    own_psnr.values.front() = 1.0F;
+    ComparisonResult own = only(own_psnr);
+    own.source_crop = CropBox{1920, 804, 0, 138};
+    save("whole", source_only, own);
+    EXPECT_EQ(found(load("whole", source_only)), 1U);
+    own.source_crop = made.source_crop;
+    save("whole", source_only, own);
+    const auto both = load("whole", source_only);
+    ASSERT_EQ(found(both), request.metrics.size());
+    EXPECT_EQ(both->first.metric_results.frame("psnr")->values.front(), 1.0F);
+
+    ComparisonResult cropped_test = made;
+    cropped_test.distorted_crop = CropBox{whole_test.distorted_crop->w, whole_test.distorted_crop->h - 100, 0, 50};
+    save("cropped", automatic, cropped_test);
+    EXPECT_FALSE(load("cropped", source_only));
+
+    save("other way", source_only, whole_test);
+    EXPECT_FALSE(load("other way", automatic));
+
+    ComparisonResult resolution_test = made;
+    resolution_test.distorted_crop = made.source_crop;
+    ComparisonRecipe automatic_test = automatic;
+    automatic_test.resample_test = ResampleTarget{1280, "720p"};
+    ComparisonRecipe source_only_test = source_only;
+    source_only_test.resample_test = automatic_test.resample_test;
+    save("resolution", automatic_test, resolution_test);
+    const auto tested = load("resolution", source_only_test);
+    ASSERT_EQ(found(tested), request.metrics.size());
+    EXPECT_EQ(tested->first.distorted_crop, made.source_crop);
+}
+
+// Vship's SSIMULACRA2 in Auto's folder comes before the CPU's in its own (as
+// within one folder), the CPU's once asked for again; Auto's CVVDP for
+// another display is listed, not once CVVDP is asked for again; and a folder
+// of its own whose context this app cannot read has its scores left unread.
+TEST_F(SourceOnlyReuse, AutosScoresRankAndListAsOneFolders) {
+    save("whole", automatic, whole_test);
+    FrameMetricResult cpu_score = *made.metric_results.frame("ssimulacra2");
+    cpu_score.provenance = MetricProvenance{"ssimulacra2", "libjxl 0.11", "cpu",
+                                            score_identity::libjxl_cpu("ssimulacra2"), cpu_score.provenance.parameters};
+    cpu_score.provenance.parameters["color_tags"] = nlohmann::json(score_identity::cpu_colour_tags).dump();
+    save("whole", source_only, only(cpu_score));
+    const auto ranked = [&](const std::set<std::string>& asked_again) {
+        const auto loaded = load("whole", source_only, asked_again);
+        const FrameMetricResult* score = loaded ? loaded->first.metric_results.frame("ssimulacra2") : nullptr;
+        return score ? score->provenance.compute_backend : std::string();
+    };
+    EXPECT_EQ(ranked({}), "gpu");
+    EXPECT_EQ(ranked({"ssimulacra2"}), "cpu");
+
+    CvvdpSettings other_display = cvvdp_from(stored);
+    other_display.resize_to_display = !other_display.resize_to_display;
+    const AnalysisRequest other_request = analysis_request(options_from(stored.at("options")), {"cvvdp"}, {},
+                                                           other_display, VideoInfo{}, VideoInfo{});
+    const auto others = [&](const std::set<std::string>& asked_again) {
+        const auto listed = other_cvvdp_scores(folder / "whole", folder / "s.mp4", folder / "t.mp4", source_only,
+                                               other_request.metrics, {}, asked_again);
+        return listed ? listed->scores.size() : 0U;
+    };
+    EXPECT_EQ(others({}), 1U);
+    EXPECT_EQ(others({"cvvdp"}), 0U);
+
+    save("unreadable", automatic, whole_test);
+    FrameMetricResult changed = *made.metric_results.frame("psnr");
+    changed.values.front() = 1.0F;
+    touch(save("unreadable", source_only, only(changed)) / "context.json", "[]");
+    const auto from_auto = load("unreadable", source_only);
+    ASSERT_EQ(found(from_auto), request.metrics.size());
+    EXPECT_NE(from_auto->first.metric_results.frame("psnr")->values.front(), 1.0F);
 }
 
 // Storing a result writes the Python app's context.json and score files:

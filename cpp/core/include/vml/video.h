@@ -12,8 +12,13 @@
 
 namespace vml {
 
-// Whether black bars are detected and cut (automatic) or kept (none).
-enum class CropMode { automatic, none };
+// Whether black bars are detected and cut (automatic), kept (none), or detected and cut in the source alone, the
+// test video's full frame compared (source_only: an encode cropped when it was made). New ones go last: a mode goes
+// between processes as its number.
+enum class CropMode { automatic, none, source_only };
+
+// The mode as the saved scores' identity and the log name it: "auto", "none" or "source".
+const char* crop_mode_text(CropMode mode);
 
 // The GPU maker whose decoder to use: automatic picks one found on this PC,
 // and none decodes in software.

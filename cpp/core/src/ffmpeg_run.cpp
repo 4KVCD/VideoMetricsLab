@@ -1960,27 +1960,25 @@ std::vector<std::vector<std::string>> build_stream_commands(
 
 namespace {
 
-// The crops of a run: none, or (CropMode::automatic) the black bars found in
-// both videos, decoded the way the run will (`decoding`), as the picture
-// both show.
+// The crops of a run as its black-bar handling asks (crops_for), each video
+// decoded the way the run will (`decoding`).
 std::pair<std::optional<CropBox>, std::optional<CropBox>> run_crops(const RunEnvironment& environment,
                                                                     const VideoInfo& source, const VideoInfo& distorted,
                                                                     const VmafOptions& options,
                                                                     const HardwareDecoding& decoding,
                                                                     const StatusCallback& on_status,
                                                                     const CancelToken& cancel) {
-    if (options.crop_mode != CropMode::automatic) {
+    if (options.crop_mode == CropMode::none) {
         return {};
     }
     // Said, or the run line would keep the step before: a long video's
     // detection takes a while.
     if (on_status) {
-        on_status({"Detecting black bars in source and distorted..."});
+        on_status({options.crop_mode == CropMode::source_only ? "Detecting black bars in source..."
+                                                               : "Detecting black bars in source and distorted..."});
     }
-    const auto [source_box, distorted_box] =
-        detect_pair(environment.ffmpeg, source, distorted, cancel, decoding.source, decoding.distorted,
-                    options.scale_algorithm);
-    return common_picture(source, distorted, source_box, distorted_box);
+    return crops_for(options.crop_mode, environment.ffmpeg, source, distorted, cancel, decoding.source,
+                     decoding.distorted, options.scale_algorithm);
 }
 
 // The VMAF models the GPU scores (`model` VMAF's, at `depth` bits and
@@ -2455,7 +2453,7 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
         decoding.source = pick_decode(environment.decoding, options.gpu_vendor, source);
     }
     std::optional<CropBox> source_crop;
-    if (options.crop_mode == CropMode::automatic) {
+    if (options.crop_mode != CropMode::none) {  // the source's own bars, whether Auto or Source only
         if (on_status) {
             on_status({"Detecting black bars in source..."});
         }

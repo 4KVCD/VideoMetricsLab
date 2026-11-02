@@ -413,7 +413,9 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
     options.scale_direction = arguments.scale_to == "reference" ? ScaleDirection::distorted_to_source
                                                                 : ScaleDirection::source_to_distorted;
     options.duration_limit = duration_limit(arguments, test);
-    options.crop_mode = arguments.black_bars == "auto" ? CropMode::automatic : CropMode::none;
+    options.crop_mode = arguments.black_bars == "auto"     ? CropMode::automatic
+                        : arguments.black_bars == "source" ? CropMode::source_only
+                                                           : CropMode::none;
     options.compute_vmaf = false;
     if (arguments.model == "auto") {
         options.model_choice = std::string(auto_model_choice);

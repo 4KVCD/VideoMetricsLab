@@ -1301,7 +1301,19 @@ void MainWindow::on_source_probed(int generation, const Probed& probed) {
     apply_source_info(path_of(probed.path), *probed.info);
 }
 
+void MainWindow::forget_recalculations_unless(const std::filesystem::path& reference) {
+    // What a Recalculate forgot (RowData::forgotten_metrics) was the old
+    // pair's: kept only when `reference` is the same file again.
+    if (source_info_ && same_file(source_info_->path, reference)) {
+        return;
+    }
+    for (const std::shared_ptr<RowData>& row_data : rows_) {
+        row_data->forgotten_metrics.clear();
+    }
+}
+
 void MainWindow::apply_source_info(const std::filesystem::path& path, const VideoInfo& info) {
+    forget_recalculations_unless(path);
     source_info_ = info;
     // A reference just read (chosen again too) has no film grain choice:
     // Settings' default, or it is asked about at Calculate metrics.
@@ -1780,8 +1792,16 @@ void MainWindow::set_row_black_bars(int row, bool probe_failed) {
     const bool resample = row_data.options.resample_test.has_value();
     const std::optional<CropBox>& subject_crop = resample ? result.source_crop : result.distorted_crop;
     const VideoInfo& subject_info = resample ? result.source_info : result.distorted_info;
-    if (!subject_crop) {
+    if (!subject_crop && !result.source_crop) {
         show(app::tr("Off"), app::tr("Black-bar detection was disabled for this run; no crop was applied."), true);
+        return;
+    }
+    if (!subject_crop) {
+        // Source only: the reference's bars cut, the test video compared at its full frame
+        show(app::tr("Source only"),
+             crop_detail(app::tr("Reference"), result.source_info, result.source_crop) + "\n\n" +
+                 app::tr("The test video is compared at its full frame."),
+             false);
         return;
     }
     QString tooltip = crop_detail(app::tr("Reference"), result.source_info, result.source_crop);

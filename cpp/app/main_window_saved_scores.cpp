@@ -67,7 +67,8 @@ bool MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& pa
         }
         texts.append(text);
         queries.emplace(text, SavedScoresQuery{row_data->identity_path(), analysis_request_of(*row_data),
-                                               displayable_metric_specs(row_data->options, row_data->cvvdp)});
+                                               displayable_metric_specs(row_data->options, row_data->cvvdp),
+                                               row_data->forgotten_metrics});
         cache_lookup_paths_.push_back(row_data->path);
     }
     if (texts.isEmpty()) {
@@ -263,6 +264,11 @@ void MainWindow::recompute_rows(const std::vector<int>& rows, bool forget_saved)
                                   request = analysis_request_of(row_data)] {
                                      clear_metrics(base, source, identity, request.recipe, request.metrics);
                                  });
+            // Auto's saved scores would answer them again (load_result).
+            if (row_data.options.crop_mode == CropMode::source_only) {
+                const std::vector<std::string> keys = requested_metrics(row_data);
+                row_data.forgotten_metrics.insert(keys.begin(), keys.end());
+            }
         }
         // The Scaling cell for the row's settings again, not the cleared
         // result's crops. Not a resolution test's: its Info cell describes

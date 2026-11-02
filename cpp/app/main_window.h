@@ -177,6 +177,14 @@ struct RowData {
     // True only for a "Test both" companion row, whose scale direction was
     // set on purpose to the direction the row stands for.
     bool scale_direction_pinned = false;
+    // The metrics (keys) a Recalculate forgot while the row's black bars were
+    // set to Source only: never taken from Auto's saved scores (load_result),
+    // even once the new scores are saved (the Source-only folder answers
+    // first then; emptied at the save, the set would let Auto's back in while
+    // the save is still being written). Cleared when the reference changes
+    // (forget_recalculations_unless). Not kept when the app closes: after a
+    // restart Auto's scores answer them again, which are the same scores.
+    std::set<std::string> forgotten_metrics;
 
     // The file the saved scores are looked up under: the real file when the
     // row's own path is a made-up stand-in.
@@ -271,6 +279,7 @@ private:
     void remember_video_dir(const QString& kind, const std::filesystem::path& path);
     void start_source_probe(const std::filesystem::path& path);
     void on_source_probed(int generation, const Probed& probed);
+    void forget_recalculations_unless(const std::filesystem::path& reference);
     void apply_source_info(const std::filesystem::path& path, const VideoInfo& info);
     void check_rows_against_new_source(const std::filesystem::path& path);
     void invalidate_completed_results(const std::vector<int>& rows);

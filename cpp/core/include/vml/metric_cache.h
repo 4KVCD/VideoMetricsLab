@@ -14,6 +14,7 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -103,16 +104,24 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
 // the metrics `specs` do not ask for: a metric asked for has its own saved
 // score or none, or a score made another way (XPSNR of every frame for one
 // of every n-th) would stand for it and never be calculated as asked.
+// With black bars set to Source only, Auto's saved scores of the comparison
+// answer where they are Source only's (Auto compared the test video at its
+// whole frame), except for the metric keys in `not_from_other_recipes`: those
+// the user asked to calculate again, whose Source-only scores are not saved
+// yet.
 std::optional<std::pair<ComparisonResult, std::string>> load_result(
     const std::filesystem::path& base, const std::filesystem::path& source, const std::filesystem::path& distorted,
     const ComparisonRecipe& recipe, const std::vector<MetricRequestSpec>& specs,
-    const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental = {});
+    const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental = {},
+    const std::set<std::string>& not_from_other_recipes = {});
 
 // CVVDP's scores saved for a comparison with other displays than the one
 // its request in `specs` or `supplemental` models, each with the CVVDP
 // parameters it was made with (the Python app's other_cvvdp_scores), and
 // that request's parameters; nothing when neither asks for CVVDP. Never an
 // answer for the request: a CVVDP score holds for its own display only.
+// With black bars set to Source only, Auto's come too where load_result
+// would take them (not with "cvvdp" in `not_from_other_recipes`).
 struct OtherCvvdpScores {
     nlohmann::json parameters;                             // the request's
     std::vector<std::pair<CvvdpSettings, double>> scores;  // made for other displays
@@ -122,7 +131,8 @@ std::optional<OtherCvvdpScores> other_cvvdp_scores(const std::filesystem::path& 
                                                    const std::filesystem::path& distorted,
                                                    const ComparisonRecipe& recipe,
                                                    const std::vector<MetricRequestSpec>& specs,
-                                                   const std::vector<MetricRequestSpec>& supplemental = {});
+                                                   const std::vector<MetricRequestSpec>& supplemental = {},
+                                                   const std::set<std::string>& not_from_other_recipes = {});
 
 // Deletes a comparison's saved scores of `specs`, and those that would
 // answer the same requests (another VMAF score made with the same model, a

@@ -25,7 +25,7 @@ const char* const top_usage = "usage: VideoMetricsLab-cli [-h] [--version] COMMA
 
 const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]
                                    [--model-v1 MODEL]
-                                   [--black-bars {auto,none}]
+                                   [--black-bars {auto,source,none}]
                                    [--scale-to {test,reference}]
                                    [--scaler {bicubic,bilinear,lanczos,spline}]
                                    [--duration SECONDS | --frames N]
@@ -104,9 +104,12 @@ options:
                         or their high frame rate models vmaf_v1_hfr_3d0h,
                         vmaf_v1_hfr_5d0h, vmaf_v1_hfr_1d5h_2160,
                         vmaf_v1_hfr_3d0h_2160 (default: auto)
-  --black-bars {auto,none}
-                        auto: detect and cut black bars; none: compare the
-                        whole pictures (default: auto)
+  --black-bars {auto,source,none}
+                        auto: detect and cut black bars; source: detect and
+                        cut the source's black bars only, the test video
+                        compared at its full frame (an encode cropped when it
+                        was made); none: compare the whole pictures (default:
+                        auto)
   --scale-to {test,reference}
                         which video's size the other is scaled to when they
                         differ (default: test)
@@ -782,7 +785,9 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--model"}, [&parsed](const std::string& value) { parsed.model = value; }),
         option({"--model-v1"}, [&parsed](const std::string& value) { parsed.model_v1 = choice(value, v1_words()); }),
         option({"--black-bars"},
-               [&parsed](const std::string& value) { parsed.black_bars = choice(value, {"auto", "none"}); }),
+               [&parsed](const std::string& value) {
+                   parsed.black_bars = choice(value, {"auto", "source", "none"});
+               }),
         option({"--scale-to"},
                [&parsed](const std::string& value) { parsed.scale_to = choice(value, {"test", "reference"}); }),
         option({"--scaler"},

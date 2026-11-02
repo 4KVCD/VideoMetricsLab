@@ -775,7 +775,11 @@
   "its pixel format or a colour tag has no rawvideo equivalent for FFmpeg": "픽셀 형식 또는 색상 태그에 FFmpeg용 rawvideo 대응 값이 없습니다",
   "  Install it with Homebrew: brew install ffmpeg-full.": "  Homebrew로 설치하세요: brew install ffmpeg-full.",
   "FFmpeg has no zscale filter: HDR video cannot be converted to SDR": "FFmpeg에 zscale 필터가 없습니다: HDR 비디오를 SDR로 변환할 수 없습니다",
-  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)": "FFmpeg에 zscale 필터가 없습니다: HDR 비디오를 SDR로 변환할 수 없습니다 (brew install ffmpeg-full)"
+  "FFmpeg has no zscale filter: HDR video cannot be converted to SDR (brew install ffmpeg-full)": "FFmpeg에 zscale 필터가 없습니다: HDR 비디오를 SDR로 변환할 수 없습니다 (brew install ffmpeg-full)",
+  "Source only (test video already cropped)": "소스만(테스트 영상은 이미 잘림)",
+  "The source's black bars are detected and cut; the test video is compared at its full frame, for an encode cropped when it was made.": "소스의 검은 띠를 감지해 잘라 내고, 테스트 영상은 전체 프레임으로 비교합니다. 만들 때 이미 잘라 낸 인코딩용입니다.",
+  "Source only": "소스만",
+  "The test video is compared at its full frame.": "테스트 영상은 전체 프레임으로 비교됩니다."
  },
  "plurals": {
   "about {count} day": [

@@ -38,7 +38,7 @@ std::string custom_model_identity(const std::string& path) {
 
 nlohmann::json ComparisonRecipe::identity() const {
     nlohmann::json identity{
-        {"crop_mode", crop_mode == CropMode::automatic ? "auto" : "none"},
+        {"crop_mode", crop_mode_text(crop_mode)},
         {"scale_direction",
          scale_direction == ScaleDirection::source_to_distorted ? "source_to_distorted" : "distorted_to_source"},
         {"duration_limit", duration_limit},

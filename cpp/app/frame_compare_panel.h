@@ -266,6 +266,7 @@ private:
         std::string identity;
         std::string source_file;
         std::string distorted_file;
+        bool test_full_frame = false;  // FrameComparison::test_full_frame: the compared boxes differ
         auto operator<=>(const PairKey&) const = default;
     };
     static PairKey pair_key(const FrameComparisonEntry& entry);

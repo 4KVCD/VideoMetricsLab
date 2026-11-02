@@ -87,10 +87,16 @@ bool is_file(const std::filesystem::path& path) {
 
 // The boxes a run compares for a pair, from its two files' own black bars:
 // the picture both files show (common_picture), unless the pair is one file
-// against itself.
-DetectedCrops compared_crops(const VideoInfo& source, const VideoInfo& distorted, const DetectedCrops& files) {
+// against itself (a resolution test: both sides are the source's, cut alike);
+// with `test_full_frame` (black bars in the source only), the source's box
+// and the test video's full frame, as crops_for gives the run.
+DetectedCrops compared_crops(const VideoInfo& source, const VideoInfo& distorted, const DetectedCrops& files,
+                             bool test_full_frame) {
     if (distorted.path == source.path) {
         return files;
+    }
+    if (test_full_frame) {
+        return {files.source, std::nullopt};
     }
     const auto [source_crop, distorted_crop] = common_picture(source, distorted, files.source, files.distorted);
     return {source_crop, distorted_crop};
@@ -1583,7 +1589,7 @@ void FrameComparePanel::ensure_auto_crop(const FrameComparisonEntry* entry) {
     const CropDetectWorker::Known source_crop = known(key.source_file);
     const CropDetectWorker::Known distorted_crop = known(key.distorted_file);
     if (source_crop && distorted_crop) {
-        auto_crops_[key] = compared_crops(source, distorted, {*source_crop, *distorted_crop});
+        auto_crops_[key] = compared_crops(source, distorted, {*source_crop, *distorted_crop}, key.test_full_frame);
         for (FrameComparisonEntry& current : entries_) {
             current = apply_auto_crop(current);
         }
@@ -1610,7 +1616,7 @@ void FrameComparePanel::ensure_auto_crop(const FrameComparisonEntry* entry) {
 
 FrameComparePanel::PairKey FrameComparePanel::pair_key(const FrameComparisonEntry& entry) {
     return {entry.identity, crop_file_key(entry.comparison.source_info.path),
-            crop_file_key(entry.comparison.distorted_info.path)};
+            crop_file_key(entry.comparison.distorted_info.path), entry.comparison.test_full_frame};
 }
 
 void FrameComparePanel::on_auto_crop_ready(const PairKey& key, const VideoInfo& source, const VideoInfo& distorted,
@@ -1619,7 +1625,7 @@ void FrameComparePanel::on_auto_crop_ready(const PairKey& key, const VideoInfo& 
     // shows the pair cropped if it is still that pair.
     auto_crop_files_[key.source_file] = files.source;
     auto_crop_files_[key.distorted_file] = files.distorted;
-    auto_crops_[key] = compared_crops(source, distorted, files);
+    auto_crops_[key] = compared_crops(source, distorted, files, key.test_full_frame);
     std::optional<FrameComparison> previous;
     for (FrameComparisonEntry& entry : entries_) {
         if (pair_key(entry) == key) {

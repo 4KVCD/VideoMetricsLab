@@ -90,7 +90,8 @@ std::optional<FrameComparisonEntry> MainWindow::frame_comparison_entry(const Row
     comparison.resample_target = resample;
     comparison.fps = comparison.distorted_info.fps;
     comparison.frame_count = whole_video_frames(comparison, options);
-    comparison.auto_crop_pending = options.crop_mode == CropMode::automatic;
+    comparison.auto_crop_pending = options.crop_mode != CropMode::none;
+    comparison.test_full_frame = options.crop_mode == CropMode::source_only;
     return FrameComparisonEntry{row_data.frame_identity, text_of(row_data.path.stem()), std::move(comparison),
                                 nullptr, row_data.frame_identity};
 }

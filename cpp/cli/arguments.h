@@ -23,7 +23,7 @@ struct CompareArguments {
     std::optional<std::vector<std::string>> metrics;  // keys, in the registry's order
     std::string model = "auto";
     std::string model_v1 = "auto";  // a word of v1_model_choices (model_select.h)
-    std::string black_bars = "auto";
+    std::string black_bars = "auto";  // "auto", "source" (the source's only) or "none"
     std::string scale_to = "test";
     std::string scaler = "bicubic";
     std::optional<double> duration;
