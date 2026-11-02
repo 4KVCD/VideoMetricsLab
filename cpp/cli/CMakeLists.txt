@@ -2,6 +2,8 @@
 # code (vml_cli, which the tests use too) and the program, vml-cli.
 add_library(vml_cli STATIC
     arguments.cpp
+    bitrate.cpp
+    common.cpp
     compare.cpp
     devices.cpp
     report.cpp

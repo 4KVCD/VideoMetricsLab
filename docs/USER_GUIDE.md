@@ -152,6 +152,7 @@ add inputs for bitrate analysis. The three views show packet/frame size,
 one-second bitrate and GOP-based bitrate. Only the first video stream is
 counted: audio, subtitles and container overhead are excluded. Overall video
 bitrate is video packet bytes × 8 divided by the measured video duration.
+The command line's `bitrate` command (below) reads the same numbers.
 
 ## Command line
 
@@ -203,6 +204,12 @@ More examples:
 # In a script: read the score from JSON
 $run = .\VideoMetricsLab-cli.exe compare reference.mkv encode.mkv -m vmaf --json - -q | ConvertFrom-Json
 $run.videos[0].metrics.vmaf.score
+
+# Each encode's length, frames and bitrate, as the Bitrate Viewer tab
+.\VideoMetricsLab-cli.exe bitrate encodes\*.mkv
+
+# A raw VVC stream's bitrate, and its graphs' figures as CSV files in the folder bitrate
+.\VideoMetricsLab-cli.exe bitrate encode.266 --fps 24000/1001 --csv bitrate
 
 # What would calculate each metric on this PC
 .\VideoMetricsLab-cli.exe devices
@@ -298,6 +305,26 @@ and `--fps` say what they are, for every `.yuv` file of the command. It is
 read as FFmpeg's `rawvideo`, and scores exactly as the same pictures in a
 container. It has no colour tags: it takes the other video's when that one
 has them, and `--colour` gives them otherwise.
+
+### Bitrate
+
+`bitrate VIDEO...` reads each video's video stream with ffprobe, as the
+**Bitrate Viewer** tab does, without decoding it, and prints a table of its
+length, frames, average bitrate and lowest and highest one-second bitrate.
+It needs only ffprobe. A raw stream needs `--fps`, as for `compare`; a raw
+YUV file has no bitrate to read.
+
+| Option | Meaning |
+| --- | --- |
+| `--fps RATE` | A raw stream's frame rate, such as `24000/1001`. |
+| `--csv FOLDER` | Also write the tab's three graphs' figures as `<video>_bitrate_frames.csv` (each frame's time, size and whether it is a keyframe), `_bitrate_seconds.csv` (each second's kb/s) and `_bitrate_gops.csv` (each group of pictures' frames, bytes and kb/s). Times count from the stream's first frame, as the tab's **Adjust stream start time to zero** does. |
+| `--no-adjust-start` | With `--csv`: times from the file's start. |
+| `--json FILE` | Also write the results as JSON; `--json -` prints the JSON instead of the table. |
+| `-q`, `--quiet` | No progress, only the results. |
+
+The exit code is 0 when every video was read, 1 when one could not be or a
+file could not be written, 2 for a wrong command (a raw stream without
+`--fps`) or when ffprobe cannot be used, and 130 after Ctrl+C.
 
 ## Saved results and caches
 

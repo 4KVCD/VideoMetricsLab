@@ -10,6 +10,7 @@
 
 #include "vml/av2_stream.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/number_format.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -179,12 +180,11 @@ BitratePlot second_plot(const BitrateData& data, bool adjust_start) {
     return plot;
 }
 
-BitratePlot gop_plot(const BitrateData& data, bool adjust_start) {
-    BitratePlot plot{{}, {}, "GOP bitrate (kb/s)", "kb/s"};
+GopBins gop_bins(const BitrateData& data, bool adjust_start) {
+    GopBins bins;
     if (data.times.empty()) {
-        return plot;
+        return bins;
     }
-    // A group starts at the first packet and at every later keyframe.
     std::vector<std::size_t> group_starts{0};
     for (std::size_t index = 1; index < data.keyframes.size(); ++index) {
         if (data.keyframes[index]) {
@@ -192,9 +192,6 @@ BitratePlot gop_plot(const BitrateData& data, bool adjust_start) {
         }
     }
     const double offset = adjust_start ? data.start_time() : 0.0;
-    std::vector<double> starts;
-    std::vector<double> ends;
-    std::vector<float> rates;
     for (std::size_t group = 0; group < group_starts.size(); ++group) {
         const std::size_t begin = group_starts[group];
         const std::size_t finish = group + 1 < group_starts.size() ? group_starts[group + 1] : data.times.size();
@@ -206,12 +203,69 @@ BitratePlot gop_plot(const BitrateData& data, bool adjust_start) {
             size += data.sizes[index];
         }
         const double duration = end - start;
-        starts.push_back(start - offset);
-        ends.push_back(end - offset);
-        rates.push_back(static_cast<float>(duration > 0 ? static_cast<double>(size * 8) / duration / 1000 : 0.0));
+        bins.starts.push_back(start - offset);
+        bins.ends.push_back(end - offset);
+        bins.frames.push_back(static_cast<long long>(finish - begin));
+        bins.bytes.push_back(size);
+        bins.rates.push_back(duration > 0 ? static_cast<double>(size * 8) / duration / 1000 : 0.0);
     }
-    step_points(starts, ends, rates, plot);
+    return bins;
+}
+
+BitratePlot gop_plot(const BitrateData& data, bool adjust_start) {
+    BitratePlot plot{{}, {}, "GOP bitrate (kb/s)", "kb/s"};
+    const GopBins bins = gop_bins(data, adjust_start);
+    if (bins.starts.empty()) {
+        return plot;
+    }
+    std::vector<float> rates;
+    rates.reserve(bins.rates.size());
+    for (const double rate : bins.rates) {
+        rates.push_back(static_cast<float>(rate));
+    }
+    step_points(bins.starts, bins.ends, rates, plot);
     return plot;
+}
+
+// ------------------------------------------------------------- the CSV files
+
+namespace {
+
+// kb/s in a CSV cell: to a tenth, finer than the tab shows (1 kb/s at most) and coarser than a float's rates are
+// exact at film bitrates.
+std::string kbps_cell(double kbps) { return format_fixed(kbps, 1); }
+
+}  // namespace
+
+std::string frames_csv(const BitrateData& data, bool adjust_start) {
+    const double offset = adjust_start ? data.start_time() : 0.0;
+    std::string text = "frame,time_s,size_bytes,keyframe\r\n";
+    for (std::size_t index = 0; index < data.times.size(); ++index) {
+        text += std::to_string(index) + "," + format_fixed(data.times[index] - offset, 6) + "," +
+                std::to_string(data.sizes[index]) + "," + (data.keyframes[index] ? "1" : "0") + "\r\n";
+    }
+    return text;
+}
+
+std::string seconds_csv(const BitrateData& data, bool adjust_start) {
+    const SecondBins bins = second_bins(data, adjust_start);
+    std::string text = "start_s,end_s,kbps\r\n";
+    for (std::size_t index = 0; index < bins.starts.size(); ++index) {
+        text += format_fixed(bins.starts[index], 6) + "," + format_fixed(bins.ends[index], 6) + "," +
+                kbps_cell(bins.rates[index]) + "\r\n";
+    }
+    return text;
+}
+
+std::string gops_csv(const BitrateData& data, bool adjust_start) {
+    const GopBins bins = gop_bins(data, adjust_start);
+    std::string text = "start_s,end_s,frames,bytes,kbps\r\n";
+    for (std::size_t index = 0; index < bins.starts.size(); ++index) {
+        text += format_fixed(bins.starts[index], 6) + "," + format_fixed(bins.ends[index], 6) + "," +
+                std::to_string(bins.frames[index]) + "," + std::to_string(bins.bytes[index]) + "," +
+                kbps_cell(bins.rates[index]) + "\r\n";
+    }
+    return text;
 }
 
 // ------------------------------------------------------------- the packets

@@ -89,6 +89,27 @@ BitratePlot second_plot(const BitrateData& data, bool adjust_start = true);
 // Each group of pictures' bitrate (keyframe to keyframe), in kb/s, as steps.
 BitratePlot gop_plot(const BitrateData& data, bool adjust_start = true);
 
+// The groups of pictures: one starts at the first packet and at every later
+// keyframe. Each one's start and end (as second_bins'), its frames, bytes
+// and kb/s.
+struct GopBins {
+    std::vector<double> starts;
+    std::vector<double> ends;
+    std::vector<long long> frames;
+    std::vector<long long> bytes;
+    std::vector<double> rates;
+};
+GopBins gop_bins(const BitrateData& data, bool adjust_start);
+
+// The graphs' figures as CSV text, rows ended CR LF as the app's other CSV
+// files: each frame's number, time, size in bytes and whether it is a
+// keyframe (1 or 0); each second's start, end and kb/s; each group of
+// pictures' start, end, frames, bytes and kb/s. Times in seconds, from the
+// stream's start with adjust_start (as the graphs), else from the file's.
+std::string frames_csv(const BitrateData& data, bool adjust_start);
+std::string seconds_csv(const BitrateData& data, bool adjust_start);
+std::string gops_csv(const BitrateData& data, bool adjust_start);
+
 // ffprobe's lines of packets, read one at a time as they come
 // (-show_packets in compact form), into the stream's packets in
 // presentation order.

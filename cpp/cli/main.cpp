@@ -2,18 +2,21 @@
 // (vmaf_app/cli.py), as far as it has been ported (compare.h says how far).
 //
 //     vml-cli compare REFERENCE TEST [TEST ...] [options]
+//     vml-cli bitrate VIDEO [VIDEO ...] [options]
 //     vml-cli devices
 //     vml-cli --version
 //
 // Progress goes to stderr, results to stdout. Exit code 0 when every video
-// got every metric asked for, 1 when one failed, 2 for a wrong command (or
-// one this version cannot do yet), 130 when cancelled with Ctrl+C.
+// got every metric asked for (or was read, for bitrate), 1 when one failed,
+// 2 for a wrong command (or one this version cannot do yet), 130 when
+// cancelled with Ctrl+C.
 #include <csignal>
 #include <exception>
 #include <string>
 #include <vector>
 
 #include "arguments.h"
+#include "bitrate.h"
 #include "compare.h"
 #include "devices.h"
 #include "vml/app_log.h"
@@ -49,6 +52,8 @@ int main(int argc, char** argv) {
         switch (arguments.command) {
             case cli::Command::compare:
                 return cli::compare(arguments.compare);
+            case cli::Command::bitrate:
+                return cli::bitrate(arguments.bitrate);
             case cli::Command::devices:
                 return cli::devices();
             case cli::Command::none:

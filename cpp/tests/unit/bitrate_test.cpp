@@ -97,6 +97,27 @@ TEST(Bitrate, ReadsThePacketsAndDrawsTheGraphsAsThePythonAppDoes) {
     }
 }
 
+// The graphs' figures as the command line's CSV files write them: each
+// frame, second and group of pictures, from the stream's start or, without
+// adjust_start, on the file's timeline in all three (a stream starting 10 s
+// into its file).
+TEST(Bitrate, WritesEachGraphsFiguresAsCsv) {
+    const BitrateData data = bitrate_data("clip.mkv", {10.0, 10.5, 11.0, 11.5}, {0.5, 0.5, 0.5, 0.5},
+                                          {1000, 500, 2000, 500}, {true, false, true, false});
+    const GopBins gops = gop_bins(data, true);
+    EXPECT_EQ(gops.frames, (std::vector<long long>{2, 2}));
+    EXPECT_EQ(gops.bytes, (std::vector<long long>{1500, 2500}));
+    EXPECT_EQ(gops.rates, (std::vector<double>{12.0, 20.0}));
+    EXPECT_EQ(frames_csv(data, true),
+              "frame,time_s,size_bytes,keyframe\r\n0,0.000000,1000,1\r\n1,0.500000,500,0\r\n2,1.000000,2000,1\r\n"
+              "3,1.500000,500,0\r\n");
+    EXPECT_EQ(seconds_csv(data, true), "start_s,end_s,kbps\r\n0.000000,1.000000,12.0\r\n1.000000,2.000000,20.0\r\n");
+    EXPECT_EQ(seconds_csv(data, false), "start_s,end_s,kbps\r\n10.000000,11.000000,12.0\r\n11.000000,12.000000,20.0\r\n");
+    EXPECT_EQ(gops_csv(data, false),
+              "start_s,end_s,frames,bytes,kbps\r\n10.000000,11.000000,2,1500,12.0\r\n11.000000,12.000000,2,2500,20.0\r\n");
+    EXPECT_EQ(frames_csv(data, false).substr(34, 23), "0,10.000000,1000,1\r\n1,1");
+}
+
 // A raw stream timed by --fps is read at that rate: ffprobe would take a raw
 // 120 fps HEVC stream as 25 frames a second (its packets 0.04 s long, the
 // bitrate 4.8 times too low). A video scaled to one size reads as any other:

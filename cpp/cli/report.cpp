@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <set>
 
+#include "common.h"
 #include "vml/export_csv.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
@@ -17,54 +18,12 @@ namespace {
 
 using Json = nlohmann::ordered_json;
 
-std::string left_justified(const std::string& text, std::size_t width) {
-    const std::size_t length = python_length(text);
-    return length >= width ? text : text + std::string(width - length, ' ');
-}
-
-std::string right_justified(const std::string& text, std::size_t width) {
-    const std::size_t length = python_length(text);
-    return length >= width ? text : std::string(width - length, ' ') + text;
-}
-
 std::string name_of(const std::filesystem::path& path) { return platform::path_text(path.filename()); }
 
 // A video's media information on one line.
 std::string media_text(const VideoInfo& info) {
     return std::to_string(info.width) + "x" + std::to_string(info.height) + ", " + format_fixed(info.fps, 3) +
            " fps, " + info.codec_name + ", " + info.pix_fmt + ", " + format_hms(info.duration);
-}
-
-// A whole number with commas between thousands ("28,800").
-std::string with_thousands(long long number) {
-    std::string digits = std::to_string(number < 0 ? -number : number);
-    for (int at = static_cast<int>(digits.size()) - 3; at > 0; at -= 3) {
-        digits.insert(static_cast<std::size_t>(at), ",");
-    }
-    return (number < 0 ? "-" : "") + digits;
-}
-
-// Table rows as lines: the first column left-justified, the others right,
-// the last as it is, two spaces between, trailing spaces cut.
-void add_table(std::vector<std::string>& lines, const std::vector<std::vector<std::string>>& rows,
-               bool last_column_free) {
-    std::vector<std::size_t> widths(rows.front().size(), 0);
-    for (const auto& row : rows) {
-        for (std::size_t column = 0; column < row.size(); ++column) {
-            widths[column] = std::max(widths[column], python_length(row[column]));
-        }
-    }
-    for (const auto& row : rows) {
-        std::string line = "  " + left_justified(row[0], widths[0]);
-        const std::size_t justified_end = last_column_free ? row.size() - 1 : row.size();
-        for (std::size_t column = 1; column < justified_end; ++column) {
-            line += "  " + right_justified(row[column], widths[column]);
-        }
-        if (last_column_free) {
-            line += "  " + row.back();
-        }
-        lines.emplace_back(python_rstrip(line));
-    }
 }
 
 // A table row for CVVDP on each of the video's other displays; why there

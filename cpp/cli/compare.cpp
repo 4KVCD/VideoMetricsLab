@@ -16,6 +16,7 @@
 #include <string_view>
 #include <thread>
 
+#include "common.h"
 #include "report.h"
 #include "vml/app_log.h"
 #include "vml/cancel.h"
@@ -273,10 +274,6 @@ std::string taken_colour_note(const VideoInfo& info, const std::string& which, c
            "those.";
 }
 
-// Whether `path` is a raw YUV file (.yuv): pictures and nothing else, which
-// FFmpeg reads only when told their size, pixel format and frame rate.
-bool is_raw_yuv(const std::filesystem::path& path) { return ascii_lower(platform::path_text(path.extension())) == ".yuv"; }
-
 // The video at `path` as the command reads it: a raw YUV file with --size,
 // --pix-fmt and --fps (ffprobe.h's probe_raw_yuv), a raw stream timed at
 // --fps (timed_raw_stream), any other video as ffprobe reads it, with the
@@ -305,9 +302,7 @@ std::optional<VideoInfo> read_video(const std::filesystem::path& path, const Com
         return info;
     }
     if (!arguments.fps) {
-        // FFmpeg would read it at 25 frames a second.
-        wrong = which + " is a raw " + codec_label(info.codec_name) +
-                " stream, which records no frame rate: give its frame rate with --fps, such as --fps 24000/1001.";
+        wrong = raw_stream_needs_fps(which, info);
         return std::nullopt;
     }
     return timed_raw_stream(std::move(info), *arguments.fps, ffprobe);
@@ -617,184 +612,6 @@ std::optional<std::string> gpu_not_yet(const std::vector<MetricTask>& tasks) {
     return std::nullopt;
 }
 
-// ------------------------------------------------------------------ progress
-
-// The run's progress on stderr, nothing with --quiet: lines that stay, and
-// a line for each video. On a terminal the videos share one line, redrawn
-// in place as the window draws its lines: at once when what it says apart
-// from its figures changes (line_shape), and with new figures once a
-// second, the videos with new figures taking the line in turn. Elsewhere
-// each video's line is written out, at most every ten seconds.
-class Progress {
-public:
-    explicit Progress(bool quiet) : quiet_(quiet), redraw_(platform::is_terminal(platform::Stream::error)) {}
-    ~Progress() { stop_ticking(); }
-
-    // Writes a line that stays.
-    void message(const std::string& text) {
-        const std::lock_guard lock(mutex_);
-        write(text);
-    }
-
-    // Writes a line that stays, with -q too: a failure the user must see.
-    void problem(const std::string& text) {
-        const std::lock_guard lock(mutex_);
-        if (quiet_ || !redraw_) {
-            platform::write_text(platform::Stream::error, text + "\n");
-            return;
-        }
-        platform::write_text(platform::Stream::error, wipe() + text + "\n" + shown_);
-    }
-
-    // Starts drawing new figures once a second, on a terminal, until done().
-    void start() {
-        const std::lock_guard lock(mutex_);
-        if (redraw_ && !quiet_ && !ticker_.joinable()) {
-            stopping_ = false;
-            ticker_ = std::thread([this] { tick(); });
-        }
-    }
-
-    // Shows `text`, the line of the video of job `index`; `shape` is what it
-    // says apart from its figures (line_shape).
-    void job(std::size_t index, const std::string& text, const LineShape& shape) {
-        if (quiet_) {
-            return;
-        }
-        const std::lock_guard lock(mutex_);
-        if (!redraw_) {
-            const Clock::time_point now = Clock::now();
-            const auto last = last_written_.find(index);
-            if (last == last_written_.end() || now - last->second >= write_every_) {
-                last_written_[index] = now;
-                write(text);
-            }
-            return;
-        }
-        const auto [found, added] = lines_.try_emplace(index);
-        Line& line = found->second;
-        line.text = text;
-        if (added || line.shape != shape) {
-            line.shape = shape;
-            draw(index);
-        } else {
-            line.due = true;
-        }
-    }
-
-    // Writes `text`, a line that stays, for the video of job `index`, which
-    // has ended: its line is not drawn again.
-    void finished(std::size_t index, const std::string& text) {
-        const std::lock_guard lock(mutex_);
-        lines_.erase(index);
-        if (shown_index_ == index) {
-            platform::write_text(platform::Stream::error, wipe());
-            shown_.clear();
-            shown_index_.reset();
-        }
-        write(text);
-    }
-
-    // Wipes the line being redrawn, at the end of the run.
-    void done() {
-        stop_ticking();
-        const std::lock_guard lock(mutex_);
-        if (redraw_ && !shown_.empty() && !quiet_) {
-            platform::write_text(platform::Stream::error, wipe());
-        }
-        shown_.clear();
-        shown_index_.reset();
-        lines_.clear();
-    }
-
-private:
-    struct Line {
-        std::string text;
-        LineShape shape;
-        bool due = false;  // it has new figures, not drawn yet
-    };
-
-    // Once a second until the run ends: the line of the next video with new
-    // figures, after the one shown, so that videos running at once take the
-    // line in turn.
-    void tick() {
-        std::unique_lock lock(mutex_);
-        while (!woken_.wait_for(lock, redraw_every_, [this] { return stopping_; })) {
-            if (const std::optional<std::size_t> next = next_due()) {
-                draw(*next);
-            }
-        }
-    }
-
-    std::optional<std::size_t> next_due() const {
-        const auto is_due = [](const auto& line) { return line.second.due; };
-        const auto after = shown_index_ ? lines_.upper_bound(*shown_index_) : lines_.begin();
-        auto found = std::find_if(after, lines_.end(), is_due);
-        if (found == lines_.end()) {
-            found = std::find_if(lines_.begin(), after, is_due);
-            if (found == after) {
-                return std::nullopt;
-            }
-        }
-        return found->first;
-    }
-
-    // Stops the ticks; the thread ends before this returns.
-    void stop_ticking() {
-        std::thread ticker;
-        {
-            const std::lock_guard lock(mutex_);
-            stopping_ = true;
-            ticker = std::move(ticker_);
-        }
-        woken_.notify_all();
-        if (ticker.joinable()) {
-            ticker.join();
-        }
-    }
-
-    // Draws the line of the video of job `index` in place of the one shown.
-    void draw(std::size_t index) {
-        Line& line = lines_.at(index);
-        line.due = false;
-        const std::string wiped = wipe();
-        shown_ = first_characters(line.text, 118);
-        shown_index_ = index;
-        platform::write_text(platform::Stream::error, wiped + shown_);
-    }
-
-    // Writes a line that stays: on a terminal, above the line being redrawn.
-    void write(const std::string& text) {
-        if (quiet_) {
-            return;
-        }
-        if (!redraw_) {
-            platform::write_text(platform::Stream::error, text + "\n");
-            return;
-        }
-        platform::write_text(platform::Stream::error, wipe() + text + "\n" + shown_);
-    }
-
-    // What wipes the line being redrawn, leaving the cursor at its start.
-    std::string wipe() const { return "\r" + std::string(python_length(shown_), ' ') + "\r"; }
-
-    static constexpr std::chrono::seconds redraw_every_{1};
-    static constexpr std::chrono::seconds write_every_{10};
-    const bool quiet_;
-    const bool redraw_;
-    std::mutex mutex_;
-    // On a terminal: each running video's line, the one being redrawn, and
-    // the thread that draws new figures once a second.
-    std::map<std::size_t, Line> lines_;
-    std::string shown_;
-    std::optional<std::size_t> shown_index_;
-    std::thread ticker_;
-    std::condition_variable woken_;
-    bool stopping_ = false;
-    // Elsewhere: when each video's line was last written.
-    std::map<std::size_t, Clock::time_point> last_written_;
-};
-
 // ------------------------------------------------------------------- the run
 
 // Runs the jobs (job_runner.h), keeping each video's result, or why it or
@@ -980,26 +797,6 @@ std::string ffmpeg_problem(const ToolsStatus& status) {
     return text + "\nPut ffmpeg and ffprobe on PATH, or set FFmpeg's folder in the app's Settings tab.";
 }
 
-void print_error(const std::string& text) { platform::write_text(platform::Stream::error, text + "\n"); }
-
-// `text` with its lines ended as Python writes a text file on this system:
-// CR LF on Windows.
-std::string text_file(std::string text) {
-#ifdef _WIN32
-    std::string crlf;
-    crlf.reserve(text.size() + text.size() / 16);
-    for (const char c : text) {
-        if (c == '\n') {
-            crlf += '\r';
-        }
-        crlf += c;
-    }
-    return crlf;
-#else
-    return text;
-#endif
-}
-
 }  // namespace
 
 std::filesystem::path python_path(const std::string& text) {
@@ -1055,6 +852,11 @@ std::filesystem::path python_path(const std::string& text) {
 
 std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& patterns,
                                                 const std::filesystem::path& reference) {
+    return expand_videos(patterns, reference);
+}
+
+std::vector<std::filesystem::path> expand_videos(const std::vector<std::string>& patterns,
+                                                 const std::optional<std::filesystem::path>& excluded) {
     std::vector<std::filesystem::path> found;
     std::set<std::string> found_files;  // each path found, resolved()
     const auto add = [&found, &found_files](const std::filesystem::path& path, const std::string& file) {
@@ -1062,7 +864,7 @@ std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& 
             found.push_back(path);
         }
     };
-    const std::string reference_file = resolved(reference);
+    const std::optional<std::string> excluded_file = excluded ? std::optional(resolved(*excluded)) : std::nullopt;
     for (const std::string& text : patterns) {
         const std::filesystem::path path = python_path(text);
         std::error_code error;
@@ -1081,7 +883,7 @@ std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& 
             found.push_back(path);  // named in the results as not readable
         }
         for (const std::filesystem::path& match : matches) {
-            if (const std::string file = resolved(match); file != reference_file) {
+            if (const std::string file = resolved(match); file != excluded_file) {
                 add(match, file);
             }
         }
@@ -1394,29 +1196,6 @@ RunEnvironment run_environment(const ToolsStatus& tools, const std::vector<VmafJ
     return RunEnvironment{tools.ffmpeg.path, format_version(tools.ffmpeg.version), tools.ffprobe.path,
                           gpu_decode ? DecodingCapabilities::detect(tools.ffmpeg.path) : DecodingCapabilities{},
                           platform::logical_cores()};
-}
-
-// Writes `document` to `path`, its folder made first, as the Python app
-// writes it. Why it could not be written, as the Python app's OSError says
-// it (the path alone left a user guessing), or nothing.
-std::optional<std::string> write_json_file(const std::filesystem::path& path, const nlohmann::ordered_json& document) {
-    if (path.has_parent_path()) {
-        std::error_code error;
-        std::filesystem::create_directories(path.parent_path(), error);
-        if (error) {
-            return python_os_error(error, path.parent_path());
-        }
-    }
-    errno = 0;
-    std::ofstream file(path, std::ios::binary);
-    const int opened = errno;
-    file << text_file(python_json_dumps(document) + "\n");
-    file.close();
-    if (!file) {
-        const int code = opened != 0 ? opened : (errno != 0 ? errno : EIO);
-        return python_os_error(std::error_code(code, std::generic_category()), path);
-    }
-    return std::nullopt;
 }
 
 // Why --model's file cannot be VMAF's model, when VMAF is asked for and it

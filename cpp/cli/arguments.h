@@ -51,13 +51,24 @@ struct CompareArguments {
     bool verbose = false;
 };
 
-enum class Command { none, compare, devices };
+// The bitrate command's arguments.
+struct BitrateArguments {
+    std::vector<std::string> videos;  // files, or patterns such as encodes\*.mkv
+    std::optional<double> fps;        // a raw stream's frame rate
+    std::optional<std::string> csv;   // the folder for each video's CSV files
+    bool no_adjust_start = false;     // the CSV files' times from the file's start (only with csv)
+    std::optional<std::string> json_path;  // "-" prints the JSON instead of the table
+    bool quiet = false;
+};
+
+enum class Command { none, compare, devices, bitrate };
 
 struct Arguments {
     Command command = Command::none;
     // Help or the version was asked for: print this and exit 0.
     std::optional<std::string> print_and_exit;
     CompareArguments compare;
+    BitrateArguments bitrate;
 };
 
 // A wrong command; the message is argparse's (usage, then the error).

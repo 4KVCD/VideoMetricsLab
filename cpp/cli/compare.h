@@ -81,5 +81,9 @@ std::filesystem::path python_path(const std::string& text);
 // as a video that could not be read.
 std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& patterns,
                                                 const std::filesystem::path& reference);
+// expand_tests for any command's videos: `excluded` (if any) left out of what
+// patterns find, as the reference is.
+std::vector<std::filesystem::path> expand_videos(const std::vector<std::string>& patterns,
+                                                 const std::optional<std::filesystem::path>& excluded);
 
 }  // namespace vml::cli

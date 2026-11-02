@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "vml/results.h"
 
@@ -27,5 +28,12 @@ std::string safe_filename_stem(const std::string& label);
 // `reserved` (which it is added to): label.csv, then label_2.csv...
 std::filesystem::path unique_output_path(const std::filesystem::path& folder, const std::string& label,
                                          const std::string& suffix, std::set<std::filesystem::path>& reserved);
+// unique_output_path for several files of one label: one name free for every
+// suffix (label_bitrate_frames.csv and label_bitrate_seconds.csv both, or
+// label_2_...), so that the files stay together. The paths in the suffixes'
+// order.
+std::vector<std::filesystem::path> unique_output_paths(const std::filesystem::path& folder, const std::string& label,
+                                                       const std::vector<std::string>& suffixes,
+                                                       std::set<std::filesystem::path>& reserved);
 
 }  // namespace vml

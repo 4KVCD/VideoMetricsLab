@@ -175,17 +175,35 @@ std::string safe_filename_stem(const std::string& label) {
 
 std::filesystem::path unique_output_path(const std::filesystem::path& folder, const std::string& label,
                                          const std::string& suffix, std::set<std::filesystem::path>& reserved) {
+    return unique_output_paths(folder, label, {suffix}, reserved).front();
+}
+
+std::vector<std::filesystem::path> unique_output_paths(const std::filesystem::path& folder, const std::string& label,
+                                                       const std::vector<std::string>& suffixes,
+                                                       std::set<std::filesystem::path>& reserved) {
     std::string stem = safe_filename_stem(label);
     if (stem.empty()) {
         stem = "run";
     }
-    std::filesystem::path candidate = folder / platform::path_from_text(stem + suffix);
-    std::error_code error;
-    for (int counter = 2; reserved.contains(candidate) || std::filesystem::exists(candidate, error); ++counter) {
-        candidate = folder / platform::path_from_text(stem + "_" + std::to_string(counter) + suffix);
+    const auto paths_for = [&](const std::string& name) {
+        std::vector<std::filesystem::path> paths;
+        for (const std::string& suffix : suffixes) {
+            paths.push_back(folder / platform::path_from_text(name + suffix));
+        }
+        return paths;
+    };
+    const auto taken = [&reserved](const std::vector<std::filesystem::path>& paths) {
+        std::error_code error;
+        return std::any_of(paths.begin(), paths.end(), [&](const std::filesystem::path& path) {
+            return reserved.contains(path) || std::filesystem::exists(path, error);
+        });
+    };
+    std::vector<std::filesystem::path> candidates = paths_for(stem);
+    for (int counter = 2; taken(candidates); ++counter) {
+        candidates = paths_for(stem + "_" + std::to_string(counter));
     }
-    reserved.insert(candidate);
-    return candidate;
+    reserved.insert(candidates.begin(), candidates.end());
+    return candidates;
 }
 
 }  // namespace vml

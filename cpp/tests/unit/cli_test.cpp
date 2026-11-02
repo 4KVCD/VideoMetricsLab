@@ -9,13 +9,17 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <random>
+#include <set>
 #include <string>
 #include <vector>
 
+#include "bitrate.h"
 #include "compare.h"
 #include "devices.h"
 #include "reference.h"
+#include "test_videos.h"
 #include "vml/model_select.h"
 #include "vml/platform/system.h"
 
@@ -228,6 +232,54 @@ TEST(CommandLine, RefusesAGpuMakerThePcLacks) {
     EXPECT_EQ(missing_gpu_maker("auto", {}, true), std::nullopt);
     EXPECT_EQ(missing_gpu_maker(std::nullopt, {}, true), std::nullopt);
     EXPECT_EQ(missing_gpu_maker("amd", {}, false), std::nullopt);
+}
+
+// The bitrate command: its options (--no-adjust-start only with --csv, whose
+// times it sets), its table of the videos read, and each video's three CSV
+// files under one name free for all three, a second run's beside them.
+TEST(CommandLine, ReadsTheBitrateCommandAndWritesItsFiles) {
+    const Arguments parsed =
+        parse_arguments({"bitrate", "a.mkv", "b*.266", "--fps", "24000/1001", "--csv", "out", "--no-adjust-start"});
+    ASSERT_EQ(parsed.command, Command::bitrate);
+    EXPECT_EQ(parsed.bitrate.videos, (std::vector<std::string>{"a.mkv", "b*.266"}));
+    EXPECT_DOUBLE_EQ(*parsed.bitrate.fps, 24000.0 / 1001);
+    EXPECT_EQ(parsed.bitrate.csv, "out");
+    EXPECT_TRUE(parsed.bitrate.no_adjust_start);
+    EXPECT_FALSE(parsed.bitrate.json_path || parsed.bitrate.quiet);
+    EXPECT_THROW(parse_arguments({"bitrate", "a.mkv", "--no-adjust-start"}), UsageError);
+    EXPECT_THROW(parse_arguments({"bitrate"}), UsageError);
+    EXPECT_THROW(parse_arguments({"bitrate", "a.mkv", "--metrics", "vmaf"}), UsageError);
+
+    // 4,000 bytes in 2 s: 1,500 in the first second, 2,500 in the second
+    BitrateVideo read{"clip.mkv", VideoInfo{},
+                      bitrate_data("clip.mkv", {0.0, 0.5, 1.0, 1.5}, {0.5, 0.5, 0.5, 0.5}, {1000, 500, 2000, 500},
+                                   {true, false, true, false}),
+                      {}};
+    read.info->codec_name = "hevc";
+    const BitrateVideo missing{"gone.mkv", std::nullopt, std::nullopt, "not found"};
+    EXPECT_EQ(bitrate_table({read, missing}),
+              "  File      Codec    Duration  Frames  Average Mb/s  Minimum Mb/s  Maximum Mb/s\n"
+              "  clip.mkv   HEVC  0:00:02.00       4         0.016         0.012         0.020\n");
+    const nlohmann::ordered_json json = bitrate_json({read, missing});
+    EXPECT_EQ(json["format"], "bitrate-1");
+    EXPECT_EQ(json["videos"][0]["bytes"], 4000);
+    EXPECT_EQ(json["videos"][0]["average_kbps"], 16.0);
+    EXPECT_EQ(json["videos"][1]["error"], "not found");
+
+    const test::Folder folder;
+    const std::filesystem::path out = folder / "out";
+    std::filesystem::create_directories(out);
+    for (const std::string stem : {"clip", "clip_2"}) {
+        std::set<std::filesystem::path> reserved;  // a run of its own: the first run's files are on disk
+        const std::vector<std::filesystem::path> written = write_bitrate_csvs(read, out, true, reserved);
+        ASSERT_EQ(written.size(), 3U);
+        EXPECT_EQ(written[0], out / (stem + "_bitrate_frames.csv"));
+        EXPECT_EQ(written[1], out / (stem + "_bitrate_seconds.csv"));
+        EXPECT_EQ(written[2], out / (stem + "_bitrate_gops.csv"));
+    }
+    std::ifstream seconds(out / "clip_bitrate_seconds.csv", std::ios::binary);
+    const std::string text((std::istreambuf_iterator<char>(seconds)), std::istreambuf_iterator<char>());
+    EXPECT_EQ(text, "start_s,end_s,kbps\r\n0.000000,1.000000,12.0\r\n1.000000,2.000000,20.0\r\n");
 }
 
 #ifdef __APPLE__

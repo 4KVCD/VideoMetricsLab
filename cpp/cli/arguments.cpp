@@ -46,6 +46,11 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
 
 const char* const devices_usage = "usage: VideoMetricsLab-cli devices [-h]\n";
 
+const char* const bitrate_usage = R"(usage: VideoMetricsLab-cli bitrate [-h] [--fps RATE] [--csv FOLDER]
+                                   [--no-adjust-start] [--json FILE] [-q]
+                                   VIDEO [VIDEO ...]
+)";
+
 const char* const examples = R"(examples:
   VideoMetricsLab-cli compare reference.mkv encode.mkv
       the app's default metrics for one encode
@@ -65,6 +70,10 @@ const char* const examples = R"(examples:
       a raw YUV reference, 1080p 10-bit 4:2:0, and a raw VVC stream
   VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display "30-inch 4K HDR monitor, dim room"
       CVVDP on a display other than the app's default (repeat it for several)
+  VideoMetricsLab-cli bitrate encodes\*.mkv
+      each encode's length, frames and bitrate, as the Bitrate Viewer tab
+  VideoMetricsLab-cli bitrate encode.266 --fps 24000/1001 --csv bitrate
+      a raw VVC stream's bitrate, and its graphs' figures as CSV files
   VideoMetricsLab-cli devices
       what would calculate each metric on this PC
 )";
@@ -74,6 +83,7 @@ positional arguments:
   COMMAND
     compare   calculate metrics for test videos against a reference
     devices   show FFmpeg and which GPU each metric would use
+    bitrate   show videos' bitrate, as the Bitrate Viewer tab
 
 options:
   -h, --help  show this help message and exit
@@ -204,6 +214,27 @@ Shows FFmpeg's version and what would calculate each metric on this PC.
 
 options:
   -h, --help  show this help message and exit
+)";
+
+const char* const bitrate_sections = R"(
+Reads each VIDEO's video stream with ffprobe, as the app's Bitrate Viewer tab does, and prints its length, frames and bitrate: the average, and the lowest and highest one-second bitrate (Mb/s).
+
+positional arguments:
+  VIDEO                 a video file, or a pattern such as encodes\*.mkv
+
+options:
+  -h, --help            show this help message and exit
+  --fps RATE            a raw stream's frame rate (.266, .265, .264, .obu),
+                        such as 24000/1001; such a stream records none
+  --csv FOLDER          also write each video's frames, seconds and groups of
+                        pictures to FOLDER as <video>_bitrate_frames.csv,
+                        _seconds.csv and _gops.csv
+  --no-adjust-start     with --csv: times from the file's start, not from the
+                        stream's first frame
+  --json FILE           also write the results as JSON to FILE; - prints the
+                        JSON instead of the table
+  -q, --quiet           no progress, only the results
+
 )";
 
 const std::string version_text = std::string("VideoMetricsLab ") + VML_VERSION;
@@ -839,6 +870,22 @@ Parser compare_parser(CompareArguments& parsed) {
     return parser;
 }
 
+// The bitrate command's parser, keeping what it reads in `parsed`.
+Parser bitrate_parser(BitrateArguments& parsed) {
+    Parser parser;
+    parser.actions = {
+        help(std::string(bitrate_usage) + bitrate_sections + examples),
+        {{}, "VIDEO", Nargs::one_or_more, true,
+         [&parsed](const std::vector<std::string>& values) { parsed.videos = values; }},
+        option({"--fps"}, [&parsed](const std::string& value) { parsed.fps = frame_rate(value); }),
+        option({"--csv"}, [&parsed](const std::string& value) { parsed.csv = value; }),
+        flag({"--no-adjust-start"}, parsed.no_adjust_start),
+        option({"--json"}, [&parsed](const std::string& value) { parsed.json_path = value; }),
+        flag({"-q", "--quiet"}, parsed.quiet),
+    };
+    return parser;
+}
+
 // Reads a command's strings with its parser; its errors are its own
 // (argparse's error() of the command's parser).
 std::vector<std::string> parse_command(const Parser& parser, const std::string& usage, const std::string& prog,
@@ -871,7 +918,7 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
          [&](const std::vector<std::string>& values) {
              std::string command;
              try {
-                 command = choice(values.front(), {"compare", "devices"});
+                 command = choice(values.front(), {"compare", "devices", "bitrate"});
              } catch (const ArgumentError& error) {
                  throw ArgumentError{"argument COMMAND: " + error.message};
              }
@@ -880,6 +927,15 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
                  parsed.command = Command::compare;
                  const Parser parser = compare_parser(parsed.compare);
                  command_extras = parse_command(parser, compare_usage, std::string(program) + " compare", rest);
+             } else if (command == "bitrate") {
+                 parsed.command = Command::bitrate;
+                 const Parser parser = bitrate_parser(parsed.bitrate);
+                 const std::string prog = std::string(program) + " bitrate";
+                 command_extras = parse_command(parser, bitrate_usage, prog, rest);
+                 if (parsed.bitrate.no_adjust_start && !parsed.bitrate.csv) {
+                     throw UsageError(std::string(bitrate_usage) + prog +
+                                      ": error: argument --no-adjust-start: only with --csv, whose times it sets");
+                 }
              } else {
                  parsed.command = Command::devices;
                  const Parser parser{{help(std::string(devices_usage) + devices_sections)}, {}};
