@@ -10,7 +10,10 @@
 // anything is scored, and the pass is made again without seeking.
 #pragma once
 
+#include <optional>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #include "vml/frame_sync.h"
 
@@ -55,5 +58,15 @@ long long picture_number_at(long long pts, long long first_pts, Rational time_ba
 // Whether `pictures` shown pictures fill the grid from the first timestamp to the last.
 bool pictures_fill_grid(long long first_pts, long long last_pts, long long pictures, Rational time_base,
                         Rational frame_rate);
+
+// FFmpeg's options before a video's -i, with its reading from the seek added: every
+// picture after the place it lands on comes through, on the file's own timestamps
+// (range_trim_filter then keeps the range's).
+std::vector<std::string> with_seek(std::vector<std::string> input_options, const std::optional<RangeSeek>& seek);
+
+// Where a filter cuts, in the file's seconds, to keep picture `number` and not the
+// one before it: half a picture early, which a container's rounded timestamps
+// cannot cross.
+double seconds_before_picture(const RangeSeek& seek, long long number);
 
 }  // namespace vml

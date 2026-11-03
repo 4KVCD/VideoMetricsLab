@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include "vml/frame_range.h"
+
 namespace vml {
 
 namespace {
@@ -42,6 +44,27 @@ TEST(RangeSeek, SeeksOnlyLateEnoughAndEarlyOfTheRange) {
     EXPECT_TRUE(seek_is_worthwhile(14400, film));
     const double seconds = seek_seconds(14400, film);
     EXPECT_NEAR(seconds, 14400 * 1001.0 / 24000 - 2, 1e-9);
+}
+
+// FFmpeg keeps a seeked video's pictures by their timestamps: half a picture before
+// each cut, from the file's first picture, whose timestamp need not be 0.
+TEST(RangeSeek, FfmpegCutsHalfAPictureBeforeTheRange) {
+    const RangeSeek seek{598.0, 42, milliseconds, Rational{25, 1}};
+    FrameRange range;
+    range.decode_start = 15000;
+    range.decode_end = 15125;
+    EXPECT_EQ(range_trim_filter(range), "trim=start_frame=15000:end_frame=15125");
+    EXPECT_EQ(range_trim_filter(range, seek), "trim=start=600.022000:end=605.022000");
+    range.decode_end.reset();
+    EXPECT_EQ(range_trim_filter(range, seek), "trim=start=600.022000");
+}
+
+TEST(RangeSeek, FfmpegInputOptionsFollowTheVideosOwn) {
+    const std::vector<std::string> own{"-export_side_data", "film_grain"};
+    EXPECT_EQ(with_seek(own, std::nullopt), own);
+    const std::vector<std::string> seeking{"-export_side_data", "film_grain", "-copyts", "-noaccurate_seek",
+                                           "-ss",               "598.000000000"};
+    EXPECT_EQ(with_seek(own, RangeSeek{598.0, 0, milliseconds, Rational{25, 1}}), seeking);
 }
 
 }  // namespace vml

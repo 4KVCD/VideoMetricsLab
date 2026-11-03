@@ -177,8 +177,11 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
         return hwaccel.has_value() && bit_depth(info.pix_fmt) <= 8 && bit_depth(analysis_format) > 8;
     };
     VideoChains chains;
-    if (const std::optional<std::string> trim = range_trim_filter(run_range(options, source))) {
+    const FrameRange range = run_range(options, source);
+    if (const std::optional<std::string> trim = range_trim_filter(range, options.range_seeks.distorted)) {
         chains.test.push_back(*trim);
+    }
+    if (const std::optional<std::string> trim = range_trim_filter(range, options.range_seeks.source)) {
         chains.source.push_back(*trim);
     }
 

@@ -271,19 +271,32 @@ void log_failed_attempt(const FfmpegOutcome& outcome, const HardwareDecoding& pl
 
 // The inputs of a run's two videos: a fed video's pictures (grain_feed.h),
 // the other's file.
-InputOptions run_inputs(const PairFeeds& feeds, const VideoInfo& source, const VideoInfo& distorted) {
+InputOptions run_inputs(const PairFeeds& feeds, const VideoInfo& source, const VideoInfo& distorted,
+                        const RangeSeeks& seeks) {
     InputOptions inputs;
     if (const PictureFeed* fed = feeds.distorted()) {
         inputs.distorted_fed = fed->input_arguments();
     } else {
-        inputs.distorted = distorted.decode_options();
+        inputs.distorted = with_seek(distorted.decode_options(), seeks.distorted);
     }
     if (const PictureFeed* fed = feeds.source()) {
         inputs.source_fed = fed->input_arguments();
     } else {
-        inputs.source = source.decode_options();
+        inputs.source = with_seek(source.decode_options(), seeks.source);
     }
     return inputs;
+}
+
+// `options` with the places FFmpeg starts reading the two videos of their range.
+VmafOptions reading_near_range(const VmafOptions& options, const RunEnvironment& environment, const VideoInfo& source,
+                               const VideoInfo& distorted, const CancelToken& cancel) {
+    const long long decode_start = run_range(options, source).decode_start;
+    VmafOptions seeking = options;
+    seeking.range_seeks.source =
+        ffmpeg_range_seek(source, decode_start, environment.ffmpeg, environment.ffprobe, cancel);
+    seeking.range_seeks.distorted =
+        ffmpeg_range_seek(distorted, decode_start, environment.ffmpeg, environment.ffprobe, cancel);
+    return seeking;
 }
 
 // The FFmpeg command of a run for a decode plan, the run's model= value (by
@@ -455,12 +468,13 @@ ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& sou
                          const StatusCallback& on_status, const CancelToken& cancel) {
     const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
     return without_wrong_xpsnr(options, depth, [&](const VmafOptions& scored) {
+        const VmafOptions seeking = reading_near_range(scored, environment, source, distorted, cancel);
         const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
                                        const std::optional<std::string>& xpsnr_log_name, const PairFeeds& feeds) {
-            const std::string graph = build_filtergraph(source, distorted, scored, source_crop, distorted_crop, plan,
+            const std::string graph = build_filtergraph(source, distorted, seeking, source_crop, distorted_crop, plan,
                                                         "vmaf_log.json", run_model, xpsnr_log_name, environment.cores);
             return build_ffmpeg_command(environment.ffmpeg, distorted.path, source.path, graph, plan,
-                                        run_inputs(feeds, source, distorted));
+                                        run_inputs(feeds, source, distorted, seeking.range_seeks));
         };
         return execute_run(build_command, scored, model, fps, total_frames, decoding, "vmaf_run_", on_progress,
                            on_status, cancel, environment, &source, &distorted);
@@ -537,6 +551,7 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
         throw VmafRunError("Select at least one metric to calculate.");
     }
     const TempFolder folder = run_folder(plan.backend == "cpu" ? "vmaf_cpu_run_" : "vmaf_gpu_run_");
+    const VmafOptions seeking = reading_near_range(options, environment, source, distorted, cancel);
     const std::vector<HardwareDecoding> ladder = fallback_ladder(decoding);
     std::optional<PairScores> scored;
     FfmpegOutcome outcome;
@@ -570,8 +585,8 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
         try {
             const std::vector<std::vector<std::string>> commands = build_stream_commands(
                 environment.ffmpeg, distorted.path, source.path,
-                build_stream_graphs(source, distorted, options, source_crop, distorted_crop, decode), decode,
-                attempt.output_args(), run_inputs(feeds, source, distorted));
+                build_stream_graphs(source, distorted, seeking, source_crop, distorted_crop, decode), decode,
+                attempt.output_args(), run_inputs(feeds, source, distorted, seeking.range_seeks));
             for (const std::vector<std::string>& command : commands) {
                 logger.info("FFmpeg: " + python_list2cmdline(command));
             }
@@ -1937,13 +1952,13 @@ std::optional<RunScores> score_gpu_and_cpu(const RunFrames& run, const VmafOptio
     return score_apart(run, gpu_options, cpu_options, *gpu, cpu, model, on_progress, on_status);
 }
 
-// The pair's scores with its crops known (run_vmaf_once), and its result.
-ComparisonResult score_pair(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
-                            VmafOptions options, const std::optional<CropBox>& source_crop,
-                            const std::optional<CropBox>& distorted_crop, const HardwareDecoding& decoding,
-                            const ProgressCallback& on_progress, const StatusCallback& on_status,
-                            const CancelToken& cancel,
-                            const std::optional<std::filesystem::path>& result_distorted_path) {
+// score_pair's run, as its reading of the videos is set.
+ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
+                                 VmafOptions options, const std::optional<CropBox>& source_crop,
+                                 const std::optional<CropBox>& distorted_crop, const HardwareDecoding& decoding,
+                                 const ProgressCallback& on_progress, const StatusCallback& on_status,
+                                 const CancelToken& cancel,
+                                 const std::optional<std::filesystem::path>& result_distorted_path) {
     const auto [width, height] = analysis_dimensions(source, distorted, options, source_crop, distorted_crop);
     const std::string model = resolve_run_models(options, width, height);
     // The range's frames counted at the source's rate, as the run cuts them (run_range).
@@ -1998,6 +2013,29 @@ ComparisonResult score_pair(const RunEnvironment& environment, const VideoInfo& 
         result.metric_failures.insert(part.failed.begin(), part.failed.end());
     }
     return result;
+}
+
+// The pair's scores with its crops known (run_vmaf_once), and its result. A run
+// that fails where FFmpeg may have read a range from a seek, which it cannot check
+// picture by picture (ffmpeg_range_seek), is made again from the videos' start: a
+// video really cut short then fails for good.
+ComparisonResult score_pair(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
+                            const VmafOptions& options, const std::optional<CropBox>& source_crop,
+                            const std::optional<CropBox>& distorted_crop, const HardwareDecoding& decoding,
+                            const ProgressCallback& on_progress, const StatusCallback& on_status,
+                            const CancelToken& cancel,
+                            const std::optional<std::filesystem::path>& result_distorted_path) {
+    try {
+        return score_pair_once(environment, source, distorted, options, source_crop, distorted_crop, decoding,
+                               on_progress, on_status, cancel, result_distorted_path);
+    } catch (const VmafRunError& error) {
+        if (!range_may_seek(run_range(options, source).decode_start, frame_rate(source))) {
+            throw;
+        }
+        turn_off_range_seek(error.what());
+    }
+    return score_pair_once(environment, source, distorted, options, source_crop, distorted_crop, decoding, on_progress,
+                           on_status, cancel, result_distorted_path);
 }
 
 // run_vmaf's run of the pair as it is marked (size_changes.h). Throws

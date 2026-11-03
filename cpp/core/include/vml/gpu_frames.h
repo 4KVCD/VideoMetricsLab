@@ -189,14 +189,28 @@ struct DecodePlan {
 void plan_range_seek(DecodePlan& plan, const VideoInfo& info, long long decode_start, const std::string& ffmpeg,
                      const std::string& ffprobe, const CancelToken& cancel);
 
+// Whether a range starting at picture `decode_start` may be read from a seek at all:
+// seeking is on, and the range is late enough.
+bool range_may_seek(long long decode_start, Rational frame_rate);
+
+// The seek for FFmpeg's decoding of `info`, under plan_range_seek's conditions: not
+// a raw stream, a video whose pictures the app feeds FFmpeg (grain_feed.h), or
+// film grain to carry over. FFmpeg's graph cannot check each picture as a seeked
+// stream does (SeekRefused), so the file's proof and a run's count of pictures are
+// the guards: a run that comes up short calls turn_off_range_seek and starts again.
+std::optional<RangeSeek> ffmpeg_range_seek(const VideoInfo& info, long long decode_start, const std::string& ffmpeg,
+                                           const std::string& ffprobe, const CancelToken& cancel);
+
 // plan_range_seek for a pass's two `plans`: the test video's, then the source's.
 void plan_pair_seek(std::vector<DecodePlan>& plans, const VideoInfo& test, const VideoInfo& source,
                     long long decode_start, const std::string& ffmpeg, const std::string& ffprobe,
                     const CancelToken& cancel);
 
 // No more seeks in this run: one was refused (SeekRefused). trust_gpu_decoding
-// clears it as a run starts.
+// clears it as a run starts. The processes the run then starts keep it
+// (run_isolated).
 void turn_off_range_seek(const std::string& reason);
+bool range_seek_turned_off();
 
 // The plan for decoding the video here, cropped to `crop` and scaled to
 // `size` with `algorithm`. Throws GpuDecodeUnavailableError, with the

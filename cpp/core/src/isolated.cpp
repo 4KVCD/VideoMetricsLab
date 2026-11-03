@@ -282,7 +282,12 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
         throw std::logic_error("no program to run " + std::string(what) + " in");
     }
     const ChildFolder folder;
-    const std::filesystem::path request_file = write_request(folder.path(), request, what);
+    // A process has its own run-wide state: seeks this run turned off stay off in it.
+    nlohmann::json sent = request;
+    if (range_seek_turned_off()) {
+        sent["range_seek_off"] = true;
+    }
+    const std::filesystem::path request_file = write_request(folder.path(), sent, what);
     // In this process's working folder, as the Python app's child is: a
     // video named by a relative path is found there (the child finds its own
     // files by the request's path).
@@ -350,6 +355,9 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
     try {
         std::ifstream file(request_file, std::ios::binary);
         const nlohmann::json request = nlohmann::json::parse(file);
+        if (request.value("range_seek_off", false)) {
+            turn_off_range_seek("its parent process turned them off");
+        }
         nlohmann::json result;
         if (task == "vulkan-probe") {
             const VulkanProbe probe = probe_vulkan();

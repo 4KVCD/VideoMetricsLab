@@ -1352,6 +1352,10 @@ private:
     // nothing to decode on the GPU).
     std::vector<std::vector<std::string>> ffmpeg_commands(const VideoPlan& video, const std::string& pixel_format,
                                                           const PictureFeed* fed) {
+        const std::optional<RangeSeek> seek =
+            fed != nullptr ? std::nullopt
+                           : ffmpeg_range_seek(video.info, range_.decode_start, request_.environment.ffmpeg,
+                                               request_.environment.ffprobe, cancel_);
         std::vector<std::optional<std::string>> attempts{fed != nullptr ? std::nullopt : video.hwaccel};
         if (attempts.front()) {
             attempts.emplace_back(std::nullopt);
@@ -1362,7 +1366,7 @@ private:
                 vship_filter_chain(video.info, video.crop, video.size, pixel_format, step_,
                                    request_.options.scale_algorithm, accel, numbering_rate_,
                                    video.colour.colorFamily == 0 && video.colour.range == 1);
-            if (const std::optional<std::string> trim = range_trim_filter(range_)) {
+            if (const std::optional<std::string> trim = range_trim_filter(range_, seek)) {
                 chain = *trim + "," + chain;  // first: the frames counted as decoded
             }
             std::vector<std::string> command{request_.environment.ffmpeg, "-hide_banner", "-loglevel",
@@ -1372,7 +1376,7 @@ private:
             } else {
                 const std::vector<std::string> decode = hwaccel_args(accel);
                 command.insert(command.end(), decode.begin(), decode.end());
-                const std::vector<std::string> input = video.info.decode_options();
+                const std::vector<std::string> input = with_seek(video.info.decode_options(), seek);
                 command.insert(command.end(), input.begin(), input.end());
                 command.insert(command.end(), {"-i", input_path(video.info.path)});
             }
@@ -1613,6 +1617,9 @@ private:
         }
         if (const std::optional<std::string> short_run =
                 short_comparison(expected_frames_, frames * step_, range_.decode_start, request_.source.fps, step_)) {
+            if (range_may_seek(range_.decode_start, frame_rate(request_.source))) {
+                throw SeekRefused(*short_run);  // a video really cut short, or a seek short of its promise: to tell
+            }
             throw ComparisonCutShortError(*short_run);
         }
         // A metric whose handler failed (out of GPU memory on a smaller card,

@@ -21,6 +21,7 @@
 #include <optional>
 #include <string>
 
+#include "vml/range_seek.h"
 #include "vml/results.h"
 
 namespace vml {
@@ -56,8 +57,11 @@ FrameRange frame_range(long long first_second, long long end_second, double fps,
 
 // FFmpeg's filter at the head of a video's chain that keeps the frames a run
 // decodes, counting them as the numbering after it does (frame_sync.h), or
-// nothing for a run over the whole video.
-std::optional<std::string> range_trim_filter(const FrameRange& range);
+// nothing for a run over the whole video. A video read from a `seek` has no
+// pictures to count from: they are kept by their timestamps, which the seek's
+// proof ties to their numbers.
+std::optional<std::string> range_trim_filter(const FrameRange& range,
+                                             const std::optional<RangeSeek>& seek = std::nullopt);
 
 // A ranged run's scores say which frames they are of: their provenance's
 // range_frames, [start, end] (`reached`: the first frame past those it

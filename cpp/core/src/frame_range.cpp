@@ -5,6 +5,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "vml/number_format.h"
+
 namespace vml {
 
 namespace {
@@ -58,13 +60,17 @@ FrameRange frame_range(long long first_second, long long end_second, double fps,
     return range;
 }
 
-std::optional<std::string> range_trim_filter(const FrameRange& range) {
+std::optional<std::string> range_trim_filter(const FrameRange& range, const std::optional<RangeSeek>& seek) {
     if (range.decode_start == 0 && !range.decode_end) {
         return std::nullopt;
     }
-    std::string trim = "trim=start_frame=" + std::to_string(range.decode_start);
+    const auto at_picture = [&seek](const char* name, long long number) {
+        return seek ? std::string(name) + "=" + format_fixed(seconds_before_picture(*seek, number), 6)
+                    : std::string(name) + "_frame=" + std::to_string(number);
+    };
+    std::string trim = "trim=" + at_picture("start", range.decode_start);
     if (range.decode_end) {
-        trim += ":end_frame=" + std::to_string(*range.decode_end);
+        trim += ":" + at_picture("end", *range.decode_end);
     }
     return trim;
 }

@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+#include "vml/range_seek.h"
 #include "vml/video.h"
 
 namespace vml {
@@ -67,6 +68,15 @@ VshipBuild vship_build_from(std::string_view value);
 // A build's name for the log: "Vship-fast" or "Vship 5.1.2".
 std::string_view vship_build_label(VshipBuild build);
 
+// Where FFmpeg starts reading each video of a ranged run (ffmpeg_range_seek,
+// gpu_frames.h); none: at the video's start.
+struct RangeSeeks {
+    std::optional<RangeSeek> source;
+    std::optional<RangeSeek> distorted;
+
+    bool operator==(const RangeSeeks&) const = default;
+};
+
 struct VmafOptions {
     std::string model = "version=vmaf_v0.6.1";  // the FFmpeg model= value a run uses
     // What the user chose, from which `model` is worked out.
@@ -104,6 +114,8 @@ struct VmafOptions {
     // When set, a resolution test (ResampleTarget) instead of a comparison
     // of two files.
     std::optional<ResampleTarget> resample_test;
+    // Not a choice of the user's: set where a run hands its two videos to FFmpeg.
+    RangeSeeks range_seeks;
 
     // The keys of FFmpeg's metrics these options ask for, in the registry's
     // order.

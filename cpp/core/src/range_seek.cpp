@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include "vml/number_format.h"
+
 namespace vml {
 
 namespace {
@@ -49,6 +51,19 @@ bool pictures_fill_grid(long long first_pts, long long last_pts, long long pictu
                         Rational frame_rate) {
     const double last = grid_position(last_pts, first_pts, time_base, frame_rate);
     return pictures > 0 && std::abs(last - static_cast<double>(pictures - 1)) <= grid_tolerance;
+}
+
+std::vector<std::string> with_seek(std::vector<std::string> input_options, const std::optional<RangeSeek>& seek) {
+    if (seek) {
+        input_options.insert(input_options.end(),
+                             {"-copyts", "-noaccurate_seek", "-ss", format_fixed(seek->start, 9)});
+    }
+    return input_options;
+}
+
+double seconds_before_picture(const RangeSeek& seek, long long number) {
+    return static_cast<double>(seek.first_pts) * as_number(seek.time_base) +
+           (static_cast<double>(number) - 0.5) / as_number(seek.frame_rate);
 }
 
 }  // namespace vml

@@ -28,6 +28,7 @@
 #include "vml/ffprobe.h"
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
+#include "vml/grain_feed.h"
 #include "vml/frame_sync.h"
 #include "vml/hevc.h"
 #include "vml/model_select.h"
@@ -1091,6 +1092,14 @@ void trust_gpu_decoding() {
     range_seek_off = false;
 }
 
+bool range_seek_turned_off() {
+    if (platform::environment_variable("VML_RANGE_SEEK").value_or("") == "0") {
+        return true;
+    }
+    const std::lock_guard lock(distrust_mutex);
+    return range_seek_off;
+}
+
 void turn_off_range_seek(const std::string& reason) {
     logger.info("Ranges are decoded from the video's start for the rest of this run: " + reason);
     const std::lock_guard lock(distrust_mutex);
@@ -1686,57 +1695,78 @@ bool opens_without_earlier_pictures(std::string_view codec, const std::vector<st
     return false;
 }
 
-bool seek_lands_on_open_point(const VideoInfo& info, std::string_view codec, double seconds,
-                              const std::string& ffmpeg) {
+// Whether a seek lands at or before the range on a picture that needs none before
+// it. Past the range the pictures would be numbered wrongly where nothing checks
+// them one by one (FFmpeg's graph).
+bool seek_lands_before_range(const VideoInfo& info, std::string_view codec, double seconds, long long decode_start,
+                             const PictureGrid& grid, const std::string& ffmpeg) {
     PacketReader probe(ffmpeg, info.path, codec, {"-copyts", "-ss", format_fixed(seconds, 9)});
     probe.start();
     std::vector<std::uint8_t> data;
     long long pts = 0;
     int flags = 0;
-    return probe.next(data, pts, flags) && opens_without_earlier_pictures(codec, data);
-}
-
-bool seeks_turned_off() {
-    if (platform::environment_variable("VML_RANGE_SEEK").value_or("") == "0") {
-        return true;
+    if (!probe.next(data, pts, flags)) {
+        return false;
     }
-    const std::lock_guard lock(distrust_mutex);
-    return range_seek_off;
+    const long long landed = picture_number_at(pts, grid.first_pts, grid.time_base, frame_rate(info));
+    return landed >= 0 && landed <= decode_start && opens_without_earlier_pictures(codec, data);
 }
 
-}  // namespace
-
-void plan_range_seek(DecodePlan& plan, const VideoInfo& info, long long decode_start, const std::string& ffmpeg,
-                     const std::string& ffprobe, const CancelToken& cancel) {
-    const bool codec_seeks = plan.codec == "hevc" || plan.codec == "vvc" || plan.codec == "h264";
-    const bool grain_carries_over = plan.film_grain != 0 && plan.film_grain_kinds != 0;
+// The seek for a range starting at `decode_start`, where the codec and the file allow one.
+std::optional<RangeSeek> find_range_seek(const VideoInfo& info, std::string_view codec, long long decode_start,
+                                         const std::string& ffmpeg, const std::string& ffprobe,
+                                         const CancelToken& cancel) {
+    const bool codec_seeks = codec == "hevc" || codec == "vvc" || codec == "h264";
     const Rational rate = frame_rate(info);
-    if (!codec_seeks || plan.untimed || plan.software_only || grain_carries_over || seeks_turned_off() ||
-        !seek_is_worthwhile(decode_start, rate)) {
-        return;
+    if (!codec_seeks || !range_may_seek(decode_start, rate)) {
+        return std::nullopt;
     }
-    const std::optional<PictureGrid>& grid = picture_grid(info, plan.codec, decode_start, ffmpeg, ffprobe, cancel);
+    const std::optional<PictureGrid>& grid = picture_grid(info, codec, decode_start, ffmpeg, ffprobe, cancel);
     if (!grid) {
         logger.info(platform::path_text(info.path.filename()) +
                     ": decoded from its start to the range (its pictures' numbers cannot be proved from their "
                     "timestamps without reading it through)");
-        return;
+        return std::nullopt;
     }
     const double seconds = seek_seconds(decode_start, rate);
     try {
-        if (!seek_lands_on_open_point(info, plan.codec, seconds, ffmpeg)) {
+        if (!seek_lands_before_range(info, codec, seconds, decode_start, *grid, ffmpeg)) {
             logger.info(platform::path_text(info.path.filename()) +
-                        ": decoded from its start to the range (a seek there lands on a picture that needs earlier "
-                        "ones)");
-            return;
+                        ": decoded from its start to the range (a seek there lands past it, or on a picture that "
+                        "needs earlier ones)");
+            return std::nullopt;
         }
     } catch (const GpuDecodeFailedError& error) {
         logger.info(platform::path_text(info.path.filename()) + ": no seek to the range: " + error.what());
-        return;
+        return std::nullopt;
     }
     logger.info(platform::path_text(info.path.filename()) + ": reading starts near the range, " +
                 format_fixed(seconds, 3) + " s in");
-    plan.seek = RangeSeek{seconds, grid->first_pts, grid->time_base, rate};
+    return RangeSeek{seconds, grid->first_pts, grid->time_base, rate};
+}
+
+}  // namespace
+
+bool range_may_seek(long long decode_start, Rational frame_rate) {
+    return !range_seek_turned_off() && seek_is_worthwhile(decode_start, frame_rate);
+}
+
+void plan_range_seek(DecodePlan& plan, const VideoInfo& info, long long decode_start, const std::string& ffmpeg,
+                     const std::string& ffprobe, const CancelToken& cancel) {
+    const bool grain_carries_over = plan.film_grain != 0 && plan.film_grain_kinds != 0;
+    if (!plan.untimed && !plan.software_only && !grain_carries_over) {
+        plan.seek = find_range_seek(info, plan.codec, decode_start, ffmpeg, ffprobe, cancel);
+    }
+}
+
+std::optional<RangeSeek> ffmpeg_range_seek(const VideoInfo& info, long long decode_start, const std::string& ffmpeg,
+                                           const std::string& ffprobe, const CancelToken& cancel) {
+    const FilmGrainScoring grain = effective_film_grain(info);
+    const bool grain_carries_over = grain.scoring != GrainScoring::without && grain.kinds != 0;
+    if (info.is_raw_stream() || decoded_by_the_app(info) || fed_to_ffmpeg(info) || grain_carries_over) {
+        return std::nullopt;
+    }
+    return find_range_seek(info, ascii_lower(info.codec_name), decode_start, ffmpeg, ffprobe, cancel);
 }
 
 void plan_pair_seek(std::vector<DecodePlan>& plans, const VideoInfo& test, const VideoInfo& source,

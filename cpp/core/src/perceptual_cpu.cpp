@@ -26,6 +26,7 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
+#include "vml/gpu_frames.h"
 #include "vml/grain_feed.h"
 #include "vml/model_select.h"
 #include "vml/number_format.h"
@@ -758,17 +759,17 @@ std::string image_filtergraph(const VideoInfo& source_info, const VideoInfo& dis
     // as decoded), then numbered at the test video's frame rate, so that the
     // frames of both are paired; then sampled, so that the frames select
     // drops are not cropped or scaled.
-    std::vector<std::string> numbering;
-    if (const std::optional<std::string> trim = range_trim_filter(cpu_range(options, source, step))) {
-        numbering.push_back(*trim);
-    }
-    for (std::string& filter : numbering_filters(frame_rate(distorted))) {
-        numbering.push_back(std::move(filter));
-    }
-    const auto chain = [&plan, &numbering](const std::string& input, const std::string& output,
-                                           const std::optional<CropBox>& crop, const VideoInfo& info,
-                                           const std::optional<Size>& target) {
-        std::vector<std::string> filters = numbering;
+    const FrameRange range = cpu_range(options, source, step);
+    const std::vector<std::string> numbering = numbering_filters(frame_rate(distorted));
+    const auto chain = [&plan, &range, &numbering](const std::string& input, const std::string& output,
+                                                   const std::optional<CropBox>& crop, const VideoInfo& info,
+                                                   const std::optional<Size>& target,
+                                                   const std::optional<RangeSeek>& seek) {
+        std::vector<std::string> filters;
+        if (const std::optional<std::string> trim = range_trim_filter(range, seek)) {
+            filters.push_back(*trim);
+        }
+        filters.insert(filters.end(), numbering.begin(), numbering.end());
         filters.insert(filters.end(), plan.sample.begin(), plan.sample.end());
         for (std::string& filter : prepare(crop, info, target, plan.scale_algorithm)) {
             filters.push_back(std::move(filter));
@@ -778,8 +779,11 @@ std::string image_filtergraph(const VideoInfo& source_info, const VideoInfo& dis
         }
         return "[" + input + "]" + join(filters, ",") + "[" + output + "]";
     };
-    return chain("0:" + std::string(video_stream), "distorted", distorted_crop, distorted, plan.distorted_target) +
-           ";" + chain("1:" + std::string(video_stream), "reference", source_crop, source, plan.source_target);
+    return chain("0:" + std::string(video_stream), "distorted", distorted_crop, distorted, plan.distorted_target,
+                 options.range_seeks.distorted) +
+           ";" +
+           chain("1:" + std::string(video_stream), "reference", source_crop, source, plan.source_target,
+                 options.range_seeks.source);
 }
 
 std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const VideoInfo& source,
@@ -792,12 +796,18 @@ std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const Vide
     // At watched_log_level: PngPairs reads FFmpeg's word that it rebuilt its filters.
     std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", watched_log_level,
                                      "-nostats", "-y"};
-    for (const auto& [video, fed] : {std::pair{&distorted, &distorted_fed}, std::pair{&source, &source_fed}}) {
+    struct Input {
+        const VideoInfo* video;
+        const std::optional<std::vector<std::string>>* fed;
+        const std::optional<RangeSeek>* seek;
+    };
+    for (const auto& [video, fed, seek] : {Input{&distorted, &distorted_fed, &options.range_seeks.distorted},
+                                           Input{&source, &source_fed, &options.range_seeks.source}}) {
         if (*fed) {
             command.insert(command.end(), (*fed)->begin(), (*fed)->end());
             continue;
         }
-        const std::vector<std::string> input = video->decode_options();
+        const std::vector<std::string> input = with_seek(video->decode_options(), *seek);
         command.insert(command.end(), input.begin(), input.end());
         command.insert(command.end(), {"-i", input_path(video->path)});
     }
@@ -1074,7 +1084,7 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
     }
     const VideoInfo& source = request.source;
     const VideoInfo& distorted = request.distorted;
-    const VmafOptions& options = request.options;
+    VmafOptions options = request.options;
     if (options.resample_test) {
         throw PerceptualRunError("Perceptual CPU metrics do not support resolution round-trip tests yet.");
     }
@@ -1086,6 +1096,11 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
               : resolve_crops(request.environment.ffmpeg, source, distorted, options.crop_mode,
                               options.scale_algorithm, cancel, on_status);
     const FrameRange range = cpu_range(options, source, step);
+    for (const auto& [video, seek] : {std::pair{&source, &options.range_seeks.source},
+                                      std::pair{&distorted, &options.range_seeks.distorted}}) {
+        *seek = ffmpeg_range_seek(*video, range.decode_start, request.environment.ffmpeg,
+                                  request.environment.ffprobe, cancel);
+    }
     const long long expected = expected_frames(source, distorted, range);
     const long long total_units = std::max(1LL, (expected + step - 1) / step) * step;
     if (on_status) {
@@ -1146,6 +1161,11 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
     const auto total = static_cast<long long>(by_pair.size());
     if (const std::optional<std::string> short_reason =
             short_comparison(expected, total * step, range.decode_start, source.fps, step)) {
+        if (range_may_seek(range.decode_start, frame_rate(source))) {
+            // A video really cut short, or a seek that gave less than it promised: from the start, to tell
+            turn_off_range_seek(*short_reason);
+            return run_cpu_perceptual_task(request, keys, crops, on_progress, on_status, cancel);
+        }
         throw ComparisonCutShortError(*short_reason);
     }
     if (on_progress) {
