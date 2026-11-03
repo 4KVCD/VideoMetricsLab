@@ -85,9 +85,9 @@ CPU: choose CPU there. The last choice is what newly added videos start with.
 The GPU's scores agree with FFmpeg's libvmaf on the CPU to within a thousandth
 of a point on every frame, so a saved VMAF score is reused whichever is
 chosen. PSNR, SSIM and XPSNR have no GPU code: the app
-calculates them on the CPU with the bundled libvmaf-fast, beside the GPU's run,
-so they do not slow VMAF down. With VMAF on the CPU, FFmpeg calculates them in
-the same run, except XPSNR of videos of more than 8 bits: FFmpeg's `xpsnr`
+calculates them on the CPU with the bundled libvmaf-fast, from the pictures
+decoded for VMAF where it can, so the videos are not decoded twice. With VMAF
+on the CPU, FFmpeg calculates them in the same run, except XPSNR of videos of more than 8 bits: FFmpeg's `xpsnr`
 filter reads such pictures wrongly at some widths, so the app calculates it,
 beside FFmpeg's run.
 

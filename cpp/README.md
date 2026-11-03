@@ -93,9 +93,10 @@ With VMAF on the GPU, PSNR, SSIM and XPSNR are a task of their own on the
 CPU, and the two run at once, as the Python app runs a video's tasks; so
 are Vship's metrics, in the GPU's queue after VMAF, and SSIMULACRA2 and
 Butteraugli on the CPU, in the CPU's queue. Where the app decodes a video
-on the CPU (a VVC video, say), PSNR, SSIM and XPSNR are scored in VMAF's
-task instead, from the frames decoded for VMAF, rather than decoding the
-video a second time. For VMAF and Vship's
+on the CPU (a VVC video, say), or both on a GPU whose pictures reach them as
+in their own run (`pass_feeds_cpu_metrics`), PSNR, SSIM and XPSNR are scored in
+VMAF's task instead, from the frames decoded for VMAF, rather than decoding the
+videos a second time. For VMAF and Vship's
 metrics on the GPU, and PSNR, SSIM and XPSNR in the app, it decodes the
 videos itself, as the Python app does: with the GPU's own decoder (NVIDIA's,
 Intel's or AMD's, through the app's libraries in `resources/native`; for VMAF

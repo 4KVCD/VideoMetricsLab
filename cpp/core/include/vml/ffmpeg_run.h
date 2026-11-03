@@ -194,14 +194,22 @@ bool cpu_metrics_in_app();
 // others (VMAF, NEG and VMAF v1).
 bool is_cpu_metric(std::string_view key);
 
+// Whether the CPU metrics `keys` are scored on every frame whatever the GPU's
+// metrics subsample: XPSNR alone, as run_cpu_metrics scores it. They cannot
+// share a pass that scores fewer frames.
+bool cpu_metrics_need_every_frame(const std::vector<std::string>& keys, int n_subsample);
+
 // Whether a run of VMAF on the GPU and PSNR, SSIM and XPSNR in the app should
 // score both from one decode of each video (plan_tasks's share_decode): when
-// the app scores those (cpu_metrics_in_app) and decodes either video on the
-// CPU, where a second decode of it would cost about as much again (GPU
+// the app scores those (cpu_metrics_in_app) and a second decode of the videos
+// would cost about as much again: either video decoded on the CPU (GPU
 // decoding off, no GPU decoder for it on this PC, or film grain only the
-// app's decoder adds). Where both are decoded on the GPU, the CPU's metrics
-// keep a task of their own, which does not hold the GPU's queue. On this PC's
-// decoders (`capabilities`, DecodingCapabilities::remembered).
+// app's decoder adds), or both on a GPU whose decoder the two parts would
+// share and which sets the pace at 4K (RTX 5090, a 4K HEVC remux against itself:
+// VMAF and NEG 267 frames a second with the decoder 90% busy, with PSNR beside
+// them in a task of its own 150). Where the pictures would differ (AMD's), the
+// CPU's metrics keep a task of their own. On this PC's decoders
+// (`capabilities`, DecodingCapabilities::remembered).
 bool shares_decode(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
                    const DecodingCapabilities& capabilities);
 

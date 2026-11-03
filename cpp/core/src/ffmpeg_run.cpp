@@ -1460,6 +1460,32 @@ bool cpu_metrics_in_app() {
 
 bool is_cpu_metric(std::string_view key) { return key == "psnr" || key == "ssim" || key == "xpsnr"; }
 
+bool cpu_metrics_need_every_frame(const std::vector<std::string>& keys, int n_subsample) {
+    return keys == std::vector<std::string>{"xpsnr"} && n_subsample > 1;
+}
+
+namespace {
+
+// Whether a GPU pass's pictures reach the CPU's scorer as they would in the
+// CPU metrics' own run, so that it may score them beside its own. Both videos
+// decoded in this process (a video whose size changes is FFmpeg's, in either
+// pass): the software decoder's and Intel's pictures, which are never handed
+// over (can_hand_over: nvf_download writes them out in both passes), and
+// NVIDIA's, which always are. Or FFmpeg decoding them, Apple's VideoToolbox
+// having no library here: both passes read the same pipes. Not AMD's, which
+// hands its pictures to the GPU's pass by Windows' decoder and to the CPU
+// metrics' own run by AMF.
+bool pass_feeds_cpu_metrics(const VideoInfo& source, const VideoInfo& distorted, const HardwareDecoding& decoding) {
+    if (decoding.source == "videotoolbox" || decoding.distorted == "videotoolbox") {
+        return true;
+    }
+    const std::optional<std::pair<std::string, std::string>> decoders =
+        source.scaled_to || distorted.scaled_to ? std::nullopt : decoders_here(decoding);
+    return decoders && decoders->first != "amd" && decoders->second != "amd";
+}
+
+}  // namespace
+
 bool shares_decode(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
                    const DecodingCapabilities& capabilities) {
     if (!cpu_metrics_in_app()) {
@@ -1474,7 +1500,7 @@ bool shares_decode(const VideoInfo& source, const VideoInfo& test, const VmafOpt
         }
     }
     const HardwareDecoding decoding = plan_hardware_decoding(capabilities, options.gpu_vendor, source, test);
-    return !decoding.source || !decoding.distorted;
+    return !decoding.source || !decoding.distorted || pass_feeds_cpu_metrics(source, test, decoding);
 }
 
 nlohmann::json scoring_task(const nlohmann::json& request, const std::filesystem::path& folder) {
@@ -1749,21 +1775,14 @@ RunScores score_alone(const RunFrames& run, const VmafOptions& options, const st
 
 // Whether the GPU's pass (`gpu`) can score the run's CPU metrics (`cpu`)
 // beside its own, from the frames it decodes, exactly as their own run
-// would: both videos decoded in this process (as score_plan decodes them) by
-// the software decoder or NVIDIA's, whose pictures the CPU's scorer reads the
-// same way for either pass (the other GPUs' decoders hand pictures over to
-// the GPU's pass another way); every CPU metric of the run in `cpu`, none left
+// would: pictures that reach the CPU's scorer as in that run
+// (pass_feeds_cpu_metrics); every CPU metric of the run in `cpu`, none left
 // to an FFmpeg of its own (run_cpu_metrics's XPSNR beside); scored for the
 // GPU's frames, which XPSNR alone with a frame subsample is not
 // (run_cpu_metrics scores it for every frame); and not to libvmaf's CUDA code
 // without VMAF v1 (score_decoded_cuda).
 bool shares_pass(const RunFrames& run, const GpuPlan& gpu, const GpuPlan& cpu, const VmafOptions& cpu_options) {
-    const std::optional<std::pair<std::string, std::string>> decoders =
-        run.source.scaled_to || run.distorted.scaled_to ? std::nullopt : decoders_here(run.decoding);
-    const auto reads_alike = [](const std::string& decoder) {
-        return decoder == software_decoder || decoder == "nvidia";
-    };
-    if (!decoders || !reads_alike(decoders->first) || !reads_alike(decoders->second)) {
+    if (!pass_feeds_cpu_metrics(run.source, run.distorted, run.decoding)) {
         return false;
     }
     const std::vector<std::string> gpu_keys = plan_keys(gpu);
@@ -1774,7 +1793,7 @@ bool shares_pass(const RunFrames& run, const GpuPlan& gpu, const GpuPlan& cpu, c
     if (cpu_options.compute_xpsnr && std::find(keys.begin(), keys.end(), "xpsnr") == keys.end()) {
         return false;
     }
-    return !(keys == std::vector<std::string>{"xpsnr"} && cpu_options.n_subsample > 1);
+    return !cpu_metrics_need_every_frame(keys, cpu_options.n_subsample);
 }
 
 // Moves the scores of `keys` out of `scores` into scores of their own, for the

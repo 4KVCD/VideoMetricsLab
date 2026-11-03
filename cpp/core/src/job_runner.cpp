@@ -1158,7 +1158,10 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     }
     // PSNR, SSIM and XPSNR beside VMAF on the GPU, from the GPU's decode,
     // when both parts still run.
-    if (share_decode && !gpu.metric_keys.empty() && !ffmpeg.metric_keys.empty() &&
+    // Not metrics that cannot share its pass: in the GPU's task they would
+    // decode the videos again while holding the GPU's queue.
+    if (share_decode && !cpu_metrics_need_every_frame(ffmpeg.metric_keys, options.n_subsample) &&
+        !gpu.metric_keys.empty() && !ffmpeg.metric_keys.empty() &&
         std::all_of(ffmpeg.metric_keys.begin(), ffmpeg.metric_keys.end(),
                     [](const std::string& key) { return is_cpu_metric(key); })) {
         gpu.cpu_beside = std::move(ffmpeg.metric_keys);
