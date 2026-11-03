@@ -48,6 +48,7 @@ add_library(vml_core
     src/perceptual_cpu.cpp
     src/python_json.cpp
     src/python_text.cpp
+    src/range_seek.cpp
     src/result_json.cpp
     src/results.cpp
     src/results_summary.cpp

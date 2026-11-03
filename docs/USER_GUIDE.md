@@ -14,9 +14,10 @@
    whole seconds (an end of 00:00:00 compares to the videos' end). A range's
    scores are those of the same frames in a run over the whole videos. An end
    within a video's last, partial second compares to its end: 00:00:00 to
-   00:00:13 for a 300-frame encode of 12.5 seconds. The
-   frames before a range are still decoded, so a range late in a long video
-   takes a while to start, and its progress may stay at 0% until then.
+   00:00:13 for a 300-frame encode of 12.5 seconds. A range late in a video
+   starts decoding near it where the file proves its frames can be counted from
+   their timestamps. Otherwise the frames before it are decoded, so it takes a
+   while to start, and its progress may stay at 0% until then.
 
 The model selector includes Netflix VMAF v0 models and the bundled VMAF v1
 models (1080p, phone, 4K, and high-frame-rate variants). VMAF v1 requires an

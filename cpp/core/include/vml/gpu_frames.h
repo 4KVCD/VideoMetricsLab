@@ -54,6 +54,7 @@
 #include "vml/gpu_decoders.h"
 #include "vml/hardware_decoding.h"
 #include "vml/pair_scorer.h"
+#include "vml/range_seek.h"
 #include "vml/video.h"
 
 namespace vml {
@@ -144,6 +145,8 @@ struct DecodePlan {
     // layout (Vship reads it as 16-bit).
     int shift = 0;
     bool luma_only = false;  // only the luma plane, which VMAF reads
+    // Where a ranged run starts reading (plan_range_seek); none: the video's start.
+    std::optional<RangeSeek> seek;
     int out_w = 0;           // the size the crop is scaled to (0: not scaled)
     int out_h = 0;
     std::string scaler = "bicubic";  // the app's scaling algorithm
@@ -176,6 +179,24 @@ struct DecodePlan {
     // The bytes of one picture handed back, its planes packed.
     std::size_t frame_bytes() const;
 };
+
+// Plans a seek into `plan` where a range starting at picture `decode_start` is
+// late enough and the file proves its pictures can be numbered from their
+// timestamps (range_seek.h): HEVC, VVC or H.264 opening at a picture that needs
+// none before it (AV1's and VP9's container keyframes may be hidden ones), with
+// no film grain to carry over. The file's checks are done once a process. Throws
+// Cancelled. VML_RANGE_SEEK=0 turns seeking off.
+void plan_range_seek(DecodePlan& plan, const VideoInfo& info, long long decode_start, const std::string& ffmpeg,
+                     const std::string& ffprobe, const CancelToken& cancel);
+
+// plan_range_seek for a pass's two `plans`: the test video's, then the source's.
+void plan_pair_seek(std::vector<DecodePlan>& plans, const VideoInfo& test, const VideoInfo& source,
+                    long long decode_start, const std::string& ffmpeg, const std::string& ffprobe,
+                    const CancelToken& cancel);
+
+// No more seeks in this run: one was refused (SeekRefused). trust_gpu_decoding
+// clears it as a run starts.
+void turn_off_range_seek(const std::string& reason);
 
 // The plan for decoding the video here, cropped to `crop` and scaled to
 // `size` with `algorithm`. Throws GpuDecodeUnavailableError, with the
@@ -468,9 +489,14 @@ public:
     // a copy: the frames before those a ranged run decodes (frame_range.h),
     // counted as next() hands them out. `on_skipped` is told how many have
     // gone every quarter of a second. False when the video ends first.
-    // Throws as next().
+    // Throws as next(). A seeked stream (DecodePlan::seek) passes over only
+    // those from its seek to picture `count`, and throws SeekRefused should its
+    // pictures not be those, or its decoding fail, before it gets there.
     bool skip(long long count, const CancelToken& cancel,
               const std::function<void(long long)>& on_skipped = {});
+
+    // How many pictures its seek saved skip() from passing over; 0 without one.
+    long long seeked_over() const;
 
     // The time base of the pictures' timestamps, once FFmpeg has reported it
     // (before the first packet), for cutting a window of them by time
@@ -580,6 +606,7 @@ public:
 
 private:
     std::optional<Picture> next_picture(const CancelToken& cancel);
+    bool skip_after_seek(long long count, const CancelToken& cancel, const std::function<void(long long)>& on_skipped);
     // A failed decoding of a plan only this decoder makes the pictures of
     // (DecodePlan::software_only) as FilmGrainRefusal, which the routes'
     // fallbacks pass on: no other route would decode them.

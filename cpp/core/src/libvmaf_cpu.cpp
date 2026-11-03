@@ -387,6 +387,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
     if ((test_vvdec || reference_vvdec) && on_vvdec_opening) {
         on_vvdec_opening();
     }
+    plan_pair_seek(plans, distorted, source, range.decode_start, ffmpeg, ffprobe, cancel);
     GpuFrameStream test = open_pass_stream(distorted, plans[0], 4, test_backend, test_vvdec, -1, ffmpeg, ffprobe);
     GpuFrameStream reference =
         open_pass_stream(source, plans[1], 4, source_backend, reference_vvdec, -1, ffmpeg, ffprobe);

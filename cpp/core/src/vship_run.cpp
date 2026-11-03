@@ -578,16 +578,17 @@ private:
         if (range_.decode_end && at >= *range_.decode_end) {
             return Taken::ended;
         }
-        if (at < range_.decode_start) {
-            return Taken::skipped;  // before the frames the range decodes
-        }
         return at % step_ == 0 ? Taken::piped : Taken::skipped;
     }
 
     // The copying thread: copies each selected picture into a free slot.
     void run() {
         try {
-            long long number = 0;  // each decoded picture's number, as FFmpeg's chain numbers it
+            if (range_.decode_start > 0 && !decoder_->skip(range_.decode_start, stop_)) {
+                filled_.put({end_of_video, nullptr});
+                return;
+            }
+            long long number = range_.decode_start;  // each decoded picture's number, as FFmpeg's chain numbers it
             while (!stopping_) {
                 const std::optional<GpuFrameStream::Picture> picture = decoder_->next(stop_);
                 if (!picture) {
@@ -1110,6 +1111,9 @@ public:
         } catch (const GpuDecodeFailedError&) {
             close();  // made again with FFmpeg decoding (remade_vship_pass)
             throw;
+        } catch (const SeekRefused&) {
+            close();  // made again from the videos' start (remade_vship_pass)
+            throw;
         } catch (const VideoSizeChanged&) {
             close();  // made again with the video scaled first (run_perceptual_task)
             throw;
@@ -1278,7 +1282,10 @@ private:
         if (!supported) {
             throw GpuDecodeUnavailableError(refusal);
         }
-        auto decoder = std::make_unique<GpuFrameStream>(video.info, decode, device, 4, backend,
+        DecodePlan seeking = decode;
+        plan_range_seek(seeking, video.info, range_.decode_start, request_.environment.ffmpeg,
+                        request_.environment.ffprobe, cancel_);
+        auto decoder = std::make_unique<GpuFrameStream>(video.info, seeking, device, 4, backend,
                                                         request_.environment.ffmpeg, request_.environment.ffprobe);
         logger.info("Vship: the " + video.label + " is decoded by the " + backend + " decoder in the scoring process");
         return decoder;
@@ -2831,6 +2838,8 @@ PerceptualTaskOutput remade_vship_pass(const std::function<PerceptualTaskOutput(
                 on_status({"Reading the videos failed (" + std::string(error.what()) + "); trying again\xE2\x80\xA6"});
             }
             input_retried = true;
+        } catch (const SeekRefused& error) {
+            turn_off_range_seek(error.what());
         } catch (const GpuDecodeFailedError& error) {
             if (!native || (error.backend() == vvdec_decoder && vvdec_retried)) {
                 throw VshipUnavailableError(error.what());

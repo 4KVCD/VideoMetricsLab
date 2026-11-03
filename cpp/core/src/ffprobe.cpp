@@ -377,6 +377,50 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
     return video_info_from_probe(path, run_ffprobe(command, path, std::chrono::seconds(60), cancel));
 }
 
+std::optional<long long> stated_frame_count(const std::filesystem::path& path, const std::string& ffprobe,
+                                            const CancelToken& cancel) {
+    const std::vector<std::string> command{
+        ffprobe, "-v", "error", "-select_streams", "v:0", "-print_format", "json", "-show_entries",
+        "stream=nb_frames:stream_tags=NUMBER_OF_FRAMES,NUMBER_OF_FRAMES-eng", text(path)};
+    const Json probe = Json::parse(run_ffprobe(command, path, std::chrono::seconds(60), cancel));
+    const Json* streams = member(probe, "streams");
+    if (streams == nullptr || streams->empty()) {
+        return std::nullopt;
+    }
+    const auto count_in = [](const Json& holder, const char* key) -> std::optional<long long> {
+        const Json* value = member(holder, key);
+        return value != nullptr && value->is_string() ? python_int(value->get_ref<const std::string&>())
+                                                      : std::optional<long long>();
+    };
+    const Json& stream = streams->at(0);
+    if (const std::optional<long long> count = count_in(stream, "nb_frames"); count && *count > 0) {
+        return count;
+    }
+    const Json* tags = member(stream, "tags");
+    if (tags == nullptr) {
+        return std::nullopt;
+    }
+    for (const char* key : {"NUMBER_OF_FRAMES", "NUMBER_OF_FRAMES-eng"}) {
+        if (const std::optional<long long> count = count_in(*tags, key); count && *count > 0) {
+            return count;
+        }
+    }
+    return std::nullopt;
+}
+
+long long count_video_packets(const std::filesystem::path& path, const std::string& ffprobe,
+                              const CancelToken& cancel) {
+    const std::vector<std::string> command{
+        ffprobe, "-v", "error", "-select_streams", "v:0", "-count_packets", "-print_format", "json", "-show_entries",
+        "stream=nb_read_packets", text(path)};
+    const Json probe = Json::parse(run_ffprobe(command, path, std::chrono::minutes(5), cancel));
+    const Json* streams = member(probe, "streams");
+    const Json* packets = streams != nullptr && !streams->empty() ? member(streams->at(0), "nb_read_packets") : nullptr;
+    return packets != nullptr && packets->is_string()
+               ? python_int(packets->get_ref<const std::string&>()).value_or(0)
+               : 0;
+}
+
 VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprobe, const CancelToken& cancel) {
     info.timed_raw = true;
     info.fps = fps;

@@ -702,6 +702,11 @@ ParsedScores score_plan(const RunEnvironment& environment, const VideoInfo& sour
         try {
             return score_decoded_here(environment, source, distorted, options, source_crop, distorted_crop, plan,
                                       fps, total_frames, decoding, *decoders, on_progress, on_status, cancel);
+        } catch (const SeekRefused& error) {
+            // Nothing scored yet: the same pass from the videos' start, with the decoders it had
+            turn_off_range_seek(error.what());
+            return score_plan(environment, source, distorted, options, source_crop, distorted_crop, plan, fps,
+                              total_frames, decoding, on_progress, on_status, cancel);
         } catch (const GpuDecodeUnavailableError& error) {
             if (error.backend() == vvdec_decoder) {
                 // vvdec-vulkan refused: off for the run, and the same pass with the app's VVdeC (vvdec_wanted is

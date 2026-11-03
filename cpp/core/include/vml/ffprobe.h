@@ -2,6 +2,7 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -40,6 +41,15 @@ VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprob
 // frames a second, the command line's --size, --pix-fmt and --fps, and
 // timed as timed_raw_stream times a raw stream. Throws ProbeError when
 // ffprobe cannot read it so, Cancelled once cancelled.
+// The frame count a file states: its stream's, or Matroska's NUMBER_OF_FRAMES tag
+// (which a stream copy may have left stale). Nothing where it states none.
+std::optional<long long> stated_frame_count(const std::filesystem::path& path, const std::string& ffprobe,
+                                            const CancelToken& cancel);
+
+// The packets of the file's first video stream, read through without decoding.
+long long count_video_packets(const std::filesystem::path& path, const std::string& ffprobe,
+                              const CancelToken& cancel);
+
 VideoInfo probe_raw_yuv(const std::filesystem::path& path, const std::string& size, const std::string& pix_fmt,
                         double fps, const std::string& ffprobe, const CancelToken& cancel = CancelToken());
 

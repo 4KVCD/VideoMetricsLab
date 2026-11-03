@@ -1263,6 +1263,7 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
         on_vvdec_opening();
     }
     const int vvdec_device = plan.backend == "vulkan" ? plan.device : -1;
+    plan_pair_seek(plans, distorted, source, range.decode_start, ffmpeg, ffprobe, cancel);
     GpuFrameStream test =
         open_pass_stream(distorted, plans[0], pool, test_backend, test_vvdec, vvdec_device, ffmpeg, ffprobe, hand_over);
     GpuFrameStream reference = open_pass_stream(source, plans[1], pool, source_backend, reference_vvdec, vvdec_device,

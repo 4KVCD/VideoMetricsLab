@@ -718,6 +718,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
         throw GpuDecodeUnavailableError("the decoders' frames are not the size compared at");
     }
     if (cuda) {
+        plan_pair_seek(plans, distorted, source, range.decode_start, ffmpeg, ffprobe, cancel);
         return score_decoded_cuda(source, distorted, plans, plan, n_subsample, range, total_frames,
                                   decoders, ffmpeg, ffprobe, on_progress, cancel);
     }
@@ -740,6 +741,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     // vvdec-vulkan on the scorer's Vulkan device (plan.device), as its pictures go into the scorer's memory; the
     // other decoders on CUDA device 0. (Where this runs in the run's own process, vvdec-vulkan keeps the device it
     // first opened on: vvdecvk_frames sets it once a process.)
+    plan_pair_seek(plans, distorted, source, range.decode_start, ffmpeg, ffprobe, cancel);
     GpuFrameStream test =
         open_pass_stream(distorted, plans[0], 4, test_backend, vvdec.test, plan.device, ffmpeg, ffprobe, hand_over);
     GpuFrameStream reference = open_pass_stream(source, plans[1], 4, source_backend, vvdec.reference, plan.device,

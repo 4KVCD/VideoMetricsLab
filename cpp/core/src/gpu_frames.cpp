@@ -20,10 +20,12 @@
 #include <regex>
 #include <system_error>
 #include <thread>
+#include <tuple>
 
 #include "vml/app_log.h"
 #include "vml/av2_stream.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/ffprobe.h"
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
@@ -637,6 +639,9 @@ public:
         listing_thread_ = std::thread([this] { read_listing(); });
     }
 
+    // How many packets next() has passed over or hidden (LeadingPictures).
+    int leading_passed_over() const { return leading_.skipped(); }
+
     // The next packet to decode, in decode order: its bytes into `data`, its
     // timestamp and its flags. The leading pictures FFmpeg's decoding drops
     // are passed over (LeadingPictures). False at the end, once FFmpeg has
@@ -1039,6 +1044,7 @@ namespace {
 std::mutex distrust_mutex;
 std::optional<std::string> distrust_reason;
 bool vvdec_off = false;
+bool range_seek_off = false;
 
 }  // namespace
 
@@ -1082,6 +1088,13 @@ void trust_gpu_decoding() {
     const std::lock_guard lock(distrust_mutex);
     distrust_reason.reset();
     vvdec_off = false;
+    range_seek_off = false;
+}
+
+void turn_off_range_seek(const std::string& reason) {
+    logger.info("Ranges are decoded from the video's start for the rest of this run: " + reason);
+    const std::lock_guard lock(distrust_mutex);
+    range_seek_off = true;
 }
 
 std::size_t DecodePlan::frame_bytes() const {
@@ -1534,6 +1547,205 @@ void PictureChecks::check_end() {
     }
 }
 
+// -------------------------------------------------------------- range seeks
+
+namespace {
+
+// How many packets to read for a video's first shown picture: past its leading
+// pictures and its reordering.
+constexpr int packets_for_first_picture = 64;
+constexpr const char* tail_seconds = "-10";  // back from the video's end, for its last picture
+
+// A file's pictures, as proved to lie on its frame rate's grid.
+struct PictureGrid {
+    long long first_pts = 0;
+    Rational time_base;
+};
+
+// The lowest shown timestamp among the packets `reader` gives, up to `limit`, as
+// the reader gives them: its packets come in decode order. Nothing without one.
+std::optional<long long> lowest_pts(PacketReader& reader, int limit) {
+    std::optional<long long> lowest;
+    std::vector<std::uint8_t> data;
+    long long pts = 0;
+    int flags = 0;
+    for (int read = 0; read < limit && reader.next(data, pts, flags); ++read) {
+        if (!(flags & no_picture_flag) && (!lowest || pts < *lowest)) {
+            lowest = pts;
+        }
+    }
+    return lowest;
+}
+
+std::optional<long long> highest_pts_to_the_end(PacketReader& reader) {
+    std::optional<long long> highest;
+    std::vector<std::uint8_t> data;
+    long long pts = 0;
+    int flags = 0;
+    while (reader.next(data, pts, flags)) {
+        if (!(flags & no_picture_flag) && (!highest || pts > *highest)) {
+            highest = pts;
+        }
+    }
+    return highest;
+}
+
+// The packets of the file's video: stated, or counted where that pays.
+std::optional<long long> packets_in_file(const VideoInfo& info, long long decode_start, const std::string& ffprobe,
+                                         const CancelToken& cancel) {
+    if (const std::optional<long long> stated = stated_frame_count(info.path, ffprobe, cancel)) {
+        return stated;
+    }
+    std::error_code size_error;
+    const auto bytes = static_cast<long long>(std::filesystem::file_size(info.path, size_error));
+    if (size_error || !counting_packets_pays(bytes, decode_start)) {
+        return std::nullopt;
+    }
+    const long long counted = count_video_packets(info.path, ffprobe, cancel);
+    return counted > 0 ? std::optional(counted) : std::nullopt;
+}
+
+// Reads the file's first and last pictures and compares them with its count.
+std::optional<PictureGrid> prove_picture_grid(const VideoInfo& info, std::string_view codec, long long decode_start,
+                                              const std::string& ffmpeg, const std::string& ffprobe,
+                                              const CancelToken& cancel) {
+    const std::optional<long long> packets = packets_in_file(info, decode_start, ffprobe, cancel);
+    if (!packets) {
+        return std::nullopt;
+    }
+    PacketReader start(ffmpeg, info.path, codec, {"-copyts"});
+    start.start();
+    const std::optional<Rational> time_base = start.wait_time_base(cancel);
+    const std::optional<long long> first = lowest_pts(start, packets_for_first_picture);
+    PacketReader tail(ffmpeg, info.path, codec, {"-copyts", "-sseof", tail_seconds});
+    tail.start();
+    const std::optional<long long> last = highest_pts_to_the_end(tail);
+    if (!time_base || !first || !last ||
+        !pictures_fill_grid(*first, *last, *packets - start.leading_passed_over(), *time_base, frame_rate(info))) {
+        return std::nullopt;
+    }
+    return PictureGrid{*first, *time_base};
+}
+
+// A process's proofs: a pass of each metric's task asks for the same files.
+const std::optional<PictureGrid>& picture_grid(const VideoInfo& info, std::string_view codec, long long decode_start,
+                                               const std::string& ffmpeg, const std::string& ffprobe,
+                                               const CancelToken& cancel) {
+    using FileAsItIs = std::tuple<std::filesystem::path, std::uintmax_t, std::filesystem::file_time_type>;
+    static std::mutex mutex;
+    static std::map<FileAsItIs, std::optional<PictureGrid>> proved;
+    std::error_code ignored;  // a file that cannot be read has no size or time, and fails to prove below
+    const FileAsItIs file{info.path, std::filesystem::file_size(info.path, ignored),
+                          std::filesystem::last_write_time(info.path, ignored)};
+    {
+        const std::lock_guard lock(mutex);
+        if (const auto known = proved.find(file); known != proved.end()) {
+            return known->second;
+        }
+    }
+    // Not under the lock: it reads the file, and two videos are asked at once.
+    std::optional<PictureGrid> grid;
+    try {
+        grid = prove_picture_grid(info, codec, decode_start, ffmpeg, ffprobe, cancel);
+    } catch (const Cancelled&) {
+        throw;
+    } catch (const std::exception& error) {
+        logger.info(platform::path_text(info.path.filename()) + ": no seek to the range: " + error.what());
+    }
+    const std::lock_guard lock(mutex);
+    return proved.try_emplace(file, grid).first->second;
+}
+
+// Whether a packet's picture needs none before it. H.264's keyframes may be
+// recovery points, which do: only its IDR pictures. HEVC's and VVC's random
+// access pictures don't; the leading pictures that follow them are before the
+// range (seek_seconds) and LeadingPictures passes them over.
+bool opens_without_earlier_pictures(std::string_view codec, const std::vector<std::uint8_t>& packet) {
+    constexpr int h264_slice = 1, h264_idr = 5, vvc_first_idr = 7;
+    if (codec == "vvc") {
+        const std::optional<int> picture = vvc_picture(packet);
+        return picture && *picture >= vvc_first_idr && *picture <= vvc_unit::cra;
+    }
+    for (std::size_t at = 0; at + 4 < packet.size(); ++at) {
+        if (packet[at] != 0 || packet[at + 1] != 0 || packet[at + 2] != 1) {
+            continue;
+        }
+        if (codec == "h264") {
+            const int type = packet[at + 3] & 0x1f;
+            if (type == h264_idr || type == h264_slice) {
+                return type == h264_idr;
+            }
+        } else {
+            const int type = hevc_unit::type_of(packet[at + 3]);
+            if (type <= hevc_unit::last_picture && hevc_unit::layer_of(packet[at + 3], packet[at + 4]) == 0) {
+                return type >= hevc_unit::first_random_access && type <= hevc_unit::cra;
+            }
+        }
+        at += 2;
+    }
+    return false;
+}
+
+bool seek_lands_on_open_point(const VideoInfo& info, std::string_view codec, double seconds,
+                              const std::string& ffmpeg) {
+    PacketReader probe(ffmpeg, info.path, codec, {"-copyts", "-ss", format_fixed(seconds, 9)});
+    probe.start();
+    std::vector<std::uint8_t> data;
+    long long pts = 0;
+    int flags = 0;
+    return probe.next(data, pts, flags) && opens_without_earlier_pictures(codec, data);
+}
+
+bool seeks_turned_off() {
+    if (platform::environment_variable("VML_RANGE_SEEK").value_or("") == "0") {
+        return true;
+    }
+    const std::lock_guard lock(distrust_mutex);
+    return range_seek_off;
+}
+
+}  // namespace
+
+void plan_range_seek(DecodePlan& plan, const VideoInfo& info, long long decode_start, const std::string& ffmpeg,
+                     const std::string& ffprobe, const CancelToken& cancel) {
+    const bool codec_seeks = plan.codec == "hevc" || plan.codec == "vvc" || plan.codec == "h264";
+    const bool grain_carries_over = plan.film_grain != 0 && plan.film_grain_kinds != 0;
+    const Rational rate = frame_rate(info);
+    if (!codec_seeks || plan.untimed || plan.software_only || grain_carries_over || seeks_turned_off() ||
+        !seek_is_worthwhile(decode_start, rate)) {
+        return;
+    }
+    const std::optional<PictureGrid>& grid = picture_grid(info, plan.codec, decode_start, ffmpeg, ffprobe, cancel);
+    if (!grid) {
+        logger.info(platform::path_text(info.path.filename()) +
+                    ": decoded from its start to the range (its pictures' numbers cannot be proved from their "
+                    "timestamps without reading it through)");
+        return;
+    }
+    const double seconds = seek_seconds(decode_start, rate);
+    try {
+        if (!seek_lands_on_open_point(info, plan.codec, seconds, ffmpeg)) {
+            logger.info(platform::path_text(info.path.filename()) +
+                        ": decoded from its start to the range (a seek there lands on a picture that needs earlier "
+                        "ones)");
+            return;
+        }
+    } catch (const GpuDecodeFailedError& error) {
+        logger.info(platform::path_text(info.path.filename()) + ": no seek to the range: " + error.what());
+        return;
+    }
+    logger.info(platform::path_text(info.path.filename()) + ": reading starts near the range, " +
+                format_fixed(seconds, 3) + " s in");
+    plan.seek = RangeSeek{seconds, grid->first_pts, grid->time_base, rate};
+}
+
+void plan_pair_seek(std::vector<DecodePlan>& plans, const VideoInfo& test, const VideoInfo& source,
+                    long long decode_start, const std::string& ffmpeg, const std::string& ffprobe,
+                    const CancelToken& cancel) {
+    plan_range_seek(plans[0], test, decode_start, ffmpeg, ffprobe, cancel);
+    plan_range_seek(plans[1], source, decode_start, ffmpeg, ffprobe, cancel);
+}
+
 // ----------------------------------------------------------------- streams
 
 // An AV2 video's temporal units, read by the app (av2_stream.h): FFmpeg 9
@@ -1615,6 +1827,9 @@ private:
 };
 
 struct GpuFrameStream::State {
+    std::optional<RangeSeek> seek;
+    std::optional<Picture> first_in_range;  // skip_after_seek's, for next() to give
+
     explicit State(std::string_view backend_name)
         : backend(backend_name),
           decoder(backend_name == software_decoder ? "the software decoder" : "the GPU's decoder"),
@@ -1720,6 +1935,10 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
     state.untimed = plan.untimed;
     state.software_only = plan.software_only;
     std::vector<std::string> reader_options = plan.untimed ? info.input_options() : std::vector<std::string>();
+    state.seek = plan.seek;
+    if (plan.seek) {
+        reader_options.insert(reader_options.end(), {"-copyts", "-ss", format_fixed(plan.seek->start, 9)});
+    }
     if (start) {
         // As the stills' -ss (frame_extract.cpp): FFmpeg reads it to the microsecond.
         reader_options.insert(reader_options.end(), {"-ss", format_fixed(*start, 9)});
@@ -1816,6 +2035,10 @@ std::optional<GpuFrameStream::Picture> GpuFrameStream::next(const CancelToken& c
 
 std::optional<GpuFrameStream::Picture> GpuFrameStream::next_picture(const CancelToken& cancel) {
     State& state = *state_;
+    if (state.first_in_range) {
+        // skip_after_seek had to take it to know it was there
+        return std::exchange(state.first_in_range, std::nullopt);
+    }
     while (true) {
         cancel.throw_if_cancelled();
         int slot = 0;
@@ -1871,8 +2094,52 @@ void GpuFrameStream::release(int slot) {
     }
 }
 
+long long GpuFrameStream::seeked_over() const {
+    const std::optional<RangeSeek>& seek = state_->seek;
+    return seek ? static_cast<long long>(seek->start * seek->frame_rate.numerator / seek->frame_rate.denominator) : 0;
+}
+
+bool GpuFrameStream::skip_after_seek(long long count, const CancelToken& cancel,
+                                     const std::function<void(long long)>& on_skipped) {
+    const RangeSeek& seek = *state_->seek;
+    const long long saved = seeked_over();
+    auto reported = std::chrono::steady_clock::now();
+    long long previous = -1;
+    while (true) {
+        std::optional<Picture> picture;
+        try {
+            picture = next(cancel);
+        } catch (const GpuDecodeFailedError& error) {
+            throw SeekRefused(error.what());
+        }
+        if (!picture) {
+            return false;
+        }
+        const long long number = picture_number_at(picture->pts, seek.first_pts, seek.time_base, seek.frame_rate);
+        if (number < 0 || number > count || (previous >= 0 && number != previous + 1)) {
+            release(picture->slot);
+            throw SeekRefused("a picture with timestamp " + std::to_string(picture->pts) +
+                              " is not the one its number should be after picture " + std::to_string(previous));
+        }
+        if (number == count) {
+            state_->first_in_range = picture;
+            return true;
+        }
+        release(picture->slot);
+        previous = number;
+        const auto now = std::chrono::steady_clock::now();
+        if (on_skipped && now - reported >= std::chrono::milliseconds(250)) {
+            reported = now;
+            on_skipped(number + 1 - saved);
+        }
+    }
+}
+
 bool GpuFrameStream::skip(long long count, const CancelToken& cancel,
                           const std::function<void(long long)>& on_skipped) {
+    if (state_->seek) {
+        return skip_after_seek(count, cancel, on_skipped);
+    }
     auto reported = std::chrono::steady_clock::now();
     for (long long done = 0; done < count; ++done) {
         const std::optional<Picture> picture = next(cancel);
@@ -2241,12 +2508,12 @@ void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const Fr
         release.reference = [&reference](int slot) { reference.release(slot); };
     }
     // Progress counts the frames passed over to the range too, which can be
-    // most of the time a range late in a long video takes.
-    const long long skipped = range.decode_start;
+    // most of the time a range late in a long video takes; a seek's are not.
+    const long long skipped = range.decode_start - std::min(test.seeked_over(), reference.seeked_over());
     const long long whole = total_frames + skipped;
     const auto started = std::chrono::steady_clock::now();
-    if (skipped > 0 &&
-        !skip_both(test, reference, skipped, cancel, [&](long long done) {
+    if (range.decode_start > 0 &&
+        !skip_both(test, reference, range.decode_start, cancel, [&](long long done) {
             if (on_progress) {
                 const auto now = std::chrono::steady_clock::now();
                 const double seconds = std::chrono::duration<double>(now - started).count();

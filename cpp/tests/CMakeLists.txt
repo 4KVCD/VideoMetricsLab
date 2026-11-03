@@ -28,6 +28,7 @@ add_executable(vml_tests
     unit/metric_cache_test.cpp
     unit/metrics_test.cpp
     unit/number_format_test.cpp
+    unit/range_seek_test.cpp
     unit/perceptual_cpu_test.cpp
     unit/process_test.cpp
     unit/python_json_test.cpp
