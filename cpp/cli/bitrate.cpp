@@ -10,6 +10,7 @@
 
 #include "common.h"
 #include "compare.h"
+#include "vml/build_info.h"
 #include "vml/cancel.h"
 #include "vml/export_csv.h"
 #include "vml/ffmpeg_tools.h"
@@ -255,7 +256,7 @@ Json bitrate_json(const std::vector<BitrateVideo>& videos, const std::optional<B
         entry["maximum_kbps"] = kbps_value(data.summary.maximum_kbps);
         entries.push_back(entry);
     }
-    Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"format", bitrate_format}, {"videos", entries}};
+    Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"commit", build_commit()}, {"format", bitrate_format}, {"videos", entries}};
     if (difference) {
         const std::optional<DifferenceSummary>& seconds = difference->seconds;
         const auto per_second = [&seconds](double DifferenceSummary::*field) {

@@ -27,6 +27,11 @@ struct MetricProvenance {
     std::string implementation_compatibility_id;
     // Text, as JSON, of the parameters the value depends on ({"model": ...}).
     std::map<std::string, std::string> parameters;
+    // The build of the app that calculated the score ("2.4 (0123456789ab)",
+    // build_stamp): kept as it was when the score is saved again or loaded;
+    // empty for a score saved before builds said. History only: no lookup
+    // reads it.
+    std::string made_by;
 };
 
 // A provenance of a metric FFmpeg calculated: its libvmaf filter, or its

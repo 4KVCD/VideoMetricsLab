@@ -113,11 +113,16 @@ nlohmann::ordered_json provenance_to_dict(const MetricProvenance& provenance) {
     for (const auto& [name, text] : provenance.parameters) {
         parameters[name] = nlohmann::ordered_json::parse(text);
     }
-    return {{"implementation", provenance.implementation},
-            {"implementation_version", provenance.implementation_version},
-            {"compute_backend", provenance.compute_backend},
-            {"implementation_compatibility_id", provenance.implementation_compatibility_id},
-            {"parameters", parameters}};
+    nlohmann::ordered_json dict{{"implementation", provenance.implementation},
+                                {"implementation_version", provenance.implementation_version},
+                                {"compute_backend", provenance.compute_backend},
+                                {"implementation_compatibility_id", provenance.implementation_compatibility_id},
+                                {"parameters", parameters}};
+    // Only where a build said (older apps' scores have none)
+    if (!provenance.made_by.empty()) {
+        dict["made_by"] = provenance.made_by;
+    }
+    return dict;
 }
 
 MetricProvenance provenance_from_dict(const nlohmann::json& data) {
@@ -132,6 +137,9 @@ MetricProvenance provenance_from_dict(const nlohmann::json& data) {
                                 {}};
     for (auto item = parameters.begin(); item != parameters.end(); ++item) {
         provenance.parameters[item.key()] = item.value().dump();
+    }
+    if (const auto made_by = data.find("made_by"); made_by != data.end() && made_by->is_string()) {
+        provenance.made_by = made_by->get<std::string>();
     }
     return provenance;
 }

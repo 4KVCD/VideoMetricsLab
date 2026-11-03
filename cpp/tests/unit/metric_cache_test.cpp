@@ -24,6 +24,7 @@
 
 #include "reference.h"
 #include "test_videos.h"
+#include "vml/build_info.h"
 #include "vml/npz.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
@@ -516,7 +517,11 @@ TEST(MetricCache, StoresAResultAsThePythonApp) {
         const ComparisonResult result = test::result_from(stored.at("result"));
         const std::filesystem::path directory = store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4",
                                                              request.recipe, result, stored.at("label"), request.metrics);
-        EXPECT_EQ(platform::read_file(directory / "context.json"), stored.at("context").get<std::string>());
+        // As the Python app's but for the build that saved it, which it did not say
+        nlohmann::json context = nlohmann::json::parse(platform::read_file(directory / "context.json").value_or(""));
+        EXPECT_EQ(context.value("saved_by", ""), build_stamp());
+        context.erase("saved_by");
+        EXPECT_EQ(python_json_compact(context), stored.at("context").get<std::string>());
         std::map<std::string, std::string> files;
         for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(directory)) {
             if (entry.path().extension() == ".npz") {
@@ -533,6 +538,37 @@ TEST(MetricCache, StoresAResultAsThePythonApp) {
         EXPECT_EQ(loaded->first.resample_target, result.resample_target);
         for (const std::string& key : result.metric_results.keys()) {
             EXPECT_EQ(version_of(loaded->first.metric_results, key), version_of(result.metric_results, key)) << key;
+        }
+    }
+}
+
+// The build that made a score comes back with it, saved again unchanged
+// (not as the build that saves it); a score saved before builds said, none.
+TEST(MetricCache, AScoreKeepsTheBuildThatMadeIt) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult result = test::result_from(stored.at("result"));
+    ASSERT_TRUE(result.metric_results.frame("vmaf"));
+    FrameMetricResult vmaf = *result.metric_results.frame("vmaf");
+    vmaf.provenance.made_by = "2.3 (0123456789ab)";
+    result.metric_results.add(vmaf);
+    const auto stored_and_loaded = [&](const ComparisonResult& saved) {
+        store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe, saved, "t", request.metrics);
+        return load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe, request.metrics,
+                           request.perceptual_backends);
+    };
+    const auto loaded = stored_and_loaded(result);
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->first.metric_results.frame("vmaf")->provenance.made_by, "2.3 (0123456789ab)");
+    const auto again = stored_and_loaded(loaded->first);
+    ASSERT_TRUE(again.has_value());
+    EXPECT_EQ(again->first.metric_results.frame("vmaf")->provenance.made_by, "2.3 (0123456789ab)");
+    for (const std::string& key : result.metric_results.keys()) {
+        if (key != "vmaf" && again->first.metric_results.frame(key)) {
+            EXPECT_EQ(again->first.metric_results.frame(key)->provenance.made_by, "") << key;
         }
     }
 }

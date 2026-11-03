@@ -4,6 +4,7 @@
 #include <set>
 
 #include "common.h"
+#include "vml/build_info.h"
 #include "vml/difference.h"
 #include "vml/export_csv.h"
 #include "vml/metrics.h"
@@ -313,7 +314,7 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
                       const std::vector<Summaries>& summaries, bool cancelled, const std::optional<Json>& difference) {
     Json reference{{"path", platform::path_text(source.path)}};
     add_media(reference, source);
-    Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"format", results_format},
+    Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"commit", build_commit()}, {"format", results_format},
                   {"cancelled", cancelled}, {"reference", reference}, {"videos", Json::array()}};
     for (std::size_t v = 0; v < videos.size(); ++v) {
         const TestVideo& video = videos[v];

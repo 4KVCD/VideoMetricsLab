@@ -14,6 +14,7 @@
 #include <variant>
 
 #include "vml/app_log.h"
+#include "vml/build_info.h"
 #include "vml/colour.h"
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
@@ -461,7 +462,8 @@ nlohmann::json context_json(const ComparisonResult& result, const std::string& l
             {"model_choice", optional_text(result.model_choice)},
             {"model_v1", result.model_v1},
             {"model_choice_v1", optional_text(result.model_choice_v1)},
-            {"recipe", recipe.identity()}};
+            {"recipe", recipe.identity()},
+            {"saved_by", build_stamp()}};
 }
 
 std::optional<nlohmann::json> read_json(const std::filesystem::path& path) {

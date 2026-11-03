@@ -9,12 +9,19 @@
 #include <string>
 
 #include "reference.h"
+#include "vml/build_info.h"
 
 namespace vml {
 namespace {
 
+// The Python app's file `text` as this app saves it: with the build that
+// saved it last, which the Python app did not say.
+std::string with_saved_by(const std::string& text) {
+    return text.substr(0, text.size() - 1) + ", \"saved_by\": \"" + build_stamp() + "\"}";
+}
+
 // Every kind of score, crops, VMAF v1's model, a resolution test, and no
-// label: the file is the Python app's to the byte.
+// label: the file is the Python app's to the byte, but for saved_by.
 TEST(RunFile, SavesAResultAsThePythonApp) {
     // Held here: a loop over load_reference(...).at(...) would read the
     // list after the file's JSON is gone.
@@ -23,7 +30,7 @@ TEST(RunFile, SavesAResultAsThePythonApp) {
     for (const nlohmann::json& item : reference.at("saved")) {
         SCOPED_TRACE(item.at("name").get<std::string>());
         EXPECT_EQ(run_file_text(test::result_from(item.at("result")), item.at("label").get<std::string>()),
-                  item.at("text").get<std::string>());
+                  with_saved_by(item.at("text").get<std::string>()));
     }
 }
 
@@ -50,7 +57,7 @@ TEST(RunFile, LoadsFilesAsThePythonApp) {
         }
         const auto [result, label] = run_from_text(text);
         EXPECT_EQ(label, item.at("label").get<std::string>());
-        EXPECT_EQ(run_file_text(result, label), item.at("resaved").get<std::string>());
+        EXPECT_EQ(run_file_text(result, label), with_saved_by(item.at("resaved").get<std::string>()));
         // A run file records no decoding marks: its scores say none
         // (metric_cache.cpp's av1_grain_dav1d).
         for (const std::string& key : result.metric_results.keys()) {

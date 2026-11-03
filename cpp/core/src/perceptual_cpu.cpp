@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "vml/app_log.h"
+#include "vml/build_info.h"
 #include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
@@ -1053,7 +1054,7 @@ MetricResultSet cpu_results(const std::vector<std::string>& keys, const std::vec
                 hdr ? nlohmann::json("picture's own").dump() : nlohmann::json(butteraugli_intensity_nits).dump();
         }
         MetricProvenance provenance{key, implementation_version(executables[position]), "cpu",
-                                    score_identity::libjxl_cpu(key), std::move(parameters)};
+                                    score_identity::libjxl_cpu(key), std::move(parameters), build_stamp()};
         mark_range(provenance, range);
         results.add(FrameMetricResult{key, frames, times, std::move(values), std::move(provenance)});
     }

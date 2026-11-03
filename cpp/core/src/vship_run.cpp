@@ -19,6 +19,7 @@
 #include <thread>
 
 #include "vml/app_log.h"
+#include "vml/build_info.h"
 #include "vml/colour.h"
 #include "vml/crop_detect.h"
 #include "vml/ffmpeg_tools.h"
@@ -1685,7 +1686,8 @@ private:
             if (failure_of(failures, key) != nullptr) {
                 continue;
             }
-            MetricProvenance provenance{"Vship/" + key, build_name(), "gpu", score_id(key), parameters};
+            MetricProvenance provenance{"Vship/" + key, build_name(), "gpu", score_id(key), parameters,
+                                        build_stamp()};
             mark_range(provenance, range_);
             std::vector<float> values = scores_.at(key)->values(frames);
             values = std::vector<float>(values.begin() + first, values.begin() + last);
@@ -1820,7 +1822,8 @@ nlohmann::json provenance_json(const MetricProvenance& provenance) {
             {"implementation_version", provenance.implementation_version},
             {"compute_backend", provenance.compute_backend},
             {"implementation_compatibility_id", provenance.implementation_compatibility_id},
-            {"parameters", provenance.parameters}};
+            {"parameters", provenance.parameters},
+            {"made_by", provenance.made_by}};
 }
 
 MetricProvenance provenance_from(const nlohmann::json& text) {
@@ -1830,6 +1833,7 @@ MetricProvenance provenance_from(const nlohmann::json& text) {
     text.at("compute_backend").get_to(provenance.compute_backend);
     text.at("implementation_compatibility_id").get_to(provenance.implementation_compatibility_id);
     text.at("parameters").get_to(provenance.parameters);
+    text.at("made_by").get_to(provenance.made_by);
     return provenance;
 }
 

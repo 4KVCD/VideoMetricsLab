@@ -103,6 +103,13 @@ or CPU, the GPU's maker, threads) is left out, so a score calculated one way
 stands for the other wherever the implementations declare themselves the
 same. A damaged file is a miss for its metric only.
 
+Each score's provenance says which build of the app calculated it
+(`made_by`, "2.4 (0123456789ab)": the version and the commit,
+`vml/build_info.h`), kept as it was when the score is saved again; a
+`context.json`, a saved run and the JSON exports say which build saved them
+(`saved_by`, `commit`). They are history only: no lookup reads them, so an
+older app reads these files as before.
+
 User data lives under `~/.videometricslab/` (settings, the saved scores by
 default, the log), whatever folder the app runs from.
 

@@ -8,6 +8,7 @@
 #include "dialogs.h"
 #include "i18n.h"
 #include "window_helpers.h"
+#include "vml/build_info.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
@@ -60,7 +61,7 @@ Json export_document(const std::optional<VideoInfo>& reference, const std::vecto
         source = Json{{"path", platform::path_text(reference->path)}};
         add_media(source, *reference);
     }
-    Json document{{"app", "VideoMetricsLab"}, {"version", VML_APP_VERSION}, {"format", results_format},
+    Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"commit", build_commit()}, {"format", results_format},
                   {"reference", source}, {"videos", Json::array()}};
     for (const ExportedRun& run : runs) {
         document["videos"].push_back(run_entry(run));

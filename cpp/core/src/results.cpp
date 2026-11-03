@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "vml/build_info.h"
 #include "vml/metrics.h"
 #include "vml/score_identity.h"
 #include "vml/stats.h"
@@ -22,7 +23,8 @@ MetricProvenance current_ffmpeg_provenance(const std::string& key, const std::st
                                            std::map<std::string, std::string> parameters) {
     const bool xpsnr = key == "xpsnr";
     return MetricProvenance{xpsnr ? "ffmpeg/xpsnr" : "ffmpeg/libvmaf", "ffmpeg " + version, "cpu",
-                            std::string(xpsnr ? score_identity::xpsnr : score_identity::libvmaf), std::move(parameters)};
+                            std::string(xpsnr ? score_identity::xpsnr : score_identity::libvmaf), std::move(parameters),
+                            build_stamp()};
 }
 
 std::optional<double> FrameMetricResult::aggregate() const {

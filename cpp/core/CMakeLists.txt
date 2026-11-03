@@ -8,6 +8,7 @@ add_library(vml_core
     src/bd_rate.cpp
     src/bd_rate_report.cpp
     src/bitrate.cpp
+    src/build_info.cpp
     src/cancel.cpp
     src/colour.cpp
     src/crop_detect.cpp
@@ -66,6 +67,20 @@ add_library(vml_core
     src/vmaf_vulkan.cpp
 )
 target_include_directories(vml_core PUBLIC include)
+# The app's version, for every part of it: shown, compared by the update
+# check with GitHub's latest release, and written into what the app saves
+# (vml/build_info.h).
+target_compile_definitions(vml_core PUBLIC VML_VERSION="${PROJECT_VERSION}")
+# The commit the app is built from (build_info.h's build_commit): asked of
+# git at every build, its file rewritten only when the commit changed.
+set(vml_build_commit_file ${CMAKE_CURRENT_BINARY_DIR}/generated/build_commit.cpp)
+add_custom_target(vml_build_commit
+    COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${PROJECT_SOURCE_DIR} -DOUTPUT=${vml_build_commit_file}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/build_commit.cmake
+    BYPRODUCTS ${vml_build_commit_file}
+    VERBATIM)
+target_sources(vml_core PRIVATE ${vml_build_commit_file})
+add_dependencies(vml_core vml_build_commit)
 # The decoders' scaler (native/scale/scale_filter.h), which gpu_frames.cpp
 # checks FFmpeg's scale filter against.
 target_include_directories(vml_core PRIVATE ../../native/scale)

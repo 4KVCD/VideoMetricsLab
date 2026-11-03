@@ -8,6 +8,7 @@
 #include <limits>
 #include <variant>
 
+#include "vml/build_info.h"
 #include "vml/model_select.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
@@ -294,7 +295,9 @@ std::string run_file_text(const ComparisonResult& result, const std::string& lab
                        {"scale_algorithm", result.scale_algorithm},
                        {"resample_target", resample_target_to_dict(result.resample_target)},
                        {"compared_frame_count", result.compared_frame_count},
-                       {"metric_results", std::move(metrics)}};
+                       {"metric_results", std::move(metrics)},
+                       // The build that saved the file (its scores say which made them)
+                       {"saved_by", build_stamp()}};
     return python_json_line(payload);
 }
 

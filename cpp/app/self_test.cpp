@@ -231,7 +231,7 @@ void check_gpu_metrics(SelfTestReport& report) {
 }  // namespace
 
 SelfTestReport self_test(const QApplication& app) {
-    SelfTestReport report(std::string("VideoMetricsLab ") + VML_APP_VERSION + " self-test (C++, Qt " + qVersion() + ")");
+    SelfTestReport report(std::string("VideoMetricsLab ") + VML_VERSION + " self-test (C++, Qt " + qVersion() + ")");
     report.note(std::string("packaged build: ") + (packaged() ? "yes" : "no, running from the build folder"));
     const Settings settings = Settings::load();
 

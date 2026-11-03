@@ -234,7 +234,7 @@ const std::vector<MetricColumn>& metric_columns() {
 // ======================================================================= window
 
 MainWindow::MainWindow() {
-    setWindowTitle(QStringLiteral("VideoMetricsLab %1").arg(VML_APP_VERSION));
+    setWindowTitle(QStringLiteral("VideoMetricsLab %1").arg(VML_VERSION));
     // Settings first: the ffmpeg location and what new rows default to both
     // come from them, so they must be applied before the tool check or any
     // row is added.
@@ -948,7 +948,7 @@ void MainWindow::check_for_updates() {
     QNetworkRequest request(QUrl(QString::fromUtf8(releases_url.data(), static_cast<qsizetype>(releases_url.size()))));
     request.setRawHeader("Accept", "application/vnd.github+json");
     // GitHub refuses requests without a User-Agent.
-    request.setHeader(QNetworkRequest::UserAgentHeader, "VideoMetricsLab/" VML_APP_VERSION);
+    request.setHeader(QNetworkRequest::UserAgentHeader, "VideoMetricsLab/" VML_VERSION);
     request.setTransferTimeout(update_check_timeout_seconds * 1000);
     QNetworkReply* reply = network->get(request);
     connect(reply, &QNetworkReply::finished, this, [this, reply, network] {
@@ -971,16 +971,16 @@ void MainWindow::on_update_answer(const std::string& body, const QString& error)
         logger.info(std::string("Update check: GitHub could not be asked (") + failure.what() + ")");
         return;
     }
-    if (!is_newer(release->version, VML_APP_VERSION)) {
-        logger.info("Update check: VideoMetricsLab " VML_APP_VERSION " is the latest release");
+    if (!is_newer(release->version, VML_VERSION)) {
+        logger.info("Update check: VideoMetricsLab " VML_VERSION " is the latest release");
         return;
     }
     if (!offers_package_here(*release)) {
         logger.info("Update check: VideoMetricsLab " + release->version +
-                    " is available, but not yet for this system (this is " VML_APP_VERSION ")");
+                    " is available, but not yet for this system (this is " VML_VERSION ")");
         return;
     }
-    logger.info("Update check: VideoMetricsLab " + release->version + " is available (this is " VML_APP_VERSION ")");
+    logger.info("Update check: VideoMetricsLab " + release->version + " is available (this is " VML_VERSION ")");
     offer_update(*release);
 }
 
@@ -996,7 +996,7 @@ void MainWindow::offer_update(const Release& release) {
     box->setText(app::tr("{app} {version} is available. You have {current}.",
                          {{"app", "VideoMetricsLab"},
                           {"version", QString::fromStdString(release.version)},
-                          {"current", VML_APP_VERSION}}));
+                          {"current", VML_VERSION}}));
     box->setInformativeText(app::tr("Updating does not affect your saved results or settings: they are stored "
                                     "separately from the app, in {cache_dir} and {user_data_dir}.",
                                     {{"cache_dir", text_of(cache_folder())},

@@ -10,6 +10,7 @@
 
 #include "common.h"
 #include "compare.h"
+#include "vml/build_info.h"
 #include "vml/platform/console.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
@@ -88,6 +89,7 @@ Json bd_rate_json(const BdRateReport& report, const std::string& anchor_path, co
     }
     return Json{{"app", "VideoMetricsLab"},
                 {"version", VML_VERSION},
+                {"commit", build_commit()},
                 {"format", bdrate_format},
                 {"method", "pchip"},
                 {"anchor", anchor_path},

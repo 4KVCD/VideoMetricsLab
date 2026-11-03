@@ -121,7 +121,7 @@ void start_session_log() {
     vml::platform::report_crashes_to(vml::app_log::log_dir() / vml::app_log::crash_file_name);
     const vml::app_log::Logger log("vml.main");
     log.info("==== VideoMetricsLab" + std::string(vml::app_log::session_start));
-    for (const std::string& line : vml::app_log::environment_lines(VML_APP_VERSION)) {
+    for (const std::string& line : vml::app_log::environment_lines(VML_VERSION)) {
         log.info(line);
     }
     log.info(std::string("Qt ") + qVersion());
