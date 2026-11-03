@@ -21,6 +21,11 @@ behavior on every GPU, display, driver or media format.
   FFmpeg's GPU decoding alone does not notice. Avoid scoring while another
   program saturates the GPU, or turn GPU decoding off.
 - XPSNR-only retains all frames; libvmaf-backed runs can be subsampled.
+- XPSNR of videos of more than 8 bits is calculated by the app alone (FFmpeg's
+  `xpsnr` filter reads such pictures wrongly at some widths). Where the app
+  cannot (a frame rate that is not constant, more than 12 bits, an odd size
+  above 2048x1152, a resolution test on FFmpeg's route), XPSNR fails with that
+  reason while the other metrics are kept.
 - Quality bands outside VMAF are heuristic, not standardized equivalents.
 - Unsigned builds can trigger Windows warnings. Verify provenance rather than
   bypassing warnings for downloads you do not trust.

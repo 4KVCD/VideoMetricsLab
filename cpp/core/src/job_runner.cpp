@@ -656,8 +656,17 @@ void JobRun::finish() {
     }
     // A metric that failed while the rest of its task finished (CVVDP beside
     // SSIMULACRA2 and Butteraugli, say) is reported like a failed task.
+    // So is one that failed in an FFmpeg or GPU task (XPSNR above 8 bits that
+    // the app cannot score, say: ComparisonResult::metric_failures).
     const std::optional<PerceptualTaskOutput> perceptual = perceptual_so_far();
-    const PerceptualFailures metric_failures = perceptual ? perceptual->failures : PerceptualFailures{};
+    PerceptualFailures metric_failures = perceptual ? perceptual->failures : PerceptualFailures{};
+    for (const TaskState& state : tasks_) {
+        if (state.result) {
+            for (const auto& [key, why] : state.result->metric_failures) {
+                set_failure(metric_failures, key, why);
+            }
+        }
+    }
     // Cancelled before any task finished, the video is cancelled, whatever
     // scores of it are saved.
     const bool calculated = perceptual.has_value() || std::any_of(tasks_.begin(), tasks_.end(), [](const TaskState& state) {

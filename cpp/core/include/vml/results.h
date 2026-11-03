@@ -125,6 +125,9 @@ struct ComparisonResult {
     std::string model_v1;
     std::optional<std::string> model_choice_v1;
     MetricResultSet metric_results;
+    // Metrics asked for that the run could not score, with why, while the
+    // others stand (reported as failed; never saved).
+    std::map<std::string, std::string> metric_failures;
 
     bool has_metric(const std::string& key) const { return metric_results.has(key); }
 };

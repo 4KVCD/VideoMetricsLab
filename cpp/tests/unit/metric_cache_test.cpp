@@ -942,6 +942,16 @@ TEST(MetricCache, OldScoresAreKeptButForAPairALaterColourFixReadsOtherwise) {
     EXPECT_FALSE(answers(spec, cpu, guessed_alike));  // 8-bit
     cpu.parameters["color_tags"] = nlohmann::json(score_identity::cpu_colour_tags).dump();
     EXPECT_TRUE(answers(spec, cpu, guessed_apart));
+    // FFmpeg's XPSNR above 8 bits, which it may have read wrongly; the app's
+    // is kept.
+    const AnalysisRequest xpsnr_request =
+        analysis_request(VmafOptions{}, {"xpsnr"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{});
+    const MetricRequestSpec& xpsnr_spec = *xpsnr_request.metric("xpsnr");
+    MetricProvenance xpsnr = current_ffmpeg_provenance("xpsnr", "9.0.1", {});
+    EXPECT_TRUE(answers(xpsnr_spec, xpsnr, tagged));
+    EXPECT_FALSE(answers(xpsnr_spec, xpsnr, ten_bit(tagged)));
+    xpsnr.implementation = "libvmaf";
+    EXPECT_TRUE(answers(xpsnr_spec, xpsnr, ten_bit(tagged)));
 }
 
 // Two untagged videos are read with the reference's guess, and one untagged

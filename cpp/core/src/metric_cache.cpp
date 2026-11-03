@@ -218,8 +218,24 @@ bool full_range_gray(const ColourTags& info) {
            (range == "pc" || range == "jpeg" || range == "full");
 }
 
+// Whether a saved XPSNR is FFmpeg's xpsnr filter's of a pair compared at more
+// than 8 bits, which it scores wrongly where FFmpeg pads a picture's rows
+// (ffmpeg_scores_xpsnr in ffmpeg_run.cpp); which of them it padded is not
+// known, so none is used.
+bool unsure_ffmpeg_xpsnr(const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {
+    if (provenance.implementation != "ffmpeg/xpsnr" || infos.empty()) {
+        return false;
+    }
+    std::vector<std::string> pix_fmts;
+    for (const ColourTags& info : infos) {
+        pix_fmts.push_back(info.pix_fmt);
+    }
+    return bit_depth(analysis_pix_fmt(pix_fmts)) > 8;
+}
+
 // Whether a saved score is known to be wrong and must be calculated again:
-// a stale CPU score, or a Vship 5.1 GPU score of a pair a later fix reads
+// FFmpeg's XPSNR above 8 bits (unsure_ffmpeg_xpsnr), a stale CPU score, or a
+// Vship 5.1 GPU score of a pair a later fix reads
 // otherwise. That is a pair with a full-range gray video (full_range_gray);
 // and, for a score that predates the fix, one whose videos are read with
 // one colour matrix where that changes what Vship reads
@@ -228,7 +244,7 @@ bool full_range_gray(const ColourTags& info) {
 // from app version 1.2 or 1.2.1, one with an RGB video without a transfer
 // tag. Vship-fast's scores are never stale.
 bool stale_score(const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {
-    if (stale_cpu_score(provenance, infos)) {
+    if (unsure_ffmpeg_xpsnr(provenance, infos) || stale_cpu_score(provenance, infos)) {
         return true;
     }
     if (provenance.compute_backend != "gpu" ||

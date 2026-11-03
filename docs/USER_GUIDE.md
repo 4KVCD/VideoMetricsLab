@@ -87,7 +87,9 @@ of a point on every frame, so a saved VMAF score is reused whichever is
 chosen. PSNR, SSIM and XPSNR have no GPU code: the app
 calculates them on the CPU with the bundled libvmaf-fast, beside the GPU's run,
 so they do not slow VMAF down. With VMAF on the CPU, FFmpeg calculates them in
-the same run.
+the same run, except XPSNR of videos of more than 8 bits: FFmpeg's `xpsnr`
+filter reads such pictures wrongly at some widths, so the app calculates it,
+beside FFmpeg's run.
 
 VMAF v1 follows the same choice, with any GPU that has a Vulkan driver. Its
 four features, detail loss (ADM), motion, banding (CAMBI) and colour (SpEED),

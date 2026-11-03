@@ -34,6 +34,8 @@ struct ParsedScores {
     std::vector<double> time;
     std::map<std::string, std::vector<float>> metrics;
     std::vector<std::string> order;  // the keys in the Python app's order
+    // Metrics asked for that the run did not score, with why (the others stand).
+    std::map<std::string, std::string> failed;
 
     bool has(const std::string& key) const { return metrics.contains(key); }
 };

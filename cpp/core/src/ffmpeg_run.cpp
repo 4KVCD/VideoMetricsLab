@@ -293,6 +293,45 @@ using CommandBuilder =
     std::function<std::vector<std::string>(const HardwareDecoding& plan, const std::string& run_model,
                                            const std::optional<std::string>& xpsnr_log_name, const PairFeeds& feeds)>;
 
+// Whether FFmpeg's xpsnr filter scores pictures of `bit_depth` rightly. It
+// reads a test picture of more than 8 bits from its frame with the rows the
+// picture's width apart (vf_xpsnr.c, FFmpeg 9.0 and its master in November
+// 2026: s_rec = plane_width) instead of the frame's linesize, so wherever
+// FFmpeg pads the rows (a crop narrower than the decoded picture, a picture
+// whose width is not a multiple of its alignment) the score is garbage: a
+// 10-bit 3348x1608 crop against itself gives 16.8 dB, not infinity. Pictures
+// of 8 bits it first copies into rows of their own width.
+bool ffmpeg_scores_xpsnr(int bit_depth) { return bit_depth <= 8; }
+
+const char* const xpsnr_refusal =
+    "XPSNR of videos of more than 8 bits is calculated by the app alone, which cannot calculate it for this "
+    "comparison (FFmpeg's xpsnr filter reads such pictures wrongly at some widths)";
+
+// Thrown where XPSNR is all an FFmpeg run would score and FFmpeg cannot score
+// it rightly (ffmpeg_scores_xpsnr).
+class XpsnrUnavailable : public VmafRunError {
+public:
+    XpsnrUnavailable() : VmafRunError(xpsnr_refusal) {}
+};
+
+// `run`'s scores of `options`, the FFmpeg run of a comparison at `bit_depth`,
+// without XPSNR where FFmpeg would score it wrongly: the run's other metrics,
+// XPSNR failed in them. Throws XpsnrUnavailable where XPSNR is all it scores.
+ParsedScores without_wrong_xpsnr(const VmafOptions& options, int bit_depth,
+                                 const std::function<ParsedScores(const VmafOptions&)>& run) {
+    if (!options.compute_xpsnr || ffmpeg_scores_xpsnr(bit_depth)) {
+        return run(options);
+    }
+    VmafOptions others = options;
+    others.compute_xpsnr = false;
+    if (others.requested_metrics().empty()) {
+        throw XpsnrUnavailable();
+    }
+    ParsedScores scores = run(others);
+    scores.failed["xpsnr"] = xpsnr_refusal;
+    return scores;
+}
+
 // Runs the FFmpeg command `build_command` makes to its end and parses its
 // logs, falling back to other decode plans when hardware decoding fails.
 // The logs are kept in a folder named from `folder_prefix`. Each FFmpeg gets
@@ -407,21 +446,25 @@ ParsedScores execute_run(const CommandBuilder& build_command, const VmafOptions&
 }
 
 // execute_run for a comparison of two videos (build_filtergraph and
-// build_ffmpeg_command).
+// build_ffmpeg_command), without XPSNR where FFmpeg would score it wrongly
+// (without_wrong_xpsnr).
 ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                          const VmafOptions& options, const std::optional<CropBox>& source_crop,
                          const std::optional<CropBox>& distorted_crop, const std::string& model, double fps,
                          long long total_frames, const HardwareDecoding& decoding, const ProgressCallback& on_progress,
                          const StatusCallback& on_status, const CancelToken& cancel) {
-    const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
-                                   const std::optional<std::string>& xpsnr_log_name, const PairFeeds& feeds) {
-        const std::string graph = build_filtergraph(source, distorted, options, source_crop, distorted_crop, plan,
-                                                    "vmaf_log.json", run_model, xpsnr_log_name, environment.cores);
-        return build_ffmpeg_command(environment.ffmpeg, distorted.path, source.path, graph, plan,
-                                    run_inputs(feeds, source, distorted));
-    };
-    return execute_run(build_command, options, model, fps, total_frames, decoding, "vmaf_run_", on_progress, on_status,
-                       cancel, environment, &source, &distorted);
+    const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
+    return without_wrong_xpsnr(options, depth, [&](const VmafOptions& scored) {
+        const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
+                                       const std::optional<std::string>& xpsnr_log_name, const PairFeeds& feeds) {
+            const std::string graph = build_filtergraph(source, distorted, scored, source_crop, distorted_crop, plan,
+                                                        "vmaf_log.json", run_model, xpsnr_log_name, environment.cores);
+            return build_ffmpeg_command(environment.ffmpeg, distorted.path, source.path, graph, plan,
+                                        run_inputs(feeds, source, distorted));
+        };
+        return execute_run(build_command, scored, model, fps, total_frames, decoding, "vmaf_run_", on_progress,
+                           on_status, cancel, environment, &source, &distorted);
+    });
 }
 
 // The GPU's scores as the run's (the Python app's _gpu_frame_scores): each
@@ -719,7 +762,8 @@ std::optional<std::string> cpu_metric_of_feature(const std::string& feature) {
 // takes it from its second input, the test video: FFmpeg gives an input the
 // rate av_guess_frame_rate() returns, r_frame_rate when the average rate is
 // known and within a tenth of it. Otherwise that rate cannot be predicted
-// here, and FFmpeg's filter scores XPSNR.
+// here, and FFmpeg's filter scores XPSNR (of 8 bits; of more, nothing does:
+// ffmpeg_scores_xpsnr).
 std::optional<int> xpsnr_frame_rate(const VideoInfo& info) {
     const double average = info.average_fps, nominal = info.nominal_fps;
     if (average <= 0 || nominal <= 0 || std::abs(1.0 - average / nominal) >= 0.09) {
@@ -729,8 +773,9 @@ std::optional<int> xpsnr_frame_rate(const VideoInfo& info) {
 }
 
 // Whether libvmaf-fast's port of FFmpeg's xpsnr filter gives exactly
-// FFmpeg's score for this comparison: up to 12 bits, and an even size above
-// 2048x1152 (FFmpeg's filter reads beyond the picture of an odd one).
+// FFmpeg's score for this comparison, as FFmpeg gives it for pictures whose
+// rows are not padded (ffmpeg_scores_xpsnr): up to 12 bits, and an even size
+// above 2048x1152 (FFmpeg's filter reads beyond the picture of an odd one).
 bool xpsnr_in_app(int width, int height, int bit_depth) {
     const bool odd = width % 2 != 0 || height % 2 != 0;
     if (bit_depth > 12 || (static_cast<long long>(width) * height > 2048LL * 1152 && odd)) {
@@ -769,10 +814,12 @@ bool decoded_in_app(const VideoInfo& source, const VideoInfo& distorted, const s
 // app (run_cpu_metrics) instead of with FFmpeg's libvmaf and xpsnr filters,
 // or nothing to leave them to FFmpeg's filters. The app scores them when
 // they are the run's only metrics (VMAF on the CPU keeps them in FFmpeg's
-// filters, which it runs anyway). XPSNR stays with FFmpeg where libvmaf-fast's
-// score would not be FFmpeg's exactly (xpsnr_frame_rate, xpsnr_in_app),
-// while PSNR and SSIM are still scored in the app. `cores` are "Auto"'s
-// threads; `ffmpeg` scales a video the decoders cannot (decoded_in_app).
+// filters, which it runs anyway). XPSNR of 8 bits stays with FFmpeg where
+// libvmaf-fast's score would not be FFmpeg's exactly (xpsnr_frame_rate,
+// xpsnr_in_app), while PSNR and SSIM are still scored in the app; of more
+// bits, FFmpeg's would be wrong (ffmpeg_scores_xpsnr): it is the app's, or
+// nobody's. `cores` are "Auto"'s threads; `ffmpeg` scales a video the
+// decoders cannot (decoded_in_app).
 std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<int, int> size,
                                         const VideoInfo& source, const VideoInfo& distorted,
                                         const HardwareDecoding& decoding,
@@ -795,9 +842,12 @@ std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<in
     const auto [width, height] = size;
     const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
     const std::optional<int> frame_rate = options.compute_xpsnr ? xpsnr_frame_rate(distorted) : std::nullopt;
+    // Where FFmpeg's filter would score XPSNR wrongly, the speed it would
+    // give is no reason to leave XPSNR to it.
+    const bool ffmpeg_may_score = ffmpeg_scores_xpsnr(depth);
     if (frame_rate && xpsnr_in_app(width, height, depth)) {
         metrics.emplace_back("xpsnr");
-    } else if (options.compute_xpsnr && !(decoding.source && decoding.distorted)) {
+    } else if (options.compute_xpsnr && ffmpeg_may_score && !(decoding.source && decoding.distorted)) {
         // XPSNR's FFmpeg beside them would decode the videos again, and a
         // video the CPU decodes would then be decoded twice on the CPU: 70%
         // more CPU per frame for a 4K film against its encode, and slower for
@@ -808,7 +858,7 @@ std::optional<GpuPlan> cpu_metrics_plan(const VmafOptions& options, std::pair<in
     if (metrics.empty()) {
         return std::nullopt;
     }
-    if (metrics == std::vector<std::string>{"xpsnr"} &&
+    if (metrics == std::vector<std::string>{"xpsnr"} && ffmpeg_may_score &&
         !decoded_in_app(source, distorted, source_crop, distorted_crop, size, options.scale_algorithm, decoding,
                         ffmpeg)) {
         // XPSNR alone, with its frames from FFmpeg's pipes: FFmpeg's own
@@ -1171,7 +1221,8 @@ void merge_xpsnr(ParsedScores& frames, const ParsedScores& xpsnr) {
 // is set (score_plan_apart), on the frames that would reach FFmpeg's
 // filters, paired as those filters pair them. XPSNR that the plan leaves to
 // FFmpeg is scored by an FFmpeg of its own alongside, and its scores are
-// taken for the frames PSNR and SSIM were scored for. XPSNR alone is scored
+// taken for the frames PSNR and SSIM were scored for; above 8 bits, where
+// FFmpeg would score it wrongly, it fails instead. XPSNR alone is scored
 // for every frame, as FFmpeg's filter scores it whatever n_subsample is.
 // Nothing when it fails for any reason but Cancel: FFmpeg's filters then
 // calculate the metrics.
@@ -1185,7 +1236,8 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
     logger.info(metric_names(plan) + " in the app: " + cpu_library_build() + ", " + std::to_string(plan.threads) +
                 " threads");
     const std::vector<std::string> keys = plan_keys(plan);
-    const bool beside = options.compute_xpsnr && std::find(keys.begin(), keys.end(), "xpsnr") == keys.end();
+    const bool left_to_ffmpeg = options.compute_xpsnr && std::find(keys.begin(), keys.end(), "xpsnr") == keys.end();
+    const bool beside = left_to_ffmpeg && ffmpeg_scores_xpsnr(plan.bit_depth);
     SlowerProgress progress(on_progress, beside ? 2 : 1);
     std::optional<ScoresBeside> xpsnr;
     if (beside) {
@@ -1199,7 +1251,7 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
             cancel);
     }
     VmafOptions scored = options;
-    if (beside) {
+    if (left_to_ffmpeg) {
         scored.compute_xpsnr = false;
     } else if (options.extra_features.empty()) {  // XPSNR alone
         scored.n_subsample = 1;
@@ -1238,6 +1290,8 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
         if (const std::optional<ParsedScores> found = xpsnr->result()) {
             merge_xpsnr(*frames, *found);
         }
+    } else if (left_to_ffmpeg) {
+        frames->failed["xpsnr"] = xpsnr_refusal;
     }
     return frames;
 }
@@ -1597,9 +1651,67 @@ std::optional<GpuPlan> cpu_plan(const RunFrames& run, const VmafOptions& options
                             run.source_crop, run.distorted_crop, run.environment.cores, run.environment.ffmpeg);
 }
 
+// `options` asking for its CPU metrics only (is_cpu_metric), or for its
+// others only.
+VmafOptions part_of(const VmafOptions& options, bool cpu_metrics) {
+    VmafOptions part = options;
+    for (const std::string& key : options.requested_metrics()) {
+        part.set_metric_enabled(key, is_cpu_metric(key) == cpu_metrics);
+    }
+    return part;
+}
+
+// The scores of a run whose FFmpeg would score XPSNR wrongly
+// (ffmpeg_scores_xpsnr) beside metrics FFmpeg scores (VMAF on the CPU, say):
+// XPSNR in the app (run_cpu_metrics) on a thread beside FFmpeg's run of the
+// others, as score_apart scores two parts. Nothing where the app cannot score
+// XPSNR (FFmpeg's run then reports it failed: without_wrong_xpsnr).
+std::optional<RunScores> score_xpsnr_beside(const RunFrames& run, const VmafOptions& options, const std::string& model,
+                                            const ProgressCallback& on_progress, const StatusCallback& on_status) {
+    if (!options.compute_xpsnr || ffmpeg_scores_xpsnr(run.depth)) {
+        return std::nullopt;
+    }
+    VmafOptions others = options;
+    others.compute_xpsnr = false;
+    VmafOptions xpsnr_only = part_of(options, true);
+    xpsnr_only.extra_features.clear();
+    const std::optional<GpuPlan> plan = cpu_plan(run, xpsnr_only);
+    if (others.requested_metrics().empty() || !plan) {
+        return std::nullopt;
+    }
+    SlowerProgress progress(on_progress, 2);
+    bool in_app = false;  // set on the XPSNR's thread, read once it has ended
+    ScoresBeside xpsnr(
+        [&, xpsnr_progress = progress.part(1)](const CancelToken& stop) {
+            std::optional<ParsedScores> scored =
+                run_cpu_metrics(run.environment, run.source, run.distorted, xpsnr_only, run.source_crop,
+                                run.distorted_crop, *plan, run.distorted.fps, run.total_frames, run.decoding,
+                                xpsnr_progress, nullptr, stop);
+            if (!scored) {
+                scored.emplace();  // it failed in the app, and FFmpeg's would be wrong
+                scored->failed["xpsnr"] = xpsnr_refusal;
+            }
+            in_app = !scored->frame.empty();
+            return std::move(*scored);
+        },
+        run.cancel);
+    RunScores scores;
+    scores.parts.push_back(execute_run(run.environment, run.source, run.distorted, others, run.source_crop,
+                                       run.distorted_crop, model, run.distorted.fps, run.total_frames, run.decoding,
+                                       progress.part(0), on_status, run.cancel));
+    xpsnr.join();
+    run.cancel.throw_if_cancelled();
+    scores.parts.push_back(std::move(*xpsnr.result()));
+    if (in_app) {
+        insert_keys(scores.cpu_keys, *plan);
+    }
+    return scores;
+}
+
 // The scores of a run in one part: VMAF, NEG and VMAF v1 on the GPU when they
 // are all it scores and the GPU scores them; PSNR, SSIM and XPSNR in the app
-// when they are all it scores; otherwise, or when either fails, FFmpeg's.
+// when they are all it scores; otherwise, or when either fails, FFmpeg's
+// (XPSNR above 8 bits in the app beside it: score_xpsnr_beside).
 RunScores score_alone(const RunFrames& run, const VmafOptions& options, const std::string& model,
                       const ProgressCallback& on_progress, const StatusCallback& on_status) {
     RunScores scores;
@@ -1624,22 +1736,15 @@ RunScores score_alone(const RunFrames& run, const VmafOptions& options, const st
         }
     }
     if (!scored) {
+        if (std::optional<RunScores> apart = score_xpsnr_beside(run, options, model, on_progress, on_status)) {
+            return std::move(*apart);
+        }
         scored = execute_run(run.environment, run.source, run.distorted, options, run.source_crop, run.distorted_crop,
                              model, run.distorted.fps, run.total_frames, run.decoding, on_progress, on_status,
                              run.cancel);
     }
     scores.parts.push_back(std::move(*scored));
     return scores;
-}
-
-// `options` asking for its CPU metrics only (is_cpu_metric), or for its
-// others only.
-VmafOptions part_of(const VmafOptions& options, bool cpu_metrics) {
-    VmafOptions part = options;
-    for (const std::string& key : options.requested_metrics()) {
-        part.set_metric_enabled(key, is_cpu_metric(key) == cpu_metrics);
-    }
-    return part;
 }
 
 // Whether the GPU's pass (`gpu`) can score the run's CPU metrics (`cpu`)
@@ -1734,9 +1839,15 @@ RunScores score_apart(const RunFrames& run, const VmafOptions& gpu_options, cons
                     return std::move(*scored);
                 }
             }
-            return execute_run(run.environment, run.source, run.distorted, cpu_options, run.source_crop,
-                               run.distorted_crop, "", run.distorted.fps, run.total_frames, run.decoding, cpu_progress,
-                               nullptr, stop);
+            try {
+                return execute_run(run.environment, run.source, run.distorted, cpu_options, run.source_crop,
+                                   run.distorted_crop, "", run.distorted.fps, run.total_frames, run.decoding,
+                                   cpu_progress, nullptr, stop);
+            } catch (const XpsnrUnavailable& error) {
+                ParsedScores none;  // XPSNR was all: it fails, the GPU's metrics stand
+                none.failed["xpsnr"] = error.what();
+                return none;
+            }
         },
         run.cancel);
     RunScores scores;
@@ -1827,6 +1938,9 @@ ComparisonResult score_pair(const RunEnvironment& environment, const VideoInfo& 
         scores = score_alone(run, options, model, on_progress, on_status);
     }
     for (const ParsedScores& part : scores->parts) {
+        if (part.order.empty() && !part.failed.empty()) {
+            continue;  // a part whose only metric failed: the others stand
+        }
         const long long compared = part.frame.empty() ? 0 : static_cast<long long>(part.frame.back()) + 1 - first_frame;
         if (const std::optional<std::string> short_run =
                 short_comparison(total_frames, compared, first_frame, distorted.fps, options.n_subsample)) {
@@ -1859,6 +1973,7 @@ ComparisonResult score_pair(const RunEnvironment& environment, const VideoInfo& 
             result.metric_results.add(
                 FrameMetricResult{key, part.frame, part.time, part.metrics.at(key), std::move(provenance)});
         }
+        result.metric_failures.insert(part.failed.begin(), part.failed.end());
     }
     return result;
 }
@@ -2040,20 +2155,23 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
     const std::string model = resolve_run_models(options, width, height);
     const long long total_frames = estimate_total_frames(source, options, nullptr);
     const long long decoded_frames = estimate_decoded_frames(source, options, nullptr);
-    const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
-                                   const std::optional<std::string>& xpsnr_log_name, const PairFeeds& feeds) {
-        const std::string graph = build_resample_filtergraph(source, options, source_crop, plan.source,
-                                                             "vmaf_log.json", run_model, xpsnr_log_name,
-                                                             environment.cores);
-        if (const PictureFeed* fed = feeds.source()) {
-            return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, {},
-                                          fed->input_arguments());
-        }
-        return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, source.decode_options());
-    };
-    const ParsedScores scores =
-        execute_run(build_command, options, model, source.fps, decoded_frames, decoding, "vmaf_resample_",
-                    on_progress, on_status, cancel, environment, &source, nullptr);
+    const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt}));
+    const ParsedScores scores = without_wrong_xpsnr(options, depth, [&](const VmafOptions& scored) {
+        const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
+                                       const std::optional<std::string>& xpsnr_log_name, const PairFeeds& feeds) {
+            const std::string graph = build_resample_filtergraph(source, scored, source_crop, plan.source,
+                                                                 "vmaf_log.json", run_model, xpsnr_log_name,
+                                                                 environment.cores);
+            if (const PictureFeed* fed = feeds.source()) {
+                return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, {},
+                                              fed->input_arguments());
+            }
+            return build_resample_command(environment.ffmpeg, source.path, graph, plan.source,
+                                          source.decode_options());
+        };
+        return execute_run(build_command, scored, model, source.fps, decoded_frames, decoding, "vmaf_resample_",
+                           on_progress, on_status, cancel, environment, &source, nullptr);
+    });
 
     ComparisonResult result;
     result.source = source.path;
@@ -2072,6 +2190,7 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
     if (options.compute_vmaf_v1) {
         result.model_choice_v1 = options.model_choice_v1;
     }
+    result.metric_failures = scores.failed;
     for (const std::string& key : scores.order) {
         std::map<std::string, std::string> parameters;
         if (key == "vmaf_neg") {
