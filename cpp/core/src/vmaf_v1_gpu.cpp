@@ -1284,7 +1284,8 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
         // Windows' own decoder for one video and AMF's for the other.
         logger.info("VMAF v1 with the GPU: the frames go through system memory (the videos' decoders share no "
                     "GPU memory)");
-    } else if (test.shares_gpu_memory_with(reference) && (test_backend == "nvidia" || plan.backend == "vulkan")) {
+    } else if (test.shares_gpu_memory_with(reference) &&
+               (gpu_decoder(test_backend).cuda_copies || plan.backend == "vulkan")) {
         try {
             scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.backend, device,
                            &test, pool > 4 && test.gives_textures() && reference.gives_textures());

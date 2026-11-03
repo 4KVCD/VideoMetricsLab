@@ -17,6 +17,7 @@
 #include "vml/app_log.h"
 #include "vml/colour.h"
 #include "vml/geometry.h"
+#include "vml/gpu_decoders.h"
 #include "vml/hardware_decoding.h"
 #include "vml/isolated.h"
 #include "vml/model_select.h"
@@ -337,32 +338,12 @@ std::string vendor_text(const std::optional<GpuVendor>& vendor) {
     if (!vendor) {
         return "";
     }
-    switch (*vendor) {
-    case GpuVendor::nvidia:
-        return "nvidia";
-    case GpuVendor::intel:
-        return "intel";
-    case GpuVendor::amd:
-        return "amd";
-    default:
-        return "none";
-    }
+    const GpuDecoder* decoder = decoder_of_vendor(*vendor);
+    return decoder ? std::string(decoder->name) : "none";
 }
 
 std::optional<GpuVendor> vendor_from(const std::string& text) {
-    if (text == "nvidia") {
-        return GpuVendor::nvidia;
-    }
-    if (text == "intel") {
-        return GpuVendor::intel;
-    }
-    if (text == "amd") {
-        return GpuVendor::amd;
-    }
-    if (text == "none") {
-        return GpuVendor::none;
-    }
-    return std::nullopt;
+    return text == "none" ? std::optional(GpuVendor::none) : gpu_vendor_named(text);
 }
 
 // The probe, in a process of its own (a crash there would end the run:

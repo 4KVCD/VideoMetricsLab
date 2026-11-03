@@ -25,7 +25,7 @@ HostFrames::HostFrames(GpuFrameStream& stream, const DecodePlan& plan)
     }
     buffer_.resize(plan.frame_bytes());
     target_ = buffer_.data();
-    if (stream.backend() == "nvidia") {
+    if (gpu_decoder(stream.backend()).cuda_copies) {
         pinned_ = stream.pin(buffer_.data(), buffer_.size());
         if (!pinned_) {
             logger.info("NVIDIA's decoder could not page-lock the memory it downloads the pictures to: the driver "

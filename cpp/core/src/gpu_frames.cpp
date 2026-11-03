@@ -314,8 +314,8 @@ struct DecoderLibrary {
           close(library.function<decltype(close)>("nvf_close")),
           error(library.function<decltype(error)>("nvf_error")),
           supports(library.function<decltype(supports)>("nvf_supports")) {
-        const bool amd = backend == "amd" || backend == media_foundation_decoder;
-        if (backend == "nvidia" || amd) {  // pictures handed over with no CPU copy
+        const bool amd = backend == amd_decoder || backend == media_foundation_decoder;
+        if (backend == nvidia_decoder || amd) {  // pictures handed over with no CPU copy
             unimport = library.function<decltype(unimport)>("nvf_unimport");
             pin = library.function<decltype(pin)>("nvf_pin");
             unpin = library.function<decltype(unpin)>("nvf_unpin");
@@ -346,7 +346,7 @@ struct DecoderLibrary {
             libraries_error = library.function<decltype(libraries_error)>("nvf_libraries_error");
             slot_planes = library.function<decltype(slot_planes)>("nvf_slot_planes");
         }
-        if (backend == "intel" || amd) {
+        if (backend == intel_decoder || amd) {
             scale_note = library.function<decltype(scale_note)>("nvf_scale_note");
         }
     }
@@ -411,17 +411,11 @@ bool software_decode_off() {
 }
 
 std::filesystem::path library_path(std::string_view backend) {
-    const char* name = backend == "nvidia"                   ? "nvdec_frames"
-                       : backend == "intel"                  ? "vpl_frames"
-                       : backend == "amd"                    ? "amf_frames"
-                       : backend == media_foundation_decoder ? "mf_frames"
-                       : backend == software_decoder         ? "software_frames"
-                       : backend == vvdec_decoder            ? "vvdecvk_frames"
-                                                             : nullptr;
-    if (name == nullptr) {
+    const std::string_view name = backend == media_foundation_decoder ? "mf_frames" : gpu_decoder(backend).library;
+    if (name.empty()) {
         throw std::invalid_argument("there is no decoder " + std::string(backend));
     }
-    return resource_folder() / "native" / platform::shared_library_name(name);
+    return resource_folder() / "native" / platform::shared_library_name(std::string(name));
 }
 
 // The software decoder's libraries: FFmpeg's libavutil and libavcodec with
@@ -1195,10 +1189,8 @@ bool decoder_available(std::string_view backend) {
 }
 
 bool can_hand_over(const DecodePlan& plan, std::string_view backend) {
-    if (backend == "nvidia") {
-        return true;
-    }
-    return (backend == "amd" || backend == vvdec_decoder) && !plan.scaled() && plan.widen == 0;
+    const HandOver hand_over = gpu_decoder(backend).hand_over;
+    return hand_over == HandOver::always || (hand_over == HandOver::when_unscaled && !plan.scaled() && plan.widen == 0);
 }
 
 bool vvdec_takes(const DecodePlan& plan) {
@@ -1220,7 +1212,7 @@ bool can_lend_planes(const DecodePlan& plan, std::string_view backend) {
 }
 
 bool hands_over_textures(std::string_view backend) {
-    if (backend != "amd") {
+    if (backend != amd_decoder) {
         return false;
     }
     try {
@@ -1278,7 +1270,7 @@ std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan
         // VVC video is then fed to FFmpeg by VVdeC, unscaled: grain_feed.h.)
         return {false, "the software decoder does not scale; FFmpeg scales it"};
     }
-    if (plan.via_w > 0 && backend != "nvidia") {
+    if (plan.via_w > 0 && !gpu_decoder(backend).scales_in_two_steps) {
         return {false, "only NVIDIA's decoder scales in two steps; FFmpeg scales it"};
     }
     const DecoderLibrary* library = nullptr;
@@ -1299,7 +1291,7 @@ bool nvidia_decodes_10bit_h264() {
     plan.bit_depth = 10;
     plan.width = 1920;
     plan.height = 1080;
-    return decoder_supports(0, plan, "nvidia").first;
+    return decoder_supports(0, plan, nvidia_decoder).first;
 }
 
 std::optional<std::string> scaling_refusal(const DecodePlan& plan, const std::string& ffmpeg) {
@@ -1333,21 +1325,18 @@ std::optional<std::string> scaling_refusal(const DecodePlan& plan, const std::st
     return std::nullopt;
 }
 
+std::optional<std::string> decoder_here(const std::optional<std::string>& hwaccel) {
+    if (!hwaccel) {
+        return software_decoder_bundled() ? std::optional(std::string(software_decoder)) : std::nullopt;
+    }
+    const GpuDecoder* decoder = decoder_of_hwaccel(*hwaccel);
+    return decoder && !decoder->library.empty() ? std::optional(std::string(decoder->name)) : std::nullopt;
+}
+
 std::optional<std::pair<std::string, std::string>> decoders_here(const HardwareDecoding& decoding) {
     std::vector<std::string> decoders;
     for (const std::optional<std::string>& accel : {decoding.source, decoding.distorted}) {
-        std::optional<std::string> decoder;
-        if (!accel) {
-            if (software_decoder_bundled()) {
-                decoder = std::string(software_decoder);
-            }
-        } else if (*accel == "cuda") {
-            decoder = "nvidia";
-        } else if (*accel == "qsv") {
-            decoder = "intel";
-        } else if (*accel == "d3d11va") {
-            decoder = "amd";
-        }
+        const std::optional<std::string> decoder = decoder_here(accel);
         if (!decoder) {
             return std::nullopt;
         }
@@ -1360,10 +1349,7 @@ std::optional<std::pair<std::string, std::string>> decoders_here(const HardwareD
 }
 
 bool downloads_at_once(const std::string& source_decoder, const std::string& test_decoder) {
-    const auto keeps_streams_apart = [](const std::string& decoder) {
-        return decoder == software_decoder || decoder == "nvidia" || decoder == vvdec_decoder;
-    };
-    return keeps_streams_apart(source_decoder) && keeps_streams_apart(test_decoder);
+    return gpu_decoder(source_decoder).streams_share_no_memory && gpu_decoder(test_decoder).streams_share_no_memory;
 }
 
 std::vector<std::string> packet_reader_command(const std::string& ffmpeg, const std::filesystem::path& video,
@@ -1746,9 +1732,9 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
     }
     state.configuration = configuration(ffprobe, info.path, plan.codec);
     // vvdec-vulkan's decoder only hands over: on the GPU, or into host memory it imported
-    state.handover = backend == "nvidia" || backend == vvdec_decoder || (handover && can_hand_over(plan, backend));
+    state.handover = backend == nvidia_decoder || backend == vvdec_decoder || (handover && can_hand_over(plan, backend));
     std::string said;
-    if (state.handover && backend == "amd") {
+    if (state.handover && backend == amd_decoder) {
         // Windows' own decoder first (native/mf_frames.cpp): the same decoder
         // hardware as AMF's, faster and with less CPU. Where it cannot be used
         // (not bundled, or no decoder for the codec on the GPU; HEVC's and
@@ -1765,7 +1751,7 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
             logger.info(state.file_name + ": decoded by AMF (" + error.what() + ")");
         }
     }
-    if (state.handover && backend == "amd" && state.handle == nullptr && plan.codec == "av1") {
+    if (state.handover && backend == amd_decoder && state.handle == nullptr && plan.codec == "av1") {
         // AMF's AV1 decoder, handing over, answers some packets (temporal
         // units with hidden frames) with AMF_REPEAT, having taken part of
         // them: neither going on nor submitting them again gives the right
@@ -1774,7 +1760,7 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
         logger.info(state.file_name + ": AMF decodes AV1 into system memory, not handing its pictures over");
         state.handover = false;
     }
-    if (state.handover && backend != "nvidia" && state.handle == nullptr) {
+    if (state.handover && backend != nvidia_decoder && state.handle == nullptr) {
         state.handle = state.open(*state.library, native_params(plan, device, pool, state.configuration, true), said);
         if (state.handle == nullptr && backend == vvdec_decoder) {
             // It has no system-memory route: its own reason, not a second open's refusal

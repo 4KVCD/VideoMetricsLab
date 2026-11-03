@@ -339,16 +339,7 @@ VshipBuild vship_build(const CompareArguments& arguments, const Settings& settin
 
 // The maker --gpu-decode names: automatic for its "auto", and without it.
 GpuVendor gpu_maker(const std::optional<std::string>& word) {
-    if (word == "nvidia") {
-        return GpuVendor::nvidia;
-    }
-    if (word == "intel") {
-        return GpuVendor::intel;
-    }
-    if (word == "amd") {
-        return GpuVendor::amd;
-    }
-    return GpuVendor::automatic;
+    return word ? gpu_vendor_named(*word).value_or(GpuVendor::automatic) : GpuVendor::automatic;
 }
 
 // A GPU maker's name, as the window's GPU decode dropdown has it.

@@ -26,6 +26,7 @@ add_library(vml_core
     src/frame_range.cpp
     src/frame_sync.cpp
     src/geometry.cpp
+    src/gpu_decoders.cpp
     src/gpu_frames.cpp
     src/gpu_vmaf.cpp
     src/grain_feed.cpp

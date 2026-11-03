@@ -8,6 +8,7 @@
 #include <regex>
 #include <set>
 
+#include "vml/gpu_decoders.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/python_text.h"
@@ -952,7 +953,9 @@ Parser compare_parser(CompareArguments& parsed) {
         flag({"--no-gpu-decode"}, parsed.no_gpu_decode),
         option({"--gpu-decode"},
                [&parsed](const std::string& value) {
-                   parsed.gpu_decode = choice(value, {"auto", "nvidia", "intel", "amd"});
+                   std::vector<std::string> words = gpu_maker_words();
+                   words.insert(words.begin(), "auto");
+                   parsed.gpu_decode = choice(value, words);
                }),
         option({"--vvc-decoder"},
                [&parsed](const std::string& value) { parsed.vvc_decoder = choice(value, {"gpu", "cpu"}); }),

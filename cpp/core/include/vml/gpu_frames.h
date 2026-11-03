@@ -51,6 +51,7 @@
 #include "vml/cancel.h"
 #include "vml/frame_range.h"
 #include "vml/frame_sync.h"
+#include "vml/gpu_decoders.h"
 #include "vml/hardware_decoding.h"
 #include "vml/pair_scorer.h"
 #include "vml/video.h"
@@ -103,15 +104,6 @@ void trust_gpu_decoding();
 // naming the GPU's decoder or the app's own, and what decodes the video
 // instead (`instead`: the caller's fallback, e.g. "through FFmpeg").
 std::string decoding_failed_status(const GpuDecodeFailedError& error, std::string_view instead);
-
-// The decoder for the videos FFmpeg would decode in software.
-inline constexpr std::string_view software_decoder = "software";
-// VVC decoded on the GPU by vvdec-vulkan (native/vvdecvk_frames.cpp), where it is wanted (vvdec_wanted), its
-// pictures handed over on the GPU: to Vulkan VMAF (the test video of a pair, beside a reference the CPU writes into
-// the slot: VulkanScorer::add_shared_mixed), or copied by the GPU into host memory the decoder imported: Vship's
-// frame buffers (pinned, NativeFrameStream), and GpuFrameStream::importable_buffer for the CPU's metrics, the engines
-// reading host planes (HostFrames) and the pictures fed to FFmpeg (grain_feed.h).
-inline constexpr std::string_view vvdec_decoder = "vvdec";
 
 // Whether a run wants vvdec-vulkan for its VVC videos: GPU decoding on (`gpu_decode`), the VVC decoder on the GPU
 // (`vvc_on_gpu`, Settings' VVC decoder), and not turned off in this run. Once it has refused, failed or crashed
@@ -300,6 +292,11 @@ std::optional<std::string> scaling_refusal(const DecodePlan& plan, const std::st
 // AMD's), or by the software decoder where FFmpeg would decode in software.
 // Two GPU makers' decoders are never used together.
 std::optional<std::pair<std::string, std::string>> decoders_here(const HardwareDecoding& decoding);
+
+// The app's decoder for a video FFmpeg would decode with `hwaccel`: the GPU's,
+// or the software decoder for one FFmpeg would decode in software; nothing
+// where FFmpeg decodes it.
+std::optional<std::string> decoder_here(const std::optional<std::string>& hwaccel);
 
 // Whether pictures of two streams of these decoders may be downloaded at the
 // same time, from two threads: the software decoder's, NVIDIA's and

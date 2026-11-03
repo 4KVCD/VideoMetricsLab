@@ -630,11 +630,11 @@ PairScores score_decoded_cuda(const VideoInfo& source, const VideoInfo& distorte
     GpuFrameStream test(distorted, plans[0], 0, 4, test_backend, ffmpeg, ffprobe);
     GpuFrameStream reference(source, plans[1], 0, 4, source_backend, ffmpeg, ffprobe);
     scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample,
-                   source_backend == "nvidia" && test_backend == "nvidia");
+                   gpu_decoder(source_backend).cuda_copies && gpu_decoder(test_backend).cuda_copies);
     // A decoded picture as the scorer takes it.
     const auto side = [](GpuFrameStream& stream, int slot) {
         CudaScorer::Decoded decoded;
-        if (stream.backend() == "nvidia") {  // copied on the GPU
+        if (gpu_decoder(stream.backend()).cuda_copies) {  // copied on the GPU
             decoded.copy = [&stream, slot](std::uint64_t address, std::int64_t pitch) {
                 stream.copy_luma(slot, address, pitch);
             };
@@ -676,7 +676,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
         // libvmaf's CUDA code takes NVIDIA's pictures on the GPU and uploads
         // the software decoder's.
         for (const std::string& library : {source_backend, test_backend}) {
-            if (library != "nvidia" && library != software_decoder) {
+            if (!libvmaf_cuda_takes(library)) {
                 throw GpuDecodeUnavailableError("libvmaf's CUDA code takes NVIDIA's and the software decoder's");
             }
         }
@@ -810,7 +810,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     // them only into its own buffer, and the CPU's metrics read them there
     // too. Last, so that it goes first: it unlocks memory with the streams.
     const auto as_planes = [](const GpuFrameStream& stream) {
-        return stream.gives_planes() || stream.backend() == "nvidia";
+        return stream.gives_planes() || gpu_decoder(stream.backend()).cuda_copies;
     };
     std::optional<HostPairs> pairs;
     if ((vvdec.any() && !mixed) || (!shared && !beside && as_planes(reference) && as_planes(test))) {

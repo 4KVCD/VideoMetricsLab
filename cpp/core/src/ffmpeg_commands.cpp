@@ -11,6 +11,7 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
+#include "vml/gpu_decoders.h"
 #include "vml/model_select.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -103,7 +104,8 @@ std::string libvmaf_stage(const VmafOptions& options, const std::string& log_nam
 // The hardware decoders that hand frames over in system memory themselves
 // when no output format is given (QSV's still hands over its surfaces).
 bool decoder_downloads(const std::optional<std::string>& hwaccel) {
-    return hwaccel == "cuda" || hwaccel == "d3d11va" || hwaccel == "videotoolbox";
+    const GpuDecoder* decoder = hwaccel ? decoder_of_hwaccel(*hwaccel) : nullptr;
+    return decoder && decoder->ffmpeg_downloads;
 }
 
 // The -hwaccel options for one input of a run with several graphs: where the

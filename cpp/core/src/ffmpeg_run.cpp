@@ -696,12 +696,9 @@ ParsedScores score_plan(const RunEnvironment& environment, const VideoInfo& sour
     // its frames (size_changes.h); the app's decoders read one size.
     const std::optional<std::pair<std::string, std::string>> decoders =
         source.scaled_to || distorted.scaled_to ? std::nullopt : decoders_here(decoding);
-    const auto cuda_takes = [](const std::string& decoder) {
-        return decoder == "nvidia" || decoder == software_decoder;
-    };
     const std::vector<std::string> keys = plan_keys(plan);
     if (decoders && (plan.backend != "cuda" || std::find(keys.begin(), keys.end(), "vmaf_v1") != keys.end() ||
-                     (cuda_takes(decoders->first) && cuda_takes(decoders->second)))) {
+                     (libvmaf_cuda_takes(decoders->first) && libvmaf_cuda_takes(decoders->second)))) {
         try {
             return score_decoded_here(environment, source, distorted, options, source_crop, distorted_crop, plan,
                                       fps, total_frames, decoding, *decoders, on_progress, on_status, cancel);
@@ -1476,12 +1473,16 @@ namespace {
 // hands its pictures to the GPU's pass by Windows' decoder and to the CPU
 // metrics' own run by AMF.
 bool pass_feeds_cpu_metrics(const VideoInfo& source, const VideoInfo& distorted, const HardwareDecoding& decoding) {
-    if (decoding.source == "videotoolbox" || decoding.distorted == "videotoolbox") {
+    const auto ffmpeg_decodes = [](const std::optional<std::string>& hwaccel) {
+        const GpuDecoder* decoder = hwaccel ? decoder_of_hwaccel(*hwaccel) : nullptr;
+        return decoder && decoder->library.empty();
+    };
+    if (ffmpeg_decodes(decoding.source) || ffmpeg_decodes(decoding.distorted)) {
         return true;
     }
     const std::optional<std::pair<std::string, std::string>> decoders =
         source.scaled_to || distorted.scaled_to ? std::nullopt : decoders_here(decoding);
-    return decoders && decoders->first != "amd" && decoders->second != "amd";
+    return decoders && decoders->first != amd_decoder && decoders->second != amd_decoder;
 }
 
 }  // namespace
@@ -2104,7 +2105,8 @@ std::optional<ComparisonResult> resample_test_on_gpu(const RunEnvironment& envir
     }
     const HardwareDecoding decoding = plan_hardware_decoding(environment.decoding, options.gpu_vendor, source, source);
     const std::optional<std::pair<std::string, std::string>> decoders = decoders_here(decoding);
-    if (!decoders || decoders->first != "nvidia" || decoders->second != "nvidia") {
+    if (!decoders || !gpu_decoder(decoders->first).scales_in_two_steps ||
+        !gpu_decoder(decoders->second).scales_in_two_steps) {
         return std::nullopt;
     }
     const auto [width, height] = resample_analysis_dimensions(source, source_crop);

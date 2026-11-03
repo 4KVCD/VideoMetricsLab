@@ -541,7 +541,7 @@ public:
         // NVIDIA's decoder copies each picture with the GPU: straight into
         // Vship's memory once CUDA has page-locked it too; else CUDA stages
         // the copy itself.
-        if (decoder_->backend() == "nvidia") {
+        if (gpu_decoder(decoder_->backend()).cuda_copies) {
             for (const std::unique_ptr<PinnedBuffer>& buffer : buffers_) {
                 if (decoder_->pin(buffer->data(), frame_bytes_)) {
                     pinned_.push_back(buffer->data());
@@ -1219,19 +1219,6 @@ private:
         }
     }
 
-    // The decoder of the app's that decodes a video FFmpeg would decode with
-    // `hwaccel`, in this process: the GPU's, or the software decoder for a
-    // video FFmpeg would decode in software.
-    std::optional<std::string> decoded_here(const std::optional<std::string>& hwaccel) const {
-        if (!hwaccel) {
-            return software_decoder_bundled() ? std::optional(std::string(software_decoder)) : std::nullopt;
-        }
-        return *hwaccel == "cuda"      ? std::optional<std::string>("nvidia")
-               : *hwaccel == "qsv"     ? std::optional<std::string>("intel")
-               : *hwaccel == "d3d11va" ? std::optional<std::string>("amd")
-                                       : std::nullopt;
-    }
-
     // The decoder of one video, when `backend`'s can give it in the layout
     // Vship is told: 8-bit planes, or P016's 16-bit samples as they are or
     // shifted to 10-bit (as FFmpeg converts full-range 10-bit), scaled where
@@ -1284,7 +1271,7 @@ private:
                                                  const std::string& backend) const {
         // NVIDIA's decoder on CUDA's first GPU, where FFmpeg's -hwaccel cuda
         // decodes too: Vship's number is Vulkan's, a list in another order.
-        const int device = backend == "nvidia" ? 0 : plan_.device.gpu_id;
+        const int device = backend == nvidia_decoder ? 0 : plan_.device.gpu_id;
         // Asked first, because a stream the decoder refuses once the pass has
         // started (10-bit H.264, say) means making the whole pass again.
         const auto [supported, refusal] = decoder_supports(device, decode, backend);
@@ -1309,7 +1296,7 @@ private:
         // the same decoder's pictures, through a pipe.
         const bool only_here = decoded_by_the_app(video.info);
         if ((native_ || only_here) && !video.info.scaled_to) {
-            if (const std::optional<std::string> backend = decoded_here(video.hwaccel)) {
+            if (const std::optional<std::string> backend = decoder_here(video.hwaccel)) {
                 said = true;
                 if (std::unique_ptr<GpuFrameStream> decoder = native_decoder(video, *backend)) {
                     return std::make_unique<NativeFrameStream>(library_, video.layout.frame_bytes, std::move(decoder),

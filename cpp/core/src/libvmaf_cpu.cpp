@@ -280,7 +280,7 @@ void CpuScorer::download_both(VmafPicture& reference_picture, GpuFrameStream& re
 void CpuScorer::download(VmafPicture& picture, GpuFrameStream& stream, int slot, std::size_t which) {
     void* const address = picture.data[0];
     const auto pitch = static_cast<std::size_t>(picture.stride[0]);
-    if (stream.backend() == "nvidia") {
+    if (gpu_decoder(stream.backend()).cuda_copies) {
         {
             const std::lock_guard lock(pinned_mutex_);  // the two videos' downloads run at once
             if (!pinned_.contains(address)) {

@@ -13,6 +13,7 @@
 #include "vml/app_log.h"
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
+#include "vml/gpu_decoders.h"
 #include "vml/isolated.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
@@ -26,29 +27,9 @@ namespace vml {
 
 namespace {
 
-// For each -hwaccel, the codecs it reliably decodes through FFmpeg's
-// generic hardware decoding. MPEG-2 and MPEG-4 Part 2 are decoded in
-// software all the same, VideoToolbox's too (gpu_decodes_exactly).
-const std::map<std::string, std::set<std::string>>& hwaccel_codecs() {
-    static const std::map<std::string, std::set<std::string>> codecs{
-        {"cuda", {"h264", "hevc", "vp8", "vp9", "mpeg2video", "mpeg4", "av1", "vc1"}},
-        {"qsv", {"h264", "hevc", "vp8", "vp9", "mpeg2video", "av1"}},
-        {"d3d11va", {"h264", "hevc", "vp9", "mpeg2video", "vc1", "av1"}},
-    };
-    return codecs;
-}
-
 std::optional<std::string> preferred_hwaccel(GpuVendor vendor) {
-    switch (vendor) {
-        case GpuVendor::nvidia:
-            return "cuda";
-        case GpuVendor::intel:
-            return "qsv";
-        case GpuVendor::amd:
-            return "d3d11va";
-        default:
-            return std::nullopt;
-    }
+    const GpuDecoder* decoder = decoder_of_vendor(vendor);
+    return decoder ? std::optional(std::string(decoder->hwaccel)) : std::nullopt;
 }
 
 // The codecs this Mac's GPU decodes through VideoToolbox, as FFmpeg names
@@ -86,8 +67,9 @@ bool decodes(const DecodingCapabilities& capabilities, const std::optional<std::
     if (*hwaccel == "d3d11va" && capabilities.d3d11va_codecs && !capabilities.d3d11va_codecs->contains(codec)) {
         return false;
     }
-    const auto supported = hwaccel_codecs().find(*hwaccel);
-    return supported != hwaccel_codecs().end() && supported->second.contains(codec);
+    const GpuDecoder* decoder = decoder_of_hwaccel(*hwaccel);
+    return decoder && std::find(decoder->hwaccel_codecs.begin(), decoder->hwaccel_codecs.end(), codec) !=
+                          decoder->hwaccel_codecs.end();
 }
 
 // The -hwaccel to try for a codec on this GPU maker (or the first one
@@ -489,12 +471,9 @@ std::vector<std::string> hwaccel_args(const std::optional<std::string>& hwaccel)
         // each hold pictures of their own: 260 MB less memory for 4K.
         args = {"-threads", "1"};
     }
-    // The frames stay on the GPU for a graph that downloads them. The
-    // format's name is the hwaccel's own, except D3D11VA's ("d3d11") and
-    // VideoToolbox's ("videotoolbox_vld").
-    const std::string output_format = *hwaccel == "d3d11va"        ? "d3d11"
-                                      : *hwaccel == "videotoolbox" ? "videotoolbox_vld"
-                                                                   : *hwaccel;
+    // The frames stay on the GPU for a graph that downloads them.
+    const GpuDecoder* decoder = decoder_of_hwaccel(*hwaccel);
+    const std::string output_format = decoder ? std::string(decoder->output_format) : *hwaccel;
     args.insert(args.end(), {"-hwaccel", *hwaccel, "-hwaccel_output_format", output_format});
     return args;
 }
