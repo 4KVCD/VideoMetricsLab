@@ -112,6 +112,9 @@ struct MetricColumn {
 // The metric columns, in the order the table shows them.
 const std::vector<MetricColumn>& metric_columns();
 
+// The metric column at `column`, or nothing for another column.
+const MetricColumn* metric_column_of(int column);
+
 // The window's tabs.
 enum Tab : int { tab_videos, tab_graph, tab_frame_compare, tab_bitrate, tab_bd_rate, tab_settings };
 

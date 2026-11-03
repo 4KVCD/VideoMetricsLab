@@ -16,6 +16,7 @@ add_library(vml_core
     src/cvvdp.cpp
     src/difference.cpp
     src/export_csv.cpp
+    src/ffmpeg_commands.cpp
     src/ffmpeg_run.cpp
     src/ffmpeg_tools.cpp
     src/ffprobe.cpp
@@ -35,6 +36,7 @@ add_library(vml_core
     src/libvmaf.cpp
     src/libvmaf_cpu.cpp
     src/metric_cache.cpp
+    src/metric_cache_load.cpp
     src/metrics.cpp
     src/model_select.cpp
     src/native_playback.cpp
@@ -51,6 +53,7 @@ add_library(vml_core
     src/run_file.cpp
     src/run_json.cpp
     src/run_line.cpp
+    src/score_logs.cpp
     src/settings.cpp
     src/sha256.cpp
     src/size_changes.cpp

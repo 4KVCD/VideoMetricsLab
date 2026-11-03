@@ -24,10 +24,13 @@ add_library(vml_app STATIC
     main_window.cpp
     main_window_compare.cpp
     main_window_graph.cpp
+    main_window_metrics.cpp
     main_window_options.cpp
+    main_window_rows.cpp
     main_window_run.cpp
     main_window_run_files.cpp
     main_window_saved_scores.cpp
+    main_window_source.cpp
     options_panel.cpp
     playback_worker.cpp
     probe_worker.cpp
