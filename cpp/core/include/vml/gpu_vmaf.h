@@ -111,6 +111,13 @@ struct GpuPlan {
     int frame_rate = 0;  // XPSNR's, in whole frames per second
 };
 
+// Whether a pass may ask for its pictures to stay on the GPU. Not with CPU metrics
+// beside it: they read the frames in system memory anyway, and AMD's decoder then
+// gives AMF's own download rather than Windows' decoder's pictures, the ones
+// those metrics read in their own run. NVIDIA's and vvdec-vulkan's streams hand
+// over whatever they are asked (GpuFrameStream).
+inline bool pass_may_hand_over(const GpuPlan& plan) { return plan.beside.empty(); }
+
 // The scorer of a plan's metrics beside the GPU's (GpuPlan::beside), made in
 // `scorer` where the plan has any: every `n_subsample`th pair, as the GPU's
 // scorers score them. Throws LibvmafError.

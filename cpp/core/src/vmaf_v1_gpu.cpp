@@ -1250,7 +1250,8 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
     // planes are not made (1080p: 342 -> 291 MB committed).
     const bool v1 = std::any_of(plan.models.begin(), plan.models.end(),
                                 [](const auto& model) { return model.first == "vmaf_v1"; });
-    const int pool = plan.backend == "vulkan" && v1 && source_backend == test_backend &&
+    const bool hand_over = pass_may_hand_over(plan);
+    const int pool = hand_over && plan.backend == "vulkan" && v1 && source_backend == test_backend &&
                              hands_over_textures(test_backend)
                          ? 6
                          : 4;
@@ -1263,9 +1264,9 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
     }
     const int vvdec_device = plan.backend == "vulkan" ? plan.device : -1;
     GpuFrameStream test =
-        open_pass_stream(distorted, plans[0], pool, test_backend, test_vvdec, vvdec_device, ffmpeg, ffprobe, true);
+        open_pass_stream(distorted, plans[0], pool, test_backend, test_vvdec, vvdec_device, ffmpeg, ffprobe, hand_over);
     GpuFrameStream reference = open_pass_stream(source, plans[1], pool, source_backend, reference_vvdec, vvdec_device,
-                                                ffmpeg, ffprobe, true);
+                                                ffmpeg, ffprobe, hand_over);
     // Declared after the streams so that it goes first: it holds on to the
     // decoders' memory.
     std::optional<MultiScorer> scorer;

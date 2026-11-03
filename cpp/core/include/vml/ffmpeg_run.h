@@ -207,9 +207,8 @@ bool cpu_metrics_need_every_frame(const std::vector<std::string>& keys, int n_su
 // app's decoder adds), or both on a GPU whose decoder the two parts would
 // share and which sets the pace at 4K (RTX 5090, a 4K HEVC remux against itself:
 // VMAF and NEG 267 frames a second with the decoder 90% busy, with PSNR beside
-// them in a task of its own 150). Where the pictures would differ (AMD's), the
-// CPU's metrics keep a task of their own. On this PC's decoders
-// (`capabilities`, DecodingCapabilities::remembered).
+// them in a task of its own 150). On this PC's decoders (`capabilities`,
+// DecodingCapabilities::remembered).
 bool shares_decode(const VideoInfo& source, const VideoInfo& test, const VmafOptions& options,
                    const DecodingCapabilities& capabilities);
 

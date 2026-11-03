@@ -1467,11 +1467,10 @@ namespace {
 // CPU metrics' own run, so that it may score them beside its own. Both videos
 // decoded in this process (a video whose size changes is FFmpeg's, in either
 // pass): the software decoder's and Intel's pictures, which are never handed
-// over (can_hand_over: nvf_download writes them out in both passes), and
-// NVIDIA's, which always are. Or FFmpeg decoding them, Apple's VideoToolbox
-// having no library here: both passes read the same pipes. Not AMD's, which
-// hands its pictures to the GPU's pass by Windows' decoder and to the CPU
-// metrics' own run by AMF.
+// over (can_hand_over: nvf_download writes them out in both passes), NVIDIA's,
+// which always are, and AMD's, which are not with these metrics beside
+// (pass_may_hand_over): AMF's download in both. Or FFmpeg decoding them, Apple's
+// VideoToolbox having no library here: both passes read the same pipes.
 bool pass_feeds_cpu_metrics(const VideoInfo& source, const VideoInfo& distorted, const HardwareDecoding& decoding) {
     const auto ffmpeg_decodes = [](const std::optional<std::string>& hwaccel) {
         const GpuDecoder* decoder = hwaccel ? decoder_of_hwaccel(*hwaccel) : nullptr;
@@ -1480,9 +1479,7 @@ bool pass_feeds_cpu_metrics(const VideoInfo& source, const VideoInfo& distorted,
     if (ffmpeg_decodes(decoding.source) || ffmpeg_decodes(decoding.distorted)) {
         return true;
     }
-    const std::optional<std::pair<std::string, std::string>> decoders =
-        source.scaled_to || distorted.scaled_to ? std::nullopt : decoders_here(decoding);
-    return decoders && decoders->first != amd_decoder && decoders->second != amd_decoder;
+    return !source.scaled_to && !distorted.scaled_to && decoders_here(decoding).has_value();
 }
 
 }  // namespace

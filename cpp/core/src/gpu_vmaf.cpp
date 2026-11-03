@@ -731,9 +731,9 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     const std::string source_library = vvdec.reference ? std::string(vvdec_decoder) : source_backend;
     // AMD's decoder hands its pictures over on the GPU where neither video is scaled or widened for the other
     // (can_hand_over); NVIDIA's always does. Not beside vvdec-vulkan's pictures in host memory, where nothing hands
-    // over.
-    const bool hand_over = (vvdec.mixed || !vvdec.any()) && can_hand_over(plans[0], test_library) &&
-                           can_hand_over(plans[1], source_library);
+    // over, nor beside the CPU's metrics (pass_may_hand_over).
+    const bool hand_over = pass_may_hand_over(plan) && (vvdec.mixed || !vvdec.any()) &&
+                           can_hand_over(plans[0], test_library) && can_hand_over(plans[1], source_library);
     if (vvdec.any() && on_vvdec_opening) {
         on_vvdec_opening();
     }
