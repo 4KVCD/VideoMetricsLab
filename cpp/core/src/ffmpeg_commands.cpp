@@ -339,7 +339,7 @@ std::string build_resample_filtergraph(const VideoInfo& source, const VmafOption
     }
     base.push_back("format=" + analysis_format);
     const std::string numbering = join(numbering_filters(frame_rate(source)), ",");
-    const std::string scale_flags = ":flags=" + options.scale_algorithm;
+    const std::string scale_flags = ":flags=" + options.resample_test->scaler;
     return join({"[0:" + std::string(video_stream) + "]" + join(base, ",") + "[base]",
                    "[base]split=2[ref_src][dist_src]", "[ref_src]" + numbering + "[ref]",
                    "[dist_src]scale=" + std::to_string(down_w) + ":" + std::to_string(down_h) + scale_flags +
@@ -371,7 +371,9 @@ std::vector<std::string> build_resample_command(const std::string& ffmpeg, const
 std::filesystem::path synthetic_resample_distorted_path(const std::filesystem::path& source,
                                                         const ResampleTarget& target) {
     std::filesystem::path name = source.stem();
-    name += " [downscale-" + target.label + "-upscale]";
+    // The default scaler unnamed, as every test's path was before tests had one.
+    const std::string scaler = target.scaler == default_resample_scaler ? "" : "-" + target.scaler;
+    name += " [downscale-" + target.label + scaler + "-upscale]";
     name += source.extension();
     return source.parent_path() / name;
 }

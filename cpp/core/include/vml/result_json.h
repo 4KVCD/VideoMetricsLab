@@ -39,8 +39,11 @@ nlohmann::ordered_json provenance_to_dict(const MetricProvenance& provenance);
 // naming a missing field as Python's KeyError says it.
 MetricProvenance provenance_from_dict(const nlohmann::json& data);
 
-// A resolution test's target ({"width", "label"}), or null for none.
+// A resolution test's target ({"width", "label"}, and "scaler" for another
+// than the default), or null for none; and read back. Throws
+// std::invalid_argument for another object or an unknown scaler.
 nlohmann::ordered_json resample_target_to_dict(const std::optional<ResampleTarget>& target);
+ResampleTarget resample_target_from_dict(const nlohmann::json& data);
 
 // The scale direction as saved ("source_to_distorted"), and read back.
 // Throws std::invalid_argument for another text, as Python's ValueError

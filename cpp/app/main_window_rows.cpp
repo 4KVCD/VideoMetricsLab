@@ -4,10 +4,13 @@
 #include "main_window.h"
 
 #include <QCheckBox>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFont>
+#include <QFormLayout>
 #include <QHeaderView>
-#include <QInputDialog>
 #include <QItemSelection>
 #include <QItemSelectionModel>
 #include <QMessageBox>
@@ -660,18 +663,33 @@ void MainWindow::on_add_resample_test() {
                     {{"smallest", resample_target_choices().back().width}, {"width", source_info_->width}}));
         return;
     }
-    QStringList labels;
+    // The size, and the scaling algorithm of both steps (the Options' one
+    // first, which made every test before tests had one of their own).
+    QDialog dialog(this);
+    dialog.setWindowTitle(app::tr("Add resolution test"));
+    auto* form = new QFormLayout(&dialog);
+    auto* sizes = new QComboBox;
     for (const ResampleTarget& target : targets) {
-        labels.append(QString::fromStdString(target.label));
+        sizes->addItem(QString::fromStdString(target.label));
     }
-    bool chosen = false;
-    const QString label =
-        QInputDialog::getItem(this, app::tr("Add resolution test"), app::tr("Downscale to (then scale back up):"),
-                              labels, std::min(1, static_cast<int>(labels.size()) - 1), false, &chosen);
-    if (!chosen) {
+    sizes->setCurrentIndex(std::min(1, static_cast<int>(targets.size()) - 1));
+    auto* scalers = new QComboBox;
+    for (const std::string_view scaler : resample_scalers) {
+        scalers->addItem(QString::fromUtf8(scaler.data(), static_cast<qsizetype>(scaler.size())));
+    }
+    scalers->setCurrentText(QString::fromStdString(default_options_.scale_algorithm));
+    form->addRow(app::tr("Downscale to (then scale back up):"), sizes);
+    form->addRow(app::tr("Scaling algorithm:"), scalers);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form->addRow(buttons);
+    if (dialog.exec() != QDialog::Accepted) {
         return;
     }
-    add_resample_test(targets[static_cast<std::size_t>(labels.indexOf(label))]);
+    ResampleTarget target = targets[static_cast<std::size_t>(sizes->currentIndex())];
+    target.scaler = scalers->currentText().toStdString();
+    add_resample_test(target);
 }
 
 void MainWindow::add_resample_test(const ResampleTarget& target) {
@@ -680,7 +698,7 @@ void MainWindow::add_resample_test(const ResampleTarget& target) {
     if (row_index_of_path(path)) {
         dialogs_.inform(app::tr("Already added"),
                         app::tr("A {label} resolution test for this reference is already in the list.",
-                                {{"label", QString::fromStdString(target.label)}}));
+                                {{"label", QString::fromStdString(target.label + " " + target.scaler)}}));
         return;
     }
     const int row = add_table_row(path);
@@ -700,12 +718,14 @@ void MainWindow::add_resample_test(const ResampleTarget& target) {
 
 void MainWindow::set_resample_row_info(int row, const ResampleTarget& target) {
     // Shows what a resolution test scales the reference down to and back up
-    // to.
+    // to, and with which scaling algorithm (named as FFmpeg names it, as the
+    // Options' list shows it, in every language).
     const VideoInfo& info = *source_info_;
     const int down_h = resample_down_height(target.width, {info.width, info.height});
     QTableWidgetItem* item = distorted_table_->item(row, col_info);
     item->setText(app::tr("Downscale to {down}, upscale back to {back}",
-                          {{"down", size_text(target.width, down_h)}, {"back", size_text(info.width, info.height)}}));
+                          {{"down", size_text(target.width, down_h)}, {"back", size_text(info.width, info.height)}}) +
+                  " (" + QString::fromStdString(target.scaler) + ")");
     item->setToolTip(QString::fromStdString(format_hms(info.duration, 1)));
     distorted_table_->item(row, col_bitrate)->setText("N/A");
     set_row_black_bars(row);

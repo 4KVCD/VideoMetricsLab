@@ -118,6 +118,8 @@ TEST(FfmpegRun, BuildsThePythonAppsResolutionTestCommands) {
         const std::optional<std::string> hwaccel = plan_named(item["plan"].get<std::string>()).source;
         VmafOptions options = options_named(item["choice"].get<std::string>(), item["setting"].get<std::string>());
         options.resample_test = targets.at(item["target"].get<std::string>());
+        // The Python app scaled a test with the Options' algorithm, a test's own now.
+        options.resample_test->scaler = options.scale_algorithm;
         const std::optional<std::string> xpsnr_log =
             options.compute_xpsnr ? std::optional<std::string>("xpsnr_log.txt") : std::nullopt;
         const std::string graph =

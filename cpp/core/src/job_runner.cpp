@@ -430,7 +430,7 @@ std::string JobRun::describe() const {
                        " (" + media_text(job_.source_info) + ")\n  calculating " + calculating +
                        (kept.empty() ? "" : "; saved scores kept: " + kept) + "\n  " + settings;
     if (options.resample_test) {
-        text += "\n  resolution test: " + options.resample_test->label;
+        text += "\n  resolution test: " + options.resample_test->label + " (" + options.resample_test->scaler + ")";
     }
     return text;
 }

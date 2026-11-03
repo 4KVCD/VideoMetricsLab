@@ -53,6 +53,11 @@ nlohmann::json ComparisonRecipe::identity() const {
     if (range_start > 0) {
         identity["range_start"] = static_cast<double>(range_start);
     }
+    if (resample_test && resample_test->scaler != default_resample_scaler) {
+        // Another scaling algorithm makes another test video; with the
+        // default, every test saved before keeps its identity.
+        identity["resample_test"]["scaler"] = resample_test->scaler;
+    }
     if (!film_grain.is_null()) {
         identity["film_grain"] = film_grain;
     }

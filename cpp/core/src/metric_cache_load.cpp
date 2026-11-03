@@ -385,11 +385,14 @@ std::optional<std::pair<ComparisonResult, std::string>> comparison_from(
                                      : recipe.scale_algorithm;
         result.resample_target = recipe.resample_test;
         if (const nlohmann::json target = context.value("resample_target", nlohmann::json()); python_truthy(target)) {
-            // As Python's ResampleTarget(**target): its two fields, no more.
-            if (!target.is_object() || target.size() != 2) {
-                return std::nullopt;
-            }
-            result.resample_target = ResampleTarget{target.at("width").get<int>(), target.at("label").get<std::string>()};
+            result.resample_target = resample_target_from_dict(target);
+        }
+        if (recipe.resample_test && algorithm.is_string() && !algorithm.get<std::string>().empty() &&
+            algorithm.get<std::string>() != recipe.resample_test->scaler) {
+            // A test saved before tests had a scaling algorithm of their own
+            // was made with the Options one, under the default's identity:
+            // another algorithm made another test video.
+            return std::nullopt;
         }
         result.compared_frame_count = context.value("compared_frame_count", 0LL);
         const auto optional_string = [&context](const char* name) -> std::optional<std::string> {

@@ -1040,9 +1040,17 @@ std::filesystem::path recipe_directory(const std::filesystem::path& base, const 
             algorithms.emplace_back(algorithm);
         }
     }
+    nlohmann::json legacy_identity = identity;
+    if (recipe.resample_test) {
+        // A resolution test's scores come from its own scaling algorithm:
+        // only the folder of that one is its, under the identity before
+        // tests had one.
+        algorithms = {recipe.resample_test->scaler};
+        legacy_identity["resample_test"].erase("scaler");
+    }
     std::vector<std::filesystem::path> legacy;
     for (const std::string& algorithm : algorithms) {
-        nlohmann::json old_identity = identity;
+        nlohmann::json old_identity = legacy_identity;
         old_identity["scale_algorithm"] = algorithm;
         const std::filesystem::path path = root / hash_of(source_identity, distorted_identity, old_identity);
         if (std::filesystem::is_directory(path, error)) {

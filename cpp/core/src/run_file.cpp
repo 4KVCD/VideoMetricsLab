@@ -1,5 +1,6 @@
 #include "vml/run_file.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cmath>
@@ -9,6 +10,7 @@
 #include <variant>
 
 #include "vml/build_info.h"
+#include "vml/ffmpeg_run.h"
 #include "vml/model_select.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
@@ -193,10 +195,7 @@ std::optional<ResampleTarget> resample_target_from(const nlohmann::json& data) {
     if (data.is_null()) {
         return std::nullopt;
     }
-    if (!data.is_object() || data.size() != 2) {
-        throw std::invalid_argument("A resolution test's target needs a width and a label.");
-    }
-    return ResampleTarget{python_item(data, "width").get<int>(), python_item(data, "label").get<std::string>()};
+    return resample_target_from_dict(data);
 }
 
 // Python's name of a JSON value's type, for the error it gives when a file
@@ -348,6 +347,16 @@ std::pair<ComparisonResult, std::string> run_from_text(const std::string& text) 
         result.scale_direction = scale_direction_from(python_item(data, "scale_direction").get<std::string>());
         result.scale_algorithm = python_item(data, "scale_algorithm").get<std::string>();
         result.resample_target = resample_target_from(python_item(data, "resample_target"));
+        if (result.resample_target && result.resample_target->scaler == default_resample_scaler &&
+            result.scale_algorithm != default_resample_scaler &&
+            std::find(resample_scalers.begin(), resample_scalers.end(), result.scale_algorithm) !=
+                resample_scalers.end()) {
+            // A test saved before tests had a scaling algorithm of their own
+            // was made with the run's: the test and its path say so now, as
+            // one added with it would.
+            result.resample_target->scaler = result.scale_algorithm;
+            result.distorted = synthetic_resample_distorted_path(result.source, *result.resample_target);
+        }
         result.compared_frame_count = python_item(data, "compared_frame_count").get<long long>();
         const nlohmann::json& choice = python_item(data, "model_choice");
         result.model_choice = choice.is_null() ? std::nullopt : std::optional(choice.get<std::string>());

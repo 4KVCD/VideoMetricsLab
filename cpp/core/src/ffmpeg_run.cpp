@@ -2014,6 +2014,9 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
     if (!options.resample_test) {
         throw std::invalid_argument("not a resolution test");
     }
+    // Every scaling of the run, and its result, with the test's own
+    // scaling algorithm.
+    options.scale_algorithm = options.resample_test->scaler;
     // One file, for the black bars and FFmpeg's route: there is no test
     // video file to plan GPU decoding for.
     HardwareDecoding decoding;

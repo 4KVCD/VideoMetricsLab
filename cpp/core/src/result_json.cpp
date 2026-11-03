@@ -1,5 +1,6 @@
 #include "vml/result_json.h"
 
+#include <algorithm>
 #include <stdexcept>
 
 #include "vml/film_grain_detect.h"
@@ -148,7 +149,27 @@ nlohmann::ordered_json resample_target_to_dict(const std::optional<ResampleTarge
     if (!target) {
         return nullptr;
     }
-    return {{"width", target->width}, {"label", target->label}};
+    nlohmann::ordered_json data{{"width", target->width}, {"label", target->label}};
+    if (target->scaler != default_resample_scaler) {
+        data["scaler"] = target->scaler;  // the default unwritten, as files had it before
+    }
+    return data;
+}
+
+ResampleTarget resample_target_from_dict(const nlohmann::json& data) {
+    const bool named_scaler = data.is_object() && data.contains("scaler");
+    if (!data.is_object() || data.size() != (named_scaler ? 3U : 2U)) {
+        throw std::invalid_argument("A resolution test's target needs a width and a label, and may name its scaler.");
+    }
+    ResampleTarget target{python_item(data, "width").get<int>(), python_item(data, "label").get<std::string>()};
+    if (named_scaler) {
+        // Into FFmpeg's filters and the test's path: only a scaler there is.
+        target.scaler = python_item(data, "scaler").get<std::string>();
+        if (std::find(resample_scalers.begin(), resample_scalers.end(), target.scaler) == resample_scalers.end()) {
+            throw std::invalid_argument("Unknown scaling algorithm for a resolution test: '" + target.scaler + "'");
+        }
+    }
+    return target;
 }
 
 const char* scale_direction_value(ScaleDirection direction) {

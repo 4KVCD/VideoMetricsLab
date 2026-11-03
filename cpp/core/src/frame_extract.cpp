@@ -261,10 +261,12 @@ std::string frame_filter(const FrameComparison& comparison, FrameSide side, cons
     const std::string algorithm = ":flags=" + comparison.scale_algorithm;
     const std::string output = std::to_string(output_width) + ":" + std::to_string(output_height);
     if (comparison.resample_target && side == FrameSide::distorted) {
+        // Made with the test's own scaling algorithm, as its run made it.
         const int width = comparison.resample_target->width;
+        const std::string test_algorithm = ":flags=" + comparison.resample_target->scaler;
         filters.push_back("scale=" + std::to_string(width) + ":" +
-                          std::to_string(resample_down_height(width, content)) + algorithm);
-        filters.push_back("scale=" + output + algorithm);
+                          std::to_string(resample_down_height(width, content)) + test_algorithm);
+        filters.push_back("scale=" + output + test_algorithm);
     } else if (content != Size{output_width, output_height}) {
         if (would_distort(comparison, info, crop, output_width, output_height)) {
             // Fitted, not stretched, while the black bars are still being

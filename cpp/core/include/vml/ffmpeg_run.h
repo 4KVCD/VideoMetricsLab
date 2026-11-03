@@ -299,8 +299,9 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
 
 // A made-up path that stands for a resolution test's test video, which has
 // no file of its own (the Python app's synthetic_resample_distorted_path):
-// the target is in the name, so that two targets of one source are not
-// taken for the same comparison.
+// the target and its scaling algorithm (but the default one) are in the
+// name, so that two tests of one source are not taken for the same
+// comparison.
 std::filesystem::path synthetic_resample_distorted_path(const std::filesystem::path& source,
                                                         const ResampleTarget& target);
 

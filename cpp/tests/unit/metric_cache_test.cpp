@@ -25,9 +25,11 @@
 #include "reference.h"
 #include "test_videos.h"
 #include "vml/build_info.h"
+#include "vml/ffmpeg_run.h"
 #include "vml/npz.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
+#include "vml/result_json.h"
 #include "vml/score_identity.h"
 #include "vml/sha256.h"
 
@@ -170,6 +172,29 @@ TEST(MetricCache, ARangesStartIsInItsIdentityOnlyWhenItHasOne) {
     EXPECT_FALSE(recipe.identity().contains("range_start"));
     recipe.range_start = 10;
     EXPECT_EQ(recipe.identity().at("range_start"), 10.0);
+}
+
+// A resolution test's scaling algorithm makes its test video: another one is
+// another test, with an identity, a path and a saved target of its own,
+// while the default one keeps those of the tests saved before (their
+// identities are FilesRequestsAndRecipesAsThePythonApp's).
+TEST(MetricCache, AResolutionTestsScalingAlgorithmMakesAnotherTest) {
+    ComparisonRecipe bicubic;
+    bicubic.resample_test = ResampleTarget{1920, "1080p"};
+    ComparisonRecipe lanczos = bicubic;
+    lanczos.resample_test->scaler = "lanczos";
+    EXPECT_NE(lanczos.identity(), bicubic.identity());
+    EXPECT_EQ(synthetic_resample_distorted_path("film.mkv", *bicubic.resample_test),
+              std::filesystem::path("film [downscale-1080p-upscale].mkv"));
+    EXPECT_EQ(synthetic_resample_distorted_path("film.mkv", *lanczos.resample_test),
+              std::filesystem::path("film [downscale-1080p-lanczos-upscale].mkv"));
+    EXPECT_EQ(resample_target_to_dict(bicubic.resample_test).dump(), R"({"width":1920,"label":"1080p"})");
+    for (const ComparisonRecipe& recipe : {bicubic, lanczos}) {
+        EXPECT_EQ(resample_target_from_dict(resample_target_to_dict(recipe.resample_test)), *recipe.resample_test);
+    }
+    nlohmann::json unknown = resample_target_to_dict(lanczos.resample_test);
+    unknown["scaler"] = "../x";  // it goes into a path and FFmpeg's filters
+    EXPECT_THROW(resample_target_from_dict(unknown), std::invalid_argument);
 }
 
 // A duration limit's scores, saved before ranges under the name of the range

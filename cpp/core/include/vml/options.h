@@ -2,6 +2,7 @@
 // (the Python app's VmafOptions, a row's settings in the window).
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -17,13 +18,27 @@ namespace vml {
 inline constexpr std::string_view auto_model_choice = "__auto__";
 inline constexpr std::string_view custom_model_choice = "__custom__";
 
+// The scaling algorithms a resolution test may have, as FFmpeg's scale
+// filter names them.
+inline constexpr std::array<std::string_view, 4> resample_scalers{"bicubic", "lanczos", "bilinear", "spline"};
+
+// A resolution test's scaling algorithm unless another is chosen, and the
+// one written nowhere: a test with it has the identity, path and saved files
+// tests had before they had a choice (the Options scaler, bicubic by default;
+// a test saved with another is told apart by its saved scale_algorithm).
+inline constexpr std::string_view default_resample_scaler = "bicubic";
+
 // What a resolution test scales the reference down to (and back up from): a
 // width, the height following from the reference's shape, and a label
-// ("1080p"). A resolution test has no second file: both videos are made
-// from the reference during the run, to see what a resolution alone costs.
+// ("1080p"); and the scaling algorithm of both steps, which makes the test
+// video, so it is part of what the test is (VmafOptions::scale_algorithm
+// does not apply to it). A resolution test has no second file: both videos
+// are made from the reference during the run, to see what a resolution
+// alone costs.
 struct ResampleTarget {
     int width = 0;
     std::string label;
+    std::string scaler = std::string(default_resample_scaler);
 
     bool operator==(const ResampleTarget&) const = default;
 };
