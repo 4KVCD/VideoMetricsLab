@@ -795,14 +795,26 @@ ParsedScores execute_run(const CommandBuilder& build_command, const VmafOptions&
 
     FfmpegOutcome outcome;
     const std::vector<HardwareDecoding> ladder = fallback_ladder(decoding);
+    // A failed attempt can leave a partial log, which would be read as the
+    // retry's.
+    const auto remove_logs = [&] {
+        std::error_code ignored;
+        std::filesystem::remove(log_path, ignored);
+        if (xpsnr_log_path) {
+            std::filesystem::remove(*xpsnr_log_path, ignored);
+        }
+    };
+    bool same_again = false;  // this attempt is the last one's plan again
     for (std::size_t attempt = 0; attempt < ladder.size(); ++attempt) {
         // Before the FFmpeg, which it outlives.
-        PairFeeds feeds(source, distorted, environment.ffmpeg, environment.ffprobe, cancel);
+        PairFeeds feeds(source, distorted, environment.ffmpeg, environment.ffprobe, cancel,
+                        vvdec_wanted(options.gpu_decode, options.vvc_on_gpu), on_status);
         const HardwareDecoding plan = feeds.decoding(ladder[attempt]);
-        if (on_status) {
+        if (on_status && !same_again) {
             on_status(attempt == 0 ? decoding_status("Running ffmpeg", plan, StatusKind::starting)
                                    : decoding_status("GPU decode failed, retrying", plan));
         }
+        same_again = false;
         const std::vector<std::string> command = build_command(plan, run_model, xpsnr_log_name, feeds);
         logger.info("FFmpeg: " + python_list2cmdline(command));
         try {
@@ -810,18 +822,21 @@ ParsedScores execute_run(const CommandBuilder& build_command, const VmafOptions&
         } catch (const platform::ProcessError& error) {
             throw VmafRunError(std::string("FFmpeg could not be started: ") + error.what());
         }
-        feeds.finish();
+        try {
+            feeds.finish();
+        } catch (const VvdecFeedFailed& error) {
+            // vvdec-vulkan is off now (it cannot fail twice): the same attempt again, VVC decoded by VVdeC
+            report_vvdec_feed_failed(error, on_status);
+            remove_logs();
+            same_again = true;
+            --attempt;
+            continue;
+        }
         if (outcome.exit_code == 0) {
             break;
         }
         log_failed_attempt(outcome, plan, attempt + 1 < ladder.size());
-        // A failed attempt can leave a partial log, which would be read as
-        // the retry's.
-        std::error_code ignored;
-        std::filesystem::remove(log_path, ignored);
-        if (xpsnr_log_path) {
-            std::filesystem::remove(*xpsnr_log_path, ignored);
-        }
+        remove_logs();
     }
     if (outcome.exit_code != 0) {
         throw VmafRunError("ffmpeg exited with code " + platform::exit_code_text(outcome.exit_code),
@@ -965,7 +980,8 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
     bool same_again = false;  // this attempt is the last one's plan again
     while (attempt_number < ladder.size()) {
         // Before the FFmpegs, which it outlives.
-        PairFeeds feeds(&source, &distorted, environment.ffmpeg, environment.ffprobe, cancel);
+        PairFeeds feeds(&source, &distorted, environment.ffmpeg, environment.ffprobe, cancel,
+                        vvdec_wanted(options.gpu_decode, options.vvc_on_gpu), on_status);
         const HardwareDecoding decode = feeds.decoding(ladder[attempt_number]);
         if (on_status && !same_again) {
             on_status(attempt_number == 0
@@ -1003,6 +1019,12 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
         }
         try {
             feeds.finish();  // a fed video decoded in part is no score
+        } catch (const VvdecFeedFailed& error) {
+            // vvdec-vulkan is off now (it cannot fail twice): the same attempt again, VVC decoded by VVdeC
+            abandon();
+            report_vvdec_feed_failed(error, on_status);
+            same_again = true;
+            continue;
         } catch (...) {
             abandon();
             throw;
@@ -1041,6 +1063,16 @@ std::vector<std::string> plan_keys(const GpuPlan& plan) {
     return keys;
 }
 
+// What the passes that decode in the app call as vvdec-vulkan opens: a vvdec_used status, before it opens, so that a
+// crash while it opens counts as its own (score_plan_apart).
+std::function<void()> on_vvdec_opening(const StatusCallback& on_status) {
+    return [on_status] {
+        if (on_status) {
+            on_status({"VVC decoded on the GPU by vvdec-vulkan", StatusKind::vvdec_used});
+        }
+    };
+}
+
 // The plan's metrics with both videos decoded in this process (the Python
 // app's _score_decoded_on_gpu): VMAF and NEG on the GPU (score_decoded),
 // with VMAF v1 from whole frames (score_decoded_v1), or PSNR, SSIM and XPSNR
@@ -1059,19 +1091,20 @@ ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoIn
         on_status(decoding_status("Running " + doing(plan), decoding));
     }
     const std::vector<std::string> keys = plan_keys(plan);
+    const bool want_vvdec = vvdec_wanted(options.gpu_decode, options.vvc_on_gpu);
     const PairScores scored =
         plan.backend == "cpu"
             ? score_decoded_cpu(source, distorted, source_crop, distorted_crop, plan.width, plan.height,
                                 plan.bit_depth, keys, options.n_subsample, range, total_frames, decoders,
                                 plan.threads, plan.frame_rate, options.scale_algorithm, environment.ffmpeg,
-                                environment.ffprobe, on_progress, cancel)
+                                environment.ffprobe, want_vvdec, on_vvdec_opening(on_status), on_progress, cancel)
         : std::find(keys.begin(), keys.end(), "vmaf_v1") != keys.end()
             ? score_decoded_v1(source, distorted, source_crop, distorted_crop, plan, options.n_subsample, range,
                                total_frames, options.scale_algorithm, decoders, environment.ffmpeg,
-                               environment.ffprobe, on_progress, cancel)
+                               environment.ffprobe, want_vvdec, on_vvdec_opening(on_status), on_progress, cancel)
             : score_decoded(source, distorted, source_crop, distorted_crop, plan, options.n_subsample, range,
                             total_frames, options.scale_algorithm, decoders, environment.ffmpeg, environment.ffprobe,
-                            on_progress, cancel);
+                            want_vvdec, on_vvdec_opening(on_status), on_progress, cancel);
     return gpu_scores(scored, fps, options, range);
 }
 
@@ -1105,9 +1138,28 @@ ParsedScores score_plan(const RunEnvironment& environment, const VideoInfo& sour
             return score_decoded_here(environment, source, distorted, options, source_crop, distorted_crop, plan,
                                       fps, total_frames, decoding, *decoders, on_progress, on_status, cancel);
         } catch (const GpuDecodeUnavailableError& error) {
+            if (error.backend() == vvdec_decoder) {
+                // vvdec-vulkan refused: off for the run, and the same pass with the app's VVdeC (vvdec_wanted is
+                // false now, so this runs once)
+                turn_off_vvdec(error.what(), on_status);
+                return score_plan(environment, source, distorted, options, source_crop, distorted_crop, plan, fps,
+                                  total_frames, decoding, on_progress, on_status, cancel);
+            }
             // FFmpeg decodes the videos.
             logger.info(doing(plan) + ": the videos are decoded by FFmpeg (" + error.what() + ")");
         } catch (const GpuDecodeFailedError& error) {
+            if (error.backend() == vvdec_decoder) {
+                // vvdec-vulkan failed partway: the pass again from its first frame with the app's VVdeC, not FFmpeg's
+                // slower route; the other GPU decoders stay trusted
+                logger.warning("vvdec-vulkan failed for " + doing(plan) +
+                               "; decoding with VVdeC on the CPU instead: " + std::string(error.what()));
+                if (on_status) {
+                    on_status({decoding_failed_status(error, "with VVdeC on the CPU")});
+                }
+                turn_off_vvdec(error.what(), on_status);
+                return score_plan(environment, source, distorted, options, source_crop, distorted_crop, plan, fps,
+                                  total_frames, decoding, on_progress, on_status, cancel);
+            }
             logger.warning("Decoding for " + (plan.backend == "cpu" ? metric_names(plan) : "VMAF on the GPU") +
                            " failed; decoding through FFmpeg instead: " + error.what());
             if (on_status) {
@@ -1351,22 +1403,19 @@ GpuPlan plan_from(const nlohmann::json& text) {
     return plan;
 }
 
-// The plan's metrics scored in a process of its own (score_plan in the
-// child, `task` "gpu-run" or "cpu-metrics"), so that a crash in libvmaf, the
-// GPU's code or its driver ends that process and not the run (the Python
-// app's run_isolated(..., what="libvmaf")). Throws what run_isolated throws.
-ParsedScores score_plan_apart(std::string_view task, const RunEnvironment& environment, const VideoInfo& source,
-                              const VideoInfo& distorted, const VmafOptions& options,
-                              const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
-                              const GpuPlan& plan, double fps, long long total_frames,
-                              const HardwareDecoding& decoding, const ProgressCallback& on_progress,
-                              const StatusCallback& on_status, const CancelToken& cancel) {
+// One attempt of score_plan_apart: the child's run, `vvdec_used` set where it opened vvdec-vulkan.
+ParsedScores run_plan_child(std::string_view task, const RunEnvironment& environment, const VideoInfo& source,
+                            const VideoInfo& distorted, const VmafOptions& options,
+                            const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
+                            const GpuPlan& plan, double fps, long long total_frames, const HardwareDecoding& decoding,
+                            const ProgressCallback& on_progress, const StatusCallback& on_status,
+                            const CancelToken& cancel, bool& vvdec_used) {
     const nlohmann::json request{
         {"ffmpeg", environment.ffmpeg},
         {"ffprobe", environment.ffprobe},
         {"source", video_json(source)},
         {"distorted", video_json(distorted)},
-        {"options", options_json(options)},
+        {"options", options_json(child_options(options))},
         {"source_crop", crop_json(source_crop)},
         {"distorted_crop", crop_json(distorted_crop)},
         {"plan", plan_json(plan)},
@@ -1381,14 +1430,7 @@ ParsedScores score_plan_apart(std::string_view task, const RunEnvironment& envir
                 const nlohmann::json& counts = message["progress"];
                 on_progress(counts.at(0).get<long long>(), counts.at(1).get<long long>(), counts.at(2).get<double>());
             } else if (message.contains("status")) {
-                const RunStatus status = status_from_json(message["status"]);
-                // The child's GPU decoder failed: not to be trusted in this process either, shown or not
-                if (status.kind == StatusKind::gpu_decoder_failed) {
-                    distrust_gpu_decoding(status.text);
-                }
-                if (on_status) {
-                    on_status(status);
-                }
+                take_child_status(status_from_json(message["status"]), on_status, vvdec_used);
             }
         },
         cancel,
@@ -1396,6 +1438,39 @@ ParsedScores score_plan_apart(std::string_view task, const RunEnvironment& envir
             scores = read_scores(result, folder, fps);
         });
     return scores;
+}
+
+// The plan's metrics scored in a process of its own (score_plan in the
+// child, `task` "gpu-run" or "cpu-metrics"), so that a crash in libvmaf, the
+// GPU's code or its driver ends that process and not the run (the Python
+// app's run_isolated(..., what="libvmaf")). A child that opened vvdec-vulkan
+// and then failed or crashed, where it did not turn vvdec-vulkan off itself,
+// is run once more with it off (the app's VVdeC on the CPU), still in the
+// caller's GPU turn. Throws what run_isolated throws.
+ParsedScores score_plan_apart(std::string_view task, const RunEnvironment& environment, const VideoInfo& source,
+                              const VideoInfo& distorted, const VmafOptions& options,
+                              const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
+                              const GpuPlan& plan, double fps, long long total_frames,
+                              const HardwareDecoding& decoding, const ProgressCallback& on_progress,
+                              const StatusCallback& on_status, const CancelToken& cancel) {
+    for (bool retried = false;; retried = true) {
+        bool vvdec_used = false;
+        try {
+            return run_plan_child(task, environment, source, distorted, options, source_crop, distorted_crop, plan,
+                                  fps, total_frames, decoding, on_progress, on_status, cancel, vvdec_used);
+        } catch (const Cancelled&) {
+            throw;
+        } catch (const VideoSizeChanged&) {
+            throw;
+        } catch (const FilmGrainRefusal&) {
+            throw;
+        } catch (const std::runtime_error& error) {
+            if (retried || !vvdec_used || vvdec_turned_off()) {
+                throw;
+            }
+            turn_off_vvdec(std::string("its pass failed: ") + error.what(), on_status);
+        }
+    }
 }
 
 // VMAF, NEG and VMAF v1 on the GPU (score_plan), with the plan's CPU metrics
@@ -1678,6 +1753,31 @@ void distrust_failed_decoder(const GpuDecodeFailedError& error, const StatusCall
     if (on_status) {
         on_status({error.what(), StatusKind::gpu_decoder_failed});
     }
+}
+
+void turn_off_vvdec(const std::string& reason, const StatusCallback& on_status) {
+    turn_off_vvdec_vulkan(reason);
+    if (on_status) {
+        on_status({reason, StatusKind::vvdec_off});
+    }
+}
+
+void take_child_status(const RunStatus& status, const StatusCallback& on_status, bool& vvdec_used) {
+    if (status.kind == StatusKind::gpu_decoder_failed) {
+        distrust_gpu_decoding(status.text);
+    } else if (status.kind == StatusKind::vvdec_off) {
+        turn_off_vvdec_vulkan(status.text);
+    } else if (status.kind == StatusKind::vvdec_used) {
+        vvdec_used = true;
+    }
+    if (on_status) {
+        on_status(status);
+    }
+}
+
+VmafOptions child_options(VmafOptions options) {
+    options.vvc_on_gpu = options.vvc_on_gpu && !vvdec_turned_off();
+    return options;
 }
 
 RunStatus gpu_decoding_off_status(const std::string& reason) {

@@ -66,6 +66,7 @@ Json values_of(const Arguments& parsed) {
         {"cpu", a.cpu},
         {"no_gpu_decode", a.no_gpu_decode},
         {"gpu_decode", either(a.gpu_decode)},
+        {"vvc_decoder", either(a.vvc_decoder)},
         {"parallel", either(a.parallel)},
         {"recalculate", a.recalculate},
         {"csv", path(a.csv)},
@@ -196,14 +197,19 @@ TEST(CommandLine, SaysWhereEachMetricIsCalculatedAsThePythonApp) {
 
 // The command's options over the app's settings, as the window's controls
 // set them: --gpu-decode turns GPU decoding on where Settings have it off,
-// --model-v1 picks the window's choice, --cvvdp-fill fills every display
-// (the Automatic one too), and without --film-grain Settings' default holds.
+// --vvc-decoder takes the place of Settings' VVC decoder, --model-v1 picks
+// the window's choice, --cvvdp-fill fills every display (the Automatic one
+// too), and without --film-grain Settings' default holds.
 TEST(CommandLine, OptionsTakeThePlaceOfTheAppsSettings) {
     Settings settings;
     settings.default_gpu_decode = false;
     settings.film_grain_default = "without";
+    settings.vvc_decode_on_gpu = false;
     CompareArguments arguments;
     EXPECT_FALSE(row_options(arguments, settings, {"vmaf"}).gpu_decode);
+    EXPECT_FALSE(row_options(arguments, settings, {"vmaf"}).vvc_on_gpu);
+    arguments.vvc_decoder = "gpu";
+    EXPECT_TRUE(row_options(arguments, settings, {"vmaf"}).vvc_on_gpu);
     EXPECT_EQ(film_grain_choice(arguments, settings), false);
     arguments.gpu_decode = "intel";
     arguments.model_v1 = "vmaf_v1_3d0h_2160";

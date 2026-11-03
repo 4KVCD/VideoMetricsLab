@@ -25,6 +25,7 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
 #include "vml/film_grain_scoring.h"
+#include "vml/gpu_frames.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/size_changes.h"
@@ -638,6 +639,35 @@ TEST(PerceptualRouting, APassWhoseInputFailedIsMadeOnceMore) {
     const auto refusal = std::make_exception_ptr(FilmGrainRefusal("the app could not decode its pictures"));
     EXPECT_THROW(remade_vship_pass(pass(1, refusal), on_status, CancelToken()), FilmGrainRefusal);
     EXPECT_EQ(attempts, 1);
+}
+
+// A Vship pass in which vvdec-vulkan failed is made again with the app's own decoders (VVC with VVdeC on the CPU),
+// vvdec-vulkan off for the run and the other GPU decoders still trusted; vvdec-vulkan failing again ends the pass.
+TEST(PerceptualRouting, APassWhoseVvdecVulkanFailedIsMadeAgainWithVvdecOnTheCpu) {
+    trust_gpu_decoding();
+    struct TrustedAgain {  // the process-wide latches left as they were, however the test ends
+        ~TrustedAgain() { trust_gpu_decoding(); }
+    } trusted_again;
+    std::vector<bool> natives;
+    const auto vvdec_failure = std::make_exception_ptr(
+        GpuDecodeFailedError("vvdec-vulkan failed", std::string(vvdec_decoder), true));
+    const auto pass = [&natives, vvdec_failure](int failures) {
+        return [&natives, vvdec_failure, failures](bool native) {
+            natives.push_back(native);
+            if (static_cast<int>(natives.size()) <= failures) {
+                std::rethrow_exception(vvdec_failure);
+            }
+            return scored("cvvdp", 9.5f, "gpu");
+        };
+    };
+    const PerceptualTaskOutput output = remade_vship_pass(pass(1), nullptr, CancelToken());
+    EXPECT_TRUE(output.metrics.has("cvvdp"));
+    EXPECT_EQ(natives, (std::vector<bool>{true, true}));
+    EXPECT_TRUE(vvdec_turned_off());
+    EXPECT_FALSE(gpu_decoding_distrusted());
+    natives.clear();
+    EXPECT_THROW(remade_vship_pass(pass(2), nullptr, CancelToken()), VshipUnavailableError);
+    EXPECT_EQ(natives.size(), 2u);
 }
 
 // A task that FFmpeg's rebuilt filters stop (a video's picture size changes

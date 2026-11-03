@@ -22,12 +22,25 @@
 #include <nlohmann/json.hpp>
 
 #include "vml/cancel.h"
+#include "vml/ffmpeg_run.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
+#include "vml/gpu_frames.h"
 #include "vml/hardware_decoding.h"
 #include "vml/video.h"
 
 namespace vml {
+
+// A feeding that decoded VVC with vvdec-vulkan failed or crashed (PictureFeed::finish): vvdec-vulkan is then off for
+// the rest of the run (turn_off_vvdec), and the FFmpeg run that read it is to be made again, its pictures decoded by
+// VVdeC on the CPU, which decodes the same ones.
+class VvdecFeedFailed : public GpuDecodeFailedError {
+public:
+    explicit VvdecFeedFailed(const std::string& message) : GpuDecodeFailedError(message, std::string(vvdec_decoder)) {}
+};
+
+// Says so (logged, and a status), before the FFmpeg run is made again.
+void report_vvdec_feed_failed(const VvdecFeedFailed& error, const StatusCallback& on_status);
 
 // Whether FFmpeg gets `info`'s pictures from the app (its film grain only the
 // app adds as it is scored), rather than decoding the file itself. With
@@ -102,11 +115,15 @@ std::optional<std::vector<std::string>> feed_input_options(const VideoInfo& info
 class PictureFeed {
 public:
     // Starts the feeding process and waits for its pipe: the whole video, or
-    // `window` of it. Throws FilmGrainRefusal with feed_refusal's reason,
-    // Cancelled, and what the feeding process threw before its pipe was
-    // there.
+    // `window` of it. With `vvdec`, a VVC video vvdec-vulkan takes
+    // (vvdec_chosen) is decoded by it, on the GPU it picks, or by VVdeC on
+    // the CPU where it refuses to start (vvdec-vulkan then off for the run);
+    // its statuses (vvdec_used, vvdec_off) go to `on_status`. Throws
+    // FilmGrainRefusal with feed_refusal's reason, Cancelled, and what the
+    // feeding process threw before its pipe was there.
     PictureFeed(const VideoInfo& info, const std::string& ffmpeg, const std::string& ffprobe,
-                const CancelToken& cancel, const std::optional<FeedWindow>& window = std::nullopt);
+                const CancelToken& cancel, const std::optional<FeedWindow>& window = std::nullopt, bool vvdec = false,
+                const StatusCallback& on_status = {});
     ~PictureFeed();
     PictureFeed(const PictureFeed&) = delete;
     PictureFeed& operator=(const PictureFeed&) = delete;
@@ -120,9 +137,10 @@ public:
     // FilmGrainRefusal when the video could not be decoded to its end (the
     // app's decoder is the only one for its pictures, so no other route is
     // tried, and FFmpeg, finding its input's end, would have scored part of
-    // the video as the whole), and Cancelled. FFmpeg stopping to read first
-    // (a range's end, or its own failure, its caller's to report) is no
-    // error of the feeding.
+    // the video as the whole), VvdecFeedFailed where vvdec-vulkan decoded it
+    // (the run is made again without it), and Cancelled. FFmpeg stopping to
+    // read first (a range's end, or its own failure, its caller's to report)
+    // is no error of the feeding.
     void finish();
 
 private:
@@ -132,11 +150,11 @@ private:
 
 // The feeding of one FFmpeg run's two videos (either may be nothing), each
 // one fed_to_ffmpeg says: made before the FFmpeg and kept until it has
-// ended.
+// ended. `vvdec` and `on_status` as PictureFeed's.
 class PairFeeds {
 public:
     PairFeeds(const VideoInfo* source, const VideoInfo* distorted, const std::string& ffmpeg,
-              const std::string& ffprobe, const CancelToken& cancel);
+              const std::string& ffprobe, const CancelToken& cancel, bool vvdec, const StatusCallback& on_status);
 
     // Each video's feed, or nothing where FFmpeg decodes the file.
     const PictureFeed* source() const { return source_ ? &*source_ : nullptr; }
@@ -156,8 +174,10 @@ private:
 };
 
 // The feeding process's side (isolated.cpp's task "grain-feed"): makes the
-// pipe, calls `on_ready`, then decodes and writes. Its result: the pictures
-// written, and whether the reader closed its end first.
-nlohmann::json picture_feed_task(const nlohmann::json& request, const std::function<void()>& on_ready);
+// pipe, sends {"ready": true}, then decodes and writes, sending {"status":
+// ...} as vvdec-vulkan opens or refuses (status_json). Its result: the
+// pictures written, and whether the reader closed its end first.
+nlohmann::json picture_feed_task(const nlohmann::json& request,
+                                 const std::function<void(const nlohmann::json&)>& send);
 
 }  // namespace vml

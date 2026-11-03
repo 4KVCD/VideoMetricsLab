@@ -1091,14 +1091,13 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
         on_status(decoding_status("Calculating SSIMULACRA2/Butteraugli on the CPU as frames are extracted",
                                   HardwareDecoding{}, StatusKind::step, "\xE2\x80\xA6"));
     }
-    const auto started = std::chrono::steady_clock::now();
+    auto started = std::chrono::steady_clock::now();
     const auto rate_of = [&started](long long units) {
         const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
         return static_cast<double>(units) / std::max(seconds, 1e-6);
     };
     // Tagged with the colours the pictures are read with (with_shared_matrix).
     const auto [source_read, distorted_read] = with_shared_matrix(source, distorted);
-    CpuScoringPool pool(keys, executables, source_read, distorted_read, cancel);
     const auto [width, height] =
         compared_dimensions(source, distorted, options.scale_direction, source_crop, distorted_crop);
     const int workers = scoring_workers(static_cast<long long>(width) * height, keys, request.concurrent_cpu_tasks,
@@ -1106,25 +1105,42 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
     logger.info(join(keys, " and ") + " on the CPU: " + std::to_string(workers) + " frame pair" + (workers == 1 ? "" : "s") +
                 " at a time");
 
+    std::optional<CpuScoringPool> pool;
     std::vector<std::vector<double>> by_pair;
-    {
-        // Before FFmpeg, which it outlives.
-        PairFeeds feeds(&source, &distorted, request.environment.ffmpeg, request.environment.ffprobe, cancel);
-        const auto fed_input = [](const PictureFeed* feed) {
-            return feed != nullptr ? std::optional(feed->input_arguments()) : std::nullopt;
-        };
-        {
-            // A folder of its own for the task's pictures, deleted with them.
-            const TempFolder folder = TempFolder::make<PerceptualRunError>(
-                "videometricslab-perceptual-", "A folder for the frame pictures could not be made.");
-            // Room for every worker's next pair while FFmpeg wakes up.
-            PngPairs pairs(png_pairs_command(request.environment.ffmpeg, source, distorted, options, source_crop,
-                                             distorted_crop, step, folder.path(), fed_input(feeds.distorted()),
-                                             fed_input(feeds.source())),
-                           folder.path(), std::max(backlog_pairs, 2 * workers), pool.stopping(), cancel);
-            by_pair = pool.score_all(pairs, workers, step, total_units, on_progress, rate_of);
+    // Made again, with a new pool, pictures and progress, where a feeding's pictures from vvdec-vulkan failed
+    // (VvdecFeedFailed: vvdec-vulkan off then, so once)
+    for (bool again = true; again;) {
+        again = false;
+        pool.emplace(keys, executables, source_read, distorted_read, cancel);
+        started = std::chrono::steady_clock::now();
+        try {
+            // Before FFmpeg, which it outlives.
+            PairFeeds feeds(&source, &distorted, request.environment.ffmpeg, request.environment.ffprobe, cancel,
+                            vvdec_wanted(options.gpu_decode, options.vvc_on_gpu), on_status);
+            const auto fed_input = [](const PictureFeed* feed) {
+                return feed != nullptr ? std::optional(feed->input_arguments()) : std::nullopt;
+            };
+            try {
+                // A folder of its own for the task's pictures, deleted with them.
+                const TempFolder folder = TempFolder::make<PerceptualRunError>(
+                    "videometricslab-perceptual-", "A folder for the frame pictures could not be made.");
+                // Room for every worker's next pair while FFmpeg wakes up.
+                PngPairs pairs(png_pairs_command(request.environment.ffmpeg, source, distorted, options, source_crop,
+                                                 distorted_crop, step, folder.path(), fed_input(feeds.distorted()),
+                                                 fed_input(feeds.source())),
+                               folder.path(), std::max(backlog_pairs, 2 * workers), pool->stopping(), cancel);
+                by_pair = pool->score_all(pairs, workers, step, total_units, on_progress, rate_of);
+            } catch (const Cancelled&) {
+                throw;
+            } catch (...) {
+                feeds.finish();  // a feeding that failed is why: its failure is the one to see
+                throw;
+            }
+            feeds.finish();  // a fed video decoded in part is no score
+        } catch (const VvdecFeedFailed& error) {
+            report_vvdec_feed_failed(error, on_status);
+            again = true;
         }
-        feeds.finish();  // a fed video decoded in part is no score
     }
     const auto total = static_cast<long long>(by_pair.size());
     if (const std::optional<std::string> short_reason =
@@ -1134,7 +1150,7 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
     if (on_progress) {
         on_progress(total * step, total * step, rate_of(total * step));
     }
-    MetricResultSet results = cpu_results(keys, executables, by_pair, step, source.fps, pool.hdr(), range);
+    MetricResultSet results = cpu_results(keys, executables, by_pair, step, source.fps, pool->hdr(), range);
     const long long compared = static_cast<long long>(results.frame(keys.front())->frame.size()) * step;
     return PerceptualTaskOutput{std::move(results), source_crop, distorted_crop, compared, {}};
 }

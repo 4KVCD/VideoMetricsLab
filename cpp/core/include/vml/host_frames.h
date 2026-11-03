@@ -19,7 +19,9 @@ namespace vml {
 // which for NVIDIA's decoder is page-locked while this lives
 // (GpuFrameStream::pin): the GPU then copies a picture into it by itself,
 // where into pageable memory the driver copies it again on the CPU (a 4K
-// 10-bit frame: 5.3 ms). Made after its stream, so that it goes first.
+// 10-bit frame: 5.3 ms). vvdec-vulkan's GPU copies them into the stream's
+// own imported buffer (GpuFrameStream::importable_buffer). Made after its
+// stream, so that it goes first.
 class HostFrames {
 public:
     // `plan` is the stream's.
@@ -29,7 +31,7 @@ public:
     HostFrames& operator=(const HostFrames&) = delete;
 
     // Whether the pictures are downloaded, rather than read where they are.
-    bool downloads() const { return !buffer_.empty(); }
+    bool downloads() const { return target_ != nullptr; }
 
     // The planes of the slot's picture (its luma alone, for a plan of the luma
     // alone), downloaded first where it is not read in place. They are valid
@@ -41,6 +43,7 @@ private:
     PackedFrame packed_;
     bool luma_only_ = false;
     std::vector<std::uint8_t> buffer_;
+    std::uint8_t* target_ = nullptr;  // where pictures are downloaded: buffer_, or the stream's importable buffer
     bool pinned_ = false;
 };
 

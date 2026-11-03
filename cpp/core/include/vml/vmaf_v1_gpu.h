@@ -202,13 +202,17 @@ private:
 // score_decoded (gpu_vmaf.h) for a run with VMAF v1: both videos decoded in
 // this process as whole frames, because SpEED reads the chroma; with
 // NVIDIA's decoder for both, or AMD's with Vulkan, the planes stay on the
-// GPU, and the software decoder's are read where it holds them. Throws as score_decoded does, and VmafV1Error.
+// GPU, and the software decoder's are read where it holds them. A VVC video
+// is decoded on the GPU by vvdec-vulkan as score_decoded's are, its pictures
+// copied by the GPU into host memory. Throws as score_decoded does, and
+// VmafV1Error.
 PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                             const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                             const GpuPlan& plan, int n_subsample, const FrameRange& range,
                             long long total_frames, const std::string& scale_algorithm,
                             const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
-                            const std::string& ffprobe,
+                            const std::string& ffprobe, bool want_vvdec,
+                            const std::function<void()>& on_vvdec_opening,
                             const std::function<void(long long, long long, double)>& on_progress,
                             const CancelToken& cancel);
 

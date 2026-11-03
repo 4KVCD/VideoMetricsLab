@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "vml/gpu_frames.h"
+#include "vml/host_frames.h"
 #include "vml/number_format.h"
 #include "vml/python_text.h"
 
@@ -353,7 +354,8 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
                              const std::string& scale_algorithm, const std::string& ffmpeg,
-                             const std::string& ffprobe,
+                             const std::string& ffprobe, bool want_vvdec,
+                             const std::function<void()>& on_vvdec_opening,
                              const std::function<void(long long, long long, double)>& on_progress,
                              const CancelToken& cancel) {
     const auto& [source_backend, test_backend] = decoders;
@@ -379,16 +381,35 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                     [&](const DecodePlan& plan) { return plan.frame_bytes() != luma_bytes; })) {
         throw GpuDecodeUnavailableError("the decoders' frames are not the size compared at");
     }
-    GpuFrameStream test(distorted, plans[0], 0, 4, test_backend, ffmpeg, ffprobe);
-    GpuFrameStream reference(source, plans[1], 0, 4, source_backend, ffmpeg, ffprobe);
+    // A VVC video decoded by vvdec-vulkan where wanted, on the GPU it picks (this pass has none of its own)
+    const bool test_vvdec = vvdec_chosen(plans[0], want_vvdec);
+    const bool reference_vvdec = vvdec_chosen(plans[1], want_vvdec);
+    if ((test_vvdec || reference_vvdec) && on_vvdec_opening) {
+        on_vvdec_opening();
+    }
+    GpuFrameStream test = open_pass_stream(distorted, plans[0], 4, test_backend, test_vvdec, -1, ffmpeg, ffprobe);
+    GpuFrameStream reference =
+        open_pass_stream(source, plans[1], 4, source_backend, reference_vvdec, -1, ffmpeg, ffprobe);
     // Declared after the streams so that it goes first: it gives back the
     // memory their decoders page-locked.
     CpuScorer scorer(width, height, bit_depth, metrics, n_subsample, threads, frame_rate);
+    // vvdec-vulkan's GPU copies its pictures only into a buffer of its stream's, from which they are copied into the
+    // scorer's pictures. Last, so that it goes first: its side thread's jobs use the scorer.
+    std::optional<HostPairs> pairs;
+    if (test_vvdec || reference_vvdec) {
+        pairs.emplace(reference, plans[1], test, plans[0]);
+    }
     test.start();
     reference.start();
     score_frame_pairs(
         test, reference, range, total_frames,
-        [&](int test_slot, int reference_slot) { scorer.add_decoded(reference, reference_slot, test, test_slot); },
+        [&](int test_slot, int reference_slot) {
+            if (pairs) {
+                pairs->score(reference_slot, test_slot, scorer, nullptr);
+            } else {
+                scorer.add_decoded(reference, reference_slot, test, test_slot);
+            }
+        },
         on_progress, cancel);
     return scorer.finish();
 }

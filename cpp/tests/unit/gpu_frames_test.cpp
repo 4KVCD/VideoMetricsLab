@@ -121,9 +121,9 @@ TEST(GpuFrames, OnlyTheSoftwareDecoderLendsThePicturesItWouldOnlyCopy) {
 }
 
 // vvdec-vulkan takes a VVC video it can hand over as it is: not another codec,
-// not scaled or widened, and not one whose film grain the app adds (its
-// pictures have no samples in host memory to add it to).
-TEST(GpuFrames, VvdecVulkanTakesUnchangedVvcWithoutAddedGrain) {
+// not scaled or widened, and with no grain added but H.274's, which its
+// hand-over adds (AFGS1's it cannot).
+TEST(GpuFrames, VvdecVulkanTakesUnchangedVvcWithH274GrainOnly) {
     DecodePlan plan;
     plan.codec = "vvc";
     plan.bit_depth = 10;
@@ -143,10 +143,31 @@ TEST(GpuFrames, VvdecVulkanTakesUnchangedVvcWithoutAddedGrain) {
     EXPECT_FALSE(vvdec_takes(widened));
     DecodePlan grain = plan;
     grain.film_grain = 1;
-    grain.film_grain_kinds = 1;
-    EXPECT_FALSE(vvdec_takes(grain));
-    grain.film_grain_kinds = 0;  // grain asked for, but the video has none
+    grain.film_grain_kinds = film_grain_h274 | film_grain_h274_model_1;
     EXPECT_TRUE(vvdec_takes(grain));
+    grain.film_grain_kinds = film_grain_afgs1;
+    EXPECT_FALSE(vvdec_takes(grain));
+    grain.film_grain = 0;  // AFGS1 left out
+    EXPECT_TRUE(vvdec_takes(grain));
+}
+
+// vvdec-vulkan decodes each VVC video it is chosen for, whatever reads the
+// pictures: CPU metrics beside VMAF, or a VVC reference, take them through
+// host memory; only a VVC test video alone beside another decoder's
+// reference is handed over to Vulkan VMAF on the GPU.
+TEST(GpuFrames, VvdecVulkanDecodesEveryVvcVideoAndHandsOverOnlyALoneTestVideo) {
+    const VvdecUse test_alone = vvdec_use(true, false, false);
+    EXPECT_TRUE(test_alone.test && test_alone.mixed);
+    const VvdecUse beside = vvdec_use(true, false, true);
+    EXPECT_TRUE(beside.test);
+    EXPECT_FALSE(beside.mixed);
+    const VvdecUse reference = vvdec_use(false, true, false);
+    EXPECT_TRUE(reference.reference && reference.any());
+    EXPECT_FALSE(reference.mixed);
+    const VvdecUse both = vvdec_use(true, true, false);
+    EXPECT_TRUE(both.test && both.reference);
+    EXPECT_FALSE(both.mixed);
+    EXPECT_FALSE(vvdec_use(false, false, true).any());
 }
 
 TEST(GpuFrames, CopiesThePacketsWithThePythonAppsCommand) {

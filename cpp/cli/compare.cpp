@@ -395,6 +395,7 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
     // --gpu-decode turns GPU decoding on, whatever Settings say.
     options.gpu_decode = arguments.gpu_decode || (settings.default_gpu_decode && !arguments.no_gpu_decode);
     options.gpu_vendor = gpu_maker(arguments.gpu_decode);
+    options.vvc_on_gpu = arguments.vvc_decoder ? *arguments.vvc_decoder == "gpu" : settings.vvc_decode_on_gpu;
     options.vmaf_on_gpu = vmaf_on ? *vmaf_on == "gpu" : settings.default_vmaf_on_gpu;
     options.vship_build = vship_build(arguments, settings);
     options.n_threads = arguments.threads.value_or(0);

@@ -35,6 +35,7 @@
 #include "vml/app_log.h"
 #include "vml/crop_detect.h"
 #include "vml/cvvdp.h"
+#include "vml/gpu_frames.h"
 #include "vml/metric_cache.h"
 #include "vml/platform/system.h"
 #include "vml/vship.h"
@@ -282,7 +283,30 @@ QGroupBox* SettingsPanel::build_gpu_box() {
     gpu_note->setWordWrap(true);
     theme::style(gpu_note, "color: {muted};");
     gpu_layout->addWidget(gpu_note);
+    if (vvdec_vulkan_bundled()) {
+        gpu_layout->addLayout(build_vvc_decoder_row());
+    }
     return gpu_box;
+}
+
+QHBoxLayout* SettingsPanel::build_vvc_decoder_row() {
+    // The entries' data: Settings' vvc_decode_on_gpu. GPU and CPU stay as they are in every language.
+    auto* row = new QHBoxLayout;
+    row->addWidget(new QLabel(app::tr("VVC decoder:")));
+    vvc_decoder = new QComboBox;
+    vvc_decoder->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    vvc_decoder->addItem(QStringLiteral("GPU"), true);
+    vvc_decoder->addItem(QStringLiteral("CPU"), false);
+    vvc_decoder->setCurrentIndex(settings_.vvc_decode_on_gpu ? 0 : 1);
+    vvc_decoder->setToolTip(app::tr(
+        "How a VVC video is decoded for every metric: GPU decodes it on the GPU, which frees the CPU but can be slower "
+        "than a fast CPU; CPU decodes it with VVdeC. The CPU decodes it anyway for a video that is scaled or has film "
+        "grain added, with CUDA VMAF, with GPU decoding off, for black-bar detection, in Video Compare, and where the "
+        "GPU's decoder cannot start.\n\nThe scores are the same either way. Applies from the next run."));
+    connect(vvc_decoder, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
+    row->addWidget(vvc_decoder);
+    row->addStretch(1);
+    return row;
 }
 
 QGroupBox* SettingsPanel::build_compare_box() {
@@ -573,6 +597,9 @@ void SettingsPanel::read_controls() {
     settings_.language = language->currentData().toString().toStdString();
     settings_.theme = theme->currentData().toString().toStdString();
     settings_.gpu_metrics_together = gpu_together->isChecked();
+    if (vvc_decoder != nullptr) {
+        settings_.vvc_decode_on_gpu = vvc_decoder->currentData().toBool();
+    }
     if (vship_build_default != nullptr) {
         settings_.default_vship_build = vship_build_default->currentData().toString().toStdString();
     }

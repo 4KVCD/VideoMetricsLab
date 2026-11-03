@@ -44,6 +44,7 @@ struct CompareArguments {
     bool cpu = false;
     bool no_gpu_decode = false;
     std::optional<std::string> gpu_decode;  // "auto", or the maker: "nvidia", "intel" or "amd"
+    std::optional<std::string> vvc_decoder;  // "gpu" or "cpu" (Settings::vvc_decode_on_gpu)
     std::optional<int> parallel;
     bool recalculate = false;
     std::optional<std::string> csv;

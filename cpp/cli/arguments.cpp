@@ -39,8 +39,9 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--vship-pass {one,each}] [--cpu]
                                    [--no-gpu-decode |
                                    --gpu-decode {auto,nvidia,intel,amd}]
-                                   [--parallel N] [--recalculate]
-                                   [--csv FOLDER] [--json FILE] [-q] [-v]
+                                   [--vvc-decoder {gpu,cpu}] [--parallel N]
+                                   [--recalculate] [--csv FOLDER]
+                                   [--json FILE] [-q] [-v]
                                    REFERENCE TEST [TEST ...]
 )";
 
@@ -200,6 +201,11 @@ options:
                         whose decoder takes each video (NVIDIA, Intel, then
                         AMD), or that maker's, which this PC must have; a Mac
                         uses its own (default: the app's)
+  --vvc-decoder {gpu,cpu}
+                        decode a VVC video on the GPU (vvdec-vulkan), else on
+                        the CPU (VVdeC); the scores are the same, and
+                        --no-gpu-decode decodes it on the CPU too (default: the
+                        app's)
   --parallel N          videos calculated at once on the CPU, 1-2 (default:
                         the app's)
   --recalculate         calculate every metric again instead of using saved
@@ -897,6 +903,8 @@ Parser compare_parser(CompareArguments& parsed) {
                [&parsed](const std::string& value) {
                    parsed.gpu_decode = choice(value, {"auto", "nvidia", "intel", "amd"});
                }),
+        option({"--vvc-decoder"},
+               [&parsed](const std::string& value) { parsed.vvc_decoder = choice(value, {"gpu", "cpu"}); }),
         option({"--parallel"},
                [&parsed](const std::string& value) {
                    const std::optional<long long> number = python_int(value);

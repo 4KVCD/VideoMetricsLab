@@ -15,6 +15,7 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <new>
 #include <numeric>
 #include <regex>
 #include <system_error>
@@ -23,6 +24,7 @@
 #include "vml/app_log.h"
 #include "vml/av2_stream.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
 #include "vml/hevc.h"
@@ -1027,10 +1029,6 @@ std::vector<unsigned char> configuration(const std::string& ffprobe, const std::
 
 }  // namespace
 
-bool vvdec_handover_wanted() {
-    return platform::environment_variable("VML_VVDEC_HANDOVER").value_or("") == "1";
-}
-
 std::string decoding_failed_status(const GpuDecodeFailedError& error, std::string_view instead) {
     const std::string what = error.backend() == software_decoder ? "Decoding in the app" : "GPU decoding";
     return what + " failed (" + error.what() + "); decoding " + std::string(instead) + " instead…";
@@ -1038,11 +1036,36 @@ std::string decoding_failed_status(const GpuDecodeFailedError& error, std::strin
 
 namespace {
 
-// distrust_gpu_decoding's state: the first reason, once tripped
+// distrust_gpu_decoding's state: the first reason, once tripped; and whether vvdec-vulkan was turned off
+// (turn_off_vvdec_vulkan)
 std::mutex distrust_mutex;
 std::optional<std::string> distrust_reason;
+bool vvdec_off = false;
 
 }  // namespace
+
+bool vvdec_wanted(bool gpu_decode, bool vvc_on_gpu) {
+    return gpu_decode && vvc_on_gpu && !vvdec_turned_off();
+}
+
+void turn_off_vvdec_vulkan(const std::string& reason) {
+    const std::lock_guard lock(distrust_mutex);
+    if (!vvdec_off) {
+        vvdec_off = true;
+        logger.warning("vvdec-vulkan, the GPU's VVC decoder, refused or failed (" + reason +
+                       "): the rest of this run decodes VVC with VVdeC on the CPU");
+    }
+}
+
+bool vvdec_turned_off() {
+    const std::lock_guard lock(distrust_mutex);
+    return vvdec_off;
+}
+
+bool vvdec_vulkan_bundled() {
+    std::error_code missing;
+    return std::filesystem::is_regular_file(library_path(vvdec_decoder), missing);
+}
 
 void distrust_gpu_decoding(const std::string& reason) {
     const std::lock_guard lock(distrust_mutex);
@@ -1060,6 +1083,7 @@ std::optional<std::string> gpu_decoding_distrusted() {
 void trust_gpu_decoding() {
     const std::lock_guard lock(distrust_mutex);
     distrust_reason.reset();
+    vvdec_off = false;
 }
 
 std::size_t DecodePlan::frame_bytes() const {
@@ -1168,11 +1192,16 @@ bool can_hand_over(const DecodePlan& plan, std::string_view backend) {
 }
 
 bool vvdec_takes(const DecodePlan& plan) {
-    return plan.codec == "vvc" && can_hand_over(plan, vvdec_decoder) && !(plan.film_grain != 0 && plan.film_grain_kinds);
+    const unsigned grain_not_h274 = plan.film_grain_kinds & ~unsigned(film_grain_h274 | film_grain_h274_model_1);
+    return plan.codec == "vvc" && can_hand_over(plan, vvdec_decoder) && !(plan.film_grain != 0 && grain_not_h274);
 }
 
-bool vvdec_chosen(const DecodePlan& plan) {
-    return vvdec_handover_wanted() && vvdec_takes(plan) && decoder_available(vvdec_decoder);
+bool vvdec_chosen(const DecodePlan& plan, bool wanted) {
+    return wanted && vvdec_takes(plan) && decoder_available(vvdec_decoder);
+}
+
+VvdecUse vvdec_use(bool test_chosen, bool reference_chosen, bool cpu_metrics_beside) {
+    return {test_chosen, reference_chosen, test_chosen && !reference_chosen && !cpu_metrics_beside};
 }
 
 bool can_lend_planes(const DecodePlan& plan, std::string_view backend) {
@@ -1311,7 +1340,7 @@ std::optional<std::pair<std::string, std::string>> decoders_here(const HardwareD
 
 bool downloads_at_once(const std::string& source_decoder, const std::string& test_decoder) {
     const auto keeps_streams_apart = [](const std::string& decoder) {
-        return decoder == software_decoder || decoder == "nvidia";
+        return decoder == software_decoder || decoder == "nvidia" || decoder == vvdec_decoder;
     };
     return keeps_streams_apart(source_decoder) && keeps_streams_apart(test_decoder);
 }
@@ -1605,6 +1634,10 @@ struct GpuFrameStream::State {
     bool lends_planes = false;   // gives_planes()
     bool untimed = false;        // DecodePlan::untimed
     bool software_only = false;  // DecodePlan::software_only
+    std::size_t frame_bytes = 0;  // the plan's
+    // importable_buffer's, of importable_bytes: freed by close() once the decoder that imported it has closed, and
+    // never by this state's destructor, which a feeding thread left running may reach while the decoder still holds it.
+    std::uint8_t* importable = nullptr;
     std::unique_ptr<PacketSource> reader;
     std::atomic<bool> closing{false};
 
@@ -1676,6 +1709,7 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
     }
     state.library = &load_decoder(backend);
     state.lends_planes = can_lend_planes(plan, backend);
+    state.frame_bytes = plan.frame_bytes();
     state.untimed = plan.untimed;
     state.software_only = plan.software_only;
     std::vector<std::string> reader_options = plan.untimed ? info.input_options() : std::vector<std::string>();
@@ -1690,7 +1724,7 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
         state.reader = std::make_unique<PacketReader>(ffmpeg, info.path, plan.codec, reader_options, plan.untimed);
     }
     state.configuration = configuration(ffprobe, info.path, plan.codec);
-    // vvdec-vulkan's decoder only hands over (it is chosen for that alone)
+    // vvdec-vulkan's decoder only hands over: on the GPU, or into host memory it imported
     state.handover = backend == "nvidia" || backend == vvdec_decoder || (handover && can_hand_over(plan, backend));
     std::string said;
     if (state.handover && backend == "amd") {
@@ -1867,6 +1901,26 @@ void GpuFrameStream::download(int slot, void* host) {
     }
 }
 
+std::uint8_t* GpuFrameStream::importable_buffer() {
+    State& state = *state_;
+    if (state.backend != vvdec_decoder) {
+        throw std::logic_error("only vvdec-vulkan's decoder imports a buffer of its own");
+    }
+    if (state.importable == nullptr) {
+        const std::size_t bytes =
+            (state.frame_bytes + host_import_alignment - 1) / host_import_alignment * host_import_alignment;
+        auto* const buffer =
+            static_cast<std::uint8_t*>(::operator new(bytes, std::align_val_t{host_import_alignment}));
+        if (!pin(buffer, bytes)) {
+            ::operator delete(buffer, std::align_val_t{host_import_alignment});  // nothing was imported
+            throw GpuDecodeUnavailableError("vvdec-vulkan's GPU cannot import host memory to copy its pictures into",
+                                            std::string(vvdec_decoder));
+        }
+        state.importable = buffer;
+    }
+    return state.importable;
+}
+
 bool GpuFrameStream::gives_planes() const { return state_->lends_planes; }
 
 FramePlanes GpuFrameStream::slot_planes(int slot) {
@@ -2002,7 +2056,8 @@ const std::string& GpuFrameStream::backend() const { return state_->backend; }
 bool GpuFrameStream::handover() const { return state_->handover; }
 
 bool GpuFrameStream::shares_gpu_memory_with(const GpuFrameStream& other) const {
-    return handover() && other.handover() && state_->library == other.state_->library;
+    return handover() && other.handover() && state_->library == other.state_->library &&
+           state_->backend != vvdec_decoder;
 }
 
 bool GpuFrameStream::pin(void* host, std::uint64_t size) {
@@ -2062,8 +2117,25 @@ void GpuFrameStream::close() {
     } else if (!close_decoder(*state.library, state.handle)) {
         logger.error(state.file_name + ": the " + state.backend + " decoder did not close in " +
                      std::to_string(close_timeout.count()) + " s; it is left open");
+    } else if (state.importable != nullptr) {
+        // The decoder released its import as it closed (a decoder left open keeps the buffer)
+        ::operator delete(state.importable, std::align_val_t{host_import_alignment});
+        state.importable = nullptr;
     }
     state.handle = nullptr;
+}
+
+GpuFrameStream open_pass_stream(const VideoInfo& info, const DecodePlan& plan, int pool, const std::string& backend,
+                                bool vvdec, int vvdec_device, const std::string& ffmpeg, const std::string& ffprobe,
+                                bool handover) {
+    if (!vvdec) {
+        return GpuFrameStream(info, plan, 0, pool, backend, ffmpeg, ffprobe, handover);
+    }
+    try {
+        return GpuFrameStream(info, plan, vvdec_device, pool, vvdec_decoder, ffmpeg, ffprobe, handover);
+    } catch (const GpuDecodeUnavailableError& error) {
+        throw GpuDecodeUnavailableError(error.what(), std::string(vvdec_decoder));
+    }
 }
 
 void require_same_range(const VideoInfo& source, const VideoInfo& distorted) {

@@ -1212,7 +1212,8 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                             const GpuPlan& plan, int n_subsample, const FrameRange& range,
                             long long total_frames, const std::string& scale_algorithm,
                             const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
-                            const std::string& ffprobe,
+                            const std::string& ffprobe, bool want_vvdec,
+                            const std::function<void()>& on_vvdec_opening,
                             const std::function<void(long long, long long, double)>& on_progress,
                             const CancelToken& cancel) {
     const auto& [source_backend, test_backend] = decoders;
@@ -1253,8 +1254,18 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                              hands_over_textures(test_backend)
                          ? 6
                          : 4;
-    GpuFrameStream test(distorted, plans[0], 0, pool, test_backend, ffmpeg, ffprobe, true);
-    GpuFrameStream reference(source, plans[1], 0, pool, source_backend, ffmpeg, ffprobe, true);
+    // A VVC video decoded by vvdec-vulkan where wanted, on the scorers' GPU (else the one it picks), its pictures
+    // copied into host memory (the scorers' GPU memory is not imported into it)
+    const bool test_vvdec = vvdec_chosen(plans[0], want_vvdec);
+    const bool reference_vvdec = vvdec_chosen(plans[1], want_vvdec);
+    if ((test_vvdec || reference_vvdec) && on_vvdec_opening) {
+        on_vvdec_opening();
+    }
+    const int vvdec_device = plan.backend == "vulkan" ? plan.device : -1;
+    GpuFrameStream test =
+        open_pass_stream(distorted, plans[0], pool, test_backend, test_vvdec, vvdec_device, ffmpeg, ffprobe, true);
+    GpuFrameStream reference = open_pass_stream(source, plans[1], pool, source_backend, reference_vvdec, vvdec_device,
+                                                ffmpeg, ffprobe, true);
     // Declared after the streams so that it goes first: it holds on to the
     // decoders' memory.
     std::optional<MultiScorer> scorer;
@@ -1264,7 +1275,9 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
     // same decoder library decodes both videos: the scorers' memory is
     // imported by the test video's, and the source's copies go into it.
     bool on_gpu = false;
-    if (!plan.beside.empty()) {
+    if (test_vvdec || reference_vvdec) {
+        logger.info("VMAF v1 with the GPU: vvdec-vulkan's pictures go through system memory");
+    } else if (!plan.beside.empty()) {
         logger.info("VMAF v1 with the GPU: the frames go through system memory, where the CPU's metrics beside it "
                     "read them");
     } else if (test.handover() && reference.handover() && !test.shares_gpu_memory_with(reference)) {

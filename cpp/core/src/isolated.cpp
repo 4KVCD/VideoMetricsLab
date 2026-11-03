@@ -374,7 +374,7 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
         } else if (task == "gpu-run" || task == "cpu-metrics") {
             result = scoring_task(request, request_file.parent_path());
         } else if (task == "grain-feed") {
-            result = picture_feed_task(request, [] { send_isolated_message({{"ready", true}}); });
+            result = picture_feed_task(request, [](const nlohmann::json& message) { send_isolated_message(message); });
         } else if (task == "process-id") {
             // For the window's self-test: that a process of its own starts.
             result = platform::process_id();

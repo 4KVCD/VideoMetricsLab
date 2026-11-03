@@ -317,6 +317,35 @@ TEST(FfmpegRun, AFailedGpuDecoderTripsTheRunAndOnlyItsReRunIsNoted) {
     }
 }
 
+// A child's statuses taken in by the run's process: vvdec-vulkan opened is noted for the pass, vvdec-vulkan turned
+// off there is off here too and in the next child's options (the other GPU decoders stay trusted), and both are
+// passed on; a new run turns it on again.
+TEST(FfmpegRun, VvdecVulkanTurnedOffInAChildIsOffForTheRun) {
+    trust_gpu_decoding();
+    struct TrustedAgain {  // the process-wide latches left as they were, however the test ends
+        ~TrustedAgain() { trust_gpu_decoding(); }
+    } trusted_again;
+    std::vector<RunStatus> sent;
+    const StatusCallback keep = [&sent](const RunStatus& status) { sent.push_back(status); };
+    VmafOptions options;
+    EXPECT_FALSE(vvdec_wanted(options.gpu_decode, options.vvc_on_gpu));  // the CPU's VVdeC by default
+    options.vvc_on_gpu = true;
+    EXPECT_TRUE(vvdec_wanted(options.gpu_decode, options.vvc_on_gpu));
+    EXPECT_FALSE(vvdec_wanted(false, options.vvc_on_gpu));
+    bool vvdec_used = false;
+    take_child_status({"opened", StatusKind::vvdec_used}, keep, vvdec_used);
+    EXPECT_TRUE(vvdec_used);
+    EXPECT_TRUE(child_options(options).vvc_on_gpu);
+    take_child_status(status_from_json(status_json({"its device was lost", StatusKind::vvdec_off})), keep, vvdec_used);
+    EXPECT_TRUE(vvdec_turned_off());
+    EXPECT_FALSE(vvdec_wanted(options.gpu_decode, options.vvc_on_gpu));
+    EXPECT_FALSE(child_options(options).vvc_on_gpu);
+    EXPECT_FALSE(gpu_decoding_distrusted());
+    EXPECT_EQ(sent.size(), 2u);
+    trust_gpu_decoding();
+    EXPECT_FALSE(vvdec_turned_off());
+}
+
 // Forgetting a video's black bars takes its answer out of the store and keeps
 // the store's others (it is read first); with none for it, nothing is
 // written.

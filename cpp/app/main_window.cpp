@@ -239,7 +239,8 @@ MainWindow::MainWindow() {
     // row is added.
     settings_ = Settings::load();
     logger.info(std::string("Settings: parallel CPU metrics ") + (settings_.parallel_jobs > 1 ? "on" : "off") +
-                ", GPU decode " + (settings_.default_gpu_decode ? "on" : "off") + ", VMAF v0.6.1 and NEG on " +
+                ", GPU decode " + (settings_.default_gpu_decode ? "on" : "off") + ", VVC decoded on the " +
+                (settings_.vvc_decode_on_gpu ? "GPU" : "CPU") + ", VMAF v0.6.1 and NEG on " +
                 (settings_.default_vmaf_on_gpu ? "GPU" : "CPU") + ", GPU metrics " +
                 (settings_.gpu_metrics_together ? "in one pass" : "one at a time") + " with " +
                 std::string(vship_build_label(default_vship_build(settings_.default_vship_build))) +

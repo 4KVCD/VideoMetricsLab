@@ -19,7 +19,12 @@ HostFrames::HostFrames(GpuFrameStream& stream, const DecodePlan& plan)
     if (stream.gives_planes()) {
         return;
     }
+    if (stream.backend() == vvdec_decoder) {
+        target_ = stream.importable_buffer();  // the only memory its GPU copies into
+        return;
+    }
     buffer_.resize(plan.frame_bytes());
+    target_ = buffer_.data();
     if (stream.backend() == "nvidia") {
         pinned_ = stream.pin(buffer_.data(), buffer_.size());
         if (!pinned_) {
@@ -43,11 +48,11 @@ FramePlanes HostFrames::take(int slot) {
         }
         return planes;
     }
-    stream_.download(slot, buffer_.data());
+    stream_.download(slot, target_);
     if (luma_only_) {
-        return FramePlanes{packed_.luma(buffer_.data())};
+        return FramePlanes{packed_.luma(target_)};
     }
-    return packed_.planes(buffer_.data());
+    return packed_.planes(target_);
 }
 
 HostPairs::HostPairs(GpuFrameStream& reference, const DecodePlan& reference_plan, GpuFrameStream& test,

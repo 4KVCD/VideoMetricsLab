@@ -243,17 +243,21 @@ private:
 // (for the Vulkan engine, with NVIDIA's decoder for both videos);
 // otherwise the decoder writes it into the memory the scorer copies to the
 // GPU. The metrics beside the GPU's (GpuPlan::beside; not with libvmaf's
-// CUDA code) are scored from the same decoded pictures. Throws
+// CUDA code) are scored from the same decoded pictures. A VVC video, either
+// one, is decoded on the GPU by vvdec-vulkan where `want_vvdec` and it can
+// (vvdec_chosen, vvdec_use), `on_vvdec_opening` called before it opens. Throws
 // GpuDecodeUnavailableError before the first picture when the app cannot
-// decode a video, GpuDecodeFailedError after it, LibvmafError
-// (VmafVulkanError), and Cancelled.
+// decode a video (backend() vvdec_decoder where vvdec-vulkan refused),
+// GpuDecodeFailedError after it, LibvmafError (VmafVulkanError), and
+// Cancelled.
 PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                          const std::optional<CropBox>& source_crop,
                          const std::optional<CropBox>& distorted_crop, const GpuPlan& plan,
                          int n_subsample, const FrameRange& range,
                          long long total_frames, const std::string& scale_algorithm,
                          const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
-                         const std::string& ffprobe,
+                         const std::string& ffprobe, bool want_vvdec,
+                         const std::function<void()>& on_vvdec_opening,
                          const std::function<void(long long, long long, double)>& on_progress,
                          const CancelToken& cancel);
 

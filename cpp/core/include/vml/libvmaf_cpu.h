@@ -154,15 +154,21 @@ int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr);
 // size is scaled by its GPU decoder as FFmpeg's scale filter scales it; the
 // software decoder does not scale, so such a video it would decode is
 // refused (GpuDecodeUnavailableError, from decoder_supports) and FFmpeg
-// scales it. Throws GpuDecodeFailedError when decoding fails after it started,
-// LibvmafError and Cancelled.
+// scales it. A VVC video is decoded on the GPU by vvdec-vulkan where
+// `want_vvdec` and it can (vvdec_chosen), on the GPU it picks,
+// `on_vvdec_opening` called before it opens, its pictures copied by the GPU
+// into host memory. Throws GpuDecodeUnavailableError before the first
+// picture (backend() vvdec_decoder where vvdec-vulkan refused),
+// GpuDecodeFailedError when decoding fails after it started, LibvmafError
+// and Cancelled.
 PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted,
                              const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                              int width, int height, int bit_depth, const std::vector<std::string>& metrics,
                              int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
                              const std::string& scale_algorithm, const std::string& ffmpeg,
-                             const std::string& ffprobe,
+                             const std::string& ffprobe, bool want_vvdec,
+                             const std::function<void()>& on_vvdec_opening,
                              const std::function<void(long long, long long, double)>& on_progress,
                              const CancelToken& cancel);
 

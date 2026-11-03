@@ -1,14 +1,17 @@
-// vvdecvk_frames.dll: VVC decoded by vvdec-vulkan (github.com/4KVCD/vvdec-vulkan: the CPU's parse, the GPU's
+// vvdecvk_frames.dll: VVC decoded by vvdec-vulkan (github.com/4KVCD/vvdec-vulkan: the GPU's parse and
 // reconstruction), its pictures handed over on the GPU, with no copy by the CPU (vvdec_handover_*):
 // - into Vulkan VMAF's slots: the slots' memory is imported into the decoder's Vulkan device, and each picture's luma
 //   is copied there by a compute pass that signals the decoder's timeline semaphore, which Vulkan VMAF waits for
 //   (vv_commit_after);
-// - into Vship's frame buffers (host memory Vship's device maps): nvf_pin imports each buffer into the decoder's
-//   device, and nvf_download copies a picture's Y, U and V straight into it on the GPU, returning once they are there.
+// - into host memory: Vship's frame buffers (memory Vship's device maps), and the app's own buffer of a stream for its
+//   CPU metrics, the engines reading host planes and the pictures fed to FFmpeg (GpuFrameStream::importable_buffer).
+//   nvf_pin imports each buffer into the decoder's device, and nvf_download copies a picture's Y, U and V (or its
+//   luma alone) straight into it on the GPU, returning once they are there.
 // The C API is gpu_frames.h's, as amf_frames.dll's hand-over has it.
 //
 // What it takes (else nvf_open refuses, and the video is decoded another way): VVC, 8 or 10 bits, its pictures not
-// scaled or widened, no film grain added. nvf_download takes only buffers pinned here: a handed-over frame's planes
+// scaled or widened, no film grain added but H.274's, which the hand-over's copies add as VVdeC on the CPU adds it
+// (vvdec-vulkan v1.1). nvf_download takes only buffers pinned here: a handed-over frame's planes
 // may not be read (vvdec.h's hand-over). The decoder's calls (decode, copy, give back) run one at a time, under the
 // decoder's mutex.
 
@@ -25,6 +28,7 @@
 #include <string>
 #include <vector>
 
+#include "grain/grain_decoding.h"
 #include "vvdec/vvdec.h"
 
 namespace {
@@ -83,14 +87,17 @@ void copy_text(char *out, int size, const std::string &text) {
     if (out && size > 0) snprintf(out, size, "%s", text.c_str());
 }
 
-// The process's vvdec-vulkan settings, before its first decoder: the GPU (its Vulkan device index), unless already
-// set. vvdec reads them once per process. The parse stays the CPU's, faster than the GPU's (VVDEC_GPU_PARSE=2,
-// honoured when set) except at very low bitrates: 95.0 against 39.8 fps on a 1080p stream, 74 against 233 on a 2 Mbps
-// 4K one.
+// The process's vvdec-vulkan settings, before its first decoder, each unless already set: the GPU's parse
+// (VVDEC_GPU_PARSE=2), and the GPU (its Vulkan device index; a device below 0 leaves the choice to vvdec-vulkan, the
+// first discrete GPU, as the app's Vulkan VMAF picks). vvdec reads them once per process. The GPU's parse is the
+// faster at low bitrates (a 0.73 Mbps 4K encode: 371-381 against 72-74 fps with the CPU's), the slower at high ones
+// (a 4K QP 16 stream: 27 against 51 fps; a 1080p one at ~0.9 Mbps: 40 against 95). A GPU without an async compute
+// queue for the parse (Intel's) parses on the CPU (vvdec-vulkan's DecLib.cpp, gpuParsesAhead).
 void set_environment(int device) {
     static std::once_flag once;
     std::call_once(once, [device] {
-        if (!getenv("VVDEC_GPU_DEVICE")) _putenv_s("VVDEC_GPU_DEVICE", std::to_string(device).c_str());
+        if (!getenv("VVDEC_GPU_PARSE")) _putenv_s("VVDEC_GPU_PARSE", "2");
+        if (device >= 0 && !getenv("VVDEC_GPU_DEVICE")) _putenv_s("VVDEC_GPU_DEVICE", std::to_string(device).c_str());
     });
 }
 
@@ -151,7 +158,8 @@ std::string refusal(const Params &p) {
     // Its chroma planes' rectangle is the crop's halved: whole chroma samples only
     if (!p.luma_only && ((p.crop_x | p.crop_y | p.crop_w | p.crop_h) & 1))
         return "the hand-over copies whole 4:2:0 pictures, cropped at even positions and sizes only";
-    if (p.film_grain != 0 && p.film_grain_kinds) return "the hand-over does not add film grain";
+    if (p.film_grain != 0 && (p.film_grain_kinds & ~(GRAIN_H274 | GRAIN_H274_MODEL_1)))
+        return "the hand-over adds H.274's film grain only";
     if (!p.handover) return "vvdec-vulkan here only hands its pictures over";
     return {};
 }
@@ -176,7 +184,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     vvdec_params_default(&vp);
     vp.threads = -1;
     vp.gpu = 1;
-    vp.filmGrainSynthesis = false;  // grain would be added from host memory, which handed-over pictures do not fill
+    vp.filmGrainSynthesis = grain_decoding(true, params->film_grain).apply_grain;  // as the CPU's VVdeC is told
     vp.logLevel = VVDEC_SILENT;
     d->dec = vvdec_decoder_open(&vp);
     d->unit = vvdec_accessUnit_alloc();

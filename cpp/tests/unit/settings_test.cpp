@@ -40,6 +40,7 @@ const std::map<std::string, std::function<Json(const Settings&)>>& settings_by_k
         {"graph_metric", [](const Settings& s) { return Json(s.graph_metric); }},
         {"parallel_jobs", [](const Settings& s) { return Json(s.parallel_jobs); }},
         {"gpu_metrics_together", [](const Settings& s) { return Json(s.gpu_metrics_together); }},
+        {"vvc_decode_on_gpu", [](const Settings& s) { return Json(s.vvc_decode_on_gpu); }},
         {"use_cache", [](const Settings& s) { return Json(s.use_cache); }},
         {"check_for_updates", [](const Settings& s) { return Json(s.check_for_updates); }},
         {"skipped_update_version", [](const Settings& s) { return Json(s.skipped_update_version); }},

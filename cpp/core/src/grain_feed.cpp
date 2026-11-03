@@ -218,10 +218,41 @@ struct PictureFeed::State {
     bool ended = false;  // the feeding is over
     nlohmann::json result;
     std::exception_ptr failure;
+    StatusCallback on_status;
+    bool vvdec_used = false;  // the feeding process opened vvdec-vulkan (its vvdec_used status)
+
+    // A message of the feeding process's: its pipe is there, or a status.
+    void take(const nlohmann::json& message) {
+        if (message.value("ready", false)) {
+            const std::lock_guard lock(mutex);
+            ready = true;
+            changed.notify_all();
+        } else if (const auto status = message.find("status"); status != message.end()) {
+            take_child_status(status_from_json(*status), on_status, vvdec_used);
+        }
+    }
+
+    // The feeding's failure as the caller is to see it: VvdecFeedFailed where vvdec-vulkan decoded the video and is
+    // still on (it is turned off here), otherwise as throw_final has it.
+    [[noreturn]] void throw_failure() {
+        if (vvdec_used && !vvdec_turned_off()) {
+            try {
+                std::rethrow_exception(failure);
+            } catch (const Cancelled&) {
+                throw;
+            } catch (const std::exception& error) {
+                const std::string reason = std::string("feeding FFmpeg failed: ") + error.what();
+                turn_off_vvdec(reason, on_status);
+                throw VvdecFeedFailed(reason);
+            }
+        }
+        throw_final(failure);
+    }
 };
 
 PictureFeed::PictureFeed(const VideoInfo& info, const std::string& ffmpeg, const std::string& ffprobe,
-                         const CancelToken& cancel, const std::optional<FeedWindow>& window)
+                         const CancelToken& cancel, const std::optional<FeedWindow>& window, bool vvdec,
+                         const StatusCallback& on_status)
     : state_(std::make_unique<State>()) {
     if (const std::optional<std::string> refusal = feed_refusal(info)) {
         throw FilmGrainRefusal(*refusal);
@@ -231,31 +262,21 @@ PictureFeed::PictureFeed(const VideoInfo& info, const std::string& ffmpeg, const
     state.pipe_path = platform::OutboundPipe::unique_path("feed");
     state.arguments = *feed_input_options(info);
     state.arguments.insert(state.arguments.end(), {"-i", state.pipe_path});
-    nlohmann::json request = {
-        {"video", video_json(info)}, {"pipe", state.pipe_path}, {"ffmpeg", ffmpeg}, {"ffprobe", ffprobe}};
+    state.on_status = on_status;
+    nlohmann::json request = {{"video", video_json(info)}, {"pipe", state.pipe_path}, {"ffmpeg", ffmpeg},
+                              {"ffprobe", ffprobe},        {"vvdec", vvdec}};
     if (window) {
         request["window"] = {{"start", window->start}, {"length", window->length}, {"skip", window->skip}};
     }
-    const auto say_ready = [&state] {
-        const std::lock_guard lock(state.mutex);
-        state.ready = true;
-        state.changed.notify_all();
-    };
-    state.feeding = std::thread([&state, request, say_ready, &cancel] {
+    state.feeding = std::thread([&state, request, &cancel] {
         nlohmann::json result;
         std::exception_ptr failure;
+        const auto take = [&state](const nlohmann::json& message) { state.take(message); };
         try {
             if (isolation_program()) {
-                result = run_isolated(
-                    "grain-feed", "The app's decoder", request,
-                    [&say_ready](const nlohmann::json& message) {
-                        if (message.value("ready", false)) {
-                            say_ready();
-                        }
-                    },
-                    cancel);
+                result = run_isolated("grain-feed", "The app's decoder", request, take, cancel);
             } else {
-                result = picture_feed_task(request, say_ready);  // the tests: no program to run it in
+                result = picture_feed_task(request, take);  // the tests: no program to run it in
             }
         } catch (...) {
             failure = std::current_exception();
@@ -271,8 +292,10 @@ PictureFeed::PictureFeed(const VideoInfo& info, const std::string& ffmpeg, const
     if (!state.ready) {
         lock.unlock();
         state.feeding.join();
-        throw_final(state.failure ? state.failure
-                                  : std::make_exception_ptr(std::runtime_error("it ended before its pipe was made")));
+        if (!state.failure) {
+            state.failure = std::make_exception_ptr(std::runtime_error("it ended before its pipe was made"));
+        }
+        state.throw_failure();
     }
 }
 
@@ -300,11 +323,19 @@ void PictureFeed::finish() {
                     (state.result.value("reader_gone", false) ? ", until FFmpeg stopped reading" : ""));
         return;
     }
-    throw_final(state.failure);
+    state.throw_failure();
+}
+
+void report_vvdec_feed_failed(const VvdecFeedFailed& error, const StatusCallback& on_status) {
+    logger.warning(std::string("FFmpeg's pictures from vvdec-vulkan failed; again with VVdeC: ") + error.what());
+    if (on_status) {
+        on_status({decoding_failed_status(error, "with VVdeC on the CPU")});
+    }
 }
 
 PairFeeds::PairFeeds(const VideoInfo* source, const VideoInfo* distorted, const std::string& ffmpeg,
-                     const std::string& ffprobe, const CancelToken& cancel) {
+                     const std::string& ffprobe, const CancelToken& cancel, bool vvdec,
+                     const StatusCallback& on_status) {
     // Both refusals before either feeding starts; a video the app decodes that
     // cannot be fed is decoded by FFmpeg where FFmpeg can (app_decoders.h),
     // and the log says why.
@@ -322,10 +353,10 @@ PairFeeds::PairFeeds(const VideoInfo* source, const VideoInfo* distorted, const 
         }
     }
     if (distorted != nullptr && fed_to_ffmpeg(*distorted)) {
-        distorted_.emplace(*distorted, ffmpeg, ffprobe, cancel);
+        distorted_.emplace(*distorted, ffmpeg, ffprobe, cancel, std::nullopt, vvdec, on_status);
     }
     if (source != nullptr && fed_to_ffmpeg(*source)) {
-        source_.emplace(*source, ffmpeg, ffprobe, cancel);
+        source_.emplace(*source, ffmpeg, ffprobe, cancel, std::nullopt, vvdec, on_status);
     }
 }
 
@@ -348,7 +379,8 @@ void PairFeeds::finish() {
     }
 }
 
-nlohmann::json picture_feed_task(const nlohmann::json& request, const std::function<void()>& on_ready) {
+nlohmann::json picture_feed_task(const nlohmann::json& request,
+                                 const std::function<void(const nlohmann::json&)>& send) {
     const VideoInfo info = video_from(request.at("video"));
     const DecodePlan plan = feed_plan(info);
     if (const auto [supported, refusal] = decoder_supports(0, plan, software_decoder); !supported) {
@@ -360,30 +392,52 @@ nlohmann::json picture_feed_task(const nlohmann::json& request, const std::funct
                             found->value("skip", 0.0)};
     }
     platform::OutboundPipe pipe(request.at("pipe").get<std::string>(), platform::frame_pipe_bytes);
-    on_ready();
+    send({{"ready", true}});
     // Decoding starts while FFmpeg starts and opens its inputs; a window's
     // packets are read from its start, as FFmpeg's -ss reads them.
-    GpuFrameStream stream(info, plan, 0, 4, software_decoder, request.at("ffmpeg").get<std::string>(),
-                          request.at("ffprobe").get<std::string>(), false,
-                          window ? std::optional(window->start) : std::nullopt);
-    stream.start();
+    const std::string ffmpeg = request.at("ffmpeg").get<std::string>();
+    const std::string ffprobe = request.at("ffprobe").get<std::string>();
+    const std::optional<double> start = window ? std::optional(window->start) : std::nullopt;
+    const auto say = [&send](const RunStatus& status) { send({{"status", status_json(status)}}); };
+    // VVC on the GPU where asked for, on the GPU vvdec-vulkan picks; where it cannot start, VVdeC on the CPU, the
+    // same pictures, and vvdec-vulkan off for the run (the parent takes the vvdec_off status in)
+    std::optional<GpuFrameStream> stream;
+    std::uint8_t* picture = nullptr;  // where each picture is downloaded
+    if (vvdec_chosen(plan, request.value("vvdec", false))) {
+        say({"VVC decoded on the GPU by vvdec-vulkan", StatusKind::vvdec_used});  // before it opens: a crash counts
+        try {
+            stream.emplace(info, plan, -1, 4, vvdec_decoder, ffmpeg, ffprobe, false, start);
+            picture = stream->importable_buffer();
+        } catch (const GpuDecodeUnavailableError& error) {
+            stream.reset();
+            logger.info(platform::path_text(info.path.filename()) + ": not decoded by vvdec-vulkan (" + error.what() +
+                        ")");
+            say({error.what(), StatusKind::vvdec_off});
+        }
+    }
+    std::vector<std::uint8_t> own_picture;
+    if (!stream) {
+        stream.emplace(info, plan, 0, 4, software_decoder, ffmpeg, ffprobe, false, start);
+        own_picture.resize(plan.frame_bytes());
+        picture = own_picture.data();
+    }
+    stream->start();
     pipe.connect();
     const CancelToken never;  // the parent ends this process to stop it
     std::optional<WindowCut> cut;
     if (window) {
-        cut.emplace(stream.time_base(never), window->length, window->skip);
+        cut.emplace(stream->time_base(never), window->length, window->skip);
     }
-    std::vector<std::uint8_t> picture(plan.frame_bytes());
     long long frames = 0;
-    while (const std::optional<GpuFrameStream::Picture> next = stream.next(never)) {
+    while (const std::optional<GpuFrameStream::Picture> next = stream->next(never)) {
         const WindowCut::Take take = cut ? cut->take(next->pts) : WindowCut::Take::feed;
         if (take == WindowCut::Take::skip) {
-            stream.release(next->slot);
+            stream->release(next->slot);
             continue;
         }
-        stream.download(next->slot, picture.data());
-        stream.release(next->slot);
-        if (!pipe.write(picture.data(), picture.size())) {
+        stream->download(next->slot, picture);
+        stream->release(next->slot);
+        if (!pipe.write(picture, plan.frame_bytes())) {
             return {{"frames", frames}, {"reader_gone", true}};
         }
         ++frames;

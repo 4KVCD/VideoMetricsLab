@@ -87,12 +87,10 @@ std::string exit_code_for_log(int code) {
 // ------------------------------------------------------------ frame memory
 
 // One frame's buffer in Vship's pinned (page-locked) memory, its size rounded
-// up to whole 64 KiB, so that a GPU decoder can import all of it
-// (vvdec-vulkan: host memory imported in multiples of the device's alignment,
-// 4 KiB on the GPUs tried, at most 64 KiB).
+// up to whole host_import_alignment, so that a GPU decoder can import all of it.
 class PinnedBuffer {
 public:
-    static constexpr std::size_t import_alignment = 64 * 1024;
+    static constexpr std::size_t import_alignment = host_import_alignment;
 
     PinnedBuffer(const VshipLibrary& library, std::size_t bytes, int gpu_id)
         : library_(library),
@@ -1253,14 +1251,21 @@ private:
                     throw GpuDecodeUnavailableError("its frames would be " + std::to_string(decode.frame_bytes()) +
                                                     " bytes, not " + std::to_string(video.layout.frame_bytes));
                 }
-                // VVC on the GPU (vvdec-vulkan), its pictures copied there into Vship's memory; not in a pass made
-                // again after a decoder failed (native_ off), and where it cannot start, the app's VVdeC on the CPU
-                if (backend == software_decoder && native_ && vvdec_chosen(decode)) {
+                // VVC on the GPU (vvdec-vulkan) where wanted (Settings' VVC decoder), its pictures copied there
+                // into Vship's memory; not in a pass made again after a decoder failed (native_ off), and where it
+                // cannot start, the app's VVdeC on the CPU, vvdec-vulkan then off for the run
+                const VmafOptions& options = request_.options;
+                if (backend == software_decoder && native_ &&
+                    vvdec_chosen(decode, vvdec_wanted(options.gpu_decode, options.vvc_on_gpu))) {
+                    if (on_status_) {
+                        on_status_({"VVC decoded on the GPU by vvdec-vulkan", StatusKind::vvdec_used});
+                    }
                     try {
                         return open_decoder(video, decode, std::string(vvdec_decoder));
                     } catch (const GpuDecodeUnavailableError& error) {
                         logger.info("Vship: the " + video.label + " is not decoded by vvdec-vulkan (" + error.what() +
                                     ")");
+                        turn_off_vvdec(error.what(), on_status_);
                     }
                 }
                 return open_decoder(video, decode, backend);
@@ -1833,7 +1838,7 @@ nlohmann::json request_json(const PerceptualRequest& request, const PassPlan& pl
             {"ffprobe", request.environment.ffprobe},
             {"source", video_json(request.source)},
             {"distorted", video_json(request.distorted)},
-            {"options", options_json(request.options)},
+            {"options", options_json(child_options(request.options))},
             {"backends", request.backends},
             {"cvvdp", request.cvvdp.parameters()},
             {"keys", plan.keys},
@@ -1939,6 +1944,30 @@ PerceptualTaskOutput score_vship_pass(const PerceptualRequest& request, const Pa
         on_status, cancel);
 }
 
+// One attempt of run_vship_pass in a process of its own: the pass's output or the video it cut short,
+// `vvdec_used` set where it opened vvdec-vulkan.
+void run_vship_child(const PerceptualRequest& request, const PassPlan& plan, const ProgressCallback& on_progress,
+                     const StatusCallback& on_status, const CancelToken& cancel, bool& vvdec_used,
+                     PerceptualTaskOutput& output, std::optional<std::string>& cut_short) {
+    run_isolated(
+        "vship-pass", "Vship", request_json(request, plan),
+        [&](const nlohmann::json& message) {
+            if (message.contains("progress") && on_progress) {
+                const nlohmann::json& counts = message["progress"];
+                on_progress(counts.at(0).get<long long>(), counts.at(1).get<long long>(), counts.at(2).get<double>());
+            } else if (message.contains("status")) {
+                take_child_status(status_from_json(message["status"]), on_status, vvdec_used);
+            }
+        },
+        cancel, [&](const nlohmann::json& result, const std::filesystem::path& folder) {
+            if (result.contains("cut_short")) {
+                cut_short = result.at("cut_short").get<std::string>();
+            } else {
+                output = output_from(result, folder);
+            }
+        });
+}
+
 // One pass, in a process of its own where a program to run it is set (the
 // Python app's _run_vship_pass): Vship and the GPU's driver run in the
 // process that loads them, and a crash in either then ends only that
@@ -1958,43 +1987,30 @@ PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const Pass
     }
     PerceptualTaskOutput output;
     std::optional<std::string> cut_short;
-    try {
-        run_isolated(
-            "vship-pass", "Vship", request_json(request, plan),
-            [&](const nlohmann::json& message) {
-                if (message.contains("progress") && on_progress) {
-                    const nlohmann::json& counts = message["progress"];
-                    on_progress(counts.at(0).get<long long>(), counts.at(1).get<long long>(),
-                                counts.at(2).get<double>());
-                } else if (message.contains("status")) {
-                    const RunStatus status = status_from_json(message["status"]);
-                    // The pass's GPU decoder failed: not to be trusted in this process either, shown or not
-                    if (status.kind == StatusKind::gpu_decoder_failed) {
-                        distrust_gpu_decoding(status.text);
-                    }
-                    if (on_status) {
-                        on_status(status);
-                    }
-                }
-            },
-            cancel, [&](const nlohmann::json& result, const std::filesystem::path& folder) {
-                if (result.contains("cut_short")) {
-                    cut_short = result.at("cut_short").get<std::string>();
-                } else {
-                    output = output_from(result, folder);
-                }
-            });
-    } catch (const IsolatedCrashError& error) {
-        logger.error("Vship pass (" + metric_labels(plan.keys, ", ") + ") failed: " + error.what());
-        throw VshipUnavailableError("Vship GPU calculation failed: " + std::string(error.what()));
-    } catch (const Cancelled&) {
-        throw;
-    } catch (const VideoSizeChanged&) {
-        throw;  // the child's, kept by run_isolated
-    } catch (const FilmGrainRefusal&) {
-        throw;  // likewise: final (the app's decoder failed, or its pictures cannot be fed)
-    } catch (const std::runtime_error& error) {
-        throw VshipUnavailableError(error.what());  // the child's own error, as its message
+    // A pass that opened vvdec-vulkan and then failed or crashed, where it did not turn vvdec-vulkan off itself, is
+    // made once more with it off (the app's VVdeC on the CPU)
+    for (bool retried = false;; retried = true) {
+        bool vvdec_used = false;
+        try {
+            run_vship_child(request, plan, on_progress, on_status, cancel, vvdec_used, output, cut_short);
+            break;
+        } catch (const Cancelled&) {
+            throw;
+        } catch (const VideoSizeChanged&) {
+            throw;  // the child's, kept by run_isolated
+        } catch (const FilmGrainRefusal&) {
+            throw;  // likewise: final (the app's decoder failed, or its pictures cannot be fed)
+        } catch (const std::runtime_error& error) {
+            if (!retried && vvdec_used && !vvdec_turned_off()) {
+                turn_off_vvdec(std::string("its pass failed: ") + error.what(), on_status);
+                continue;
+            }
+            if (dynamic_cast<const IsolatedCrashError*>(&error) != nullptr) {
+                logger.error("Vship pass (" + metric_labels(plan.keys, ", ") + ") failed: " + error.what());
+                throw VshipUnavailableError("Vship GPU calculation failed: " + std::string(error.what()));
+            }
+            throw VshipUnavailableError(error.what());  // the child's own error, as its message
+        }
     }
     if (cut_short) {
         // A video cut short keeps its kind, so that it is not retried on the
@@ -2807,6 +2823,7 @@ PerceptualTaskOutput remade_vship_pass(const std::function<PerceptualTaskOutput(
                                        const StatusCallback& on_status, const CancelToken& cancel) {
     bool native = true;
     bool input_retried = false;
+    bool vvdec_retried = false;
     while (true) {
         try {
             return attempt(native);
@@ -2823,15 +2840,26 @@ PerceptualTaskOutput remade_vship_pass(const std::function<PerceptualTaskOutput(
             }
             input_retried = true;
         } catch (const GpuDecodeFailedError& error) {
-            if (!native) {
+            if (!native || (error.backend() == vvdec_decoder && vvdec_retried)) {
                 throw VshipUnavailableError(error.what());
             }
-            // The pass made again decodes VVC with the app's VVdeC on the CPU (open_stream), the rest through FFmpeg
-            const std::string_view instead = error.backend() == vvdec_decoder ? "with VVdeC on the CPU" : "through FFmpeg";
-            logger.warning("Decoding in the Vship pass failed; decoding " + std::string(instead) + " instead: " +
-                           error.what());
+            if (error.backend() == vvdec_decoder) {
+                // vvdec-vulkan failed: off for the run, and the pass made again with VVC decoded by the app's VVdeC
+                // on the CPU and the other video by the decoder it had (the other GPU decoders stay trusted)
+                logger.warning("vvdec-vulkan failed in the Vship pass; decoding with VVdeC on the CPU instead: " +
+                               std::string(error.what()));
+                if (on_status) {
+                    on_status({decoding_failed_status(error, "with VVdeC on the CPU")});
+                }
+                turn_off_vvdec(error.what(), on_status);
+                vvdec_retried = true;
+                continue;
+            }
+            // The pass made again decodes the videos through FFmpeg (VVC with the app's VVdeC, open_stream)
+            logger.warning("Decoding in the Vship pass failed; decoding through FFmpeg instead: " +
+                           std::string(error.what()));
             if (on_status) {
-                on_status({decoding_failed_status(error, instead)});
+                on_status({decoding_failed_status(error, "through FFmpeg")});
             }
             distrust_failed_decoder(error, on_status);
             native = false;

@@ -558,8 +558,10 @@ void JobRun::report_progress(std::size_t task, long long current, long long tota
 
 void JobRun::report_status(std::size_t task, const RunStatus& status) {
     logger.info(name() + ": " + status.text);
-    if (status.kind == StatusKind::gpu_decoder_failed) {
-        return;  // what the GPU's decoder said, for the run's process (distrust_failed_decoder): not a step
+    if (status.kind == StatusKind::gpu_decoder_failed || status.kind == StatusKind::vvdec_used ||
+        status.kind == StatusKind::vvdec_off) {
+        // For the run's process (distrust_failed_decoder, take_child_status), logged above: not a step
+        return;
     }
     const std::lock_guard lock(mutex_);
     TaskState& state = tasks_[task];

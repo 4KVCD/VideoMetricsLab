@@ -134,6 +134,14 @@ previous build's output undeletable. The package therefore goes to
   libraries from the commit's own source every time -- they are not in
   git, so ones left from another commit would be stale -- and so needs
   MinGW-w64 g++ on the PATH; it stops without it.
+- **The GPU VVC decoder** (`resources/native/vvdecvk_frames.dll`): VVC
+  decoded on the GPU by vvdec-vulkan (github.com/4KVCD/vvdec-vulkan, release
+  v1.1), its pictures handed over to the GPU metrics, where Settings' VVC
+  decoder is the GPU (not the default). Built from a checkout of
+  vvdec-vulkan by `scripts/build_vvdecvk_frames.ps1 -Source <checkout>
+  -Slangc <slangc.exe> -VulkanHeaders <include folder>` (MinGW-w64 g++,
+  Slang 2026.10.2, Khronos Vulkan-Headers 3c65a01); not in git. The release
+  needs it (`scripts/build_release.ps1` stops without it).
 - **SSIMULACRA2 and Butteraugli on the CPU**, the official libjxl 0.12.0
   static Windows command-line tools, with their notices; users do not need
   to install libjxl.

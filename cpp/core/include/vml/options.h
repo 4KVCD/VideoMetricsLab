@@ -78,6 +78,9 @@ struct VmafOptions {
     // Both videos are decoded on the GPU where they can be (each falls back
     // to software on its own).
     bool gpu_decode = true;
+    // A VVC video decoded on the GPU by vvdec-vulkan where the GPU metrics can take its pictures there
+    // (Settings::vvc_decode_on_gpu; only with gpu_decode, vvdec_wanted).
+    bool vvc_on_gpu = false;
     GpuVendor gpu_vendor = GpuVendor::automatic;
     // VMAF v0.6.1, NEG and v1 on the GPU when a GPU can score them.
     bool vmaf_on_gpu = true;

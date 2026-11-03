@@ -25,6 +25,7 @@
 class QCheckBox;
 class QComboBox;
 class QGroupBox;
+class QHBoxLayout;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -90,6 +91,7 @@ public:
     QComboBox* film_grain_default = nullptr;
     QComboBox* vship_build_default = nullptr;  // none where stock Vship 5.1.2 is not bundled
     QCheckBox* gpu_together = nullptr;
+    QComboBox* vvc_decoder = nullptr;  // none where vvdec-vulkan is not bundled (a Mac)
     QComboBox* decoded_videos = nullptr;
     QComboBox* language = nullptr;
     QComboBox* theme = nullptr;
@@ -114,6 +116,7 @@ private:
     QGroupBox* build_storage_box();
     QGroupBox* build_defaults_box();
     QGroupBox* build_gpu_box();
+    QHBoxLayout* build_vvc_decoder_row();
     QGroupBox* build_compare_box();
     QGroupBox* build_window_box();
 

@@ -297,6 +297,7 @@ std::variant<VmafJob, QString> MainWindow::job_for(const RowData& row_data) cons
     const std::vector<std::string> metric_keys = requested_metrics(row_data);
     const PerceptualBackends backends(automatic_perceptual_backends.begin(), automatic_perceptual_backends.end());
     VmafOptions options = row_data.options;
+    options.vvc_on_gpu = settings_.vvc_decode_on_gpu;  // Settings' VVC decoder, as the run starts
     MetricResultSet kept = reusable_results(row_data);
     std::vector<MetricTask> tasks;
     try {

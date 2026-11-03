@@ -67,6 +67,11 @@ enum class StatusKind {
     // A video is scored with its decoding on the CPU because the GPU's video
     // decoding failed in this run (gpu_decoding_off_status): a note.
     gpu_decoding_off,
+    // vvdec-vulkan opens to decode a VVC video on the GPU (take_child_status): logged, not shown as a step.
+    vvdec_used,
+    // vvdec-vulkan refused, failed or crashed and is off for the rest of the run (turn_off_vvdec; the text is why):
+    // logged, not shown as a step.
+    vvdec_off,
 };
 
 // Whether a status says that a GPU route failed (or its check did) and its
@@ -111,6 +116,19 @@ RunStatus status_from_json(const nlohmann::json& json);
 // gpu_decoder_failed status says so, which trips the run's process too where
 // this runs in a process of its own.
 void distrust_failed_decoder(const GpuDecodeFailedError& error, const StatusCallback& on_status);
+
+// vvdec-vulkan refused, failed or crashed (`reason`): it is turned off for the rest of the run
+// (turn_off_vvdec_vulkan), and a vvdec_off status says so, which turns it off in the run's process too where this
+// runs in a process of its own. The other GPU decoders stay trusted.
+void turn_off_vvdec(const std::string& reason, const StatusCallback& on_status);
+
+// A status a process of its own sent, taken in by the run's process before it is passed on: a GPU decoder's failure
+// (gpu_decoder_failed) and vvdec-vulkan turned off (vvdec_off) hold here too, and `vvdec_used` is set where the
+// process opened vvdec-vulkan (vvdec_used), as a failure of its pass is then tried once more without it.
+void take_child_status(const RunStatus& status, const StatusCallback& on_status, bool& vvdec_used);
+
+// The run's options as a process of its own gets them: vvdec-vulkan off there too once it is off here.
+VmafOptions child_options(VmafOptions options);
 
 // The note of a video scored with its decoding on the CPU because the GPU's
 // video decoding failed in this run: one text for the whole run (the first

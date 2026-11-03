@@ -57,10 +57,16 @@
 
 namespace vml {
 
-// This video cannot be decoded here, so FFmpeg decodes it.
+// This video cannot be decoded here, so FFmpeg decodes it. backend() names the decoder that refused where the caller
+// has another of its own to try (vvdec-vulkan's refusal: the app's VVdeC on the CPU).
 class GpuDecodeUnavailableError : public std::runtime_error {
 public:
-    using std::runtime_error::runtime_error;
+    explicit GpuDecodeUnavailableError(const std::string& message, std::string backend = "")
+        : std::runtime_error(message), backend_(std::move(backend)) {}
+    const std::string& backend() const { return backend_; }
+
+private:
+    std::string backend_;
 };
 
 // Decoding failed after it had started; the caller decodes the video again
@@ -88,7 +94,7 @@ private:
 // D3D11VA's too). Once the app's decoder has seen it fail, nothing more of
 // the run decodes on the GPU (ffmpeg_run.cpp's and vship_run.cpp's re-runs).
 // Process-wide, as the GPU is; `reason`: what the decoder said, the first one
-// kept. Reset when a run starts.
+// kept. Reset when a run starts (trust_gpu_decoding, which also turns vvdec-vulkan on again: vvdec_wanted).
 void distrust_gpu_decoding(const std::string& reason);
 std::optional<std::string> gpu_decoding_distrusted();
 void trust_gpu_decoding();
@@ -100,12 +106,24 @@ std::string decoding_failed_status(const GpuDecodeFailedError& error, std::strin
 
 // The decoder for the videos FFmpeg would decode in software.
 inline constexpr std::string_view software_decoder = "software";
-// VVC decoded on the GPU by vvdec-vulkan (native/vvdecvk_frames.cpp), its pictures handed over on the GPU: to Vulkan
-// VMAF (the test video of a pair, beside a reference the CPU writes into the slot: VulkanScorer::add_shared_mixed),
-// and into Vship's frame buffers (pinned, NativeFrameStream). v2.4's first step: only with VML_VVDEC_HANDOVER=1
-// (vvdec_handover_wanted).
+// VVC decoded on the GPU by vvdec-vulkan (native/vvdecvk_frames.cpp), where it is wanted (vvdec_wanted), its
+// pictures handed over on the GPU: to Vulkan VMAF (the test video of a pair, beside a reference the CPU writes into
+// the slot: VulkanScorer::add_shared_mixed), or copied by the GPU into host memory the decoder imported: Vship's
+// frame buffers (pinned, NativeFrameStream), and GpuFrameStream::importable_buffer for the CPU's metrics, the engines
+// reading host planes (HostFrames) and the pictures fed to FFmpeg (grain_feed.h).
 inline constexpr std::string_view vvdec_decoder = "vvdec";
-bool vvdec_handover_wanted();
+
+// Whether a run wants vvdec-vulkan for its VVC videos: GPU decoding on (`gpu_decode`), the VVC decoder on the GPU
+// (`vvc_on_gpu`, Settings' VVC decoder), and not turned off in this run. Once it has refused, failed or crashed
+// (turn_off_vvdec_vulkan), the passes after decode VVC with the app's VVdeC on the CPU; the other GPU decoders stay
+// trusted. Process-wide, as the GPU is (each child process keeps its own); trust_gpu_decoding clears it as a run
+// starts.
+bool vvdec_wanted(bool gpu_decode, bool vvc_on_gpu);
+void turn_off_vvdec_vulkan(const std::string& reason);
+bool vvdec_turned_off();
+// Whether vvdec-vulkan's library is in the app (a file check: the library is not loaded), as the window's choice of
+// the VVC decoder is shown only then.
+bool vvdec_vulkan_bundled();
 
 // The environment variable that, set to "ffmpeg", sends the videos FFmpeg
 // decodes in software through FFmpeg's pipes instead of the software
@@ -194,10 +212,27 @@ inline constexpr std::string_view media_foundation_decoder = "amd-mf";
 bool can_hand_over(const DecodePlan& plan, std::string_view backend);
 
 // Whether vvdec-vulkan can decode the plan's video and hand it over: VVC, neither scaled nor widened, no film grain
-// added (its pictures have no samples in host memory to add grain to). vvdec_chosen: and it is wanted
-// (vvdec_handover_wanted) and bundled (decoder_available), asked in that order.
+// added but H.274's (the hand-over's copies add it as VVdeC does; AFGS1's it cannot). vvdec_chosen: and it is `wanted`
+// (vvdec_wanted) and bundled (decoder_available), asked in that order.
 bool vvdec_takes(const DecodePlan& plan);
-bool vvdec_chosen(const DecodePlan& plan);
+bool vvdec_chosen(const DecodePlan& plan, bool wanted);
+
+// Which videos of a pair vvdec-vulkan decodes in a pass that scores them in the app, from whether it is chosen for
+// each (vvdec_chosen), and how its pictures reach the scorers: `mixed`, the test video's handed over on the GPU to
+// Vulkan VMAF beside a reference the CPU writes, where nothing else reads them (no CPU metrics beside, the reference
+// another decoder's); otherwise copied by the GPU into host memory the decoder imported
+// (GpuFrameStream::importable_buffer), which every scorer reads (HostPairs).
+struct VvdecUse {
+    bool test = false;
+    bool reference = false;
+    bool mixed = false;
+    bool any() const { return test || reference; }
+};
+VvdecUse vvdec_use(bool test_chosen, bool reference_chosen, bool cpu_metrics_beside);
+
+// The alignment of host memory a GPU decoder imports (vvdec-vulkan: memory imported in multiples of the device's
+// alignment, 4 KiB on the GPUs tried, at most 64 KiB), for its address and its size.
+inline constexpr std::size_t host_import_alignment = 64 * 1024;
 
 // Whether `backend`'s decoder may let the plan's pictures be read where it
 // holds them in system memory (GpuFrameStream::slot_planes): the software
@@ -262,10 +297,10 @@ std::optional<std::string> scaling_refusal(const DecodePlan& plan, const std::st
 std::optional<std::pair<std::string, std::string>> decoders_here(const HardwareDecoding& decoding);
 
 // Whether pictures of two streams of these decoders may be downloaded at the
-// same time, from two threads: the software decoder's and NVIDIA's keep each
-// stream's state apart (native/software_frames.cpp, nvdec_frames.cpp); the
-// other libraries are not known to (AMD's shares memory between its
-// streams).
+// same time, from two threads: the software decoder's, NVIDIA's and
+// vvdec-vulkan's keep each stream's state apart (native/software_frames.cpp,
+// nvdec_frames.cpp, vvdecvk_frames.cpp); the other libraries are not known to
+// (AMD's shares memory between its streams).
 bool downloads_at_once(const std::string& source_decoder, const std::string& test_decoder);
 
 // FFmpeg's command that copies the video's first video stream out of its
@@ -403,7 +438,8 @@ public:
     // copy into, and one timeline signals both streams' copies. NVIDIA's
     // always are; two AMD streams need not be: each falls back from Windows'
     // own decoder (mf_frames.dll) to AMF's (amf_frames.dll) on its own, and
-    // each library has a Vulkan device, and imports, of its own.
+    // each library has a Vulkan device, and imports, of its own. Two
+    // vvdec-vulkan streams never are: each decoder keeps its own imports.
     bool shares_gpu_memory_with(const GpuFrameStream& other) const;
 
     // Starts FFmpeg and the thread that feeds its packets to the decoder.
@@ -441,8 +477,17 @@ public:
     Rational time_base(const CancelToken& cancel);
 
     // Copies the slot's picture, planes packed, to `host` (frame_bytes()
-    // of the plan long).
+    // of the plan long). vvdec-vulkan's decoder copies only into its
+    // importable_buffer() or memory it pinned.
     void download(int slot, void* host);
+
+    // vvdec-vulkan's decoder: a buffer of the plan's frame_bytes() that it
+    // has imported, so that download() has its GPU copy each picture there,
+    // made at the first call (before start(), so that a refusal comes before
+    // the pass). It lives until the decoder has closed (close()), and is left
+    // with a decoder that does not close. Throws GpuDecodeUnavailableError
+    // (backend vvdec) where the decoder cannot import it.
+    std::uint8_t* importable_buffer();
 
     // Whether slot_planes gives this stream's pictures (can_lend_planes).
     bool gives_planes() const;
@@ -541,6 +586,13 @@ private:
     struct State;
     std::shared_ptr<State> state_;  // shared with the feeding thread, which may outlive a close that gives up on it
 };
+
+// A pass's stream of `info`'s pictures, `pool` slots: vvdec-vulkan's where `vvdec`, on Vulkan device `vvdec_device`
+// (-1: the one it picks), its refusal thrown as GpuDecodeUnavailableError with backend vvdec_decoder, which the passes'
+// fallbacks turn it off for (ffmpeg_run.cpp's score_plan); otherwise `backend`'s, on device 0.
+GpuFrameStream open_pass_stream(const VideoInfo& info, const DecodePlan& plan, int pool, const std::string& backend,
+                                bool vvdec, int vvdec_device, const std::string& ffmpeg, const std::string& ffprobe,
+                                bool handover = false);
 
 // Throws GpuDecodeUnavailableError when one video is full range and the
 // other limited (VideoInfo::full_range): the app's decoders give samples as

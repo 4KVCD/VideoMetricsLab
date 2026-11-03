@@ -94,6 +94,7 @@ nlohmann::json options_json(const VmafOptions& options) {
             {"range_start", options.range_start},
             {"range_end", options.range_end},
             {"gpu_decode", options.gpu_decode},
+            {"vvc_on_gpu", options.vvc_on_gpu},
             {"gpu_vendor", static_cast<int>(options.gpu_vendor)},
             {"vmaf_on_gpu", options.vmaf_on_gpu},
             {"vship_build", static_cast<int>(options.vship_build)},
@@ -119,6 +120,7 @@ VmafOptions options_from(const nlohmann::json& text) {
     text.at("range_start").get_to(options.range_start);
     text.at("range_end").get_to(options.range_end);
     text.at("gpu_decode").get_to(options.gpu_decode);
+    text.at("vvc_on_gpu").get_to(options.vvc_on_gpu);
     options.gpu_vendor = static_cast<GpuVendor>(text.at("gpu_vendor").get<int>());
     text.at("vmaf_on_gpu").get_to(options.vmaf_on_gpu);
     options.vship_build = static_cast<VshipBuild>(text.at("vship_build").get<int>());
