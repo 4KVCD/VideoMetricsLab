@@ -127,6 +127,7 @@ public:
     QRadioButton* second_radio = nullptr;
     QRadioButton* gop_radio = nullptr;
     QCheckBox* adjust_start_checkbox = nullptr;
+    QCheckBox* difference_box = nullptr;
     QPushButton* reset_zoom_button = nullptr;
     QPushButton* export_button = nullptr;
     ChartWidget* chart = nullptr;
@@ -173,6 +174,7 @@ private:
     std::string view_name() const;
     std::shared_ptr<const BitratePlot> entry_plot(BitrateEntry& entry) const;
     void refresh_plot();  // the lines drawn again, the zoom kept
+    void refresh_difference();  // the Difference band and box, for the lines drawn
     void on_hovered(double time);
     void on_hover_left();
     void on_export_png();
@@ -194,6 +196,10 @@ private:
     // refresh_plot).
     double value_scale_ = 1;
     QString value_unit_ = QStringLiteral("kb/s");
+    // The Difference band drawn, in the lines' unit, and its label; none
+    // while the box is off or the graph does not show exactly two lines.
+    std::shared_ptr<const BitratePlot> difference_;
+    QString difference_label_;
 };
 
 }  // namespace vml::app

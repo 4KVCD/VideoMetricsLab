@@ -788,7 +788,13 @@
   "The range starts after the end of one of the videos.": "Zakres zaczyna się po końcu jednego z wideo.",
   "The range contains no frame of the videos.": "Zakres nie zawiera żadnej klatki wideo.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nNie znaleziono obsługiwanego GPU, więc są obliczane na CPU. Narzędzia CPU oceniają po jednej parze nieruchomych obrazów: około 1 s dla SSIMULACRA2 i 2 s dla Butteraugli na klatkę 4K, więc film zajmuje dni (powyższe szacunki zakładają CPU podobne do użytego przy pomiarach). Ustaw zakres, aby ocenić tylko część wideo.\n\nLiczyć mimo to?",
-  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Czasy trwania się różnią ({source} wobec {test} s). Ustaw zakres mieszczący się w obu plikach, jeśli porównujesz tylko ich wspólną część."
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Czasy trwania się różnią ({source} wobec {test} s). Ustaw zakres mieszczący się w obu plikach, jeśli porównujesz tylko ich wspólną część.",
+  "Difference": "Różnica",
+  "Draws the first visible series minus the second, frame by frame, in a band under the graph with its own scale.": "Rysuje pierwszą widoczną serię minus drugą, klatka po klatce, w pasie pod wykresem z własną skalą.",
+  "Show exactly two series with this metric's data to draw their difference.": "Pokaż dokładnie dwie serie z danymi tej metryki, aby narysować ich różnicę.",
+  "Draws the first video's bitrate minus the second's at each moment, in a band under the graph with its own scale.": "Rysuje bitrate pierwszego wideo minus bitrate drugiego w każdej chwili, w pasie pod wykresem z własną skalą.",
+  "Draws the first video's frame sizes minus the second's, frame by frame, in a band under the graph with its own scale.": "Rysuje rozmiary klatek pierwszego wideo minus drugiego, klatka po klatce, w pasie pod wykresem z własną skalą.",
+  "Show exactly two videos to draw their difference.": "Pokaż dokładnie dwa wideo, aby narysować ich różnicę."
  },
  "plurals": {
   "about {count} day": [

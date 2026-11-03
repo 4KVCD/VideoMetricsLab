@@ -10,6 +10,7 @@ add_executable(vml_tests
     unit/cli_test.cpp
     unit/cvvdp_test.cpp
     unit/decisions_test.cpp
+    unit/difference_test.cpp
     unit/ffmpeg_run_test.cpp
     unit/ffmpeg_tools_test.cpp
     unit/ffprobe_test.cpp

@@ -712,12 +712,12 @@
     {
      "hidden": [],
      "frame": 5,
-     "text": "Frame 5\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]      frame      5   t=0:00:00.17   VMAF v0.6.1=95.00   |\n[short]  frame      5   not in this run\n\u0394 (a \u2212 b) = -65.00"
+     "text": "Frame 5\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]      frame      5   t=0:00:00.17   VMAF v0.6.1=95.00   |\n[short]  frame      5   not in this run"
     },
     {
      "hidden": [],
      "frame": 7,
-     "text": "Frame 7\n[a]      frame      7   t=0:00:00.23   VMAF v0.6.1=95.00   |  PSNR=45.00   SSIM=0.9900    XPSNR=110.00  Butteraugli=7.0000\n[b]      frame      7   t=0:00:00.23   VMAF v0.6.1=95.00   |\n[short]  frame      7   not in this run\n\u0394 (a \u2212 b) = +0.00"
+     "text": "Frame 7\n[a]      frame      7   t=0:00:00.23   VMAF v0.6.1=95.00   |  PSNR=45.00   SSIM=0.9900    XPSNR=110.00  Butteraugli=7.0000\n[b]      frame      7   t=0:00:00.23   VMAF v0.6.1=95.00   |\n[short]  frame      7   not in this run"
     },
     {
      "hidden": [],
@@ -730,7 +730,7 @@
      ],
      "x": "0x1.5555555555555p-3",
      "y": "0x1.1800000000000p+6",
-     "text": "Time: 0:00:00.17\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |\n\u0394 (a \u2212 short) = -52.00"
+     "text": "Time: 0:00:00.17\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |"
     },
     {
      "hidden": [
@@ -738,7 +738,7 @@
      ],
      "x": "0x1.5555555555555p-3",
      "y": "0x1.8c00000000000p+6",
-     "text": "Time: 0:00:00.17\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |\n\u0394 (a \u2212 short) = -52.00"
+     "text": "Time: 0:00:00.17\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |"
     },
     {
      "hidden": [
@@ -746,7 +746,7 @@
      ],
      "x": "0x1.1111111111111p-2",
      "y": "0x1.e000000000000p+5",
-     "text": "Time: 0:00:00.27\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |\n\u0394 (a \u2212 short) = -52.00"
+     "text": "Time: 0:00:00.27\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |"
     },
     {
      "hidden": [
@@ -754,7 +754,7 @@
      ],
      "x": "0x0.0p+0",
      "y": "0x0.0p+0",
-     "text": "Time: 0:00:00.00\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |\n\u0394 (a \u2212 short) = -52.00"
+     "text": "Time: 0:00:00.00\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |"
     },
     {
      "hidden": [
@@ -762,7 +762,7 @@
      ],
      "x": "0x1.0000000000000p-2",
      "y": "0x1.9000000000000p+5",
-     "text": "Time: 0:00:00.25\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |\n\u0394 (a \u2212 short) = -52.00"
+     "text": "Time: 0:00:00.25\n[a]      frame      5   t=0:00:00.17   VMAF v0.6.1=30.00   |  PSNR=31.25   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |"
     },
     {
      "hidden": [
@@ -770,7 +770,7 @@
      ],
      "x": "0x1.0000000000000p+1",
      "y": "0x1.9000000000000p+5",
-     "text": "Time: 0:00:02.00\n[a]      frame      9   t=0:00:00.30   VMAF v0.6.1=95.00   |  PSNR=47.00   SSIM=0.9900    XPSNR=42.00   Butteraugli=9.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |\n\u0394 (a \u2212 short) = +13.00"
+     "text": "Time: 0:00:02.00\n[a]      frame      9   t=0:00:00.30   VMAF v0.6.1=95.00   |  PSNR=47.00   SSIM=0.9900    XPSNR=42.00   Butteraugli=9.0000\n[short]  frame      2   t=0:00:00.07   VMAF v0.6.1=82.00   |"
     },
     {
      "hidden": [
@@ -1431,13 +1431,13 @@
      "hidden": [],
      "x": "0x1.5555555555555p-3",
      "y": "0x1.1800000000000p+6",
-     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]  frame      4   t=0:00:00.13   PSNR=39.00   |  VMAF v0.6.1=95.00\n\u0394 (a \u2212 b) = -7.75"
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]  frame      4   t=0:00:00.13   PSNR=39.00   |  VMAF v0.6.1=95.00"
     },
     {
      "hidden": [],
      "x": "0x1.5555555555555p-3",
      "y": "0x1.8c00000000000p+6",
-     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]  frame      4   t=0:00:00.13   PSNR=39.00   |  VMAF v0.6.1=95.00\n\u0394 (a \u2212 b) = -7.75"
+     "text": "Time: 0:00:00.17\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]  frame      4   t=0:00:00.13   PSNR=39.00   |  VMAF v0.6.1=95.00"
     },
     {
      "hidden": [],
@@ -1449,19 +1449,19 @@
      "hidden": [],
      "x": "0x0.0p+0",
      "y": "0x0.0p+0",
-     "text": "Time: 0:00:00.00\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]  frame      4   t=0:00:00.13   PSNR=39.00   |  VMAF v0.6.1=95.00\n\u0394 (a \u2212 b) = -7.75"
+     "text": "Time: 0:00:00.00\n[a]  frame      5   t=0:00:00.17   PSNR=31.25   |  VMAF v0.6.1=30.00   SSIM=0.9000    XPSNR=39.00   Butteraugli=5.0000\n[b]  frame      4   t=0:00:00.13   PSNR=39.00   |  VMAF v0.6.1=95.00"
     },
     {
      "hidden": [],
      "x": "0x1.0000000000000p-2",
      "y": "0x1.9000000000000p+5",
-     "text": "Time: 0:00:00.25\n[a]  frame      7   t=0:00:00.23   PSNR=45.00   |  VMAF v0.6.1=95.00   SSIM=0.9900    XPSNR=110.00  Butteraugli=7.0000\n[b]  frame      6   t=0:00:00.20   PSNR=41.00   |  VMAF v0.6.1=95.00\n\u0394 (a \u2212 b) = +4.00"
+     "text": "Time: 0:00:00.25\n[a]  frame      7   t=0:00:00.23   PSNR=45.00   |  VMAF v0.6.1=95.00   SSIM=0.9900    XPSNR=110.00  Butteraugli=7.0000\n[b]  frame      6   t=0:00:00.20   PSNR=41.00   |  VMAF v0.6.1=95.00"
     },
     {
      "hidden": [],
      "x": "0x1.0000000000000p+1",
      "y": "0x1.9000000000000p+5",
-     "text": "Time: 0:00:02.00\n[a]  frame      9   t=0:00:00.30   PSNR=47.00   |  VMAF v0.6.1=95.00   SSIM=0.9900    XPSNR=42.00   Butteraugli=9.0000\n[b]  frame      8   t=0:00:00.27   PSNR=42.00   |  VMAF v0.6.1=40.00\n\u0394 (a \u2212 b) = +5.00"
+     "text": "Time: 0:00:02.00\n[a]  frame      9   t=0:00:00.30   PSNR=47.00   |  VMAF v0.6.1=95.00   SSIM=0.9900    XPSNR=42.00   Butteraugli=9.0000\n[b]  frame      8   t=0:00:00.27   PSNR=42.00   |  VMAF v0.6.1=40.00"
     },
     {
      "hidden": [],

@@ -2,7 +2,7 @@
 // metric's score over time, for several runs at once.
 //
 // Several runs (encodes compared with the same or different references) are
-// drawn as lines of their own colours, with one readout for the same moment
+// drawn as lines of their own colours, with one readout for the same frame
 // in all of them, and a table comparing them. Each metric has a page of its
 // own, as their scales differ (0-100, decibels, 0-1); the table of lines and
 // statistics above them is shared, as it is the same set of runs.
@@ -22,6 +22,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -32,6 +33,7 @@
 #include "vml/stats.h"
 #include "widgets.h"
 
+class QCheckBox;
 class QLabel;
 class QPushButton;
 class QSpinBox;
@@ -122,10 +124,22 @@ public:
     // The frame numbers the shown lines span, for the Go to frame box.
     std::pair<int, int> frame_range() const;
 
+    // Draws the difference of the two shown lines, the first (in the
+    // table's order) minus the second, in a band under them, while exactly
+    // two are shown (difference_possible).
+    void set_difference(bool on);
+    bool difference_possible() const { return difference_pair().has_value(); }
+    // The series ids of the two shown lines, in the table's order, when
+    // exactly two are shown: the pair the band draws.
+    std::optional<std::pair<int, int>> difference_pair() const;
+
 private:
     friend class GraphPanelTest;  // the graph's tests (tests/app)
 
+    bool erase_curves(const std::vector<int>& series_ids);
+    void set_frame_curve(int series_id, const SeriesEntry& entry);
     void set_timeline_curve(int series_id, const SeriesEntry& entry);
+    void refresh_difference();
     void update_no_data_label();
     void fit_hover_label();
     void fit_readout_margins();
@@ -140,8 +154,16 @@ private:
     QString readout_missing_frame(const QString& label, int frame) const;
     void set_hover_text(const QString& text);
     std::size_t find_hover_index(const MetricCurve& curve, double x, double y, double half_window) const;
-    double find_shared_hover_time(const std::vector<const MetricCurve*>& shown, double x, double y,
-                                  double x_per_pixel) const;
+    // A line's point.
+    struct HoverPoint {
+        const MetricCurve* curve = nullptr;
+        std::size_t index = 0;
+    };
+    std::optional<HoverPoint> find_shared_hover_point(const std::vector<const MetricCurve*>& shown, double x, double y,
+                                                      double x_per_pixel) const;
+    // A line's row in the readout: its run, line and point.
+    using ReadoutPick = std::tuple<const SeriesEntry*, const MetricCurve*, std::size_t>;
+    std::optional<QString> delta_row(const ReadoutPick& first, const ReadoutPick& second) const;
 
     const MetricDefinition* metric_;
     // Hover snaps to the worst frame nearby: a dip for VMAF, a peak for
@@ -149,6 +171,7 @@ private:
     float sign_;
     QString placeholder_;
     std::map<int, MetricCurve> curves_;  // by series, only lines with data
+    bool difference_on_ = false;
     QString hover_text_;
     // The readout's monospaced font, which the label takes from the first
     // hover on; the placeholder before it is in the window's.
@@ -239,7 +262,7 @@ private:
     void select_available_metric();
     QWidget* build_action_bar();
     void on_frame_requested(int frame);
-    void refresh_frame_range();
+    void refresh_page_controls();
     void cap_panel_heights();
     const MetricDefinition& current_metric() const;
     void setup_stats_table();
@@ -260,6 +283,8 @@ private:
     void on_add_saved_run();
     void on_export_png();
     void on_export_csv();
+    // The page in view's difference pair (MetricPage::difference_pair).
+    std::optional<std::pair<int, int>> shown_difference_pair() const;
     void show_stats_menu(const QPoint& position);
     void on_file_write_failed(const QString& description, const QString& error);
     void on_file_writes_idle();
@@ -284,6 +309,10 @@ private:
     std::map<std::string, MetricPage*> pages_;
     QPushButton* export_csv_button_ = nullptr;
     QSpinBox* frame_spin_ = nullptr;
+    // The Difference box: on for every page (not saved), drawn where a page
+    // shows exactly two lines.
+    bool difference_on_ = false;
+    QCheckBox* difference_box_ = nullptr;
     QLabel* status_label_ = nullptr;
     QLabel* metric_hint_ = nullptr;
 };

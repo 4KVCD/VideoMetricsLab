@@ -19,6 +19,7 @@
 #include "compare.h"
 #include "devices.h"
 #include "reference.h"
+#include "report.h"
 #include "test_videos.h"
 #include "vml/model_select.h"
 #include "vml/platform/system.h"
@@ -69,6 +70,7 @@ Json values_of(const Arguments& parsed) {
         {"vvc_decoder", either(a.vvc_decoder)},
         {"parallel", either(a.parallel)},
         {"recalculate", a.recalculate},
+        {"difference", a.difference},
         {"csv", path(a.csv)},
         {"json_path", path(a.json_path)},
         {"quiet", a.quiet},
@@ -240,6 +242,50 @@ TEST(CommandLine, RefusesAGpuMakerThePcLacks) {
     EXPECT_EQ(missing_gpu_maker("amd", {}, false), std::nullopt);
 }
 
+// --difference: exactly two test videos, and the first minus the second in
+// the table and the JSON, frame by frame and CVVDP second by second, with a
+// metric only one video has noted.
+TEST(CommandLine, GivesTheDifferenceOfTwoVideos) {
+    EXPECT_EQ(difference_refusal(3), "argument --difference: needs exactly two test videos, got 3");
+    EXPECT_TRUE(difference_refusal(1));
+    EXPECT_FALSE(difference_refusal(2));
+
+    std::vector<TestVideo> videos(2);
+    for (TestVideo& video : videos) {
+        video.metrics = {"vmaf", "psnr", "cvvdp"};
+        video.result.emplace().compared_frame_count = 3;
+    }
+    videos[0].path = "a.mkv";
+    videos[0].result->metric_results.add(FrameMetricResult{"vmaf", {0, 1, 2}, {0.0, 0.5, 1.0}, {90, 80, 70}, {}});
+    videos[0].result->metric_results.add(FrameMetricResult{"psnr", {0, 1, 2}, {0.0, 0.5, 1.0}, {40, 41, 42}, {}});
+    videos[0].result->metric_results.add(SequenceMetricResult{"cvvdp", 8.5, {}, {0, 2}, {0.0, 1.0}, {8.0f, 9.0f}});
+    videos[1].path = "b.mkv";  // no PSNR; VMAF from frame 1 on
+    videos[1].result->metric_results.add(FrameMetricResult{"vmaf", {1, 2, 3}, {0.5, 1.0, 1.5}, {75, 72, 60}, {}});
+    videos[1].result->metric_results.add(SequenceMetricResult{"cvvdp", 8.0, {}, {0, 2}, {0.0, 1.0}, {7.5f, 9.5f}});
+    const std::vector<Summaries> summaries = summarize(videos);
+    const std::optional<nlohmann::ordered_json> difference = difference_metrics(videos, summaries);
+    ASSERT_TRUE(difference);
+    EXPECT_EQ(difference->dump(),
+              R"({"vmaf":{"score":11.0,"mean":1.5,"minimum":-2.0,"maximum":5.0,"paired":2},)"
+              R"("cvvdp":{"score":0.5,"mean":0.0,"minimum":-0.5,"maximum":0.5,"paired":2}})");
+    VideoInfo source;
+    source.path = "ref.mkv";
+    const std::string table = results_table(source, videos, summaries, false, difference);
+    const std::string section = table.substr(table.find("Difference"));
+    EXPECT_EQ(section,
+              "Difference: a.mkv minus b.mkv, per frame (CVVDP per second)\n"
+              "  Metric        Score    Mean     Min     Max  Paired\n"
+              "  VMAF v0.6.1  +11.00   +1.50   -2.00   +5.00       2\n"
+              "  CVVDP        +0.500  +0.000  -0.500  +0.500       2\n"
+              "  note: scored for one video only: PSNR (a.mkv)");
+    const nlohmann::ordered_json document = results_document(source, videos, summaries, false, difference);
+    EXPECT_EQ(document["difference"]["first"], "a.mkv");
+    EXPECT_EQ(document["difference"]["second"], "b.mkv");
+    EXPECT_EQ(document["difference"]["metrics"], *difference);
+    videos[1].result.reset();
+    EXPECT_FALSE(difference_metrics(videos, summarize(videos)));
+}
+
 // The bitrate command: its options (--no-adjust-start only with --csv, whose
 // times it sets), its table of the videos read, and each video's three CSV
 // files under one name free for all three, a second run's beside them.
@@ -286,6 +332,58 @@ TEST(CommandLine, ReadsTheBitrateCommandAndWritesItsFiles) {
     std::ifstream seconds(out / "clip_bitrate_seconds.csv", std::ios::binary);
     const std::string text((std::istreambuf_iterator<char>(seconds)), std::istreambuf_iterator<char>());
     EXPECT_EQ(text, "start_s,end_s,kbps\r\n0.000000,1.000000,12.0\r\n1.000000,2.000000,20.0\r\n");
+}
+
+// bitrate --difference: the first video's bitrate minus the second's, from
+// each stream's start: the averages (and in %) and the seconds both have, in
+// the table and the JSON, and as CSV files at the first's frames and over
+// time; none when a video was not read.
+TEST(CommandLine, GivesTheBitrateDifferenceOfTwoVideos) {
+    EXPECT_TRUE(parse_arguments({"bitrate", "a.mkv", "b.mkv", "--difference"}).bitrate.difference);
+    // a: 12 then 20 kb/s, 16 on average; b: 8 kb/s for one second, 10 s into its file
+    BitrateVideo a{"a.mkv", VideoInfo{},
+                   bitrate_data("a.mkv", {0.0, 0.5, 1.0, 1.5}, {0.5, 0.5, 0.5, 0.5}, {1000, 500, 2000, 500},
+                                {true, false, true, false}),
+                   {}};
+    BitrateVideo b{"b.mkv", VideoInfo{}, bitrate_data("b.mkv", {10.0, 10.5}, {0.5, 0.5}, {500, 500}, {true, false}),
+                   {}};
+    a.info->codec_name = b.info->codec_name = "hevc";
+    const std::optional<BitrateDifference> difference = bitrate_difference({a, b});
+    ASSERT_TRUE(difference && difference->seconds);
+    EXPECT_DOUBLE_EQ(difference->average_kbps, 8);
+    EXPECT_DOUBLE_EQ(*difference->average_percent, 100);
+    EXPECT_DOUBLE_EQ(difference->seconds->mean, 4);  // second 0 only: 12 - 8
+    EXPECT_EQ(difference->seconds->paired, 1);
+
+    const std::string table = bitrate_table({a, b}, difference);
+    EXPECT_NE(table.find("Difference: a.mkv minus b.mkv, per second from each stream's start"), std::string::npos);
+    EXPECT_NE(table.find("Average Mb/s  Average %  Mean Mb/s  Min Mb/s  Max Mb/s  Seconds"), std::string::npos);
+    EXPECT_NE(table.find("\n  +0.008          +100.00     +0.004    +0.004    +0.004        1\n"), std::string::npos)
+        << table;
+    const nlohmann::ordered_json json = bitrate_json({a, b}, difference)["difference"];
+    EXPECT_EQ(json["second"], "b.mkv");
+    EXPECT_EQ(json["average_kbps"], 8.0);
+    EXPECT_EQ(json["average_percent"], 100.0);
+    EXPECT_EQ(json["seconds"]["maximum_kbps"], 4.0);
+    EXPECT_EQ(json["seconds"]["paired"], 1);
+    const BitrateVideo missing{"gone.mkv", std::nullopt, std::nullopt, "not found"};
+    EXPECT_FALSE(bitrate_difference({a, missing}));
+    EXPECT_FALSE(bitrate_difference({a}));
+
+    const test::Folder folder;
+    const std::filesystem::path out = folder / "out";
+    std::filesystem::create_directories(out);
+    std::set<std::filesystem::path> reserved;
+    const std::vector<std::filesystem::path> written = write_difference_csvs(a, b, out, true, reserved);
+    ASSERT_EQ(written.size(), 3U);
+    EXPECT_EQ(written[0], out / "a_minus_b_bitrate_frames.csv");
+    const auto text_of = [](const std::filesystem::path& path) {
+        std::ifstream file(path, std::ios::binary);
+        return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    };
+    EXPECT_EQ(text_of(written[0]),
+              "frame,time_s,size_bytes\r\n0,0.000000,500\r\n1,0.500000,0\r\n2,1.000000,\r\n3,1.500000,\r\n");
+    EXPECT_EQ(text_of(written[1]), "start_s,end_s,kbps\r\n0.000000,1.000000,4.0\r\n1.000000,2.000000,\r\n");
 }
 
 #ifdef __APPLE__

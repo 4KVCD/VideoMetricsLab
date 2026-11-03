@@ -788,7 +788,13 @@
   "The range starts after the end of one of the videos.": "Het bereik begint na het einde van een van de video's.",
   "The range contains no frame of the videos.": "Het bereik bevat geen enkel beeld van de video's.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nEr is geen ondersteunde GPU gevonden, dus ze worden op de CPU berekend. De CPU-programma's beoordelen één paar stilstaande beelden tegelijk: ongeveer 1 s voor SSIMULACRA2 en 2 s voor Butteraugli per 4K-frame, dus een film duurt dagen (de schattingen hierboven gaan uit van een CPU zoals die waarop ze zijn gemeten). Stel een bereik in om alleen een deel van de video's te beoordelen.\n\nToch berekenen?",
-  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Duur komt niet overeen ({source} vs {test} s). Stel een bereik binnen beide bestanden in als u alleen een gemeenschappelijk deel vergelijkt."
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Duur komt niet overeen ({source} vs {test} s). Stel een bereik binnen beide bestanden in als u alleen een gemeenschappelijk deel vergelijkt.",
+  "Difference": "Verschil",
+  "Draws the first visible series minus the second, frame by frame, in a band under the graph with its own scale.": "Tekent de eerste zichtbare reeks min de tweede, frame voor frame, in een band onder de grafiek met een eigen schaal.",
+  "Show exactly two series with this metric's data to draw their difference.": "Toon precies twee reeksen met gegevens van deze meetwaarde om hun verschil te tekenen.",
+  "Draws the first video's bitrate minus the second's at each moment, in a band under the graph with its own scale.": "Tekent de bitrate van de eerste video min die van de tweede op elk moment, in een band onder de grafiek met een eigen schaal.",
+  "Draws the first video's frame sizes minus the second's, frame by frame, in a band under the graph with its own scale.": "Tekent de framegroottes van de eerste video min die van de tweede, frame voor frame, in een band onder de grafiek met een eigen schaal.",
+  "Show exactly two videos to draw their difference.": "Toon precies twee video's om hun verschil te tekenen."
  },
  "plurals": {
   "about {count} day": [

@@ -788,7 +788,13 @@
   "The range starts after the end of one of the videos.": "Rentang dimulai setelah akhir salah satu video.",
   "The range contains no frame of the videos.": "Rentang tidak berisi satu pun bingkai video.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nTidak ditemukan GPU yang didukung, jadi metrik ini dihitung di CPU. Alat CPU menilai sepasang gambar diam sekaligus: sekitar 1 detik untuk SSIMULACRA2 dan 2 detik untuk Butteraugli per bingkai 4K, sehingga sebuah film memakan waktu berhari-hari (perkiraan di atas mengasumsikan CPU seperti yang dipakai untuk mengukurnya). Atur rentang untuk menilai sebagian video saja.\n\nTetap hitung?",
-  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Durasi tidak cocok ({source} vs {test} dtk). Atur rentang di dalam kedua file jika Anda hanya membandingkan bagian yang sama."
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Durasi tidak cocok ({source} vs {test} dtk). Atur rentang di dalam kedua file jika Anda hanya membandingkan bagian yang sama.",
+  "Difference": "Selisih",
+  "Draws the first visible series minus the second, frame by frame, in a band under the graph with its own scale.": "Menggambar seri terlihat pertama dikurangi yang kedua, bingkai demi bingkai, dalam pita di bawah grafik dengan skalanya sendiri.",
+  "Show exactly two series with this metric's data to draw their difference.": "Tampilkan tepat dua seri yang memiliki data metrik ini untuk menggambar selisihnya.",
+  "Draws the first video's bitrate minus the second's at each moment, in a band under the graph with its own scale.": "Menggambar bitrate video pertama dikurangi bitrate video kedua pada setiap saat, dalam pita di bawah grafik dengan skalanya sendiri.",
+  "Draws the first video's frame sizes minus the second's, frame by frame, in a band under the graph with its own scale.": "Menggambar ukuran bingkai video pertama dikurangi ukuran bingkai video kedua, bingkai demi bingkai, dalam pita di bawah grafik dengan skalanya sendiri.",
+  "Show exactly two videos to draw their difference.": "Tampilkan tepat dua video untuk menggambar selisihnya."
  },
  "plurals": {
   "about {count} day": [

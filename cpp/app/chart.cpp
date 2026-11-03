@@ -41,6 +41,12 @@ constexpr int margin_bottom = 38;
 constexpr std::array<double, 15> time_steps{1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400};
 constexpr double target_ticks = 8;
 
+// A band (ChartWidget::set_band) takes this share of the plotting area's
+// height, at the bottom; it is not drawn shorter than this many lines of
+// text, which its ticks would not fit.
+constexpr double band_share = 0.3;
+constexpr int band_min_text_lines = 3;
+
 QString time_text(double seconds) { return QString::fromStdString(format_hms(seconds)); }
 
 // A line's frames drawn point by point, a finite stretch at a time: joined
@@ -155,11 +161,11 @@ double nice_time_step(double span) {
     return hours != 0 ? hours : 3600.0;
 }
 
-double nice_value_step(double span) {
+double nice_value_step(double span, double ticks) {
     if (span <= 0) {
         return 1.0;
     }
-    const double raw = span / target_ticks;
+    const double raw = span / ticks;
     const double magnitude = std::pow(10.0, std::floor(std::log10(raw)));
     for (const double multiple : {1.0, 2.0, 5.0, 10.0}) {
         if (magnitude * multiple >= raw) {
@@ -251,8 +257,40 @@ void ChartWidget::set_y_axis_label(const QString& label) {
     }
 }
 
+void ChartWidget::set_band(std::optional<ChartBand> band) {
+    if (!band && !band_) {
+        return;  // most calls: no band before or after
+    }
+    // Fitted here, once, not at each step of a pan: from 0 or the lowest
+    // value to 0 or the highest, so that the zero line is always in it and
+    // the band's height goes to the values there are (two encodes' difference
+    // is mostly of one sign).
+    double lo = std::numeric_limits<double>::infinity();
+    double hi = -std::numeric_limits<double>::infinity();
+    if (band) {
+        for (const float value : band->series.values) {
+            if (std::isfinite(value)) {
+                lo = std::min(lo, static_cast<double>(value));
+                hi = std::max(hi, static_cast<double>(value));
+            }
+        }
+    }
+    if (!band || lo > hi) {
+        band_.reset();  // no value in common to draw
+    } else {
+        lo = std::min(lo, 0.0);
+        hi = std::max(hi, 0.0);
+        const double pad = (hi - lo) * 0.05;
+        const double flat = band->flat_half_range;
+        band_range_ = hi > lo ? std::pair(lo - pad, hi + pad) : std::pair(-flat, flat);
+        band_ = std::move(band);
+    }
+    invalidate(false);  // the lines' value axis stays as it is
+}
+
 void ChartWidget::clear() {
     series_.clear();
+    band_.reset();
     invalidate(true);
 }
 
@@ -348,6 +386,30 @@ QRect ChartWidget::plot_rect() const {
             std::max(1, height() - margin_top - margin_bottom)};
 }
 
+std::optional<QRect> ChartWidget::band_rect() const {
+    if (!band_) {
+        return std::nullopt;
+    }
+    const QRect plot = plot_rect();
+    const int band_height = static_cast<int>(std::lround(plot.height() * band_share));
+    if (band_height < band_min_text_lines * fontMetrics().height()) {
+        return std::nullopt;  // too short a chart: the lines keep all of it
+    }
+    return QRect(plot.left(), plot.bottom() + 1 - band_height, plot.width(), band_height);
+}
+
+QRect ChartWidget::lines_rect() const {
+    const QRect plot = plot_rect();
+    const std::optional<QRect> band = band_rect();
+    if (!band) {
+        return plot;
+    }
+    // A line of text between them, so that the lines' lowest tick label and
+    // the band's highest do not touch.
+    const int gap = fontMetrics().height();
+    return {plot.left(), plot.top(), plot.width(), std::max(1, band->top() - gap - plot.top())};
+}
+
 double ChartWidget::time_at(int px) const {
     const QRect rect = plot_rect();
     const auto [x0, x1] = x_range();
@@ -357,7 +419,13 @@ double ChartWidget::time_at(int px) const {
 
 double ChartWidget::value_at(int py) const {
     // height_fraction maps a height back to a value too: the same flip.
-    const QRect rect = plot_rect();
+    const QRect rect = lines_rect();
+    if (py > rect.bottom() && band_rect()) {
+        // Over the band: every point is at or below this (MetricPage's hover
+        // compares sign * value, the sign flipped as the axis is).
+        constexpr double infinity = std::numeric_limits<double>::infinity();
+        return invert_y_ ? -infinity : infinity;
+    }
     const auto [y0, y1] = y_range_;
     const double fraction = height_fraction((rect.bottom() - py) / static_cast<double>(std::max(1, rect.height())));
     return y0 + fraction * (y1 - y0);
@@ -380,15 +448,31 @@ std::vector<std::pair<int, QString>> ChartWidget::time_ticks() const {
 }
 
 std::vector<std::pair<int, QString>> ChartWidget::value_ticks(std::optional<QRect> rect) const {
-    const QRect plot = rect.value_or(plot_rect());
-    const auto [y0, y1] = y_range_;
-    const double step = nice_value_step(y1 - y0);
+    return ticks_for(rect.value_or(lines_rect()), y_range_, target_ticks);
+}
+
+std::vector<std::pair<int, QString>> ChartWidget::band_ticks() const {
+    const std::optional<QRect> band = band_rect();
+    if (!band) {
+        return {};
+    }
+    // About one label for every two lines of text.
+    const double count = std::max(2.0, band->height() / (2.0 * fontMetrics().height()));
+    return ticks_for(*band, band_range_, count);
+}
+
+std::vector<std::pair<int, QString>> ChartWidget::ticks_for(const QRect& rect, std::pair<double, double> range,
+                                                            double count) const {
+    const auto [y0, y1] = range;
+    const double step = nice_value_step(y1 - y0, count);
     std::vector<std::pair<int, QString>> ticks;
     for (double value = std::ceil(y0 / step) * step; value <= y1; value += step) {
         const double fraction = height_fraction((value - y0) / std::max(1e-9, y1 - y0));
-        // "+ 0.0" turns the -0.0 that ceil() gives for a range starting just
-        // below zero (Butteraugli's room) into 0, not "-0".
-        ticks.emplace_back(plot.bottom() - static_cast<int>(fraction * plot.height()), qt_text(format_general(value + 0.0)));
+        // The sum of steps lands next to 0, not on it, for a range across it
+        // (5.55e-17 for a band of +-0.0015), and ceil() gives -0.0 for a range
+        // starting just below it (Butteraugli's room): both are labelled "0".
+        const double shown = std::abs(value) < step * 1e-9 ? 0.0 : value;
+        ticks.emplace_back(rect.bottom() - static_cast<int>(fraction * rect.height()), qt_text(format_general(shown)));
     }
     return ticks;
 }
@@ -504,14 +588,44 @@ void ChartWidget::draw(QPixmap& pixmap, bool dark) const {
     pixmap.fill(colours.background);
     QPainter painter(&pixmap);
     painter.setFont(font());
-    const QRect plot = plot_rect();
-    draw_axes(painter, plot, dark);
+    draw_axes(painter, dark);
+    const QRect lines = lines_rect();
     for (const ChartSeries* series : visible_series()) {
-        draw_series(painter, plot, *series);
+        draw_series(painter, lines, *series, y_range_);
     }
     painter.setPen(QPen(colours.axis, 1));
-    painter.drawRect(plot.adjusted(0, 0, -1, -1));
+    painter.drawRect(lines.adjusted(0, 0, -1, -1));
+    if (const std::optional<QRect> band = band_rect()) {
+        draw_band(painter, *band, dark);
+    }
     painter.end();
+}
+
+void ChartWidget::draw_band(QPainter& painter, const QRect& rect, bool dark) const {
+    // The band's line, its zero line, frame and label (its grid and ticks
+    // are draw_axes').
+    const theme::ChartColours colours = theme::chart_colours(dark);
+    const auto [y0, y1] = band_range_;
+    const double zero_fraction = height_fraction((0.0 - y0) / std::max(1e-9, y1 - y0));
+    const int zero_row = rect.bottom() - static_cast<int>(zero_fraction * rect.height());
+    painter.setPen(QPen(colours.axis, 1));
+    painter.drawLine(rect.left(), zero_row, rect.right(), zero_row);
+    ChartSeries line = band_->series;  // spans and a shared owner: cheap to copy
+    line.color = colours.difference;
+    draw_series(painter, rect, line, band_range_);
+    painter.setPen(QPen(colours.axis, 1));
+    painter.drawRect(rect.adjusted(0, 0, -1, -1));
+    // Over the line, on a patch of the background, so that it stays
+    // readable where the line runs under it (a difference near the top of
+    // its range, as most are).
+    const QFontMetrics metrics(painter.font());
+    const QString label = metrics.elidedText(band_->label, Qt::ElideMiddle, rect.width() - 12);
+    QColor patch = colours.background;
+    patch.setAlpha(220);
+    painter.fillRect(QRect(rect.left() + 2, rect.top() + 2, metrics.horizontalAdvance(label) + 8, metrics.height() + 2),
+                     patch);
+    painter.setPen(QPen(colours.difference, 1));
+    painter.drawText(rect.left() + 6, rect.top() + metrics.ascent() + 3, label);
 }
 
 bool ChartWidget::cache_matches_display() const {
@@ -522,19 +636,34 @@ bool ChartWidget::cache_matches_display() const {
            cache_->height() == static_cast<int>(std::ceil(height() * ratio));
 }
 
-void ChartWidget::draw_axes(QPainter& painter, const QRect& rect, bool dark) const {
-    // The grid, the axes' labels and the value axis's title.
+void ChartWidget::draw_axes(QPainter& painter, bool dark) const {
+    // The grid, the axes' labels and the value axis's title: the time axis
+    // under the plotting area, the lines' value axis beside them, and the
+    // band's (if any) beside it.
     const QFontMetrics metrics(painter.font());
     const theme::ChartColours colours = theme::chart_colours(dark);
+    const QRect plot = plot_rect();
+    const QRect lines = lines_rect();
+    const std::optional<QRect> band = band_rect();
 
     painter.setPen(QPen(colours.grid, 1));
     const std::vector<std::pair<int, QString>> times = time_ticks();
     for (const auto& [px, label] : times) {
-        painter.drawLine(px, rect.top(), px, rect.bottom());
+        painter.drawLine(px, lines.top(), px, lines.bottom());
+        if (band) {
+            painter.drawLine(px, band->top(), px, band->bottom());
+        }
     }
-    const std::vector<std::pair<int, QString>> ticks = value_ticks(rect);
-    for (const auto& [py, label] : ticks) {
-        painter.drawLine(rect.left(), py, rect.right(), py);
+    const std::vector<std::pair<int, QString>> ticks = value_ticks(lines);
+    const std::vector<std::pair<int, QString>> difference_ticks = band_ticks();
+    const auto draw_rows = [&painter](const QRect& rect, const std::vector<std::pair<int, QString>>& rows) {
+        for (const auto& [py, label] : rows) {
+            painter.drawLine(rect.left(), py, rect.right(), py);
+        }
+    };
+    draw_rows(lines, ticks);
+    if (band) {
+        draw_rows(*band, difference_ticks);
     }
 
     painter.setPen(QPen(colours.text, 1));
@@ -543,14 +672,16 @@ void ChartWidget::draw_axes(QPainter& painter, const QRect& rect, bool dark) con
         // right end lost half its label ("0:00:0").
         const int label_width = metrics.horizontalAdvance(label);
         const int left = std::min(px - label_width / 2, width() - label_width - 1);
-        painter.drawText(left, rect.bottom() + metrics.height() + 2, label);
+        painter.drawText(left, plot.bottom() + metrics.height() + 2, label);
     }
-    for (const auto& [py, label] : ticks) {
-        painter.drawText(rect.left() - metrics.horizontalAdvance(label) - 6, py + metrics.ascent() / 2, label);
+    for (const auto* row_ticks : {&ticks, &difference_ticks}) {
+        for (const auto& [py, label] : *row_ticks) {
+            painter.drawText(plot.left() - metrics.horizontalAdvance(label) - 6, py + metrics.ascent() / 2, label);
+        }
     }
     if (!y_axis_label_.isEmpty()) {
         painter.save();
-        painter.translate(14, rect.center().y());
+        painter.translate(14, lines.center().y());
         painter.rotate(-90);
         // Centred as Python's (-width) // 2 centres it: rounded down.
         painter.drawText(-(metrics.horizontalAdvance(y_axis_label_) + 1) / 2, 0, y_axis_label_);
@@ -558,7 +689,8 @@ void ChartWidget::draw_axes(QPainter& painter, const QRect& rect, bool dark) con
     }
 }
 
-void ChartWidget::draw_series(QPainter& painter, const QRect& rect, const ChartSeries& series) const {
+void ChartWidget::draw_series(QPainter& painter, const QRect& rect, const ChartSeries& series,
+                              std::pair<double, double> range) const {
     // One line: point by point when there are few, else one min/max stroke
     // per column of about a pixel of the mouse (draw_columns).
     //
@@ -569,8 +701,8 @@ void ChartWidget::draw_series(QPainter& painter, const QRect& rect, const ChartS
     // frames a column sums up, are the same wherever the view starts, and a
     // drag moves the whole drawing by whole pixels.
     const View view = current_view();
-    const double y0 = y_range_.first;  // not a structured binding: the lambda below takes it
-    const double y1 = y_range_.second;
+    const double y0 = range.first;  // not a structured binding: the lambda below takes it
+    const double y1 = range.second;
     const double ratio = painter.device()->devicePixelRatioF();
     const double seconds_per_screen_pixel = std::max(1e-12, view.span) / (rect.width() * ratio);
     const int cell = std::max(1, static_cast<int>(std::lround(ratio)));  // a column's width (draw_columns)

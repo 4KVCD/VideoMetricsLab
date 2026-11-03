@@ -38,12 +38,24 @@ struct ChartSeries {
     bool visible = true;
 };
 
+// A line drawn in a band of its own across the bottom of the chart, under
+// the others, on the same time axis with its own value axis: Metric Graphs'
+// difference of two lines. Its colour is the theme's (ChartColours), not
+// `series.color`.
+struct ChartBand {
+    ChartSeries series;
+    QString label;  // drawn at the band's top left
+    // Half the value range when every value is 0: a unit of the scores'
+    // precision, so that the axis reads as the scores do.
+    double flat_half_range = 1.0;
+};
+
 // A tick spacing that reads naturally on a time axis, giving about eight
 // ticks across `span` seconds.
 double nice_time_step(double span);
 // A 1, 2 or 5 times a power of ten spacing for a value axis, giving about
-// eight ticks across `span`.
-double nice_value_step(double span);
+// `ticks` ticks across `span`.
+double nice_value_step(double span, double ticks = 8);
 
 class ChartWidget : public QWidget {
     Q_OBJECT
@@ -69,6 +81,13 @@ public:
     // the new keys' order: the last is drawn over the others.
     void renumber(const std::map<int, int>& renumbered);
     void set_series_visible(int key, bool visible);
+    // Draws `band` under the lines (nothing: no band). A band without a
+    // finite value is not drawn.
+    void set_band(std::optional<ChartBand> band);
+    bool has_band() const { return band_.has_value(); }
+    // The band's value axis's range: from 0 or its lowest value to 0 or its
+    // highest, with a little room.
+    std::pair<double, double> band_range() const { return band_range_; }
     void clear();
     // Whether any shown line has points.
     bool has_data() const;
@@ -81,15 +100,24 @@ public:
     // Shows all of the time range again.
     void reset_view();
 
-    // Where the lines are drawn, inside the axes.
+    // The plotting area, inside the axes, which the time axis, the pointer
+    // and the crosshair span; with a band, its upper part, where the lines
+    // are drawn, and the band below it; without one, the lines' is all of it.
     QRect plot_rect() const;
+    QRect lines_rect() const;
+    std::optional<QRect> band_rect() const;
     double time_at(int px) const;
+    // The lines' value at row `py`. Over the band (and the gap above it):
+    // the end of their scale every point is at or below, so that the
+    // pointer there picks the frame nearest in time.
     double value_at(int py) const;
     int pixel_for_time(double t) const;
     // The grid lines drawn: the time axis's as (pixel column, label), in
-    // order, and the value axis's as (pixel row, label), lowest value first.
+    // order, and the lines' value axis's (in `rect`, lines_rect if none) and
+    // the band's as (pixel row, label), lowest value first.
     std::vector<std::pair<int, QString>> time_ticks() const;
     std::vector<std::pair<int, QString>> value_ticks(std::optional<QRect> rect = std::nullopt) const;
+    std::vector<std::pair<int, QString>> band_ticks() const;
     double seconds_per_pixel() const;
 
     // Moves the crosshair (nothing hides it), repainting only the columns it
@@ -141,8 +169,13 @@ private:
     QPixmap render(bool dark) const;
     void draw(QPixmap& pixmap, bool dark) const;
     bool cache_matches_display() const;
-    void draw_axes(QPainter& painter, const QRect& rect, bool dark) const;
-    void draw_series(QPainter& painter, const QRect& rect, const ChartSeries& series) const;
+    void draw_axes(QPainter& painter, bool dark) const;
+    void draw_band(QPainter& painter, const QRect& rect, bool dark) const;
+    // Ticks for `range` drawn in `rect`, about `count` of them.
+    std::vector<std::pair<int, QString>> ticks_for(const QRect& rect, std::pair<double, double> range,
+                                                   double count) const;
+    void draw_series(QPainter& painter, const QRect& rect, const ChartSeries& series,
+                     std::pair<double, double> range) const;
     void report_hover(QPoint pos);
     void forget_hover();
     void request_paint();
@@ -152,6 +185,8 @@ private:
     std::optional<double> fixed_y_max_;
     bool invert_y_ = false;
     std::map<int, ChartSeries> series_;  // by key; keys rise as lines are added
+    std::optional<ChartBand> band_;
+    std::pair<double, double> band_range_{-1.0, 1.0};  // fitted once, when the band is set
     std::optional<QPixmap> cache_;
     bool cache_stale_ = true;  // to be drawn again before it is shown
     bool cache_dark_ = false;  // the theme the cache was drawn in

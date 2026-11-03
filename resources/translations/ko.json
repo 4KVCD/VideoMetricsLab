@@ -788,7 +788,13 @@
   "The range starts after the end of one of the videos.": "범위가 영상 중 하나의 끝 뒤에서 시작합니다.",
   "The range contains no frame of the videos.": "범위에 영상의 프레임이 하나도 없습니다.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\n지원되는 GPU를 찾지 못해 CPU에서 계산합니다. CPU 도구는 정지 이미지 한 쌍씩 채점합니다. 4K 프레임당 SSIMULACRA2는 약 1초, Butteraugli는 약 2초가 걸려 영화 한 편에 며칠이 걸립니다(위 예상은 측정에 쓴 것과 비슷한 CPU 기준). 영상의 일부만 채점하려면 범위를 설정하세요.\n\n그래도 계산하시겠습니까?",
-  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "길이가 일치하지 않습니다({source} 대 {test}초). 공통된 부분만 비교한다면 두 파일 안에 있는 범위를 설정하세요."
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "길이가 일치하지 않습니다({source} 대 {test}초). 공통된 부분만 비교한다면 두 파일 안에 있는 범위를 설정하세요.",
+  "Difference": "차이",
+  "Draws the first visible series minus the second, frame by frame, in a band under the graph with its own scale.": "표시된 첫 번째 계열에서 두 번째 계열을 뺀 값을 프레임별로 그래프 아래 띠에 자체 눈금으로 그립니다.",
+  "Show exactly two series with this metric's data to draw their difference.": "차이를 그리려면 이 지표의 데이터가 있는 계열을 정확히 두 개 표시하세요.",
+  "Draws the first video's bitrate minus the second's at each moment, in a band under the graph with its own scale.": "첫 번째 영상의 비트레이트에서 두 번째 영상의 비트레이트를 뺀 값을 각 시점마다 그래프 아래 띠에 자체 눈금으로 그립니다.",
+  "Draws the first video's frame sizes minus the second's, frame by frame, in a band under the graph with its own scale.": "첫 번째 영상의 프레임 크기에서 두 번째 영상의 프레임 크기를 뺀 값을 프레임별로 그래프 아래 띠에 자체 눈금으로 그립니다.",
+  "Show exactly two videos to draw their difference.": "차이를 그리려면 영상을 정확히 두 개 표시하세요."
  },
  "plurals": {
   "about {count} day": [

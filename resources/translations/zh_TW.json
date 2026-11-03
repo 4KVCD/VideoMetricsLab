@@ -788,7 +788,13 @@
   "The range starts after the end of one of the videos.": "範圍在其中一部影片結束之後才開始。",
   "The range contains no frame of the videos.": "範圍內沒有影片的任何一格畫面。",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\n找不到支援的 GPU，因此在 CPU 上計算。CPU 工具一次只能為一對靜止畫面評分：每個 4K 影格 SSIMULACRA2 約 1 秒、Butteraugli 約 2 秒，因此一部電影需要好幾天（上面的估算假設 CPU 與測量時所用的相當）。設定範圍即可只為影片的一部分評分。\n\n仍要計算嗎？",
-  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "長度不一致（{source} 與 {test} 秒）。如果只比較兩者共同的部分，請設定一個在兩個檔案之內的範圍。"
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "長度不一致（{source} 與 {test} 秒）。如果只比較兩者共同的部分，請設定一個在兩個檔案之內的範圍。",
+  "Difference": "差值",
+  "Draws the first visible series minus the second, frame by frame, in a band under the graph with its own scale.": "逐幀繪製第一個可見系列減去第二個系列的差值，顯示在圖表下方的條帶中，使用獨立的刻度。",
+  "Show exactly two series with this metric's data to draw their difference.": "請僅顯示兩個含有此指標資料的系列，以繪製它們的差值。",
+  "Draws the first video's bitrate minus the second's at each moment, in a band under the graph with its own scale.": "在每個時刻繪製第一個影片的位元速率減去第二個影片的位元速率，顯示在圖表下方的條帶中，使用獨立的刻度。",
+  "Draws the first video's frame sizes minus the second's, frame by frame, in a band under the graph with its own scale.": "逐幀繪製第一個影片的影格大小減去第二個影片的影格大小，顯示在圖表下方的條帶中，使用獨立的刻度。",
+  "Show exactly two videos to draw their difference.": "請僅顯示兩個影片，以繪製它們的差值。"
  },
  "plurals": {
   "about {count} day": [

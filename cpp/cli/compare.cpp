@@ -851,6 +851,13 @@ std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& 
     return expand_videos(patterns, reference);
 }
 
+std::optional<std::string> difference_refusal(std::size_t test_count) {
+    if (test_count == 2) {
+        return std::nullopt;
+    }
+    return "argument --difference: needs exactly two test videos, got " + std::to_string(test_count);
+}
+
 std::vector<std::filesystem::path> expand_videos(const std::vector<std::string>& patterns,
                                                  const std::optional<std::filesystem::path>& excluded) {
     std::vector<std::filesystem::path> found;
@@ -1234,12 +1241,23 @@ std::optional<std::string> model_file_wrong(const CompareArguments& arguments, c
 bool write_results(const CompareArguments& arguments, const VideoInfo& source, const std::vector<TestVideo>& videos,
                    bool cancelled, Progress& progress) {
     const std::vector<Summaries> summaries = summarize(videos);
-    const nlohmann::ordered_json document = results_document(source, videos, summaries, cancelled);
+    const std::optional<nlohmann::ordered_json> difference =
+        arguments.difference ? difference_metrics(videos, summaries) : std::nullopt;
+    if (arguments.difference && !difference) {
+        const auto missing = std::find_if(videos.begin(), videos.end(), [](const TestVideo& v) { return !v.result; });
+        progress.problem("No difference: " + (missing != videos.end() ? missing->name() : "a video") +
+                         " has no result.");
+    }
+    const nlohmann::ordered_json document = results_document(source, videos, summaries, cancelled, difference);
     bool written = true;
     if (arguments.csv) {
-        written = write_csvs(
-            videos, python_path(*arguments.csv), [&progress](const std::string& text) { progress.message(text); },
-            [&progress](const std::string& text) { progress.problem(text); });
+        const auto message = [&progress](const std::string& text) { progress.message(text); };
+        const auto failed = [&progress](const std::string& text) { progress.problem(text); };
+        const std::filesystem::path folder = python_path(*arguments.csv);
+        written = write_csvs(videos, folder, message, failed);
+        if (arguments.difference) {
+            written = write_difference_csv(videos, folder, message, failed) && written;
+        }
     }
     const std::optional<std::filesystem::path> json_file =
         arguments.json_path ? std::optional(python_path(*arguments.json_path)) : std::nullopt;
@@ -1247,7 +1265,8 @@ bool write_results(const CompareArguments& arguments, const VideoInfo& source, c
         platform::write_text(platform::Stream::output, python_json_dumps(document) + "\n");
         return written;
     }
-    platform::write_text(platform::Stream::output, results_table(source, videos, summaries, cancelled) + "\n");
+    platform::write_text(platform::Stream::output,
+                         results_table(source, videos, summaries, cancelled, difference) + "\n");
     if (json_file) {
         if (const std::optional<std::string> failure = write_json_file(*json_file, document)) {
             print_error("The JSON file could not be written: " + *failure);
@@ -1265,6 +1284,15 @@ int compare(const CompareArguments& arguments) {
     const auto progress = std::make_shared<Progress>(arguments.quiet);
     const auto running = std::make_shared<std::atomic<bool>>(false);
     cancel_on_interrupt(cancel, progress, running);
+    // The test videos, found first (it reads only the file system), so that
+    // a wrong command is said before any work.
+    const std::vector<std::filesystem::path> tests = expand_tests(arguments.tests, python_path(arguments.reference));
+    if (arguments.difference) {
+        if (const std::optional<std::string> refused = difference_refusal(tests.size())) {
+            print_error(*refused);
+            return exit_usage;
+        }
+    }
     const Settings settings = Settings::load();
     const std::filesystem::path cache_folder = apply_settings(settings);
     const ToolsStatus tools = check_tools(settings);
@@ -1322,7 +1350,7 @@ int compare(const CompareArguments& arguments) {
         return exit_usage;
     }
     ComparisonPlanner planner(arguments, settings, source, displays, asked, cache_folder);
-    for (const std::filesystem::path& path : expand_tests(arguments.tests, python_path(arguments.reference))) {
+    for (const std::filesystem::path& path : tests) {
         if (const std::optional<std::string> missing = planner.plan(path, tools.ffprobe.path, tools.ffmpeg.path)) {
             print_error("The C++ command line cannot do this yet: " + *missing + ".");
             return exit_usage;

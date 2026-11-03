@@ -788,7 +788,13 @@
   "The range starts after the end of one of the videos.": "Aralık videolardan birinin sonundan sonra başlıyor.",
   "The range contains no frame of the videos.": "Aralık videoların hiçbir karesini içermiyor.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nDesteklenen bir GPU bulunamadı, bu yüzden CPU'da hesaplanırlar. CPU araçları her seferinde bir durağan görüntü çiftini puanlar: 4K kare başına SSIMULACRA2 için yaklaşık 1 sn, Butteraugli için 2 sn; yani bir film günler sürer (yukarıdaki tahminler ölçümün yapıldığına benzer bir CPU varsayar). Videoların yalnızca bir bölümünü puanlamak için bir aralık belirleyin.\n\nYine de hesaplansın mı?",
-  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Süreler eşleşmiyor ({source} / {test} saniye). Yalnızca ortak bir bölümü karşılaştırıyorsanız iki dosyanın içinde kalan bir aralık belirleyin."
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Süreler eşleşmiyor ({source} / {test} saniye). Yalnızca ortak bir bölümü karşılaştırıyorsanız iki dosyanın içinde kalan bir aralık belirleyin.",
+  "Difference": "Fark",
+  "Draws the first visible series minus the second, frame by frame, in a band under the graph with its own scale.": "Görünen ilk seriden ikinciyi çıkarır ve kare kare, grafiğin altındaki bir şeritte kendi ölçeğiyle çizer.",
+  "Show exactly two series with this metric's data to draw their difference.": "Farklarını çizmek için bu metriğin verilerine sahip tam olarak iki seri gösterin.",
+  "Draws the first video's bitrate minus the second's at each moment, in a band under the graph with its own scale.": "Her anda ilk videonun bit hızından ikincininkini çıkarır ve grafiğin altındaki bir şeritte kendi ölçeğiyle çizer.",
+  "Draws the first video's frame sizes minus the second's, frame by frame, in a band under the graph with its own scale.": "İlk videonun kare boyutlarından ikincininkileri çıkarır ve kare kare, grafiğin altındaki bir şeritte kendi ölçeğiyle çizer.",
+  "Show exactly two videos to draw their difference.": "Farklarını çizmek için tam olarak iki video gösterin."
  },
  "plurals": {
   "about {count} day": [

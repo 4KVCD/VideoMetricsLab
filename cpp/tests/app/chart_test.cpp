@@ -44,7 +44,7 @@ protected:
         image.fill(Qt::white);
         QPainter painter(&image);
         for (const ChartSeries* series : chart.visible_series()) {
-            chart.draw_series(painter, chart.plot_rect(), *series);
+            chart.draw_series(painter, chart.lines_rect(), *series, chart.y_range());
         }
         return image;
     }
@@ -293,6 +293,70 @@ TEST_F(ChartTest, DraggingMovesTheLinesWithoutChangingThem) {
             }
         }
     }
+}
+
+// A band (Metric Graphs' difference of two lines) takes the bottom of the
+// plotting area, under the lines, with a value axis of its own: from 0 or its
+// lowest value to 0 or its highest, so that its zero line is always in it.
+TEST_F(ChartTest, DrawsABandUnderTheLinesOnItsOwnScale) {
+    ChartWidget chart(QStringLiteral("VMAF"), 100.0);
+    chart.resize(800, 400);
+    chart.set_series(0, line_of({0.0, 1.0, 2.0}, {90.0F, 80.0F, 95.0F}));
+    const QRect plot = chart.plot_rect();
+    const std::pair<double, double> lines_range = chart.y_range();
+    const auto band_of = [](std::vector<float> values) {
+        return ChartBand{line_of({0.0, 1.0, 2.0}, std::move(values)), QStringLiteral("a − b"), 0.01};
+    };
+    constexpr float nan = std::numeric_limits<float>::quiet_NaN();
+
+    // Across 0, a frame missing in one line (NaN): the ticks label "0", not
+    // the 5.55e-17 the steps add up to.
+    chart.set_band(band_of({-0.0015F, 0.001F, nan}));
+    ASSERT_TRUE(chart.band_rect());
+    const QRect band = *chart.band_rect();
+    const QRect lines = chart.lines_rect();
+    EXPECT_EQ(band.bottom(), plot.bottom());
+    EXPECT_EQ(lines.top(), plot.top());
+    EXPECT_LT(lines.bottom(), band.top());
+    EXPECT_NEAR(band.height(), plot.height() * 0.3, 1.0);
+    const auto [lo, hi] = chart.band_range();
+    EXPECT_LT(lo, -0.0015);
+    EXPECT_GT(hi, 0.001);
+    QStringList band_labels;
+    // (A range's top tick is drawn on the row above its rectangle.)
+    for (const auto& [row, label] : chart.band_ticks()) {
+        EXPECT_GE(row, band.top() - 1);
+        EXPECT_LE(row, band.bottom());
+        band_labels.append(label);
+    }
+    EXPECT_TRUE(band_labels.contains(QStringLiteral("0"))) << band_labels.join(' ').toStdString();
+    for (const auto& [row, label] : chart.value_ticks()) {
+        EXPECT_GE(row, lines.top() - 1);
+        EXPECT_LE(row, lines.bottom());
+    }
+    EXPECT_EQ(chart.y_range(), lines_range);  // the lines' axis is their own
+    // The pointer over the band: every point is at or below it.
+    EXPECT_EQ(chart.value_at(band.center().y()), std::numeric_limits<double>::infinity());
+
+    // Of one sign: from 0 to its highest, with 5 % room each side.
+    chart.set_band(band_of({0.5F, 1.0F, 0.75F}));
+    EXPECT_DOUBLE_EQ(chart.band_range().first, -0.05);
+    EXPECT_DOUBLE_EQ(chart.band_range().second, 1.05);
+    // All 0: a unit of the scores' precision either side.
+    chart.set_band(band_of({0.0F, 0.0F, 0.0F}));
+    EXPECT_EQ(chart.band_range(), std::pair(-0.01, 0.01));
+    // No frame in common: no band, and the lines take the plotting area again.
+    chart.set_band(band_of({nan, nan, nan}));
+    EXPECT_FALSE(chart.has_band());
+    EXPECT_EQ(chart.lines_rect(), plot);
+
+    // Too short a chart for the band's ticks: the lines keep all of it.
+    chart.set_band(band_of({0.5F, 1.0F, 0.75F}));
+    chart.resize(800, 140);
+    EXPECT_FALSE(chart.band_rect());
+    EXPECT_EQ(chart.lines_rect(), chart.plot_rect());
+    chart.clear();
+    EXPECT_FALSE(chart.has_band());
 }
 
 }  // namespace

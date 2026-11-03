@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -62,6 +63,11 @@ protected:
     static QString cell(const BitratePanel& panel, int row, int column) {
         return panel.table->item(row, column)->text();
     }
+    static std::vector<float> band_values(const BitratePanel& panel) {
+        const std::span<const float> values = panel.chart->band_->series.values;
+        return {values.begin(), values.end()};
+    }
+    static QString band_label(const BitratePanel& panel) { return panel.chart->band_->label; }
 };
 
 namespace {
@@ -205,6 +211,54 @@ TEST_F(BitratePanelTest, ALineTickedReadOrRemovedKeepsTheZoom) {
 
     panel->frame_radio->click();
     EXPECT_NE(panel->chart->x_range(), zoomed);
+}
+
+// The Difference box is usable while exactly two lines are drawn; on, the
+// band is the first line minus the second, in the lines' unit (Mb/s too),
+// over time or frame by frame, with its value under the pointer. A third
+// line takes the band away, and two lines with no time in common have none.
+TEST_F(BitratePanelTest, DrawsTheDifferenceOfTwoLines) {
+    VideoColors colors;
+    const test::Folder folder;
+    const std::filesystem::path first = folder / "first.mkv";
+    const std::filesystem::path second = folder / "second.mkv";
+    const std::filesystem::path third = folder / "third.mkv";
+    const auto panel = make_panel(colors);
+    panel->add_files({first, second, third});
+    analyzed(*panel, first, two_seconds(first));  // 12 then 20 kb/s; frames of 8, 4, 16 and 4 kbit
+    analyzed(*panel, second,
+             std::make_shared<const BitrateData>(bitrate_data(second, {0.0, 0.5, 1.0, 1.5}, {0.5, 0.5, 0.5, 0.5},
+                                                              {500, 500, 500, 500}, {true, false, true, false})));
+    EXPECT_TRUE(panel->difference_box->isEnabled());
+    EXPECT_FALSE(panel->chart->has_band());
+
+    panel->difference_box->setChecked(true);  // 12 - 8 kb/s, then 20 - 8
+    ASSERT_TRUE(panel->chart->has_band());
+    EXPECT_EQ(band_values(*panel), (std::vector<float>{4, 4, 12, 12}));
+    EXPECT_EQ(band_label(*panel).toStdString(), "first.mkv − second.mkv");
+    hover(*panel, 1.2);
+    EXPECT_EQ(panel->hover_label->text().toStdString(),
+              "Time: 0:00:01.200\nfirst.mkv: 20.00 kb/s\nsecond.mkv: 8.00 kb/s\n"
+              "Δ (first.mkv − second.mkv) = 12.00 kb/s");
+    panel->frame_radio->click();
+    EXPECT_EQ(band_values(*panel), (std::vector<float>{4, 0, 12, 0}));
+
+    // 3,200 kb/s, 10 s into its file: the graph in Mb/s
+    analyzed(*panel, third,
+             std::make_shared<const BitrateData>(bitrate_data(third, {10.0, 10.5, 11.0, 11.5}, {0.5, 0.5, 0.5, 0.5},
+                                                              {200'000, 200'000, 200'000, 200'000},
+                                                              {true, false, true, false})));
+    EXPECT_FALSE(panel->difference_box->isEnabled());
+    EXPECT_FALSE(panel->chart->has_band());
+    panel->table->item(0, col_use)->setCheckState(Qt::Unchecked);
+    panel->second_radio->click();
+    ASSERT_TRUE(panel->chart->has_band());
+    const std::vector<float> mega = band_values(*panel);  // second minus third, both from their start
+    ASSERT_EQ(mega.size(), 4U);
+    EXPECT_FLOAT_EQ(mega[0], -3.192F);
+    panel->adjust_start_checkbox->setChecked(false);  // 0-2 s in one file, 10-12 s in the other
+    EXPECT_TRUE(panel->difference_box->isEnabled());
+    EXPECT_FALSE(panel->chart->has_band());
 }
 
 }  // namespace vml::app

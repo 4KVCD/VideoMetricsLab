@@ -40,15 +40,16 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--no-gpu-decode |
                                    --gpu-decode {auto,nvidia,intel,amd}]
                                    [--vvc-decoder {gpu,cpu}] [--parallel N]
-                                   [--recalculate] [--csv FOLDER]
-                                   [--json FILE] [-q] [-v]
+                                   [--recalculate] [--difference]
+                                   [--csv FOLDER] [--json FILE] [-q] [-v]
                                    REFERENCE TEST [TEST ...]
 )";
 
 const char* const devices_usage = "usage: VideoMetricsLab-cli devices [-h]\n";
 
 const char* const bitrate_usage = R"(usage: VideoMetricsLab-cli bitrate [-h] [--fps RATE] [--csv FOLDER]
-                                   [--no-adjust-start] [--json FILE] [-q]
+                                   [--no-adjust-start] [--difference]
+                                   [--json FILE] [-q]
                                    VIDEO [VIDEO ...]
 )";
 
@@ -59,6 +60,8 @@ const char* const examples = R"(examples:
       two metrics for every .mkv in a folder, with a summary side by side
   VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv -m all --csv results
       every metric, and each video's per-frame scores in results\a.csv, b.csv
+  VideoMetricsLab-cli compare reference.mkv a.mkv b.mkv --difference --csv results
+      a.mkv minus b.mkv frame by frame as well, in results\a_minus_b.csv
   VideoMetricsLab-cli compare reference.mkv encode.mkv --duration 30 --cpu
       the first 30 seconds only, everything calculated on the CPU
   VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q
@@ -77,6 +80,8 @@ const char* const examples = R"(examples:
       each encode's length, frames and bitrate, as the Bitrate Viewer tab
   VideoMetricsLab-cli bitrate encode.266 --fps 24000/1001 --csv bitrate
       a raw VVC stream's bitrate, and its graphs' figures as CSV files
+  VideoMetricsLab-cli bitrate a.mkv b.mkv --difference --csv bitrate
+      a.mkv's bitrate minus b.mkv's as well, in bitrate\a_minus_b_bitrate_*.csv
   VideoMetricsLab-cli devices
       what would calculate each metric on this PC
 )";
@@ -210,6 +215,9 @@ options:
                         the app's)
   --recalculate         calculate every metric again instead of using saved
                         scores
+  --difference          with two test videos: the first minus the second as
+                        well, frame by frame (CVVDP second by second); with
+                        --csv also in FOLDER as <first>_minus_<second>.csv
   --csv FOLDER          write each video's per-frame scores to FOLDER as
                         <video>.csv
   --json FILE           also write the results as JSON to FILE; - prints the
@@ -241,6 +249,12 @@ options:
                         _seconds.csv and _gops.csv
   --no-adjust-start     with --csv: times from the file's start, not from the
                         stream's first frame
+  --difference          with two videos: the first one's bitrate minus the
+                        second's as well, from each stream's start: the
+                        averages and the seconds both have (paired by number);
+                        with --csv also in FOLDER as
+                        <first>_minus_<second>_bitrate_frames.csv (at the
+                        first's frames), _seconds.csv and _gops.csv
   --json FILE           also write the results as JSON to FILE; - prints the
                         JSON instead of the table
   -q, --quiet           no progress, only the results
@@ -914,6 +928,7 @@ Parser compare_parser(CompareArguments& parsed) {
                    parsed.parallel = static_cast<int>(std::stoi(choice(std::to_string(*number), {"1", "2"})));
                }),
         flag({"--recalculate"}, parsed.recalculate),
+        flag({"--difference"}, parsed.difference),
         option({"--csv"}, [&parsed](const std::string& value) { parsed.csv = value; }),
         option({"--json"}, [&parsed](const std::string& value) { parsed.json_path = value; }),
         flag({"-q", "--quiet"}, parsed.quiet),
@@ -933,6 +948,7 @@ Parser bitrate_parser(BitrateArguments& parsed) {
         option({"--fps"}, [&parsed](const std::string& value) { parsed.fps = frame_rate(value); }),
         option({"--csv"}, [&parsed](const std::string& value) { parsed.csv = value; }),
         flag({"--no-adjust-start"}, parsed.no_adjust_start),
+        flag({"--difference"}, parsed.difference),
         option({"--json"}, [&parsed](const std::string& value) { parsed.json_path = value; }),
         flag({"-q", "--quiet"}, parsed.quiet),
     };

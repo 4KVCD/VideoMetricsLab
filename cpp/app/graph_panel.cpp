@@ -1,6 +1,7 @@
 #include "graph_panel.h"
 
 #include <QAbstractItemView>
+#include <QCheckBox>
 #include <QColor>
 #include <QFont>
 #include <QFontMetrics>
@@ -34,6 +35,7 @@
 #include "theme.h"
 #include "widgets.h"
 #include "window_helpers.h"
+#include "vml/difference.h"
 #include "vml/export_csv.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/number_format.h"
@@ -175,6 +177,15 @@ std::optional<double> value_at_frame(std::span<const int> frames, std::span<cons
     return std::isnan(value) ? std::nullopt : std::optional(value);
 }
 
+// The index of a per-frame line's point at exactly `frame`, or nothing.
+std::optional<std::size_t> index_of_frame(const MetricCurve& curve, int frame) {
+    const auto found = std::lower_bound(curve.frames.begin(), curve.frames.end(), frame);
+    if (found == curve.frames.end() || *found != frame) {
+        return std::nullopt;
+    }
+    return static_cast<std::size_t>(found - curve.frames.begin());
+}
+
 // The index of the time nearest `x`.
 std::size_t nearest_index_by_time(std::span<const double> times, double x) {
     const auto index = static_cast<std::size_t>(std::lower_bound(times.begin(), times.end(), x) - times.begin());
@@ -255,6 +266,28 @@ std::vector<QString> statistics_cells(const ScoreStats& stats, const MetricDefin
 // The worst frames' tail shares, as the table heads them.
 constexpr std::array<const char*, 4> tail_shares{"10%", "5%", "1%", "0.1%"};
 
+// What point `index` of a line is paired by with another's (difference.h):
+// its frame number, or for a per-second line (CVVDP) its second's number (a
+// run started part way into a second has a shorter first one, paired with
+// the other run's whole one).
+long long pairing_key(const MetricCurve& curve, std::size_t index) {
+    return curve.starts.empty() ? static_cast<long long>(curve.frames[index]) : second_number(curve.starts[index]);
+}
+
+// `first` minus `second` at each point of `first` (difference.h), as the band
+// draws it: in floats, NaN a gap.
+std::vector<float> difference_of(const MetricCurve& first, const MetricCurve& second) {
+    const std::vector<double> differences =
+        first.starts.empty() ? frame_difference(first.frames, first.values, second.frames, second.values)
+                             : second_difference(first.starts, first.values, second.starts, second.values);
+    std::vector<float> drawn;
+    drawn.reserve(differences.size());
+    for (const double difference : differences) {
+        drawn.push_back(static_cast<float>(difference));
+    }
+    return drawn;
+}
+
 }  // namespace
 
 // ================================================================ a page
@@ -308,11 +341,18 @@ MetricPage::MetricPage(const MetricDefinition& metric, QWidget* parent)
 }
 
 void MetricPage::set_curve(int series_id, const SeriesEntry& entry) {
-    remove_curves({series_id});
+    // The difference drawn again once, after the line is replaced, not also
+    // when it is taken away (erase_curves, not remove_curves).
+    erase_curves({series_id});
     if (metric_->kind == MetricKind::sequence) {
         set_timeline_curve(series_id, entry);
-        return;
+    } else {
+        set_frame_curve(series_id, entry);
     }
+    refresh_difference();
+}
+
+void MetricPage::set_frame_curve(int series_id, const SeriesEntry& entry) {
     // A metric is calculated for a whole run or not at all, so its scores
     // are there or not, frame for frame.
     const FrameMetricResult* result = entry.result->metric_results.frame(std::string(metric_->key));
@@ -400,7 +440,13 @@ void MetricPage::set_timeline_curve(int series_id, const SeriesEntry& entry) {
 }
 
 void MetricPage::remove_curves(const std::vector<int>& series_ids) {
-    // The readout sized again once, however many go.
+    if (erase_curves(series_ids)) {
+        refresh_difference();
+    }
+}
+
+bool MetricPage::erase_curves(const std::vector<int>& series_ids) {
+    // The readout sized again once, however many go. Whether any went.
     std::vector<int> removed;
     for (const int id : series_ids) {
         if (curves_.erase(id) > 0) {
@@ -408,11 +454,12 @@ void MetricPage::remove_curves(const std::vector<int>& series_ids) {
         }
     }
     if (removed.empty()) {
-        return;
+        return false;
     }
     chart_->remove_series(removed);
     update_no_data_label();
     fit_hover_label();
+    return true;
 }
 
 void MetricPage::renumber(const std::map<int, int>& renumbered) {
@@ -423,6 +470,7 @@ void MetricPage::renumber(const std::map<int, int>& renumbered) {
     }
     curves_ = std::move(curves);
     chart_->renumber(renumbered);
+    refresh_difference();  // the order may have swapped which is first
 }
 
 void MetricPage::set_visible(int series_id, bool visible) {
@@ -433,6 +481,45 @@ void MetricPage::set_visible(int series_id, bool visible) {
     found->second.visible = visible;
     chart_->set_series_visible(series_id, visible);
     fit_hover_label();
+    refresh_difference();
+}
+
+void MetricPage::set_difference(bool on) {
+    if (on != difference_on_) {
+        difference_on_ = on;
+        refresh_difference();
+    }
+}
+
+std::optional<std::pair<int, int>> MetricPage::difference_pair() const {
+    // The series' ids follow the table's order.
+    std::vector<int> shown;
+    for (const auto& [id, curve] : curves_) {
+        if (curve.visible) {
+            shown.push_back(id);
+        }
+    }
+    if (shown.size() != 2) {
+        return std::nullopt;
+    }
+    return std::pair(shown[0], shown[1]);
+}
+
+void MetricPage::refresh_difference() {
+    const auto pair = difference_on_ ? difference_pair() : std::nullopt;
+    if (!pair) {
+        chart_->set_band(std::nullopt);
+        return;
+    }
+    const MetricCurve* first = &curves_.at(pair->first);
+    const MetricCurve* second = &curves_.at(pair->second);
+    // The band's times are the first line's: its owner is kept with the
+    // difference, whatever later replaces the line.
+    auto drawn = std::make_shared<std::pair<std::shared_ptr<const void>, std::vector<float>>>(
+        first->owner, difference_of(*first, *second));
+    ChartSeries series{first->times, drawn->second, drawn, QColor(), true};
+    const QString label = QStringLiteral("%1 − %2").arg(first->label, second->label);
+    chart_->set_band(ChartBand{std::move(series), label, std::pow(10.0, -metric_->decimals)});
 }
 
 const MetricCurve* MetricPage::curve(int series_id) const {
@@ -652,15 +739,15 @@ std::size_t MetricPage::find_hover_index(const MetricCurve& curve, double x, dou
     return lowest ? *lowest : nearest_index_by_time(times, x);
 }
 
-double MetricPage::find_shared_hover_time(const std::vector<const MetricCurve*>& shown, double x, double y,
-                                          double x_per_pixel) const {
-    // find_hover_index for several lines: one moment for all of them, by the
-    // same rule over their points together, so that every line's readout is
-    // of the same moment.
+std::optional<MetricPage::HoverPoint> MetricPage::find_shared_hover_point(const std::vector<const MetricCurve*>& shown,
+                                                                         double x, double y, double x_per_pixel) const {
+    // find_hover_index for several lines: one point for all of them, by the
+    // same rule over their points together, whose moment and frame every
+    // line's readout is of. Nothing when no line has a scored point near `x`.
     const auto at_or_below = static_cast<float>(y * sign_);
-    std::optional<double> best_time;
+    std::optional<HoverPoint> best;
     double best_distance = 0;
-    std::optional<double> fallback_time;
+    std::optional<HoverPoint> fallback;
     float fallback_value = 0;
     for (const MetricCurve* curve : shown) {
         const std::span<const double> times = curve->times;
@@ -688,19 +775,33 @@ double MetricPage::find_shared_hover_time(const std::vector<const MetricCurve*>&
                 }
             }
         }
-        if (lowest && (!fallback_time || lowest_value < fallback_value)) {
-            fallback_time = times[static_cast<std::size_t>(*lowest)];
+        if (lowest && (!fallback || lowest_value < fallback_value)) {
+            fallback = HoverPoint{curve, static_cast<std::size_t>(*lowest)};
             fallback_value = lowest_value;
         }
-        if (nearest && (!best_time || nearest_distance < best_distance)) {
-            best_time = times[static_cast<std::size_t>(*nearest)];
+        if (nearest && (!best || nearest_distance < best_distance)) {
+            best = HoverPoint{curve, static_cast<std::size_t>(*nearest)};
             best_distance = nearest_distance;
         }
     }
-    if (best_time) {
-        return *best_time;
+    return best ? best : fallback;
+}
+
+std::optional<QString> MetricPage::delta_row(const ReadoutPick& first, const ReadoutPick& second) const {
+    // The two lines' difference, as the Difference band pairs them: only for
+    // the same frame (CVVDP: the same second), and only where both have a
+    // score; XPSNR's infinity in both is 0, in one alone no difference.
+    const auto& [first_entry, first_curve, first_index] = first;
+    const auto& [second_entry, second_curve, second_index] = second;
+    if (pairing_key(*first_curve, first_index) != pairing_key(*second_curve, second_index)) {
+        return std::nullopt;
     }
-    return fallback_time ? *fallback_time : x;  // nothing near in any line: the pointer's own time
+    const double delta = point_difference(first_curve->values[first_index], second_curve->values[second_index]);
+    if (std::isnan(delta)) {
+        return std::nullopt;
+    }
+    return QStringLiteral("Δ (%1 − %2) = %3")
+        .arg(first_entry->label, second_entry->label, qt_text(metric_->format_delta(delta)));
 }
 
 void MetricPage::on_hover(double x, double y, const std::map<int, SeriesEntry>& entries) {
@@ -718,7 +819,8 @@ void MetricPage::on_hover(double x, double y, const std::map<int, SeriesEntry>& 
         set_hover_text(time_line);
         return;
     }
-    std::vector<std::tuple<const SeriesEntry*, const MetricCurve*, std::size_t>> picks;
+    std::vector<ReadoutPick> picks;
+    std::optional<double> cursor_time;  // nothing: the first line's point
     if (metric_->kind == MetricKind::sequence) {
         // A per-second line: the second under the pointer. Snapping to dips
         // would look five whole seconds either side.
@@ -726,15 +828,24 @@ void MetricPage::on_hover(double x, double y, const std::map<int, SeriesEntry>& 
             picks.emplace_back(entry, curve, second_at(*curve, x));
         }
     } else if (shown.size() > 1) {
-        // Every line at the same moment: each snapped to its own dip would
-        // compare different frames.
+        // Every line at the same frame, the one the pointer picked, as the
+        // runs are scored and Go to frame shows them (each snapped to its own
+        // dip would compare different frames); a line without that frame (a
+        // shorter or subsampled run) at the point nearest its moment.
         std::vector<const MetricCurve*> curves;
         for (const auto& [entry, curve] : shown) {
             curves.push_back(curve);
         }
-        const double target = find_shared_hover_time(curves, x, y, x_per_pixel);
+        const std::optional<HoverPoint> anchor = find_shared_hover_point(curves, x, y, x_per_pixel);
+        const double target = anchor ? anchor->curve->times[anchor->index] : x;  // nothing near: the pointer's time
         for (const auto& [entry, curve] : shown) {
-            picks.emplace_back(entry, curve, nearest_index_by_time(curve->times, target));
+            // The anchor's own line finds its own point: frames are in order, each once.
+            const std::optional<std::size_t> index =
+                anchor ? index_of_frame(*curve, anchor->curve->frames[anchor->index]) : std::nullopt;
+            picks.emplace_back(entry, curve, index.value_or(nearest_index_by_time(curve->times, target)));
+        }
+        if (anchor) {
+            cursor_time = target;
         }
     } else {
         const auto& [entry, curve] = shown.front();
@@ -743,30 +854,22 @@ void MetricPage::on_hover(double x, double y, const std::map<int, SeriesEntry>& 
     }
 
     QStringList lines{time_line};
-    std::vector<std::pair<QString, double>> found;
     for (const auto& [entry, curve, index] : picks) {
         const double value = curve->values[index];
         const int frame = curve->frames[index];
         const QString prefix = readout_prefix(entry->label, frame, start_time(*curve, index));
-        const auto others = other_values(*curve, frame, index);
-        if (std::isnan(value)) {
-            // The run has the metric but not this frame (subsampled, or a
-            // metric that failed on some frames).
-            lines.append(readout_row(prefix, std::nullopt, others));
-            continue;
-        }
-        lines.append(readout_row(prefix, value, others));
-        found.emplace_back(entry->label, value);
+        // NaN: the run has the metric but not this frame (subsampled, or a
+        // metric that failed on some frames).
+        lines.append(readout_row(prefix, std::isnan(value) ? std::nullopt : std::optional(value),
+                                 other_values(*curve, frame, index)));
     }
-    if (found.size() == 2) {
-        const double delta = found[0].second - found[1].second;
-        if (!std::isnan(delta)) {
-            lines.append(QStringLiteral("Δ (%1 − %2) = %3")
-                             .arg(found[0].first, found[1].first, qt_text(metric_->format_delta(delta))));
+    if (picks.size() == 2) {
+        if (const std::optional<QString> delta = delta_row(picks[0], picks[1])) {
+            lines.append(*delta);
         }
     }
     const auto& [entry, curve, index] = picks.front();
-    chart_->set_cursor_time(curve->times[index]);
+    chart_->set_cursor_time(cursor_time.value_or(curve->times[index]));
     set_hover_text(lines.join('\n'));
 }
 
@@ -786,7 +889,7 @@ bool MetricPage::show_frame(int frame, const std::map<int, SeriesEntry>& entries
         return false;
     }
     QStringList lines{app::tr("Frame {frame}", {{"frame", frame}})};
-    std::vector<std::pair<QString, double>> found;
+    std::vector<ReadoutPick> found;  // the lines with a score at the frame
     std::optional<double> cursor_time;
     for (const auto& [entry, curve] : shown) {
         std::size_t index = 0;
@@ -801,12 +904,12 @@ bool MetricPage::show_frame(int frame, const std::map<int, SeriesEntry>& entries
         } else {
             // A run can be shorter, or subsampled: a frame it lacks is said
             // to be missing, not shown with a neighbour's score.
-            const auto at = std::lower_bound(curve->frames.begin(), curve->frames.end(), frame);
-            if (at == curve->frames.end() || *at != frame) {
+            const std::optional<std::size_t> at = index_of_frame(*curve, frame);
+            if (!at) {
                 lines.append(readout_missing_frame(entry->label, frame));
                 continue;
             }
-            index = static_cast<std::size_t>(at - curve->frames.begin());
+            index = *at;
         }
         const double value = curve->values[index];
         const QString prefix = readout_prefix(entry->label, curve->frames[index], start_time(*curve, index));
@@ -816,16 +919,16 @@ bool MetricPage::show_frame(int frame, const std::map<int, SeriesEntry>& entries
             continue;
         }
         lines.append(readout_row(prefix, value, others));
-        found.emplace_back(entry->label, value);
+        found.emplace_back(entry, curve, index);
         if (!cursor_time) {
             cursor_time = curve->times[index];
         }
     }
-    if (found.size() == 2) {
-        const double delta = found[0].second - found[1].second;
-        if (!std::isnan(delta)) {
-            lines.append(QStringLiteral("Δ (%1 − %2) = %3")
-                             .arg(found[0].first, found[1].first, qt_text(metric_->format_delta(delta))));
+    // Only with two lines shown: with three, two of them would read as the
+    // difference of the whole comparison.
+    if (shown.size() == 2 && found.size() == 2) {
+        if (const std::optional<QString> delta = delta_row(found[0], found[1])) {
+            lines.append(*delta);
         }
     }
     if (cursor_time) {
@@ -929,6 +1032,7 @@ GraphPanel::~GraphPanel() = default;
 
 MetricPage* GraphPanel::build_page(const MetricDefinition& metric) {
     auto* page = new MetricPage(metric);
+    page->set_difference(difference_on_);
     connect(&page->chart(), &ChartWidget::hovered, this,
             [this, page](double x, double y) { page->on_hover(x, y, entries_); });
     pages_[std::string(metric.key)] = page;
@@ -964,7 +1068,7 @@ void GraphPanel::on_tab_changed(int index) {
     }
     update_metric_hint();
     refresh_stats_table();
-    refresh_frame_range();
+    refresh_page_controls();
 }
 
 void GraphPanel::set_preferred_metric(const std::string& key) {
@@ -1044,6 +1148,17 @@ QWidget* GraphPanel::build_action_bar() {
     auto* go_button = new QPushButton(app::tr("Go"));
     connect(go_button, &QPushButton::clicked, this, [this] { on_frame_requested(frame_spin_->value()); });
     layout->addWidget(go_button);
+    layout->addSpacing(16);
+    // Usable once a page shows two lines (refresh_page_controls).
+    difference_box_ = new QCheckBox(app::tr("Difference"));
+    difference_box_->setEnabled(false);
+    connect(difference_box_, &QCheckBox::toggled, this, [this](bool on) {
+        difference_on_ = on;
+        for (const auto& [key, page] : pages_) {
+            page->set_difference(on);
+        }
+    });
+    layout->addWidget(difference_box_);
     layout->addStretch(1);
     return bar;
 }
@@ -1052,9 +1167,11 @@ void GraphPanel::on_frame_requested(int frame) {
     pages_.at(std::string(current_metric().key))->show_frame(frame, entries_);
 }
 
-void GraphPanel::refresh_frame_range() {
-    // The Go to frame box bounded by what is drawn, so that it cannot ask
-    // for a frame no line has.
+void GraphPanel::refresh_page_controls() {
+    // The controls under the graph brought up to date for the page shown:
+    // the Go to frame box bounded by what is drawn, so that it cannot ask
+    // for a frame no line has, and the Difference box usable where the page
+    // shows two lines.
     const auto page = pages_.find(std::string(current_metric().key));
     if (page == pages_.end()) {
         return;
@@ -1063,6 +1180,12 @@ void GraphPanel::refresh_frame_range() {
     const bool blocked = frame_spin_->blockSignals(true);
     frame_spin_->setRange(lo, std::max(lo, hi));
     frame_spin_->blockSignals(blocked);
+    const bool possible = page->second->difference_possible();
+    difference_box_->setEnabled(possible);
+    difference_box_->setToolTip(possible ? app::tr("Draws the first visible series minus the second, frame by frame, "
+                                                   "in a band under the graph with its own scale.")
+                                         : app::tr("Show exactly two series with this metric's data to draw their "
+                                                   "difference."));
 }
 
 void GraphPanel::cap_panel_heights() {
@@ -1220,6 +1343,9 @@ void GraphPanel::on_stats_item_changed(QTableWidgetItem* item) {
     const QVariant id = item->data(Qt::UserRole);
     if (id.isValid()) {
         set_visible(id.toInt(), item->checkState() == Qt::Checked);
+        // Not the table: refreshing it would replace this item while it is
+        // still being changed.
+        refresh_page_controls();
     }
 }
 
@@ -1300,7 +1426,7 @@ void GraphPanel::series_changed() {
     apply_order();
     select_available_metric();
     refresh_stats_table();
-    refresh_frame_range();
+    refresh_page_controls();
 }
 
 void GraphPanel::set_order(std::vector<std::string> identities) {
@@ -1416,13 +1542,13 @@ void GraphPanel::remove_runs(const std::vector<int>& series_ids, bool suppress) 
     }
     select_available_metric();
     refresh_stats_table();
-    refresh_frame_range();
+    refresh_page_controls();
 }
 
 void GraphPanel::set_series_visible(int series_id, bool visible) {
     set_visible(series_id, visible);
     refresh_stats_table();
-    refresh_frame_range();
+    refresh_page_controls();
 }
 
 void GraphPanel::set_visible(int series_id, bool visible) {
@@ -1706,11 +1832,30 @@ void GraphPanel::on_export_csv() {
         file_writes_->submit(QStringLiteral("export %1").arg(name_of(out)),
                              [result = entry.result, out] { export_csv(*result, out); });
     }
+    long long files = static_cast<long long>(entries_.size());
+    if (const std::optional<std::pair<int, int>> pair = difference_on_ ? shown_difference_pair() : std::nullopt) {
+        // The difference the band shows, of the page in view: the two runs'
+        // every metric, first minus second.
+        const SeriesEntry& first = entries_.at(pair->first);
+        const SeriesEntry& second = entries_.at(pair->second);
+        const std::filesystem::path out = unique_output_path(
+            path_of(folder), difference_label(first.label.toStdString(), second.label.toStdString()), ".csv",
+            reserved);
+        file_writes_->submit(QStringLiteral("export %1").arg(name_of(out)),
+                             [first = first.result, second = second.result, out] {
+                                 export_difference_csv(*first, *second, out);
+                             });
+        ++files;
+    }
     export_destination_ = folder;
     status_label_->show();
     status_label_->setText(ntr("Exporting {count} CSV file to {directory}...",
-                               "Exporting {count} CSV files to {directory}...",
-                               static_cast<long long>(entries_.size()), {{"directory", folder}}));
+                               "Exporting {count} CSV files to {directory}...", files, {{"directory", folder}}));
+}
+
+std::optional<std::pair<int, int>> GraphPanel::shown_difference_pair() const {
+    const auto page = pages_.find(std::string(current_metric().key));
+    return page == pages_.end() ? std::nullopt : page->second->difference_pair();
 }
 
 void GraphPanel::show_stats_menu(const QPoint& position) {

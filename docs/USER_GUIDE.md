@@ -27,6 +27,11 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
    CPUs, but increases resource use and is not always faster.
 5. Inspect per-frame curves in **Metric Graphs**. Click a metric's mean column
    to show its detailed statistics. Export a graph PNG or CSV as needed.
+   With two videos shown, **Difference** draws the first minus the second,
+   frame by frame, in a band under the graph with its own scale. With it on,
+   **Export CSV** also writes that difference, every metric's, as
+   `<first>_minus_<second>.csv` (the videos' labels), in the per-video files'
+   columns: a cell is blank where either video lacks the frame or the metric.
 
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one.
@@ -168,6 +173,10 @@ add inputs for bitrate analysis. The three views show packet/frame size,
 one-second bitrate and GOP-based bitrate. Only the first video stream is
 counted: audio, subtitles and container overhead are excluded. Overall video
 bitrate is video packet bytes × 8 divided by the measured video duration.
+With two videos shown, **Difference** draws the first minus the second in a
+band under the graph with its own scale: frame by frame in the frame view, and
+at each moment in the second and GOP views (where two encodes' GOPs differ,
+each moment's GOP bitrate is subtracted).
 The command line's `bitrate` command (below) reads the same numbers.
 
 ## Command line
@@ -261,6 +270,7 @@ $run.videos[0].metrics.vmaf.score
 | `--threads N` | libvmaf threads. Left out: automatic. |
 | `--parallel 1\|2` | Videos calculated at once on the CPU. |
 | `--recalculate` | Ignore saved scores. |
+| `--difference` | With exactly two test videos: the first minus the second as well, frame by frame (CVVDP second by second), paired as **Difference** in Metric Graphs pairs them. The tables end with a difference table (Score: the two scores subtracted; Mean, Min, Max: of the frames' differences; Paired: the frames, or seconds, both have), the JSON gets a `difference` section, and with `--csv` it is written as `<first>_minus_<second>.csv` (the files' names). |
 | `--csv FOLDER` | Write each video's per-frame scores as `<video>.csv`, as **Export CSV** does. |
 | `--json FILE` | Also write the results as JSON. `--json -` prints the JSON instead of the tables, for a script to read. |
 | `-q`, `--quiet` | No progress, only the results. |
@@ -287,7 +297,7 @@ The exit code is 0 when every video got every metric asked for that it can
 have (one it cannot, such as CVVDP with `--subsample`, is left out with a
 note, as in the app), 1 when a video failed or lost a metric, 2 for a wrong
 command (a raw stream without `--fps`, or a raw YUV file without `--size`,
-`--pix-fmt` and `--fps`, among them), when FFmpeg cannot be used or when
+`--pix-fmt` and `--fps`, and `--difference` without two test videos, among them), when FFmpeg cannot be used or when
 there is no test video, and 130 after Ctrl+C.
 Ctrl+C stops the run as **Cancel** does; scores that had finished are saved.
 Closing the console window does the same on Windows' classic console.
@@ -339,6 +349,7 @@ YUV file has no bitrate to read.
 | `--fps RATE` | A raw stream's frame rate, such as `24000/1001`. |
 | `--csv FOLDER` | Also write the tab's three graphs' figures as `<video>_bitrate_frames.csv` (each frame's time, size and whether it is a keyframe), `_bitrate_seconds.csv` (each second's kb/s) and `_bitrate_gops.csv` (each group of pictures' frames, bytes and kb/s). Times count from the stream's first frame, as the tab's **Adjust stream start time to zero** does. |
 | `--no-adjust-start` | With `--csv`: times from the file's start. |
+| `--difference` | With exactly two videos: the first's bitrate minus the second's as well, as the tab's **Difference** pairs them, from each stream's start. The table ends with the averages' difference (in Mb/s and %) and the mean, lowest and highest of the seconds both have (paired by number), the JSON gets a `difference` section, and with `--csv` it is written as `<first>_minus_<second>_bitrate_frames.csv` (each of the first's frames' size in bytes minus the second's frame of that number), `_bitrate_seconds.csv` and `_bitrate_gops.csv` (kb/s over time); a cell is empty where only one video has the frame or the time. |
 | `--json FILE` | Also write the results as JSON; `--json -` prints the JSON instead of the table. |
 | `-q`, `--quiet` | No progress, only the results. |
 

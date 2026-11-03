@@ -10,6 +10,7 @@ add_library(vml_core
     src/colour.cpp
     src/crop_detect.cpp
     src/cvvdp.cpp
+    src/difference.cpp
     src/export_csv.cpp
     src/ffmpeg_run.cpp
     src/ffmpeg_tools.cpp

@@ -788,7 +788,13 @@
   "The range starts after the end of one of the videos.": "La plage commence après la fin de l'une des vidéos.",
   "The range contains no frame of the videos.": "La plage ne contient aucune image des vidéos.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nAucun GPU pris en charge n'a été trouvé, elles sont donc calculées sur le CPU. Les outils CPU notent une paire d'images fixes à la fois : environ 1 s pour SSIMULACRA2 et 2 s pour Butteraugli par image 4K, donc un film prend des jours (les estimations ci-dessus supposent un CPU comparable à celui des mesures). Fixez une plage pour ne noter qu'une partie des vidéos.\n\nCalculer quand même ?",
-  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Les durées ne correspondent pas ({source} contre {test} secondes). Fixez une plage comprise dans les deux fichiers si vous ne comparez qu'une partie commune."
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Les durées ne correspondent pas ({source} contre {test} secondes). Fixez une plage comprise dans les deux fichiers si vous ne comparez qu'une partie commune.",
+  "Difference": "Différence",
+  "Draws the first visible series minus the second, frame by frame, in a band under the graph with its own scale.": "Trace la première série visible moins la seconde, image par image, dans une bande sous le graphique avec sa propre échelle.",
+  "Show exactly two series with this metric's data to draw their difference.": "Affichez exactement deux séries ayant les données de cette métrique pour tracer leur différence.",
+  "Draws the first video's bitrate minus the second's at each moment, in a band under the graph with its own scale.": "Trace le débit de la première vidéo moins celui de la seconde à chaque instant, dans une bande sous le graphique avec sa propre échelle.",
+  "Draws the first video's frame sizes minus the second's, frame by frame, in a band under the graph with its own scale.": "Trace la taille des images de la première vidéo moins celle de la seconde, image par image, dans une bande sous le graphique avec sa propre échelle.",
+  "Show exactly two videos to draw their difference.": "Affichez exactement deux vidéos pour tracer leur différence."
  },
  "plurals": {
   "about {count} day": [

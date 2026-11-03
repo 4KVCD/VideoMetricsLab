@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -29,14 +30,27 @@ std::vector<Summaries> summarize(const std::vector<TestVideo>& videos);
 // run was stopped before it had them all.
 std::string video_status(const TestVideo& video, bool cancelled);
 
-// The run as plain-text tables (printed unless the command says --json -).
+// --difference: the first video minus the second, for each metric both were
+// asked for and scored, paired as vml/difference.h pairs them: "score" (the
+// two scores subtracted), and "mean", "minimum", "maximum" and "paired" of
+// the frames' differences (CVVDP's seconds'; null with none paired), by key
+// in the first video's order. Nothing unless there are two videos with a
+// result.
+std::optional<nlohmann::ordered_json> difference_metrics(const std::vector<TestVideo>& videos,
+                                                         const std::vector<Summaries>& summaries);
+
+// The run as plain-text tables (printed unless the command says --json -),
+// with the difference's (`difference`: difference_metrics, when asked for).
 std::string results_table(const VideoInfo& source, const std::vector<TestVideo>& videos,
-                          const std::vector<Summaries>& summaries, bool cancelled);
+                          const std::vector<Summaries>& summaries, bool cancelled,
+                          const std::optional<nlohmann::ordered_json>& difference = std::nullopt);
 
 // The run as --json writes it, in the shape of results_summary.h, which the
-// window's Export results saves too.
+// window's Export results saves too; with --difference, a "difference"
+// section: the two videos' paths and difference_metrics.
 nlohmann::ordered_json results_document(const VideoInfo& source, const std::vector<TestVideo>& videos,
-                                        const std::vector<Summaries>& summaries, bool cancelled);
+                                        const std::vector<Summaries>& summaries, bool cancelled,
+                                        const std::optional<nlohmann::ordered_json>& difference = std::nullopt);
 
 // Each result's per-frame scores as the window's Export CSV writes them, in
 // `folder`; `message` says what was written and `failed` what could not be
@@ -44,5 +58,12 @@ nlohmann::ordered_json results_document(const VideoInfo& source, const std::vect
 bool write_csvs(const std::vector<TestVideo>& videos, const std::filesystem::path& folder,
                 const std::function<void(const std::string&)>& message,
                 const std::function<void(const std::string&)>& failed);
+// --difference with --csv: the first video's per-frame scores minus the
+// second's (export_difference_csv) in `folder` as <first>_minus_<second>.csv,
+// when both have a result; reported as write_csvs reports. False if it could
+// not be written.
+bool write_difference_csv(const std::vector<TestVideo>& videos, const std::filesystem::path& folder,
+                          const std::function<void(const std::string&)>& message,
+                          const std::function<void(const std::string&)>& failed);
 
 }  // namespace vml::cli

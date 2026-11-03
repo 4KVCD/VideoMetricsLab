@@ -110,9 +110,10 @@ QColor readable(const QColor& series_colour) { return is_dark() ? series_colour.
 ChartColours chart_colours(std::optional<bool> dark) {
     if (dark.value_or(is_dark())) {
         return {QColor(30, 30, 30), QColor(220, 220, 220), QColor(150, 150, 150), QColor(255, 255, 255, 38),
-                QColor(170, 170, 170)};
+                QColor(170, 170, 170), QColor(200, 160, 255)};
     }
-    return {QColor("white"), QColor(40, 40, 40), QColor(90, 90, 90), QColor(0, 0, 0, 40), QColor(120, 120, 120)};
+    return {QColor("white"), QColor(40, 40, 40), QColor(90, 90, 90), QColor(0, 0, 0, 40), QColor(120, 120, 120),
+            QColor(120, 60, 200)};
 }
 
 void style(QWidget* widget, const QString& template_text) {

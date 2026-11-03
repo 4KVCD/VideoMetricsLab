@@ -47,6 +47,7 @@ struct CompareArguments {
     std::optional<std::string> vvc_decoder;  // "gpu" or "cpu" (Settings::vvc_decode_on_gpu)
     std::optional<int> parallel;
     bool recalculate = false;
+    bool difference = false;  // the first test video minus the second, too
     std::optional<std::string> csv;
     std::optional<std::string> json_path;  // "-" prints the JSON instead of the tables
     bool quiet = false;
@@ -59,6 +60,7 @@ struct BitrateArguments {
     std::optional<double> fps;        // a raw stream's frame rate
     std::optional<std::string> csv;   // the folder for each video's CSV files
     bool no_adjust_start = false;     // the CSV files' times from the file's start (only with csv)
+    bool difference = false;          // the first video's bitrate minus the second's (two videos only)
     std::optional<std::string> json_path;  // "-" prints the JSON instead of the table
     bool quiet = false;
 };

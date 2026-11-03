@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "vml/difference.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/number_format.h"
@@ -64,45 +65,51 @@ MetricResultSet portable_metric_results(const ComparisonResult& result) {
     return moved;
 }
 
-}  // namespace
-
-void export_csv(const ComparisonResult& result, const std::filesystem::path& path) {
-    const MetricResultSet metrics = portable_metric_results(result);
-    const std::vector<std::string> keys = column_keys();
-    // Every frame any metric scored, in order.
+// A result's scores as export_csv lays them out: every frame any metric
+// scored, in order, with its time (the first column's that has the frame),
+// and each column's cell on each row (NaN: blank).
+struct CsvTable {
     std::vector<int> frames;
+    std::vector<double> times;
+    std::vector<std::string> names;  // the columns after frame and time_s
+    std::map<std::string, std::vector<double>> values;
+
+    std::size_t row_of(int frame) const {
+        return static_cast<std::size_t>(std::lower_bound(frames.begin(), frames.end(), frame) - frames.begin());
+    }
+};
+
+constexpr double blank = std::numeric_limits<double>::quiet_NaN();
+
+CsvTable csv_table(const MetricResultSet& metrics) {
+    CsvTable table;
+    const std::vector<std::string> keys = column_keys();
     const SequenceMetricResult* cvvdp = metrics.sequence("cvvdp");
     for (const std::string& key : keys) {
         if (const FrameMetricResult* column = metrics.frame(key)) {
-            frames.insert(frames.end(), column->frame.begin(), column->frame.end());
+            table.frames.insert(table.frames.end(), column->frame.begin(), column->frame.end());
         }
     }
     if (cvvdp != nullptr && cvvdp->has_timeline()) {
-        frames.insert(frames.end(), cvvdp->frame.begin(), cvvdp->frame.end());
+        table.frames.insert(table.frames.end(), cvvdp->frame.begin(), cvvdp->frame.end());
     }
-    std::sort(frames.begin(), frames.end());
-    frames.erase(std::unique(frames.begin(), frames.end()), frames.end());
-    const auto row_of = [&frames](int frame) {
-        return static_cast<std::size_t>(std::lower_bound(frames.begin(), frames.end(), frame) - frames.begin());
-    };
+    std::sort(table.frames.begin(), table.frames.end());
+    table.frames.erase(std::unique(table.frames.begin(), table.frames.end()), table.frames.end());
 
-    const double none = std::numeric_limits<double>::quiet_NaN();
-    std::vector<double> times(frames.size(), none);
-    std::map<std::string, std::vector<double>> values;
-    std::vector<std::string> names = keys;
-    // A frame's time is the first column's that has the frame.
-    const auto fill = [&](const std::vector<int>& at, const std::vector<double>& their_times,
-                          const auto& their_values, std::vector<double>& column) {
+    table.times.assign(table.frames.size(), blank);
+    table.names = keys;
+    const auto fill = [&table](const std::vector<int>& at, const std::vector<double>& their_times,
+                               const auto& their_values, std::vector<double>& column) {
         for (std::size_t i = 0; i < at.size(); ++i) {
-            const std::size_t row = row_of(at[i]);
+            const std::size_t row = table.row_of(at[i]);
             column[row] = static_cast<double>(their_values[i]);
-            if (std::isnan(times[row])) {
-                times[row] = their_times[i];
+            if (std::isnan(table.times[row])) {
+                table.times[row] = their_times[i];
             }
         }
     };
     for (const std::string& key : keys) {
-        std::vector<double>& column = values[key] = std::vector<double>(frames.size(), none);
+        std::vector<double>& column = table.values[key] = std::vector<double>(table.frames.size(), blank);
         if (const FrameMetricResult* result_column = metrics.frame(key)) {
             fill(result_column->frame, result_column->time, result_column->values, column);
         }
@@ -110,18 +117,22 @@ void export_csv(const ComparisonResult& result, const std::filesystem::path& pat
     if (cvvdp != nullptr) {
         // The JOD of the second starting at each row's frame, and the whole
         // video's JOD on the same rows.
-        std::vector<double>& second = values["cvvdp_second_jod"] = std::vector<double>(frames.size(), none);
-        std::vector<double>& video = values["cvvdp_video_jod"] = std::vector<double>(frames.size(), none);
+        std::vector<double>& second = table.values["cvvdp_second_jod"] =
+            std::vector<double>(table.frames.size(), blank);
+        std::vector<double>& video = table.values["cvvdp_video_jod"] = std::vector<double>(table.frames.size(), blank);
         if (cvvdp->has_timeline()) {
             fill(cvvdp->frame, cvvdp->time, cvvdp->values, second);
             for (const int frame : cvvdp->frame) {
-                video[row_of(frame)] = cvvdp->score;
+                video[table.row_of(frame)] = cvvdp->score;
             }
         }
-        names.emplace_back("cvvdp_second_jod");
-        names.emplace_back("cvvdp_video_jod");
+        table.names.emplace_back("cvvdp_second_jod");
+        table.names.emplace_back("cvvdp_video_jod");
     }
+    return table;
+}
 
+void write_csv_table(const CsvTable& table, const std::filesystem::path& path) {
     // A failure says why, as the Python app's OSError does ("[Errno 13]
     // Permission denied: '...'"); the path alone left a user guessing.
     errno = 0;
@@ -137,14 +148,14 @@ void export_csv(const ComparisonResult& result, const std::filesystem::path& pat
     // Python's csv.writer: comma-separated, rows ended with CR LF; none of
     // these cells needs quotes.
     std::string header = "frame,time_s";
-    for (const std::string& name : names) {
+    for (const std::string& name : table.names) {
         header += "," + name;
     }
     file << header << "\r\n";
-    for (std::size_t row = 0; row < frames.size(); ++row) {
-        std::string line = std::to_string(frames[row]) + "," + format_fixed(times[row], 6);
-        for (const std::string& name : names) {
-            const double value = values[name][row];
+    for (std::size_t row = 0; row < table.frames.size(); ++row) {
+        std::string line = std::to_string(table.frames[row]) + "," + format_fixed(table.times[row], 6);
+        for (const std::string& name : table.names) {
+            const double value = table.values.at(name)[row];
             line += "," + (std::isnan(value) ? std::string() : python_repr(value));
         }
         file << line << "\r\n";
@@ -153,6 +164,49 @@ void export_csv(const ComparisonResult& result, const std::filesystem::path& pat
     if (!file) {
         throw failed();
     }
+}
+
+}  // namespace
+
+void export_csv(const ComparisonResult& result, const std::filesystem::path& path) {
+    write_csv_table(csv_table(portable_metric_results(result)), path);
+}
+
+void export_difference_csv(const ComparisonResult& first, const ComparisonResult& second,
+                           const std::filesystem::path& path) {
+    const MetricResultSet ours = portable_metric_results(first);
+    const MetricResultSet theirs = portable_metric_results(second);
+    CsvTable table = csv_table(ours);  // the first's rows, times and columns
+    for (const std::string& key : column_keys()) {
+        std::vector<double>& column = table.values.at(key);
+        std::fill(column.begin(), column.end(), blank);
+        const FrameMetricResult* mine = ours.frame(key);
+        const FrameMetricResult* other = theirs.frame(key);
+        if (mine != nullptr && other != nullptr) {
+            const std::vector<double> differences =
+                frame_difference(mine->frame, mine->values, other->frame, other->values);
+            for (std::size_t i = 0; i < differences.size(); ++i) {
+                column[table.row_of(mine->frame[i])] = differences[i];
+            }
+        }
+    }
+    if (const SequenceMetricResult* mine = ours.sequence("cvvdp")) {
+        std::vector<double>& seconds = table.values.at("cvvdp_second_jod");
+        std::vector<double>& video = table.values.at("cvvdp_video_jod");
+        std::fill(seconds.begin(), seconds.end(), blank);
+        std::fill(video.begin(), video.end(), blank);
+        const SequenceMetricResult* other = theirs.sequence("cvvdp");
+        if (mine->has_timeline() && other != nullptr && other->has_timeline()) {
+            const std::vector<double> differences =
+                second_difference(mine->time, mine->values, other->time, other->values);
+            for (std::size_t i = 0; i < differences.size(); ++i) {
+                const std::size_t row = table.row_of(mine->frame[i]);
+                seconds[row] = differences[i];
+                video[row] = mine->score - other->score;
+            }
+        }
+    }
+    write_csv_table(table, path);
 }
 
 std::string safe_filename_stem(const std::string& label) {
@@ -171,6 +225,22 @@ std::string safe_filename_stem(const std::string& label) {
         }
     }
     return stem;
+}
+
+std::string difference_label(const std::string& first, const std::string& second) {
+    // Cut at a character's first byte, never inside a UTF-8 sequence.
+    const auto cut = [](const std::string& name) {
+        constexpr int longest = 60;
+        int characters = 0;
+        for (std::size_t i = 0; i < name.size(); ++i) {
+            const bool continues = (static_cast<unsigned char>(name[i]) & 0xC0) == 0x80;
+            if (!continues && ++characters > longest) {
+                return name.substr(0, i);
+            }
+        }
+        return name;
+    };
+    return cut(first) + "_minus_" + cut(second);
 }
 
 std::filesystem::path unique_output_path(const std::filesystem::path& folder, const std::string& label,

@@ -788,7 +788,13 @@
   "The range starts after the end of one of the videos.": "El rango empieza después del final de uno de los videos.",
   "The range contains no frame of the videos.": "El rango no contiene ningún fotograma de los videos.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nNo se encontró ninguna GPU compatible, así que se calculan en la CPU. Las herramientas de CPU puntúan un par de imágenes fijas cada vez: unos 1 s para SSIMULACRA2 y 2 s para Butteraugli por fotograma 4K, así que una película tarda días (las estimaciones de arriba suponen una CPU como la usada para medirlas). Define un rango para puntuar solo una parte de los videos.\n\n¿Calcular de todos modos?",
-  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Las duraciones no coinciden ({source} frente a {test} segundos). Define un rango dentro de ambos archivos si solo comparas una parte común."
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Las duraciones no coinciden ({source} frente a {test} segundos). Define un rango dentro de ambos archivos si solo comparas una parte común.",
+  "Difference": "Diferencia",
+  "Draws the first visible series minus the second, frame by frame, in a band under the graph with its own scale.": "Dibuja la primera serie visible menos la segunda, fotograma a fotograma, en una banda bajo el gráfico con su propia escala.",
+  "Show exactly two series with this metric's data to draw their difference.": "Muestre exactamente dos series con datos de esta métrica para dibujar su diferencia.",
+  "Draws the first video's bitrate minus the second's at each moment, in a band under the graph with its own scale.": "Dibuja la tasa de bits del primer video menos la del segundo en cada momento, en una banda bajo el gráfico con su propia escala.",
+  "Draws the first video's frame sizes minus the second's, frame by frame, in a band under the graph with its own scale.": "Dibuja los tamaños de fotograma del primer video menos los del segundo, fotograma a fotograma, en una banda bajo el gráfico con su propia escala.",
+  "Show exactly two videos to draw their difference.": "Muestre exactamente dos videos para dibujar su diferencia."
  },
  "plurals": {
   "about {count} day": [

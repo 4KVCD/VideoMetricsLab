@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "vml/av2_stream.h"
+#include "vml/difference.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/number_format.h"
 #include "vml/platform/process.h"
@@ -227,6 +228,88 @@ BitratePlot gop_plot(const BitrateData& data, bool adjust_start) {
     return plot;
 }
 
+// ------------------------------------------------------------ the difference
+
+namespace {
+
+// A stepped graph's steps (step_points' start and end pairs), each ending
+// where the next one starts, as its line is drawn: a group of pictures ends
+// where its last frame ends, which rounding puts a little before or after the
+// next one's start (5.296 s and 5.297 s in a VVC film), so that they neither
+// overlap nor leave gaps.
+struct Steps {
+    std::vector<double> starts;
+    std::vector<double> ends;
+    std::vector<float> values;
+};
+
+Steps steps_of(const BitratePlot& plot) {
+    Steps steps;
+    for (std::size_t index = 0; index + 1 < plot.times.size(); index += 2) {
+        steps.starts.push_back(plot.times[index]);
+        steps.ends.push_back(plot.times[index + 1]);
+        steps.values.push_back(plot.values[index]);
+    }
+    for (std::size_t index = 0; index + 1 < steps.starts.size(); ++index) {
+        steps.ends[index] = steps.starts[index + 1];
+    }
+    return steps;
+}
+
+// The value of the step covering the time `from` (NaN for none), for times
+// that only rise: `index`, the step looked at, moves forward between calls.
+double step_value(const Steps& steps, std::size_t& index, double from) {
+    while (index < steps.starts.size() && steps.ends[index] <= from) {
+        ++index;
+    }
+    return index < steps.starts.size() && steps.starts[index] <= from ? static_cast<double>(steps.values[index])
+                                                                       : std::nan("");
+}
+
+}  // namespace
+
+BitratePlot frame_difference_plot(const BitratePlot& first, const BitratePlot& second) {
+    BitratePlot plot{first.times, {}, first.axis_label, first.value_label};
+    plot.values.reserve(first.values.size());
+    for (std::size_t index = 0; index < first.values.size(); ++index) {
+        plot.values.push_back(index < second.values.size() ? first.values[index] - second.values[index]
+                                                           : std::nanf(""));
+    }
+    return plot;
+}
+
+BitratePlot step_difference_plot(const BitratePlot& first, const BitratePlot& second) {
+    const Steps a = steps_of(first);
+    const Steps b = steps_of(second);
+    // Every step's start and end: between two neighbours, each graph is one
+    // step or none.
+    std::vector<double> bounds;
+    bounds.reserve(2 * (a.starts.size() + b.starts.size()));
+    for (const Steps* steps : {&a, &b}) {
+        bounds.insert(bounds.end(), steps->starts.begin(), steps->starts.end());
+        bounds.insert(bounds.end(), steps->ends.begin(), steps->ends.end());
+    }
+    std::ranges::sort(bounds);
+    bounds.erase(std::unique(bounds.begin(), bounds.end()), bounds.end());
+    BitratePlot plot{{}, {}, first.axis_label, first.value_label};
+    std::size_t a_index = 0;
+    std::size_t b_index = 0;
+    for (std::size_t index = 0; index + 1 < bounds.size(); ++index) {
+        const double difference = step_value(a, a_index, bounds[index]) - step_value(b, b_index, bounds[index]);
+        plot.times.push_back(bounds[index]);
+        plot.times.push_back(bounds[index + 1]);
+        plot.values.push_back(static_cast<float>(difference));
+        plot.values.push_back(static_cast<float>(difference));
+    }
+    return plot;
+}
+
+std::vector<double> seconds_difference(const BitrateData& first, const BitrateData& second) {
+    const SecondBins mine = second_bins(first, true);
+    const SecondBins theirs = second_bins(second, true);
+    return second_difference(mine.starts, mine.rates, theirs.starts, theirs.rates);
+}
+
 // ------------------------------------------------------------- the CSV files
 
 namespace {
@@ -264,6 +347,27 @@ std::string gops_csv(const BitrateData& data, bool adjust_start) {
         text += format_fixed(bins.starts[index], 6) + "," + format_fixed(bins.ends[index], 6) + "," +
                 std::to_string(bins.frames[index]) + "," + std::to_string(bins.bytes[index]) + "," +
                 kbps_cell(bins.rates[index]) + "\r\n";
+    }
+    return text;
+}
+
+std::string frame_difference_csv(const BitrateData& first, const BitrateData& second, bool adjust_start) {
+    const double offset = adjust_start ? first.start_time() : 0.0;
+    std::string text = "frame,time_s,size_bytes\r\n";
+    for (std::size_t index = 0; index < first.times.size(); ++index) {
+        text += std::to_string(index) + "," + format_fixed(first.times[index] - offset, 6) + "," +
+                (index < second.sizes.size() ? std::to_string(first.sizes[index] - second.sizes[index]) : "") + "\r\n";
+    }
+    return text;
+}
+
+std::string step_difference_csv(const BitratePlot& difference) {
+    std::string text = "start_s,end_s,kbps\r\n";
+    // A step's start and end are its two points (step_points)
+    for (std::size_t index = 0; index + 1 < difference.times.size(); index += 2) {
+        const float kbps = difference.values[index];
+        text += format_fixed(difference.times[index], 6) + "," + format_fixed(difference.times[index + 1], 6) + "," +
+                (std::isnan(kbps) ? "" : kbps_cell(kbps)) + "\r\n";
     }
     return text;
 }

@@ -788,7 +788,13 @@
   "The range starts after the end of one of the videos.": "A tartomány az egyik videó vége után kezdődik.",
   "The range contains no frame of the videos.": "A tartomány a videók egyetlen képkockáját sem tartalmazza.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nNem található támogatott GPU, ezért a CPU-n számítódnak. A CPU-s eszközök egyszerre egy állóképpárt pontoznak: 4K képkockánként kb. 1 mp az SSIMULACRA2 és 2 mp a Butteraugli, így egy film napokig tart (a fenti becslések a méréshez használthoz hasonló CPU-t feltételeznek). Állítson be tartományt, hogy csak a videók egy részét pontozza.\n\nMégis számolja?",
-  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Az időtartamok nem egyeznek ({source} és {test} mp). Ha csak egy közös részüket hasonlítja össze, állítson be mindkét fájlon belüli tartományt."
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Az időtartamok nem egyeznek ({source} és {test} mp). Ha csak egy közös részüket hasonlítja össze, állítson be mindkét fájlon belüli tartományt.",
+  "Difference": "Különbség",
+  "Draws the first visible series minus the second, frame by frame, in a band under the graph with its own scale.": "Az első látható sorozat és a második különbségét rajzolja képkockánként, a grafikon alatti sávban, saját skálával.",
+  "Show exactly two series with this metric's data to draw their difference.": "Pontosan két, e metrika adatait tartalmazó sorozatot jelenítsen meg a különbségük rajzolásához.",
+  "Draws the first video's bitrate minus the second's at each moment, in a band under the graph with its own scale.": "Az első videó bitrátájának és a másodikénak különbségét rajzolja minden pillanatban, a grafikon alatti sávban, saját skálával.",
+  "Draws the first video's frame sizes minus the second's, frame by frame, in a band under the graph with its own scale.": "Az első videó képkockaméreteinek és a másodikénak különbségét rajzolja képkockánként, a grafikon alatti sávban, saját skálával.",
+  "Show exactly two videos to draw their difference.": "Pontosan két videót jelenítsen meg a különbségük rajzolásához."
  },
  "plurals": {
   "about {count} day": [

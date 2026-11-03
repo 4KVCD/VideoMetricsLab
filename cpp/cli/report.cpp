@@ -4,6 +4,7 @@
 #include <set>
 
 #include "common.h"
+#include "vml/difference.h"
 #include "vml/export_csv.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
@@ -114,7 +115,85 @@ void add_summary(std::vector<std::string>& lines, const std::vector<TestVideo>& 
     add_table(lines, rows, false);
 }
 
+// --difference's table: a row per metric both videos have, and a note for
+// those only one has.
+void add_difference(std::vector<std::string>& lines, const std::vector<TestVideo>& videos,
+                    const std::vector<Summaries>& summaries, const Json& difference, bool cancelled) {
+    lines.emplace_back("");
+    lines.push_back("Difference: " + videos[0].name() + " minus " + videos[1].name() +
+                    ", per frame (CVVDP per second)" + (cancelled ? ", of the scores finished" : ""));
+    std::vector<std::vector<std::string>> rows{{"Metric", "Score", "Mean", "Min", "Max", "Paired"}};
+    for (const auto& [key, entry] : difference.items()) {
+        const MetricDefinition& definition = metric_definition(key);
+        const auto show = [&definition, &entry](const char* field) {
+            return definition.format_delta(summary_number(entry.at(field)));
+        };
+        rows.push_back({std::string(definition.label), show("score"), show("mean"), show("minimum"),
+                        show("maximum"), with_thousands(entry.at("paired").get<long long>())});
+    }
+    if (rows.size() > 1) {
+        add_table(lines, rows, false);
+    }
+    std::vector<std::string> one_only;
+    for (std::size_t v = 0; v < 2; ++v) {
+        for (const std::string& key : videos[v].metrics) {
+            if (summaries[v].contains(key) && !difference.contains(key)) {
+                one_only.push_back(std::string(metric_definition(key).label) + " (" + videos[v].name() + ")");
+            }
+        }
+    }
+    if (!one_only.empty()) {
+        std::string note = "  note: scored for one video only: ";
+        for (std::size_t i = 0; i < one_only.size(); ++i) {
+            note += (i == 0 ? "" : ", ") + one_only[i];
+        }
+        lines.push_back(note);
+    }
+}
+
+// The differences of a metric's points in both results, at the first's
+// points (vml/difference.h); nothing where one has no points of its own.
+std::vector<double> paired_differences(const ComparisonResult& first, const ComparisonResult& second,
+                                       const std::string& key) {
+    if (const SequenceMetricResult* mine = first.metric_results.sequence(key)) {
+        const SequenceMetricResult* other = second.metric_results.sequence(key);
+        return other == nullptr ? std::vector<double>()
+                                : second_difference(mine->time, mine->values, other->time, other->values);
+    }
+    const FrameMetricResult* mine = first.metric_results.frame(key);
+    const FrameMetricResult* other = second.metric_results.frame(key);
+    return mine == nullptr || other == nullptr
+               ? std::vector<double>()
+               : frame_difference(mine->frame, mine->values, other->frame, other->values);
+}
+
 }  // namespace
+
+std::optional<Json> difference_metrics(const std::vector<TestVideo>& videos, const std::vector<Summaries>& summaries) {
+    if (videos.size() != 2 || !videos[0].result || !videos[1].result) {
+        return std::nullopt;
+    }
+    Json metrics = Json::object();
+    for (const std::string& key : videos[0].metrics) {
+        const auto ours = summaries[0].find(key);
+        const auto theirs = summaries[1].find(key);
+        if (ours == summaries[0].end() || theirs == summaries[1].end()) {
+            continue;
+        }
+        const std::optional<double> first = summary_number(ours->second.at("score"));
+        const std::optional<double> second = summary_number(theirs->second.at("score"));
+        const std::optional<DifferenceSummary> points =
+            summarize_difference(paired_differences(*videos[0].result, *videos[1].result, key));
+        metrics[key] = Json{
+            {"score", json_number(first && second ? std::optional(point_difference(*first, *second)) : std::nullopt)},
+            {"mean", json_number(points ? std::optional(points->mean) : std::nullopt)},
+            {"minimum", json_number(points ? std::optional(points->minimum) : std::nullopt)},
+            {"maximum", json_number(points ? std::optional(points->maximum) : std::nullopt)},
+            {"paired", points ? points->paired : 0},
+        };
+    }
+    return metrics;
+}
 
 std::string TestVideo::name() const { return name_of(path); }
 
@@ -157,7 +236,8 @@ std::string video_status(const TestVideo& video, bool cancelled) {
 }
 
 std::string results_table(const VideoInfo& source, const std::vector<TestVideo>& videos,
-                          const std::vector<Summaries>& summaries, bool cancelled) {
+                          const std::vector<Summaries>& summaries, bool cancelled,
+                          const std::optional<Json>& difference) {
     std::vector<std::string> lines{"Reference: " + name_of(source.path) + " (" + media_text(source) + ")"};
     for (std::size_t v = 0; v < videos.size(); ++v) {
         const TestVideo& video = videos[v];
@@ -215,6 +295,9 @@ std::string results_table(const VideoInfo& source, const std::vector<TestVideo>&
         }
     }
     add_summary(lines, videos, summaries);
+    if (difference) {
+        add_difference(lines, videos, summaries, *difference, cancelled);
+    }
     if (cancelled) {
         lines.emplace_back("");
         lines.emplace_back("Cancelled: the scores finished before that are saved.");
@@ -227,7 +310,7 @@ std::string results_table(const VideoInfo& source, const std::vector<TestVideo>&
 }
 
 Json results_document(const VideoInfo& source, const std::vector<TestVideo>& videos,
-                      const std::vector<Summaries>& summaries, bool cancelled) {
+                      const std::vector<Summaries>& summaries, bool cancelled, const std::optional<Json>& difference) {
     Json reference{{"path", platform::path_text(source.path)}};
     add_media(reference, source);
     Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"format", results_format},
@@ -282,6 +365,11 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
         }
         document["videos"].push_back(entry);
     }
+    if (difference) {
+        document["difference"] = Json{{"first", platform::path_text(videos[0].path)},
+                                      {"second", platform::path_text(videos[1].path)},
+                                      {"metrics", *difference}};
+    }
     return document;
 }
 
@@ -313,6 +401,29 @@ bool write_csvs(const std::vector<TestVideo>& videos, const std::filesystem::pat
         }
     }
     return written;
+}
+
+bool write_difference_csv(const std::vector<TestVideo>& videos, const std::filesystem::path& folder,
+                          const std::function<void(const std::string&)>& message,
+                          const std::function<void(const std::string&)>& failed) {
+    if (videos.size() != 2 || !videos[0].result || !videos[1].result) {
+        return true;  // nothing to write: the tables say which has no result
+    }
+    // write_csvs has made the folder, or said why it could not.
+    std::set<std::filesystem::path> reserved;
+    const std::filesystem::path path = unique_output_path(
+        folder,
+        difference_label(platform::path_text(videos[0].path.stem()), platform::path_text(videos[1].path.stem())),
+        ".csv", reserved);
+    const std::string names = videos[0].name() + " minus " + videos[1].name();
+    try {
+        export_difference_csv(*videos[0].result, *videos[1].result, path);
+        message(names + ": per-frame difference in " + platform::path_text(path));
+        return true;
+    } catch (const std::exception& failure) {
+        failed(names + ": the CSV could not be written (" + failure.what() + ")");
+        return false;
+    }
 }
 
 }  // namespace vml::cli

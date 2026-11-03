@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <utility>
 #include <vector>
@@ -157,6 +158,57 @@ TEST(Bitrate, ReadsARawStreamAtItsFrameRate) {
     const std::vector<std::string> plain = bitrate_command("ffprobe", scaled);
     EXPECT_EQ(std::find(plain.begin(), plain.end(), "-reinit_filter"), plain.end());
     EXPECT_EQ(std::find(plain.begin(), plain.end(), "-framerate"), plain.end());
+}
+
+struct Step {
+    double start;
+    double end;
+    float value;
+};
+
+// A stepped graph's points from its steps, as step_points makes them.
+BitratePlot stepped(const std::vector<Step>& steps) {
+    BitratePlot plot{{}, {}, "Video bitrate (kb/s)", "kb/s"};
+    for (const auto& [start, end, value] : steps) {
+        plot.times.insert(plot.times.end(), {start, end});
+        plot.values.insert(plot.values.end(), {value, value});
+    }
+    return plot;
+}
+
+// The values as text, NaN as "nan", for comparing lines with gaps.
+std::vector<std::string> texts(const std::vector<float>& values) {
+    std::vector<std::string> result;
+    for (const float value : values) {
+        result.push_back(std::isnan(value) ? "nan" : std::to_string(value));
+    }
+    return result;
+}
+
+// The Bitrate tab's Difference band: frame graphs pair frame i with frame i
+// at the first's times, NaN past the second's last; stepped graphs subtract
+// over time, NaN before or after either's steps, each step lasting until the
+// next one starts (a group of pictures' end is a little off it either way).
+TEST(Bitrate, SubtractsTwoGraphsFrameByFrameOrOverTime) {
+    const float nan = std::nanf("");
+    const BitratePlot first{{0.0, 0.5, 1.0}, {10, 20, 30}, "Frame size (kbit)", "kbit"};
+    const BitratePlot second{{0.1, 0.6}, {4, 25}, "", ""};
+    const BitratePlot frames = frame_difference_plot(first, second);
+    EXPECT_EQ(frames.times, first.times);
+    EXPECT_EQ(texts(frames.values), texts({6, -5, nan}));
+    EXPECT_EQ(frames.axis_label, "Frame size (kbit)");
+
+    // a's second step overlaps its third by 1 ms; b's first ends 1 ms before its second
+    const BitratePlot a = stepped({{0, 1, 10}, {1, 2.001, 20}, {2, 3, 30}});
+    const BitratePlot b = stepped({{0.5, 1.999, 4}, {2, 3, 5}});
+    const BitratePlot difference = step_difference_plot(a, b);
+    EXPECT_EQ(difference.times, (std::vector<double>{0, 0.5, 0.5, 1, 1, 2, 2, 3}));
+    EXPECT_EQ(texts(difference.values), texts({nan, nan, 6, 6, 16, 16, 25, 25}));
+    EXPECT_EQ(difference.value_label, "kb/s");
+
+    // No time in common: no difference anywhere
+    const BitratePlot later = stepped({{5, 6, 1}});
+    EXPECT_TRUE(std::ranges::all_of(step_difference_plot(a, later).values, [](float v) { return std::isnan(v); }));
 }
 
 }  // namespace

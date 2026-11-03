@@ -788,7 +788,13 @@
   "The range starts after the end of one of the videos.": "Диапазон начинается после конца одного из видео.",
   "The range contains no frame of the videos.": "Диапазон не содержит ни одного кадра видео.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nПоддерживаемый GPU не найден, поэтому они вычисляются на CPU. Инструменты CPU оценивают по одной паре неподвижных изображений за раз: около 1 с для SSIMULACRA2 и 2 с для Butteraugli на кадр 4K, так что фильм займёт дни (оценки выше предполагают CPU, подобный тому, на котором проводились замеры). Задайте диапазон, чтобы оценить только часть видео.\n\nВсё равно вычислить?",
-  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Длительности не совпадают ({source} и {test} с). Задайте диапазон в пределах обоих файлов, если сравниваете только их общую часть."
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Длительности не совпадают ({source} и {test} с). Задайте диапазон в пределах обоих файлов, если сравниваете только их общую часть.",
+  "Difference": "Разница",
+  "Draws the first visible series minus the second, frame by frame, in a band under the graph with its own scale.": "Рисует первую видимую серию минус вторую, кадр за кадром, в полосе под графиком с собственной шкалой.",
+  "Show exactly two series with this metric's data to draw their difference.": "Покажите ровно две серии с данными этой метрики, чтобы нарисовать их разницу.",
+  "Draws the first video's bitrate minus the second's at each moment, in a band under the graph with its own scale.": "Рисует битрейт первого видео минус битрейт второго в каждый момент, в полосе под графиком с собственной шкалой.",
+  "Draws the first video's frame sizes minus the second's, frame by frame, in a band under the graph with its own scale.": "Рисует размеры кадров первого видео минус второго, кадр за кадром, в полосе под графиком с собственной шкалой.",
+  "Show exactly two videos to draw their difference.": "Покажите ровно два видео, чтобы нарисовать их разницу."
  },
  "plurals": {
   "about {count} day": [

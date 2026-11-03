@@ -89,6 +89,23 @@ BitratePlot second_plot(const BitrateData& data, bool adjust_start = true);
 // Each group of pictures' bitrate (keyframe to keyframe), in kb/s, as steps.
 BitratePlot gop_plot(const BitrateData& data, bool adjust_start = true);
 
+// Two graphs' difference, the first's values minus the second's (the Bitrate
+// tab's Difference band), with the first's labels.
+// - frame_difference_plot, of frame graphs: frame i with frame i (both in
+//   presentation order), at the first's times; NaN for frames the second
+//   does not have.
+// - step_difference_plot, of stepped graphs (per second, per group of
+//   pictures): the two steps subtracted over time, a step between each pair
+//   of neighbouring boundaries of either, NaN before or after either's
+//   steps. A step lasts until the next one starts, as its line is drawn (a
+//   group of pictures' own end can be a little before or after that).
+BitratePlot frame_difference_plot(const BitratePlot& first, const BitratePlot& second);
+BitratePlot step_difference_plot(const BitratePlot& first, const BitratePlot& second);
+// Each second's bitrate difference, from each stream's start, paired by the
+// second's number (vml/difference.h's second_difference): at the first's
+// seconds, NaN where the second has none. The command line's summary.
+std::vector<double> seconds_difference(const BitrateData& first, const BitrateData& second);
+
 // The groups of pictures: one starts at the first packet and at every later
 // keyframe. Each one's start and end (as second_bins'), its frames, bytes
 // and kb/s.
@@ -109,6 +126,13 @@ GopBins gop_bins(const BitrateData& data, bool adjust_start);
 std::string frames_csv(const BitrateData& data, bool adjust_start);
 std::string seconds_csv(const BitrateData& data, bool adjust_start);
 std::string gops_csv(const BitrateData& data, bool adjust_start);
+// Two videos' difference as CSV text (the command line's bitrate
+// --difference): each of the first's frames' number, time and size in bytes
+// minus the size of the second's frame of that number (empty where it has
+// none); and a stepped graphs' difference (step_difference_plot): each step's
+// start, end and kb/s (empty where there is none).
+std::string frame_difference_csv(const BitrateData& first, const BitrateData& second, bool adjust_start);
+std::string step_difference_csv(const BitratePlot& difference);
 
 // ffprobe's lines of packets, read one at a time as they come
 // (-show_packets in compact form), into the stream's packets in

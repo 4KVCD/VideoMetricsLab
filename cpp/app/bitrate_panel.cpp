@@ -84,6 +84,20 @@ QPixmap swatch_of(const QColor& color) {
     return swatch;
 }
 
+// The point of a line nearest `time`, the earlier one when they tie; none
+// for a line without points.
+std::optional<std::size_t> nearest_point(const std::vector<double>& times, double time) {
+    if (times.empty()) {
+        return std::nullopt;
+    }
+    auto index = static_cast<std::size_t>(std::lower_bound(times.begin(), times.end(), time) - times.begin());
+    index = std::min(times.size() - 1, index);
+    if (index > 0 && std::abs(times[index - 1] - time) <= std::abs(times[index] - time)) {
+        --index;
+    }
+    return index;
+}
+
 }  // namespace
 
 // ------------------------------------------------------------------ the worker
@@ -210,6 +224,16 @@ void BitratePanel::add_plot_controls(QVBoxLayout* root) {
     });
     plot_controls->addSpacing(18);
     plot_controls->addWidget(adjust_start_checkbox);
+    // Usable while two lines are drawn (refresh_difference); not saved, as
+    // Metric Graphs' box.
+    difference_box = new QCheckBox(app::tr("Difference"));
+    difference_box->setEnabled(false);
+    connect(difference_box, &QCheckBox::toggled, this, [this](bool /*on*/) {
+        refresh_difference();
+        on_hover_left();
+    });
+    plot_controls->addSpacing(18);
+    plot_controls->addWidget(difference_box);
     plot_controls->addStretch(1);
     reset_zoom_button = new QPushButton(app::tr("Reset zoom"));
     export_button = new QPushButton(app::tr("Export PNG\xE2\x80\xA6"));
@@ -766,30 +790,69 @@ void BitratePanel::refresh_plot() {
         }
         current_plots_.emplace_back(file_name(entry->path), plot);
     }
-    hover_label->reserve_lines(1 + static_cast<int>(current_plots_.size()));  // the time, then each line
+    refresh_difference();
     on_hover_left();
     update_buttons();
 }
 
+void BitratePanel::refresh_difference() {
+    // The first line (in the table's order) minus the second, in a band under the graph, while the box is on and
+    // exactly two lines are drawn: frame by frame on the frame graph, over time on the stepped ones.
+    const bool possible = current_plots_.size() == 2;
+    const bool frames = view_name() == "frame";
+    difference_box->setEnabled(possible);
+    difference_box->setToolTip(
+        !possible ? app::tr("Show exactly two videos to draw their difference.")
+        : frames  ? app::tr("Draws the first video's frame sizes minus the second's, frame by frame, in a band under "
+                            "the graph with its own scale.")
+                  : app::tr("Draws the first video's bitrate minus the second's at each moment, in a band under the "
+                            "graph with its own scale."));
+    difference_.reset();
+    if (possible && difference_box->isChecked()) {
+        const auto& [first_name, first] = current_plots_[0];
+        const auto& [second_name, second] = current_plots_[1];
+        auto plot = std::make_shared<BitratePlot>(frames ? frame_difference_plot(*first, *second)
+                                                         : step_difference_plot(*first, *second));
+        for (float& value : plot->values) {
+            value /= static_cast<float>(value_scale_);  // in the lines' unit
+        }
+        difference_ = plot;
+        difference_label_ = QStringLiteral("%1 − %2").arg(first_name, second_name);
+        // Flat: +- the readout's last decimal (on_hovered)
+        chart->set_band(ChartBand{{std::span(plot->times), std::span(plot->values), plot, QColor(), true},
+                                  difference_label_, value_scale_ > 1 ? 0.001 : 0.01});
+        if (!chart->has_band()) {
+            difference_.reset();  // no time in common: no band drawn, nothing to read out
+        }
+    } else {
+        chart->set_band(std::nullopt);
+    }
+    // The time, then each line, then the difference
+    hover_label->reserve_lines(1 + static_cast<int>(current_plots_.size()) + (difference_ ? 1 : 0));
+}
+
 void BitratePanel::on_hovered(double time) {
-    // Each line's value at the time under the pointer.
+    // Each line's value at the time under the pointer, then their difference.
     chart->set_cursor_time(time);
     QStringList lines{app::tr("Time: {time}", {{"time", qt_text(format_hms(time, 3))}})};
     for (const auto& [name, plot] : current_plots_) {
-        const std::vector<double>& times = plot->times;
-        if (times.empty()) {
-            continue;
+        if (const auto index = nearest_point(plot->times, time)) {
+            lines.append(python_format("{name}: {value:,.2f} {unit}",
+                                       {{"name", name},
+                                        {"value", static_cast<double>(plot->values[*index]) / value_scale_},
+                                        {"unit", value_unit_}}));
         }
-        // The point nearest the time, the earlier one when they tie.
-        auto index = static_cast<std::size_t>(std::lower_bound(times.begin(), times.end(), time) - times.begin());
-        index = std::min(times.size() - 1, index);
-        if (index > 0 && std::abs(times[index - 1] - time) <= std::abs(times[index] - time)) {
-            --index;
+    }
+    if (difference_) {
+        const auto index = nearest_point(difference_->times, time);
+        if (index && std::isfinite(difference_->values[*index])) {
+            // In Mb/s to the kilobit: two encodes a few kb/s apart do not read "-0.00"
+            lines.append(python_format(value_scale_ > 1 ? "Δ ({names}) = {value:,.3f} {unit}"
+                                                        : "Δ ({names}) = {value:,.2f} {unit}",
+                                       {{"names", difference_label_},
+                                        {"value", static_cast<double>(difference_->values[*index])},
+                                        {"unit", value_unit_}}));
         }
-        lines.append(python_format("{name}: {value:,.2f} {unit}",
-                                   {{"name", name},
-                                    {"value", static_cast<double>(plot->values[index]) / value_scale_},
-                                    {"unit", value_unit_}}));
     }
     hover_label->set_text(lines.join('\n'));
 }

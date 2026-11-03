@@ -32,6 +32,7 @@ struct ChartColours {
     QColor axis;
     QColor grid;
     QColor crosshair;
+    QColor difference;  // Metric Graphs' difference of two lines (ChartWidget::set_band)
 };
 
 // Whether the window is drawn in dark colours now.

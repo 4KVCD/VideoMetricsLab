@@ -788,7 +788,13 @@
   "The range starts after the end of one of the videos.": "يبدأ النطاق بعد نهاية أحد الفيديوين.",
   "The range contains no frame of the videos.": "لا يحتوي النطاق على أي إطار من الفيديوين.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nلم يُعثر على GPU مدعوم، لذا تُحسب على المعالج. تقيّم أدوات المعالج زوجًا واحدًا من الصور الثابتة في كل مرة: نحو ثانية واحدة لـ SSIMULACRA2 وثانيتين لـ Butteraugli لكل إطار 4K، لذا يستغرق الفيلم أيامًا (التقديرات أعلاه تفترض معالجًا مثل الذي قيست عليه). اضبط نطاقًا لتقييم جزء فقط من الفيديوهات.\n\nالحساب على أي حال؟",
-  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "المدتان غير متطابقتين ({source} مقابل {test} ثانية). اضبط نطاقًا ضمن الملفين إذا كنت تقارن جزءًا مشتركًا فقط."
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "المدتان غير متطابقتين ({source} مقابل {test} ثانية). اضبط نطاقًا ضمن الملفين إذا كنت تقارن جزءًا مشتركًا فقط.",
+  "Difference": "الفرق",
+  "Draws the first visible series minus the second, frame by frame, in a band under the graph with its own scale.": "يرسم السلسلة المرئية الأولى ناقص الثانية، إطارًا بإطار، في شريط أسفل الرسم البياني بمقياسه الخاص.",
+  "Show exactly two series with this metric's data to draw their difference.": "اعرض سلسلتين بالضبط تحتويان على بيانات هذا المقياس لرسم الفرق بينهما.",
+  "Draws the first video's bitrate minus the second's at each moment, in a band under the graph with its own scale.": "يرسم معدل بت الفيديو الأول ناقص معدل الثاني في كل لحظة، في شريط أسفل الرسم البياني بمقياسه الخاص.",
+  "Draws the first video's frame sizes minus the second's, frame by frame, in a band under the graph with its own scale.": "يرسم أحجام إطارات الفيديو الأول ناقص أحجام الثاني، إطارًا بإطار، في شريط أسفل الرسم البياني بمقياسه الخاص.",
+  "Show exactly two videos to draw their difference.": "اعرض فيديوهين بالضبط لرسم الفرق بينهما."
  },
  "plurals": {
   "about {count} day": [

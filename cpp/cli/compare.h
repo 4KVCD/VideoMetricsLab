@@ -86,4 +86,8 @@ std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& 
 std::vector<std::filesystem::path> expand_videos(const std::vector<std::string>& patterns,
                                                  const std::optional<std::filesystem::path>& excluded);
 
+// Why --difference cannot be used with `test_count` test videos (as
+// expand_tests finds them): it needs exactly two. Nothing when it can.
+std::optional<std::string> difference_refusal(std::size_t test_count);
+
 }  // namespace vml::cli
