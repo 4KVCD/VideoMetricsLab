@@ -319,8 +319,10 @@ struct BeforeSampling {
 };
 
 // FFmpeg's output of the pictures: Y4M on standard output (16-bit mono is
-// "unofficial" Y4M, so -strict -1).
-const std::vector<std::string> luma_output{"-f", "yuv4mpegpipe", "-strict", "-1", "-"};
+// "unofficial" Y4M, so -strict -1), each picture once: Y4M's muxer is
+// constant frame rate, and would fill the gaps between pictures picked out
+// (raw_previews_command) with copies of them.
+const std::vector<std::string> luma_output{"-fps_mode", "passthrough", "-f", "yuv4mpegpipe", "-strict", "-1", "-"};
 
 // The command that decodes `frames` pictures from `start` seconds (-ss, an
 // accurate seek: the pictures from that time on, as the app's decoder feeds
@@ -681,19 +683,24 @@ Pictures run_detection(const std::function<std::vector<std::string>(const std::o
     cancel.throw_if_cancelled();
     DetectionOutput output;
     while (true) {
+        std::string failure;
         try {
             output = run_ffmpeg(command(hwaccel), cancel, limit);
+            if ((output.code == 0 && output.read_error.empty()) || !hwaccel) {
+                break;
+            }
+            failure = failure_of(output);
         } catch (const CropDetectError& error) {
-            throw CropDetectError(std::string(error.what()) + " (" + path + ")");
-        }
-        if ((output.code == 0 && output.read_error.empty()) || !hwaccel) {
-            break;
+            if (!hwaccel) {
+                throw CropDetectError(std::string(error.what()) + " (" + path + ")");
+            }
+            failure = error.what();  // a GPU decoder that hung (timed out) or could not start
         }
         // A hardware attempt that fails is tried again in software; the
         // pixels, and so the bars, are the same. Info, not a warning: a GPU
         // that cannot decode the video is expected, and software answers.
         logger.info("Black bars in " + platform::path_text(platform::path_from_text(path).filename()) + ": " +
-                    failure_of(output) + " decoding with " + *hwaccel + "; sampling in software from here");
+                    failure + " decoding with " + *hwaccel + "; sampling in software from here");
         hwaccel.reset();
     }
     if (filters_rebuilt(output.lines)) {
