@@ -951,7 +951,9 @@ public:
           // The saved scores know a video by its file, not by the colours it
           // was read with, so --colour scores are neither read nor saved.
           use_saved_(!arguments.recalculate && settings.use_cache && !arguments.colour),
-          cache_folder_(std::move(cache_folder)) {}
+          cache_folder_(std::move(cache_folder)) {
+        note_argument_use(source);
+    }
 
     // Plans the comparison of the video at `path` (read with `ffprobe`), kept
     // in `videos` with why it is not compared, if it is not. Returns what the
@@ -960,6 +962,11 @@ public:
                                     const std::string& ffmpeg);
     // Each job's video, once every video is planned (the lists no longer grow).
     std::vector<TestVideo*> job_targets();
+    // What the command asked for that no video used (--fps with no raw
+    // stream, say), once every video is planned: about the command, not
+    // about any video's scores, so not among its notes. Nothing when no test
+    // video was read (its error says why).
+    std::vector<std::string> unused_argument_notes() const;
 
     std::vector<TestVideo> videos;
     std::vector<VmafJob> jobs;
@@ -977,6 +984,8 @@ private:
     // Whether `video`'s scores may be read from the saved scores: those it
     // would save (TestVideo::save_scores).
     bool reads_saved(const TestVideo& video) const { return use_saved_ && video.save_scores; }
+    // Marks the arguments that only some videos use as used by `video`.
+    void note_argument_use(const VideoInfo& video);
 
     const CompareArguments& arguments_;
     const Settings& settings_;
@@ -988,6 +997,13 @@ private:
     const std::filesystem::path cache_folder_;
     // Each job's video: its index, and for CVVDP on a further display, which.
     std::vector<std::pair<std::size_t, std::optional<std::size_t>>> job_videos_;
+    // Whether the reference or a test video read so far is a raw stream or
+    // raw YUV file (--fps), a raw YUV file (--size, --pix-fmt), or has film
+    // grain (--film-grain); and whether any test video was read.
+    bool raw_stream_used_ = false;
+    bool raw_yuv_used_ = false;
+    bool film_grain_used_ = false;
+    bool test_video_read_ = false;
 };
 
 // What the command could ask for when the two videos last differently: the
@@ -1034,15 +1050,8 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
     }
     video.save_scores =
         !arguments_.colour && video.colours_taken.empty() && !source_.timed_raw && !video.info->timed_raw;
-    if (arguments_.fps && !source_.is_raw_stream() && !video.info->is_raw_stream()) {
-        video.notes.emplace_back("--fps is not used: it is for raw streams and raw YUV files, and neither this "
-                                 "video nor the reference is one");
-    }
-    if ((arguments_.size || arguments_.pix_fmt) && source_.format_name != "rawvideo" &&
-        video.info->format_name != "rawvideo") {
-        video.notes.emplace_back("--size and --pix-fmt are not used: they are for raw YUV files, and neither this "
-                                 "video nor the reference is one");
-    }
+    note_argument_use(*video.info);
+    test_video_read_ = true;
     add_film_grain_notes(video);
     video.metrics = asked_;
     leave_out_cvvdp_if_unable(video);
@@ -1117,22 +1126,41 @@ void ComparisonPlanner::add_colour_notes(TestVideo& video) const {
     }
 }
 
-// Film grain asked for but left out (FilmGrainScoring::why_without), and
-// --film-grain given for two videos with no film grain.
+// Film grain asked for but left out (FilmGrainScoring::why_without).
 void ComparisonPlanner::add_film_grain_notes(TestVideo& video) const {
     const std::pair<const VideoInfo*, const char*> sides[] = {{&video.source, "the reference"},
                                                               {&*video.info, "the test video"}};
-    bool any_grain = false;
     for (const auto& [info, which] : sides) {
         const FilmGrainScoring grain = effective_film_grain(*info);
-        any_grain = any_grain || grain.scoring != GrainScoring::none;
         if (!grain.why_without.empty()) {
             video.notes.push_back(std::string("the film grain of ") + which + " is left out: " + grain.why_without);
         }
     }
-    if (arguments_.film_grain && !any_grain) {
-        video.notes.emplace_back("--film-grain is not used: neither this video nor the reference has film grain");
+}
+
+void ComparisonPlanner::note_argument_use(const VideoInfo& video) {
+    raw_stream_used_ = raw_stream_used_ || video.is_raw_stream();
+    raw_yuv_used_ = raw_yuv_used_ || video.format_name == "rawvideo";
+    film_grain_used_ = film_grain_used_ || effective_film_grain(video).scoring != GrainScoring::none;
+}
+
+std::vector<std::string> ComparisonPlanner::unused_argument_notes() const {
+    std::vector<std::string> notes;
+    if (!test_video_read_) {
+        return notes;
     }
+    if (arguments_.fps && !raw_stream_used_) {
+        notes.emplace_back("--fps is not used: it is for raw streams and raw YUV files, and neither the reference "
+                           "nor any test video is one.");
+    }
+    if ((arguments_.size || arguments_.pix_fmt) && !raw_yuv_used_) {
+        notes.emplace_back("--size and --pix-fmt are not used: they are for raw YUV files, and neither the "
+                           "reference nor any test video is one.");
+    }
+    if (arguments_.film_grain && !film_grain_used_) {
+        notes.emplace_back("--film-grain is not used: neither the reference nor any test video has film grain.");
+    }
+    return notes;
 }
 
 // Queues the jobs that compare `video`, checked against the reference
@@ -1365,6 +1393,9 @@ int compare(const CompareArguments& arguments) {
         return exit_usage;
     }
     report_plans(planner.videos, *progress);
+    for (const std::string& note : planner.unused_argument_notes()) {
+        progress->message(note);
+    }
 
     bool cancelled = false;
     if (!planner.jobs.empty()) {
