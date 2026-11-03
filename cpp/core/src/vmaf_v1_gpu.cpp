@@ -1279,9 +1279,6 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
     bool on_gpu = false;
     if (test_vvdec || reference_vvdec) {
         logger.info("VMAF v1 with the GPU: vvdec-vulkan's pictures go through system memory");
-    } else if (!plan.beside.empty()) {
-        logger.info("VMAF v1 with the GPU: the frames go through system memory, where the CPU's metrics beside it "
-                    "read them");
     } else if (test.handover() && reference.handover() && !test.shares_gpu_memory_with(reference)) {
         // Windows' own decoder for one video and AMF's for the other.
         logger.info("VMAF v1 with the GPU: the frames go through system memory (the videos' decoders share no "
@@ -1329,6 +1326,10 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
         test, reference, range, total_frames,
         [&](int test_slot, int reference_slot) {
             if (on_gpu) {
+                // The CPU's metrics read a download of the luma the GPU's scorers copy where it is.
+                if (beside) {
+                    beside->add_decoded(reference, reference_slot, test, test_slot);
+                }
                 scorer->add_decoded(reference, reference_slot, test, test_slot);
                 return;
             }
