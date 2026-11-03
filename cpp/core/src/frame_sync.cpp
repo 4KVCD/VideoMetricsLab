@@ -141,13 +141,6 @@ std::vector<std::string> numbering_filters(Rational rate) {
                                 std::to_string(rate.numerator)};
 }
 
-std::vector<std::string> duration_args(const std::optional<std::string>& duration_limit) {
-    if (!duration_limit || duration_limit->empty()) {
-        return {};
-    }
-    return {"-enc_time_base", "filter", "-t", *duration_limit};
-}
-
 std::optional<long long> frames_within(const std::optional<std::string>& duration_limit, Rational rate) {
     if (!duration_limit || duration_limit->empty()) {
         return std::nullopt;

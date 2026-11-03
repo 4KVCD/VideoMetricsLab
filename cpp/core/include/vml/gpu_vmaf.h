@@ -131,11 +131,10 @@ std::timed_mutex& gpu_pass();
 std::unique_lock<std::timed_mutex> take_gpu_turn(const std::function<void()>& on_wait, const CancelToken& cancel);
 
 // FFmpeg's output options for VMAF on the GPU, the test video's FFmpeg's and
-// the source's: the video's frames ([vmaf_dist] or [vmaf_ref]) as they come,
-// cut at `duration_limit` seconds (0: none), as YUV4MPEG into the pipe at
+// the source's: the video's frames ([vmaf_dist] or [vmaf_ref]) as they come
+// (a range's kept by the chains' heads), as YUV4MPEG into the pipe at
 // `test_pipe` or `source_pipe` (GpuAttempt's).
-std::pair<std::vector<std::string>, std::vector<std::string>> gpu_output_args(double duration_limit,
-                                                                              const std::string& test_pipe,
+std::pair<std::vector<std::string>, std::vector<std::string>> gpu_output_args(const std::string& test_pipe,
                                                                               const std::string& source_pipe);
 
 // The status a run waiting for the GPU's turn sends.
@@ -208,9 +207,9 @@ public:
     GpuAttempt& operator=(const GpuAttempt&) = delete;
 
     // FFmpeg's output options for the test video's FFmpeg and the source's:
-    // the video's frames ([vmaf_dist] or [vmaf_ref]) as they come, cut at
-    // `duration_limit` seconds (0: none), as YUV4MPEG into its pipe.
-    std::pair<std::vector<std::string>, std::vector<std::string>> output_args(double duration_limit) const;
+    // the video's frames ([vmaf_dist] or [vmaf_ref]) as they come, as
+    // YUV4MPEG into its pipe (gpu_output_args).
+    std::pair<std::vector<std::string>, std::vector<std::string>> output_args() const;
 
     // Call once FFmpeg has ended: the scores, or nothing when FFmpeg failed
     // (the caller then retries or gives up), a video's frames cut short by
@@ -234,9 +233,9 @@ private:
 
 // VMAF and NEG with both videos decoded in this process (gpu_frames.h)
 // instead of by FFmpeg: the frames GpuAttempt's FFmpegs would give, cropped,
-// scaled and widened by the decoders, and paired frame N with frame N as
-// far as `duration_limit` (-t's text, or nothing) keeps them. `decoders`
-// are the source's and the test video's (decoders_here); `ffmpeg` copies
+// scaled and widened by the decoders, and paired frame N with frame N, those
+// `range` decodes (score_frame_pairs). `decoders` are the source's and the
+// test video's (decoders_here); `ffmpeg` copies
 // their packets out of their containers. The plan's backend scores them:
 // the Vulkan engine, or libvmaf's CUDA code, which takes only NVIDIA's
 // decoder's pictures and the software decoder's. NVIDIA's pictures stay on
@@ -251,7 +250,7 @@ private:
 PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                          const std::optional<CropBox>& source_crop,
                          const std::optional<CropBox>& distorted_crop, const GpuPlan& plan,
-                         int n_subsample, const std::optional<std::string>& duration_limit,
+                         int n_subsample, const FrameRange& range,
                          long long total_frames, const std::string& scale_algorithm,
                          const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
                          const std::string& ffprobe,

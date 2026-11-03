@@ -37,16 +37,9 @@ const std::string* failure_of(const PerceptualFailures& failures, const std::str
     return found != failures.end() ? &found->second : nullptr;
 }
 
-double compared_seconds(const VideoInfo& source, const VideoInfo& distorted, double duration_limit) {
-    double seconds = std::min(source.duration, distorted.duration);
-    if (duration_limit > 0) {
-        seconds = std::min(seconds, duration_limit);
-    }
-    return seconds;
-}
-
-void validate_pair(const VideoInfo& source, const VideoInfo& distorted, double duration_limit) {
-    if (const std::optional<std::string> problem = pair_problem(source, distorted, duration_limit)) {
+void validate_pair(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options) {
+    if (const std::optional<std::string> problem =
+            pair_problem(source, distorted, options.range_start, options.range_end)) {
         throw PerceptualRunError(*problem);
     }
 }
@@ -64,7 +57,7 @@ CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const
                                                           : "Detecting black bars in source and distorted\xE2\x80\xA6"});
         }
         // Black bars are detected from samples across the whole file, not
-        // only the part compared: a short duration limit may fall entirely in
+        // only the part compared: a short range may fall entirely in
         // a dark intro, which must not decide the crop. Decoded in software,
         // as the Python app's perceptual metrics detect them.
         crops = crops_for(crop_mode, ffmpeg, source, distorted, cancel, std::nullopt, std::nullopt, scale_algorithm);

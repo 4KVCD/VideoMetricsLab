@@ -121,7 +121,7 @@ public:
     // app's decoder is the only one for its pictures, so no other route is
     // tried, and FFmpeg, finding its input's end, would have scored part of
     // the video as the whole), and Cancelled. FFmpeg stopping to read first
-    // (a duration limit, or its own failure, its caller's to report) is no
+    // (a range's end, or its own failure, its caller's to report) is no
     // error of the feeding.
     void finish();
 

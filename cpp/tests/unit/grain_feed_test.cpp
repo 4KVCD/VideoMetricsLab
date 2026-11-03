@@ -149,8 +149,8 @@ TEST(GrainFeed, AFedVideoTakesItsFilesPlaceInEveryCommand) {
     InputOptions files;
     InputOptions test_fed;
     test_fed.distorted_fed = fed;
-    EXPECT_EQ(build_ffmpeg_command("ffmpeg", test.path, source.path, "[0:v]null[a]", source_on_gpu, 0, test_fed),
-              with_fed_input(build_ffmpeg_command("ffmpeg", test.path, source.path, "[0:v]null[a]", source_on_gpu, 0,
+    EXPECT_EQ(build_ffmpeg_command("ffmpeg", test.path, source.path, "[0:v]null[a]", source_on_gpu, test_fed),
+              with_fed_input(build_ffmpeg_command("ffmpeg", test.path, source.path, "[0:v]null[a]", source_on_gpu,
                                                   files),
                              test, fed));
 
@@ -164,8 +164,8 @@ TEST(GrainFeed, AFedVideoTakesItsFilesPlaceInEveryCommand) {
     EXPECT_EQ(build_stream_commands("ffmpeg", test.path, source.path, graphs, HardwareDecoding{}, outputs, source_fed),
               streams);
 
-    EXPECT_EQ(build_resample_command("ffmpeg", source.path, "[0:v]null", std::nullopt, 0, {}, fed),
-              with_fed_input(build_resample_command("ffmpeg", source.path, "[0:v]null", std::nullopt, 0), source, fed));
+    EXPECT_EQ(build_resample_command("ffmpeg", source.path, "[0:v]null", std::nullopt, {}, fed),
+              with_fed_input(build_resample_command("ffmpeg", source.path, "[0:v]null", std::nullopt), source, fed));
 
     VideoInfo plain_test = test;
     plain_test.pix_fmt = "yuv420p";

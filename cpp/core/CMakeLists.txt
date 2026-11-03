@@ -17,6 +17,7 @@ add_library(vml_core
     src/film_grain_detect.cpp
     src/film_grain_scoring.cpp
     src/frame_extract.cpp
+    src/frame_range.cpp
     src/frame_sync.cpp
     src/geometry.cpp
     src/gpu_frames.cpp

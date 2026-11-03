@@ -28,7 +28,7 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--black-bars {auto,source,none}]
                                    [--scale-to {test,reference}]
                                    [--scaler {bicubic,bilinear,lanczos,spline}]
-                                   [--duration SECONDS | --frames N]
+                                   [--duration SECONDS | --range START-END]
                                    [--colour {pq-bt2020,hlg-bt2020,bt709}]
                                    [--film-grain {with,without}] [--fps RATE]
                                    [--size WIDTHxHEIGHT] [--pix-fmt FORMAT]
@@ -62,8 +62,10 @@ const char* const examples = R"(examples:
       the first 30 seconds only, everything calculated on the CPU
   VideoMetricsLab-cli compare reference.mkv encode.mkv -m vmaf --json - -q
       only JSON on the output, for a script to read
-  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33
-      HDR10 video in files with no colour tags, the first 33 frames
+  VideoMetricsLab-cli compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --duration 2
+      HDR10 video in files with no colour tags, the first 2 seconds
+  VideoMetricsLab-cli compare reference.mkv encode.mkv --range 1:00:00-1:02:00
+      two minutes, an hour into the videos
   VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001
       a raw VVC stream from an encoder, at 23.976 frames a second
   VideoMetricsLab-cli compare reference.yuv encode.266 --size 1920x1080 --pix-fmt yuv420p10le --fps 24000/1001
@@ -125,9 +127,11 @@ options:
                         differ (default: test)
   --scaler {bicubic,bilinear,lanczos,spline}
                         scaling algorithm (default: bicubic)
-  --duration SECONDS    compare only the first SECONDS of each video
-  --frames N            compare only the first N frames of each video (a short
-                        encode of a longer reference, say)
+  --duration SECONDS    compare only the first SECONDS of each video, whole
+                        seconds or H:MM:SS
+  --range START-END     compare only that part of each video, from START to
+                        END, each whole seconds or H:MM:SS (1:00-1:30);
+                        without END, to the videos' end
   --colour, --color {pq-bt2020,hlg-bt2020,bt709}
                         the colours of a video with no colour tags (y4m, say):
                         pq-bt2020 (HDR10), hlg-bt2020 or bt709 (SDR). A tagged
@@ -672,19 +676,8 @@ std::vector<std::string> metric_list(const std::string& text) {
     return keys;
 }
 
-// A number above 0, read as Python's float() or int() reads it (the app's
+// A whole number above 0, read as Python's int() reads it (the app's
 // _positive types).
-double positive_float(const std::string& text) {
-    const std::optional<double> value = python_float(text);
-    if (!value) {
-        throw ArgumentError{"invalid parse value: " + python_string_repr(text)};
-    }
-    if (!(*value > 0) || !std::isfinite(*value)) {
-        throw ArgumentError{"must be above 0"};
-    }
-    return *value;
-}
-
 long long positive_int(const std::string& text) {
     const std::optional<long long> value = python_int(text);
     if (!value) {
@@ -704,6 +697,58 @@ int int_up_to(const std::string& text, int most) {
         throw ArgumentError{"must be from 1 to " + std::to_string(most)};
     }
     return static_cast<int>(value);
+}
+
+// A time in whole seconds: "90", "1:30" or "1:01:30" (the minutes and
+// seconds after the first part in two digits, under 60); nothing for other
+// text, a part of a second included.
+std::optional<long long> whole_seconds(std::string_view text) {
+    static const std::regex time("([0-9]{1,9})(?::([0-9]{2}))?(?::([0-9]{2}))?");  // no overflow
+    const std::string stripped(python_strip(text));
+    std::smatch parts;
+    if (!std::regex_match(stripped, parts, time)) {
+        return std::nullopt;
+    }
+    long long seconds = 0;
+    for (std::size_t part = 1; part < parts.size() && parts[part].matched; ++part) {
+        const long long value = std::stoll(parts[part].str());
+        if (part > 1 && value >= 60) {
+            return std::nullopt;
+        }
+        seconds = seconds * 60 + value;
+    }
+    return seconds;
+}
+
+// --duration: the first whole seconds of the videos.
+long long duration_seconds(const std::string& text) {
+    const std::optional<long long> seconds = whole_seconds(text);
+    if (!seconds) {
+        throw ArgumentError{"invalid time: " + python_string_repr(text) + " (whole seconds, or H:MM:SS)"};
+    }
+    if (*seconds <= 0) {
+        throw ArgumentError{"must be above 0"};
+    }
+    return *seconds;
+}
+
+// --range: START-END in whole seconds, each as whole_seconds reads it; no
+// END: to the videos' end (0). An END written, 0 included, is after START.
+std::pair<long long, long long> time_range(const std::string& text) {
+    const std::size_t dash = text.find('-');
+    const std::optional<long long> start =
+        dash == std::string::npos ? std::nullopt : whole_seconds(text.substr(0, dash));
+    const std::string end_text = dash == std::string::npos ? std::string() : text.substr(dash + 1);
+    const bool to_the_end = python_strip(end_text).empty();
+    const std::optional<long long> end = to_the_end ? std::optional(0LL) : whole_seconds(end_text);
+    if (!start || !end) {
+        throw ArgumentError{"invalid time range: " + python_string_repr(text) +
+                            " (START-END, each whole seconds or H:MM:SS; no END: to the end)"};
+    }
+    if (!to_the_end && *end <= *start) {
+        throw ArgumentError{"its end must be after its start"};
+    }
+    return {*start, *end};
 }
 
 // A frame rate (--fps): a fraction of whole numbers below 2^53, as many as a
@@ -825,8 +870,8 @@ Parser compare_parser(CompareArguments& parsed) {
                [&parsed](const std::string& value) {
                    parsed.scaler = choice(value, {"bicubic", "bilinear", "lanczos", "spline"});
                }),
-        option({"--duration"}, [&parsed](const std::string& value) { parsed.duration = positive_float(value); }),
-        option({"--frames"}, [&parsed](const std::string& value) { parsed.frames = positive_int(value); }),
+        option({"--duration"}, [&parsed](const std::string& value) { parsed.duration = duration_seconds(value); }),
+        option({"--range"}, [&parsed](const std::string& value) { parsed.range = time_range(value); }),
         option({"--colour", "--color"},
                [&parsed](const std::string& value) {
                    parsed.colour = choice(value, {"pq-bt2020", "hlg-bt2020", "bt709"});
@@ -866,7 +911,7 @@ Parser compare_parser(CompareArguments& parsed) {
         flag({"-q", "--quiet"}, parsed.quiet),
         flag({"-v", "--verbose"}, parsed.verbose),
     };
-    parser.exclusive = {{"--duration", "--frames"}, {"--no-gpu-decode", "--gpu-decode"}};
+    parser.exclusive = {{"--duration", "--range"}, {"--no-gpu-decode", "--gpu-decode"}};
     return parser;
 }
 

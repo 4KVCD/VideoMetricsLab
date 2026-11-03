@@ -49,6 +49,7 @@
 #include <vector>
 
 #include "vml/cancel.h"
+#include "vml/frame_range.h"
 #include "vml/frame_sync.h"
 #include "vml/hardware_decoding.h"
 #include "vml/pair_scorer.h"
@@ -425,6 +426,14 @@ public:
     // Gives a slot back to the decoder once its picture has been copied.
     void release(int slot);
 
+    // Passes over the next `count` pictures, their slots given back without
+    // a copy: the frames before those a ranged run decodes (frame_range.h),
+    // counted as next() hands them out. `on_skipped` is told how many have
+    // gone every quarter of a second. False when the video ends first.
+    // Throws as next().
+    bool skip(long long count, const CancelToken& cancel,
+              const std::function<void(long long)>& on_skipped = {});
+
     // The time base of the pictures' timestamps, once FFmpeg has reported it
     // (before the first packet), for cutting a window of them by time
     // (grain_feed.h's WindowCut). Waits up to a minute. Throws
@@ -556,14 +565,15 @@ struct SlotReleases {
 
 // Scores two videos decoded in the app pair by pair, as the Python app's
 // frame_sync.decoded_frame_pairs pairs them: frame N of the test video with
-// frame N of the source, until either video ends, or as far as
-// `duration_limit` (-t's text) keeps frames at the test video's rate.
-// `score` is called with each pair's slots (the test video's, then the
-// source's), which are given back (`releases`) once it returns. Progress
-// goes to `on_progress` every quarter of a second.
-void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const VideoInfo& distorted,
-                       const std::optional<std::string>& duration_limit, long long total_frames,
-                       const std::function<void(int, int)>& score,
+// frame N of the source, until either video ends, those `range` decodes
+// (the frames before them passed over in both videos at once; `score`
+// counts its pairs from 0 at range.decode_start). `score` is called with each
+// pair's slots (the test video's, then the source's), which are given back
+// (`releases`) once it returns. Progress, of `total_frames` pairs and the
+// frames passed over before them, goes to `on_progress` every quarter of a
+// second.
+void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const FrameRange& range,
+                       long long total_frames, const std::function<void(int, int)>& score,
                        const std::function<void(long long, long long, double)>& on_progress,
                        const CancelToken& cancel, const SlotReleases& releases = {});
 

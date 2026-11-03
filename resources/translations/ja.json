@@ -165,7 +165,6 @@
   "Delete this preset of yours. Built-in presets cannot be deleted.": "この自分のプリセットを削除します。組み込みのプリセットは削除できません。",
   "Scale the video to fill the display": "動画をディスプレイいっぱいに拡大縮小する",
   "Off (the official default): the video is shown pixel for pixel, so a 1080p video covers a quarter of a 4K display. On: it is scaled, keeping its shape, to fill the display.\n\nSet per video: choosing or saving a display preset does not change it.": "オフ（公式の既定）：動画を 1 ピクセルずつそのまま表示するため、1080p の動画は 4K ディスプレイの 4 分の 1 を占めます。オン：縦横比を保ってディスプレイいっぱいに拡大縮小します。\n\n動画ごとの設定です：ディスプレイのプリセットを選んだり保存したりしても変わりません。",
-  "Duration limit (0 = full):": "時間の上限（0 = 全体）：",
   "Scaling algorithm:": "スケーリングアルゴリズム：",
   "Source downscaled to test": "ソースをテストに合わせて縮小",
   "Test upscaled to source": "テストをソースに合わせて拡大",
@@ -577,8 +576,6 @@
   "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} はタイムスタンプのない生の {codec} ストリームのため、フレームレートが分かりません。先にフレームレートを指定してコンテナに入れてください。例: mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix)（動画本来のフレームレートで）。",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "可変フレームレートの動画にはまだ安全に対応していません。比較する前に、両方の動画を同じ固定フレームレートに変換してください。",
   "Frame rates do not match ({source} vs {test} fps).": "フレームレートが一致しません（{source} と {test} fps）。",
-  "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "長さが一致しません（{source} と {test} 秒）。共通する冒頭部分だけを比較する場合は、両方のファイルに収まる時間の上限を設定してください。",
-  "The duration limit extends beyond the end of one of the videos.": "時間の上限がどちらかの動画の終わりを超えています。",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "クロップ後の 2 本の動画の形が異なります：ソース {source}、テスト {test}。採点すると一方をもう一方に引き伸ばすことになり、結果は無意味です。一方にレターボックスがある場合は、比較の前に黒帯が取り除かれるよう［黒帯の扱い］を［自動検出］にしてください。",
   "FFmpeg could not prepare lossless perceptual-metric frames.": "FFmpeg が知覚指標用のロスレスフレームを準備できませんでした。",
   "FFmpeg produced no frame pairs for perceptual metrics.": "FFmpeg が知覚指標用のフレームペアを出力しませんでした。",
@@ -728,7 +725,6 @@
   "Play / pause": "再生 / 一時停止",
   "Space": "スペース",
   "\n\nCalculated on the CPU, which gives different numbers from the GPU, so the next run calculates it again on this PC's GPU.": "\n\nCPU で計算されました。CPU は GPU と異なる数値になるため、次回の実行でこの PC の GPU で再計算します。",
-  "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a duration limit to score only the start.\n\nCalculate anyway?": "\n\n対応する GPU が見つからないため、CPU で計算されます。CPU ツールは静止画のペアを 1 組ずつ採点します：4K フレームあたり SSIMULACRA2 で約 1 秒、Butteraugli で約 2 秒かかるため、映画 1 本で数日かかります（上の見積もりは測定に使ったものと同程度の CPU を想定）。冒頭だけを採点するには、時間の上限を設定してください。\n\nそれでも計算しますか？",
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "GPU を選ぶと、VMAF v0.6.1、VMAF NEG、VMAF v1 は Vulkan で GPU 上で計算されます（Vulkan で計算できない NVIDIA GPU では、VMAF v0.6.1 と NEG は CUDA で計算されます）。VMAF v1: GPU コードがオプションに対応していないモデルでは、バンディングと色の特徴量 (CAMBI、SpEED) を CPU 上で計算します。PSNR、SSIM、XPSNR はどちらの場合も CPU で計算されます。GPU のスコアはすべてのフレームで CPU のスコアと 1000 分の 1 ポイント以内で一致するため、どちらを選んでも保存済みのスコアは保持されます。GPU での計算に失敗した場合は、代わりに CPU で計算されます。",
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (MoltenVK on Metal). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "GPU を選ぶと、VMAF v0.6.1、VMAF NEG、VMAF v1 は Vulkan で GPU 上で計算されます（MoltenVK / Metal）。VMAF v1: GPU コードがオプションに対応していないモデルでは、バンディングと色の特徴量 (CAMBI、SpEED) を CPU 上で計算します。PSNR、SSIM、XPSNR はどちらの場合も CPU で計算されます。GPU のスコアはすべてのフレームで CPU のスコアと 1000 分の 1 ポイント以内で一致するため、どちらを選んでも保存済みのスコアは保持されます。GPU での計算に失敗した場合は、代わりに CPU で計算されます。",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2、Butteraugli、CVVDP を動画ごとに 1 回のパスでまとめて計算する",
@@ -779,7 +775,17 @@
   "Source only (test video already cropped)": "ソースのみ（テスト動画はトリミング済み）",
   "The source's black bars are detected and cut; the test video is compared at its full frame, for an encode cropped when it was made.": "ソースの黒帯を検出して切り取り、テスト動画はフルフレームのまま比較します。作成時にトリミングされたエンコード向けです。",
   "Source only": "ソースのみ",
-  "The test video is compared at its full frame.": "テスト動画はフルフレームのまま比較されます。"
+  "The test video is compared at its full frame.": "テスト動画はフルフレームのまま比較されます。",
+  "Range:": "範囲：",
+  "to": "～",
+  "The part of the videos compared, in whole seconds, from the first time to the second. An end of 00:00:00 compares to the end of the videos.": "比較する動画の部分（秒単位の整数）。最初の時刻から 2 番目の時刻まで比較します。終わりが 00:00:00 の場合は動画の最後まで比較します。",
+  "The range extends beyond the end of one of the videos.": "範囲がどちらかの動画の終わりを超えています。",
+  "The range ends before it starts.": "範囲の終わりが始まりより前です。",
+  "A range needs the videos' frame rates, which are not known.": "範囲には動画のフレームレートが必要ですが、不明です。",
+  "The range starts after the end of one of the videos.": "範囲がどちらかの動画の終わりより後に始まっています。",
+  "The range contains no frame of the videos.": "範囲に動画のフレームが1つも含まれていません。",
+  "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\n対応する GPU が見つからないため、CPU で計算されます。CPU ツールは静止画のペアを 1 組ずつ採点します：4K フレームあたり SSIMULACRA2 で約 1 秒、Butteraugli で約 2 秒かかるため、映画 1 本で数日かかります（上の見積もりは測定に使ったものと同程度の CPU を想定）。動画の一部だけを採点するには、範囲を設定してください。\n\nそれでも計算しますか？",
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "長さが一致しません（{source} と {test} 秒）。共通する部分だけを比較する場合は、両方のファイルに収まる範囲を設定してください。"
  },
  "plurals": {
   "about {count} day": [

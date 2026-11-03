@@ -165,7 +165,6 @@
   "Delete this preset of yours. Built-in presets cannot be deleted.": "내 사전 설정을 삭제합니다. 기본 제공 사전 설정은 삭제할 수 없습니다.",
   "Scale the video to fill the display": "영상을 디스플레이에 맞게 확대/축소",
   "Off (the official default): the video is shown pixel for pixel, so a 1080p video covers a quarter of a 4K display. On: it is scaled, keeping its shape, to fill the display.\n\nSet per video: choosing or saving a display preset does not change it.": "끔(공식 기본값): 영상을 픽셀 단위 그대로 보여 주므로 1080p 영상은 4K 디스플레이의 4분의 1을 차지합니다. 켬: 비율을 유지한 채 디스플레이를 채우도록 확대/축소합니다.\n\n영상마다 설정합니다. 디스플레이 사전 설정을 고르거나 저장해도 바뀌지 않습니다.",
-  "Duration limit (0 = full):": "길이 제한(0 = 전체):",
   "Scaling algorithm:": "크기 조정 알고리즘:",
   "Source downscaled to test": "원본을 테스트 크기로 축소",
   "Test upscaled to source": "테스트를 원본 크기로 확대",
@@ -577,8 +576,6 @@
   "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video}은(는) 타임스탬프가 없는 원시 {codec} 스트림이라 프레임 레이트를 알 수 없습니다. 먼저 프레임 레이트를 지정해 컨테이너에 넣으세요. 예: mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix) (영상의 실제 프레임 레이트로).",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "가변 프레임 속도 영상은 아직 안전하게 지원되지 않습니다. 비교하기 전에 두 영상을 같은 고정 프레임 속도로 변환하세요.",
   "Frame rates do not match ({source} vs {test} fps).": "프레임 속도가 일치하지 않습니다({source} 대 {test} fps).",
-  "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "길이가 일치하지 않습니다({source} 대 {test}초). 공통된 앞부분만 비교한다면 두 파일 모두의 범위 안에서 길이 제한을 설정하세요.",
-  "The duration limit extends beyond the end of one of the videos.": "길이 제한이 영상 중 하나의 끝을 넘습니다.",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "자른 뒤 두 영상의 모양이 다릅니다: 원본 {source}, 테스트 {test}. 채점하면 한쪽을 다른 쪽에 맞게 늘이게 되어 결과가 무의미합니다. 한쪽에 레터박스가 있다면 비교 전에 검은 띠가 제거되도록 검은 띠 처리를 '자동 감지'로 설정하세요.",
   "FFmpeg could not prepare lossless perceptual-metric frames.": "FFmpeg가 지각 지표용 무손실 프레임을 준비하지 못했습니다.",
   "FFmpeg produced no frame pairs for perceptual metrics.": "FFmpeg가 지각 지표용 프레임 쌍을 만들지 않았습니다.",
@@ -728,7 +725,6 @@
   "Play / pause": "재생 / 일시 중지",
   "Space": "스페이스",
   "\n\nCalculated on the CPU, which gives different numbers from the GPU, so the next run calculates it again on this PC's GPU.": "\n\nCPU에서 계산했으며, CPU는 GPU와 결과가 다르므로 다음 실행에서 이 PC의 GPU로 다시 계산합니다.",
-  "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a duration limit to score only the start.\n\nCalculate anyway?": "\n\n지원되는 GPU를 찾지 못해 CPU에서 계산합니다. CPU 도구는 정지 이미지 한 쌍씩 채점합니다. 4K 프레임당 SSIMULACRA2는 약 1초, Butteraugli는 약 2초가 걸려 영화 한 편에 며칠이 걸립니다(위 예상은 측정에 쓴 것과 비슷한 CPU 기준). 앞부분만 채점하려면 길이 제한을 설정하세요.\n\n그래도 계산하시겠습니까?",
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "GPU를 선택하면 VMAF v0.6.1, VMAF NEG, VMAF v1이 Vulkan으로 GPU에서 계산됩니다(Vulkan으로 계산할 수 없는 NVIDIA GPU에서는 VMAF v0.6.1 및 NEG를 CUDA로 계산). VMAF v1: GPU 코드가 옵션을 지원하지 않는 모델에서는 밴딩 및 색상 특징(CAMBI, SpEED)을 CPU에서 계산합니다. PSNR, SSIM, XPSNR은 어느 쪽이든 CPU에서 계산됩니다. GPU의 점수는 모든 프레임에서 CPU의 점수와 1000분의 1점 이내로 일치하므로, 어느 쪽을 선택하든 저장된 점수가 유지됩니다. GPU 계산이 실패하면 대신 CPU에서 계산됩니다.",
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (MoltenVK on Metal). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "GPU를 선택하면 VMAF v0.6.1, VMAF NEG, VMAF v1이 Vulkan으로 GPU에서 계산됩니다(MoltenVK / Metal). VMAF v1: GPU 코드가 옵션을 지원하지 않는 모델에서는 밴딩 및 색상 특징(CAMBI, SpEED)을 CPU에서 계산합니다. PSNR, SSIM, XPSNR은 어느 쪽이든 CPU에서 계산됩니다. GPU의 점수는 모든 프레임에서 CPU의 점수와 1000분의 1점 이내로 일치하므로, 어느 쪽을 선택하든 저장된 점수가 유지됩니다. GPU 계산이 실패하면 대신 CPU에서 계산됩니다.",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2, Butteraugli, CVVDP를 영상당 한 번의 패스에서 함께 계산",
@@ -779,7 +775,17 @@
   "Source only (test video already cropped)": "소스만(테스트 영상은 이미 잘림)",
   "The source's black bars are detected and cut; the test video is compared at its full frame, for an encode cropped when it was made.": "소스의 검은 띠를 감지해 잘라 내고, 테스트 영상은 전체 프레임으로 비교합니다. 만들 때 이미 잘라 낸 인코딩용입니다.",
   "Source only": "소스만",
-  "The test video is compared at its full frame.": "테스트 영상은 전체 프레임으로 비교됩니다."
+  "The test video is compared at its full frame.": "테스트 영상은 전체 프레임으로 비교됩니다.",
+  "Range:": "범위:",
+  "to": "~",
+  "The part of the videos compared, in whole seconds, from the first time to the second. An end of 00:00:00 compares to the end of the videos.": "비교할 영상 부분(초 단위 정수)으로, 첫 시각부터 두 번째 시각까지입니다. 끝이 00:00:00이면 영상 끝까지 비교합니다.",
+  "The range extends beyond the end of one of the videos.": "범위가 영상 중 하나의 끝을 넘습니다.",
+  "The range ends before it starts.": "범위가 시작보다 먼저 끝납니다.",
+  "A range needs the videos' frame rates, which are not known.": "범위에는 영상의 프레임 레이트가 필요한데 알 수 없습니다.",
+  "The range starts after the end of one of the videos.": "범위가 영상 중 하나의 끝 뒤에서 시작합니다.",
+  "The range contains no frame of the videos.": "범위에 영상의 프레임이 하나도 없습니다.",
+  "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\n지원되는 GPU를 찾지 못해 CPU에서 계산합니다. CPU 도구는 정지 이미지 한 쌍씩 채점합니다. 4K 프레임당 SSIMULACRA2는 약 1초, Butteraugli는 약 2초가 걸려 영화 한 편에 며칠이 걸립니다(위 예상은 측정에 쓴 것과 비슷한 CPU 기준). 영상의 일부만 채점하려면 범위를 설정하세요.\n\n그래도 계산하시겠습니까?",
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "길이가 일치하지 않습니다({source} 대 {test}초). 공통된 부분만 비교한다면 두 파일 안에 있는 범위를 설정하세요."
  },
  "plurals": {
   "about {count} day": [

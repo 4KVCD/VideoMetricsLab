@@ -293,7 +293,7 @@ void PictureFeed::finish() {
     state.feeding.join();
     if (!state.failure) {
         // Fed to the video's end, or FFmpeg stopped reading first: where its
-        // run was to end (a duration limit), or failing, which its caller
+        // run was to end (a range's end), or failing, which its caller
         // reports.
         logger.info(state.file_name + ": " + std::to_string(state.result.value("frames", 0LL)) +
                     " pictures decoded by the app for FFmpeg" +

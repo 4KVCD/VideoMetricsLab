@@ -14,7 +14,6 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
-#include <cmath>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -110,6 +109,21 @@ bool vmaf_gpu_possible(const std::vector<GpuVendor>& gpu_vendors) {
 #endif
 }
 
+// A time in whole seconds (HH:mm:ss), applied when it is entered or a step
+// is taken, not at every digit typed: each change takes the rows' scores
+// away.
+QTimeEdit* new_seconds_edit() {
+    auto* edit = new QTimeEdit;
+    // In a right-to-left window (Arabic) QTimeEdit writes the sections
+    // backwards ("00:00:00" reversed); times read left to right in every
+    // language. The direction must be set before the display format.
+    edit->setLayoutDirection(Qt::LeftToRight);
+    edit->setDisplayFormat("HH:mm:ss");
+    edit->setTime(QTime(0, 0));
+    edit->setKeyboardTracking(false);
+    return edit;
+}
+
 }  // namespace
 
 OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* parent)
@@ -162,7 +176,7 @@ OptionsPanel::OptionsPanel(const std::vector<GpuVendor>& gpu_vendors, QWidget* p
 }
 
 void OptionsPanel::build_preparation(QFormLayout* form) {
-    // Black bars, duration, scaling algorithm and resolution mismatch.
+    // Black bars, range, scaling algorithm and resolution mismatch.
     crop_combo = new QComboBox;
     // The entries' data: the CropMode's number.
     crop_combo->addItem(app::tr("Auto-detect (recommended)"), static_cast<int>(CropMode::automatic));
@@ -175,18 +189,21 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
     connect(crop_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("crop_mode"); });
     form->addRow(app::tr("Black-bar handling:"), crop_combo);
 
-    duration_edit = new QTimeEdit;
-    // In a right-to-left window (Arabic) QTimeEdit writes the sections
-    // backwards ("000.00:00:00"); times read left to right in every
-    // language. The direction must be set before the display format.
-    duration_edit->setLayoutDirection(Qt::LeftToRight);
-    duration_edit->setDisplayFormat("HH:mm:ss.zzz");
-    duration_edit->setTime(QTime(0, 0, 0, 0));
-    // Applied when the time is entered or a step is taken, not at every
-    // digit typed: each change takes the rows' scores away.
-    duration_edit->setKeyboardTracking(false);
-    connect(duration_edit, &QTimeEdit::timeChanged, this, [this] { emit field_edited("duration_limit"); });
-    form->addRow(app::tr("Duration limit (0 = full):"), duration_edit);
+    // The range compared, from its start to its end in whole seconds (an end
+    // of 0: to the videos' end).
+    range_start_edit = new_seconds_edit();
+    range_end_edit = new_seconds_edit();
+    connect(range_start_edit, &QTimeEdit::timeChanged, this, [this] { emit field_edited("range_start"); });
+    connect(range_end_edit, &QTimeEdit::timeChanged, this, [this] { emit field_edited("range_end"); });
+    auto* range_row = new QHBoxLayout;
+    range_row->addWidget(range_start_edit);
+    range_row->addWidget(new QLabel(app::tr("to")));
+    range_row->addWidget(range_end_edit);
+    range_row->addStretch();
+    auto* range_label = new QLabel(app::tr("Range:"));
+    range_label->setToolTip(app::tr("The part of the videos compared, in whole seconds, from the first time to the "
+                                    "second. An end of 00:00:00 compares to the end of the videos."));
+    form->addRow(range_label, range_row);
 
     scale_algo_combo = new QComboBox;
     scale_algo_combo->addItems(scale_algorithms);
@@ -261,7 +278,7 @@ void OptionsPanel::build_metric_settings(QFormLayout* form) {
     subsample_spin = new QSpinBox;
     subsample_spin->setRange(1, 60);
     subsample_spin->setValue(1);
-    subsample_spin->setKeyboardTracking(false);  // as the duration: not at every digit typed
+    subsample_spin->setKeyboardTracking(false);  // as the range: not at every digit typed
     connect(subsample_spin, &QSpinBox::valueChanged, this, [this] { emit field_edited("n_subsample"); });
     form->addRow(app::tr("libvmaf frame subsample:"), subsample_spin);
     subsample_spin->setToolTip(
@@ -450,9 +467,8 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::vector<Vm
         std::max(0, static_cast<int>(scale_algorithms.indexOf(QString::fromStdString(options.scale_algorithm)))));
     scale_direction_combo->setCurrentIndex(options.scale_direction == ScaleDirection::distorted_to_source ? 1 : 0);
 
-    // Rounded half to even, as Python's round() rounds.
-    const auto milliseconds = static_cast<int>(std::nearbyint(options.duration_limit * 1000));
-    duration_edit->setTime(QTime(0, 0, 0, 0).addMSecs(milliseconds));
+    range_start_edit->setTime(QTime(0, 0).addSecs(static_cast<int>(options.range_start)));
+    range_end_edit->setTime(QTime(0, 0).addSecs(static_cast<int>(options.range_end)));
 
     const auto any = [&selected](auto&& predicate) { return std::any_of(selected.begin(), selected.end(), predicate); };
     model_combo->setEnabled(any([](const VmafOptions& item) { return item.compute_vmaf; }));
@@ -545,7 +561,8 @@ VmafOptions OptionsPanel::read_options(const std::vector<std::string>& extra_fea
     options.compute_xpsnr = compute_xpsnr;
     options.compute_vmaf = compute_vmaf;
     options.compute_vmaf_neg = compute_vmaf_neg;
-    options.duration_limit = QTime(0, 0, 0, 0).msecsTo(duration_edit->time()) / 1000.0;
+    options.range_start = QTime(0, 0).secsTo(range_start_edit->time());
+    options.range_end = QTime(0, 0).secsTo(range_end_edit->time());
     options.gpu_decode = gpu_checkbox->isChecked();
     options.gpu_vendor = gpu_checkbox->isChecked()
                              ? gpu_vendor_entries[static_cast<std::size_t>(gpu_vendor_combo->currentIndex())]

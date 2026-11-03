@@ -165,7 +165,6 @@
   "Delete this preset of yours. Built-in presets cannot be deleted.": "删除你的这个预设。内置预设无法删除。",
   "Scale the video to fill the display": "缩放视频以填满显示器",
   "Off (the official default): the video is shown pixel for pixel, so a 1080p video covers a quarter of a 4K display. On: it is scaled, keeping its shape, to fill the display.\n\nSet per video: choosing or saving a display preset does not change it.": "关闭（官方默认）：视频按像素一比一显示，因此 1080p 视频只占 4K 显示器的四分之一。开启：保持比例缩放以填满显示器。\n\n按视频单独设置：选择或保存显示器预设不会改变它。",
-  "Duration limit (0 = full):": "时长限制（0 = 全部）：",
   "Scaling algorithm:": "缩放算法：",
   "Source downscaled to test": "源缩小到测试分辨率",
   "Test upscaled to source": "测试放大到源分辨率",
@@ -577,8 +576,6 @@
   "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} 是没有时间戳的原始 {codec} 流，因此无法知道其帧率。请先按其帧率将它放入容器，例如 mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix)（使用视频本身的帧率）。",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "尚不能安全地支持可变帧率视频。比较前请将两个视频转换为相同的恒定帧率。",
   "Frame rates do not match ({source} vs {test} fps).": "帧率不一致（{source} 与 {test} fps）。",
-  "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "时长不一致（{source} 与 {test} 秒）。如果只比较两者共同的开头部分，请在两个文件的范围内设置时长限制。",
-  "The duration limit extends beyond the end of one of the videos.": "时长限制超出了其中一个视频的结尾。",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "两个视频裁切后的形状不同：源为 {source}，测试为 {test}。评分会把一个拉伸以适应另一个，结果将毫无意义。如果其中一个带有黑边，请将黑边处理设为“自动检测”，以便在比较前去除黑边。",
   "FFmpeg could not prepare lossless perceptual-metric frames.": "FFmpeg 无法为感知指标准备无损帧。",
   "FFmpeg produced no frame pairs for perceptual metrics.": "FFmpeg 没有为感知指标生成帧对。",
@@ -728,7 +725,6 @@
   "Play / pause": "播放 / 暂停",
   "Space": "空格",
   "\n\nCalculated on the CPU, which gives different numbers from the GPU, so the next run calculates it again on this PC's GPU.": "\n\n在 CPU 上计算，CPU 得出的数值与 GPU 不同，因此下次运行会在本机的 GPU 上重新计算。",
-  "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a duration limit to score only the start.\n\nCalculate anyway?": "\n\n未找到受支持的 GPU，因此在 CPU 上计算。CPU 工具一次只能对一对静止画面评分：每个 4K 帧 SSIMULACRA2 约 1 秒、Butteraugli 约 2 秒，因此一部电影需要数天（上面的估算假设 CPU 与测量时所用的相当）。设置时长限制可只对开头评分。\n\n仍然计算吗？",
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "选择 GPU 时，VMAF v0.6.1、VMAF NEG 和 VMAF v1 通过 Vulkan 在 GPU 上计算（在 Vulkan 无法计算它们的 NVIDIA GPU 上，VMAF v0.6.1 和 NEG 使用 CUDA）。VMAF v1：对于 GPU 代码不支持其选项的模型，色带和色彩特征（CAMBI、SpEED）在 CPU 上计算。PSNR、SSIM 和 XPSNR 无论如何都在 CPU 上计算。GPU 的分数在每一帧都与 CPU 的结果相差不超过千分之一分，因此无论选择哪一项，已保存的分数都会保留。如果 GPU 计算失败，则改在 CPU 上计算。",
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (MoltenVK on Metal). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "选择 GPU 时，VMAF v0.6.1、VMAF NEG 和 VMAF v1 通过 Vulkan 在 GPU 上计算（MoltenVK / Metal）。VMAF v1：对于 GPU 代码不支持其选项的模型，色带和色彩特征（CAMBI、SpEED）在 CPU 上计算。PSNR、SSIM 和 XPSNR 无论如何都在 CPU 上计算。GPU 的分数在每一帧都与 CPU 的结果相差不超过千分之一分，因此无论选择哪一项，已保存的分数都会保留。如果 GPU 计算失败，则改在 CPU 上计算。",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "SSIMULACRA2、Butteraugli 和 CVVDP 在每个视频的同一遍中一起计算",
@@ -779,7 +775,17 @@
   "Source only (test video already cropped)": "仅源视频（测试视频已裁剪）",
   "The source's black bars are detected and cut; the test video is compared at its full frame, for an encode cropped when it was made.": "检测并裁掉源视频的黑边；测试视频以完整画面比较，适用于制作时已裁剪的编码。",
   "Source only": "仅源视频",
-  "The test video is compared at its full frame.": "测试视频以完整画面比较。"
+  "The test video is compared at its full frame.": "测试视频以完整画面比较。",
+  "Range:": "范围：",
+  "to": "至",
+  "The part of the videos compared, in whole seconds, from the first time to the second. An end of 00:00:00 compares to the end of the videos.": "比较的视频部分，以整秒计，从第一个时间到第二个时间。结束为 00:00:00 时比较到视频结尾。",
+  "The range extends beyond the end of one of the videos.": "范围超出了其中一个视频的结尾。",
+  "The range ends before it starts.": "范围的结束早于开始。",
+  "A range needs the videos' frame rates, which are not known.": "范围需要视频的帧率，但帧率未知。",
+  "The range starts after the end of one of the videos.": "范围在其中一个视频结束之后才开始。",
+  "The range contains no frame of the videos.": "范围内没有视频的任何一帧。",
+  "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\n未找到受支持的 GPU，因此在 CPU 上计算。CPU 工具一次只能对一对静止画面评分：每个 4K 帧 SSIMULACRA2 约 1 秒、Butteraugli 约 2 秒，因此一部电影需要数天（上面的估算假设 CPU 与测量时所用的相当）。设置范围可只对视频的一部分评分。\n\n仍然计算吗？",
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "时长不一致（{source} 与 {test} 秒）。如果只比较两者共同的部分，请设置一个在两个文件之内的范围。"
  },
  "plurals": {
   "about {count} day": [

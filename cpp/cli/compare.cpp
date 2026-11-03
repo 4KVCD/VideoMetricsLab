@@ -15,6 +15,8 @@
 #include <set>
 #include <string_view>
 #include <thread>
+#include <tuple>
+#include <utility>
 
 #include "common.h"
 #include "report.h"
@@ -28,6 +30,7 @@
 #include "vml/ffprobe.h"
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
+#include "vml/frame_range.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
 #include "vml/gpu_frames.h"
@@ -319,21 +322,13 @@ std::optional<std::string> vmaf_where(const CompareArguments& arguments) {
     return arguments.cpu ? std::optional<std::string>("cpu") : std::nullopt;
 }
 
-// The duration limit, in seconds, of --duration or --frames; 0 for none.
-//
-// N frames are the frames that start before N/fps, numbered at the test
-// video's frame rate as every metric numbers them. The limit is half a frame
-// short of that, so that writing it to the millisecond (-t) can neither drop
-// the last frame nor take one more. Throws std::invalid_argument for
-// --frames on a video without a frame rate.
-double duration_limit(const CompareArguments& arguments, const VideoInfo& test) {
-    if (!arguments.frames) {
-        return arguments.duration.value_or(0.0);
+// The range compared, in whole seconds (an end of 0: to the end): --range's,
+// or --duration's first seconds; both 0: the whole videos.
+std::pair<long long, long long> range_of(const CompareArguments& arguments) {
+    if (arguments.range) {
+        return *arguments.range;
     }
-    if (test.fps <= 0) {
-        throw std::invalid_argument("its frame rate is unknown, so --frames cannot count its frames; use --duration");
-    }
-    return (static_cast<double>(*arguments.frames) - 0.5) / test.fps;
+    return {0, arguments.duration.value_or(0)};
 }
 
 // The Vship build SSIMULACRA2, Butteraugli and CVVDP run on: --vship's, or
@@ -394,7 +389,7 @@ std::optional<bool> film_grain_choice(const CompareArguments& arguments, const S
 }
 
 VmafOptions row_options(const CompareArguments& arguments, const Settings& settings,
-                        const std::vector<std::string>& metric_keys, const VideoInfo& test) {
+                        const std::vector<std::string>& metric_keys) {
     const std::optional<std::string> vmaf_on = vmaf_where(arguments);
     VmafOptions options;
     // --gpu-decode turns GPU decoding on, whatever Settings say.
@@ -407,7 +402,7 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
     options.scale_algorithm = arguments.scaler;
     options.scale_direction = arguments.scale_to == "reference" ? ScaleDirection::distorted_to_source
                                                                 : ScaleDirection::source_to_distorted;
-    options.duration_limit = duration_limit(arguments, test);
+    std::tie(options.range_start, options.range_end) = range_of(arguments);
     options.crop_mode = arguments.black_bars == "auto"     ? CropMode::automatic
                         : arguments.black_bars == "source" ? CropMode::source_only
                                                            : CropMode::none;
@@ -987,6 +982,22 @@ private:
     std::vector<std::pair<std::size_t, std::optional<std::size_t>>> job_videos_;
 };
 
+// What the command could ask for when the two videos last differently: the
+// end that compares to the shorter video's end, its last second partial
+// (end_second_of), from the range's start where it has one (a range with
+// no end is all it can have here), or any part of both.
+std::string different_durations_hint(const VideoInfo& source, const VideoInfo& test, long long range_start) {
+    if (source.fps <= 0 || source.duration <= 0 || test.duration <= 0) {
+        return " Here: --duration SECONDS or --range START-END.";
+    }
+    const long long end =
+        end_second_of(std::min(source.estimated_frame_count(), test.estimated_frame_count()), source.fps);
+    const std::string to_the_end = range_start > 0
+                                       ? "--range " + std::to_string(range_start) + "-" + std::to_string(end)
+                                       : "--duration " + std::to_string(end);
+    return " Here: " + to_the_end + " compares to the shorter video's end; --range START-END compares a part of both.";
+}
+
 std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& path, const std::string& ffprobe,
                                                    const std::string& ffmpeg) {
     TestVideo& video = videos.emplace_back();
@@ -1040,7 +1051,8 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
     } catch (const std::exception& error) {
         video.error = error.what();
         if (video.error.starts_with("Durations do not match")) {
-            video.error += " Here: --frames N or --duration SECONDS.";
+            video.error += different_durations_hint(video.source, *video.info,
+                                                    arguments_.range ? arguments_.range->first : 0);
         }
         return std::nullopt;
     }
@@ -1121,7 +1133,7 @@ void ComparisonPlanner::add_film_grain_notes(TestVideo& video) const {
 // decoded on the GPU. Returns what the command line cannot do yet of its own
 // job, or nothing; throws when the two videos cannot be compared as asked.
 std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video, const std::string& ffmpeg) {
-    video.options = row_options(arguments_, settings_, video.metrics, *video.info);
+    video.options = row_options(arguments_, settings_, video.metrics);
     validate_video_pair(video.source, *video.info, video.options);
     const auto [width, height] = analysis_dimensions(video.source, *video.info, video.options);
     VmafOptions options = video.options;
@@ -1163,7 +1175,7 @@ void ComparisonPlanner::queue_other_displays(TestVideo& video) {
         other.display = displays_[display].first;
         other.for_display_only = true;
         other.save_scores = video.save_scores;
-        other.options = row_options(arguments_, settings_, other.metrics, *video.info);
+        other.options = row_options(arguments_, settings_, other.metrics);
         const std::size_t before = jobs.size();
         queue(other, other.source, other.options, backends_, displays_[display].second, reads_saved(other),
               cache_folder_, jobs);

@@ -66,9 +66,12 @@ bool MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& pa
             continue;  // rows removed meanwhile are not asked about
         }
         texts.append(text);
-        queries.emplace(text, SavedScoresQuery{row_data->identity_path(), analysis_request_of(*row_data),
+        const AnalysisRequest request = analysis_request_of(*row_data);
+        const auto forgotten = row_data->forgotten_metrics.find(request.recipe.identity().dump());
+        queries.emplace(text, SavedScoresQuery{row_data->identity_path(), request,
                                                displayable_metric_specs(row_data->options, row_data->cvvdp),
-                                               row_data->forgotten_metrics});
+                                               forgotten == row_data->forgotten_metrics.end() ? std::set<std::string>()
+                                                                                              : forgotten->second});
         cache_lookup_paths_.push_back(row_data->path);
     }
     if (texts.isEmpty()) {
@@ -264,10 +267,12 @@ void MainWindow::recompute_rows(const std::vector<int>& rows, bool forget_saved)
                                   request = analysis_request_of(row_data)] {
                                      clear_metrics(base, source, identity, request.recipe, request.metrics);
                                  });
-            // Auto's saved scores would answer them again (load_result).
-            if (row_data.options.crop_mode == CropMode::source_only) {
+            // Auto's saved scores (Source only) or the whole videos' (a
+            // range) would answer them again (load_result).
+            const ComparisonRecipe recipe = analysis_request_of(row_data).recipe;
+            if (recipe.crop_mode == CropMode::source_only || recipe.range_start > 0 || recipe.range_end > 0) {
                 const std::vector<std::string> keys = requested_metrics(row_data);
-                row_data.forgotten_metrics.insert(keys.begin(), keys.end());
+                row_data.forgotten_metrics[recipe.identity().dump()].insert(keys.begin(), keys.end());
             }
         }
         // The Scaling cell for the row's settings again, not the cleared

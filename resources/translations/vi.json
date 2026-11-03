@@ -165,7 +165,6 @@
   "Delete this preset of yours. Built-in presets cannot be deleted.": "Xóa cài đặt sẵn riêng này. Không thể xóa cài đặt sẵn tích hợp.",
   "Scale the video to fill the display": "Phóng video cho đầy màn hình",
   "Off (the official default): the video is shown pixel for pixel, so a 1080p video covers a quarter of a 4K display. On: it is scaled, keeping its shape, to fill the display.\n\nSet per video: choosing or saving a display preset does not change it.": "Tắt (giá trị chính thức): video hiển thị theo từng pixel, nên video 1080p chiếm một phần tư màn hình 4K. Bật: phóng to, giữ nguyên tỷ lệ, cho đầy màn hình.\n\nĐặt riêng cho từng video: chọn hoặc lưu cài đặt sẵn màn hình không thay đổi nó.",
-  "Duration limit (0 = full):": "Giới hạn thời lượng (0 = toàn bộ):",
   "Scaling algorithm:": "Thuật toán co giãn:",
   "Source downscaled to test": "Thu nhỏ nguồn theo video thử",
   "Test upscaled to source": "Phóng to video thử theo nguồn",
@@ -577,8 +576,6 @@
   "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} là luồng {codec} thô không có dấu thời gian, nên không biết tốc độ khung hình. Hãy đưa nó vào một container kèm tốc độ khung hình trước, ví dụ mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), với tốc độ khung hình thật của video.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Video có tốc độ khung hình thay đổi chưa được hỗ trợ an toàn. Hãy chuyển cả hai video sang cùng một tốc độ khung hình cố định trước khi so sánh.",
   "Frame rates do not match ({source} vs {test} fps).": "Tốc độ khung hình không khớp ({source} so với {test} fps).",
-  "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "Thời lượng không khớp ({source} so với {test} giây). Đặt giới hạn thời lượng nằm trong cả hai tệp nếu bạn chỉ so sánh phần đầu chung.",
-  "The duration limit extends beyond the end of one of the videos.": "Giới hạn thời lượng vượt quá cuối một trong hai video.",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "Hai video có hình dạng khác nhau sau khi cắt: nguồn {source} so với thử {test}. Việc chấm điểm sẽ kéo giãn một video cho vừa video kia và kết quả sẽ vô nghĩa. Nếu một video có viền (letterbox), hãy đặt Viền đen thành Tự phát hiện để bỏ viền trước khi so sánh.",
   "FFmpeg could not prepare lossless perceptual-metric frames.": "FFmpeg không chuẩn bị được khung hình không mất dữ liệu cho chỉ số cảm nhận.",
   "FFmpeg produced no frame pairs for perceptual metrics.": "FFmpeg không tạo ra cặp khung hình nào cho chỉ số cảm nhận.",
@@ -728,7 +725,6 @@
   "Play / pause": "Phát / tạm dừng",
   "Space": "Space",
   "\n\nCalculated on the CPU, which gives different numbers from the GPU, so the next run calculates it again on this PC's GPU.": "\n\nĐã tính trên CPU, vốn cho số khác với GPU, nên lần chạy tới sẽ tính lại trên GPU của máy này.",
-  "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a duration limit to score only the start.\n\nCalculate anyway?": "\n\nKhông tìm thấy GPU được hỗ trợ, nên chúng được tính trên CPU. Công cụ CPU chấm từng cặp ảnh tĩnh một: khoảng 1 giây cho SSIMULACRA2 và 2 giây cho Butteraugli mỗi khung hình 4K, nên một bộ phim mất nhiều ngày (ước tính trên giả định CPU giống máy đã dùng để đo). Hãy đặt giới hạn thời lượng để chỉ chấm phần đầu.\n\nVẫn tính?",
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "Với GPU, VMAF v0.6.1, VMAF NEG và VMAF v1 được tính trên GPU bằng Vulkan (VMAF v0.6.1 và NEG bằng CUDA trên GPU NVIDIA mà Vulkan không tính được). VMAF v1: với mô hình có tùy chọn mà mã GPU không hỗ trợ, các đặc trưng dải màu và màu sắc (CAMBI, SpEED) trên CPU. PSNR, SSIM và XPSNR luôn được tính trên CPU. Điểm của GPU khớp với điểm của CPU trong phạm vi một phần nghìn điểm ở mọi khung hình, nên điểm đã lưu được giữ lại dù chọn cách nào. Nếu việc tính trên GPU thất bại, chúng được tính trên CPU.",
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (MoltenVK on Metal). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "Với GPU, VMAF v0.6.1, VMAF NEG và VMAF v1 được tính trên GPU bằng Vulkan (MoltenVK / Metal). VMAF v1: với mô hình có tùy chọn mà mã GPU không hỗ trợ, các đặc trưng dải màu và màu sắc (CAMBI, SpEED) trên CPU. PSNR, SSIM và XPSNR luôn được tính trên CPU. Điểm của GPU khớp với điểm của CPU trong phạm vi một phần nghìn điểm ở mọi khung hình, nên điểm đã lưu được giữ lại dù chọn cách nào. Nếu việc tính trên GPU thất bại, chúng được tính trên CPU.",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "Tính SSIMULACRA2, Butteraugli và CVVDP cùng lúc, một lượt cho mỗi video",
@@ -779,7 +775,17 @@
   "Source only (test video already cropped)": "Chỉ nguồn (video thử đã được cắt sẵn)",
   "The source's black bars are detected and cut; the test video is compared at its full frame, for an encode cropped when it was made.": "Các dải đen của nguồn được phát hiện và cắt bỏ; video thử được so sánh với toàn khung hình, cho bản mã hóa đã được cắt khi tạo.",
   "Source only": "Chỉ nguồn",
-  "The test video is compared at its full frame.": "Video thử được so sánh với toàn khung hình."
+  "The test video is compared at its full frame.": "Video thử được so sánh với toàn khung hình.",
+  "Range:": "Khoảng:",
+  "to": "đến",
+  "The part of the videos compared, in whole seconds, from the first time to the second. An end of 00:00:00 compares to the end of the videos.": "Phần video được so sánh, theo giây chẵn, từ thời điểm thứ nhất đến thời điểm thứ hai. Điểm kết thúc 00:00:00 so sánh đến hết video.",
+  "The range extends beyond the end of one of the videos.": "Khoảng vượt quá cuối một trong hai video.",
+  "The range ends before it starts.": "Khoảng kết thúc trước khi bắt đầu.",
+  "A range needs the videos' frame rates, which are not known.": "Khoảng cần tốc độ khung hình của video, nhưng chưa biết.",
+  "The range starts after the end of one of the videos.": "Khoảng bắt đầu sau khi một trong hai video đã kết thúc.",
+  "The range contains no frame of the videos.": "Khoảng này không chứa khung hình nào của video.",
+  "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nKhông tìm thấy GPU được hỗ trợ, nên chúng được tính trên CPU. Công cụ CPU chấm từng cặp ảnh tĩnh một: khoảng 1 giây cho SSIMULACRA2 và 2 giây cho Butteraugli mỗi khung hình 4K, nên một bộ phim mất nhiều ngày (ước tính trên giả định CPU giống máy đã dùng để đo). Hãy đặt một khoảng để chỉ chấm một phần video.\n\nVẫn tính?",
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Thời lượng không khớp ({source} so với {test} giây). Đặt một khoảng nằm trong cả hai tệp nếu bạn chỉ so sánh một phần chung."
  },
  "plurals": {
   "about {count} day": [

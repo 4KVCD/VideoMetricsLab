@@ -315,7 +315,7 @@
     "crop_mode": "none",
     "scale_direction": "distorted_to_source",
     "scale_algorithm": "lanczos",
-    "duration_limit": "0x1.e800000000000p+4",
+    "duration_limit": "0x1.e000000000000p+4",
     "resample_test": null
    },
    "metrics": [
@@ -330,8 +330,8 @@
     "butteraugli": "cpu",
     "ssimulacra2": "gpu"
    },
-   "recipe": "{\"crop_mode\":\"none\",\"duration_limit\":30.5,\"manual_distorted_crop\":null,\"manual_source_crop\":null,\"resample_test\":null,\"scale_direction\":\"distorted_to_source\"}",
-   "recipe_hash": "03e3bac2f0fc8410f28f5c62d1ae3b5c667d365d87f8cb9d019b011b7b23e2d2",
+   "recipe": "{\"crop_mode\":\"none\",\"duration_limit\":30.0,\"manual_distorted_crop\":null,\"manual_source_crop\":null,\"resample_test\":null,\"scale_direction\":\"distorted_to_source\"}",
+   "recipe_hash": "39126c1fbe17493f68ca8cec76e508c5afa42aa2c57ebb3bf0e83a8a196e3138",
    "specs": [
     {
      "hash": "58ac3a4348c7de99fc351c220006b0f8c3ec901e0d53ff0dc27be45a9ed0afca",

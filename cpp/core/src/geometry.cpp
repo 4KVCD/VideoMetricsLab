@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 
+#include "vml/frame_range.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -12,9 +13,27 @@ namespace vml {
 
 namespace {
 
-// Why the two videos' frame rates or durations do not allow a comparison.
+// Whether two videos last as long, to within a tenth of a second or two
+// frames: compared to their end, neither has frames the other lacks.
+bool durations_match(const VideoInfo& source, const VideoInfo& distorted) {
+    const double frame_duration = 1.0 / std::max({source.fps, distorted.fps, 1.0});
+    return std::abs(source.duration - distorted.duration) <= std::max(0.1, 2 * frame_duration);
+}
+
+// Why the two videos' frame rates or durations do not allow a comparison of
+// seconds [range_start, range_end) (range_end 0: to the end).
 std::optional<std::string> timeline_problem(const VideoInfo& source, const VideoInfo& distorted,
-                                            double duration_limit) {
+                                            long long range_start, long long range_end) {
+    if (range_end > 0 && range_end <= range_start) {
+        return "The range ends before it starts.";
+    }
+    if ((range_start > 0 || range_end > 0) && (source.fps <= 0 || distorted.fps <= 0)) {
+        return "A range needs the videos' frame rates, which are not known.";  // its seconds count frames
+    }
+    if (range_end > 0 &&
+        first_frame_of_second(range_start, source.fps) >= first_frame_of_second(range_end, source.fps)) {
+        return "The range contains no frame of the videos.";  // below 1 fps, a second may have none
+    }
     if (source.is_variable_frame_rate() || distorted.is_variable_frame_rate()) {
         return "Variable-frame-rate video is not supported safely yet. Convert both videos "
                "to the same constant frame rate before comparing them.";
@@ -29,16 +48,26 @@ std::optional<std::string> timeline_problem(const VideoInfo& source, const Video
                " fps).";
     }
     if (source.duration > 0 && distorted.duration > 0) {
-        if (duration_limit <= 0) {
-            const double frame_duration = 1.0 / std::max({source.fps, distorted.fps, 1.0});
-            if (std::abs(source.duration - distorted.duration) > std::max(0.1, 2 * frame_duration)) {
+        // Counted in frames, as the run counts them (frame_range.h): a
+        // duration ends where the last frame's display does, so 288 frames
+        // at 24000/1001 fps last 12.012 s and second 12 has none of them. An
+        // end within the shorter video's last, partial second compares to
+        // its end (0-13 for a 300-frame encode, 12.5 s), where every route
+        // stops: the two videos' frames are paired until either ends.
+        const long long shorter_frames =
+            std::min(source.estimated_frame_count(), distorted.estimated_frame_count());
+        const long long last_end = end_second_of(shorter_frames, source.fps);
+        if (range_start > 0 && range_start >= last_end) {
+            return "The range starts after the end of one of the videos.";
+        }
+        if (range_end <= 0) {
+            if (!durations_match(source, distorted)) {
                 return "Durations do not match (" + format_fixed(source.duration, 3) + " vs " +
                        format_fixed(distorted.duration, 3) +
-                       " seconds). Set a duration limit within both files if comparing only their common opening "
-                       "segment.";
+                       " seconds). Set a range within both files if comparing only a part they share.";
             }
-        } else if (std::min(source.duration, distorted.duration) + 0.1 < duration_limit) {
-            return "The duration limit extends beyond the end of one of the videos.";
+        } else if (range_end > last_end) {
+            return "The range extends beyond the end of one of the videos.";
         }
     }
     return std::nullopt;
@@ -172,11 +201,12 @@ std::optional<std::string> untimed_pair_problem(const VideoInfo& source, const V
     if (!source.is_raw_stream() && !distorted.is_raw_stream()) {
         return std::nullopt;
     }
-    return pair_problem(source, distorted, 0.0);
+    return pair_problem(source, distorted, 0, 0);
 }
 
-std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, double duration_limit) {
-    std::optional<std::string> problem = timeline_problem(source, distorted, duration_limit);
+std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, long long range_start,
+                                        long long range_end) {
+    std::optional<std::string> problem = timeline_problem(source, distorted, range_start, range_end);
     const auto untimed = [](const VideoInfo& info) { return info.is_raw_stream() && !info.timed_raw; };
     const VideoInfo* raw = untimed(source) ? &source : untimed(distorted) ? &distorted : nullptr;
     if (!problem || raw == nullptr) {

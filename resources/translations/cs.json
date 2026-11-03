@@ -165,7 +165,6 @@
   "Delete this preset of yours. Built-in presets cannot be deleted.": "Odstranit tuto vlastní předvolbu. Vestavěné předvolby odstranit nelze.",
   "Scale the video to fill the display": "Roztáhnout video na celou obrazovku",
   "Off (the official default): the video is shown pixel for pixel, so a 1080p video covers a quarter of a 4K display. On: it is scaled, keeping its shape, to fill the display.\n\nSet per video: choosing or saving a display preset does not change it.": "Vypnuto (oficiální hodnota): video se zobrazí pixel na pixel, takže video 1080p zabere čtvrtinu obrazovky 4K. Zapnuto: zvětší se se zachováním poměru stran na celou obrazovku.\n\nNastavuje se pro každé video: volba ani uložení předvolby displeje to nemění.",
-  "Duration limit (0 = full):": "Omezení délky (0 = celé):",
   "Scaling algorithm:": "Algoritmus změny velikosti:",
   "Source downscaled to test": "Zdroj zmenšen na test",
   "Test upscaled to source": "Test zvětšen na zdroj",
@@ -577,8 +576,6 @@
   "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} je surový stream {codec} bez časových značek, takže jeho snímková frekvence není známa. Nejprve ho vložte do kontejneru s jeho snímkovou frekvencí, např. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), s vlastní snímkovou frekvencí videa.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Video s proměnnou snímkovou frekvencí zatím není bezpečně podporováno. Před porovnáním převeďte obě videa na stejnou konstantní snímkovou frekvenci.",
   "Frame rates do not match ({source} vs {test} fps).": "Snímkové frekvence se neshodují ({source} vs {test} fps).",
-  "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing only their common opening segment.": "Délky se neshodují ({source} vs {test} s). Pokud porovnáváte jen jejich společný začátek, nastavte omezení délky v rámci obou souborů.",
-  "The duration limit extends beyond the end of one of the videos.": "Omezení délky přesahuje konec jednoho z videí.",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "Videa mají po ořezu různý tvar: zdroj {source} vs test {test}. Hodnocení by jedno roztáhlo podle druhého a výsledek by neměl smysl. Pokud má jedno z nich pruhy (letterbox), nastavte Černé pruhy na Automatická detekce, aby se před porovnáním odstranily.",
   "FFmpeg could not prepare lossless perceptual-metric frames.": "FFmpeg nedokázal připravit bezeztrátové snímky pro percepční metriky.",
   "FFmpeg produced no frame pairs for perceptual metrics.": "FFmpeg nevytvořil žádné páry snímků pro percepční metriky.",
@@ -728,7 +725,6 @@
   "Play / pause": "Přehrát / pozastavit",
   "Space": "Mezerník",
   "\n\nCalculated on the CPU, which gives different numbers from the GPU, so the next run calculates it again on this PC's GPU.": "\n\nSpočítáno na CPU, které dává jiná čísla než GPU, proto jej příští běh přepočítá na GPU tohoto počítače.",
-  "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a duration limit to score only the start.\n\nCalculate anyway?": "\n\nNebylo nalezeno žádné podporované GPU, proto se počítají na CPU. Nástroje pro CPU hodnotí vždy jeden pár statických obrázků: asi 1 s pro SSIMULACRA2 a 2 s pro Butteraugli na snímek 4K, takže film trvá dny (odhady výše předpokládají CPU jako ten, na kterém byly změřeny). Nastavte omezení délky, chcete-li hodnotit jen začátek.\n\nPřesto spočítat?",
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (VMAF v0.6.1 and NEG with CUDA on an NVIDIA GPU whose Vulkan cannot calculate them). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "S volbou GPU se VMAF v0.6.1, VMAF NEG a VMAF v1 počítají na GPU pomocí Vulkanu (VMAF v0.6.1 a NEG pomocí CUDA na GPU NVIDIA, jehož Vulkan je spočítat nedokáže). VMAF v1: u modelu, jehož volby kód pro GPU nepodporuje, příznaky pruhování a barev (CAMBI, SpEED) na CPU. PSNR, SSIM a XPSNR se vždy počítají na CPU. Skóre z GPU se u každého snímku shodují se skóre z CPU s přesností na tisícinu bodu, takže uložené skóre zůstává zachováno při kterékoli volbě. Pokud výpočet na GPU selže, spočítají se na CPU.",
   "With GPU, VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated on the GPU, with Vulkan (MoltenVK on Metal). VMAF v1: for a model whose options the GPU code does not support, its banding and colour features (CAMBI, SpEED) on the CPU. PSNR, SSIM and XPSNR are calculated on the CPU either way. The GPU's scores agree with the CPU's to within a thousandth of a point on every frame, so a saved score is kept whichever is chosen. If the GPU calculation fails, they are calculated on the CPU instead.": "S volbou GPU se VMAF v0.6.1, VMAF NEG a VMAF v1 počítají na GPU pomocí Vulkanu (MoltenVK / Metal). VMAF v1: u modelu, jehož volby kód pro GPU nepodporuje, příznaky pruhování a barev (CAMBI, SpEED) na CPU. PSNR, SSIM a XPSNR se vždy počítají na CPU. Skóre z GPU se u každého snímku shodují se skóre z CPU s přesností na tisícinu bodu, takže uložené skóre zůstává zachováno při kterékoli volbě. Pokud výpočet na GPU selže, spočítají se na CPU.",
   "Calculate SSIMULACRA2, Butteraugli and CVVDP together, in one pass per video": "Počítat SSIMULACRA2, Butteraugli a CVVDP společně, v jednom průchodu na video",
@@ -779,7 +775,17 @@
   "Source only (test video already cropped)": "Jen zdroj (testovací video je už oříznuté)",
   "The source's black bars are detected and cut; the test video is compared at its full frame, for an encode cropped when it was made.": "Černé pruhy zdroje se zjistí a oříznou; testovací video se porovnává v plném snímku, pro kódování oříznuté už při vytvoření.",
   "Source only": "Jen zdroj",
-  "The test video is compared at its full frame.": "Testovací video se porovnává v plném snímku."
+  "The test video is compared at its full frame.": "Testovací video se porovnává v plném snímku.",
+  "Range:": "Rozsah:",
+  "to": "až",
+  "The part of the videos compared, in whole seconds, from the first time to the second. An end of 00:00:00 compares to the end of the videos.": "Porovnávaná část videí v celých sekundách, od prvního času do druhého. Konec 00:00:00 porovnává až do konce videí.",
+  "The range extends beyond the end of one of the videos.": "Rozsah přesahuje konec jednoho z videí.",
+  "The range ends before it starts.": "Rozsah končí dříve, než začíná.",
+  "A range needs the videos' frame rates, which are not known.": "Rozsah potřebuje snímkové frekvence videí, které nejsou známy.",
+  "The range starts after the end of one of the videos.": "Rozsah začíná po konci jednoho z videí.",
+  "The range contains no frame of the videos.": "Rozsah neobsahuje žádný snímek videí.",
+  "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nNebylo nalezeno žádné podporované GPU, proto se počítají na CPU. Nástroje pro CPU hodnotí vždy jeden pár statických obrázků: asi 1 s pro SSIMULACRA2 a 2 s pro Butteraugli na snímek 4K, takže film trvá dny (odhady výše předpokládají CPU jako ten, na kterém byly změřeny). Nastavte rozsah, chcete-li hodnotit jen část videí.\n\nPřesto spočítat?",
+  "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Délky se neshodují ({source} vs {test} s). Pokud porovnáváte jen jejich společnou část, nastavte rozsah v rámci obou souborů."
  },
  "plurals": {
   "about {count} day": [

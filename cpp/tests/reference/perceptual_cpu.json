@@ -235,7 +235,6 @@
  ],
  "commands": [
   {
-   "limit": "0x0.0p+0",
    "step": 1,
    "command": [
     "ffmpeg",
@@ -269,10 +268,10 @@
     "-atomic_writing",
     "1",
     "<folder>/reference-%08d.png"
-   ]
+   ],
+   "range_end": 0
   },
   {
-   "limit": "0x1.8000000000000p+0",
    "step": 3,
    "command": [
     "ffmpeg",
@@ -287,13 +286,9 @@
     "-i",
     "<source>",
     "-filter_complex",
-    "[0:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]",
+    "[0:V:0]trim=start_frame=0:end_frame=48,settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]trim=start_frame=0:end_frame=48,settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,3)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]",
     "-map",
     "[distorted]",
-    "-enc_time_base",
-    "filter",
-    "-t",
-    "1.500",
     "-fps_mode",
     "passthrough",
     "-pix_fmt",
@@ -303,10 +298,6 @@
     "<folder>/test-%08d.png",
     "-map",
     "[reference]",
-    "-enc_time_base",
-    "filter",
-    "-t",
-    "1.500",
     "-fps_mode",
     "passthrough",
     "-pix_fmt",
@@ -314,10 +305,10 @@
     "-atomic_writing",
     "1",
     "<folder>/reference-%08d.png"
-   ]
+   ],
+   "range_end": 2
   },
   {
-   "limit": "0x1.4000000000000p+3",
    "step": 1,
    "command": [
     "ffmpeg",
@@ -332,13 +323,9 @@
     "-i",
     "<source>",
     "-filter_complex",
-    "[0:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]",
+    "[0:V:0]trim=start_frame=0:end_frame=240,settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]trim=start_frame=0:end_frame=240,settb=AVTB,setpts=N*1000000/24,setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]",
     "-map",
     "[distorted]",
-    "-enc_time_base",
-    "filter",
-    "-t",
-    "10.000",
     "-fps_mode",
     "passthrough",
     "-pix_fmt",
@@ -348,10 +335,6 @@
     "<folder>/test-%08d.png",
     "-map",
     "[reference]",
-    "-enc_time_base",
-    "filter",
-    "-t",
-    "10.000",
     "-fps_mode",
     "passthrough",
     "-pix_fmt",
@@ -359,10 +342,10 @@
     "-atomic_writing",
     "1",
     "<folder>/reference-%08d.png"
-   ]
+   ],
+   "range_end": 10
   },
   {
-   "limit": "0x1.559b3d07c84b6p-5",
    "step": 2,
    "command": [
     "ffmpeg",
@@ -377,13 +360,9 @@
     "-i",
     "<source>",
     "-filter_complex",
-    "[0:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]",
+    "[0:V:0]trim=start_frame=0:end_frame=24,settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[distorted];[1:V:0]trim=start_frame=0:end_frame=24,settb=AVTB,setpts=N*1000000/24,select=not(mod(n\\,2)),setparams=colorspace=bt709:range=tv,scale=flags=bicubic+accurate_rnd,format=rgb48le[reference]",
     "-map",
     "[distorted]",
-    "-enc_time_base",
-    "filter",
-    "-t",
-    "0.042",
     "-fps_mode",
     "passthrough",
     "-pix_fmt",
@@ -393,10 +372,6 @@
     "<folder>/test-%08d.png",
     "-map",
     "[reference]",
-    "-enc_time_base",
-    "filter",
-    "-t",
-    "0.042",
     "-fps_mode",
     "passthrough",
     "-pix_fmt",
@@ -404,7 +379,8 @@
     "-atomic_writing",
     "1",
     "<folder>/reference-%08d.png"
-   ]
+   ],
+   "range_end": 1
   }
  ],
  "scores": [

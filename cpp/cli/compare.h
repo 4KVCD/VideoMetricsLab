@@ -32,10 +32,10 @@ namespace vml::cli {
 // Runs the compare command; returns the exit code.
 int compare(const CompareArguments& arguments);
 
-// The options the window's row would hold for these choices, for the test
-// video `test`: the command's, else the app's (Settings).
+// The options the window's row would hold for these choices: the command's,
+// else the app's (Settings).
 VmafOptions row_options(const CompareArguments& arguments, const Settings& settings,
-                        const std::vector<std::string>& metric_keys, const VideoInfo& test);
+                        const std::vector<std::string>& metric_keys);
 
 // Whether videos are scored with their film grain: --film-grain's choice,
 // else the app's default (Settings), or nothing where the app asks (they

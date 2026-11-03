@@ -251,8 +251,6 @@ TEST(Decisions, FramesArePairedAsThePythonAppPairsThem) {
     const Rational rate{24000, 1001};
     EXPECT_EQ(framesync_opts(), expected["framesync"].get<std::vector<std::string>>());
     EXPECT_EQ(numbering_filters(rate), expected["numbering"].get<std::vector<std::string>>());
-    EXPECT_EQ(duration_args("30.042"), expected["duration"].get<std::vector<std::string>>());
-    EXPECT_EQ(duration_args(std::nullopt), expected["no_duration"].get<std::vector<std::string>>());
 }
 
 VideoInfo video_from(const Json& item) {
@@ -272,10 +270,56 @@ TEST(Decisions, TwoVideosAreRefusedAsThePythonAppRefusesThem) {
     for (const Json& item : decisions()["pairs"]) {
         SCOPED_TRACE(item["name"].get<std::string>());
         const std::optional<std::string> problem =
-            pair_problem(video_from(item["source"]), video_from(item["test"]), *test::reference_number(item["limit"]));
+            pair_problem(video_from(item["source"]), video_from(item["test"]), 0, item["range_end"].get<long long>());
         EXPECT_EQ(problem.value_or("<none>"),
                   item["problem"].is_null() ? std::string("<none>") : item["problem"].get<std::string>());
     }
+}
+
+// A range must end after it starts and start within both videos, and needs
+// their frame rates to count its frames; with no end, the videos must last
+// as long.
+TEST(Decisions, ARangeIsRefusedWhereItCannotBeCompared) {
+    VideoInfo source;
+    source.fps = 24.0;
+    source.duration = 60.0;
+    VideoInfo shorter = source;
+    shorter.duration = 30.0;
+    EXPECT_EQ(pair_problem(source, source, 20, 10), "The range ends before it starts.");
+    EXPECT_EQ(pair_problem(source, shorter, 40, 50), "The range starts after the end of one of the videos.");
+    EXPECT_EQ(pair_problem(source, shorter, 10, 20), std::nullopt);
+    EXPECT_TRUE(pair_problem(source, shorter, 10, 0)->starts_with("Durations do not match"));
+    VideoInfo no_rate = source;
+    no_rate.fps = 0.0;
+    EXPECT_EQ(pair_problem(no_rate, no_rate, 10, 20), "A range needs the videos' frame rates, which are not known.");
+}
+
+// A range is counted in frames: one ending within the shorter video's last,
+// partial second compares to its end (a 300-frame encode, 12.5 s at
+// 24000/1001, to 13 s), whichever of the two is shorter, and one whose
+// last second has none of its frames (288 frames last 12.012 s, none in
+// second 12) is refused. Below 1 fps a second may have no frame at all.
+TEST(Decisions, ARangeEndingInAVideosLastPartialSecondComparesToItsEnd) {
+    VideoInfo source;
+    source.fps = 24000.0 / 1001.0;
+    source.duration = 60.0;
+    VideoInfo encode = source;
+    encode.duration = 300 * 1001.0 / 24000.0;
+    EXPECT_EQ(pair_problem(source, encode, 0, 13), std::nullopt);
+    EXPECT_EQ(pair_problem(source, encode, 12, 13), std::nullopt);
+    EXPECT_EQ(pair_problem(encode, source, 0, 13), std::nullopt);
+    EXPECT_EQ(pair_problem(source, encode, 0, 14), "The range extends beyond the end of one of the videos.");
+    VideoInfo whole_seconds = source;
+    whole_seconds.duration = 288 * 1001.0 / 24000.0;
+    EXPECT_EQ(pair_problem(source, whole_seconds, 0, 12), std::nullopt);
+    EXPECT_EQ(pair_problem(source, whole_seconds, 0, 13), "The range extends beyond the end of one of the videos.");
+    EXPECT_EQ(pair_problem(source, whole_seconds, 12, 13), "The range starts after the end of one of the videos.");
+    EXPECT_EQ(pair_problem(source, whole_seconds, 12, 0), "The range starts after the end of one of the videos.");
+    VideoInfo slides;
+    slides.fps = 0.5;
+    slides.duration = 6.0;  // frames at 0, 2 and 4 s
+    EXPECT_EQ(pair_problem(slides, slides, 1, 2), "The range contains no frame of the videos.");
+    EXPECT_EQ(pair_problem(slides, slides, 1, 3), std::nullopt);
 }
 
 TEST(Decisions, ShapesAndComparedSizesAreThePythonAppsOwn) {

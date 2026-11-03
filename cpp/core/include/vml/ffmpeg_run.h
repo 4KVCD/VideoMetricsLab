@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "vml/cancel.h"
+#include "vml/frame_range.h"
 #include "vml/hardware_decoding.h"
 #include "vml/options.h"
 #include "vml/results.h"
@@ -139,13 +140,25 @@ void validate_video_pair(const VideoInfo& source, const VideoInfo& distorted, co
 void validate_display_geometry(const VideoInfo& source, const VideoInfo& distorted,
                                const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop);
 
-// How many frames FFmpeg will pass (it stops at the shorter video and at the
-// limit), which sizes the progress and is the result's compared frames.
+// The frames a run of `options` compares and decodes (frame_range.h), the
+// range's seconds counted at `source`'s frame rate, as CVVDP counts them:
+// VMAF and XPSNR look at the frames around the one they score.
+FrameRange run_range(const VmafOptions& options, const VideoInfo& source);
+
+// How many frames a run compares (to the shorter video's end, within the
+// range): the result's compared frames. An estimate, at `reference`'s frame
+// rate.
 long long estimate_total_frames(const VideoInfo& reference, const VmafOptions& options, const VideoInfo* other);
 
-// Why `compared` frames are too few to stand for the video (one of the two
-// was cut short), or nothing.
-std::optional<std::string> short_comparison(long long expected, long long compared, double fps, int step);
+// How many frames FFmpeg passes for it (with those its metrics look at
+// around the range), which sizes the progress.
+long long estimate_decoded_frames(const VideoInfo& reference, const VmafOptions& options, const VideoInfo* other);
+
+// Why `compared` frames, counted like `expected` from frame `first_frame`,
+// are too few to stand for the video (one of the two was cut short), or
+// nothing.
+std::optional<std::string> short_comparison(long long expected, long long compared, long long first_frame,
+                                            double fps, int step);
 
 // Whether an FFmpeg that wrote frames into a pipe of the app's ended because
 // a write into it failed (Windows refuses writes into a full pipe under heavy
@@ -199,8 +212,7 @@ struct InputOptions {
 // FFmpeg's command for a filter graph, the test video first.
 std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const std::filesystem::path& distorted,
                                               const std::filesystem::path& source, const std::string& filtergraph,
-                                              const HardwareDecoding& decoding, double duration_limit,
-                                              const InputOptions& inputs = {});
+                                              const HardwareDecoding& decoding, const InputOptions& inputs = {});
 
 // The filter graph of a resolution test (VmafOptions::resample_test), which
 // has a single input: the source is decoded once and split into an
@@ -218,7 +230,7 @@ std::string build_resample_filtergraph(const VideoInfo& source, const VmafOption
 // InputOptions' fed inputs).
 std::vector<std::string> build_resample_command(const std::string& ffmpeg, const std::filesystem::path& source,
                                                 const std::string& filtergraph,
-                                                const std::optional<std::string>& hwaccel, double duration_limit,
+                                                const std::optional<std::string>& hwaccel,
                                                 const std::vector<std::string>& source_options = {},
                                                 const std::optional<std::vector<std::string>>& source_fed = {});
 

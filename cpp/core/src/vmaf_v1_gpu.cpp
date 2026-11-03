@@ -1209,7 +1209,7 @@ PairScores MultiScorer::finish() {
 
 PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                             const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
-                            const GpuPlan& plan, int n_subsample, const std::optional<std::string>& duration_limit,
+                            const GpuPlan& plan, int n_subsample, const FrameRange& range,
                             long long total_frames, const std::string& scale_algorithm,
                             const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
                             const std::string& ffprobe,
@@ -1310,7 +1310,7 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
         releases.reference = [&](int slot) { scorer->release_later(reference, slot, true); };
     }
     score_frame_pairs(
-        test, reference, distorted, duration_limit, total_frames,
+        test, reference, range, total_frames,
         [&](int test_slot, int reference_slot) {
             if (on_gpu) {
                 scorer->add_decoded(reference, reference_slot, test, test_slot);

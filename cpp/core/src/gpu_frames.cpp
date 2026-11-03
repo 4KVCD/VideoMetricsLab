@@ -11,6 +11,7 @@
 #include <cstring>
 #include <deque>
 #include <exception>
+#include <future>
 #include <limits>
 #include <map>
 #include <mutex>
@@ -1829,6 +1830,24 @@ void GpuFrameStream::release(int slot) {
     }
 }
 
+bool GpuFrameStream::skip(long long count, const CancelToken& cancel,
+                          const std::function<void(long long)>& on_skipped) {
+    auto reported = std::chrono::steady_clock::now();
+    for (long long done = 0; done < count; ++done) {
+        const std::optional<Picture> picture = next(cancel);
+        if (!picture) {
+            return false;
+        }
+        release(picture->slot);
+        const auto now = std::chrono::steady_clock::now();
+        if (on_skipped && now - reported >= std::chrono::milliseconds(250)) {
+            reported = now;
+            on_skipped(done + 1);
+        }
+    }
+    return true;
+}
+
 Rational GpuFrameStream::time_base(const CancelToken& cancel) {
     const std::optional<Rational> found = state_->reader->wait_time_base(cancel);
     if (!found) {
@@ -2063,9 +2082,76 @@ void widen_to(DecodePlan& plan, const VideoInfo& info, int bit_depth) {
     }
 }
 
-void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const VideoInfo& distorted,
-                       const std::optional<std::string>& duration_limit, long long total_frames,
-                       const std::function<void(int, int)>& score,
+namespace {
+
+// Thrown into the test video's pass over its first pictures when the
+// reference's ended or failed first: no pair can follow.
+struct ReferenceStopped {};
+
+// Passes over both videos' first `count` pictures (score_frame_pairs), each
+// on its own decoder at once, telling `on_skipped` how far the slower one
+// is. False when either video ends first. Should one fail or be cancelled,
+// the other is stopped before the error goes on.
+bool skip_both(GpuFrameStream& test, GpuFrameStream& reference, long long count, const CancelToken& cancel,
+               const std::function<void(long long)>& on_skipped) {
+    std::atomic<long long> reference_skipped = 0;
+    std::atomic<bool> reference_stopped = false;  // it ended or failed before its count
+    CancelToken reference_cancel;                 // the reference's own, stopped with the test video's pass
+    auto reference_skip = std::async(std::launch::async, [&] {
+        try {
+            const bool has = reference.skip(count, reference_cancel, [&](long long done) { reference_skipped = done; });
+            reference_stopped = !has;
+            return has;
+        } catch (...) {
+            reference_stopped = true;
+            throw;
+        }
+    });
+    bool test_has = false;
+    try {
+        test_has = test.skip(count, cancel, [&](long long done) {
+            if (reference_stopped) {
+                throw ReferenceStopped{};
+            }
+            if (on_skipped) {
+                on_skipped(std::min(done, reference_skipped.load()));
+            }
+        });
+    } catch (const ReferenceStopped&) {
+        return reference_skip.get();  // false, or the reference's error
+    } catch (...) {
+        reference_cancel.cancel();
+        try {
+            reference_skip.get();
+        } catch (...) {
+            // The test video's error is the one to report.
+        }
+        throw;
+    }
+    if (!test_has) {
+        reference_cancel.cancel();  // the comparison ends with the test video
+    }
+    while (reference_skip.wait_for(std::chrono::milliseconds(100)) != std::future_status::ready) {
+        if (cancel.cancelled()) {
+            reference_cancel.cancel();  // a cancel of the run while the reference is still passing over
+        } else if (test_has && on_skipped) {
+            on_skipped(reference_skipped.load());  // the reference catching up
+        }
+    }
+    try {
+        return reference_skip.get() && test_has;
+    } catch (const Cancelled&) {
+        if (!test_has) {
+            return false;
+        }
+        throw;
+    }
+}
+
+}  // namespace
+
+void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const FrameRange& range,
+                       long long total_frames, const std::function<void(int, int)>& score,
                        const std::function<void(long long, long long, double)>& on_progress,
                        const CancelToken& cancel, const SlotReleases& releases) {
     SlotReleases release = releases;
@@ -2075,8 +2161,23 @@ void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const Vi
     if (!release.reference) {
         release.reference = [&reference](int slot) { reference.release(slot); };
     }
-    const std::optional<long long> limit = frames_within(duration_limit, frame_rate(distorted));
+    // Progress counts the frames passed over to the range too, which can be
+    // most of the time a range late in a long video takes.
+    const long long skipped = range.decode_start;
+    const long long whole = total_frames + skipped;
     const auto started = std::chrono::steady_clock::now();
+    if (skipped > 0 &&
+        !skip_both(test, reference, skipped, cancel, [&](long long done) {
+            if (on_progress) {
+                const auto now = std::chrono::steady_clock::now();
+                const double seconds = std::chrono::duration<double>(now - started).count();
+                on_progress(done, whole, static_cast<double>(done) / seconds);
+            }
+        })) {
+        return;  // the videos end before the range
+    }
+    const std::optional<long long> limit =
+        range.decode_end ? std::optional(*range.decode_end - range.decode_start) : std::nullopt;
     auto reported = started;
     long long count = 0;
     while (!limit || count < *limit) {
@@ -2097,7 +2198,7 @@ void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const Vi
         if (on_progress && now - reported >= std::chrono::milliseconds(250)) {
             reported = now;
             const double seconds = std::chrono::duration<double>(now - started).count();
-            on_progress(count, total_frames, static_cast<double>(count) / seconds);
+            on_progress(skipped + count, whole, static_cast<double>(skipped + count) / seconds);
         }
     }
 }

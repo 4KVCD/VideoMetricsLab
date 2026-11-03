@@ -10954,14 +10954,7 @@
   "numbering": [
    "settb=AVTB",
    "setpts=N*1001000000/24000"
-  ],
-  "duration": [
-   "-enc_time_base",
-   "filter",
-   "-t",
-   "30.042"
-  ],
-  "no_duration": []
+  ]
  },
  "within": [
   {
@@ -11249,7 +11242,7 @@
     "codec_name": "hevc",
     "path": "video.mkv"
    },
-   "limit": "0x0.0p+0"
+   "range_end": 0
   },
   {
    "name": "ntsc against whole",
@@ -11270,7 +11263,7 @@
     "codec_name": "hevc",
     "path": "video.mkv"
    },
-   "limit": "0x0.0p+0"
+   "range_end": 0
   },
   {
    "name": "two containers",
@@ -11291,7 +11284,7 @@
     "codec_name": "hevc",
     "path": "video.mkv"
    },
-   "limit": "0x0.0p+0"
+   "range_end": 0
   },
   {
    "name": "variable",
@@ -11312,11 +11305,11 @@
     "codec_name": "hevc",
     "path": "video.mkv"
    },
-   "limit": "0x0.0p+0"
+   "range_end": 0
   },
   {
    "name": "durations",
-   "problem": "Durations do not match (60.000 vs 30.000 seconds). Set a duration limit within both files if comparing only their common opening segment.",
+   "problem": "Durations do not match (60.000 vs 30.000 seconds). Set a range within both files if comparing only a part they share.",
    "source": {
     "fps": "0x1.7f9dcb5112287p+4",
     "duration": "0x1.e000000000000p+5",
@@ -11333,7 +11326,7 @@
     "codec_name": "hevc",
     "path": "video.mkv"
    },
-   "limit": "0x0.0p+0"
+   "range_end": 0
   },
   {
    "name": "durations, limit",
@@ -11354,11 +11347,11 @@
     "codec_name": "hevc",
     "path": "video.mkv"
    },
-   "limit": "0x1.4000000000000p+4"
+   "range_end": 20
   },
   {
    "name": "limit past the end",
-   "problem": "The duration limit extends beyond the end of one of the videos.",
+   "problem": "The range extends beyond the end of one of the videos.",
    "source": {
     "fps": "0x1.7f9dcb5112287p+4",
     "duration": "0x1.e000000000000p+5",
@@ -11375,7 +11368,7 @@
     "codec_name": "hevc",
     "path": "video.mkv"
    },
-   "limit": "0x1.4000000000000p+5"
+   "range_end": 40
   },
   {
    "name": "two frames apart",
@@ -11396,7 +11389,7 @@
     "codec_name": "hevc",
     "path": "video.mkv"
    },
-   "limit": "0x0.0p+0"
+   "range_end": 0
   },
   {
    "name": "raw stream",
@@ -11417,7 +11410,7 @@
     "codec_name": "hevc",
     "path": "video.mkv"
    },
-   "limit": "0x0.0p+0"
+   "range_end": 0
   },
   {
    "name": "raw h264",
@@ -11438,7 +11431,7 @@
     "codec_name": "h264",
     "path": "c.264"
    },
-   "limit": "0x0.0p+0"
+   "range_end": 0
   },
   {
    "name": "unknown durations",
@@ -11459,7 +11452,7 @@
     "codec_name": "hevc",
     "path": "video.mkv"
    },
-   "limit": "0x0.0p+0"
+   "range_end": 0
   }
  ],
  "shapes": [

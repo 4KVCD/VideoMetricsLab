@@ -124,7 +124,7 @@ TEST(PerceptualCpu, MakesThePicturesAsThePythonApp) {
     for (const Json& expected : reference()["commands"]) {
         SCOPED_TRACE(expected.dump());
         VmafOptions options;
-        options.duration_limit = *test::reference_number(expected["limit"]);
+        options.range_end = expected["range_end"].get<long long>();
         std::vector<std::string> command;
         for (std::string argument : expected["command"].get<std::vector<std::string>>()) {
             if (argument == "<source>" || argument == "<test>") {

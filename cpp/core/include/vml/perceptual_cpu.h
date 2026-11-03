@@ -77,11 +77,17 @@ double parse_score(std::string_view metric, std::string_view output);
 // not a map at all.
 double butteraugli_norm3(const std::filesystem::path& distortion_map);
 
+// The frames a CPU SSIMULACRA2/Butteraugli run of `options` compares and
+// decodes (frame_range.h), every `step`-th: these metrics look at no frame
+// but the one they score.
+FrameRange cpu_range(const VmafOptions& options, const VideoInfo& source, int step);
+
 // The filter graph that makes two lossless RGB48 picture streams of the same
 // size, [distorted] and [reference], from the test video (FFmpeg's first
 // input) and the source (its second). Their Nth pictures are a pair: each
 // video's frame N, as every metric pairs them (frame_sync.h), every
-// `step`-th. Each video is converted to RGB with the matrix and range Vship
+// `step`-th, those of the range (cpu_range: counted from its decode_start).
+// Each video is converted to RGB with the matrix and range Vship
 // reads it with, after any crop and scaling, so that the tools see what
 // Vship sees.
 std::string image_filtergraph(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options,
@@ -90,7 +96,7 @@ std::string image_filtergraph(const VideoInfo& source, const VideoInfo& distorte
 
 // The FFmpeg command that writes the pictures of image_filtergraph into
 // `folder` as test-%08d.png and reference-%08d.png, each output to its own
-// input's end or the duration limit, each picture under a temporary name
+// input's end or the range's, each picture under a temporary name
 // until it is whole (-atomic_writing). A video whose pictures the app feeds
 // (grain_feed.h) has its feed's input (`distorted_fed`, `source_fed`) in its
 // file's place.

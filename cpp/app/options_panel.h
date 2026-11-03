@@ -95,7 +95,8 @@ public:
     // and the tests use them as a user would.
     QLabel* target_label = nullptr;
     QComboBox* crop_combo = nullptr;
-    QTimeEdit* duration_edit = nullptr;
+    QTimeEdit* range_start_edit = nullptr;  // the range compared, in whole seconds
+    QTimeEdit* range_end_edit = nullptr;
     QComboBox* scale_algo_combo = nullptr;
     QComboBox* scale_direction_combo = nullptr;
     QComboBox* film_grain_combo = nullptr;

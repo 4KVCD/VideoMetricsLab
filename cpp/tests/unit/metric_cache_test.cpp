@@ -6,6 +6,7 @@
 // files, and the VMAF model a loaded result has.
 #include "vml/metric_cache.h"
 #include "vml/colour.h"
+#include "vml/cvvdp.h"
 #include "vml/film_grain_detect.h"
 
 #include <gtest/gtest.h>
@@ -43,7 +44,7 @@ VmafOptions options_from(const nlohmann::json& fields) {
     options.scale_direction = fields.at("scale_direction") == "distorted_to_source" ? ScaleDirection::distorted_to_source
                                                                                     : ScaleDirection::source_to_distorted;
     options.scale_algorithm = fields.at("scale_algorithm").get<std::string>();
-    options.duration_limit = *test::reference_number(fields.at("duration_limit"));
+    options.range_end = static_cast<long long>(*test::reference_number(fields.at("duration_limit")));
     if (const nlohmann::json& target = fields.at("resample_test"); !target.is_null()) {
         options.resample_test = ResampleTarget{target.at("width"), target.at("label")};
     }
@@ -156,6 +157,206 @@ TEST(MetricCache, SourceOnlyBlackBarsAreARecipeOfTheirOwn) {
     EXPECT_EQ(recipe.identity().at("crop_mode"), "none");
     recipe.crop_mode = CropMode::source_only;
     EXPECT_EQ(recipe.identity().at("crop_mode"), "source");
+}
+
+// A range's end is in its identity under the duration limit's name and its
+// start only when it has one, so that a duration limit's comparison (the
+// range from 0) keeps its saved scores' name.
+TEST(MetricCache, ARangesStartIsInItsIdentityOnlyWhenItHasOne) {
+    ComparisonRecipe recipe;
+    recipe.range_end = 30;
+    EXPECT_EQ(recipe.identity().at("duration_limit"), 30.0);
+    EXPECT_FALSE(recipe.identity().contains("range_start"));
+    recipe.range_start = 10;
+    EXPECT_EQ(recipe.identity().at("range_start"), 10.0);
+}
+
+// A duration limit's scores, saved before ranges under the name of the range
+// from 0, answer that range when they reach its end (VMAF with the frame
+// after it, which its last frame's motion looked at), cut to it, CVVDP's
+// seconds in range pooled again; a ranged run's own (range_frames) answer as
+// they are. At 2 fps, the range [0, 1 s) is frames 0 and 1.
+TEST(MetricCache, ADurationLimitsScoresAnswerTheRangeFromZeroWhenTheyReachItsEnd) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult four = test::result_from(stored.at("result"));  // frames 0 to 3
+    for (VideoInfo* info : {&four.source_info, &four.distorted_info}) {
+        info->fps = 2.0;
+        info->nb_frames = 4;
+    }
+    SequenceMetricResult cvvdp = *four.metric_results.sequence("cvvdp");
+    cvvdp.frame = {0, 2};  // its two seconds at 2 fps
+    const auto first_frames = [&](std::size_t count) {
+        ComparisonResult result = four;
+        result.metric_results = MetricResultSet();
+        for (const char* key : {"vmaf", "psnr", "ssimulacra2"}) {
+            FrameMetricResult metric = *four.metric_results.frame(key);
+            metric.frame.resize(count);
+            metric.time.resize(count);
+            metric.values.resize(count);
+            result.metric_results.add(metric);
+        }
+        result.metric_results.add(cvvdp);
+        return result;
+    };
+    const auto load = [&](const std::string& cache, long long end, const ComparisonResult& saved) {
+        ComparisonRecipe recipe = request.recipe;
+        recipe.range_end = end;
+        store_result(folder / cache, folder / "s.mp4", folder / "t.mp4", recipe, saved, "t", request.metrics);
+        const auto loaded = load_result(folder / cache, folder / "s.mp4", folder / "t.mp4", recipe, request.metrics,
+                                        request.perceptual_backends);
+        return loaded ? loaded->first.metric_results : MetricResultSet();
+    };
+
+    const MetricResultSet whole = load("four", 1, first_frames(4));
+    ASSERT_NE(whole.frame("vmaf"), nullptr);
+    EXPECT_EQ(whole.frame("vmaf")->frame, (std::vector<int>{0, 1}));
+    EXPECT_EQ(whole.frame("psnr")->frame, (std::vector<int>{0, 1}));
+    ASSERT_NE(whole.sequence("cvvdp"), nullptr);
+    EXPECT_EQ(whole.sequence("cvvdp")->frame, (std::vector<int>{0}));
+    EXPECT_FLOAT_EQ(static_cast<float>(whole.sequence("cvvdp")->score), cvvdp.values.front());  // one second's JOD
+
+    const MetricResultSet two = load("two", 1, first_frames(2));
+    EXPECT_FALSE(two.has("vmaf"));  // its last frame's motion had no next frame
+    EXPECT_TRUE(two.has("psnr"));
+
+    const MetricResultSet three = load("three", 2, first_frames(3));  // the range [0, 2 s) is all four frames
+    EXPECT_FALSE(three.has("psnr"));
+    EXPECT_TRUE(three.has("cvvdp"));  // its run decoded the four frames within the limit
+
+    ComparisonResult own = first_frames(2);
+    FrameMetricResult vmaf = *own.metric_results.frame("vmaf");
+    vmaf.provenance.parameters["range_frames"] = "[0,2]";
+    own.metric_results = MetricResultSet();
+    own.metric_results.add(vmaf);
+    EXPECT_EQ(load("own", 1, own).frame("vmaf")->frame, (std::vector<int>{0, 1}));
+
+    // A range from a later second: only a ranged run's scores are of it (none
+    // was saved before ranges), so one without its mark is not taken.
+    ComparisonRecipe later = request.recipe;
+    later.range_start = 1;
+    later.range_end = 2;
+    own.metric_results.add(*first_frames(2).metric_results.frame("psnr"));  // no mark
+    store_result(folder / "later", folder / "s.mp4", folder / "t.mp4", later, own, "t", request.metrics);
+    const auto loaded_later = load_result(folder / "later", folder / "s.mp4", folder / "t.mp4", later, request.metrics,
+                                          request.perceptual_backends);
+    ASSERT_TRUE(loaded_later);
+    EXPECT_TRUE(loaded_later->first.metric_results.has("vmaf"));
+    EXPECT_FALSE(loaded_later->first.metric_results.has("psnr"));
+}
+
+// A range takes the whole videos' saved scores, cut to it, where it has none
+// of its own: the frames in it, CVVDP's seconds in it pooled again (the last
+// second of the whole run only where its run saved how far it reached),
+// marked as the range's own, and the range's frame count. Not for the metrics
+// a Recalculate forgot, not from a whole run with other black bars, not a
+// subsampled score. At 2 fps, the range [1 s, 2 s) is frames 2 and 3.
+TEST(MetricCache, ARangeTakesTheWholeVideosScoresCutToIt) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult whole = test::result_from(stored.at("result"));  // frames 0 to 3
+    for (VideoInfo* info : {&whole.source_info, &whole.distorted_info}) {
+        info->fps = 2.0;
+        info->nb_frames = 4;
+    }
+    SequenceMetricResult cvvdp = *whole.metric_results.sequence("cvvdp");
+    cvvdp.frame = {0, 2};  // its two seconds
+    whole.metric_results.add(cvvdp);
+    ComparisonResult reaching = whole;
+    cvvdp.provenance.parameters["cvvdp_frames_reached"] = "4";
+    reaching.metric_results.add(cvvdp);
+    const auto ranged = [&request](long long start, long long end) {
+        ComparisonRecipe recipe = request.recipe;
+        recipe.range_start = start;
+        recipe.range_end = end;
+        return recipe;
+    };
+    const auto load = [&](const std::string& cache, const ComparisonRecipe& recipe,
+                          const std::set<std::string>& again = {}) {
+        return load_result(folder / cache, folder / "s.mp4", folder / "t.mp4", recipe, request.metrics,
+                           request.perceptual_backends, {}, again);
+    };
+    store_result(folder / "old", folder / "s.mp4", folder / "t.mp4", request.recipe, whole, "t", request.metrics);
+    store_result(folder / "new", folder / "s.mp4", folder / "t.mp4", request.recipe, reaching, "t", request.metrics);
+
+    const auto later = load("new", ranged(1, 2));
+    ASSERT_TRUE(later);
+    const MetricResultSet& cut = later->first.metric_results;
+    ASSERT_NE(cut.frame("vmaf"), nullptr);
+    EXPECT_EQ(cut.frame("vmaf")->frame, (std::vector<int>{2, 3}));
+    EXPECT_EQ(cut.frame("vmaf")->values,
+              (std::vector<float>(whole.metric_results.frame("vmaf")->values.begin() + 2,
+                                  whole.metric_results.frame("vmaf")->values.end())));
+    EXPECT_EQ(cut.frame("psnr")->frame, (std::vector<int>{2, 3}));
+    EXPECT_EQ(cut.frame("vmaf")->provenance.parameters.at("range_frames"), "[2,4]");
+    ASSERT_NE(cut.sequence("cvvdp"), nullptr);
+    EXPECT_EQ(cut.sequence("cvvdp")->frame, (std::vector<int>{2}));
+    EXPECT_EQ(cut.sequence("cvvdp")->score, pool_cvvdp_windows({{2, 2, cvvdp.values[1]}}));
+    EXPECT_EQ(cut.sequence("cvvdp")->provenance.parameters.at("range_frames"), "[2,4]");
+    EXPECT_FALSE(cut.sequence("cvvdp")->provenance.parameters.contains("cvvdp_frames_reached"));
+    EXPECT_EQ(later->first.compared_frame_count, 2);
+
+    // The metrics found (none when nothing is).
+    const auto keys = [&](const std::string& cache, const ComparisonRecipe& recipe,
+                          const std::set<std::string>& again = {}) {
+        const auto loaded = load(cache, recipe, again);
+        return loaded ? loaded->first.metric_results.keys() : std::vector<std::string>();
+    };
+    const auto has = [](const std::vector<std::string>& found, const std::string& key) {
+        return std::find(found.begin(), found.end(), key) != found.end();
+    };
+    // Saved before the reach was: the last second's length is not known.
+    EXPECT_TRUE(has(keys("old", ranged(1, 2)), "vmaf"));
+    EXPECT_FALSE(has(keys("old", ranged(1, 2)), "cvvdp"));
+    EXPECT_FALSE(has(keys("old", ranged(1, 0)), "cvvdp"));  // to the end
+    const auto to_the_end = load("new", ranged(1, 0));
+    ASSERT_TRUE(to_the_end && to_the_end->first.metric_results.frame("psnr"));
+    EXPECT_EQ(to_the_end->first.metric_results.frame("psnr")->frame, (std::vector<int>{2, 3}));
+    // The first second ends where the second begins.
+    const auto first = load("old", ranged(0, 1));
+    ASSERT_TRUE(first && first->first.metric_results.frame("vmaf") && first->first.metric_results.sequence("cvvdp"));
+    EXPECT_EQ(first->first.metric_results.frame("vmaf")->frame, (std::vector<int>{0, 1}));
+    EXPECT_EQ(first->first.metric_results.sequence("cvvdp")->score, pool_cvvdp_windows({{0, 2, cvvdp.values[0]}}));
+
+    // A Recalculate's metrics are not taken from the whole videos.
+    EXPECT_FALSE(has(keys("new", ranged(1, 2), {"vmaf"}), "vmaf"));
+    EXPECT_TRUE(has(keys("new", ranged(1, 2), {"vmaf"}), "psnr"));
+
+    // The range's own comparison cut other black bars: the whole run's
+    // scores are of another comparison; its own score is found.
+    ComparisonResult own = whole;
+    own.source_crop = CropBox{100, 100, 2, 2};
+    own.metric_results = MetricResultSet();
+    FrameMetricResult own_psnr = *cut.frame("psnr");  // the range's frames, marked as its own
+    own.metric_results.add(own_psnr);
+    store_result(folder / "new", folder / "s.mp4", folder / "t.mp4", ranged(1, 2), own, "t", request.metrics);
+    EXPECT_EQ(keys("new", ranged(1, 2)), (std::vector<std::string>{"psnr"}));
+
+    // A subsampled whole run (every other frame) is not cut.
+    std::vector<MetricRequestSpec> every_other = request.metrics;
+    for (MetricRequestSpec& spec : every_other) {
+        if (spec.coverage) {
+            spec.coverage = FrameCoverage{"sampled", 2};
+        }
+    }
+    ComparisonResult sampled = whole;
+    FrameMetricResult psnr = *whole.metric_results.frame("psnr");
+    psnr.frame = {0, 2};
+    psnr.time = {0.0, 1.0};
+    psnr.values.resize(2);
+    sampled.metric_results = MetricResultSet();
+    sampled.metric_results.add(psnr);
+    store_result(folder / "sampled", folder / "s.mp4", folder / "t.mp4", request.recipe, sampled, "t", every_other);
+    ASSERT_TRUE(load_result(folder / "sampled", folder / "s.mp4", folder / "t.mp4", request.recipe, every_other,
+                            request.perceptual_backends));  // saved, and found for the whole videos
+    EXPECT_FALSE(load_result(folder / "sampled", folder / "s.mp4", folder / "t.mp4", ranged(1, 2), every_other,
+                             request.perceptual_backends));
 }
 
 // Black bars Source only takes Auto's saved scores where Auto compared the

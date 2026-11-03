@@ -70,7 +70,11 @@ struct VmafOptions {
     bool compute_vmaf_v1 = false;
     std::string model_choice_v1 = std::string(auto_model_choice);
     std::string model_v1;
-    double duration_limit = 0.0;  // seconds; 0 compares the whole videos
+    // The range compared, in whole seconds of the reference counted as CVVDP
+    // counts them (frame_range.h): from range_start to range_end; range_end
+    // 0 compares to the videos' end. Both 0: the whole videos.
+    long long range_start = 0;
+    long long range_end = 0;
     // Both videos are decoded on the GPU where they can be (each falls back
     // to software on its own).
     bool gpu_decode = true;

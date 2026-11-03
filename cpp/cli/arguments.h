@@ -6,6 +6,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace vml::cli {
@@ -26,8 +27,8 @@ struct CompareArguments {
     std::string black_bars = "auto";  // "auto", "source" (the source's only) or "none"
     std::string scale_to = "test";
     std::string scaler = "bicubic";
-    std::optional<double> duration;
-    std::optional<long long> frames;
+    std::optional<long long> duration;  // whole seconds from the start of the videos
+    std::optional<std::pair<long long, long long>> range;  // whole seconds; an end of 0: to the end
     std::optional<std::string> colour;
     std::optional<std::string> film_grain;  // "with" or "without" (VideoInfo::with_film_grain)
     std::optional<double> fps;            // a raw stream's or raw YUV file's frame rate

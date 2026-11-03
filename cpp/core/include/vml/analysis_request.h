@@ -22,7 +22,8 @@ struct ComparisonRecipe {
     CropMode crop_mode = CropMode::automatic;
     std::string scale_algorithm = "bicubic";
     ScaleDirection scale_direction = ScaleDirection::source_to_distorted;
-    double duration_limit = 0.0;
+    long long range_start = 0;  // VmafOptions' range, in whole seconds
+    long long range_end = 0;
     std::optional<ResampleTarget> resample_test;
     // The two videos' film grain as they are scored: {"source": ..,
     // "distorted": ..}, each film_grain_identity's text or null; null where

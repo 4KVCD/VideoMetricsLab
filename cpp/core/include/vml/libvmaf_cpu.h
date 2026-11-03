@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "vml/cancel.h"
+#include "vml/frame_range.h"
 #include "vml/libvmaf.h"
 #include "vml/pair_scorer.h"
 #include "vml/threads.h"
@@ -148,8 +149,8 @@ int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr);
 // PSNR, SSIM and XPSNR (CpuScorer) with both videos decoded in this process,
 // luma only, as score_decoded (gpu_vmaf.h) does for VMAF: by `decoders`
 // (the source's and the test video's), cropped as FFmpeg's crop filter
-// crops and widened as FFmpeg converts, paired frame N with frame N as far
-// as `duration_limit` (-t's text) keeps them. A video compared at another
+// crops and widened as FFmpeg converts, paired frame N with frame N, those
+// `range` decodes (score_frame_pairs). A video compared at another
 // size is scaled by its GPU decoder as FFmpeg's scale filter scales it; the
 // software decoder does not scale, so such a video it would decode is
 // refused (GpuDecodeUnavailableError, from decoder_supports) and FFmpeg
@@ -158,7 +159,7 @@ int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr);
 PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted,
                              const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                              int width, int height, int bit_depth, const std::vector<std::string>& metrics,
-                             int n_subsample, const std::optional<std::string>& duration_limit, long long total_frames,
+                             int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
                              const std::string& scale_algorithm, const std::string& ffmpeg,
                              const std::string& ffprobe,

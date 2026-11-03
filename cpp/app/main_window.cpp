@@ -1761,8 +1761,8 @@ void MainWindow::set_row_black_bars(int row, bool probe_failed) {
     // Whether the test video has black bars, and nothing more; the pixel
     // counts, and what was cropped off the reference, are in the tooltip.
     // Auto crop is worked out during a run, and can differ between rows, as
-    // each has its own duration limit: the cell says it is pending until a
-    // result gives the crops the run used.
+    // each has its own range: the cell says it is pending until a result
+    // gives the crops the run used.
     QTableWidgetItem* item = distorted_table_->item(row, col_black_bars);
     if (item == nullptr) {
         return;

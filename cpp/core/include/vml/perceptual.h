@@ -22,7 +22,7 @@
 namespace vml {
 
 // What a perceptual task is given: the two videos, the run's options (black
-// bars, scaling, the duration limit, frame subsampling, decoding), where
+// bars, scaling, the range, frame subsampling, decoding), where
 // SSIMULACRA2 and Butteraugli are each set to run, the display CVVDP models,
 // and how many tasks the CPU's queue runs at once, this one included, which
 // sets the share of the cores and memory SSIMULACRA2 and Butteraugli take
@@ -102,14 +102,10 @@ struct PerceptualTaskOutput {
 // CPU whatever its length.)
 inline constexpr double long_cpu_run_seconds = 10 * 60;
 
-// How much video a comparison scores: the shorter input, capped by the
-// duration limit when one is set.
-double compared_seconds(const VideoInfo& source, const VideoInfo& distorted, double duration_limit);
-
 // Throws PerceptualRunError if the two videos cannot be compared by the
 // window's rules (geometry.h's pair_problem), such as durations that do not
-// match.
-void validate_pair(const VideoInfo& source, const VideoInfo& distorted, double duration_limit);
+// match, over `options`' range.
+void validate_pair(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options);
 
 // The black-bar crops of the source and the test video, or none when black
 // bars are kept (`crop_mode`), a video whose size changes sampled scaled

@@ -505,19 +505,19 @@ private:
 // app's _NativeFrameStream): each picture FFmpeg's chain would send goes
 // straight into a free slot, copied there by the GPU from NVIDIA's decoder
 // and vvdec-vulkan, or by the CPU from the others. FFmpeg's chain numbers
-// the frames, keeps every `step`-th, and its -t keeps the first `limit`
-// numbered ones (none: all). A decoding failure after the start is thrown
-// from next() as GpuDecodeFailedError, and the pass is then made again
-// without decoding here (remade_vship_pass).
+// the frames, keeps every `step`-th, and its trim those `range` decodes
+// (the pictures before them passed over undownloaded). A decoding failure
+// after the start is thrown from next() as GpuDecodeFailedError, and the
+// pass is then made again without decoding here (remade_vship_pass).
 class NativeFrameStream : public FrameRing {
 public:
     NativeFrameStream(const VshipLibrary& library, std::size_t frame_bytes, std::unique_ptr<GpuFrameStream> decoder,
-                      int step, std::optional<long long> limit, int gpu_id)
+                      int step, const FrameRange& range, int gpu_id)
         : FrameRing(library, frame_bytes, gpu_id),
           decoder_(std::move(decoder)),
           frame_bytes_(frame_bytes),
           step_(step),
-          limit_(limit) {}
+          range_(range) {}
 
     ~NativeFrameStream() override { close(); }
 
@@ -572,10 +572,15 @@ private:
     // What FFmpeg's chain does with a decoded picture.
     enum class Taken { piped, skipped, ended };
 
-    // The selection of the picture numbered `at`.
+    // The selection of the picture numbered `at` in the whole video
+    // (range_.decode_start is a multiple of the step, so the picked frames
+    // are a run over the whole video's).
     Taken select(long long at) const {
-        if (limit_ && at >= *limit_) {
+        if (range_.decode_end && at >= *range_.decode_end) {
             return Taken::ended;
+        }
+        if (at < range_.decode_start) {
+            return Taken::skipped;  // before the frames the range decodes
         }
         return at % step_ == 0 ? Taken::piped : Taken::skipped;
     }
@@ -622,7 +627,7 @@ private:
     std::size_t frame_bytes_;
     std::vector<void*> pinned_;  // the buffers CUDA page-locked or vvdec-vulkan imported, unpinned before the decoder closes
     int step_;
-    std::optional<long long> limit_;
+    FrameRange range_;
     std::atomic<bool> stopping_{false};
     CancelToken stop_;  // set by close()
 };
@@ -858,8 +863,10 @@ private:
 // (pool_cvvdp_windows).
 class CvvdpLane : public Lane {
 public:
-    CvvdpLane(LaneSetup setup, CvvdpSettings settings, double fps)
-        : Lane(std::move(setup)), settings_(std::move(settings)), fps_(fps) {}
+    // `first_frame`: the first pair's frame in the whole video (a ranged
+    // run's decode_start): its seconds are the whole video's.
+    CvvdpLane(LaneSetup setup, CvvdpSettings settings, double fps, long long first_frame)
+        : Lane(std::move(setup)), settings_(std::move(settings)), fps_(fps), first_frame_(first_frame) {}
 
     ~CvvdpLane() override {
         stop();
@@ -888,11 +895,14 @@ private:
             }
             if (!error()) {
                 try {
-                    const auto this_second = static_cast<long long>(static_cast<double>(job->index) / fps_);
-                    if (count != 0 && this_second != second) {
+                    const long long frame = first_frame_ + job->index;
+                    const long long this_second = second_of_frame(frame, fps_);
+                    if (count == 0) {
+                        start = frame;
+                    } else if (this_second != second) {
                         windows_.push_back({start, count, jod});
                         reset(handler);
-                        start = job->index;
+                        start = frame;
                         count = 0;
                     }
                     second = this_second;
@@ -964,6 +974,7 @@ private:
 
     CvvdpSettings settings_;
     double fps_;
+    long long first_frame_;
     std::vector<CvvdpWindow> windows_;
 };
 
@@ -1044,7 +1055,7 @@ public:
         if (plan.keys.empty() || !std::all_of(plan.keys.begin(), plan.keys.end(), is_perceptual_metric)) {
             throw std::invalid_argument("A Vship pass scores SSIMULACRA2, Butteraugli and CVVDP only.");
         }
-        validate_pair(request.source, request.distorted, request.options.duration_limit);
+        validate_pair(request.source, request.distorted, request.options);
         cancel.throw_if_cancelled();
         plan_videos();
         step_ = request.step_of(plan.keys.front());
@@ -1066,18 +1077,14 @@ public:
             throw VshipUnavailableError("CVVDP scores every frame; it cannot be subsampled.");
         }
         // Both videos' frames are numbered at the test video's frame rate
-        // (frame_sync.h) and both are cut at the duration limit, so they keep
-        // the same frames.
+        // (frame_sync.h) and both are kept to the same range's, so they keep
+        // the same frames. CVVDP looks at the frames before the one it scores.
         numbering_rate_ = frame_rate(request.distorted);
-        const double limit = request.options.duration_limit;
-        if (limit > 0) {
-            duration_limit_ = format_fixed(limit, 6);
-        }
-        expected_frames_ =
+        range_ = frame_range(request.options.range_start, request.options.range_end, request.source.fps, step_,
+                             cvvdp_.has_value());
+        const long long frames =
             std::min(request.source.estimated_frame_count(), request.distorted.estimated_frame_count());
-        if (duration_limit_) {
-            expected_frames_ = std::min(expected_frames_, std::max(1LL, *frames_within(duration_limit_, numbering_rate_)));
-        }
+        expected_frames_ = std::max(1LL, std::min(frames, range_.decode_end.value_or(frames)) - range_.decode_start);
         total_units_ = std::max(1LL, (expected_frames_ + step_ - 1) / step_) * step_;
         for (const std::string& key : frame_keys_) {
             scores_.emplace(key, std::make_unique<ScoreArray>());
@@ -1300,8 +1307,7 @@ private:
                 said = true;
                 if (std::unique_ptr<GpuFrameStream> decoder = native_decoder(video, *backend)) {
                     return std::make_unique<NativeFrameStream>(library_, video.layout.frame_bytes, std::move(decoder),
-                                                               step_, frames_within(duration_limit_, numbering_rate_),
-                                                               plan_.device.gpu_id);
+                                                               step_, range_, plan_.device.gpu_id);
                 }
             }
         }
@@ -1339,7 +1345,7 @@ private:
 
 
     // The FFmpeg commands to try for one video, keeping every step-th frame,
-    // cut at the duration limit: with hardware decoding first if it has any,
+    // cut to the range: with hardware decoding first if it has any,
     // then in software. The software retry sends the same layout as the
     // hardware attempt, because Vship's handlers are set up for one layout
     // per video. A `fed` video has one, its input the feed's (raw pictures:
@@ -1352,10 +1358,13 @@ private:
         }
         std::vector<std::vector<std::string>> commands;
         for (const std::optional<std::string>& accel : attempts) {
-            const std::string chain =
+            std::string chain =
                 vship_filter_chain(video.info, video.crop, video.size, pixel_format, step_,
                                    request_.options.scale_algorithm, accel, numbering_rate_,
                                    video.colour.colorFamily == 0 && video.colour.range == 1);
+            if (const std::optional<std::string> trim = range_trim_filter(range_)) {
+                chain = *trim + "," + chain;  // first: the frames counted as decoded
+            }
             std::vector<std::string> command{request_.environment.ffmpeg, "-hide_banner", "-loglevel",
                                              watched_log_level, "-nostats", "-nostdin"};
             if (fed != nullptr) {
@@ -1368,8 +1377,6 @@ private:
                 command.insert(command.end(), {"-i", input_path(video.info.path)});
             }
             command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", chain});
-            const std::vector<std::string> cut = duration_args(duration_limit_);
-            command.insert(command.end(), cut.begin(), cut.end());
             command.insert(command.end(), {"-fps_mode", "passthrough"});
             const std::vector<std::string> piped = vship_piped_as(pixel_format);
             command.insert(command.end(), piped.begin(), piped.end());
@@ -1415,7 +1422,7 @@ private:
                              abort_};
         };
         if (cvvdp_) {
-            cvvdp_lane_ = std::make_unique<CvvdpLane>(setup(), *cvvdp_, request_.source.fps);
+            cvvdp_lane_ = std::make_unique<CvvdpLane>(setup(), *cvvdp_, request_.source.fps, range_.decode_start);
         }
         for (const std::string& key : frame_keys_) {
             for (std::size_t lane = 0; lane < lanes_per_metric; ++lane) {
@@ -1605,7 +1612,7 @@ private:
             throw VshipUnavailableError("FFmpeg produced no frame pairs for Vship.");
         }
         if (const std::optional<std::string> short_run =
-                short_comparison(expected_frames_, frames * step_, request_.source.fps, step_)) {
+                short_comparison(expected_frames_, frames * step_, range_.decode_start, request_.source.fps, step_)) {
             throw ComparisonCutShortError(*short_run);
         }
         // A metric whose handler failed (out of GPU memory on a smaller card,
@@ -1622,7 +1629,8 @@ private:
         output.metrics = results(frames, failures);
         output.source_crop = videos_[0].crop;
         output.distorted_crop = videos_[1].crop;
-        output.compared_frame_count = frames * step_;
+        const auto [first, last] = pairs_in_range(frames);
+        output.compared_frame_count = (last - first) * step_;
         output.failures = failures;
         const double elapsed =
             std::max(std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count(), 1e-6);
@@ -1647,10 +1655,11 @@ private:
     // second of video.
     MetricResultSet results(long long frames, const PerceptualFailures& failures) const {
         const VshipDevice& device = plan_.device;
+        const auto [first, last] = pairs_in_range(frames);
         std::vector<int> frame_numbers;
         std::vector<double> times;
-        for (long long index = 0; index < frames; ++index) {
-            const auto number = static_cast<int>(index * step_);
+        for (long long index = first; index < last; ++index) {
+            const auto number = static_cast<int>(range_.decode_start + index * step_);
             frame_numbers.push_back(number);
             times.push_back(static_cast<double>(number) / std::max(request_.source.fps, 1.0));
         }
@@ -1672,8 +1681,10 @@ private:
                 continue;
             }
             MetricProvenance provenance{"Vship/" + key, build_name(), "gpu", score_id(key), parameters};
-            found.add(FrameMetricResult{key, frame_numbers, times, scores_.at(key)->values(frames),
-                                        std::move(provenance)});
+            mark_range(provenance, range_);
+            std::vector<float> values = scores_.at(key)->values(frames);
+            values = std::vector<float>(values.begin() + first, values.begin() + last);
+            found.add(FrameMetricResult{key, frame_numbers, times, std::move(values), std::move(provenance)});
         }
         if (cvvdp_lane_ && !cvvdp_lane_->error()) {
             found.add(cvvdp_result());
@@ -1701,13 +1712,41 @@ private:
         return plan_.vship51 ? score_identity::vship51_gpu(key) : score_identity::vship_gpu(key);
     }
 
-    // CVVDP's score, with each second's JOD at the second's first frame.
+    // The pairs (by their place, `frames` in all) whose frames are in range:
+    // [first, last). A ranged run with CVVDP decodes frames before them for
+    // its look back, and one after (frame_range's looks_around, for VMAF's
+    // look ahead), which no Vship metric needs.
+    std::pair<long long, long long> pairs_in_range(long long frames) const {
+        const auto place_of = [this](long long frame) {
+            return std::max(0LL, (frame - range_.decode_start + step_ - 1) / step_);  // the first pair at or after it
+        };
+        const long long first = std::min(frames, place_of(range_.start));
+        const long long last = range_.end ? std::min(frames, place_of(*range_.end)) : frames;
+        return {first, std::max(first, last)};
+    }
+
+    // CVVDP's score, with each second's JOD at the second's first frame. A
+    // ranged run's seconds before the range (its warm-up) are left out, and
+    // its score is pooled from its seconds' JODs as they are saved (float),
+    // as a range cut from a saved result is pooled: the same score either
+    // way. Its frames are saved with it (range_frames; a whole run's reach
+    // in cvvdp_frames_reached).
     SequenceMetricResult cvvdp_result() const {
         const VshipDevice& device = plan_.device;
-        const std::vector<CvvdpWindow>& windows = cvvdp_lane_->windows();
+        std::vector<CvvdpWindow> windows;
+        for (const CvvdpWindow& window : cvvdp_lane_->windows()) {
+            if (window.first >= range_.start && (!range_.end || window.first < *range_.end)) {
+                windows.push_back(window);
+            }
+        }
+        if (!range_.whole()) {
+            for (CvvdpWindow& window : windows) {
+                window.jod = static_cast<float>(window.jod);
+            }
+        }
         SequenceMetricResult result;
         result.key = "cvvdp";
-        result.score = pool_cvvdp_windows(windows);
+        result.score = windows.empty() ? std::nan("") : pool_cvvdp_windows(windows);
         result.provenance = {"Vship/cvvdp",
                              build_name(),
                              "gpu",
@@ -1718,6 +1757,16 @@ private:
                               {"resize_to_display", nlohmann::json(cvvdp_->resize_to_display).dump()},
                               {"timeline", nlohmann::json("JOD of each second of video").dump()},
                               {"color_tags", nlohmann::json(score_identity::vship_colour_tags).dump()}}};
+        if (!windows.empty()) {
+            // Where its run reached, which the length of its last second
+            // needs: a ranged run's in its range_frames, a whole run's on its
+            // own, for a range to be cut from it (metric_cache.cpp).
+            const long long reached = windows.back().first + windows.back().frames;
+            if (range_.whole()) {
+                result.provenance.parameters["cvvdp_frames_reached"] = nlohmann::json(reached).dump();
+            }
+            mark_range(result.provenance, range_, reached);
+        }
         for (const CvvdpWindow& window : windows) {
             result.frame.push_back(static_cast<int>(window.first));
             result.time.push_back(static_cast<double>(static_cast<int>(window.first)) /
@@ -1739,7 +1788,7 @@ private:
     std::vector<std::string> frame_keys_;  // the metrics scored per frame: all but CVVDP
     std::optional<CvvdpSettings> cvvdp_;   // with CVVDP, the display it models
     Rational numbering_rate_;
-    std::optional<std::string> duration_limit_;
+    FrameRange range_;  // the frames compared and decoded
     long long expected_frames_ = 0;
     long long total_units_ = 1;
     std::mutex decode_mutex_;

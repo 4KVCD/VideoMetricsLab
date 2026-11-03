@@ -337,9 +337,13 @@ const char* const templates[] = {
     "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate "
     "before comparing them.",
     "Frame rates do not match ({source} vs {test} fps).",
-    "Durations do not match ({source} vs {test} seconds). Set a duration limit within both files if comparing "
-    "only their common opening segment.",
-    "The duration limit extends beyond the end of one of the videos.",
+    "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part "
+    "they share.",
+    "The range extends beyond the end of one of the videos.",
+    "The range ends before it starts.",
+    "A range needs the videos' frame rates, which are not known.",
+    "The range starts after the end of one of the videos.",
+    "The range contains no frame of the videos.",
     "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them "
     "would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set "
     "black-bar handling to 'Auto-detect' so the bars are removed before comparison.",

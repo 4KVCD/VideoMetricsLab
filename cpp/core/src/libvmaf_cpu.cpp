@@ -350,7 +350,7 @@ int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr) {
 PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted,
                              const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                              int width, int height, int bit_depth, const std::vector<std::string>& metrics,
-                             int n_subsample, const std::optional<std::string>& duration_limit, long long total_frames,
+                             int n_subsample, const FrameRange& range, long long total_frames,
                              const std::pair<std::string, std::string>& decoders, int threads, int frame_rate,
                              const std::string& scale_algorithm, const std::string& ffmpeg,
                              const std::string& ffprobe,
@@ -387,7 +387,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
     test.start();
     reference.start();
     score_frame_pairs(
-        test, reference, distorted, duration_limit, total_frames,
+        test, reference, range, total_frames,
         [&](int test_slot, int reference_slot) { scorer.add_decoded(reference, reference_slot, test, test_slot); },
         on_progress, cancel);
     return scorer.finish();

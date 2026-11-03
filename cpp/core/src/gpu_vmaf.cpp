@@ -312,16 +312,11 @@ std::unique_lock<std::timed_mutex> take_gpu_turn(const std::function<void()>& on
     return pass;
 }
 
-std::pair<std::vector<std::string>, std::vector<std::string>> gpu_output_args(double duration_limit,
-                                                                              const std::string& test_pipe,
+std::pair<std::vector<std::string>, std::vector<std::string>> gpu_output_args(const std::string& test_pipe,
                                                                               const std::string& source_pipe) {
-    const std::vector<std::string> cut =
-        duration_args(duration_limit > 0 ? std::optional(format_fixed(duration_limit, 3)) : std::nullopt);
-    const auto output = [&cut](const char* label, const std::string& pipe) {
-        std::vector<std::string> args{"-map", "[" + std::string(label) + "]", "-fps_mode", "passthrough"};
-        args.insert(args.end(), cut.begin(), cut.end());
-        args.insert(args.end(), {"-flush_packets", "1", "-f", "yuv4mpegpipe", "-strict", "-1", pipe});
-        return args;
+    const auto output = [](const char* label, const std::string& pipe) {
+        return std::vector<std::string>{"-map", "[" + std::string(label) + "]", "-fps_mode", "passthrough",
+                                        "-flush_packets", "1", "-f", "yuv4mpegpipe", "-strict", "-1", pipe};
     };
     return {output("vmaf_dist", test_pipe), output("vmaf_ref", source_pipe)};
 }
@@ -529,9 +524,9 @@ GpuAttempt::~GpuAttempt() {
     }
 }
 
-std::pair<std::vector<std::string>, std::vector<std::string>> GpuAttempt::output_args(double duration_limit) const {
+std::pair<std::vector<std::string>, std::vector<std::string>> GpuAttempt::output_args() const {
     const State& s = *state_;
-    return gpu_output_args(duration_limit, s.distorted->path(), s.reference->path());
+    return gpu_output_args(s.distorted->path(), s.reference->path());
 }
 
 // Frame N of the test video with frame N of the source, until either video
@@ -621,7 +616,7 @@ namespace {
 // software decoder's are written into the memory they are uploaded from.
 PairScores score_decoded_cuda(const VideoInfo& source, const VideoInfo& distorted,
                               const std::vector<DecodePlan>& plans, const GpuPlan& plan, int n_subsample,
-                              const std::optional<std::string>& duration_limit, long long total_frames,
+                              const FrameRange& range, long long total_frames,
                               const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
                               const std::string& ffprobe,
                               const std::function<void(long long, long long, double)>& on_progress,
@@ -651,7 +646,7 @@ PairScores score_decoded_cuda(const VideoInfo& source, const VideoInfo& distorte
     test.start();
     reference.start();
     score_frame_pairs(
-        test, reference, distorted, duration_limit, total_frames,
+        test, reference, range, total_frames,
         [&](int test_slot, int reference_slot) {
             scorer->add_decoded(side(reference, reference_slot), side(test, test_slot));
         },
@@ -664,7 +659,7 @@ PairScores score_decoded_cuda(const VideoInfo& source, const VideoInfo& distorte
 PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                          const std::optional<CropBox>& source_crop,
                          const std::optional<CropBox>& distorted_crop, const GpuPlan& plan,
-                         int n_subsample, const std::optional<std::string>& duration_limit,
+                         int n_subsample, const FrameRange& range,
                          long long total_frames, const std::string& scale_algorithm,
                          const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
                          const std::string& ffprobe,
@@ -722,7 +717,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
         throw GpuDecodeUnavailableError("the decoders' frames are not the size compared at");
     }
     if (cuda) {
-        return score_decoded_cuda(source, distorted, plans, plan, n_subsample, duration_limit, total_frames,
+        return score_decoded_cuda(source, distorted, plans, plan, n_subsample, range, total_frames,
                                   decoders, ffmpeg, ffprobe, on_progress, cancel);
     }
     // v2.4's first step (VML_VVDEC_HANDOVER=1): an 8- or 10-bit VVC test video, unscaled and scored without film grain,
@@ -800,7 +795,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     test.start();
     reference.start();
     score_frame_pairs(
-        test, reference, distorted, duration_limit, total_frames,
+        test, reference, range, total_frames,
         [&](int test_slot, int reference_slot) {
             if (beside && !shared) {
                 // Each luma plane written out once, into the CPU's picture,

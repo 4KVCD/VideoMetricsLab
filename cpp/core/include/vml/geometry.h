@@ -67,9 +67,10 @@ std::optional<std::string> shape_problem(const VideoInfo& source, const VideoInf
                                          const std::optional<CropBox>& source_crop,
                                          const std::optional<CropBox>& distorted_crop);
 
-// Why two videos cannot be compared (their timelines do not match), or
-// nothing.
-std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, double duration_limit);
+// Why two videos cannot be compared over seconds [range_start, range_end)
+// (range_end 0: to the end; their timelines do not match there), or nothing.
+std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, long long range_start,
+                                        long long range_end);
 
 // Video Compare's check: a raw stream whose frame rate (FFmpeg's guess)
 // disagrees with the other video's is refused, as pair_problem refuses it.

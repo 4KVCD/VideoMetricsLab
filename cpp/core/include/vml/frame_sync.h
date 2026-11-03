@@ -5,8 +5,8 @@
 // from each video's first frame, until either video ends. FFmpeg's
 // two-input filters pair frames by their timestamps, so each video's frames
 // are first restamped with their numbers (numbering_filters): frame N gets
-// the time of N frames of the test video, in both videos. A duration limit
-// (an output's -t, duration_args) then keeps the same frames of both.
+// the time of N frames of the test video, in both videos. A range keeps the
+// same frames of both (frame_range.h: a trim before the numbering).
 #pragma once
 
 #include <optional>
@@ -42,12 +42,9 @@ Rational frame_rate(const VideoInfo& info);
 // before a filter pairs the two.
 std::vector<std::string> numbering_filters(Rational rate);
 
-// An FFmpeg output's options for a duration limit, given as -t takes it
-// ("30.042"); none without a limit.
-std::vector<std::string> duration_args(const std::optional<std::string>& duration_limit);
-
 // How many frames, numbered at `rate`, a duration limit keeps: those whose
-// time is below it. Nothing when there is no limit.
+// time is below it. Nothing when there is no limit. For scores saved before
+// ranges, whose runs cut the videos so (metric_cache.cpp's fit_seconds).
 std::optional<long long> frames_within(const std::optional<std::string>& duration_limit, Rational rate);
 
 // A duration as -t takes it ("30.042") in whole microseconds, read as FFmpeg

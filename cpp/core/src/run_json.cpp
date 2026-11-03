@@ -91,7 +91,8 @@ nlohmann::json options_json(const VmafOptions& options) {
             {"compute_vmaf_v1", options.compute_vmaf_v1},
             {"model_choice_v1", options.model_choice_v1},
             {"model_v1", options.model_v1},
-            {"duration_limit", options.duration_limit},
+            {"range_start", options.range_start},
+            {"range_end", options.range_end},
             {"gpu_decode", options.gpu_decode},
             {"gpu_vendor", static_cast<int>(options.gpu_vendor)},
             {"vmaf_on_gpu", options.vmaf_on_gpu},
@@ -115,7 +116,8 @@ VmafOptions options_from(const nlohmann::json& text) {
     text.at("compute_vmaf_v1").get_to(options.compute_vmaf_v1);
     text.at("model_choice_v1").get_to(options.model_choice_v1);
     text.at("model_v1").get_to(options.model_v1);
-    text.at("duration_limit").get_to(options.duration_limit);
+    text.at("range_start").get_to(options.range_start);
+    text.at("range_end").get_to(options.range_end);
     text.at("gpu_decode").get_to(options.gpu_decode);
     options.gpu_vendor = static_cast<GpuVendor>(text.at("gpu_vendor").get<int>());
     text.at("vmaf_on_gpu").get_to(options.vmaf_on_gpu);

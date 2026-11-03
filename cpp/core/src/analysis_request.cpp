@@ -41,12 +41,18 @@ nlohmann::json ComparisonRecipe::identity() const {
         {"crop_mode", crop_mode_text(crop_mode)},
         {"scale_direction",
          scale_direction == ScaleDirection::source_to_distorted ? "source_to_distorted" : "distorted_to_source"},
-        {"duration_limit", duration_limit},
+        // The range's end under the duration limit's name, a number of
+        // seconds as it was (30.0; 0.0: to the end): every comparison saved
+        // before ranges keeps its identity, a limit being a range from 0.
+        {"duration_limit", static_cast<double>(range_end)},
         {"resample_test", resample_test ? nlohmann::json{{"width", resample_test->width},
                                                          {"label", resample_test->label}}
                                         : nlohmann::json(nullptr)},
         {"manual_source_crop", nullptr},
         {"manual_distorted_crop", nullptr}};
+    if (range_start > 0) {
+        identity["range_start"] = static_cast<double>(range_start);
+    }
     if (!film_grain.is_null()) {
         identity["film_grain"] = film_grain;
     }
@@ -69,8 +75,8 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
                                  const std::map<std::string, std::string>& perceptual_backends,
                                  const CvvdpSettings& cvvdp, const VideoInfo& source, const VideoInfo& distorted) {
     AnalysisRequest request;
-    request.recipe = {options.crop_mode, options.scale_algorithm, options.scale_direction, options.duration_limit,
-                      options.resample_test};
+    request.recipe = {options.crop_mode,  options.scale_algorithm, options.scale_direction,
+                      options.range_start, options.range_end,      options.resample_test};
     const std::optional<std::string> source_grain = film_grain_identity(source);
     const std::optional<std::string> distorted_grain = film_grain_identity(distorted);
     if (source_grain || distorted_grain) {

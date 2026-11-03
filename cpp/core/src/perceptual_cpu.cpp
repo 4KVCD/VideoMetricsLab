@@ -731,6 +731,10 @@ double butteraugli_norm3(const std::filesystem::path& distortion_map) {
     return std::pow(mean, 1.0 / 3.0);
 }
 
+FrameRange cpu_range(const VmafOptions& options, const VideoInfo& source, int step) {
+    return frame_range(options.range_start, options.range_end, source.fps, step, false);
+}
+
 std::string image_filtergraph(const VideoInfo& source_info, const VideoInfo& distorted_info,
                               const VmafOptions& options, const std::optional<CropBox>& source_crop,
                               const std::optional<CropBox>& distorted_crop, int step) {
@@ -749,11 +753,17 @@ std::string image_filtergraph(const VideoInfo& source_info, const VideoInfo& dis
     if (step > 1) {
         plan.sample.push_back("select=not(mod(n\\," + std::to_string(step) + "))");
     }
-    // Both videos' frames are first numbered at the test video's frame rate,
-    // so that the duration limit (each output's -t) keeps the same frames of
-    // both; then sampled, so that the frames select drops are not cropped or
-    // scaled.
-    const std::vector<std::string> numbering = numbering_filters(frame_rate(distorted));
+    // Both videos' frames are first kept to those a range decodes (counted
+    // as decoded), then numbered at the test video's frame rate, so that the
+    // frames of both are paired; then sampled, so that the frames select
+    // drops are not cropped or scaled.
+    std::vector<std::string> numbering;
+    if (const std::optional<std::string> trim = range_trim_filter(cpu_range(options, source, step))) {
+        numbering.push_back(*trim);
+    }
+    for (std::string& filter : numbering_filters(frame_rate(distorted))) {
+        numbering.push_back(std::move(filter));
+    }
     const auto chain = [&plan, &numbering](const std::string& input, const std::string& output,
                                            const std::optional<CropBox>& crop, const VideoInfo& info,
                                            const std::optional<Size>& target) {
@@ -792,13 +802,8 @@ std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const Vide
     }
     command.insert(command.end(), {"-filter_complex", image_filtergraph(source, distorted, options, source_crop,
                                                                         distorted_crop, step)});
-    std::vector<std::string> output_args;
-    if (options.duration_limit > 0) {
-        output_args = duration_args(format_fixed(options.duration_limit, 3));
-    }
-    for (const char* arg : {"-fps_mode", "passthrough", "-pix_fmt", "rgb48le", "-atomic_writing", "1"}) {
-        output_args.emplace_back(arg);
-    }
+    const std::vector<std::string> output_args{"-fps_mode", "passthrough", "-pix_fmt",
+                                               "rgb48le",    "-atomic_writing", "1"};
     for (const auto& [label, pattern] : {std::pair{"[distorted]", "test-%08d.png"},
                                          std::pair{"[reference]", "reference-%08d.png"}}) {
         command.insert(command.end(), {"-map", label});
@@ -838,15 +843,11 @@ int common_step(const PerceptualRequest& request, const std::vector<std::string>
     return *steps.begin();
 }
 
-// How many frames the comparison is expected to have: the shorter video's,
-// at most as many as the duration limit holds.
-long long expected_frames(const VideoInfo& source, const VideoInfo& distorted, double duration_limit) {
-    long long expected = std::min(source.estimated_frame_count(), distorted.estimated_frame_count());
-    if (duration_limit > 0) {
-        expected =
-            std::min(expected, std::max(1LL, static_cast<long long>(std::ceil(duration_limit * source.fps))));
-    }
-    return expected;
+// How many frames the comparison is expected to decode: the shorter video's,
+// those of the range (cpu_range).
+long long expected_frames(const VideoInfo& source, const VideoInfo& distorted, const FrameRange& range) {
+    const long long frames = std::min(source.estimated_frame_count(), distorted.estimated_frame_count());
+    return std::max(1LL, std::min(frames, range.decode_end.value_or(frames)) - range.decode_start);
 }
 
 // The frame pairs of one CPU perceptual task, scored `workers` pairs at a
@@ -1013,24 +1014,31 @@ void CpuScoringPool::fail(std::exception_ptr error) {
 }
 
 // The scores `by_pair` (each pair's, in `keys`' order, scored by
-// `executables`) as the task's results: frames `step` apart, timed at `fps`,
-// with how they were made.
+// `executables`) as the task's results: frames `step` apart from
+// range.decode_start, those in range kept, timed at `fps`, with how they
+// were made.
 MetricResultSet cpu_results(const std::vector<std::string>& keys, const std::vector<std::filesystem::path>& executables,
-                            const std::vector<std::vector<double>>& by_pair, int step, double fps, bool hdr) {
+                            const std::vector<std::vector<double>>& by_pair, int step, double fps, bool hdr,
+                            const FrameRange& range) {
     const auto total = static_cast<long long>(by_pair.size());
     std::vector<int> frames;
     std::vector<double> times;
+    std::vector<std::size_t> kept;  // the pairs in range
     for (long long index = 0; index < total; ++index) {
-        const auto frame = static_cast<int>(index * step);
-        frames.push_back(frame);
+        const long long frame = range.decode_start + index * step;
+        if (frame < range.start) {
+            continue;  // decoded for the subsampling's grid, before the range
+        }
+        frames.push_back(static_cast<int>(frame));
         times.push_back(static_cast<double>(frame) / std::max(fps, 1.0));
+        kept.push_back(static_cast<std::size_t>(index));
     }
     MetricResultSet results;
     for (std::size_t position = 0; position < keys.size(); ++position) {
         const std::string& key = keys[position];
         std::vector<float> values;
-        for (const std::vector<double>& pair : by_pair) {
-            values.push_back(static_cast<float>(pair[position]));
+        for (const std::size_t pair : kept) {
+            values.push_back(static_cast<float>(by_pair[pair][position]));
         }
         // The colours are read as Vship reads them, with its Butteraugli
         // 3-norm and display brightness.
@@ -1044,9 +1052,10 @@ MetricResultSet cpu_results(const std::vector<std::string>& keys, const std::vec
             parameters["intensity_target"] =
                 hdr ? nlohmann::json("picture's own").dump() : nlohmann::json(butteraugli_intensity_nits).dump();
         }
-        results.add(FrameMetricResult{key, frames, times, std::move(values),
-                                      MetricProvenance{key, implementation_version(executables[position]), "cpu",
-                                                       score_identity::libjxl_cpu(key), std::move(parameters)}});
+        MetricProvenance provenance{key, implementation_version(executables[position]), "cpu",
+                                    score_identity::libjxl_cpu(key), std::move(parameters)};
+        mark_range(provenance, range);
+        results.add(FrameMetricResult{key, frames, times, std::move(values), std::move(provenance)});
     }
     return results;
 }
@@ -1068,14 +1077,15 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
     if (options.resample_test) {
         throw PerceptualRunError("Perceptual CPU metrics do not support resolution round-trip tests yet.");
     }
-    validate_pair(source, distorted, options.duration_limit);
+    validate_pair(source, distorted, options);
     const std::vector<std::filesystem::path> executables = metric_executables(keys);
     const int step = common_step(request, keys);
     const auto [source_crop, distorted_crop] =
         crops ? *crops
               : resolve_crops(request.environment.ffmpeg, source, distorted, options.crop_mode,
                               options.scale_algorithm, cancel, on_status);
-    const long long expected = expected_frames(source, distorted, options.duration_limit);
+    const FrameRange range = cpu_range(options, source, step);
+    const long long expected = expected_frames(source, distorted, range);
     const long long total_units = std::max(1LL, (expected + step - 1) / step) * step;
     if (on_status) {
         on_status(decoding_status("Calculating SSIMULACRA2/Butteraugli on the CPU as frames are extracted",
@@ -1117,14 +1127,16 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
         feeds.finish();  // a fed video decoded in part is no score
     }
     const auto total = static_cast<long long>(by_pair.size());
-    if (const std::optional<std::string> short_reason = short_comparison(expected, total * step, source.fps, step)) {
+    if (const std::optional<std::string> short_reason =
+            short_comparison(expected, total * step, range.decode_start, source.fps, step)) {
         throw ComparisonCutShortError(*short_reason);
     }
     if (on_progress) {
         on_progress(total * step, total * step, rate_of(total * step));
     }
-    return PerceptualTaskOutput{cpu_results(keys, executables, by_pair, step, source.fps, pool.hdr()), source_crop,
-                                distorted_crop, total * step, {}};
+    MetricResultSet results = cpu_results(keys, executables, by_pair, step, source.fps, pool.hdr(), range);
+    const long long compared = static_cast<long long>(results.frame(keys.front())->frame.size()) * step;
+    return PerceptualTaskOutput{std::move(results), source_crop, distorted_crop, compared, {}};
 }
 
 }  // namespace vml

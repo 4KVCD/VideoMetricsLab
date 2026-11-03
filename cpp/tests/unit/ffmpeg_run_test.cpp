@@ -97,7 +97,7 @@ VmafOptions options_named(const std::string& choice, const std::string& setting)
         options.scale_direction = ScaleDirection::distorted_to_source;
     } else if (setting == "limit") {
         options.n_threads = 24;
-        options.duration_limit = 1.0;
+        options.range_end = 1;  // the first second
     } else {
         options.n_threads = 0;  // "Auto": the PC's cores
     }
@@ -124,7 +124,7 @@ TEST(FfmpegRun, BuildsThePythonAppsResolutionTestCommands) {
             build_resample_filtergraph(source, options, source_crop, hwaccel, "vmaf_log.json",
                                        item["model"].get<std::string>(), xpsnr_log, item["cores"].get<unsigned>());
         std::vector<std::string> command =
-            build_resample_command("<ffmpeg>", source.path, graph, hwaccel, options.duration_limit);
+            build_resample_command("<ffmpeg>", source.path, graph, hwaccel);
         for (std::string& part : command) {
             if (part == platform::path_text(std::filesystem::absolute(source.path))) {
                 part = "<source>";  // an absolute path, which differs between PCs
@@ -145,11 +145,10 @@ TEST(FfmpegRun, BuildsThePythonAppsCommandsForVmafOnTheGpu) {
         const auto [source_crop, test_crop] = crops_named(item["crop"].get<std::string>());
         const HardwareDecoding plan = plan_named(item["plan"].get<std::string>());
         const VmafOptions options = options_named("vmaf, neg", item["setting"].get<std::string>());
-        const double limit = test::reference_number(item["limit"]).value();
         std::vector<std::vector<std::string>> commands = build_stream_commands(
             "<ffmpeg>", test.path, source.path,
             build_stream_graphs(source, test, options, source_crop, test_crop, plan), plan,
-            gpu_output_args(limit, "<test pipe>", "<source pipe>"));
+            gpu_output_args("<test pipe>", "<source pipe>"));
         for (std::vector<std::string>& command : commands) {
             for (std::string& part : command) {
                 if (part == platform::path_text(std::filesystem::absolute(test.path))) {
@@ -163,16 +162,34 @@ TEST(FfmpegRun, BuildsThePythonAppsCommandsForVmafOnTheGpu) {
     }
 }
 
+// A range late in the videos: both videos' chains first keep the frames from
+// a second before it (VMAF's motion looks back) to a frame past it, counted
+// as decoded, and the outputs have no duration of their own. At 120 fps,
+// seconds 5 to 6 are frames 600 to 719.
+TEST(FfmpegRun, ARangesFramesAreKeptAtTheHeadOfBothChains) {
+    const auto [source, test] = pair_named("4k against 1080p");
+    VmafOptions options = options_named("vmaf", "plain");
+    options.range_start = 5;
+    options.range_end = 6;
+    const std::string graph = build_filtergraph(source, test, options, std::nullopt, std::nullopt, HardwareDecoding{},
+                                                "vmaf_log.json", "version=vmaf_v0.6.1", std::nullopt, 12);
+    EXPECT_NE(graph.find("[0:V:0]trim=start_frame=480:end_frame=721,"), std::string::npos) << graph;
+    EXPECT_NE(graph.find("[1:V:0]trim=start_frame=480:end_frame=721,"), std::string::npos) << graph;
+    const std::vector<std::string> command =
+        build_ffmpeg_command("ffmpeg", test.path, source.path, graph, HardwareDecoding{});
+    EXPECT_EQ(std::count(command.begin(), command.end(), "-t"), 0);
+}
+
 // A Mac's GPU decoder hands its frames over in system memory itself, so a
 // run with several graphs decodes each picture once and leaves the download
 // to it; one graph keeps the frames on the GPU for its own hwdownload.
 TEST(FfmpegRun, AMacsGpuDecoderDownloadsItselfForSeveralGraphs) {
     const HardwareDecoding mac{"videotoolbox", "videotoolbox"};
     const std::vector<std::string> several =
-        build_ffmpeg_command("ffmpeg", "test.mp4", "ref.mp4", "[0:v]null[a]\n[1:v]null[b]", mac, 0);
+        build_ffmpeg_command("ffmpeg", "test.mp4", "ref.mp4", "[0:v]null[a]\n[1:v]null[b]", mac);
     EXPECT_EQ(std::count(several.begin(), several.end(), "-hwaccel_output_format"), 0);
     EXPECT_EQ(std::count(several.begin(), several.end(), "videotoolbox"), 2);
-    const std::vector<std::string> one = build_ffmpeg_command("ffmpeg", "test.mp4", "ref.mp4", "[0:v]null", mac, 0);
+    const std::vector<std::string> one = build_ffmpeg_command("ffmpeg", "test.mp4", "ref.mp4", "[0:v]null", mac);
     EXPECT_EQ(std::count(one.begin(), one.end(), "videotoolbox_vld"), 2);
 }
 
@@ -207,11 +224,14 @@ TEST(FfmpegRun, ReadsLibvmafsLogAsThePythonAppDoes) {
 }
 
 TEST(FfmpegRun, ARunCutShortIsRefused) {
-    EXPECT_EQ(short_comparison(1000, 990, 24.0, 1), std::nullopt);
-    EXPECT_EQ(short_comparison(1000, 500, 24.0, 1).value_or(""),
+    EXPECT_EQ(short_comparison(1000, 990, 0, 24.0, 1), std::nullopt);
+    EXPECT_EQ(short_comparison(1000, 500, 0, 24.0, 1).value_or(""),
               "Only 500 of the 1000 frames expected could be compared: one of the videos ends after 0:00:20.8, "
               "though its file says it is longer. It may have been cut short: an encode that stopped early, or a "
               "copy that did not finish.");
+    // In a range from 1:00, the time is the video's, not the range's.
+    EXPECT_NE(short_comparison(1000, 500, 1440, 24.0, 1).value_or("").find("ends after 0:01:20.8,"),
+              std::string::npos);
 }
 
 // An FFmpeg whose write into the app's frame pipe Windows refused (its lines

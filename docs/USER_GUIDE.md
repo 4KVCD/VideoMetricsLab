@@ -9,7 +9,14 @@
 2. Select the metric checkboxes in each row. Cell edits apply to selected rows;
    header checkboxes apply across rows. VMAF, PSNR, SSIM and XPSNR are enabled
    by default; VMAF NEG, SSIMULACRA2 and Butteraugli can be selected separately.
-3. Review crop, scale, model, duration and subsampling settings before starting.
+3. Review crop, scale, model, range and subsampling settings before starting.
+   **Range** compares only a part of the videos, from one time to another in
+   whole seconds (an end of 00:00:00 compares to the videos' end). A range's
+   scores are those of the same frames in a run over the whole videos. An end
+   within a video's last, partial second compares to its end: 00:00:00 to
+   00:00:13 for a 300-frame encode of 12.5 seconds. The
+   frames before a range are still decoded, so a range late in a long video
+   takes a while to start, and its progress may stay at 0% until then.
 
 The model selector includes Netflix VMAF v0 models and the bundled VMAF v1
 models (1080p, phone, 4K, and high-frame-rate variants). VMAF v1 requires an
@@ -186,8 +193,11 @@ More examples:
 # The first 30 seconds only, everything calculated on the CPU
 .\VideoMetricsLab-cli.exe compare reference.mkv encode.mkv --duration 30 --cpu
 
-# HDR10 in files with no colour tags (y4m), the first 33 frames (CVVDP models an HDR display for HDR video)
-.\VideoMetricsLab-cli.exe compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --frames 33
+# HDR10 in files with no colour tags (y4m), the first 2 seconds (CVVDP models an HDR display for HDR video)
+.\VideoMetricsLab-cli.exe compare reference.y4m encode.y4m -m cvvdp --colour pq-bt2020 --duration 2
+
+# Two minutes, an hour into the videos
+.\VideoMetricsLab-cli.exe compare reference.mkv encode.mkv --range 1:00:00-1:02:00
 
 # CVVDP on two displays of your choice: a 30-inch HDR monitor and a 65-inch HDR TV
 .\VideoMetricsLab-cli.exe compare reference.mkv encode.mkv -m cvvdp --cvvdp-display "30-inch 4K HDR monitor, dim room" --cvvdp-display "65-inch 4K HDR TV, 1000 nits, living room"
@@ -223,8 +233,8 @@ $run.videos[0].metrics.vmaf.score
 | `--black-bars auto\|source\|none` | Detect and cut black bars; `source`: cut the source's only and compare the test video's full frame (an encode cropped when it was made), as the Options panel's **Source only (test video already cropped)**, which takes the scores saved by `auto` where `auto` compared the test video's full frame too; or compare whole pictures. |
 | `--scale-to test\|reference` | Which video's size the other is scaled to when they differ. |
 | `--scaler bicubic\|bilinear\|lanczos\|spline` | Scaling algorithm. |
-| `--duration SECONDS` | Compare only the start of each video. |
-| `--frames N` | Compare only the first N frames of each video, such as a short encode of a longer reference. |
+| `--duration SECONDS` | Compare only the first SECONDS of each video (whole seconds, or H:MM:SS). |
+| `--range START-END` | Compare only that part of each video, from START to END (whole seconds, or H:MM:SS: `1:00-1:30`); without END, to the videos' end. |
 | `--colour pq-bt2020\|hlg-bt2020\|bt709` | The colours of a video with no colour tags (y4m, say); a tagged video keeps its own. Left out, such a video takes the other video's tags when that one has them (a y4m encode of a tagged HDR10 source is read as HDR10), and is otherwise taken as SDR, which changes CVVDP, SSIMULACRA2 and Butteraugli. Scores with colours given or taken are not saved. |
 | `--film-grain with\|without` | Score with the film grain a video's stream asks the player to add, as players show it, or without it, the coded pictures only. Left out: as Settings' **Film grain** default says; with, where it asks. |
 | `--fps RATE` | The frame rate of a raw video stream or raw YUV file (below), such as `24000/1001`, `23.976` or `60`. Required when the reference or a test video is one. These scores are not saved. |

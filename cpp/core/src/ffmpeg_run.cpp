@@ -153,11 +153,9 @@ std::vector<std::string> split_hwaccel_args(const std::optional<std::string>& hw
     return hwaccel_args(hwaccel);
 }
 
-// The options after the inputs: the graphs and the outputs, each with the
-// duration limit (an output's -t limits how many frames reach libvmaf).
-std::vector<std::string> output_args(const std::string& filtergraph, double duration_limit) {
-    const std::vector<std::string> cut =
-        duration_args(duration_limit > 0 ? std::optional<std::string>(format_fixed(duration_limit, 3)) : std::nullopt);
+// The options after the inputs: the graphs and the outputs (a range's frames
+// are kept by each chain's head, video_chains).
+std::vector<std::string> output_args(const std::string& filtergraph) {
     std::vector<std::string> graphs;
     std::stringstream lines(filtergraph);
     for (std::string graph; std::getline(lines, graph, graph_separator);) {
@@ -172,18 +170,16 @@ std::vector<std::string> output_args(const std::string& filtergraph, double dura
         for (std::size_t index = 0; index < graphs.size(); ++index) {
             args.push_back("-map");
             args.push_back("[graph" + std::to_string(index) + "]");
-            args.insert(args.end(), cut.begin(), cut.end());
             args.insert(args.end(), {"-f", "null", "-"});
         }
         return args;
     }
-    args = {"-lavfi", filtergraph, "-progress", "pipe:1", "-nostats"};
-    args.insert(args.end(), cut.begin(), cut.end());
-    args.insert(args.end(), {"-f", "null", "-"});
-    return args;
+    return {"-lavfi", filtergraph, "-progress", "pipe:1", "-nostats", "-f", "null", "-"};
 }
 
-// Each video's filters before the two are paired: downloaded from its GPU
+// Each video's filters before the two are paired: a range's frames kept
+// (first, so that the frames are counted as decoded, as a run over the whole
+// videos numbers them), downloaded from its GPU
 // decoder if need be (in a run of several graphs, a decoder that downloads
 // its pictures itself does it once for all of them), cropped, converted to
 // the analysis format (the deeper video's) and, for a test video of the
@@ -211,6 +207,10 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
         return hwaccel.has_value() && bit_depth(info.pix_fmt) <= 8 && bit_depth(analysis_format) > 8;
     };
     VideoChains chains;
+    if (const std::optional<std::string> trim = range_trim_filter(run_range(options, source))) {
+        chains.test.push_back(*trim);
+        chains.source.push_back(*trim);
+    }
 
     if (decoding.distorted && !(split && decoder_downloads(decoding.distorted))) {
         // Frames come as GPU surfaces and must come back to system memory
@@ -521,6 +521,31 @@ std::vector<double> times_of(const std::vector<int>& frames, double fps) {
     return times;
 }
 
+// A ranged run's scores as a run over the whole videos gives them: the
+// frames it numbered from 0 at range.decode_start get their numbers in the
+// whole videos, and only those in range are kept (those before them were
+// decoded for the metrics that look back, the one after for VMAF's look
+// ahead), timed at `fps`.
+void keep_range(ParsedScores& scores, const FrameRange& range, double fps) {
+    if (range.whole()) {
+        return;
+    }
+    ParsedScores kept;
+    kept.order = scores.order;
+    for (std::size_t i = 0; i < scores.frame.size(); ++i) {
+        const long long frame = scores.frame[i] + range.decode_start;
+        if (frame < range.start || (range.end && frame >= *range.end)) {
+            continue;
+        }
+        kept.frame.push_back(static_cast<int>(frame));
+        for (const auto& [key, values] : scores.metrics) {
+            kept.metrics[key].push_back(i < values.size() ? values[i] : std::nanf(""));
+        }
+    }
+    kept.time = times_of(kept.frame, fps);
+    scores = std::move(kept);
+}
+
 // The columns of the scores read, in the Python app's order.
 enum Column { vmaf_column, psnr_column, ssim_column, xpsnr_column, neg_column, v1_column, column_count };
 constexpr std::array<const char*, column_count> column_keys{"vmaf", "psnr", "ssim", "xpsnr", "vmaf_neg", "vmaf_v1"};
@@ -825,6 +850,9 @@ ParsedScores execute_run(const CommandBuilder& build_command, const VmafOptions&
         }
         scores = parse_log(log_path, fps, xpsnr_log_path);
     }
+    if (source != nullptr) {
+        keep_range(scores, run_range(options, *source), fps);
+    }
     std::vector<std::string> missing;
     for (const std::string& key : options.requested_metrics()) {
         if (!scores.has(key)) {
@@ -850,24 +878,18 @@ ParsedScores execute_run(const RunEnvironment& environment, const VideoInfo& sou
         const std::string graph = build_filtergraph(source, distorted, options, source_crop, distorted_crop, plan,
                                                     "vmaf_log.json", run_model, xpsnr_log_name, environment.cores);
         return build_ffmpeg_command(environment.ffmpeg, distorted.path, source.path, graph, plan,
-                                    options.duration_limit, run_inputs(feeds, source, distorted));
+                                    run_inputs(feeds, source, distorted));
     };
     return execute_run(build_command, options, model, fps, total_frames, decoding, "vmaf_run_", on_progress, on_status,
                        cancel, environment, &source, &distorted);
 }
 
-// The duration limit of a GPU run, in seconds (0: none): one frame more
-// than the run's, because FFmpeg's libvmaf filter also scores the first
-// frame at or past the limit before its output stops there, and the GPU must
-// be given the same frames.
-double gpu_duration_limit(const VmafOptions& options, double fps) {
-    return options.duration_limit > 0 && fps > 0 ? options.duration_limit + 1 / fps : 0.0;
-}
-
 // The GPU's scores as the run's (the Python app's _gpu_frame_scores): each
 // kept as a float, as the Python app keeps FFmpeg's, the frames timed at
-// `fps`. Throws when no frame was scored or a requested metric has none.
-ParsedScores gpu_scores(const PairScores& scored, double fps, const VmafOptions& options) {
+// `fps`, with a ranged run's frames numbered as in the whole videos and only
+// those in `range` kept (keep_range). Throws when no frame was scored or a
+// requested metric has none.
+ParsedScores gpu_scores(const PairScores& scored, double fps, const VmafOptions& options, const FrameRange& range) {
     if (scored.frames.empty()) {
         throw LibvmafError("GPU VMAF scored no frames");
     }
@@ -885,6 +907,7 @@ ParsedScores gpu_scores(const PairScores& scored, double fps, const VmafOptions&
             scores.order.emplace_back(key);
         }
     }
+    keep_range(scores, range, fps);
     std::vector<std::string> missing;
     for (const std::string& key : options.requested_metrics()) {
         if (!scores.has(key)) {
@@ -931,7 +954,6 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
         throw VmafRunError("Select at least one metric to calculate.");
     }
     const TempFolder folder = run_folder(plan.backend == "cpu" ? "vmaf_cpu_run_" : "vmaf_gpu_run_");
-    const double limit = gpu_duration_limit(options, fps);
     const std::vector<HardwareDecoding> ladder = fallback_ladder(decoding);
     std::optional<PairScores> scored;
     FfmpegOutcome outcome;
@@ -965,7 +987,7 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
             const std::vector<std::vector<std::string>> commands = build_stream_commands(
                 environment.ffmpeg, distorted.path, source.path,
                 build_stream_graphs(source, distorted, options, source_crop, distorted_crop, decode), decode,
-                attempt.output_args(limit), run_inputs(feeds, source, distorted));
+                attempt.output_args(), run_inputs(feeds, source, distorted));
             for (const std::vector<std::string>& command : commands) {
                 logger.info("FFmpeg: " + python_list2cmdline(command));
             }
@@ -1007,7 +1029,7 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
     if (!scored) {
         throw LibvmafError("GPU VMAF scored no frames");
     }
-    return gpu_scores(*scored, fps, options);
+    return gpu_scores(*scored, fps, options, run_range(options, source));
 }
 
 // The keys of the metrics a plan scores.
@@ -1032,8 +1054,7 @@ ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoIn
                                 const std::pair<std::string, std::string>& decoders,
                                 const ProgressCallback& on_progress, const StatusCallback& on_status,
                                 const CancelToken& cancel) {
-    const double limit = gpu_duration_limit(options, fps);
-    const std::optional<std::string> limit_text = limit > 0 ? std::optional(format_fixed(limit, 3)) : std::nullopt;
+    const FrameRange range = run_range(options, source);
     if (on_status) {
         on_status(decoding_status("Running " + doing(plan), decoding));
     }
@@ -1041,17 +1062,17 @@ ParsedScores score_decoded_here(const RunEnvironment& environment, const VideoIn
     const PairScores scored =
         plan.backend == "cpu"
             ? score_decoded_cpu(source, distorted, source_crop, distorted_crop, plan.width, plan.height,
-                                plan.bit_depth, keys, options.n_subsample, limit_text, total_frames, decoders,
+                                plan.bit_depth, keys, options.n_subsample, range, total_frames, decoders,
                                 plan.threads, plan.frame_rate, options.scale_algorithm, environment.ffmpeg,
                                 environment.ffprobe, on_progress, cancel)
         : std::find(keys.begin(), keys.end(), "vmaf_v1") != keys.end()
-            ? score_decoded_v1(source, distorted, source_crop, distorted_crop, plan, options.n_subsample, limit_text,
+            ? score_decoded_v1(source, distorted, source_crop, distorted_crop, plan, options.n_subsample, range,
                                total_frames, options.scale_algorithm, decoders, environment.ffmpeg,
                                environment.ffprobe, on_progress, cancel)
-            : score_decoded(source, distorted, source_crop, distorted_crop, plan, options.n_subsample, limit_text,
+            : score_decoded(source, distorted, source_crop, distorted_crop, plan, options.n_subsample, range,
                             total_frames, options.scale_algorithm, decoders, environment.ffmpeg, environment.ffprobe,
                             on_progress, cancel);
-    return gpu_scores(scored, fps, options);
+    return gpu_scores(scored, fps, options, range);
 }
 
 // The plan's metrics outside FFmpeg's filters (the Python app's
@@ -1690,7 +1711,8 @@ FrameScores parse_libvmaf_log(const std::filesystem::path& log, double fps,
 }
 
 void validate_video_pair(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options) {
-    if (const std::optional<std::string> problem = pair_problem(source, distorted, options.duration_limit)) {
+    if (const std::optional<std::string> problem =
+            pair_problem(source, distorted, options.range_start, options.range_end)) {
         throw VmafRunError(*problem);
     }
 }
@@ -1702,18 +1724,33 @@ void validate_display_geometry(const VideoInfo& source, const VideoInfo& distort
     }
 }
 
+FrameRange run_range(const VmafOptions& options, const VideoInfo& source) {
+    // VMAF's motion and XPSNR look at the frames around the one they score.
+    const bool looks_around =
+        options.compute_vmaf || options.compute_vmaf_neg || options.compute_vmaf_v1 || options.compute_xpsnr;
+    return frame_range(options.range_start, options.range_end, source.fps, options.n_subsample, looks_around);
+}
+
+namespace {
+
+// The frames of the shorter video, as far as they are known.
+long long shorter_frame_count(const VideoInfo& reference, const VideoInfo* other) {
+    const long long frames = reference.estimated_frame_count();
+    return other != nullptr ? std::min(frames, other->estimated_frame_count()) : frames;
+}
+
+}  // namespace
+
 long long estimate_total_frames(const VideoInfo& reference, const VmafOptions& options, const VideoInfo* other) {
-    long long frames = reference.estimated_frame_count();
-    if (other != nullptr) {
-        frames = std::min(frames, other->estimated_frame_count());
-    }
-    if (options.duration_limit > 0) {
-        // The frames the -t limit keeps, counted as the run counts them.
-        const std::optional<long long> kept =
-            frames_within(format_fixed(options.duration_limit, 3), frame_rate(reference));
-        frames = std::min(frames, kept.value_or(0));
-    }
-    return frames;
+    const long long frames = shorter_frame_count(reference, other);
+    const FrameRange range = run_range(options, reference);
+    return std::max(0LL, std::min(frames, range.end.value_or(frames)) - range.start);
+}
+
+long long estimate_decoded_frames(const VideoInfo& reference, const VmafOptions& options, const VideoInfo* other) {
+    const long long frames = shorter_frame_count(reference, other);
+    const FrameRange range = run_range(options, reference);
+    return std::max(0LL, std::min(frames, range.decode_end.value_or(frames)) - range.decode_start);
 }
 
 bool refused_frame_write(int exit_code, std::string_view ffmpeg_errors) {
@@ -1728,7 +1765,8 @@ bool refused_frame_write(int exit_code, std::string_view ffmpeg_errors) {
             ffmpeg_errors.find("Error closing file: Invalid argument") != std::string_view::npos);
 }
 
-std::optional<std::string> short_comparison(long long expected, long long compared, double fps, int step) {
+std::optional<std::string> short_comparison(long long expected, long long compared, long long first_frame,
+                                            double fps, int step) {
     // Short by at most half a second (at least three frames), plus one step
     // of subsampling, still covers the video.
     const long long slack = std::max(3LL, static_cast<long long>(std::ceil(0.5 * fps))) + std::max(1, step);
@@ -1737,7 +1775,7 @@ std::optional<std::string> short_comparison(long long expected, long long compar
     }
     return "Only " + std::to_string(compared) + " of the " + std::to_string(expected) +
            " frames expected could be compared: one of the videos ends after " +
-           format_hms(static_cast<double>(compared) / std::max(fps, 1.0), 1) +
+           format_hms(static_cast<double>(first_frame + compared) / std::max(fps, 1.0), 1) +
            ", though its file says it is longer. It may have been cut short: an encode that stopped early, or a "
            "copy that did not finish.";
 }
@@ -1803,8 +1841,7 @@ std::string build_filtergraph(const VideoInfo& source, const VideoInfo& distorte
 
 std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const std::filesystem::path& distorted,
                                               const std::filesystem::path& source, const std::string& filtergraph,
-                                              const HardwareDecoding& decoding, double duration_limit,
-                                              const InputOptions& inputs) {
+                                              const HardwareDecoding& decoding, const InputOptions& inputs) {
     const bool several_graphs = filtergraph.find(graph_separator) != std::string::npos;
     const auto decode = [several_graphs](const std::optional<std::string>& hwaccel) {
         return several_graphs ? split_hwaccel_args(hwaccel) : hwaccel_args(hwaccel);
@@ -1822,7 +1859,7 @@ std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const s
         command.insert(command.end(), own->begin(), own->end());
         command.insert(command.end(), {"-i", input_path(path)});
     }
-    const std::vector<std::string> outputs = output_args(filtergraph, duration_limit);
+    const std::vector<std::string> outputs = output_args(filtergraph);
     command.insert(command.end(), outputs.begin(), outputs.end());
     return command;
 }
@@ -1843,7 +1880,11 @@ std::string build_resample_filtergraph(const VideoInfo& source, const VmafOption
     // One input, so the analysis format comes from the source alone.
     const std::string analysis_format = analysis_pix_fmt({source.pix_fmt});
 
+    // A range's frames kept first, as in video_chains: both videos are the source's, cut alike.
     std::vector<std::string> base;
+    if (const std::optional<std::string> trim = range_trim_filter(run_range(options, source))) {
+        base.push_back(*trim);
+    }
     if (hwaccel) {
         // As in build_filtergraph: hwdownload can only give the hardware
         // surface's own format, not the analysis format.
@@ -1867,7 +1908,7 @@ std::string build_resample_filtergraph(const VideoInfo& source, const VmafOption
 
 std::vector<std::string> build_resample_command(const std::string& ffmpeg, const std::filesystem::path& source,
                                                 const std::string& filtergraph,
-                                                const std::optional<std::string>& hwaccel, double duration_limit,
+                                                const std::optional<std::string>& hwaccel,
                                                 const std::vector<std::string>& source_options,
                                                 const std::optional<std::vector<std::string>>& source_fed) {
     std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-y"};
@@ -1879,7 +1920,7 @@ std::vector<std::string> build_resample_command(const std::string& ffmpeg, const
         command.insert(command.end(), source_options.begin(), source_options.end());
         command.insert(command.end(), {"-i", input_path(source)});
     }
-    const std::vector<std::string> outputs = output_args(filtergraph, duration_limit);
+    const std::vector<std::string> outputs = output_args(filtergraph);
     command.insert(command.end(), outputs.begin(), outputs.end());
     return command;
 }
@@ -2329,19 +2370,23 @@ ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInf
 
     const auto [width, height] = analysis_dimensions(source, distorted, options, source_crop, distorted_crop);
     const std::string model = resolve_run_models(options, width, height);
-    const long long total_frames = estimate_total_frames(distorted, options, &source);
+    // The range's frames counted at the source's rate, as the run cuts them (run_range).
+    const long long total_frames = estimate_total_frames(source, options, &distorted);
+    const long long decoded_frames = estimate_decoded_frames(source, options, &distorted);
+    const FrameRange range = run_range(options, source);
+    const long long first_frame = range.start;
 
     const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt}));
     const RunFrames run{environment, source, distorted, source_crop, distorted_crop, width, height,
-                        depth,       total_frames, decoding, cancel};
+                        depth,       decoded_frames, decoding, cancel};
     std::optional<RunScores> scores = score_gpu_and_cpu(run, options, model, on_progress, on_status);
     if (!scores) {
         scores = score_alone(run, options, model, on_progress, on_status);
     }
     for (const ParsedScores& part : scores->parts) {
-        const long long compared = part.frame.empty() ? 0 : static_cast<long long>(part.frame.back()) + 1;
+        const long long compared = part.frame.empty() ? 0 : static_cast<long long>(part.frame.back()) + 1 - first_frame;
         if (const std::optional<std::string> short_run =
-                short_comparison(total_frames, compared, distorted.fps, options.n_subsample)) {
+                short_comparison(total_frames, compared, first_frame, distorted.fps, options.n_subsample)) {
             throw VmafRunError(*short_run);
         }
     }
@@ -2365,10 +2410,11 @@ ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInf
     }
     for (const ParsedScores& part : scores->parts) {
         for (const std::string& key : part.order) {
-            result.metric_results.add(FrameMetricResult{
-                key, part.frame, part.time, part.metrics.at(key),
-                run_provenance(key, model, options, environment.ffmpeg_version, scores->cpu_keys, scores->gpu_keys,
-                               scores->gpu_backend)});
+            MetricProvenance provenance = run_provenance(key, model, options, environment.ffmpeg_version,
+                                                         scores->cpu_keys, scores->gpu_keys, scores->gpu_backend);
+            mark_range(provenance, range);
+            result.metric_results.add(
+                FrameMetricResult{key, part.frame, part.time, part.metrics.at(key), std::move(provenance)});
         }
     }
     return result;
@@ -2464,21 +2510,21 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
     const auto [width, height] = resample_analysis_dimensions(source, source_crop);
     const std::string model = resolve_run_models(options, width, height);
     const long long total_frames = estimate_total_frames(source, options, nullptr);
+    const long long decoded_frames = estimate_decoded_frames(source, options, nullptr);
     const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
                                    const std::optional<std::string>& xpsnr_log_name, const PairFeeds& feeds) {
         const std::string graph = build_resample_filtergraph(source, options, source_crop, plan.source,
                                                              "vmaf_log.json", run_model, xpsnr_log_name,
                                                              environment.cores);
         if (const PictureFeed* fed = feeds.source()) {
-            return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, options.duration_limit,
-                                          {}, fed->input_arguments());
+            return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, {},
+                                          fed->input_arguments());
         }
-        return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, options.duration_limit,
-                                      source.decode_options());
+        return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, source.decode_options());
     };
     const ParsedScores scores =
-        execute_run(build_command, options, model, source.fps, total_frames, decoding, "vmaf_resample_", on_progress,
-                    on_status, cancel, environment, &source, nullptr);
+        execute_run(build_command, options, model, source.fps, decoded_frames, decoding, "vmaf_resample_",
+                    on_progress, on_status, cancel, environment, &source, nullptr);
 
     ComparisonResult result;
     result.source = source.path;
@@ -2506,9 +2552,10 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
         } else if (key == "vmaf_v1") {
             parameters["model"] = nlohmann::json(options.model_v1).dump();
         }
+        MetricProvenance provenance = current_ffmpeg_provenance(key, environment.ffmpeg_version, std::move(parameters));
+        mark_range(provenance, run_range(options, source));
         result.metric_results.add(
-            FrameMetricResult{key, scores.frame, scores.time, scores.metrics.at(key),
-                              current_ffmpeg_provenance(key, environment.ffmpeg_version, std::move(parameters))});
+            FrameMetricResult{key, scores.frame, scores.time, scores.metrics.at(key), std::move(provenance)});
     }
     return result;
 }

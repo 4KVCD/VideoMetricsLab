@@ -18,12 +18,13 @@ namespace vml::app {
 namespace {
 
 // The frames the tab offers: the shorter video's (a resolution test's
-// source's), as a run would bound them, but whatever duration limit the
-// metrics have. That limit is the metrics' alone: playback stopped at it,
-// three seconds into a four-minute video, and the frames past it show that
+// source's), as a run would bound them, but whatever range the metrics
+// have. That range is the metrics' alone: playback stopped at it, three
+// seconds into a four-minute video, and the frames outside it show that
 // they were not scored.
 long long whole_video_frames(const FrameComparison& comparison, VmafOptions options) {
-    options.duration_limit = 0;
+    options.range_start = 0;
+    options.range_end = 0;
     const bool resample = comparison.resample_target.has_value();
     return estimate_total_frames(resample ? comparison.source_info : comparison.distorted_info, options,
                                  resample ? nullptr : &comparison.source_info);

@@ -164,8 +164,10 @@ void MainWindow::on_panel_field_edited(const QString& field) {
             target.model_choice_v1 = panel.model_choice_v1;
         } else if (field == "crop_mode") {
             target.crop_mode = panel.crop_mode;
-        } else if (field == "duration_limit") {
-            target.duration_limit = panel.duration_limit;
+        } else if (field == "range_start") {
+            target.range_start = panel.range_start;
+        } else if (field == "range_end") {
+            target.range_end = panel.range_end;
         } else if (field == "scale_algorithm") {
             target.scale_algorithm = panel.scale_algorithm;
         } else if (field == "scale_direction") {

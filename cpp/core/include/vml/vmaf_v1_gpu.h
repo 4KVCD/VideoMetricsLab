@@ -205,7 +205,7 @@ private:
 // GPU, and the software decoder's are read where it holds them. Throws as score_decoded does, and VmafV1Error.
 PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
                             const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
-                            const GpuPlan& plan, int n_subsample, const std::optional<std::string>& duration_limit,
+                            const GpuPlan& plan, int n_subsample, const FrameRange& range,
                             long long total_frames, const std::string& scale_algorithm,
                             const std::pair<std::string, std::string>& decoders, const std::string& ffmpeg,
                             const std::string& ffprobe,

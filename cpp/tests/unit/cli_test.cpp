@@ -50,7 +50,7 @@ Json values_of(const Arguments& parsed) {
         {"scale_to", a.scale_to},
         {"scaler", a.scaler},
         {"duration", either(a.duration)},
-        {"frames", either(a.frames)},
+        {"range", a.range ? Json::array({a.range->first, a.range->second}) : Json(nullptr)},
         {"colour", either(a.colour)},
         {"film_grain", either(a.film_grain)},
         {"fps", either(a.fps)},
@@ -100,7 +100,7 @@ TEST(CommandLine, ReadsArgumentsAsThePythonApp) {
                 EXPECT_EQ(top_help(), with_version(expected["stdout"]));
             } else {
                 Json values = expected["values"];
-                for (const char* number : {"duration", "fps"}) {
+                for (const char* number : {"fps"}) {
                     if (values.is_object() && values.contains(number)) {
                         const std::optional<double> value = test::reference_number(values[number]);
                         values[number] = value ? Json(*value) : Json(nullptr);
@@ -203,12 +203,12 @@ TEST(CommandLine, OptionsTakeThePlaceOfTheAppsSettings) {
     settings.default_gpu_decode = false;
     settings.film_grain_default = "without";
     CompareArguments arguments;
-    EXPECT_FALSE(row_options(arguments, settings, {"vmaf"}, VideoInfo{}).gpu_decode);
+    EXPECT_FALSE(row_options(arguments, settings, {"vmaf"}).gpu_decode);
     EXPECT_EQ(film_grain_choice(arguments, settings), false);
     arguments.gpu_decode = "intel";
     arguments.model_v1 = "vmaf_v1_3d0h_2160";
     arguments.film_grain = "with";
-    const VmafOptions options = row_options(arguments, settings, {"vmaf_v1"}, VideoInfo{});
+    const VmafOptions options = row_options(arguments, settings, {"vmaf_v1"});
     EXPECT_TRUE(options.gpu_decode);
     EXPECT_EQ(options.gpu_vendor, GpuVendor::intel);
     EXPECT_EQ(options.model_choice_v1, builtin_choice("vmaf_v1_3d0h_2160"));

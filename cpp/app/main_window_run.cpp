@@ -504,9 +504,10 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
             continue;  // on the GPU
         }
         double seconds = std::min(info.duration, source_info_->duration);
-        if (row_data->options.duration_limit > 0) {
-            seconds = std::min(seconds, row_data->options.duration_limit);
+        if (row_data->options.range_end > 0) {
+            seconds = std::min(seconds, static_cast<double>(row_data->options.range_end));
         }
+        seconds -= static_cast<double>(row_data->options.range_start);
         if (seconds <= long_cpu_run_seconds) {
             continue;
         }
@@ -532,8 +533,8 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
             lines.join("\n") +
             app::tr("\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still "
                     "image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film "
-                    "takes days (the estimates above assume a CPU like the one they were measured on). Set a duration "
-                    "limit to score only the start.\n\nCalculate anyway?"),
+                    "takes days (the estimates above assume a CPU like the one they were measured on). Set a range to "
+                    "score only a part of the videos.\n\nCalculate anyway?"),
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     return answer == QMessageBox::Yes;
 }

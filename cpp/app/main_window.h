@@ -177,14 +177,17 @@ struct RowData {
     // True only for a "Test both" companion row, whose scale direction was
     // set on purpose to the direction the row stands for.
     bool scale_direction_pinned = false;
-    // The metrics (keys) a Recalculate forgot while the row's black bars were
-    // set to Source only: never taken from Auto's saved scores (load_result),
-    // even once the new scores are saved (the Source-only folder answers
-    // first then; emptied at the save, the set would let Auto's back in while
-    // the save is still being written). Cleared when the reference changes
-    // (forget_recalculations_unless). Not kept when the app closes: after a
-    // restart Auto's scores answer them again, which are the same scores.
-    std::set<std::string> forgotten_metrics;
+    // The metrics (keys) a Recalculate forgot, by the recipe they were
+    // forgotten for (its identity's JSON), where another recipe's saved
+    // scores would answer them (load_result): Auto's for Source only, the
+    // whole videos' for a range. Never taken from those for that recipe, even
+    // once the new scores are saved (its own folder answers first then;
+    // emptied at the save, the set would let the others back in while the
+    // save is still being written); another range of the row still takes
+    // them. Cleared when the reference changes (forget_recalculations_unless).
+    // Not kept when the app closes: after a restart the other recipes' scores
+    // answer them again, which are the same scores.
+    std::map<std::string, std::set<std::string>> forgotten_metrics;
 
     // The file the saved scores are looked up under: the real file when the
     // row's own path is a made-up stand-in.
