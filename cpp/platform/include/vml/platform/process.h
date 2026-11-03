@@ -30,7 +30,7 @@ public:
 
 // How much of a program's standard error is kept: its end. FFmpeg can write
 // a warning for every frame of a long video, and what is used of it is its
-// last lines (an error's last 25, cropdetect's last one), so keeping it all
+// last lines (an error's last 25), so keeping it all
 // would cost memory for nothing.
 inline constexpr std::size_t error_tail_bytes = 64 * 1024;
 

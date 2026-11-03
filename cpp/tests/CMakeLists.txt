@@ -7,6 +7,7 @@ add_executable(vml_tests
     unit/av2_stream_test.cpp
     unit/bd_rate_test.cpp
     unit/bitrate_test.cpp
+    unit/black_bars_rule_test.cpp
     unit/cancel_test.cpp
     unit/cli_test.cpp
     unit/cvvdp_test.cpp

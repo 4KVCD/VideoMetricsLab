@@ -80,8 +80,8 @@ struct FeedWindow {
 };
 
 // Which of a window's pictures are fed, as FFmpeg's -ss, trim=start and -t
-// give them to what reads them (crop_detect.cpp's cropdetect, which sees the
-// frame at or past the end that -t drops after it; a still's one frame):
+// give them to what reads them (crop_detect.cpp's previews, which end with
+// the frame at or past the end; a still's one frame):
 // those stamped from the window's start (0, its packets being read from
 // there) and from `skip` on, the ones before skipped; up to and including the
 // first at or past its length, which ends it.

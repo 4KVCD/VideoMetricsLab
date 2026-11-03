@@ -8,6 +8,7 @@ add_library(vml_core
     src/bd_rate.cpp
     src/bd_rate_report.cpp
     src/bitrate.cpp
+    src/black_bars_rule.cpp
     src/build_info.cpp
     src/cancel.cpp
     src/colour.cpp

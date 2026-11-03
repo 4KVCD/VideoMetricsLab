@@ -103,8 +103,8 @@ TEST(GrainFeed, WhatRawvideoCannotCarryAsTheFileIsIsNotFed) {
     EXPECT_TRUE(feed_refusal(scaled).has_value());
 }
 
-// A black-bar window's fed pictures are those FFmpeg's -ss and -t give
-// cropdetect: from the window's start (0; the keyframe's pictures before it,
+// A window's fed pictures are those FFmpeg's -ss and -t give a filter:
+// from the window's start (0; the keyframe's pictures before it,
 // stamped below 0, skipped) up to and including the first at or past its
 // length, which ends it.
 TEST(GrainFeed, AWindowFeedsThePicturesFfmpegsSeekAndDurationGive) {

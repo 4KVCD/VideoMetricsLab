@@ -14,7 +14,6 @@
 #include <map>
 #include <memory>
 #include <mutex>
-#include <regex>
 #include <semaphore>
 #include <set>
 #include <sstream>
@@ -26,6 +25,7 @@
 
 #include "vml/app_decoders.h"
 #include "vml/app_log.h"
+#include "vml/black_bars_rule.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
@@ -53,14 +53,15 @@ std::string box_text(const CropBox& box) {
            std::to_string(box.y);
 }
 
-constexpr double sample_window_seconds = 3.0;
-constexpr int sample_count = 5;
-constexpr double sample_span_from = 0.1;  // of the duration
-constexpr double sample_span_to = 0.9;
-// cropdetect's limit: how bright a pixel may be and still count as black.
-constexpr double black_limit = 24.0 / 255.0;
+// HandBrake's previews (black_bars_rule.h): how many, and how many first
+// pictures stand for them in a video of unknown duration.
+constexpr int preview_count = 10;
+constexpr int unknown_duration_pictures = 20;
+// How bright a dark line's mean may be (black_bars_rule.cpp's dark_mean),
+// for the answers' key.
+constexpr double dark_limit = 32.0 / 255.0;
 // How many detection decoders may run at once in the whole app: one video's
-// windows run in turn, so this limits two jobs detecting both their videos
+// previews run in turn, so this limits two jobs detecting both their videos
 // to two (2.5 GB of GPU memory for 4K on the GPU decoder).
 std::counting_semaphore<2> decoder_slots(2);
 // How many files' answers to remember (a bound against an extreme session).
@@ -68,8 +69,8 @@ constexpr std::size_t remembered_answers = 512;
 // Raised when the detection itself changes what it finds, so that older
 // answers in the store are ignored. 2: Intel's GPU decoded lossless H.264
 // to other pixels before (pick_decode); 3: so did NVIDIA's before the RTX 50
-// series.
-constexpr int store_version = 3;
+// series; 4: HandBrake's rule in place of FFmpeg's cropdetect.
+constexpr int store_version = 4;
 
 // What an answer depends on: which bytes are in the file, and which stretch
 // of it is sampled (not how it was decoded: the GPUs that decode a video
@@ -101,7 +102,7 @@ std::optional<AnswerKey> answer_key(const std::filesystem::path& path, double sa
         return std::nullopt;
     }
     return AnswerKey{platform::path_text(resolved), static_cast<long long>(size), *written,
-                     python_round(sampled_duration, 3), python_round(black_limit, 6)};
+                     python_round(sampled_duration, 3), python_round(dark_limit, 6)};
 }
 
 // The answers, newest last, and the files being detected now (a second
@@ -279,44 +280,26 @@ Answers& answers() {
     return kept;
 }
 
-// How many seconds each sample reads: at most the part being compared.
-double sample_window(double duration) {
-    return duration <= 0 ? sample_window_seconds : std::min(sample_window_seconds, duration);
+// The previews' times: HandBrake's ten, at i / 11 of the video for i = 0 to
+// 9, as its scan takes a stream's (the first at its start, which a dark
+// opening leaves out as too dark to say anything). None for a video of
+// unknown duration (a file still being written): its first pictures stand
+// for them (unknown_duration_pictures).
+std::vector<double> preview_times(double duration) {
+    std::vector<double> times;
+    if (duration > 0) {
+        for (int i = 0; i < preview_count; ++i) {
+            times.push_back(duration * i / (preview_count + 1));
+        }
+    }
+    return times;
 }
 
-// The windows' start times, spread over the middle of the video, each
-// leaving enough video for the whole window.
-std::vector<double> sample_offsets(double duration, double window) {
-    if (duration <= 0) {
-        return {0.0};
-    }
-    const double last_start = std::max(0.0, duration - window);
-    const double from = std::min(duration * sample_span_from, last_start);
-    const double to = std::min(duration * sample_span_to, last_start);
-    if (to <= from) {
-        return {from};
-    }
-    const double step = (to - from) / (sample_count - 1);
-    std::vector<double> starts;
-    for (int i = 0; i < sample_count; ++i) {
-        starts.push_back(from + i * step);
-    }
-    return starts;
-}
-
-// cropdetect, named `name` if one is given, for the frames the timeline
-// expression `enable` gives (every frame without one).
-std::string cropdetect(const std::string& name = "", const std::string& enable = "") {
-    return "cropdetect" + (name.empty() ? "" : "@" + name) + "=limit=" + python_repr(black_limit) +
-           ":round=2:reset=0" + (enable.empty() ? "" : ":enable=" + enable);
-}
-
-// What comes before cropdetect: hwdownload where the frames are decoded on
-// the GPU, which gives the surface's own format (`download_format`), which
-// cropdetect cannot take, so the run's own conversion follows it; then the
-// scale of a video whose size changes (size_changes.h), as the run scales
-// its frames before it crops them.
-struct BeforeCropdetect {
+// What comes before the luma is taken: hwdownload where the frames are
+// decoded on the GPU, which gives the surface's own format (`download_format`);
+// then the scale of a video whose size changes (size_changes.h), as the run
+// scales its frames before it crops them.
+struct BeforeSampling {
     std::string download_format;
     std::optional<std::string> scale;
 
@@ -325,45 +308,60 @@ struct BeforeCropdetect {
     std::string filters(const std::optional<std::string>& hwaccel) const {
         return (hwaccel ? "hwdownload,format=" + download_format + "," : "") + (scale ? *scale + "," : "");
     }
+
+    // Those filters and the luma alone at 16 bits (black_bars_rule.h's
+    // Y4mLumaReader: the high byte is the luma at 8 bits, whatever its own
+    // depth). extractplanes leaves the samples as they are; FFmpeg converts
+    // a format it cannot take (RGB) to YUV before it.
+    std::string luma(const std::optional<std::string>& hwaccel) const {
+        return filters(hwaccel) + "extractplanes=y,format=gray16le";
+    }
 };
 
-// The command that samples the window from `start` to `start` + `window`
-// seconds (-ss and -t), `input` the video's input options (a raw YUV file's
-// size and format, VideoInfo::input_options).
-std::vector<std::string> window_command(const std::string& ffmpeg, const std::string& path,
-                                        const std::vector<std::string>& input, double start, double window,
-                                        const std::optional<std::string>& hwaccel,
-                                        const BeforeCropdetect& before) {
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner"};
+// FFmpeg's output of the pictures: Y4M on standard output (16-bit mono is
+// "unofficial" Y4M, so -strict -1).
+const std::vector<std::string> luma_output{"-f", "yuv4mpegpipe", "-strict", "-1", "-"};
+
+// The command that decodes `frames` pictures from `start` seconds (-ss, an
+// accurate seek: the pictures from that time on, as the app's decoder feeds
+// them), `input` the video's input options (a raw YUV file's size and
+// format, VideoInfo::input_options).
+std::vector<std::string> preview_command(const std::string& ffmpeg, const std::string& path,
+                                         const std::vector<std::string>& input, double start, int frames,
+                                         const std::optional<std::string>& hwaccel, const BeforeSampling& before) {
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-nostats"};
     const std::vector<std::string> decoding = hwaccel_args(hwaccel);
     command.insert(command.end(), decoding.begin(), decoding.end());
     command.insert(command.end(), input.begin(), input.end());
     command.insert(command.end(), {"-ss", format_fixed(start, 3), "-i", path, "-map", "0:" + std::string(video_stream),
-                                   "-t", format_fixed(window, 3), "-vf", before.filters(hwaccel) + cropdetect(), "-f",
-                                   "null", "-"});
+                                   "-frames:v", std::to_string(frames), "-vf", before.luma(hwaccel)});
+    command.insert(command.end(), luma_output.begin(), luma_output.end());
     return command;
 }
 
-// The frames of a raw stream (VideoInfo::timed_raw) in each window, starting
-// at `starts`, `window` long: [first, end) for each, by the times a
-// container's windows are given (-ss and -t, to the millisecond), a frame's
-// time being its number over the frame rate.
-std::vector<std::pair<long long, long long>> raw_window_frames(const VideoInfo& info, const std::vector<double>& starts,
-                                                               double window) {
-    const auto millisecond = [](double seconds) { return std::nearbyint(seconds * 1000) / 1000; };
-    // The first frame at or after a time, against the rounding of the product.
-    const auto frame_at = [&info](double seconds) {
-        return static_cast<long long>(std::ceil(seconds * info.fps - 1e-6));
-    };
-    std::vector<std::pair<long long, long long>> frames;
-    for (const double start : starts) {
-        frames.emplace_back(frame_at(millisecond(start)), frame_at(millisecond(start) + millisecond(window)));
+// The frame of a raw stream (VideoInfo::timed_raw) HandBrake judges for each
+// preview starting at `times`: the second from the first at or after its
+// time (a frame's time its number over the frame rate, the time to the
+// millisecond as -ss takes it); for a video of unknown duration, every
+// second one of its first pictures.
+std::vector<long long> preview_frames(const VideoInfo& info, const std::vector<double>& times) {
+    std::vector<long long> frames;
+    if (times.empty()) {
+        for (int i = 1; i < unknown_duration_pictures; i += 2) {
+            frames.push_back(i);
+        }
+        return frames;
+    }
+    for (const double time : times) {
+        // The first frame at or after the time, against the rounding of the product
+        const double millisecond = std::nearbyint(time * 1000) / 1000;
+        frames.push_back(static_cast<long long>(std::ceil(millisecond * info.fps - 1e-6)) + 1);
     }
     return frames;
 }
 
 // Whether a raw stream can be read from a byte partway through
-// (run_byte_windows): its format marks where each picture starts (start
+// (run_byte_previews): its format marks where each picture starts (start
 // codes, JPEG markers) and its decoder waits for a picture it can decode on
 // its own. Started at 30% and 60% of a file, these gave only right pictures;
 // AV1's OBUs and EVC gave none, and H.263's and H.261's decoders broken ones.
@@ -498,75 +496,65 @@ std::string pieced_input(const std::string& path, const std::vector<ByteRange>& 
     return input;
 }
 
-// The command that samples a raw stream's window from `input` (the input
-// options and -i), the first `frames` pictures decoded from it.
-std::vector<std::string> byte_window_command(const std::string& ffmpeg, const std::vector<std::string>& input,
-                                             long long frames, const std::optional<std::string>& hwaccel,
-                                             const BeforeCropdetect& before) {
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner"};
+// The command that decodes a raw stream's preview from `input` (the input
+// options and -i): its first `frames` pictures from there.
+std::vector<std::string> byte_preview_command(const std::string& ffmpeg, const std::vector<std::string>& input,
+                                              int frames, const std::optional<std::string>& hwaccel,
+                                              const BeforeSampling& before) {
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-nostats"};
     const std::vector<std::string> decoding = hwaccel_args(hwaccel);
     command.insert(command.end(), decoding.begin(), decoding.end());
     command.insert(command.end(), input.begin(), input.end());
     command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-frames:v", std::to_string(frames), "-vf",
-                                   before.filters(hwaccel) + cropdetect(), "-f", "null", "-"});
+                                   before.luma(hwaccel)});
+    command.insert(command.end(), luma_output.begin(), luma_output.end());
     return command;
 }
 
-// The command that samples a raw stream's windows (raw_window_frames, in
-// order) in one pass from its start, for a stream that cannot be read from a
-// byte partway (reads_from_a_byte), or whose windows found no picture from
-// there (its only keyframe its first): select picks out the windows' frames,
-// a cropdetect for each window (@w0, @w1...) takes its own by their number
-// among those picked (windows overlap in a short video), and the pass stops
-// after the last window's frames (trim).
-std::vector<std::string> raw_windows_command(const std::string& ffmpeg, const VideoInfo& info,
-                                             const std::vector<std::pair<long long, long long>>& windows,
-                                             const std::optional<std::string>& hwaccel,
-                                             const BeforeCropdetect& before) {
-    long long end = 0;
+// The command that decodes a raw stream's preview frames `frames` (in order,
+// each once) in one pass from its start, for a stream that cannot be read
+// from a byte partway (reads_from_a_byte), or whose previews found no picture
+// from there (its only keyframe its first): select picks them out, and the
+// pass stops after the last (trim).
+std::vector<std::string> raw_previews_command(const std::string& ffmpeg, const VideoInfo& info,
+                                              const std::vector<long long>& frames,
+                                              const std::optional<std::string>& hwaccel,
+                                              const BeforeSampling& before) {
     std::string picked;
-    for (const auto& [first, after] : windows) {
-        picked += (picked.empty() ? "" : "+") + std::string("between(n\\,") + std::to_string(first) + "\\," +
-                  std::to_string(after - 1) + ")";
-        end = std::max(end, after);
+    for (const long long frame : frames) {
+        picked += (picked.empty() ? "" : "+") + std::string("eq(n\\,") + std::to_string(frame) + ")";
     }
-    // How many of the frames picked come before frame `frame`.
-    const auto picked_before = [&windows](long long frame) {
-        long long count = 0;
-        long long counted_to = 0;
-        for (const auto& [first, after] : windows) {
-            count += std::max(0LL, std::min(after, frame) - std::max(first, counted_to));
-            counted_to = std::max(counted_to, after);
-        }
-        return count;
-    };
-    std::string filters = "trim=end_frame=" + std::to_string(end) + ",select=gt(" + picked + "\\,0)," +
-                          before.filters(hwaccel);
-    for (std::size_t i = 0; i < windows.size(); ++i) {
-        filters += (i == 0 ? "" : ",") + cropdetect("w" + std::to_string(i),
-                                                    "between(n\\," + std::to_string(picked_before(windows[i].first)) +
-                                                        "\\," + std::to_string(picked_before(windows[i].second) - 1) +
-                                                        ")");
-    }
+    const std::string filters = "trim=end_frame=" + std::to_string(frames.back() + 1) + ",select=gt(" + picked +
+                                "\\,0)," + before.luma(hwaccel);
     std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-nostats"};
     const std::vector<std::string> decoding = hwaccel_args(hwaccel);
     command.insert(command.end(), decoding.begin(), decoding.end());
     const std::vector<std::string> input = info.input_options();
     command.insert(command.end(), input.begin(), input.end());
     command.insert(command.end(), {"-i", platform::path_text(info.path), "-map", "0:" + std::string(video_stream),
-                                   "-vf", filters, "-f", "null", "-"});
+                                   "-vf", filters});
+    command.insert(command.end(), luma_output.begin(), luma_output.end());
     return command;
 }
 
-// What a detection command wrote: its exit code, the end of its error output
-// (for a failure's message), and every line the detection reads, whole
-// (cropdetect's boxes, and FFmpeg's word that it rebuilt its filters): a
-// pass of several windows writes more than the end that is kept
-// (error_tail_bytes), and would lose an early window's last box.
+// The pictures a detection command decoded, judged as they came
+// (picture_edges: nothing for one too dark to say), and their size.
+struct Pictures {
+    int width = 0;
+    int height = 0;
+    std::vector<std::optional<BarEdges>> edges;
+};
+
+// What a detection command gave: its exit code, the end of its error output
+// (for a failure's message), the lines of it the detection reads (FFmpeg's
+// word that it rebuilt its filters), its pictures, and why its output could
+// not be read, if it could not.
 struct DetectionOutput {
     int code = 0;
     std::string tail;
     std::string lines;
+    Pictures pictures;
+    std::string read_error;
 };
 
 // A detection decoder slot (decoder_slots), held while this lives. Waiting
@@ -588,9 +576,30 @@ public:
     DecoderSlot& operator=(const DecoderSlot&) = delete;
 };
 
+// Reads `process`'s pictures (Y4M luma, luma_output) into `pictures` until
+// its output ends; a stream it cannot read is drained, so that FFmpeg never
+// waits for room in the pipe, and why goes to `error`.
+void read_pictures(platform::ChildProcess& process, Pictures& pictures, std::string& error) {
+    const auto read = [&process](void* into, std::size_t bytes) { return process.read(into, bytes); };
+    try {
+        Y4mLumaReader reader(read);
+        while (const std::optional<LumaPicture> picture = reader.next()) {
+            pictures.width = picture->width;
+            pictures.height = picture->height;
+            pictures.edges.push_back(picture_edges(*picture));
+        }
+    } catch (const std::exception& failure) {
+        error = failure.what();
+        char drained[65536];
+        while (read(drained, sizeof drained) > 0) {
+        }
+    }
+}
+
 // Runs one detection command to its end, a decoder slot already held, for
-// at most `limit` of running (paused time not counted).
-DetectionOutput run_window(const std::vector<std::string>& command, const CancelToken& cancel,
+// at most `limit` of running (paused time not counted), its pictures read
+// on a thread of their own while it runs.
+DetectionOutput run_ffmpeg(const std::vector<std::string>& command, const CancelToken& cancel,
                            std::chrono::seconds limit) {
     logger.info("FFmpeg: " + python_list2cmdline(command));
     struct Kept {
@@ -600,46 +609,43 @@ DetectionOutput run_window(const std::vector<std::string>& command, const Cancel
     const auto kept = std::make_shared<Kept>();
     platform::ProcessOptions options;
     options.on_error_line = [kept](std::string_view line) {
-        if (line.find("crop=") != std::string_view::npos || filters_rebuilt(line)) {
+        if (filters_rebuilt(line)) {
             const std::lock_guard lock(kept->mutex);
             kept->lines.append(line).push_back('\n');
         }
     };
     try {
-        platform::ChildProcess window = platform::ChildProcess::start(command, options);
-        const CancelToken::Attached attached = cancel.attach(window);
-        auto running = std::chrono::steady_clock::duration::zero();  // paused time not counted
-        while (!window.wait_for(200ms)) {
-            if (cancel.cancelled()) {
-                window.terminate();
-            }
-            if (!cancel.paused()) {
-                running += 200ms;
-            }
-            if (running >= limit) {
-                window.terminate();
-                window.wait();
-                throw CropDetectError("Crop detection timed out");
-            }
-        }
         DetectionOutput output;
-        output.code = window.wait();
+        platform::ChildProcess ffmpeg_process = platform::ChildProcess::start(command, options);
+        {
+            // Joined before `ffmpeg_process` goes: the program has ended or been
+            // ended by then, so its output has too
+            const std::jthread reader([&] { read_pictures(ffmpeg_process, output.pictures, output.read_error); });
+            const CancelToken::Attached attached = cancel.attach(ffmpeg_process);
+            auto running = std::chrono::steady_clock::duration::zero();  // paused time not counted
+            while (!ffmpeg_process.wait_for(200ms)) {
+                if (cancel.cancelled()) {
+                    ffmpeg_process.terminate();
+                }
+                if (!cancel.paused()) {
+                    running += 200ms;
+                }
+                if (running >= limit) {
+                    ffmpeg_process.terminate();
+                    ffmpeg_process.wait();
+                    throw CropDetectError("Crop detection timed out");
+                }
+            }
+            output.code = ffmpeg_process.wait();
+        }
         cancel.throw_if_cancelled();
-        output.tail = window.standard_error();  // waits for the error output's end, and so its lines
+        output.tail = ffmpeg_process.standard_error();  // waits for the error output's end, and so its lines
         const std::lock_guard lock(kept->mutex);
         output.lines = std::move(kept->lines);
         return output;
     } catch (const platform::ProcessError& error) {
         throw CropDetectError(std::string("Could not run crop detection: ") + error.what());
     }
-}
-
-// Runs one detection command to its end, holding a decoder slot, for at
-// most `limit` of running (paused time not counted).
-DetectionOutput launch_window(const std::vector<std::string>& command, const CancelToken& cancel,
-                              std::chrono::seconds limit) {
-    const DecoderSlot slot(cancel);
-    return run_window(command, cancel, limit);
 }
 
 // The last line of FFmpeg's error output (the output as a whole stripped of
@@ -654,166 +660,125 @@ std::string last_error_line(const std::string& errors) {
     return line_break == std::string::npos ? stripped : stripped.substr(line_break + 1);
 }
 
-// Runs the detection command `command` makes for a decoder, the GPU's
-// (`hwaccel`) and else software, for at most `limit` each, and returns the
-// lines of FFmpeg's error output the detection reads (DetectionOutput),
-// where cropdetect writes its boxes. Throws CropDetectError when it fails,
-// and VideoSizeChanged when FFmpeg rebuilt its filters partway, which starts
-// cropdetect again, at the new size.
-std::string run_detection(const std::function<std::vector<std::string>(const std::optional<std::string>&)>& command,
-                          const std::string& path, const CancelToken& cancel,
-                          const std::optional<std::string>& hwaccel, std::chrono::seconds limit) {
-    cancel.throw_if_cancelled();
-    std::vector<std::optional<std::string>> attempts{hwaccel};
-    if (hwaccel) {
-        attempts.emplace_back(std::nullopt);
+// Why a detection command failed, for its error: FFmpeg's last line, or its
+// exit code, or why its pictures could not be read.
+std::string failure_of(const DetectionOutput& output) {
+    if (output.code == 0) {
+        return "its pictures could not be read (" + output.read_error + ")";
     }
+    const std::string line = last_error_line(output.tail);
+    return line.empty() ? "ffmpeg exited with code " + platform::exit_code_text(output.code) : line;
+}
+
+// Runs the detection command `command` makes for a decoder, the GPU's
+// (`hwaccel`) and else software, for at most `limit` each, and returns its
+// pictures. A GPU decoder that fails is dropped from `hwaccel`, so that the
+// video's next previews go to software at once. Throws CropDetectError when
+// it fails, and VideoSizeChanged when FFmpeg rebuilt its filters partway.
+Pictures run_detection(const std::function<std::vector<std::string>(const std::optional<std::string>&)>& command,
+                       const std::string& path, const CancelToken& cancel, std::optional<std::string>& hwaccel,
+                       std::chrono::seconds limit) {
+    cancel.throw_if_cancelled();
     DetectionOutput output;
-    for (const std::optional<std::string>& attempt : attempts) {
+    while (true) {
         try {
-            output = launch_window(command(attempt), cancel, limit);
+            output = run_ffmpeg(command(hwaccel), cancel, limit);
         } catch (const CropDetectError& error) {
             throw CropDetectError(std::string(error.what()) + " (" + path + ")");
         }
-        // A hardware attempt that fails is tried again in software; the
-        // pixels, and so the box, are the same.
-        if (output.code == 0) {
+        if ((output.code == 0 && output.read_error.empty()) || !hwaccel) {
             break;
         }
-        if (attempt) {
-            // Info, not a warning: a GPU that cannot decode the video is
-            // expected, and the software pass that follows answers.
-            const std::string line = last_error_line(output.tail);
-            logger.info("Black bars in " + platform::path_text(platform::path_from_text(path).filename()) +
-                        ": FFmpeg exited with code " + platform::exit_code_text(output.code) + " decoding with " +
-                        *attempt + (line.empty() ? "" : " (" + line + ")") + "; sampling again in software");
-        }
+        // A hardware attempt that fails is tried again in software; the
+        // pixels, and so the bars, are the same. Info, not a warning: a GPU
+        // that cannot decode the video is expected, and software answers.
+        logger.info("Black bars in " + platform::path_text(platform::path_from_text(path).filename()) + ": " +
+                    failure_of(output) + " decoding with " + *hwaccel + "; sampling in software from here");
+        hwaccel.reset();
     }
     if (filters_rebuilt(output.lines)) {
         throw VideoSizeChanged(platform::path_from_text(path));
     }
-    if (output.code != 0) {
-        const std::string line = last_error_line(output.tail);
-        throw CropDetectError("Crop detection failed for " + path + ": " +
-                              (line.empty() ? "ffmpeg exited with code " + platform::exit_code_text(output.code) : line));
+    if (output.code != 0 || !output.read_error.empty()) {
+        throw CropDetectError("Crop detection failed for " + path + ": " + failure_of(output));
     }
-    return output.lines;
+    return std::move(output.pictures);
 }
 
-// A box cropdetect wrote, from its "crop=w:h:x:y".
-CropBox box_from(const std::smatch& match, std::size_t first_group) {
-    return CropBox{std::stoi(match[first_group].str()), std::stoi(match[first_group + 1].str()),
-                   std::stoi(match[first_group + 2].str()), std::stoi(match[first_group + 3].str())};
-}
-
-// The last box a window's cropdetect wrote in FFmpeg's error output: the
-// one from all its frames.
-std::optional<CropBox> last_box(const std::string& errors) {
-    static const std::regex crop(R"(crop=(\d+):(\d+):(\d+):(\d+))");
-    std::optional<CropBox> box;
-    for (auto match = std::sregex_iterator(errors.begin(), errors.end(), crop); match != std::sregex_iterator();
-         ++match) {
-        box = box_from(*match, 1);
-    }
-    return box;
-}
-
-// Each window's last box in a pass of several (cropdetect@w0, @w1...), as each
-// window's own cropdetect wrote it; nothing for a window that wrote none.
-std::vector<std::optional<CropBox>> boxes_by_window(const std::string& errors, std::size_t windows) {
-    static const std::regex crop(R"(\[cropdetect@w(\d+) @[^\]]*\][^\n]*?crop=(\d+):(\d+):(\d+):(\d+))");
-    std::vector<std::optional<CropBox>> boxes(windows);
-    for (auto match = std::sregex_iterator(errors.begin(), errors.end(), crop); match != std::sregex_iterator();
-         ++match) {
-        const std::size_t index = std::stoul((*match)[1].str());
-        if (index < boxes.size()) {
-            boxes[index] = box_from(*match, 2);
-        }
-    }
-    return boxes;
-}
-
-// Runs one window, on the GPU decoder and else in software, and returns the
-// box it found, or nothing.
-std::optional<CropBox> run_single_window(const std::string& ffmpeg, const VideoInfo& info, double start,
-                                         double window, const CancelToken& cancel,
-                                         const std::optional<std::string>& hwaccel,
-                                         const BeforeCropdetect& before) {
+// One preview decoded by FFmpeg from the file: `frames` pictures from
+// `start`.
+Pictures run_preview(const std::string& ffmpeg, const VideoInfo& info, double start, int frames,
+                     const CancelToken& cancel, std::optional<std::string>& hwaccel, const BeforeSampling& before) {
     const std::string path = platform::path_text(info.path);
-    return last_box(run_detection(
+    return run_detection(
         [&](const std::optional<std::string>& attempt) {
-            return window_command(ffmpeg, path, info.input_options(), start, window, attempt, before);
+            return preview_command(ffmpeg, path, info.input_options(), start, frames, attempt, before);
         },
-        path, cancel, hwaccel, 60s));
+        path, cancel, hwaccel, 60s);
 }
 
-// One window sampled from the pictures the app's decoder makes
-// (samples_through_the_app): the window's pictures fed to FFmpeg's
-// cropdetect, as its own pass (window_command) would give them. The decoder
-// slot is held from the feeding's start, which decodes before FFmpeg reads,
-// to its end. Throws FilmGrainRefusal when the app could not feed the
-// window, CropDetectError when FFmpeg failed, and Cancelled.
-std::optional<CropBox> run_fed_window(const std::string& ffmpeg, const VideoInfo& info, double start,
-                                      double window, const CancelToken& cancel) {
-    const DecoderSlot slot(cancel);
+// One preview decoded by the app's decoder (samples_through_the_app): the
+// pictures of `window` fed to FFmpeg, which takes their luma as
+// preview_command does. Throws FilmGrainRefusal when the app could not feed
+// the window, CropDetectError when FFmpeg failed, and Cancelled.
+Pictures run_fed_preview(const std::string& ffmpeg, const VideoInfo& info, const FeedWindow& window,
+                         const CancelToken& cancel) {
     // The coded pictures, without their grain, as FFmpeg's vvc gives a video
-    // deeper than 8 bits (it adds H.274's grain at 8 bits only): the boxes
-    // are the ones it would find. VVC's decoder asks ffprobe nothing
-    // (gpu_frames.cpp's configuration).
+    // deeper than 8 bits (it adds H.274's grain at 8 bits only). VVC's
+    // decoder asks ffprobe nothing (gpu_frames.cpp's configuration).
     VideoInfo coded = info;
     coded.with_film_grain = false;
-    // From the millisecond window_command's -ss gives FFmpeg (its text, so
-    // that a start on a half millisecond is rounded as that text rounds it).
-    const double start_ms = python_float(format_fixed(start, 3)).value_or(start);
-    PictureFeed feed(coded, ffmpeg, "", cancel, FeedWindow{start_ms, window});
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner"};
+    PictureFeed feed(coded, ffmpeg, "", cancel, window);
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-nostats"};
     command.insert(command.end(), feed.input_arguments().begin(), feed.input_arguments().end());
-    command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-vf", cropdetect(), "-f", "null", "-"});
-    const DetectionOutput output = run_window(command, cancel, 60s);
-    feed.finish();  // a window fed in part gives no box
-    if (output.code != 0) {
-        const std::string line = last_error_line(output.tail);
+    command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-vf", BeforeSampling{}.luma({})});
+    command.insert(command.end(), luma_output.begin(), luma_output.end());
+    DetectionOutput output = run_ffmpeg(command, cancel, 60s);
+    feed.finish();  // a window fed in part gives no pictures
+    if (output.code != 0 || !output.read_error.empty()) {
         throw CropDetectError("Crop detection failed for " + platform::path_text(info.path) + ": " +
-                              (line.empty() ? "ffmpeg exited with code " + platform::exit_code_text(output.code)
-                                            : line));
+                              failure_of(output));
     }
-    return last_box(output.lines);
+    return std::move(output.pictures);
 }
 
-// A window sampled from the app's decoder (run_fed_window), or by FFmpeg as
-// any other video's where the app cannot feed it and FFmpeg decodes the codec
-// (app_decoders.h); else the window fails.
-std::optional<CropBox> run_window_through_the_app(const std::string& ffmpeg, const VideoInfo& info, double start,
-                                                  double window, const CancelToken& cancel,
-                                                  const std::optional<std::string>& hwaccel,
-                                                  const BeforeCropdetect& before) {
+// A preview from the app's decoder (run_fed_preview), or from FFmpeg as any
+// other video's where the app cannot feed it and FFmpeg decodes the codec
+// (app_decoders.h); else it fails.
+Pictures run_preview_through_the_app(const std::string& ffmpeg, const VideoInfo& info, double start, int frames,
+                                     const CancelToken& cancel, std::optional<std::string>& hwaccel,
+                                     const BeforeSampling& before) {
     try {
-        return run_fed_window(ffmpeg, info, start, window, cancel);
+        // From the millisecond preview_command's -ss gives FFmpeg (its text,
+        // so that a start on a half millisecond is rounded as that text
+        // rounds it); the window's length to the frame before the last
+        // wanted, so that it ends with that one (WindowCut)
+        const double start_ms = python_float(format_fixed(start, 3)).value_or(start);
+        const double frame = info.fps > 0 ? 1.0 / info.fps : 1.0 / 24;
+        return run_fed_preview(ffmpeg, info, FeedWindow{start_ms, frame * (frames - 1)}, cancel);
     } catch (const FilmGrainRefusal& refusal) {
         if (const std::optional<std::string> failure = unfed_failure(info, refusal)) {
             throw CropDetectError("Crop detection failed for " + platform::path_text(info.path) + ": " + *failure);
         }
-        logger.info("Black bars in " + platform::path_text(info.path.filename()) + ": a window sampled by FFmpeg, " +
+        logger.info("Black bars in " + platform::path_text(info.path.filename()) + ": a preview decoded by FFmpeg, " +
                     "as the app's decoder could not feed it (" + refusal.what() + ")");
     }
-    return run_single_window(ffmpeg, info, start, window, cancel, hwaccel, before);
+    return run_preview(ffmpeg, info, start, frames, cancel, hwaccel, before);
 }
 
-// The boxes a raw stream's windows found, each started from a byte partway
-// through, and why any window failed: FFmpeg cannot seek in a stream without
-// timestamps (-ss lands on no picture), so each window starts at the share
-// of the file its time is of the video, and is its first frames decoded from
-// there. A window that decoded no picture (none after its byte, past the
-// stream's last keyframe) finds no box.
-std::pair<std::vector<CropBox>, std::vector<std::string>> run_byte_windows(
-    const std::string& ffmpeg, const VideoInfo& info, std::uintmax_t file_bytes, const std::vector<double>& starts,
-    double window, const CancelToken& cancel, const std::optional<std::string>& hwaccel,
-    const BeforeCropdetect& before) {
+// The previews of a raw stream, each started from a byte partway through,
+// and why any failed: FFmpeg cannot seek in a stream without timestamps (-ss
+// lands on no picture), so each starts at the share of the file its time is
+// of the video, and is its first pictures decoded from there. A preview that
+// decoded no picture (none after its byte, past the stream's last keyframe)
+// has none.
+std::pair<std::vector<Pictures>, std::vector<std::string>> run_byte_previews(
+    const std::string& ffmpeg, const VideoInfo& info, std::uintmax_t file_bytes, const std::vector<double>& times,
+    const CancelToken& cancel, std::optional<std::string>& hwaccel, const BeforeSampling& before) {
     const std::string path = platform::path_text(info.path);
-    const long long frames = std::max(1LL, static_cast<long long>(std::llround(window * info.fps)));
-    // An HEVC stream's windows start at a random access picture, after the
+    // An HEVC stream's previews start at a random access picture, after the
     // parameter sets from before its first picture: x265 writes them only
-    // there unless told to repeat them (--repeat-headers), and a window
+    // there unless told to repeat them (--repeat-headers), and a preview
     // without them decodes nothing. ('|' in the path would split the input.)
     const bool hevc = info.format_name == "hevc";
     std::vector<ByteRange> parameter_sets;
@@ -823,15 +788,15 @@ std::pair<std::vector<CropBox>, std::vector<std::string>> run_byte_windows(
             return {};
         }
     }
-    std::vector<CropBox> boxes;
+    std::vector<Pictures> previews;
     std::vector<std::string> failures;
-    for (const double start : starts) {
-        const auto offset = static_cast<std::uintmax_t>(static_cast<double>(file_bytes) * start / info.duration);
+    for (const double time : times) {
+        const auto offset = static_cast<std::uintmax_t>(static_cast<double>(file_bytes) * time / info.duration);
         std::vector<std::string> input = info.input_options();
         if (hevc) {
             const std::optional<std::uintmax_t> access = hevc_random_access(info.path, offset, cancel);
             if (!access) {
-                break;  // none after this window's byte, so none after a later one's
+                break;  // none after this preview's byte, so none after a later one's
             }
             std::vector<ByteRange> parts = parameter_sets;
             parts.emplace_back(*access, 0);
@@ -841,332 +806,187 @@ std::pair<std::vector<CropBox>, std::vector<std::string>> run_byte_windows(
             input.insert(input.end(), {"-skip_initial_bytes", std::to_string(offset), "-i", path});
         }
         try {
-            if (const std::optional<CropBox> box = last_box(run_detection(
-                    [&](const std::optional<std::string>& attempt) {
-                        return byte_window_command(ffmpeg, input, frames, attempt, before);
-                    },
-                    path, cancel, hwaccel, 60s))) {
-                boxes.push_back(*box);
-            }
+            previews.push_back(run_detection(
+                [&](const std::optional<std::string>& attempt) {
+                    return byte_preview_command(ffmpeg, input, 2, attempt, before);
+                },
+                path, cancel, hwaccel, 60s));
         } catch (const CropDetectError& error) {
             failures.emplace_back(error.what());
         }
     }
-    return {boxes, failures};
+    return {previews, failures};
 }
 
-// Each window's box of a raw stream (raw_windows_command), or nothing for a
-// window that found none.
-std::vector<std::optional<CropBox>> run_raw_windows(const std::string& ffmpeg, const VideoInfo& info,
-                                                    const std::vector<double>& starts, double window,
-                                                    const CancelToken& cancel,
-                                                    const std::optional<std::string>& hwaccel,
-                                                    const BeforeCropdetect& before) {
-    const std::vector<std::pair<long long, long long>> windows = raw_window_frames(info, starts, window);
-    long long frames = 0;
-    for (const auto& [first, end] : windows) {
-        frames = std::max(frames, end);
-    }
-    // A window's minute, and a tenth of a second for each frame the pass
-    // decodes: a bound against a pass that hangs, which a slow decoder (4K
-    // VVC in software) stays well inside.
-    const std::chrono::seconds limit = 60s + std::chrono::seconds(frames / 10);
+// Each preview of a raw stream from one pass from its start
+// (raw_previews_command): the picture judged of each, by its frame number.
+std::vector<Pictures> run_raw_previews(const std::string& ffmpeg, const VideoInfo& info,
+                                       const std::vector<double>& times, const CancelToken& cancel,
+                                       std::optional<std::string>& hwaccel, const BeforeSampling& before) {
+    const std::vector<long long> wanted = preview_frames(info, times);
+    std::vector<long long> frames = wanted;  // each once, in order (previews of a short video share frames)
+    std::sort(frames.begin(), frames.end());
+    frames.erase(std::unique(frames.begin(), frames.end()), frames.end());
+    // A minute, and a tenth of a second for each frame the pass decodes: a
+    // bound against a pass that hangs, which a slow decoder (4K VVC in
+    // software) stays well inside.
+    const std::chrono::seconds limit = 60s + std::chrono::seconds(frames.back() / 10);
     const std::string path = platform::path_text(info.path);
-    return boxes_by_window(run_detection(
-                               [&](const std::optional<std::string>& attempt) {
-                                   return raw_windows_command(ffmpeg, info, windows, attempt, before);
-                               },
-                               path, cancel, hwaccel, limit),
-                           windows.size());
-}
-
-// --------------------------------------------- overlapping windows, one pass
-
-// Runs of windows that overlap or touch, as indexes into `starts` (in order):
-// each run's frames can be decoded once for all its windows.
-std::vector<std::vector<std::size_t>> overlapping_runs(const std::vector<double>& starts, double window) {
-    std::vector<std::vector<std::size_t>> runs;
-    for (std::size_t i = 0; i < starts.size(); ++i) {
-        if (!runs.empty() && starts[i] <= starts[runs.back().back()] + window) {
-            runs.back().push_back(i);
-        } else {
-            runs.push_back({i});
+    const Pictures picked = run_detection(
+        [&](const std::optional<std::string>& attempt) {
+            return raw_previews_command(ffmpeg, info, frames, attempt, before);
+        },
+        path, cancel, hwaccel, limit);
+    // The pictures come in the frames' order, those past the stream's end
+    // missing: each preview's is its frame's
+    std::vector<Pictures> previews;
+    for (const long long frame : wanted) {
+        Pictures preview{picked.width, picked.height, {}};
+        const auto found = std::lower_bound(frames.begin(), frames.end(), frame);
+        const auto at = static_cast<std::size_t>(found - frames.begin());
+        if (at < picked.edges.size()) {
+            preview.edges.push_back(picked.edges[at]);
         }
+        previews.push_back(std::move(preview));
     }
-    return runs;
+    return previews;
 }
 
-// Whether one pass gives each window exactly the frames its own pass
-// (window_command) gets: where FFmpeg's seek lands on a picture shown at or
-// before the window's start. Matroska and WebM seek by presentation time,
-// and an intra-only codec has a picture at every frame, in MP4/MOV or a raw
-// file. MP4 and MOV seek by decode time (an open-GOP picture after the start
-// can be where a window's own pass begins, missing frames one pass has), and
-// other formats' timestamp corrections (MPEG-TS, AVI) differ in a pass that
-// keeps the file's timestamps.
-bool merges_windows(const VideoInfo& info) {
-    static const std::set<std::string, std::less<>> intra_only{"ffv1", "prores", "dnxhd", "mjpeg", "rawvideo"};
-    const bool mov = info.format_name.starts_with("mov,mp4");
-    return info.format_name.find("matroska") != std::string::npos ||
-           ((mov || info.format_name == "rawvideo") && intra_only.contains(info.codec_name));
+// A video of unknown duration's first pictures (unknown_duration_pictures)
+// as the previews they stand for: each two, in order.
+std::vector<Pictures> as_previews(const Pictures& first) {
+    std::vector<Pictures> previews;
+    for (std::size_t at = 0; at < first.edges.size(); at += 2) {
+        Pictures preview{first.width, first.height, {}};
+        preview.edges.assign(first.edges.begin() + static_cast<std::ptrdiff_t>(at),
+                             first.edges.begin() + static_cast<std::ptrdiff_t>(std::min(at + 2, first.edges.size())));
+        previews.push_back(std::move(preview));
+    }
+    return previews;
 }
 
-// The file's start time as FFmpeg gives it on its "  Duration: ..., start:
-// 0.000000" line (whole microseconds), from which its seek (-ss) counts: 0
-// for a file that has none (FFmpeg's seek then counts from 0, and it writes
-// no "start:"); nothing if FFmpeg could not read the file.
-std::optional<long long> file_start_microseconds(const std::string& ffmpeg, const VideoInfo& info,
-                                                 const CancelToken& cancel) {
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner"};
-    const std::vector<std::string> input = info.input_options();
-    command.insert(command.end(), input.begin(), input.end());
-    command.insert(command.end(), {"-i", platform::path_text(info.path)});
-    // The input's own line, two spaces in, kept as it comes: a metadata
-    // value naming a duration is further in, and a file with many streams or
-    // chapters writes more than the end of its error output that is kept.
-    struct Found {
-        std::mutex mutex;
-        std::optional<std::string> line;
-    };
-    const auto found = std::make_shared<Found>();
-    platform::ProcessOptions options;
-    options.on_error_line = [found](std::string_view line) {
-        if (line.starts_with("  Duration: ")) {
-            const std::lock_guard lock(found->mutex);
-            if (!found->line) {
-                found->line = std::string(line);
-            }
-        }
-    };
-    try {
-        // No output named: it says what it read, and ends.
-        platform::ChildProcess probe = platform::ChildProcess::start(command, options);
-        const CancelToken::Attached attached = cancel.attach(probe);
-        if (!probe.wait_for(30s)) {
-            probe.terminate();
-            probe.wait();
-            return std::nullopt;
-        }
-        cancel.throw_if_cancelled();
-        static_cast<void>(probe.standard_error());  // waits for the error output's end, and so its lines
-    } catch (const platform::ProcessError&) {
+// The picture HandBrake judges of a preview: its second (a stream's first
+// may be a dummy picture), or its first where it gave one alone; nothing for
+// a preview that decoded none.
+std::optional<std::optional<BarEdges>> judged(const Pictures& preview) {
+    if (preview.edges.empty()) {
         return std::nullopt;
     }
-    const std::lock_guard lock(found->mutex);
-    if (!found->line) {
-        return std::nullopt;
-    }
-    static const std::regex start(R"(, start: (-?)(\d+)\.(\d{6}))");
-    std::smatch match;
-    if (!std::regex_search(*found->line, match, start)) {
-        return 0;
-    }
-    const long long magnitude = std::stoll(match[2].str()) * 1'000'000 + std::stoll(match[3].str());
-    return match[1].length() > 0 ? -magnitude : magnitude;
+    return preview.edges.size() >= 2 ? preview.edges[1] : preview.edges[0];
 }
 
-// Microseconds as seconds with six decimals, from whole numbers (no
-// rounding of a double between).
-std::string seconds_text(long long microseconds) {
-    const long long whole = microseconds / 1'000'000;
-    const long long part = microseconds % 1'000'000;
-    std::string digits = std::to_string(part);
-    return std::to_string(whole) + "." + std::string(6 - digits.size(), '0') + digits;
-}
-
-// One pass for the windows `run` (indexes into `starts`), each window seeing
-// exactly the frames its own pass (window_command) sees. The pass keeps the
-// file's timestamps (-copyts) from the first window's seek; each window's
-// branch trims from its own start (the file's start time `file_start` added,
-// as -ss counts from it), then its cropdetect, then a trim to the window's
-// length, so that its cropdetect also sees the frame past the end that its
-// own pass's -t drops after it. Each branch is an output of its own, so the
-// pass ends when the last window does.
-std::vector<std::string> merged_windows_command(const std::string& ffmpeg, const VideoInfo& info,
-                                                const std::vector<double>& starts,
-                                                const std::vector<std::size_t>& run, double window,
-                                                long long file_start, const std::optional<std::string>& hwaccel,
-                                                const BeforeCropdetect& before) {
-    std::string graph = "[0:" + std::string(video_stream) + "]" + before.filters(hwaccel) +
-                        "split=" + std::to_string(run.size());
-    for (std::size_t i = 0; i < run.size(); ++i) {
-        graph += "[s" + std::to_string(i) + "]";
+// The previews of a raw stream: from bytes partway where the stream allows
+// it (a pass from the start reaches the last preview only after decoding
+// nine tenths of the video: for a 4K VVC film, still not there after 21
+// minutes), else in one pass from the start. The first preview, from the
+// first byte, always decodes: fewer than fewest_judged decoded from bytes
+// says the stream cannot be read from partway (its only keyframe its first,
+// or its parameter sets only at its start).
+std::pair<std::vector<Pictures>, std::vector<std::string>> sample_raw_stream(
+    const std::string& ffmpeg, const VideoInfo& info, const std::vector<double>& times, const CancelToken& cancel,
+    std::optional<std::string>& hwaccel, const BeforeSampling& before) {
+    std::vector<Pictures> previews;
+    std::vector<std::string> failures;
+    std::error_code unknown;
+    const std::uintmax_t file_bytes = std::filesystem::file_size(info.path, unknown);
+    if (reads_from_a_byte(info) && !unknown && !times.empty()) {
+        std::tie(previews, failures) = run_byte_previews(ffmpeg, info, file_bytes, times, cancel, hwaccel, before);
     }
-    for (std::size_t i = 0; i < run.size(); ++i) {
-        // The window's start in whole milliseconds, as its own pass's -ss.
-        std::string start = format_fixed(starts[run[i]], 3);
-        start.erase(std::remove(start.begin(), start.end(), '.'), start.end());
-        graph += ";[s" + std::to_string(i) + "]trim=start=" + seconds_text(std::stoll(start) * 1000 + file_start) +
-                 "," + cropdetect("w" + std::to_string(i)) + ",trim=duration=" + format_fixed(window, 3) + "[o" +
-                 std::to_string(i) + "]";
-    }
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-nostats"};
-    const std::vector<std::string> decoding = hwaccel_args(hwaccel);
-    command.insert(command.end(), decoding.begin(), decoding.end());
-    const std::vector<std::string> input = info.input_options();
-    command.insert(command.end(), input.begin(), input.end());
-    command.insert(command.end(), {"-copyts", "-ss", format_fixed(starts[run.front()], 3), "-i",
-                                   platform::path_text(info.path), "-filter_complex", graph});
-    for (std::size_t i = 0; i < run.size(); ++i) {
-        command.insert(command.end(), {"-map", "[o" + std::to_string(i) + "]", "-f", "null", "-"});
-    }
-    return command;
-}
-
-// Each window's box of `run` from one pass (merged_windows_command), or
-// nothing where the pass cannot stand for the windows' own passes: it failed
-// or timed out.
-std::optional<std::vector<std::optional<CropBox>>> run_merged_windows(
-    const std::string& ffmpeg, const VideoInfo& info, const std::vector<double>& starts,
-    const std::vector<std::size_t>& run, double window, long long file_start, const CancelToken& cancel,
-    const std::optional<std::string>& hwaccel, const BeforeCropdetect& before) {
-    const std::string path = platform::path_text(info.path);
-    std::string errors;
-    try {
-        errors = run_detection(
-            [&](const std::optional<std::string>& attempt) {
-                return merged_windows_command(ffmpeg, info, starts, run, window, file_start, attempt,
-                                              before);
-            },
-            path, cancel, hwaccel, 60s * static_cast<long long>(run.size()));
-    } catch (const CropDetectError& error) {
+    const auto decoded = static_cast<std::size_t>(
+        std::count_if(previews.begin(), previews.end(), [](const Pictures& p) { return !p.edges.empty(); }));
+    if (decoded < fewest_judged) {
         logger.info("Black bars in " + platform::path_text(info.path.filename()) +
-                    ": windows sampled one by one, as one pass for them failed (" + error.what() + ")");
-        return std::nullopt;
+                    ": sampling in one pass from the start, as too few previews could start partway through");
+        failures.clear();
+        try {
+            previews = run_raw_previews(ffmpeg, info, times, cancel, hwaccel, before);
+        } catch (const CropDetectError& error) {
+            failures.emplace_back(error.what());
+        }
     }
-    return boxes_by_window(errors, run.size());
+    return {previews, failures};
 }
 
-// detect_crop's work, without the kept answers.
+// detect_crop's work, without the kept answers: HandBrake's previews
+// (black_bars_rule.h), each a decoder's run of its own, one after another.
 CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double sampled_duration,
-                        const CancelToken& cancel, const std::optional<std::string>& hwaccel,
+                        const CancelToken& cancel, const std::optional<std::string>& gpu_decoder,
                         const std::string& scale_algorithm) {
     const std::string path = platform::path_text(info.path);
-    const double window = sample_window(sampled_duration);
-    const BeforeCropdetect before{hw_native_format(info.pix_fmt), size_change_scale(info, scale_algorithm)};
-    const std::vector<double> starts = sample_offsets(sampled_duration, window);
+    const BeforeSampling before{hw_native_format(info.pix_fmt), size_change_scale(info, scale_algorithm)};
+    const std::vector<double> times = preview_times(sampled_duration);
+    std::optional<std::string> hwaccel = gpu_decoder;  // dropped for the rest once it fails
     cancel.throw_if_cancelled();
-    std::vector<CropBox> boxes;
+    // One decoder slot for all of the video's previews: they run in turn
+    const DecoderSlot slot(cancel);
+    std::vector<Pictures> previews;
     std::vector<std::string> failures;
     // A raw YUV file's pictures are all one size, so FFmpeg's -ss finds a
-    // window's first frame in it exactly, as in a container. A raw stream the
-    // app reads itself (AV2) has its windows from the app's decoder, below.
-    if (info.timed_raw && info.format_name != "rawvideo" && !samples_through_the_app(info)) {
-        // Each window from a byte partway through where the stream allows
-        // it: a pass from the start reaches the last window only after
-        // decoding nine tenths of the video (for a 4K VVC film, still not
-        // there after 21 minutes).
-        std::error_code unknown;
-        const std::uintmax_t file_bytes = std::filesystem::file_size(info.path, unknown);
-        if (reads_from_a_byte(info) && !unknown && info.duration > 0) {
-            std::tie(boxes, failures) =
-                run_byte_windows(ffmpeg, info, file_bytes, starts, window, cancel, hwaccel, before);
-        }
-        if (boxes.empty()) {
-            // No picture from any window started partway, or a stream that
-            // cannot be: every window again, in one pass from the start.
-            logger.info("Black bars in " + platform::path_text(info.path.filename()) +
-                        ": sampling in one pass from the start, as no window could start partway through");
-            failures.clear();
-            try {
-                for (const std::optional<CropBox>& box :
-                     run_raw_windows(ffmpeg, info, starts, window, cancel, hwaccel, before)) {
-                    if (box) {
-                        boxes.push_back(*box);
-                    }
-                }
-            } catch (const CropDetectError& error) {
-                failures.emplace_back(error.what());
-            }
-        }
+    // preview's first frame in it exactly, as in a container. A raw stream
+    // the app reads itself (AV2) has its previews from the app's decoder.
+    const bool through_the_app = samples_through_the_app(info);
+    if (info.timed_raw && info.format_name != "rawvideo" && !through_the_app) {
+        std::tie(previews, failures) = sample_raw_stream(ffmpeg, info, times, cancel, hwaccel, before);
     } else {
-        // One decoder at a time: five at once held 6.2 GB of GPU memory for a
-        // 4K source. Windows that overlap (a video under 17 s) are decoded in
-        // one pass where it sees each window's frames exactly, each frame
-        // once (a 6.4 s 4K video: 382 frames, not some 1240); the others,
-        // and those of a pass that failed, one by one.
-        std::vector<std::optional<CropBox>> found(starts.size());
-        std::vector<bool> sampled(starts.size(), false);
-        // A video the app's decoder samples has its windows one by one: each
-        // a feeding of its own.
-        const bool through_the_app = samples_through_the_app(info);
         if (through_the_app) {
             logger.info("Black bars in " + platform::path_text(info.path.filename()) + ": sampled with " +
                         std::string(app_decoded_codec(ascii_lower(info.codec_name))->decoder) +
                         ", the app's decoder of its codec");
         }
-        const std::vector<std::vector<std::size_t>> runs = overlapping_runs(starts, window);
-        const bool shared = !through_the_app &&
-                            std::any_of(runs.begin(), runs.end(), [](const auto& run) { return run.size() > 1; });
-        const std::optional<long long> file_start =
-            shared && merges_windows(info) ? file_start_microseconds(ffmpeg, info, cancel) : std::nullopt;
-        if (file_start && *file_start >= 0) {
-            for (const std::vector<std::size_t>& run : runs) {
-                if (run.size() < 2) {
-                    continue;
-                }
-                if (const auto run_boxes = run_merged_windows(ffmpeg, info, starts, run, window, *file_start, cancel,
-                                                              hwaccel, before)) {
-                    for (std::size_t i = 0; i < run.size(); ++i) {
-                        found[run[i]] = (*run_boxes)[i];
-                        sampled[run[i]] = true;
-                    }
+        const auto preview = [&](double start, int frames) {
+            return through_the_app
+                       ? run_preview_through_the_app(ffmpeg, info, start, frames, cancel, hwaccel, before)
+                       : run_preview(ffmpeg, info, start, frames, cancel, hwaccel, before);
+        };
+        try {
+            if (times.empty()) {
+                previews = as_previews(preview(0, unknown_duration_pictures));
+            }
+            for (const double time : times) {
+                try {
+                    previews.push_back(preview(time, 2));
+                } catch (const CropDetectError& error) {
+                    failures.emplace_back(error.what());
                 }
             }
-        }
-        for (std::size_t i = 0; i < starts.size(); ++i) {
-            if (sampled[i]) {
-                continue;
-            }
-            try {
-                found[i] = through_the_app
-                               ? run_window_through_the_app(ffmpeg, info, starts[i], window, cancel, hwaccel, before)
-                               : run_single_window(ffmpeg, info, starts[i], window, cancel, hwaccel, before);
-            } catch (const CropDetectError& error) {
-                failures.emplace_back(error.what());
-            }
-        }
-        // In the windows' order: between equally good boxes, the first wins.
-        for (const std::optional<CropBox>& box : found) {
-            if (box) {
-                boxes.push_back(*box);
-            }
+        } catch (const CropDetectError& error) {
+            failures.emplace_back(error.what());
         }
     }
-    cancel.throw_if_cancelled();  // a partial vote is not an answer
-    if (boxes.empty() && failures.empty()) {
+    cancel.throw_if_cancelled();  // a partial sampling is not an answer
+    // Every preview's picture judged, at one size
+    int width = 0;
+    int height = 0;
+    std::size_t decoded = 0;
+    std::vector<BarEdges> counted;
+    for (const Pictures& sampled : previews) {
+        const std::optional<std::optional<BarEdges>> picture = judged(sampled);
+        if (!picture) {
+            continue;
+        }
+        if (decoded > 0 && (sampled.width != width || sampled.height != height)) {
+            throw VideoSizeChanged(info.path);  // previews of two sizes: one box cannot cut both
+        }
+        width = sampled.width;
+        height = sampled.height;
+        ++decoded;
+        if (*picture) {
+            counted.push_back(**picture);
+        }
+    }
+    if (decoded == 0 && failures.empty()) {
         throw CropDetectError("Could not auto-detect black bars in " + path +
                               ": FFmpeg found no pictures in the parts of it that were sampled. The file may be "
                               "damaged or cut short.");
     }
-    if (boxes.empty()) {
+    if (decoded == 0) {
         throw CropDetectError("Could not auto-detect black bars in " + path + ": " + failures.back() +
                               ". Choose 'None (use full frame)' for this video to continue without cropping.");
     }
-    // The most common box wins, and between equally common ones the largest:
-    // a box from a dark stretch is too tight.
-    std::vector<std::pair<CropBox, int>> counts;
-    for (const CropBox& box : boxes) {
-        const auto found = std::find_if(counts.begin(), counts.end(), [&box](const auto& item) { return item.first == box; });
-        if (found == counts.end()) {
-            counts.emplace_back(box, 1);
-        } else {
-            ++found->second;
-        }
-    }
-    const auto better = [](const auto& a, const auto& b) {
-        const long long area_a = static_cast<long long>(a.first.w) * a.first.h;
-        const long long area_b = static_cast<long long>(b.first.w) * b.first.h;
-        return std::tie(a.second, area_a) < std::tie(b.second, area_b);
-    };
-    // The first of equally good boxes, as Python's max() takes it.
-    auto best = counts.begin();
-    for (auto item = counts.begin(); item != counts.end(); ++item) {
-        if (better(*best, *item)) {
-            best = item;
-        }
-    }
-    return best->first;
+    logger.info("Black bars in " + platform::path_text(info.path.filename()) + ": " + std::to_string(counted.size()) +
+                " of " + std::to_string(decoded) + " previews judged" +
+                (counted.size() < std::min(fewest_judged, decoded) ? " (too few: the whole frame)" : ""));
+    return handbrake_box(counted, decoded, width, height);
 }
 
 }  // namespace
@@ -1228,7 +1048,7 @@ std::pair<CropBox, CropBox> detect_pair(const std::string& ffmpeg, const VideoIn
                                         const std::optional<std::string>& source_hwaccel,
                                         const std::optional<std::string>& distorted_hwaccel,
                                         const std::string& scale_algorithm) {
-    // Each video's windows run in turn, so this is two decoders, in about
+    // Each video's previews run in turn, so this is two decoders, in about
     // half the time of one video after the other. Both are waited for before
     // anything is thrown: a cancel first, then the source's error.
     std::optional<CropBox> boxes[2];
