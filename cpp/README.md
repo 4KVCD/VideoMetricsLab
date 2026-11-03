@@ -183,9 +183,11 @@ The tests that need a GPU, or a library the app does not ship for the
 system yet, are skipped without it, as on GitHub's runners.
 
 The tests take at most 100 ms each, a few seconds together, and are the
-check before every commit: `ctest --preset windows-release`. Real videos
-are scored by the golden suite (below); a test that would take longer than
-100 ms is not written.
+check before every commit: `ctest --preset windows-release`. ctest runs
+each test program in a few shards (a process each, not one per test); one
+test alone: `build/windows/tests/Release/vml_tests.exe --gtest_filter=Suite.Name`.
+Real videos are scored by the golden suite (below); a test that would take
+longer than 100 ms is not written.
 
 | System | Needs | Commands (from `cpp`) |
 | --- | --- | --- |

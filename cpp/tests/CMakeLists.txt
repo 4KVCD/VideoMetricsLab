@@ -67,20 +67,30 @@ add_library(vml_test_library SHARED unit/test_library.cpp)
 target_link_libraries(vml_test_library PRIVATE vml_compile_options)
 add_dependencies(vml_tests vml_test_child vml_test_library vml-cli)
 
-include(GoogleTest)
 # Unit tests only, each at most 100 ms (gtest's own time, in a Release
 # build): the check before every commit. Real videos are scored by the
 # golden suite (tests/golden); playback and the window are checked by hand.
 #
-# The tests that run work on the PC's GPU also share a lock, so that ctest -j
-# runs them one at a time: side by side they could use up a smaller PC's
-# memory (they crashed a 14 GB laptop with an AMD 780M). The others run in
-# parallel.
+# Each test program runs as a few ctest tests, gtest's shards of its tests,
+# not as one process per test: starting a process (and loading Qt) costs
+# more than most tests do (2026-11-02: 39 of the suite's 42 s of process
+# time). A shard that fails prints the failing tests by name.
+function(vml_add_test_shards name target shards filter)
+    math(EXPR last "${shards} - 1")
+    foreach(index RANGE ${last})
+        add_test(NAME ${name}_${index} COMMAND ${target} --gtest_filter=${filter})
+        set_tests_properties(${name}_${index} PROPERTIES
+            ENVIRONMENT "GTEST_TOTAL_SHARDS=${shards};GTEST_SHARD_INDEX=${index}"
+            LABELS unit ${ARGN})
+    endforeach()
+endfunction()
+
+# The tests that run work on the PC's GPU run in one shard of their own, under
+# a lock, so that ctest -j never runs two at once: side by side they could use
+# up a smaller PC's memory (they crashed a 14 GB laptop with an AMD 780M).
 set(gpu_suites "GpuFrames.*:VmafVulkan.*:Vship.*")
-gtest_discover_tests(vml_tests TEST_FILTER "-${gpu_suites}"
-    PROPERTIES LABELS unit)
-gtest_discover_tests(vml_tests TEST_FILTER "${gpu_suites}"
-    PROPERTIES LABELS unit RESOURCE_LOCK gpu)
+vml_add_test_shards(vml_tests vml_tests 8 "-${gpu_suites}")
+vml_add_test_shards(vml_tests_gpu vml_tests 1 "${gpu_suites}" RESOURCE_LOCK gpu)
 
 # The window's tests, where the window is built (app/CMakeLists.txt). They
 # run with no screen, each in a profile of its own (app/main.cpp).
@@ -135,5 +145,5 @@ if(TARGET vml_app)
             VERBATIM)
         vml_deploy_qt_translations(vml_app_tests)
     endif()
-    gtest_discover_tests(vml_app_tests PROPERTIES LABELS unit)
+    vml_add_test_shards(vml_app_tests vml_app_tests 4 "*")
 endif()
