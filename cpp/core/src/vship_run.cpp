@@ -1763,7 +1763,8 @@ private:
                               {"display", cvvdp_->display.identity().dump()},
                               {"resize_to_display", nlohmann::json(cvvdp_->resize_to_display).dump()},
                               {"timeline", nlohmann::json("JOD of each second of video").dump()},
-                              {"color_tags", nlohmann::json(score_identity::vship_colour_tags).dump()}}};
+                              {"color_tags", nlohmann::json(score_identity::vship_colour_tags).dump()}},
+                             build_stamp()};
         if (!windows.empty()) {
             // Where its run reached, which the length of its last second
             // needs: a ranged run's in its range_frames, a whole run's on its

@@ -8,8 +8,9 @@
 
 namespace vml {
 
-// The commit the app was built from, as 12 hex digits, or "unknown" (built
-// where git cannot say). Written at every build by core/build_commit.cmake.
+// The commit the app was built from, as 12 hex digits, with "-dirty" after
+// them when built with uncommitted changes, or "unknown" (built where git
+// cannot say). Written at every build by core/build_commit.cmake.
 const char* build_commit();
 
 // The version and the commit: "2.4 (0123456789ab)".
