@@ -2468,7 +2468,7 @@ bool skip_both(GpuFrameStream& test, GpuFrameStream& reference, long long count,
     } catch (...) {
         reference_cancel.cancel();
         try {
-            reference_skip.get();
+            static_cast<void>(reference_skip.get());  // only to wait for it
         } catch (...) {
             // The test video's error is the one to report.
         }

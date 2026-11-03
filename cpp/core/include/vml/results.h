@@ -31,7 +31,7 @@ struct MetricProvenance {
     // build_stamp): kept as it was when the score is saved again or loaded;
     // empty for a score saved before builds said. History only: no lookup
     // reads it.
-    std::string made_by;
+    std::string made_by{};
 };
 
 // A provenance of a metric FFmpeg calculated: its libvmaf filter, or its

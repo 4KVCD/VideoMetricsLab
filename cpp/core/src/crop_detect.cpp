@@ -42,6 +42,20 @@
 namespace vml {
 
 namespace {
+// A thread joined as it goes out of scope: std::jthread, which the macOS CI's
+// standard library does not have.
+class JoiningThread {
+public:
+    template <typename Function>
+    explicit JoiningThread(Function function) : thread_(std::move(function)) {}
+    JoiningThread(const JoiningThread&) = delete;
+    JoiningThread& operator=(const JoiningThread&) = delete;
+    ~JoiningThread() { thread_.join(); }
+
+private:
+    std::thread thread_;
+};
+
 
 using namespace std::chrono_literals;
 
@@ -622,7 +636,7 @@ DetectionOutput run_ffmpeg(const std::vector<std::string>& command, const Cancel
         {
             // Joined before `ffmpeg_process` goes: the program has ended or been
             // ended by then, so its output has too
-            const std::jthread reader([&] { read_pictures(ffmpeg_process, output.pictures, output.read_error); });
+            const JoiningThread reader([&] { read_pictures(ffmpeg_process, output.pictures, output.read_error); });
             const CancelToken::Attached attached = cancel.attach(ffmpeg_process);
             auto running = std::chrono::steady_clock::duration::zero();  // paused time not counted
             while (!ffmpeg_process.wait_for(200ms)) {
