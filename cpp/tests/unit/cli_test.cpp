@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "bdrate.h"
 #include "bitrate.h"
 #include "compare.h"
 #include "devices.h"
@@ -384,6 +385,81 @@ TEST(CommandLine, GivesTheBitrateDifferenceOfTwoVideos) {
     EXPECT_EQ(text_of(written[0]),
               "frame,time_s,size_bytes\r\n0,0.000000,500\r\n1,0.500000,0\r\n2,1.000000,\r\n3,1.500000,\r\n");
     EXPECT_EQ(text_of(written[1]), "start_s,end_s,kbps\r\n0.000000,1.000000,4.0\r\n1.000000,2.000000,\r\n");
+}
+
+// bdrate: two CSV files with a row per encode (a BOM, a quoted cell, an
+// empty score, columns in any case); s1's test at half the rate everywhere
+// (-50 %), s2's the same as its anchor (0) but for a PSNR not scored (n/a,
+// with a warning), s3 in the anchor's file only (left out); a mean and
+// median per class; and the refusals.
+TEST(CommandLine, CalculatesBdRatesFromTwoCsvFiles) {
+    const Arguments parsed =
+        parse_arguments({"bdrate", "--anchor", "a.csv", "--test", "b.csv", "--group-by", "Class"});
+    ASSERT_EQ(parsed.command, Command::bdrate);
+    BdrateArguments arguments = parsed.bdrate;
+    try {
+        parse_arguments({"bdrate", "--anchor", "a.csv"});
+        ADD_FAILURE() << "no --test was taken";
+    } catch (const UsageError& error) {
+        EXPECT_NE(std::string(error.what()).find("the following arguments are required: --test"), std::string::npos);
+    }
+    EXPECT_THROW(parse_arguments({"bdrate", "--anchor", "a", "--test", "b", "--weights", "vmaf=1"}), UsageError);
+
+    const RateTable anchor = read_rate_table("\xEF\xBB\xBFSequence,Class,KBPS,vmaf,psnr\r\n"
+                                             "s1,\"A, B\",1000,30,30\r\ns1,\"A, B\",2000,33,33\r\n"
+                                             "s1,\"A, B\",4000,36,36\r\ns1,\"A, B\",8000,39,39\r\n"
+                                             "s2,C,1000,30,30\r\ns2,C,2000,33,33\r\ns2,C,4000,36,36\r\n"
+                                             "s2,C,8000,39,39\r\ns3,C,1000,30,30\r\ns3,C,2000,33,33\r\n",
+                                             "a.csv");
+    const RateTable test = read_rate_table("sequence,kbps,vmaf,psnr\n"
+                                           "s1,500,30,30\ns1,1000,33,33\ns1,2000,36,36\ns1,4000,39,39\n"
+                                           "s2,1000,30,30\ns2,2000,33,\ns2,4000,36,36\ns2,8000,39,39\n",
+                                           "b.csv");
+    EXPECT_EQ(anchor.metric_keys, (std::vector<std::string>{"vmaf", "psnr"}));
+    EXPECT_EQ(anchor.encodes[0].text.at("class"), "A, B");
+
+    const BdRateReport report = bd_rate_report(anchor, test, bd_rate_options(arguments));
+    EXPECT_EQ(std::ranges::count(report.warnings, "s3: only in the anchor, left out"), 1);
+    EXPECT_EQ(std::ranges::count(report.warnings, "s2: psnr: not scored at every encode, n/a"), 1);
+    const std::string table = bd_rate_table(report, "a.csv", "b.csv");
+    for (const char* line : {"BD-rate of b.csv against a.csv, 2 sequences (- is less bitrate for the same score)\n",
+                             "\n| | VMAF v0.6.1 | PSNR |\n|---|---|---|\n", "\n| mean | -25.0% | -50.0% |\n",
+                             "\n| A, B mean | -50.0% | -50.0% |\n", "\n| C median | +0.0% | n/a |\n",
+                             "\n| s2 | +0.0% | n/a |\n"}) {
+        EXPECT_NE(table.find(line), std::string::npos) << line << table;
+    }
+    const std::string csv = bd_rate_csv(report);
+    EXPECT_TRUE(csv.starts_with("\xEF\xBB\xBFrow,class,anchor_encodes,test_encodes,vmaf,psnr\r\nmean,,,,")) << csv;
+    EXPECT_NE(csv.find("\r\ns2,C,4,4,0.0,\r\n"), std::string::npos) << csv;
+    const nlohmann::ordered_json json = bd_rate_json(report, "a.csv", "b.csv");
+    EXPECT_EQ(json["format"], "bdrate-1");
+    EXPECT_NEAR(json["mean"]["bd_rate"]["vmaf"].get<double>(), -25, 1e-9);
+    EXPECT_FALSE(json["mean"].contains("W"));
+    EXPECT_NEAR(json["sequences"][0]["bd_rate"]["vmaf"].get<double>(), -50, 1e-9);
+    EXPECT_TRUE(json["sequences"][1]["bd_rate"]["psnr"].is_null());
+    EXPECT_EQ(json["sequences"][1]["why"]["psnr"], "not scored at every encode");
+    EXPECT_EQ(json["groups"][0]["group"], "A, B");
+
+    arguments.group_by = "vmaf";  // a score column, not a group
+    EXPECT_THROW(bd_rate_report(anchor, test, bd_rate_options(arguments)), std::runtime_error);
+    try {
+        read_rate_table("sequence,kbps\r\ns1,fast\r\n", "a.csv");
+        ADD_FAILURE() << "a rate that is not a number was taken";
+    } catch (const std::runtime_error& error) {
+        EXPECT_STREQ(error.what(), "a.csv: line 2: kbps is not a number: 'fast'");
+    }
+    EXPECT_THROW(read_rate_table("sequence,vmaf\ns1,30\n", "a.csv"), std::runtime_error);
+
+    // As a spreadsheet saves it: two unnamed empty columns, a row of empty
+    // fields after the data
+    const RateTable saved = read_rate_table("sequence,kbps,vmaf,,\r\ns9,1000,30,,\r\n,,,,\r\n", "a.csv");
+    EXPECT_EQ(saved.columns, (std::vector<std::string>{"sequence", "kbps", "vmaf"}));
+    EXPECT_EQ(saved.encodes.size(), 1u);
+    // No sequence in both: no sequences, and the warnings name them
+    const BdRateReport apart = bd_rate_report(saved, test, BdRateOptions{});
+    EXPECT_TRUE(apart.sequences.empty());
+    EXPECT_EQ(std::ranges::count(apart.warnings, "s9: only in the anchor, left out"), 1);
+    EXPECT_EQ(std::ranges::count(apart.warnings, "s2: only in the test, left out"), 1);
 }
 
 #ifdef __APPLE__

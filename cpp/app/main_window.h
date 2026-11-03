@@ -68,6 +68,7 @@ class CheckableHeaderView;
 class ElidedLabel;
 class CvvdpDisplayDialog;
 class FileWrites;
+class BdRatePanel;
 class BitratePanel;
 class FrameComparePanel;
 struct FrameComparisonEntry;
@@ -112,7 +113,7 @@ struct MetricColumn {
 const std::vector<MetricColumn>& metric_columns();
 
 // The window's tabs.
-enum Tab : int { tab_videos, tab_graph, tab_frame_compare, tab_bitrate, tab_settings };
+enum Tab : int { tab_videos, tab_graph, tab_frame_compare, tab_bitrate, tab_bd_rate, tab_settings };
 
 // A run's own line on Metric Graphs: a name no other run has (the Python
 // app's graph_identity, an object of its own).
@@ -624,6 +625,7 @@ private:
     GraphPanel* graph_panel_ = nullptr;
     FrameComparePanel* frame_compare_panel_ = nullptr;
     BitratePanel* bitrate_panel_ = nullptr;
+    BdRatePanel* bd_rate_panel_ = nullptr;
     // The newer release offered, while its message is open.
     QPointer<QMessageBox> update_box_;
     // The GPU checks a run is waiting for (wait_for_gpu_checks), while it is,

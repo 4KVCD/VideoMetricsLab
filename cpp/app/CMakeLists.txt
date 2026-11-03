@@ -10,6 +10,7 @@ if(NOT Qt6_FOUND)
 endif()
 
 add_library(vml_app STATIC
+    bd_rate_panel.cpp
     bitrate_panel.cpp
     chart.cpp
     cvvdp_display_dialog.cpp
@@ -30,6 +31,7 @@ add_library(vml_app STATIC
     options_panel.cpp
     playback_worker.cpp
     probe_worker.cpp
+    rate_curve_chart.cpp
     results_export.cpp
     row_state.cpp
     run_worker.cpp

@@ -5,6 +5,7 @@
 add_executable(vml_tests
     unit/app_log_test.cpp
     unit/av2_stream_test.cpp
+    unit/bd_rate_test.cpp
     unit/bitrate_test.cpp
     unit/cancel_test.cpp
     unit/cli_test.cpp
@@ -98,6 +99,7 @@ vml_add_test_shards(vml_tests_gpu vml_tests 1 "${gpu_suites}" RESOURCE_LOCK gpu)
 if(TARGET vml_app)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     add_executable(vml_app_tests
+        app/bd_rate_panel_test.cpp
         app/bitrate_panel_test.cpp
         app/chart_test.cpp
         app/film_grain_control_test.cpp

@@ -2,6 +2,7 @@
 # code (vml_cli, which the tests use too) and the program, vml-cli.
 add_library(vml_cli STATIC
     arguments.cpp
+    bdrate.cpp
     bitrate.cpp
     common.cpp
     compare.cpp

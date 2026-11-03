@@ -3,11 +3,13 @@
 //
 //     vml-cli compare REFERENCE TEST [TEST ...] [options]
 //     vml-cli bitrate VIDEO [VIDEO ...] [options]
+//     vml-cli bdrate --anchor CSV --test CSV [options]
 //     vml-cli devices
 //     vml-cli --version
 //
 // Progress goes to stderr, results to stdout. Exit code 0 when every video
-// got every metric asked for (or was read, for bitrate), 1 when one failed,
+// got every metric asked for (or was read, for bitrate; the files were read,
+// for bdrate), 1 when one failed,
 // 2 for a wrong command (or one this version cannot do yet), 130 when
 // cancelled with Ctrl+C.
 #include <csignal>
@@ -16,6 +18,7 @@
 #include <vector>
 
 #include "arguments.h"
+#include "bdrate.h"
 #include "bitrate.h"
 #include "compare.h"
 #include "devices.h"
@@ -54,6 +57,8 @@ int main(int argc, char** argv) {
                 return cli::compare(arguments.compare);
             case cli::Command::bitrate:
                 return cli::bitrate(arguments.bitrate);
+            case cli::Command::bdrate:
+                return cli::bdrate(arguments.bdrate);
             case cli::Command::devices:
                 return cli::devices();
             case cli::Command::none:

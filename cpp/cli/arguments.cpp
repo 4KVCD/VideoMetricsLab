@@ -53,6 +53,10 @@ const char* const bitrate_usage = R"(usage: VideoMetricsLab-cli bitrate [-h] [--
                                    VIDEO [VIDEO ...]
 )";
 
+const char* const bdrate_usage = R"(usage: VideoMetricsLab-cli bdrate [-h] --anchor CSV --test CSV [-m LIST]
+                                  [--group-by COLUMN] [--json FILE] [-q]
+)";
+
 const char* const examples = R"(examples:
   VideoMetricsLab-cli compare reference.mkv encode.mkv
       the app's default metrics for one encode
@@ -82,6 +86,10 @@ const char* const examples = R"(examples:
       a raw VVC stream's bitrate, and its graphs' figures as CSV files
   VideoMetricsLab-cli bitrate a.mkv b.mkv --difference --csv bitrate
       a.mkv's bitrate minus b.mkv's as well, in bitrate\a_minus_b_bitrate_*.csv
+  VideoMetricsLab-cli bdrate --anchor anchor.csv --test test.csv
+      each sequence's BD-rate for each metric the files have, and their mean
+  VideoMetricsLab-cli bdrate --anchor anchor.csv --test test.csv --json - -q
+      only JSON on the output, for a script to read
   VideoMetricsLab-cli devices
       what would calculate each metric on this PC
 )";
@@ -92,6 +100,7 @@ positional arguments:
     compare   calculate metrics for test videos against a reference
     devices   show FFmpeg and which GPU each metric would use
     bitrate   show videos' bitrate, as the Bitrate Viewer tab
+    bdrate    calculate BD-rates from two encoders' rates and scores
 
 options:
   -h, --help  show this help message and exit
@@ -258,6 +267,28 @@ options:
   --json FILE           also write the results as JSON to FILE; - prints the
                         JSON instead of the table
   -q, --quiet           no progress, only the results
+
+)";
+
+const char* const bdrate_sections = R"(
+Calculates each sequence's BD-rate (Bjontegaard delta rate) for each metric: how much more (+) or less (-) bitrate the test encoder needs than the anchor for the same score, in %, over the scores both reach; then their mean and median. Each encoder's rate curve is the log of its rate against the score, interpolated with PCHIP; give each sequence at least 4 encodes.
+
+options:
+  -h, --help          show this help message and exit
+  --anchor CSV        the anchor's encodes: a CSV file with a row per encode
+                      and the columns sequence, kbps, and the scores of any
+                      metrics by key (vmaf, psnr, ...; empty where not
+                      scored); other columns are only read for --group-by
+  --test CSV          the test encoder's encodes, in the same form; sequences
+                      are paired by name
+  -m, --metrics LIST  comma-separated: vmaf, vmaf_neg, vmaf_v1, psnr, ssim,
+                      xpsnr, ssimulacra2, butteraugli, cvvdp; or all (default:
+                      those the files have columns for)
+  --group-by COLUMN   a column of the anchor's file, such as class: a mean and
+                      median for each of its values as well
+  --json FILE         also write the results as JSON to FILE; - prints the
+                      JSON instead of the table
+  -q, --quiet         no warnings, only the results
 
 )";
 
@@ -655,6 +686,15 @@ std::vector<std::string> parse_known(const Parser& parser, const std::vector<std
 
 // ---------------------------------------------------------------- the values
 
+// Every metric's key, in the registry's order: "vmaf, vmaf_neg, ...".
+std::string metric_keys_text() {
+    std::string keys;
+    for (const MetricDefinition& metric : metrics()) {
+        keys += (keys.empty() ? "" : ", ") + std::string(metric.key);
+    }
+    return keys;
+}
+
 // The metric keys named in a --metrics value ("all" is every metric), in
 // the registry's order.
 std::vector<std::string> metric_list(const std::string& text) {
@@ -682,11 +722,8 @@ std::vector<std::string> metric_list(const std::string& text) {
         start = end + 1;
     }
     if (!unknown.empty() || named.empty()) {
-        std::string choices = "all";
-        for (const MetricDefinition& metric : metrics()) {
-            choices += ", " + std::string(metric.key);
-        }
-        throw ArgumentError{"unknown metric " + (unknown.empty() ? text : unknown) + "; choose from: " + choices};
+        throw ArgumentError{"unknown metric " + (unknown.empty() ? text : unknown) +
+                            "; choose from: all, " + metric_keys_text()};
     }
     for (const MetricDefinition& metric : metrics()) {
         if (std::find(named.begin(), named.end(), metric.key) != named.end()) {
@@ -955,6 +992,24 @@ Parser bitrate_parser(BitrateArguments& parsed) {
     return parser;
 }
 
+// The bdrate command's parser, keeping what it reads in `parsed`.
+Parser bdrate_parser(BdrateArguments& parsed) {
+    Action anchor = option({"--anchor"}, [&parsed](const std::string& value) { parsed.anchor = value; });
+    Action test = option({"--test"}, [&parsed](const std::string& value) { parsed.test = value; });
+    anchor.required = test.required = true;
+    Parser parser;
+    parser.actions = {
+        help(std::string(bdrate_usage) + bdrate_sections + examples),
+        std::move(anchor),
+        std::move(test),
+        option({"-m", "--metrics"}, [&parsed](const std::string& value) { parsed.metrics = metric_list(value); }),
+        option({"--group-by"}, [&parsed](const std::string& value) { parsed.group_by = value; }),
+        option({"--json"}, [&parsed](const std::string& value) { parsed.json_path = value; }),
+        flag({"-q", "--quiet"}, parsed.quiet),
+    };
+    return parser;
+}
+
 // Reads a command's strings with its parser; its errors are its own
 // (argparse's error() of the command's parser).
 std::vector<std::string> parse_command(const Parser& parser, const std::string& usage, const std::string& prog,
@@ -987,7 +1042,7 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
          [&](const std::vector<std::string>& values) {
              std::string command;
              try {
-                 command = choice(values.front(), {"compare", "devices", "bitrate"});
+                 command = choice(values.front(), {"compare", "devices", "bitrate", "bdrate"});
              } catch (const ArgumentError& error) {
                  throw ArgumentError{"argument COMMAND: " + error.message};
              }
@@ -1005,6 +1060,10 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
                      throw UsageError(std::string(bitrate_usage) + prog +
                                       ": error: argument --no-adjust-start: only with --csv, whose times it sets");
                  }
+             } else if (command == "bdrate") {
+                 parsed.command = Command::bdrate;
+                 const Parser parser = bdrate_parser(parsed.bdrate);
+                 command_extras = parse_command(parser, bdrate_usage, std::string(program) + " bdrate", rest);
              } else {
                  parsed.command = Command::devices;
                  const Parser parser{{help(std::string(devices_usage) + devices_sections)}, {}};

@@ -5,6 +5,8 @@ add_library(vml_core
     src/app_log.cpp
     src/av2_probe.cpp
     src/av2_stream.cpp
+    src/bd_rate.cpp
+    src/bd_rate_report.cpp
     src/bitrate.cpp
     src/cancel.cpp
     src/colour.cpp

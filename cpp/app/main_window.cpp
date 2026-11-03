@@ -48,6 +48,7 @@
 #include <utility>
 #include <variant>
 
+#include "bd_rate_panel.h"
 #include "bitrate_panel.h"
 #include "cvvdp_display_dialog.h"
 #include "file_writes.h"
@@ -375,6 +376,7 @@ void MainWindow::apply_theme_colours() {
     }
     apply_best_worst();  // the backgrounds, in the new theme's greens and reds
     graph_panel_->refresh_theme();  // its table's colours are set cell by cell too
+    bd_rate_panel_->refresh_theme();
 }
 
 void MainWindow::close_when_idle() {
@@ -623,6 +625,12 @@ void MainWindow::build_ui() {
     // Its own list of videos: a finished run adds its own (on_job_finished).
     bitrate_panel_ = new BitratePanel([this] { return find_tool("ffprobe", settings_); }, video_colors_);
     tabs_->addTab(new ScrollingPage(bitrate_panel_), app::tr("Bitrate Viewer"));
+    // Its encodes from the runs Metric Graphs lists, brought up to date first.
+    bd_rate_panel_ = new BdRatePanel([this] {
+        sync_graph();
+        return graph_panel_->runs();
+    });
+    tabs_->addTab(new ScrollingPage(bd_rate_panel_), app::tr("BD-rate"));
     settings_panel_ = new SettingsPanel(settings_, *file_writes_, [this] { return tools_status_; }, dialogs_);
     connect(settings_panel_, &SettingsPanel::defaults_changed, this, [this] { on_default_settings_changed(); });
     connect(settings_panel_, &SettingsPanel::decoded_videos_changed, frame_compare_panel_,

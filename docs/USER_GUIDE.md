@@ -179,6 +179,24 @@ at each moment in the second and GOP views (where two encodes' GOPs differ,
 each moment's GOP bitrate is subtracted).
 The command line's `bitrate` command (below) reads the same numbers.
 
+## BD-rate
+
+**BD-rate** shows how much bitrate a test encoder saves (−, in green) or
+costs (+, in red) against an anchor for the same score, for each sequence and
+each of the nine metrics, with the mean and median over the sequences. Fill
+the **Anchor** and **Test** boxes with **Add videos…** (videos scored in this
+session: each one's sequence is its reference's file name, its rate the
+video's own bitrate) or **Import CSV…** (a file in the command line's
+`bdrate` format, below); give each a name. Sequences are paired by name. A
+cell is n/a where there is no BD-rate; its tooltip says why, and
+**Warnings** lists what else needs a look. **Group by** adds a mean and
+median for each value of a column of the anchor's CSV files, such as
+`class`. Click a sequence to draw its rate curves for the metric chosen:
+bitrate on a log scale, a dot per encode, and the scores both curves cover
+shaded, the range the BD-rate averages over. **Copy as markdown** copies the
+table as the command line prints it; **Export CSV…** saves every number in
+full. The numbers are the command line's `bdrate`.
+
 ## Command line
 
 `VideoMetricsLab-cli.exe`, beside the app, calculates metrics without the
@@ -356,6 +374,53 @@ YUV file has no bitrate to read.
 The exit code is 0 when every video was read, 1 when one could not be or a
 file could not be written, 2 for a wrong command (a raw stream without
 `--fps`) or when ffprobe cannot be used, and 130 after Ctrl+C.
+
+### BD-rate
+
+`bdrate --anchor A.csv --test B.csv` calculates the BD-rate (Bjontegaard
+delta rate) of a test encoder against an anchor for each sequence and
+metric: how much more (+) or less (-) bitrate, in %, the test needs for the
+same score, averaged over the scores both reach. Each encoder's rate curve
+is the natural log of its rate against the score, interpolated with PCHIP
+(a monotone cubic) and integrated exactly; Butteraugli, where lower is
+better, has its scores negated first. Then the mean and median over the
+sequences. It calculates no scores itself: it reads them from the two
+files.
+
+Each file is a CSV file with a header row and a row per encode. The
+`sequence` and `kbps` columns are needed; a column named by a metric's key
+(`vmaf`, `vmaf_neg`, `vmaf_v1`, `psnr`, `ssim`, `xpsnr`, `ssimulacra2`,
+`butteraugli`, `cvvdp`) holds its scores, empty where not scored. Other
+columns, such as `qp` or `class`, are only read for `--group-by`.
+
+```
+sequence,qp,kbps,vmaf,psnr,ssim,cvvdp
+crowd_run_1920x1080_50,22,41250.5,95.12,38.41,0.9871,9.62
+crowd_run_1920x1080_50,27,18820.0,90.33,35.97,0.9763,9.31
+```
+
+Sequences are paired by name; one in a single file is left out with a
+warning. A cell is n/a, with a warning on stderr, where there is no
+BD-rate: a metric not scored at every encode of the sequence, fewer than 2
+encodes, two encodes with the same score, or score ranges that do not
+overlap. Fewer than 4 encodes give a warning as well. The means and
+medians are over the sequences that have a BD-rate.
+
+| Option | Meaning |
+| --- | --- |
+| `--anchor CSV` | The anchor's encodes. |
+| `--test CSV` | The test encoder's encodes. |
+| `-m`, `--metrics LIST` | The metrics to show, or `all`. Default: those the files have columns for. |
+| `--group-by COLUMN` | A mean and median for each value of this column of the anchor's file as well. |
+| `--json FILE` | Also write the results as JSON, every number in full; `--json -` prints the JSON instead of the table. |
+| `-q`, `--quiet` | No warnings, only the results. |
+
+The table is in markdown: a column per metric and rows for the
+mean, the median, each group's mean and median, and each sequence. The exit
+code is 0 when both files were read, n/a cells or not; 1 when the JSON file
+could not be written; 2 for a wrong command or a file that cannot be read
+(no `sequence` or `kbps` column, a cell that is not a number, no sequence in
+both files).
 
 ## Saved results and caches
 

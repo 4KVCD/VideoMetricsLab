@@ -65,7 +65,17 @@ struct BitrateArguments {
     bool quiet = false;
 };
 
-enum class Command { none, compare, devices, bitrate };
+// The bdrate command's arguments.
+struct BdrateArguments {
+    std::string anchor;  // the anchor's CSV file: a row per encode
+    std::string test;    // the test encoder's
+    std::optional<std::vector<std::string>> metrics;  // keys, in the registry's order
+    std::optional<std::string> group_by;   // a column of the anchor's file
+    std::optional<std::string> json_path;  // "-" prints the JSON instead of the table
+    bool quiet = false;
+};
+
+enum class Command { none, compare, devices, bitrate, bdrate };
 
 struct Arguments {
     Command command = Command::none;
@@ -73,6 +83,7 @@ struct Arguments {
     std::optional<std::string> print_and_exit;
     CompareArguments compare;
     BitrateArguments bitrate;
+    BdrateArguments bdrate;
 };
 
 // A wrong command; the message is argparse's (usage, then the error).
