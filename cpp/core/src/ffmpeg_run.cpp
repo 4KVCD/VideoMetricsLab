@@ -1804,24 +1804,13 @@ std::optional<RunScores> score_gpu_and_cpu(const RunFrames& run, const VmafOptio
     return score_apart(run, gpu_options, cpu_options, *gpu, cpu, model, on_progress, on_status);
 }
 
-// run_vmaf's run of the pair as it is marked (size_changes.h). Throws
-// VideoSizeChanged when FFmpeg rebuilt its filters for one of them.
-ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
-                               VmafOptions options, const ProgressCallback& on_progress,
-                               const StatusCallback& on_status, const CancelToken& cancel,
-                               const std::optional<std::filesystem::path>& result_distorted_path) {
-    validate_video_pair(source, distorted, options);
-    // The decode plan comes before black-bar detection, so the detection
-    // decodes the way the run will.
-    HardwareDecoding decoding;
-    if (options.gpu_decode) {
-        decoding = plan_hardware_decoding(environment.decoding, options.gpu_vendor, source, distorted);
-    }
-    const auto [source_crop, distorted_crop] = run_crops(environment, source, distorted, options, decoding, on_status, cancel);
-    // After cropping: removing a letterbox is what makes a letterboxed source
-    // and a cropped encode the same shape.
-    validate_display_geometry(source, distorted, source_crop, distorted_crop);
-
+// The pair's scores with its crops known (run_vmaf_once), and its result.
+ComparisonResult score_pair(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
+                            VmafOptions options, const std::optional<CropBox>& source_crop,
+                            const std::optional<CropBox>& distorted_crop, const HardwareDecoding& decoding,
+                            const ProgressCallback& on_progress, const StatusCallback& on_status,
+                            const CancelToken& cancel,
+                            const std::optional<std::filesystem::path>& result_distorted_path) {
     const auto [width, height] = analysis_dimensions(source, distorted, options, source_crop, distorted_crop);
     const std::string model = resolve_run_models(options, width, height);
     // The range's frames counted at the source's rate, as the run cuts them (run_range).
@@ -1872,6 +1861,27 @@ ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInf
         }
     }
     return result;
+}
+
+// run_vmaf's run of the pair as it is marked (size_changes.h). Throws
+// VideoSizeChanged when FFmpeg rebuilt its filters for one of them.
+ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
+                               VmafOptions options, const ProgressCallback& on_progress,
+                               const StatusCallback& on_status, const CancelToken& cancel,
+                               const std::optional<std::filesystem::path>& result_distorted_path) {
+    validate_video_pair(source, distorted, options);
+    // The decode plan comes before black-bar detection, so the detection
+    // decodes the way the run will.
+    HardwareDecoding decoding;
+    if (options.gpu_decode) {
+        decoding = plan_hardware_decoding(environment.decoding, options.gpu_vendor, source, distorted);
+    }
+    const auto [source_crop, distorted_crop] = run_crops(environment, source, distorted, options, decoding, on_status, cancel);
+    // After cropping: removing a letterbox is what makes a letterboxed source
+    // and a cropped encode the same shape.
+    validate_display_geometry(source, distorted, source_crop, distorted_crop);
+    return score_pair(environment, source, distorted, std::move(options), source_crop, distorted_crop, decoding,
+                      on_progress, on_status, cancel, result_distorted_path);
 }
 
 // `options` with the videos decoded on the CPU, the GPU's video decoding
@@ -1939,6 +1949,63 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
 
 namespace {
 
+// A resolution test scored as a comparison of the source with a test video
+// NVIDIA's decoder makes from it (VideoInfo::resample_via): its decoders
+// scale as FFmpeg's scale filter does, so the test video's pictures are
+// build_resample_filtergraph's, and VMAF runs on the GPU and PSNR, SSIM and
+// XPSNR in the app, from the same frames. Nothing where it cannot be: then
+// FFmpeg makes the test (resample_test_run).
+std::optional<ComparisonResult> resample_test_on_gpu(const RunEnvironment& environment, const VideoInfo& source,
+                                                     const VmafOptions& options,
+                                                     const std::optional<CropBox>& source_crop,
+                                                     const ProgressCallback& on_progress,
+                                                     const StatusCallback& on_status, const CancelToken& cancel) {
+    const ResampleTarget& target = *options.resample_test;
+    const bool cropped = source_crop && !source_crop->is_noop(source.width, source.height);
+    // The decoders keep a crop on even samples; FFmpeg scales back to the
+    // crop's own size.
+    if (!options.gpu_decode || source.scaled_to ||
+        (cropped && ((source_crop->x | source_crop->y | source_crop->w | source_crop->h) & 1) != 0)) {
+        return std::nullopt;
+    }
+    const HardwareDecoding decoding = plan_hardware_decoding(environment.decoding, options.gpu_vendor, source, source);
+    const std::optional<std::pair<std::string, std::string>> decoders = decoders_here(decoding);
+    if (!decoders || decoders->first != "nvidia" || decoders->second != "nvidia") {
+        return std::nullopt;
+    }
+    const auto [width, height] = resample_analysis_dimensions(source, source_crop);
+    VideoInfo test = source;
+    test.resample_via = std::pair(target.width, resample_down_height(target.width, {width, height}));
+    try {
+        const DecodePlan plan =
+            plan_decode(test, source_crop, 6, true, std::pair(width, height), options.scale_algorithm);
+        if (const std::optional<std::string> refusal = scaling_refusal(plan, environment.ffmpeg)) {
+            logger.info("Resolution test made by FFmpeg: " + *refusal);
+            return std::nullopt;
+        }
+    } catch (const GpuDecodeUnavailableError& error) {
+        logger.info(std::string("Resolution test made by FFmpeg: ") + error.what());
+        return std::nullopt;
+    }
+    try {
+        ComparisonResult result =
+            score_pair(environment, source, test, options, source_crop, source_crop, decoding, on_progress, on_status,
+                       cancel, synthetic_resample_distorted_path(source.path, target));
+        result.distorted_info = source;  // after the round trip, it is back at the source's own size
+        result.resample_target = options.resample_test;
+        return result;
+    } catch (const Cancelled&) {
+        throw;
+    } catch (const VideoSizeChanged&) {
+        throw;  // run_resample_test refuses it
+    } catch (const std::exception& error) {
+        // No part of it fell back to FFmpeg's filters: they refuse the test
+        // video (video_chains), as they would compare the source with itself.
+        logger.warning(std::string("The resolution test on the GPU failed; FFmpeg makes it: ") + error.what());
+        return std::nullopt;
+    }
+}
+
 // run_resample_test's run. Throws VideoSizeChanged when FFmpeg rebuilt its
 // filters (size_changes.h).
 ComparisonResult resample_test_run(const RunEnvironment& environment, const VideoInfo& source, VmafOptions options,
@@ -1947,7 +2014,8 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
     if (!options.resample_test) {
         throw std::invalid_argument("not a resolution test");
     }
-    // One file: there is no test video to plan GPU decoding for.
+    // One file, for the black bars and FFmpeg's route: there is no test
+    // video file to plan GPU decoding for.
     HardwareDecoding decoding;
     if (options.gpu_decode) {
         decoding.source = pick_decode(environment.decoding, options.gpu_vendor, source);
@@ -1958,6 +2026,10 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
             on_status({"Detecting black bars in source..."});
         }
         source_crop = detect_crop(environment.ffmpeg, source, cancel, decoding.source, options.scale_algorithm);
+    }
+    if (std::optional<ComparisonResult> on_gpu =
+            resample_test_on_gpu(environment, source, options, source_crop, on_progress, on_status, cancel)) {
+        return std::move(*on_gpu);
     }
     // The comparison is at the source's own size, the downscale being undone
     // before it: Auto's VMAF models come from that.

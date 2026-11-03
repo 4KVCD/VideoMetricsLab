@@ -99,6 +99,12 @@ struct VideoInfo {
     // scaled to first, so that the whole video is scored at one size
     // (size_changes.h). Nothing for any other video.
     std::optional<std::pair<int, int>> scaled_to;
+    // Set for a resolution test's test video, which the app's decoders make
+    // from the source (DecodePlan::via_w): each frame scaled to this size,
+    // then back to the size compared at. FFmpeg's filters refuse such a
+    // video, as they would compare the source with itself. Nothing for any
+    // other video.
+    std::optional<std::pair<int, int>> resample_via;
     // The film grain its stream describes for the player to add, as
     // film_grain_detect.h's FilmGrainKind bits, 0 for none; nothing where it
     // was not read (a run saved before 2.3, a scan that failed).

@@ -285,10 +285,12 @@ struct NativeParams {
     int handover;
     int film_grain;
     int film_grain_kinds;
+    int via_w;
+    int via_h;
 };
 // The layout above, and nvf_set_libraries with dav2d: a library that says
 // another is refused (DecoderLibrary).
-constexpr int native_params_version = 3;
+constexpr int native_params_version = 4;
 
 // A function of `library` that some builds of it lack: nullptr where it has
 // none.
@@ -526,7 +528,9 @@ NativeParams native_params(const DecodePlan& plan, int device, int pool, const s
                         0,  // cpu_scaling: Intel's and AMD's tests only
                         handover ? 1 : 0,
                         plan.film_grain,
-                        static_cast<int>(plan.film_grain_kinds)};
+                        static_cast<int>(plan.film_grain_kinds),
+                        plan.via_w,
+                        plan.via_h};
 }
 
 // Closes a decoder on a thread of its own, waited for only so long: a close
@@ -1150,6 +1154,12 @@ DecodePlan plan_decode(const VideoInfo& info, const std::optional<CropBox>& crop
     if (plan.out_w <= 0 || plan.out_h <= 0) {
         throw GpuDecodeUnavailableError("the size it is scaled to is empty");
     }
+    if (info.resample_via) {
+        std::tie(plan.via_w, plan.via_h) = *info.resample_via;
+        if (plan.via_w <= 0 || plan.via_h <= 0) {
+            throw GpuDecodeUnavailableError("the size it is scaled to first is empty");
+        }
+    }
     plan.shift = depth > 8 ? shift : 0;
     plan.luma_only = luma_only;
     plan.scaler = is_scaler(algorithm) ? algorithm : "bicubic";
@@ -1268,6 +1278,9 @@ std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan
         // VVC video is then fed to FFmpeg by VVdeC, unscaled: grain_feed.h.)
         return {false, "the software decoder does not scale; FFmpeg scales it"};
     }
+    if (plan.via_w > 0 && backend != "nvidia") {
+        return {false, "only NVIDIA's decoder scales in two steps; FFmpeg scales it"};
+    }
     const DecoderLibrary* library = nullptr;
     try {
         library = &load_decoder(backend);
@@ -1293,17 +1306,25 @@ std::optional<std::string> scaling_refusal(const DecodePlan& plan, const std::st
     if (!plan.scaled()) {
         return std::nullopt;
     }
-    // The filters the decoders would make (luma along and down, then
-    // chroma); none where swscale would cascade.
-    const auto [out_w, out_h] = plan.output_size();
+    // The filters the decoders would make for each step (luma along and
+    // down, then chroma); none where swscale would cascade.
     const int scaler = scaler_number(plan.scaler);
-    const std::array<std::array<int, 3>, 4> filters{{{plan.crop_w, out_w, 0},
-                                                     {plan.crop_h, out_h, 1},
-                                                     {(plan.crop_w + 1) / 2, (out_w + 1) / 2, 0},
-                                                     {(plan.crop_h + 1) / 2, (out_h + 1) / 2, 1}}};
-    for (const auto& [from, to, vertical] : filters) {
-        if (plane_filter(from, to, scaler, vertical != 0).taps == 0) {
-            return "so large a downscale is left to FFmpeg, which makes it in two steps";
+    std::vector<std::pair<int, int>> sizes{{plan.crop_w, plan.crop_h}};
+    if (plan.via_w > 0) {
+        sizes.emplace_back(plan.via_w, plan.via_h);
+    }
+    sizes.push_back(plan.output_size());
+    for (std::size_t step = 0; step + 1 < sizes.size(); ++step) {
+        const auto [w, h] = sizes[step];
+        const auto [out_w, out_h] = sizes[step + 1];
+        const std::array<std::array<int, 3>, 4> filters{{{w, out_w, 0},
+                                                         {h, out_h, 1},
+                                                         {(w + 1) / 2, (out_w + 1) / 2, 0},
+                                                         {(h + 1) / 2, (out_h + 1) / 2, 1}}};
+        for (const auto& [from, to, vertical] : filters) {
+            if (plane_filter(from, to, scaler, vertical != 0).taps == 0) {
+                return "so large a downscale is left to FFmpeg, which makes it in two steps";
+            }
         }
     }
     if (!scales_as_ffmpeg(ffmpeg, plan.scaler)) {

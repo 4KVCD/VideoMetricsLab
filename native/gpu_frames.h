@@ -64,18 +64,24 @@ struct Params {
     int film_grain;      // the stream's film grain: 1 added, 0 left out, -1 as the decoder adds
                          // it by itself (the grain not known)
     int film_grain_kinds;  // what grain the stream describes: GrainKind bits (grain/grain_decoding.h)
+    int via_w, via_h;    // NVIDIA: the crop scaled to this size first, then that to out_w x out_h, as a
+                         // resolution test's two scale filters do (0: one step); refused elsewhere
 };
 
 // The Params layout and the library calls this library was built with. The
 // app refuses a library of another: it would read the fields given as other
 // ones (one built before the film grain fields would leave them unread). 3:
-// nvf_set_libraries takes dav2d, and CODEC_AV2.
-#define NVF_PARAMS_VERSION 3
+// nvf_set_libraries takes dav2d, and CODEC_AV2. 4: via_w and via_h.
+#define NVF_PARAMS_VERSION 4
 NVF_API int nvf_params_version() { return NVF_PARAMS_VERSION; }
 
 inline int out_width(const Params &p) { return p.out_w > 0 ? p.out_w : p.crop_w; }
 inline int out_height(const Params &p) { return p.out_h > 0 ? p.out_h : p.crop_h; }
-inline bool is_scaled(const Params &p) { return out_width(p) != p.crop_w || out_height(p) != p.crop_h; }
+// Scaled in two steps, through via_w x via_h.
+inline bool two_steps(const Params &p) { return p.via_w > 0; }
+inline bool is_scaled(const Params &p) {
+    return two_steps(p) || out_width(p) != p.crop_w || out_height(p) != p.crop_h;
+}
 // 16-bit samples handed back: 10-bit pictures, or widened 8-bit ones.
 inline bool wide_out(const Params &p) { return p.bit_depth > 8 || p.widen; }
 
@@ -88,11 +94,13 @@ struct Info {
     int scaled_on_gpu;   // the pictures are being scaled on the GPU
 };
 
-inline bool params_valid(const Params &p) {
+// `two_steps_allowed`: the library scales in two steps (NVIDIA's alone).
+inline bool params_valid(const Params &p, bool two_steps_allowed = false) {
     return (p.bit_depth == 8 || p.bit_depth == 10) && !(p.crop_x & 1) && !(p.crop_y & 1) && p.crop_w > 0
            && p.crop_h > 0 && p.pool >= 1 && (p.shift == 0 || p.shift == 6) && !(p.bit_depth == 8 && p.shift)
            && p.out_w >= 0 && p.out_h >= 0 && p.scaler >= 0 && p.scaler <= 3 && p.widen >= 0 && p.widen <= 2
-           && !(p.widen && p.bit_depth != 8) && p.film_grain >= -1 && p.film_grain <= 1;
+           && !(p.widen && p.bit_depth != 8) && p.film_grain >= -1 && p.film_grain <= 1 && p.via_w >= 0
+           && p.via_h >= 0 && (p.via_w > 0) == (p.via_h > 0) && (two_steps_allowed || !two_steps(p));
 }
 
 // The bytes of one picture handed back: the (scaled) crop's luma, then U and V.

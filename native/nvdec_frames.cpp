@@ -32,6 +32,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include <algorithm>
 #include <condition_variable>
 #include <cstdarg>
 #include <cstdint>
@@ -570,12 +571,18 @@ struct Decoder {
     CUevent decode_event = nullptr, output_event = nullptr;
     CUmodule module = nullptr;
     CUfunction plane8 = nullptr, plane16 = nullptr, hpass = nullptr, vpass = nullptr, widen8 = nullptr;
-    // Scaling: each filter's tables in GPU memory, and the rows between the passes.
+    // Scaling: each filter's tables in GPU memory, and the rows between the
+    // passes. Two steps (two_steps) scale the crop to via_w x via_h with the
+    // first step's filters, and that picture to the output with the second's.
     struct DeviceFilter {
         CUdeviceptr starts = 0, weights = 0;
         unsigned taps = 0;
-    } luma_h, luma_v, chroma_h, chroma_v;
+    };
+    struct StepFilters {
+        DeviceFilter luma_h, luma_v, chroma_h, chroma_v;
+    } steps[2];
     CUdeviceptr scratch = 0;
+    CUdeviceptr via = 0;  // two steps: the picture between them, laid out as the pictures handed back
     int out_w = 0, out_h = 0;
     CUvideoctxlock lock = nullptr;
     CUvideoparser parser = nullptr;
@@ -762,16 +769,29 @@ bool launch(Decoder *d, CUfunction kernel, CUdeviceptr src, unsigned src_pitch, 
                     "Converting a picture");
 }
 
+// Where a scaling step reads its picture (w x h): the planes, the bytes
+// between rows (`pitch`) and between samples (`step`), and their samples:
+// 16-bit (`wide`) ones shifted right by `shift` to their value; 8-bit ones of
+// the decoder's picture (`decoded`) widened first as Params::widen says.
+struct StepInput {
+    CUdeviceptr y, u, v;
+    unsigned luma_pitch, chroma_pitch, luma_step, chroma_step;
+    unsigned wide, shift;
+    bool decoded;
+    unsigned w, h;
+};
+
 // One plane through the two scaling passes: `src` (w x h samples, `step`
-// bytes apart in rows `pitch` bytes apart) to `dst` (ow x oh, packed), 8-bit
-// samples widened first as `widen` says (scale_filter.h's Widen), `simd` the
-// plane's simd_rows.
-bool scale(Decoder *d, CUdeviceptr src, unsigned pitch, unsigned step, unsigned w, unsigned h, CUdeviceptr dst,
-           unsigned ow, unsigned oh, const Decoder::DeviceFilter &fh, const Decoder::DeviceFilter &fv, unsigned widen,
-           int simd) {
+// bytes apart in rows `pitch` bytes apart, as `in` says) to `dst` (ow x oh,
+// packed, 16-bit samples shifted left by `out_shift`), 8-bit samples widened
+// first as `widen` says (scale_filter.h's Widen), `simd` the plane's
+// simd_rows.
+bool scale(Decoder *d, const StepInput &in, CUdeviceptr src, unsigned pitch, unsigned step, unsigned w, unsigned h,
+           CUdeviceptr dst, unsigned ow, unsigned oh, unsigned out_shift, const Decoder::DeviceFilter &fh,
+           const Decoder::DeviceFilter &fv, unsigned widen, int simd) {
     const Params &p = d->params;
-    unsigned wide = p.bit_depth > 8, in_shift = p.bit_depth > 8 ? 6 : 0;
-    unsigned out_wide = wide_out(p), out_shift = p.bit_depth > 8 && p.shift == 0 ? 6 : 0;
+    unsigned wide = in.wide, in_shift = in.shift;
+    unsigned out_wide = wide_out(p);
     unsigned row_shift = out_wide ? 9 : 7;  // to swscale's 15-bit intermediate
     unsigned scratch_pitch = ow * 2, out_pitch = ow * (out_wide ? 2 : 1);
     CUdeviceptr scratch = d->scratch;
@@ -787,6 +807,72 @@ bool scale(Decoder *d, CUdeviceptr src, unsigned pitch, unsigned step, unsigned 
            && d->check(cu.cuLaunchKernel(d->vpass, (ow + kBlockX - 1) / kBlockX, (oh + kBlockY - 1) / kBlockY, 1,
                                          kBlockX, kBlockY, 1, 0, d->decode_stream, v_args, nullptr),
                        "Scaling a picture");
+}
+
+// A picture (`in`) scaled with one step's filters to `dst` (ow x oh, planes
+// packed as the pictures handed back), 16-bit samples shifted left by
+// `out_shift`.
+bool scale_step(Decoder *d, const Decoder::StepFilters &f, const StepInput &in, CUdeviceptr dst, unsigned ow,
+                unsigned oh, unsigned out_shift) {
+    const Params &p = d->params;
+    // Widened 8-bit pictures are widened before they are scaled, as
+    // FFmpeg's format filter widens them in front of its scale filter.
+    const unsigned luma_widen = in.decoded ? plane_widen(p, false) : WIDEN_NONE;
+    const unsigned chroma_widen = in.decoded ? plane_widen(p, true) : WIDEN_NONE;
+    if (!scale(d, in, in.y, in.luma_pitch, in.luma_step, in.w, in.h, dst, ow, oh, out_shift, f.luma_h, f.luma_v,
+               luma_widen, simd_rows(oh, false))) {
+        return false;
+    }
+    if (p.luma_only) return true;
+    const size_t out_bps = wide_out(p) ? 2 : 1;
+    const unsigned cw = (in.w + 1) / 2, ch = (in.h + 1) / 2, ocw = (ow + 1) / 2, och = (oh + 1) / 2;
+    const CUdeviceptr u = dst + static_cast<size_t>(ow) * oh * out_bps, v = u + static_cast<size_t>(ocw) * och * out_bps;
+    const int simd = simd_rows(oh, true);
+    return scale(d, in, in.u, in.chroma_pitch, in.chroma_step, cw, ch, u, ocw, och, out_shift, f.chroma_h,
+                 f.chroma_v, chroma_widen, simd)
+           && scale(d, in, in.v, in.chroma_pitch, in.chroma_step, cw, ch, v, ocw, och, out_shift, f.chroma_h,
+                    f.chroma_v, chroma_widen, simd);
+}
+
+// The decoder's picture (NV12/P010: the luma at `luma`, U and V interleaved
+// at `chroma`, rows `pitch` bytes apart) scaled to `dst`: in one step, or in
+// two through d->via, whose samples are kept as yuv420p10le's or yuv420p's,
+// as FFmpeg's picture between its two scale filters.
+bool scale_picture(Decoder *d, CUdeviceptr luma, CUdeviceptr chroma, unsigned pitch, CUdeviceptr dst) {
+    const Params &p = d->params;
+    const unsigned bps = d->bytes_per_sample;
+    const unsigned out_shift = p.bit_depth > 8 && p.shift == 0 ? 6 : 0;  // P016's layout when shift is 0
+    // NV12/P010: U and V interleaved, 10-bit samples in the top bits.
+    StepInput decoded{};
+    decoded.y = luma;
+    decoded.u = chroma;
+    decoded.v = chroma + bps;
+    decoded.luma_pitch = decoded.chroma_pitch = pitch;
+    decoded.luma_step = bps;
+    decoded.chroma_step = 2 * bps;
+    decoded.wide = bps > 1;
+    decoded.shift = bps > 1 ? 6 : 0;
+    decoded.decoded = true;
+    decoded.w = p.crop_w;
+    decoded.h = p.crop_h;
+    if (!two_steps(p)) return scale_step(d, d->steps[0], decoded, dst, d->out_w, d->out_h, out_shift);
+    // The picture between the steps: planes packed, samples in the low bits.
+    const unsigned out_bps = wide_out(p) ? 2 : 1;
+    const unsigned vw = p.via_w, vh = p.via_h, vcw = (vw + 1) / 2, vch = (vh + 1) / 2;
+    StepInput via{};
+    via.y = d->via;
+    via.u = d->via + static_cast<size_t>(vw) * vh * out_bps;
+    via.v = via.u + static_cast<size_t>(vcw) * vch * out_bps;
+    via.luma_pitch = vw * out_bps;
+    via.chroma_pitch = vcw * out_bps;
+    via.luma_step = via.chroma_step = out_bps;
+    via.wide = out_bps > 1;
+    via.shift = 0;
+    via.decoded = false;
+    via.w = vw;
+    via.h = vh;
+    return scale_step(d, d->steps[0], decoded, d->via, vw, vh, 0)
+           && scale_step(d, d->steps[1], via, dst, d->out_w, d->out_h, out_shift);
 }
 
 bool widen(Decoder *d, CUdeviceptr src, unsigned pitch, unsigned step, CUdeviceptr dst, unsigned w, unsigned h,
@@ -848,20 +934,7 @@ int CUDAAPI on_display(void *user, CUVIDPARSERDISPINFO *display) {
     const unsigned chroma_w = (p.crop_w + 1) / 2, chroma_h = (p.crop_h + 1) / 2;
     bool ok;
     if (is_scaled(p)) {
-        // Widened 8-bit pictures are widened before they are scaled, as
-        // FFmpeg's format filter widens them in front of its scale filter.
-        const unsigned luma_widen = plane_widen(p, false), chroma_widen = plane_widen(p, true);
-        const unsigned ow = d->out_w, oh = d->out_h, ocw = (ow + 1) / 2, och = (oh + 1) / 2;
-        ok = scale(d, luma, pitch, bps, p.crop_w, p.crop_h, dst, ow, oh, d->luma_h, d->luma_v, luma_widen,
-                   simd_rows(d->out_h, false));
-        if (ok && !p.luma_only) {
-            CUdeviceptr u = dst + d->luma_bytes, v = u + d->chroma_bytes;
-            const int simd = simd_rows(d->out_h, true);
-            ok = scale(d, chroma, pitch, 2 * bps, chroma_w, chroma_h, u, ocw, och, d->chroma_h, d->chroma_v,
-                       chroma_widen, simd)
-                 && scale(d, chroma + bps, pitch, 2 * bps, chroma_w, chroma_h, v, ocw, och, d->chroma_h, d->chroma_v,
-                          chroma_widen, simd);
-        }
+        ok = scale_picture(d, luma, chroma, pitch, dst);
     } else if (p.widen) {
         ok = widen(d, luma, pitch, 1, dst, p.crop_w, p.crop_h, p.widen == 2);
         if (ok && !p.luma_only) {
@@ -907,9 +980,12 @@ void destroy(Decoder *d) {
         if (d->lock) cu.cuvidCtxLockDestroy(d->lock);
         if (d->pool) cu.cuMemFree(d->pool);
         if (d->scratch) cu.cuMemFree(d->scratch);
-        for (Decoder::DeviceFilter *f : {&d->luma_h, &d->luma_v, &d->chroma_h, &d->chroma_v}) {
-            if (f->starts) cu.cuMemFree(f->starts);
-            if (f->weights) cu.cuMemFree(f->weights);
+        if (d->via) cu.cuMemFree(d->via);
+        for (Decoder::StepFilters &s : d->steps) {
+            for (Decoder::DeviceFilter *f : {&s.luma_h, &s.luma_v, &s.chroma_h, &s.chroma_v}) {
+                if (f->starts) cu.cuMemFree(f->starts);
+                if (f->weights) cu.cuMemFree(f->weights);
+            }
         }
         if (d->module) cu.cuModuleUnload(d->module);
         if (d->decode_event) cu.cuEventDestroy(d->decode_event);
@@ -937,7 +1013,7 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
     }
     const Driver &cu = g_driver;
     Params p = *params;
-    if (!params_valid(p)) {
+    if (!params_valid(p, true)) {
         copy_text(error, error_size, "invalid decoder parameters");
         return nullptr;
     }
@@ -960,15 +1036,26 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         destroy(d);
         return nullptr;
     };
-    // The scaling filters: luma along and down, then chroma.
-    std::vector<Filter> filters;
+    // Each step's sizes, from the crop to the output (through via_w x via_h
+    // in two steps), and its scaling filters: luma along and down, then
+    // chroma. The rows between a step's passes are its output width by its
+    // input height; the scratch holds the largest step's.
+    std::vector<std::pair<int, int>> sizes{{p.crop_w, p.crop_h}};
+    if (two_steps(p)) sizes.emplace_back(p.via_w, p.via_h);
+    sizes.emplace_back(d->out_w, d->out_h);
+    std::vector<std::vector<Filter>> filters;
+    size_t scratch_samples = 0;
     if (is_scaled(p)) {
-        const int cw = (p.crop_w + 1) / 2, ch = (p.crop_h + 1) / 2;
-        const int ocw = (d->out_w + 1) / 2, och = (d->out_h + 1) / 2;
-        filters = {plane_filter(p.crop_w, d->out_w, p.scaler, false), plane_filter(p.crop_h, d->out_h, p.scaler, true),
-                   plane_filter(cw, ocw, p.scaler, false), plane_filter(ch, och, p.scaler, true)};
-        for (const Filter &f : filters) {
-            if (!f.taps) return give_up("so large a downscale is left to FFmpeg, which makes it in two steps");
+        for (size_t i = 0; i + 1 < sizes.size(); i++) {
+            const auto [w, h] = sizes[i];
+            const auto [ow, oh] = sizes[i + 1];
+            filters.push_back({plane_filter(w, ow, p.scaler, false), plane_filter(h, oh, p.scaler, true),
+                               plane_filter((w + 1) / 2, (ow + 1) / 2, p.scaler, false),
+                               plane_filter((h + 1) / 2, (oh + 1) / 2, p.scaler, true)});
+            for (const Filter &f : filters.back()) {
+                if (!f.taps) return give_up("so large a downscale is left to FFmpeg, which makes it in two steps");
+            }
+            scratch_samples = std::max(scratch_samples, static_cast<size_t>(ow) * h);
         }
     }
     CUresult result = cu.cuDeviceGet(&d->device, p.device);
@@ -999,22 +1086,29 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         if (result == CUDA_SUCCESS) result = cu.cuModuleGetFunction(&d->widen8, d->module, "widen8");
         if (result == CUDA_SUCCESS && is_scaled(p)) {
             step = "Preparing the scaling filters";
-            Decoder::DeviceFilter *targets[4] = {&d->luma_h, &d->luma_v, &d->chroma_h, &d->chroma_v};
-            for (int i = 0; i < 4 && result == CUDA_SUCCESS; i++) {
-                const Filter &f = filters[i];
-                Decoder::DeviceFilter &t = *targets[i];
-                t.taps = static_cast<unsigned>(f.taps);
-                result = cu.cuMemAlloc(&t.starts, f.starts.size() * sizeof(int32_t));
-                if (result == CUDA_SUCCESS) result = cu.cuMemAlloc(&t.weights, f.weights.size() * sizeof(int16_t));
-                if (result == CUDA_SUCCESS)
-                    result = cu.cuMemcpyHtoD(t.starts, f.starts.data(), f.starts.size() * sizeof(int32_t));
-                if (result == CUDA_SUCCESS)
-                    result = cu.cuMemcpyHtoD(t.weights, f.weights.data(), f.weights.size() * sizeof(int16_t));
+            for (size_t s = 0; s < filters.size() && result == CUDA_SUCCESS; s++) {
+                Decoder::StepFilters &on_gpu = d->steps[s];
+                Decoder::DeviceFilter *targets[4] = {&on_gpu.luma_h, &on_gpu.luma_v, &on_gpu.chroma_h,
+                                                     &on_gpu.chroma_v};
+                for (int i = 0; i < 4 && result == CUDA_SUCCESS; i++) {
+                    const Filter &f = filters[s][i];
+                    Decoder::DeviceFilter &t = *targets[i];
+                    t.taps = static_cast<unsigned>(f.taps);
+                    result = cu.cuMemAlloc(&t.starts, f.starts.size() * sizeof(int32_t));
+                    if (result == CUDA_SUCCESS) result = cu.cuMemAlloc(&t.weights, f.weights.size() * sizeof(int16_t));
+                    if (result == CUDA_SUCCESS)
+                        result = cu.cuMemcpyHtoD(t.starts, f.starts.data(), f.starts.size() * sizeof(int32_t));
+                    if (result == CUDA_SUCCESS)
+                        result = cu.cuMemcpyHtoD(t.weights, f.weights.data(), f.weights.size() * sizeof(int16_t));
+                }
             }
-            // The rows between the passes, swscale's 15-bit intermediate:
-            // the widest plane's output width by its input height.
-            size_t rows = static_cast<size_t>(d->out_w) * p.crop_h;
-            if (result == CUDA_SUCCESS) result = cu.cuMemAlloc(&d->scratch, rows * sizeof(int16_t));
+            // The rows between the passes, swscale's 15-bit intermediate.
+            if (result == CUDA_SUCCESS) result = cu.cuMemAlloc(&d->scratch, scratch_samples * sizeof(int16_t));
+            if (result == CUDA_SUCCESS && two_steps(p)) {
+                const size_t vw = p.via_w, vh = p.via_h;
+                const size_t chroma = p.luma_only ? 0 : 2 * ((vw + 1) / 2) * ((vh + 1) / 2);
+                result = cu.cuMemAlloc(&d->via, (vw * vh + chroma) * out_sample);
+            }
         }
         if (result == CUDA_SUCCESS) {
             step = "Allocating GPU memory for the decoded pictures";

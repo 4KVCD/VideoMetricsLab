@@ -155,6 +155,11 @@ struct DecodePlan {
     int out_w = 0;           // the size the crop is scaled to (0: not scaled)
     int out_h = 0;
     std::string scaler = "bicubic";  // the app's scaling algorithm
+    // A resolution test's test video: the crop scaled to this size first,
+    // then that to the output size, as its two scale filters do (0: one
+    // step). NVIDIA's decoder alone does it.
+    int via_w = 0;
+    int via_h = 0;
     int widen = 0;  // widen_shift or widen_repeat: 8-bit pictures handed back as 10-bit (0: no)
     // The stream's film grain as the video is scored (film_grain_scoring.h):
     // 1 added, 0 left out, -1 as the decoder adds it by itself (none, or not
@@ -175,7 +180,7 @@ struct DecodePlan {
     int bytes_per_sample() const { return bit_depth > 8 || widen ? 2 : 1; }
     // The size of the pictures handed back.
     std::pair<int, int> output_size() const { return {out_w ? out_w : crop_w, out_h ? out_h : crop_h}; }
-    bool scaled() const { return output_size() != std::pair(crop_w, crop_h); }
+    bool scaled() const { return via_w > 0 || output_size() != std::pair(crop_w, crop_h); }
     // The bytes of one picture handed back, its planes packed.
     std::size_t frame_bytes() const;
 };

@@ -358,6 +358,27 @@ TEST(GpuFrames, OnlyTheSoftwareDecoderAddsH274GrainAndThenDecodesRawStreamsAndSc
     EXPECT_THROW(plan_decode(hevc, std::nullopt), GpuDecodeUnavailableError);
 }
 
+// A resolution test's test video (VideoInfo::resample_via) is scaled in two
+// steps, as its two scale filters do, by NVIDIA's decoder alone; a step that
+// swscale would make in two of its own is left to FFmpeg.
+TEST(GpuFrames, ScalesAResolutionTestInTwoStepsOnNvidiaAlone) {
+    VideoInfo info;
+    info.path = "film.mkv";
+    info.format_name = "matroska,webm";
+    info.codec_name = "hevc";
+    info.pix_fmt = "yuv420p10le";
+    info.width = 3840;
+    info.height = 2160;
+    info.resample_via = std::pair(1920, 1080);
+    const DecodePlan plan = plan_decode(info, std::nullopt, 6, true, std::pair(3840, 2160));
+    EXPECT_EQ(std::pair(plan.via_w, plan.via_h), std::pair(1920, 1080));
+    EXPECT_TRUE(plan.scaled());  // back at its own size, but scaled on the way
+    EXPECT_EQ(decoder_supports(0, plan, "intel").second, "only NVIDIA's decoder scales in two steps; FFmpeg scales it");
+    info.resample_via = std::pair(32, 18);  // 1/120: a bicubic filter of over 256 taps
+    EXPECT_EQ(scaling_refusal(plan_decode(info, std::nullopt, 6, true, std::pair(3840, 2160)), "ffmpeg"),
+              "so large a downscale is left to FFmpeg, which makes it in two steps");
+}
+
 // The decoder's pictures must match the packets fed: in timestamp order,
 // each the next packet's, and one for every packet by the end. Those an MP4
 // edit list cuts off are dropped.

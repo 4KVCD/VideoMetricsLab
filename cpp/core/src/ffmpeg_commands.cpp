@@ -155,6 +155,12 @@ struct VideoChains {
 VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options,
                          const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                          const HardwareDecoding& decoding, bool split) {
+    if (source.resample_via || distorted.resample_via) {
+        // Its frames exist only as the app's decoders make them: FFmpeg
+        // would compare the source with itself (build_resample_filtergraph
+        // makes a resolution test in FFmpeg).
+        throw VmafRunError("FFmpeg cannot read a resolution test's test video");
+    }
     const auto [distorted_w, distorted_h] = content_size(distorted, distorted_crop);
     const auto [source_w, source_h] = content_size(source, source_crop);
     const bool sizes_differ = source_w != distorted_w || source_h != distorted_h;
