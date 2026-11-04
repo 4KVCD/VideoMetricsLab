@@ -67,8 +67,10 @@ public:
     // Set while the rows shown are the ones already shown: show_options then
     // leaves alone the number or time being typed, which is not yet a value.
     bool keep_typing = false;
-    // Takes what is typed in the number and time boxes as their values. A run
-    // needs it: on macOS clicking a button leaves the focus where it is.
+    // Takes what is typed in the number and time boxes as their values. A click
+    // on Calculate has already done so by taking the focus (on macOS too, under
+    // the Fusion style main.cpp sets there); a run that waited for saved scores
+    // or a GPU check starts with no click, and a box may be in use then.
     void commit_typed_values();
     // The VMAF GPU/CPU choice as a run would take it: CPU when there is no
     // GPU, whatever the video is set to.
