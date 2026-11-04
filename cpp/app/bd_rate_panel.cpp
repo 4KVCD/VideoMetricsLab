@@ -295,7 +295,7 @@ void BdRatePanel::on_add_videos(Side& side) {
     for (const GraphPanel::Run& run : runs) {
         const ComparisonResult& result = *run.result;
         const QString name = run.label.isEmpty() ? qt_text(platform::path_text(result.distorted.filename())) : run.label;
-        const long long bits_per_second = result.distorted_info.bit_rate;
+        const long long bits_per_second = rate_of_scores(result);
         const QString rate = bits_per_second > 0
                                  ? app::tr("{rate:.0f} kb/s", {{"rate", static_cast<double>(bits_per_second) / 1000}})
                                  : app::tr("bitrate unknown");

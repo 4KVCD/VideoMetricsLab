@@ -103,6 +103,16 @@ TEST(BdRate, TakesAnEncodeFromAScoredVideo) {
     EXPECT_DOUBLE_EQ(*encode->scores.at("vmaf"), 88.0);
     EXPECT_DOUBLE_EQ(*encode->scores.at("cvvdp"), 9.67);
     EXPECT_FALSE(encode->scores.contains("psnr"));
+    // The file's bitrate does not go with scores of a part of it, or of a
+    // resolution test's picture.
+    ComparisonResult ranged = result;
+    FrameMetricResult part{"psnr", {0, 1}, {0.0, 0.04}, {40.0F, 41.0F}, {}};
+    part.provenance.parameters["range_frames"] = "[0,2]";
+    ranged.metric_results.add(part);
+    EXPECT_FALSE(rate_encode(ranged));
+    ComparisonResult resized = result;
+    resized.resample_target = ResampleTarget{};
+    EXPECT_FALSE(rate_encode(resized));
     result.distorted_info.bit_rate = 0;
     EXPECT_FALSE(rate_encode(result));
 }

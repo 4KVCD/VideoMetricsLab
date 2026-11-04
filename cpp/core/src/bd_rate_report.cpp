@@ -327,8 +327,23 @@ RateTable read_rate_table(std::string_view text, const std::string& name) {
     }
 }
 
+long long rate_of_scores(const ComparisonResult& result) {
+    if (result.resample_target) {
+        return 0;
+    }
+    for (const std::string& key : result.metric_results.keys()) {
+        const FrameMetricResult* frames = result.metric_results.frame(key);
+        const MetricProvenance& provenance =
+            frames != nullptr ? frames->provenance : result.metric_results.sequence(key)->provenance;
+        if (provenance.parameters.contains("range_frames")) {
+            return 0;
+        }
+    }
+    return result.distorted_info.bit_rate;
+}
+
 std::optional<RateTable::Encode> rate_encode(const ComparisonResult& result) {
-    const long long bits_per_second = result.distorted_info.bit_rate;
+    const long long bits_per_second = rate_of_scores(result);
     if (bits_per_second <= 0) {
         return std::nullopt;
     }

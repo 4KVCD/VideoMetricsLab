@@ -42,6 +42,11 @@ RateTable read_rate_table(std::string_view text, const std::string& name);
 // test video's bitrate is not known.
 std::optional<RateTable::Encode> rate_encode(const ComparisonResult& result);
 
+// The bits per second that go with `result`'s scores: its test video's bitrate,
+// which is of the whole file, or 0 for scores of only a part of it (a range) or
+// of no file of its own (a resolution test).
+long long rate_of_scores(const ComparisonResult& result);
+
 // The text columns a group can be taken from: the table's columns other than
 // sequence, kbps and the metrics', in its order.
 std::vector<std::string> group_columns(const RateTable& table);
