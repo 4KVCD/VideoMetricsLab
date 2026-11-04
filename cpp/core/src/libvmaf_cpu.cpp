@@ -356,27 +356,10 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
                              const CancelToken& cancel) {
     const auto& [source_backend, test_backend] = decoders;
     require_same_range(source, distorted);
-    // Each video's plan, the test video's first: its luma alone, at the size
-    // and depth compared at, 10-bit samples in the low bits as FFmpeg's
-    // yuv420p10le has them.
-    std::vector<DecodePlan> plans;
-    for (const bool test_video : {true, false}) {
-        const VideoInfo& info = test_video ? distorted : source;
-        DecodePlan plan = plan_decode(info, test_video ? distorted_crop : source_crop, 6, true,
-                                      std::pair(width, height), scale_algorithm);
-        widen_to(plan, info, bit_depth);
-        const auto [supported, refusal] = decoder_supports(0, plan, test_video ? test_backend : source_backend);
-        if (!supported) {
-            throw GpuDecodeUnavailableError(refusal);
-        }
-        plans.push_back(plan);
-    }
-    const std::size_t luma_bytes = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) *
-                                   bytes_per_sample(bit_depth);
-    if (std::any_of(plans.begin(), plans.end(),
-                    [&](const DecodePlan& plan) { return plan.frame_bytes() != luma_bytes; })) {
-        throw GpuDecodeUnavailableError("the decoders' frames are not the size compared at");
-    }
+    const std::pair size(width, height);
+    std::vector<DecodePlan> plans = plan_pair(source, distorted, source_crop, distorted_crop, size, bit_depth, true,
+                                              scale_algorithm, decoders);
+    require_luma_of_size(plans, size, bit_depth);
     // A VVC video decoded by vvdec-vulkan where wanted, on the GPU it picks (this pass has none of its own)
     const bool test_vvdec = vvdec_chosen(plans[0], want_vvdec);
     const bool reference_vvdec = vvdec_chosen(plans[1], want_vvdec);

@@ -1951,6 +1951,28 @@ std::optional<RunScores> score_gpu_and_cpu(const RunFrames& run, const VmafOptio
     return score_apart(run, gpu_options, cpu_options, *gpu, cpu, model, on_progress, on_status);
 }
 
+// What a comparison's result says of the videos and the options, before its scores.
+ComparisonResult result_of_pair(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options,
+                                const std::string& model, const std::optional<CropBox>& source_crop,
+                                const std::optional<CropBox>& distorted_crop, long long total_frames) {
+    ComparisonResult result;
+    result.source = source.path;
+    result.fps = distorted.fps;
+    result.model = model;
+    result.source_crop = source_crop;
+    result.distorted_crop = distorted_crop;
+    result.source_info = source;
+    result.distorted_info = distorted;
+    result.scale_algorithm = options.scale_algorithm;
+    result.compared_frame_count = total_frames;
+    result.model_choice = options.model_choice;
+    result.model_v1 = options.model_v1;
+    if (options.compute_vmaf_v1) {
+        result.model_choice_v1 = options.model_choice_v1;
+    }
+    return result;
+}
+
 // score_pair's run, as its reading of the videos is set.
 ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
                                  VmafOptions options, const std::optional<CropBox>& source_crop,
@@ -1984,23 +2006,10 @@ ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoI
         }
     }
 
-    ComparisonResult result;
-    result.source = source.path;
+    ComparisonResult result =
+        result_of_pair(source, distorted, options, model, source_crop, distorted_crop, total_frames);
     result.distorted = result_distorted_path.value_or(distorted.path);
-    result.fps = distorted.fps;
-    result.model = model;
-    result.source_crop = source_crop;
-    result.distorted_crop = distorted_crop;
-    result.source_info = source;
-    result.distorted_info = distorted;
     result.scale_direction = options.scale_direction;
-    result.scale_algorithm = options.scale_algorithm;
-    result.compared_frame_count = total_frames;
-    result.model_choice = options.model_choice;
-    result.model_v1 = options.model_v1;
-    if (options.compute_vmaf_v1) {
-        result.model_choice_v1 = options.model_choice_v1;
-    }
     for (const ParsedScores& part : scores->parts) {
         for (const std::string& key : part.order) {
             MetricProvenance provenance = run_provenance(key, model, options, environment.ffmpeg_version,
@@ -2238,23 +2247,11 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
                            on_progress, on_status, cancel, environment, &source, nullptr);
     });
 
-    ComparisonResult result;
-    result.source = source.path;
+    // Both branches come from the same source, and after the round trip the test
+    // video is back at the source's own size.
+    ComparisonResult result = result_of_pair(source, source, options, model, source_crop, source_crop, total_frames);
     result.distorted = synthetic_resample_distorted_path(source.path, *options.resample_test);
-    result.fps = source.fps;
-    result.model = model;
-    result.source_crop = source_crop;
-    result.distorted_crop = source_crop;  // both branches come from the same source
-    result.source_info = source;
-    result.distorted_info = source;  // after the round trip, it is back at the source's own size
-    result.scale_algorithm = options.scale_algorithm;
     result.resample_target = options.resample_test;
-    result.compared_frame_count = total_frames;
-    result.model_choice = options.model_choice;
-    result.model_v1 = options.model_v1;
-    if (options.compute_vmaf_v1) {
-        result.model_choice_v1 = options.model_choice_v1;
-    }
     result.metric_failures = scores.failed;
     for (const std::string& key : scores.order) {
         std::map<std::string, std::string> parameters;

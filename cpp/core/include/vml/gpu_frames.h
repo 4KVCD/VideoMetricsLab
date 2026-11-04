@@ -649,6 +649,21 @@ void require_same_range(const VideoInfo& source, const VideoInfo& distorted);
 // than the comparison.
 void widen_to(DecodePlan& plan, const VideoInfo& info, int bit_depth);
 
+// Both videos' plans, the test video's first: at `size` and `bit_depth`, the
+// size and depth compared at, 10-bit samples in the low bits as FFmpeg's
+// yuv420p10le has them, the luma alone or whole frames. `decoders` are the
+// source's and the test video's. Throws GpuDecodeUnavailableError with the
+// reason where a decoder cannot do its plan.
+std::vector<DecodePlan> plan_pair(const VideoInfo& source, const VideoInfo& distorted,
+                                  const std::optional<CropBox>& source_crop,
+                                  const std::optional<CropBox>& distorted_crop, std::pair<int, int> size,
+                                  int bit_depth, bool luma_only, const std::string& scale_algorithm,
+                                  const std::pair<std::string, std::string>& decoders);
+
+// Throws GpuDecodeUnavailableError unless each plan's frames are luma planes of
+// `size` and `bit_depth`, which the memory they are written into is made for.
+void require_luma_of_size(const std::vector<DecodePlan>& plans, std::pair<int, int> size, int bit_depth);
+
 // How the slots of the pairs scored are given back: each to its decoder, by
 // default, as soon as no later pair uses it; or, for VMAF v1 reading the
 // pictures where they are, once the GPU has read them

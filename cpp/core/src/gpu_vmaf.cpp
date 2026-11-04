@@ -697,27 +697,10 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
         }
     }
     require_same_range(source, distorted);
-    // Each video's plan, the test video's first: its luma alone, at the size
-    // and depth compared at, 10-bit samples in the low bits as FFmpeg's
-    // yuv420p10le has them.
-    std::vector<DecodePlan> plans;
-    for (const bool test_video : {true, false}) {
-        const VideoInfo& info = test_video ? distorted : source;
-        DecodePlan decoded = plan_decode(info, test_video ? distorted_crop : source_crop, 6, true,
-                                         std::pair(plan.width, plan.height), scale_algorithm);
-        widen_to(decoded, info, plan.bit_depth);
-        const auto [supported, refusal] = decoder_supports(0, decoded, test_video ? test_backend : source_backend);
-        if (!supported) {
-            throw GpuDecodeUnavailableError(refusal);
-        }
-        plans.push_back(decoded);
-    }
-    // The decoders write each luma plane into memory of the size compared at.
-    const std::size_t luma_bytes = static_cast<std::size_t>(plan.width) * static_cast<std::size_t>(plan.height) *
-                                   bytes_per_sample(plan.bit_depth);
-    if (std::any_of(plans.begin(), plans.end(), [&](const DecodePlan& p) { return p.frame_bytes() != luma_bytes; })) {
-        throw GpuDecodeUnavailableError("the decoders' frames are not the size compared at");
-    }
+    const std::pair size(plan.width, plan.height);
+    std::vector<DecodePlan> plans = plan_pair(source, distorted, source_crop, distorted_crop, size, plan.bit_depth,
+                                              true, scale_algorithm, decoders);
+    require_luma_of_size(plans, size, plan.bit_depth);
     if (cuda) {
         plan_pair_seek(plans, distorted, source, range.decode_start, ffmpeg, ffprobe, cancel);
         return score_decoded_cuda(source, distorted, plans, plan, n_subsample, range, total_frames,

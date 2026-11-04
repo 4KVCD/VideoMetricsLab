@@ -1224,20 +1224,9 @@ PairScores score_decoded_v1(const VideoInfo& source, const VideoInfo& distorted,
         }
     }
     require_same_range(source, distorted);
-    // Each video's plan, the test video's first: whole frames, at the size
-    // and depth compared at.
-    std::vector<DecodePlan> plans;
-    for (const bool test_video : {true, false}) {
-        const VideoInfo& info = test_video ? distorted : source;
-        DecodePlan decoded = plan_decode(info, test_video ? distorted_crop : source_crop, 6, false,
-                                         std::pair(plan.width, plan.height), scale_algorithm);
-        widen_to(decoded, info, plan.bit_depth);
-        const auto [supported, refusal] = decoder_supports(0, decoded, test_video ? test_backend : source_backend);
-        if (!supported) {
-            throw GpuDecodeUnavailableError(refusal);
-        }
-        plans.push_back(decoded);
-    }
+    std::vector<DecodePlan> plans = plan_pair(source, distorted, source_crop, distorted_crop,
+                                              std::pair(plan.width, plan.height), plan.bit_depth, false,
+                                              scale_algorithm, decoders);
     const std::optional<int> device = plan.device >= 0 ? std::optional(plan.device) : std::nullopt;
     // When the engine reads pictures where the decoder left them (V1Scorer's
     // pictures mode), they stay the decoder's until the GPU is done with them:

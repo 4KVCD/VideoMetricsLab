@@ -2437,6 +2437,35 @@ void require_same_range(const VideoInfo& source, const VideoInfo& distorted) {
     }
 }
 
+std::vector<DecodePlan> plan_pair(const VideoInfo& source, const VideoInfo& distorted,
+                                  const std::optional<CropBox>& source_crop,
+                                  const std::optional<CropBox>& distorted_crop, std::pair<int, int> size,
+                                  int bit_depth, bool luma_only, const std::string& scale_algorithm,
+                                  const std::pair<std::string, std::string>& decoders) {
+    std::vector<DecodePlan> plans;
+    for (const bool test_video : {true, false}) {
+        const VideoInfo& info = test_video ? distorted : source;
+        DecodePlan plan =
+            plan_decode(info, test_video ? distorted_crop : source_crop, 6, luma_only, size, scale_algorithm);
+        widen_to(plan, info, bit_depth);
+        const auto [supported, refusal] = decoder_supports(0, plan, test_video ? decoders.second : decoders.first);
+        if (!supported) {
+            throw GpuDecodeUnavailableError(refusal);
+        }
+        plans.push_back(plan);
+    }
+    return plans;
+}
+
+void require_luma_of_size(const std::vector<DecodePlan>& plans, std::pair<int, int> size, int bit_depth) {
+    const std::size_t luma_bytes =
+        static_cast<std::size_t>(size.first) * static_cast<std::size_t>(size.second) * bytes_per_sample(bit_depth);
+    if (std::any_of(plans.begin(), plans.end(),
+                    [luma_bytes](const DecodePlan& plan) { return plan.frame_bytes() != luma_bytes; })) {
+        throw GpuDecodeUnavailableError("the decoders' frames are not the size compared at");
+    }
+}
+
 void widen_to(DecodePlan& plan, const VideoInfo& info, int bit_depth) {
     if (plan.bit_depth < bit_depth) {
         plan.widen = info.full_range() ? widen_repeat : widen_shift;
