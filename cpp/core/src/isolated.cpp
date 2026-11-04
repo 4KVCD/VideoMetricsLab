@@ -355,7 +355,7 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
     try {
         std::ifstream file(request_file, std::ios::binary);
         const nlohmann::json request = nlohmann::json::parse(file);
-        if (request.value("range_seek_off", false)) {
+        if (request.value("range_seek_off", false) && !range_seek_turned_off()) {
             turn_off_range_seek("its parent process turned them off");
         }
         nlohmann::json result;
