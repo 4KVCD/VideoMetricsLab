@@ -84,8 +84,9 @@ constexpr std::size_t remembered_answers = 512;
 // Raised when the detection itself changes what it finds, so that older
 // answers in the store are ignored. 2: Intel's GPU decoded lossless H.264
 // to other pixels before (pick_decode); 3: so did NVIDIA's before the RTX 50
-// series; 4: HandBrake's rule in place of FFmpeg's cropdetect.
-constexpr int store_version = 4;
+// series; 4: HandBrake's rule in place of FFmpeg's cropdetect; 5: an odd-sized
+// video's picture is even-sized.
+constexpr int store_version = 5;
 
 // What an answer depends on: which bytes are in the file, and which stretch
 // of it is sampled (not how it was decoded: the GPUs that decode a video

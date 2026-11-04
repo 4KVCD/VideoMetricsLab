@@ -81,6 +81,8 @@ TEST(BlackBarsRule, TakesTheMedianOfThePicturesBars) {
     // ... but a video too short for three judged on the ones it has
     EXPECT_EQ(handbrake_box({letterbox}, 1, 1920, 1080), (CropBox{1920, 804, 0, 138}));
     EXPECT_EQ(handbrake_box({}, 0, 1920, 1080), (CropBox{1920, 1080, 0, 0}));
+    // An odd-sized video's picture is even-sized too
+    EXPECT_EQ(handbrake_box({{40, 41, 0, 0}}, 1, 853, 481), (CropBox{852, 400, 0, 40}));
 }
 
 // A Y4M stream of two 4x2 pictures of 16-bit luma, as FFmpeg's yuv4mpegpipe

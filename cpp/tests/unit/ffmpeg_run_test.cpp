@@ -389,7 +389,7 @@ TEST(FfmpegRun, ForgettingAVideosBlackBarsKeepsTheOthers) {
     const Json ours = {{platform::path_text(resolved), size, *platform::modified_ns(resolved), 10.0, 0.12549},
                        {1920, 800, 0, 140}};
     const Json other = {{"E:\\other.mkv", 10, 20, 30.0, 0.12549}, {1920, 816, 0, 132}};
-    std::ofstream(store, std::ios::binary) << Json{{"version", 4}, {"boxes", {other, ours}}}.dump();
+    std::ofstream(store, std::ios::binary) << Json{{"version", 5}, {"boxes", {other, ours}}}.dump();
     const auto read_store = [&store] {
         std::ifstream file(store, std::ios::binary);
         return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());

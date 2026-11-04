@@ -119,7 +119,7 @@ CropBox handbrake_box(const std::vector<BarEdges>& counted, std::size_t decoded,
     const int b = even(bottom[index]);
     const int l = even(left[index]);
     const int r = even(right[index]);
-    return CropBox{width - l - r, height - t - b, l, t};
+    return CropBox{even(width - l - r), even(height - t - b), l, t};
 }
 
 Y4mLumaReader::Y4mLumaReader(std::function<std::size_t(void*, std::size_t)> read) : read_(std::move(read)) {}
