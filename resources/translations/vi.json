@@ -495,6 +495,8 @@
   "Second based": "Theo giây",
   "GOP based": "Theo GOP",
   "Adjust stream start time to zero": "Đặt thời điểm bắt đầu luồng về 0",
+  "Frame types": "Loại khung hình",
+  "Marks each frame of the Frame based graph with its type: I, P or B.": "Đánh dấu từng khung hình trên biểu đồ theo khung hình bằng loại của nó: I, P hoặc B.",
   "Reset zoom": "Đặt lại thu phóng",
   "Export PNG…": "Xuất PNG…",
   "Video bitrate (kb/s)": "Bitrate video (kbps)",

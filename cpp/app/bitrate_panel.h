@@ -11,6 +11,7 @@
 #include <QThread>
 #include <QWidget>
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -54,6 +55,7 @@ struct BitrateEntry {
     int series = 0;  // its line's key on the chart
     std::optional<VideoInfo> info;
     std::shared_ptr<const BitrateData> data;
+    std::shared_ptr<const std::vector<std::uint8_t>> frame_types;  // read_frame_types: a type per frame, or none
     bool enabled = true;
     BitrateState state = BitrateState::ready;
     long long packets_read = 0;  // while it is read
@@ -67,6 +69,7 @@ struct BitrateAnalyzed {
     QString path;
     VideoInfo info;
     std::shared_ptr<const BitrateData> data;
+    std::shared_ptr<const std::vector<std::uint8_t>> frame_types;
 };
 
 // Reads each file's packets in turn, off the window's thread: its details
@@ -128,6 +131,8 @@ public:
     QRadioButton* gop_radio = nullptr;
     QCheckBox* adjust_start_checkbox = nullptr;
     QCheckBox* difference_box = nullptr;
+    QCheckBox* frame_types_box = nullptr;
+    QLabel* frame_types_legend = nullptr;
     QPushButton* reset_zoom_button = nullptr;
     QPushButton* export_button = nullptr;
     ChartWidget* chart = nullptr;
@@ -175,6 +180,7 @@ private:
     std::shared_ptr<const BitratePlot> entry_plot(BitrateEntry& entry) const;
     void refresh_plot();  // the lines drawn again, the zoom kept
     void refresh_difference();  // the Difference band and box, for the lines drawn
+    void show_frame_types_box();  // usable in the frame graph; its legend while ticked
     void on_hovered(double time);
     void on_hover_left();
     void on_export_png();
@@ -191,7 +197,13 @@ private:
     bool populating_ = false;
     int next_series_ = 0;
     // The lines drawn, in the table's order: each file's name and graph.
-    std::vector<std::pair<QString, std::shared_ptr<const BitratePlot>>> current_plots_;
+    // The lines drawn; frame_types only for a frame graph's.
+    struct DrawnPlot {
+        QString name;
+        std::shared_ptr<const BitratePlot> plot;
+        std::shared_ptr<const std::vector<std::uint8_t>> frame_types;
+    };
+    std::vector<DrawnPlot> current_plots_;
     // The graph's values are divided by this and shown in this unit (see
     // refresh_plot).
     double value_scale_ = 1;

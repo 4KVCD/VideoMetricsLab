@@ -495,6 +495,8 @@
   "Second based": "За секундами",
   "GOP based": "За GOP",
   "Adjust stream start time to zero": "Встановити початок потоку на нуль",
+  "Frame types": "Типи кадрів",
+  "Marks each frame of the Frame based graph with its type: I, P or B.": "Позначає кожен кадр на покадровому графіку його типом: I, P або B.",
   "Reset zoom": "Скинути масштаб",
   "Export PNG…": "Експорт PNG…",
   "Video bitrate (kb/s)": "Бітрейт відео (кбіт/с)",

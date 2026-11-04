@@ -25,6 +25,7 @@
 #include "chart.h"
 #include "series_colors.h"
 #include "test_videos.h"
+#include "frame_types.h"
 #include "vml/platform/system.h"
 
 namespace vml::app {
@@ -34,7 +35,8 @@ class BitratePanelTest : public ::testing::Test {
 protected:
     // A file read: its details and packets, as the worker gives them.
     static void analyzed(BitratePanel& panel, const std::filesystem::path& path,
-                         std::shared_ptr<const BitrateData> data) {
+                         std::shared_ptr<const BitrateData> data,
+                         std::shared_ptr<const std::vector<std::uint8_t>> frame_types = nullptr) {
         VideoInfo info;
         info.path = path;
         info.width = 1920;
@@ -44,7 +46,8 @@ protected:
         info.nb_frames = 4;
         info.codec_name = "h264";
         info.pix_fmt = "yuv420p";
-        panel.on_analyzed({QString::fromStdString(platform::path_text(path)), info, std::move(data)});
+        panel.on_analyzed({QString::fromStdString(platform::path_text(path)), info, std::move(data),
+                          std::move(frame_types)});
     }
     static void failed(BitratePanel& panel, const std::filesystem::path& path, const QString& error) {
         panel.on_failed(QString::fromStdString(platform::path_text(path)), error);
@@ -68,6 +71,10 @@ protected:
         return {values.begin(), values.end()};
     }
     static QString band_label(const BitratePanel& panel) { return panel.chart->band_->label; }
+    static std::size_t marks_drawn(const BitratePanel& panel, std::size_t row) {
+        return panel.chart->series_.at(entry(panel, row).series).marks.size();
+    }
+    static QCheckBox* frame_types_box(const BitratePanel& panel) { return panel.frame_types_box; }
 };
 
 namespace {
@@ -133,6 +140,37 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
     panel->table->item(0, col_use)->setCheckState(Qt::Unchecked);
     EXPECT_FALSE(panel->chart->has_data());
     EXPECT_FALSE(panel->export_button->isEnabled());
+}
+
+// A frame's type shows under the pointer in the frame graph; its colours only
+// once ticked, and only there.
+TEST_F(BitratePanelTest, FrameTypesInTheFrameGraph) {
+    VideoColors colors;
+    const auto panel = make_panel(colors);
+    const test::Folder folder;
+    const std::filesystem::path path = folder / "encode.mkv";
+    panel->add_files({path});
+    analyzed(*panel, path, two_seconds(path),
+             std::make_shared<const std::vector<std::uint8_t>>(
+                 std::vector<std::uint8_t>{frame_type_i, frame_type_b, frame_type_i, frame_type_unknown}));
+    QCheckBox* const box = frame_types_box(*panel);
+    EXPECT_FALSE(box->isEnabled());
+    hover(*panel, 0.6);
+    EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:00.600\nencode.mkv: 12.00 kb/s");
+
+    panel->frame_radio->click();
+    EXPECT_TRUE(box->isEnabled());
+    EXPECT_EQ(marks_drawn(*panel, 0), 0u);
+    hover(*panel, 0.6);
+    EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:00.600\nencode.mkv: 4.00 kbit (B)");
+    hover(*panel, 1.6);  // a type not known adds nothing
+    EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:01.600\nencode.mkv: 4.00 kbit");
+
+    box->click();
+    EXPECT_EQ(marks_drawn(*panel, 0), 4u);
+    panel->second_radio->click();
+    EXPECT_FALSE(box->isEnabled());
+    EXPECT_EQ(marks_drawn(*panel, 0), 0u);
 }
 
 // Why a file failed is on its own row: once a row above it is removed, the

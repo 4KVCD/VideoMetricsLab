@@ -16,6 +16,7 @@
 #include <QString>
 #include <QWidget>
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
@@ -36,6 +37,9 @@ struct ChartSeries {
     std::shared_ptr<const void> owner;
     QColor color;
     bool visible = true;
+    // Empty, or a value for each point: a dot on it in mark_colors[value], none for 0.
+    std::span<const std::uint8_t> marks = {};
+    std::span<const QColor> mark_colors = {};
 };
 
 // A line drawn in a band of its own across the bottom of the chart, under

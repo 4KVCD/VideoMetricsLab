@@ -495,6 +495,8 @@
   "Second based": "Per seconde",
   "GOP based": "Per GOP",
   "Adjust stream start time to zero": "Starttijd van de stream op nul zetten",
+  "Frame types": "Frametypen",
+  "Marks each frame of the Frame based graph with its type: I, P or B.": "Markeert elk frame in de framegrafiek met zijn type: I, P of B.",
   "Reset zoom": "Zoom herstellen",
   "Export PNG…": "PNG exporteren…",
   "Video bitrate (kb/s)": "Videobitrate (kbps)",

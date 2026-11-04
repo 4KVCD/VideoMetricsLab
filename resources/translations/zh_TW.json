@@ -495,6 +495,8 @@
   "Second based": "依秒",
   "GOP based": "依 GOP",
   "Adjust stream start time to zero": "將串流開始時間調整為零",
+  "Frame types": "影格類型",
+  "Marks each frame of the Frame based graph with its type: I, P or B.": "在逐格圖表中以類型標示每個影格：I、P 或 B。",
   "Reset zoom": "重設縮放",
   "Export PNG…": "匯出 PNG…",
   "Video bitrate (kb/s)": "影片位元速率 (kb/s)",

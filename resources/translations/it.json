@@ -495,6 +495,8 @@
   "Second based": "Per secondo",
   "GOP based": "Per GOP",
   "Adjust stream start time to zero": "Porta a zero l'inizio del flusso",
+  "Frame types": "Tipi di fotogramma",
+  "Marks each frame of the Frame based graph with its type: I, P or B.": "Contrassegna ogni fotogramma del grafico per fotogrammi con il suo tipo: I, P o B.",
   "Reset zoom": "Reimposta zoom",
   "Export PNG…": "Esporta PNG…",
   "Video bitrate (kb/s)": "Bitrate video (kb/s)",

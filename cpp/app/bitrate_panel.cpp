@@ -20,12 +20,14 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <exception>
 #include <span>
 
 #include "chart.h"
 #include "formatting.h"
+#include "frame_types.h"
 #include "i18n.h"
 #include "series_colors.h"
 #include "vml/ffprobe.h"
@@ -43,6 +45,34 @@ enum Column { col_use, col_file, col_media, col_duration, col_frames, col_averag
 const char* const hover_hint =
     N_("Hover over the plot to inspect values. Scroll to zoom, drag to pan, and double-click to reset.");
 const char* const calculate_tooltip = N_("Calculate bitrate for videos with the Use checkbox checked.");
+
+// The dots' colours, by FrameType (ChartSeries::mark_colors).
+std::span<const QColor> frame_type_colors() {
+    static const std::array<QColor, 4> colors{QColor(), QColor(0xE0, 0xA0, 0x00), QColor(0x3B, 0x82, 0xF6),
+                                              QColor(0x22, 0xA3, 0x5A)};
+    return colors;
+}
+
+// I, P and B in their dots' colours. Letters that are not translated.
+QString frame_types_legend_text() {
+    const std::span<const QColor> colors = frame_type_colors();
+    return QStringLiteral("<b style='color:%1'>I</b> <b style='color:%2'>P</b> <b style='color:%3'>B</b>")
+        .arg(colors[frame_type_i].name(), colors[frame_type_p].name(), colors[frame_type_b].name());
+}
+
+// A frame's type, as the readout adds it to the frame's line.
+QString frame_type_suffix(std::uint8_t type) {
+    switch (type) {
+    case frame_type_i:
+        return QStringLiteral(" (I)");
+    case frame_type_p:
+        return QStringLiteral(" (P)");
+    case frame_type_b:
+        return QStringLiteral(" (B)");
+    default:
+        return {};
+    }
+}
 
 // A file's key in the list: its full path, in one case.
 QString path_key(const std::filesystem::path& path) {
@@ -115,13 +145,15 @@ void BitrateWorker::run() {
             if (cancel_.cancelled()) {
                 return;
             }
+            FrameTypeReader type_reader(info, cancel_);
             // Here, off the window's thread: the summary walks every packet.
             auto data = std::make_shared<const BitrateData>(analyze_video_bitrate(
                 ffprobe_, info, cancel_, [this, &name](long long done, long long total) {
                     emit progress(name, done, total);
                 }));
+            auto types = std::make_shared<const std::vector<std::uint8_t>>(type_reader.types_of(*data));
             if (!cancel_.cancelled()) {
-                emit analyzed({name, info, std::move(data)});
+                emit analyzed({name, info, std::move(data), std::move(types)});
             }
         } catch (const Cancelled&) {
             return;
@@ -232,6 +264,19 @@ void BitratePanel::add_plot_controls(QVBoxLayout* root) {
     });
     plot_controls->addSpacing(18);
     plot_controls->addWidget(difference_box);
+    plot_controls->addSpacing(18);
+    // Not saved, as the Difference box.
+    frame_types_box = new QCheckBox(app::tr("Frame types"));
+    frame_types_box->setToolTip(app::tr("Marks each frame of the Frame based graph with its type: I, P or B."));
+    frame_types_legend = new QLabel(frame_types_legend_text());
+    connect(frame_types_box, &QCheckBox::toggled, this, [this](bool /*on*/) {
+        show_frame_types_box();
+        refresh_plot();
+    });
+    connect(frame_radio, &QRadioButton::toggled, this, [this](bool /*on*/) { show_frame_types_box(); });
+    plot_controls->addWidget(frame_types_box);
+    plot_controls->addWidget(frame_types_legend);
+    show_frame_types_box();
     plot_controls->addStretch(1);
     reset_zoom_button = new QPushButton(app::tr("Reset zoom"));
     export_button = new QPushButton(app::tr("Export PNG\xE2\x80\xA6"));
@@ -555,6 +600,7 @@ void BitratePanel::on_analyzed(const BitrateAnalyzed& analyzed) {
     }
     entry->info = analyzed.info;
     entry->data = analyzed.data;
+    entry->frame_types = analyzed.frame_types;
     entry->plots.clear();
     entry->state = BitrateState::complete;
     progress->setValue(100);
@@ -735,6 +781,11 @@ std::shared_ptr<const BitratePlot> BitratePanel::entry_plot(BitrateEntry& entry)
     return plot;
 }
 
+void BitratePanel::show_frame_types_box() {
+    frame_types_box->setEnabled(frame_radio->isChecked());
+    frame_types_legend->setVisible(frame_radio->isChecked() && frame_types_box->isChecked());
+}
+
 void BitratePanel::refresh_plot() {
     // Every ticked file's line, for the graph chosen. The zoom is kept, as in Metric Graphs: a line ticked, read or
     // removed leaves the time range in view; another graph or Adjust start resets it.
@@ -770,23 +821,29 @@ void BitratePanel::refresh_plot() {
         value_unit_ = mega ? app::tr("Mb/s") : app::tr("kb/s");
     }
     for (const auto& [entry, plot] : plots) {
+        // What the line's spans point into, kept alive by the graph: the
+        // plot, the line in megabits, and the frames' types.
+        struct DrawnLine {
+            std::shared_ptr<const BitratePlot> plot;
+            std::vector<float> mega_values;
+            std::shared_ptr<const std::vector<std::uint8_t>> frame_types;
+        };
+        // Only the frame graph has a point for each frame.
+        auto line = std::make_shared<DrawnLine>(DrawnLine{plot, {}, view == "frame" ? entry->frame_types : nullptr});
         if (mega) {
-            // The line in megabits, kept alive by the graph with the plot
-            // whose times it shares.
-            struct Scaled {
-                std::shared_ptr<const BitratePlot> plot;
-                std::vector<float> values;
-            };
-            auto scaled = std::make_shared<Scaled>(Scaled{plot, plot->values});
-            for (float& value : scaled->values) {
+            line->mega_values = plot->values;
+            for (float& value : line->mega_values) {
                 value /= 1000;
             }
-            chart->set_series(entry->series,
-                              {std::span(plot->times), std::span(scaled->values), scaled, entry->color, true});
-        } else {
-            chart->set_series(entry->series, {std::span(plot->times), std::span(plot->values), plot, entry->color, true});
         }
-        current_plots_.emplace_back(name_of(entry->path), plot);
+        const std::vector<float>& values = mega ? line->mega_values : plot->values;
+        ChartSeries series{std::span(plot->times), std::span(values), line, entry->color, true};
+        if (line->frame_types && frame_types_box->isChecked()) {
+            series.marks = *line->frame_types;
+            series.mark_colors = frame_type_colors();
+        }
+        chart->set_series(entry->series, std::move(series));
+        current_plots_.push_back({name_of(entry->path), plot, line->frame_types});
     }
     refresh_difference();
     on_hover_left();
@@ -807,8 +864,8 @@ void BitratePanel::refresh_difference() {
                             "graph with its own scale."));
     difference_.reset();
     if (possible && difference_box->isChecked()) {
-        const auto& [first_name, first] = current_plots_[0];
-        const auto& [second_name, second] = current_plots_[1];
+        const auto& [first_name, first, first_types] = current_plots_[0];
+        const auto& [second_name, second, second_types] = current_plots_[1];
         auto plot = std::make_shared<BitratePlot>(frames ? frame_difference_plot(*first, *second)
                                                          : step_difference_plot(*first, *second));
         for (float& value : plot->values) {
@@ -833,12 +890,16 @@ void BitratePanel::on_hovered(double time) {
     // Each line's value at the time under the pointer, then their difference.
     chart->set_cursor_time(time);
     QStringList lines{app::tr("Time: {time}", {{"time", qt_text(format_hms(time, 3))}})};
-    for (const auto& [name, plot] : current_plots_) {
+    for (const auto& [name, plot, frame_types] : current_plots_) {
         if (const auto index = nearest_point(plot->times, time)) {
-            lines.append(python_format("{name}: {value:,.2f} {unit}",
-                                       {{"name", name},
-                                        {"value", static_cast<double>(plot->values[*index]) / value_scale_},
-                                        {"unit", value_unit_}}));
+            QString line = python_format("{name}: {value:,.2f} {unit}",
+                                         {{"name", name},
+                                          {"value", static_cast<double>(plot->values[*index]) / value_scale_},
+                                          {"unit", value_unit_}});
+            if (frame_types && static_cast<std::size_t>(*index) < frame_types->size()) {
+                line += frame_type_suffix((*frame_types)[*index]);
+            }
+            lines.append(line);
         }
     }
     if (difference_) {

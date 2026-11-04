@@ -689,6 +689,40 @@ void ChartWidget::draw_axes(QPainter& painter, bool dark) const {
     }
 }
 
+namespace {
+
+// The dots on a line's points (ChartSeries::marks). More than fit: the largest
+// frame of each `seconds_per_column`, on a grid from time 0 as draw_columns' so
+// that a drag does not change which, and drawing costs what the width does.
+template <typename ToX, typename ToY>
+void draw_marks(QPainter& painter, const ChartSeries& series, std::ptrdiff_t lo, std::ptrdiff_t hi,
+                double seconds_per_column, double radius, ToX to_x, ToY to_y) {
+    painter.setPen(Qt::NoPen);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const auto draw = [&](std::ptrdiff_t point) {
+        const std::uint8_t mark = series.marks[point];
+        if (mark != 0 && mark < series.mark_colors.size()) {
+            painter.setBrush(series.mark_colors[mark]);
+            painter.drawEllipse(QPointF(to_x(series.times[point]), to_y(series.values[point])), radius, radius);
+        }
+    };
+    std::ptrdiff_t largest = lo;
+    double column = std::floor(series.times[lo] / seconds_per_column);
+    for (std::ptrdiff_t point = lo + 1; point < hi; ++point) {
+        const double its_column = std::floor(series.times[point] / seconds_per_column);
+        if (its_column != column) {
+            draw(largest);
+            largest = point;
+            column = its_column;
+        } else if (series.values[point] > series.values[largest]) {
+            largest = point;
+        }
+    }
+    draw(largest);
+}
+
+}  // namespace
+
 void ChartWidget::draw_series(QPainter& painter, const QRect& rect, const ChartSeries& series,
                               std::pair<double, double> range) const {
     // One line: point by point when there are few, else one min/max stroke
@@ -747,6 +781,10 @@ void ChartWidget::draw_series(QPainter& painter, const QRect& rect, const ChartS
         draw_points(painter, shown_times, shown_values, to_x, to_y);
     } else {
         draw_columns(painter, shown_times, shown_values, seconds_per_screen_pixel, cell, origin, to_y);
+    }
+    if (series.marks.size() == times.size()) {
+        const double radius = 2 * ratio;  // a dot 4 pixels of the mouse across, and as many apart
+        draw_marks(painter, series, lo, hi, seconds_per_screen_pixel * 2 * radius, radius, to_x, to_y);
     }
     painter.restore();
 }

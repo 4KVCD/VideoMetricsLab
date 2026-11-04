@@ -128,7 +128,7 @@ if(TARGET vml_app)
     if(WIN32 AND MSVC)
         # Native playback, where it is built (app/CMakeLists.txt), with
         # FFmpeg's headers; no min and max macros from Windows' headers.
-        target_sources(vml_app_tests PRIVATE app/native_pool_test.cpp app/native_probe_test.cpp)
+        target_sources(vml_app_tests PRIVATE app/frame_types_test.cpp app/native_pool_test.cpp app/native_probe_test.cpp)
         target_include_directories(vml_app_tests SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/../native/ffmpeg/include)
         target_compile_definitions(vml_app_tests PRIVATE NOMINMAX)
     endif()
@@ -139,7 +139,7 @@ if(TARGET vml_app)
     if(APPLE AND native_playback_macos)
         # Native playback on macOS, where FFmpeg's libraries are built
         # (app/CMakeLists.txt).
-        target_sources(vml_app_tests PRIVATE app/native_pool_test.cpp app/native_probe_test.cpp app/soundtrack_test.cpp)
+        target_sources(vml_app_tests PRIVATE app/frame_types_test.cpp app/native_pool_test.cpp app/native_probe_test.cpp app/soundtrack_test.cpp)
         target_include_directories(vml_app_tests SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/../native/ffmpeg/include)
     endif()
     if(WIN32)

@@ -13,6 +13,7 @@ add_library(vml_app STATIC
     bd_rate_panel.cpp
     bitrate_panel.cpp
     chart.cpp
+    frame_types.cpp
     cvvdp_display_dialog.cpp
     frame_drag.cpp
     dialogs.cpp

@@ -495,6 +495,8 @@
   "Second based": "秒単位",
   "GOP based": "GOP 単位",
   "Adjust stream start time to zero": "ストリームの開始時刻を 0 に合わせる",
+  "Frame types": "フレームタイプ",
+  "Marks each frame of the Frame based graph with its type: I, P or B.": "フレーム単位のグラフで各フレームをタイプ (I、P、B) で示します。",
   "Reset zoom": "ズームをリセット",
   "Export PNG…": "PNG をエクスポート…",
   "Video bitrate (kb/s)": "動画ビットレート (kb/s)",

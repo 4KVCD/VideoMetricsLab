@@ -495,6 +495,8 @@
   "Second based": "Według sekund",
   "GOP based": "Według GOP",
   "Adjust stream start time to zero": "Wyzeruj czas początku strumienia",
+  "Frame types": "Typy klatek",
+  "Marks each frame of the Frame based graph with its type: I, P or B.": "Oznacza każdą klatkę na wykresie klatek jej typem: I, P lub B.",
   "Reset zoom": "Resetuj powiększenie",
   "Export PNG…": "Eksportuj PNG…",
   "Video bitrate (kb/s)": "Bitrate wideo (kb/s)",

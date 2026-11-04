@@ -495,6 +495,8 @@
   "Second based": "حسب الثانية",
   "GOP based": "حسب GOP",
   "Adjust stream start time to zero": "ضبط وقت بدء الدفق على الصفر",
+  "Frame types": "أنواع الإطارات",
+  "Marks each frame of the Frame based graph with its type: I, P or B.": "يميّز كل إطار في الرسم البياني حسب الإطارات بنوعه: I أو P أو B.",
   "Reset zoom": "إعادة ضبط التكبير",
   "Export PNG…": "تصدير PNG…",
   "Video bitrate (kb/s)": "معدل بت الفيديو (كيلوبت/ث)",
