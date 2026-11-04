@@ -361,8 +361,11 @@ std::string run_ffprobe(const std::vector<std::string>& command, const std::file
             error.pop_back();
         }
         const std::size_t start = error.find_first_not_of(" \t\r\n");
-        throw ProbeError("ffprobe failed for " + text(path) + ":\n" +
-                         (start == std::string::npos ? std::string() : error.substr(start)));
+        // It says nothing where it crashed.
+        const std::string said = start == std::string::npos
+                                     ? "it ended with exit code " + platform::exit_code_text(output.exit_code)
+                                     : error.substr(start);
+        throw ProbeError("ffprobe failed for " + text(path) + ":\n" + said);
     }
     return output.standard_output;
 }

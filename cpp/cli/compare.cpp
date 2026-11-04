@@ -994,6 +994,7 @@ private:
     bool raw_stream_used_ = false;
     bool raw_yuv_used_ = false;
     bool film_grain_used_ = false;
+    bool vvc_used_ = false;
     bool test_video_read_ = false;
 };
 
@@ -1082,14 +1083,17 @@ void ComparisonPlanner::leave_out_cvvdp_if_unable(TestVideo& video) const {
     if (std::find(video.metrics.begin(), video.metrics.end(), "cvvdp") == video.metrics.end()) {
         return;
     }
-    const char* reason = arguments_.subsample > 1
-                             ? "CVVDP needs every frame: it is not calculated with --subsample above 1"
-                         : !detect_vship_device(vship_build(arguments_, settings_), gpu_probes_token()).first
-                             ? "CVVDP is calculated on the GPU only, and no GPU that Vship can use was found"
-                             : nullptr;
-    if (reason != nullptr) {
+    const VshipBuild build = vship_build(arguments_, settings_);
+    std::optional<std::string> reason;
+    if (arguments_.subsample > 1) {
+        reason = "CVVDP needs every frame: it is not calculated with --subsample above 1";
+    } else if (!detect_vship_device(build, gpu_probes_token()).first) {
+        reason = "CVVDP is calculated on the GPU only, and no GPU that " + std::string(vship_build_label(build)) +
+                 " can use was found";
+    }
+    if (reason) {
         std::erase(video.metrics, "cvvdp");
-        video.notes.emplace_back(reason);
+        video.notes.push_back(*reason);
     }
 }
 
@@ -1133,6 +1137,7 @@ void ComparisonPlanner::note_argument_use(const VideoInfo& video) {
     raw_stream_used_ = raw_stream_used_ || video.is_raw_stream();
     raw_yuv_used_ = raw_yuv_used_ || video.format_name == "rawvideo";
     film_grain_used_ = film_grain_used_ || effective_film_grain(video).scoring != GrainScoring::none;
+    vvc_used_ = vvc_used_ || ascii_lower(video.codec_name) == "vvc";
 }
 
 std::vector<std::string> ComparisonPlanner::unused_argument_notes() const {
@@ -1150,6 +1155,10 @@ std::vector<std::string> ComparisonPlanner::unused_argument_notes() const {
     }
     if (arguments_.film_grain && !film_grain_used_) {
         notes.emplace_back("--film-grain is not used: neither the reference nor any test video has film grain.");
+    }
+    if (arguments_.vvc_decoder == "gpu" && vvc_used_ && !decoder_available(vvdec_decoder)) {
+        notes.emplace_back("--vvc-decoder gpu is not used: this package has no vvdec-vulkan, so VVC is decoded on the "
+                           "CPU.");
     }
     return notes;
 }
