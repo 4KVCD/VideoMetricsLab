@@ -275,11 +275,8 @@
   "CVVDP judges each frame together with the frames before it, so it needs every frame: it is not available while libvmaf frame subsample is above 1.": "CVVDP 结合之前的帧来判断每一帧，因此需要每一帧：当 libvmaf 帧采样间隔大于 1 时不可用。",
   "CVVDP is calculated on the GPU only, and no GPU that Vship can use was found.": "CVVDP 只在 GPU 上计算，但未找到 Vship 能使用的 GPU。",
   "\n\nCalculated with {build}, not with this video's {chosen}; their scores differ slightly, so the next run calculates it again with {chosen}.": "\n\n用 {build} 计算，而不是用此视频设置的 {chosen}；两者的分数略有不同，因此下次运行会用 {chosen} 重新计算。",
-  "CVVDP is calculated on the GPU only, and no GPU that stock Vship can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP 只在 GPU 上计算，但未找到原版 Vship 可用的 GPU；将 Vship 计算设为 GPU 即可计算。",
   "New videos use:": "新视频使用：",
-  "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command line without --vship: GPU, the app's own build, or GPU - Vship, stock Vship. Each video's own is set in the Options panel (Vship compute).": "为新添加的视频以及在命令行中未指定 --vship 时计算 SSIMULACRA2、Butteraugli 和 CVVDP 的 Vship：GPU（应用自己的构建），或 GPU - Vship（原版 Vship）。每个视频的设置在选项面板中（Vship 计算）。",
   "Vship compute:": "Vship 计算：",
-  "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: GPU, the app's own build, or GPU - Vship, stock Vship. Their scores differ slightly, and each one's are saved apart: switching shows that one's saved scores, or calculates them on the next run. If GPU fails, stock Vship calculates them instead. Without a GPU Vship can use, or if stock Vship fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available.": "由哪个 Vship 在 GPU 上计算 SSIMULACRA2、Butteraugli 和 CVVDP：GPU（应用自己的构建），或 GPU - Vship（原版 Vship）。两者的分数略有不同，各自的分数分开保存：切换后显示所选版本已保存的分数，或在下次运行时计算。如果 GPU 失败，改由原版 Vship 计算。没有 Vship 可用的 GPU，或原版 Vship 也失败时，SSIMULACRA2 和 Butteraugli 在 CPU（libjxl）上计算，CVVDP 不可用。",
   "At least one metric must stay shown.": "至少要保留一个显示的指标。",
   "CVVDP preset": "CVVDP 预设",
   "Saved your CVVDP preset \"{name}\".": "已保存你的 CVVDP 预设“{name}”。",
@@ -844,7 +841,14 @@
   "{group} median": "{group} 中位数",
   "{test} against {anchor}. Sequences in both: {count}. Negative: less bitrate for the same score.": "{test} 对比 {anchor}。两者共有的序列：{count}。负值：相同分数下码率更低。",
   "{video} (reference {reference}, {rate})": "{video}（参考视频 {reference}，{rate}）",
-  "{video}: its bitrate is the whole file's, soundtrack included": "{video}：其码率是整个文件的码率，包括音轨"
+  "{video}: its bitrate is the whole file's, soundtrack included": "{video}：其码率是整个文件的码率，包括音轨",
+  "GPU (fastest and most accurate)": "GPU (最快且最准确)",
+  "Vship Vulkan (preferred)": "Vship Vulkan (首选)",
+  "Vship HIP (use only if Vulkan has problems)": "Vship HIP (仅在 Vulkan 有问题时使用)",
+  "Vship CUDA (use only if Vulkan has problems)": "Vship CUDA (仅在 Vulkan 有问题时使用)",
+  "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU. GPU, the app's own build, is the fastest and most accurate. Vship Vulkan is stock Vship; Vship HIP (AMD) and Vship CUDA (NVIDIA) are stock Vship too, for a GPU whose Vulkan driver has problems, and all three share their saved scores. GPU's scores differ slightly and are saved apart: switching shows those saved, or calculates them on the next run. If GPU fails, Vship Vulkan calculates them instead. Without a GPU the chosen Vship can use, or if it fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available.": "选择在 GPU 上计算 SSIMULACRA2、Butteraugli 和 CVVDP 的 Vship。GPU 是应用自己的版本,最快且最准确。Vship Vulkan 是原版 Vship;Vship HIP (AMD) 和 Vship CUDA (NVIDIA) 也是原版 Vship,用于 Vulkan 驱动有问题的 GPU,这三者共用已保存的分数。GPU 的分数略有不同,并单独保存:切换时显示已保存的分数,或在下次运行时计算。如果 GPU 失败,则改由 Vship Vulkan 计算。如果没有所选 Vship 可用的 GPU,或者它也失败,SSIMULACRA2 和 Butteraugli 将在 CPU 上计算 (libjxl),CVVDP 不可用。",
+  "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command line without --vship. Each video's own is set in the Options panel (Vship compute).": "为新添加的视频以及在不带 --vship 的命令行中计算 SSIMULACRA2、Butteraugli 和 CVVDP 的 Vship。每个视频的设置在选项面板中 (Vship 计算)。",
+  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP 只在 GPU 上计算,且未找到 {build} 可用的 GPU;将 Vship 计算设为 GPU 后即可计算。"
  },
  "plurals": {
   "about {count} day": [

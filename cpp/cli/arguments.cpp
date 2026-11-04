@@ -36,7 +36,7 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--cvvdp-display PRESET] [--cvvdp-fill]
                                    [--subsample N] [--threads N]
                                    [--vmaf-on {gpu,cpu}]
-                                   [--vship {vship-fast,vship}]
+                                   [--vship {vship-fast,vship,vship-hip,vship-cuda}]
                                    [--vship-pass {one,each}] [--cpu]
                                    [--no-gpu-decode |
                                    --gpu-decode {auto,nvidia,intel,amd}]
@@ -194,12 +194,14 @@ options:
   --threads N           libvmaf threads (default: automatic)
   --vmaf-on {gpu,cpu}   where VMAF v0.6.1, VMAF NEG and VMAF v1 is calculated
                         (default: the app's)
-  --vship {vship-fast,vship}
+  --vship {vship-fast,vship,vship-hip,vship-cuda}
                         the Vship build that calculates SSIMULACRA2,
                         Butteraugli and CVVDP on the GPU: vship-fast (the
-                        app's own; the window's GPU) or vship (stock Vship;
-                        the window's GPU - Vship), whose scores differ
-                        slightly and are saved apart (default: the app's)
+                        app's own; the window's GPU), or stock Vship: vship
+                        (the window's Vship Vulkan), or if Vulkan has problems
+                        vship-hip (AMD) or vship-cuda (NVIDIA). Stock Vship's
+                        three share their scores, which differ slightly from
+                        vship-fast's and are saved apart (default: the app's)
   --vship-pass {one,each}
                         one: SSIMULACRA2, Butteraugli and CVVDP in one pass
                         per video, which decodes it once (faster only on a
@@ -946,7 +948,9 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--threads"}, [&parsed](const std::string& value) { parsed.threads = int_up_to(value, 128); }),
         option({"--vmaf-on"}, [&parsed](const std::string& value) { parsed.vmaf_on = choice(value, {"gpu", "cpu"}); }),
         option({"--vship"},
-               [&parsed](const std::string& value) { parsed.vship = choice(value, {"vship-fast", "vship"}); }),
+               [&parsed](const std::string& value) {
+                   parsed.vship = choice(value, {"vship-fast", "vship", "vship-hip", "vship-cuda"});
+               }),
         option({"--vship-pass"},
                [&parsed](const std::string& value) { parsed.vship_pass = choice(value, {"one", "each"}); }),
         flag({"--cpu"}, parsed.cpu),

@@ -72,7 +72,7 @@ int devices() {
     std::future<std::pair<std::optional<VshipDevice>, std::string>> vship_check =
         std::async(std::launch::async, [build] { return detect_vship_device(build, gpu_probes_token()); });
     std::future<std::pair<std::optional<VshipDevice>, std::string>> other_check;
-    if (vship51_bundled()) {
+    if (vship_build_bundled(VshipBuild::stock)) {
         other_check = std::async(std::launch::async, [other] { return detect_vship_device(other, gpu_probes_token()); });
     }
     std::future<GpuVmafBackend> vmaf_check = std::async(std::launch::async, [] { return gpu_vmaf_backend(gpu_probes_token()); });

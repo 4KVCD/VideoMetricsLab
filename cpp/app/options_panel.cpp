@@ -406,19 +406,19 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
             app::tr("No GPU was found: VMAF v0.6.1 and VMAF NEG are calculated on the CPU."));
     }
 
-    // The Vship build, in the VshipBuild order; a choice only where stock
-    // Vship is bundled.
+    // The Vship builds that are bundled.
     vship_build_combo = new QComboBox;
-    vship_build_combo->addItems({vship_choice_label(VshipBuild::fast), vship_choice_label(VshipBuild::stock)});
+    add_vship_choices(*vship_build_combo, bundled_vship_builds());
     vship_build_combo->setToolTip(app::tr(
-        "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: GPU, the app's own build, or GPU - "
-        "Vship, stock Vship. Their scores differ slightly, and each one's are saved apart: switching shows that one's "
-        "saved scores, or calculates them on the next run. If GPU fails, stock Vship calculates them instead. Without "
-        "a GPU Vship can use, or if stock Vship fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU "
-        "(libjxl), and CVVDP is not available."));
+        "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU. GPU, the app's own build, is the fastest "
+        "and most accurate. Vship Vulkan is stock Vship; Vship HIP (AMD) and Vship CUDA (NVIDIA) are stock Vship too, "
+        "for a GPU whose Vulkan driver has problems, and all three share their saved scores. GPU's scores differ "
+        "slightly and are saved apart: switching shows those saved, or calculates them on the next run. If GPU fails, "
+        "Vship Vulkan calculates them instead. Without a GPU the chosen Vship can use, or if it fails too, SSIMULACRA2 "
+        "and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available."));
     connect(vship_build_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("vship_build"); });
     form->addRow(app::tr("Vship compute:"), vship_build_combo);
-    form->setRowVisible(vship_build_combo, vship51_bundled());
+    form->setRowVisible(vship_build_combo, vship_build_bundled(VshipBuild::stock));
     QStringList names;
     for (const GpuVendor vendor : gpu_vendors) {
         names.append(qt_text(vendor_label(vendor)));
@@ -458,7 +458,7 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::vector<Vm
     gpu_vendor_combo->setEnabled(options.gpu_decode);
 
     show_vmaf_backend(options.vmaf_on_gpu);
-    vship_build_combo->setCurrentIndex(options.vship_build == VshipBuild::stock ? 1 : 0);
+    show_vship_choice(*vship_build_combo, options.vship_build);
 
     crop_combo->setCurrentIndex(std::max(0, crop_combo->findData(static_cast<int>(options.crop_mode))));
     threads_spin->setValue(options.n_threads);
@@ -568,7 +568,7 @@ VmafOptions OptionsPanel::read_options(const std::vector<std::string>& extra_fea
                              ? gpu_vendor_entries[static_cast<std::size_t>(gpu_vendor_combo->currentIndex())]
                              : GpuVendor::none;
     options.vmaf_on_gpu = vmaf_backend_combo->currentIndex() == 0;
-    options.vship_build = vship_build_combo->currentIndex() == 1 ? VshipBuild::stock : VshipBuild::fast;
+    options.vship_build = shown_vship_choice(*vship_build_combo);
     options.crop_mode = static_cast<CropMode>(crop_combo->currentData().toInt());
     return options;
 }

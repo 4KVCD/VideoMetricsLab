@@ -275,11 +275,8 @@
   "CVVDP judges each frame together with the frames before it, so it needs every frame: it is not available while libvmaf frame subsample is above 1.": "يحكم CVVDP على كل إطار مع الإطارات السابقة له، لذا يحتاج إلى كل إطار: غير متاح ما دام أخذ عينات الإطارات في libvmaf أكبر من 1.",
   "CVVDP is calculated on the GPU only, and no GPU that Vship can use was found.": "يُحسب CVVDP على GPU فقط، ولم يُعثر على GPU يستطيع Vship استخدامها.",
   "\n\nCalculated with {build}, not with this video's {chosen}; their scores differ slightly, so the next run calculates it again with {chosen}.": "\n\nحُسب باستخدام {build}، لا باستخدام {chosen} المحدد لهذا الفيديو؛ ونتائجهما تختلف قليلًا، لذا يعيد التشغيل التالي حسابه باستخدام {chosen}.",
-  "CVVDP is calculated on the GPU only, and no GPU that stock Vship can use was found; with Vship compute set to GPU it can be calculated.": "يُحسب CVVDP على GPU فقط، ولم يُعثر على GPU يمكن لـ Vship الأصلي استخدامه؛ عند ضبط «حساب Vship» على GPU يمكن حسابه.",
   "New videos use:": "مقاطع الفيديو الجديدة تستخدم:",
-  "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command line without --vship: GPU, the app's own build, or GPU - Vship, stock Vship. Each video's own is set in the Options panel (Vship compute).": "إصدار Vship الذي يحسب SSIMULACRA2 وButteraugli وCVVDP لمقاطع الفيديو المضافة حديثًا، وفي سطر الأوامر دون --vship: ‏GPU، إصدار التطبيق الخاص، أو GPU - Vship، وهو Vship الأصلي. يُضبط إصدار كل فيديو في لوحة «الخيارات» (حساب Vship).",
   "Vship compute:": "حساب Vship:",
-  "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: GPU, the app's own build, or GPU - Vship, stock Vship. Their scores differ slightly, and each one's are saved apart: switching shows that one's saved scores, or calculates them on the next run. If GPU fails, stock Vship calculates them instead. Without a GPU Vship can use, or if stock Vship fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available.": "أي Vship يحسب SSIMULACRA2 وButteraugli وCVVDP على GPU: ‏GPU، إصدار التطبيق الخاص، أو GPU - Vship، وهو Vship الأصلي. تختلف نتائجهما قليلًا، وتُحفظ نتائج كل منهما منفصلة: التبديل يعرض النتائج المحفوظة للإصدار المختار، أو يحسبها في التشغيل التالي. إذا فشل GPU يحسبها Vship الأصلي بدلًا منه. بدون GPU يمكن لـ Vship استخدامه، أو إذا فشل Vship الأصلي أيضًا، يُحسب SSIMULACRA2 وButteraugli على CPU ‏(libjxl)، ولا يتوفر CVVDP.",
   "At least one metric must stay shown.": "يجب أن يبقى مقياس واحد على الأقل ظاهرًا.",
   "CVVDP preset": "إعداد CVVDP المسبق",
   "Saved your CVVDP preset \"{name}\".": "حُفظ إعدادك المسبق لـ CVVDP «{name}».",
@@ -844,7 +841,14 @@
   "{group} median": "وسيط {group}",
   "{test} against {anchor}. Sequences in both: {count}. Negative: less bitrate for the same score.": "{test} مقابل {anchor}. التسلسلات المشتركة: {count}. القيمة السالبة: معدل بت أقل للدرجة نفسها.",
   "{video} (reference {reference}, {rate})": "{video} (المرجع {reference}، {rate})",
-  "{video}: its bitrate is the whole file's, soundtrack included": "{video}: معدل بته هو معدل الملف كله، بما فيه المسار الصوتي"
+  "{video}: its bitrate is the whole file's, soundtrack included": "{video}: معدل بته هو معدل الملف كله، بما فيه المسار الصوتي",
+  "GPU (fastest and most accurate)": "GPU (الأسرع والأدق)",
+  "Vship Vulkan (preferred)": "Vship Vulkan (مفضّل)",
+  "Vship HIP (use only if Vulkan has problems)": "Vship HIP (استخدمه فقط إذا واجه Vulkan مشاكل)",
+  "Vship CUDA (use only if Vulkan has problems)": "Vship CUDA (استخدمه فقط إذا واجه Vulkan مشاكل)",
+  "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU. GPU, the app's own build, is the fastest and most accurate. Vship Vulkan is stock Vship; Vship HIP (AMD) and Vship CUDA (NVIDIA) are stock Vship too, for a GPU whose Vulkan driver has problems, and all three share their saved scores. GPU's scores differ slightly and are saved apart: switching shows those saved, or calculates them on the next run. If GPU fails, Vship Vulkan calculates them instead. Without a GPU the chosen Vship can use, or if it fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available.": "أي Vship يحسب SSIMULACRA2 وButteraugli وCVVDP على GPU. يُعد GPU، إصدار التطبيق الخاص، الأسرع والأدق. Vship Vulkan هو Vship الأصلي؛ وVship HIP (AMD) وVship CUDA (NVIDIA) هما أيضًا Vship الأصلي، لبطاقة GPU يواجه تعريف Vulkan فيها مشاكل، وتتشارك الثلاثة درجاتها المحفوظة. تختلف درجات GPU قليلًا وتُحفظ منفصلة: يعرض التبديل المحفوظ منها أو يحسبها في التشغيل التالي. إذا فشل GPU، يحسبها Vship Vulkan بدلًا منه. بدون GPU يمكن لـ Vship المختار استخدامه، أو إذا فشل هو أيضًا، يُحسب SSIMULACRA2 وButteraugli على CPU (libjxl)، ولا يتوفر CVVDP.",
+  "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command line without --vship. Each video's own is set in the Options panel (Vship compute).": "Vship الذي يحسب SSIMULACRA2 وButteraugli وCVVDP لمقاطع الفيديو المضافة حديثًا، وفي سطر الأوامر بدون --vship. يُضبط لكل فيديو في لوحة الخيارات (حساب Vship).",
+  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "يُحسب CVVDP على GPU فقط، ولم يُعثر على GPU يمكن لـ {build} استخدامه؛ يمكن حسابه عند ضبط حساب Vship على GPU."
  },
  "plurals": {
   "about {count} day": [

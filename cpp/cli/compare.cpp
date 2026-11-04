@@ -732,7 +732,7 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         const auto backend = chosen.find(key);
         return asks(key) && (backend == chosen.end() || backend->second == "gpu");
     };
-    if (video.options.vship_build == VshipBuild::fast && vship51_bundled() &&
+    if (video.options.vship_build == VshipBuild::fast && vship_build_bundled(VshipBuild::stock) &&
         (asks("cvvdp") || on_gpu("ssimulacra2") || on_gpu("butteraugli"))) {
         // Vship-fast's probe, started with the run (start_gpu_checks),
         // answered first: where only 5.1.2 found a GPU, the request asks for
@@ -1331,8 +1331,10 @@ int compare(const CompareArguments& arguments) {
         print_error(*wrong);
         return exit_usage;
     }
-    if (arguments.vship && vship_build_from(*arguments.vship) == VshipBuild::stock && !vship51_bundled()) {
-        print_error("--vship vship: stock Vship is not bundled with this package.");
+    if (arguments.vship && !vship_build_bundled(vship_build_from(*arguments.vship))) {
+        print_error("--vship " + *arguments.vship + ": " +
+                    std::string(vship_build_label(vship_build_from(*arguments.vship))) +
+                    " is not bundled with this package.");
         return exit_usage;
     }
 #ifdef __APPLE__

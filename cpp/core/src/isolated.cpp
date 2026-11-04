@@ -378,7 +378,7 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
         } else if (task == "nvdec-probe") {
             result = {{"h264_10bit", nvidia_decodes_10bit_h264()}};
         } else if (task == "vship-probe") {
-            result = vship_probe_result(probe_vship_device(request.value("vship51", false)));
+            result = vship_probe_result(probe_vship_device(vship_build_from(request.value("vship_build", std::string()))));
         } else if (task == "gpu-run" || task == "cpu-metrics") {
             result = scoring_task(request, request_file.parent_path());
         } else if (task == "grain-feed") {

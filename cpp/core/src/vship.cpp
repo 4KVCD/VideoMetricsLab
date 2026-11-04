@@ -42,9 +42,32 @@ constexpr bool vship_bundled = false;
 // 10-bit frames, it scored SSIMULACRA2, Butteraugli and CVVDP together at
 // 45 pairs a second, where Vship 5.1.2 scored 36 with CUDA and 35 with
 // Vulkan. In tools/vship/vship51, stock Vship 5.1.2's Vulkan build (v2.1's),
-// which a metric Vship-fast failed is calculated with again.
-constexpr const char* vship_backend = "vulkan";
-constexpr const char* vship51_folder = "vship51";
+// which a metric Vship-fast failed is calculated with again. In tools/vship/hip
+// and cuda, Vship's own releases for a GPU whose Vulkan driver has problems:
+// 5.1.1's HIP, as 5.1.2 has none, and 5.1.2's CUDA (v2.0's).
+const char* vship_folder(VshipBuild build) {
+    switch (build) {
+    case VshipBuild::stock:
+        return "vship51";
+    case VshipBuild::hip:
+        return "hip";
+    case VshipBuild::cuda:
+        return "cuda";
+    default:
+        return "vulkan";
+    }
+}
+
+// The API a build runs on, as scores record it.
+const char* vship_backend(VshipBuild build) {
+    return build == VshipBuild::hip ? "hip" : build == VshipBuild::cuda ? "cuda" : "vulkan";
+}
+// Whose GPU a HIP or CUDA build needs, for the reason it will not load elsewhere.
+std::string vship_needs(VshipBuild build) {
+    return build == VshipBuild::hip ? " (it needs an AMD GPU and its driver)"
+           : build == VshipBuild::cuda ? " (it needs an NVIDIA GPU and its driver)"
+                                       : "";
+}
 
 // The largest frame, in pixels, a (GPU maker, metric) combination is given,
 // with the GPUs it covers for the reason shown. Vship 5.1.2's Vulkan
@@ -255,7 +278,7 @@ private:
 struct LoadedLibrary {
     std::mutex mutex;
     std::unique_ptr<VshipLibrary> library;
-    bool vship51 = false;  // stock Vship 5.1.2's rather than Vship-fast's
+    VshipBuild build = VshipBuild::fast;
 };
 
 LoadedLibrary& loaded_library() {
@@ -284,17 +307,16 @@ bool has_api(const platform::DynamicLibrary& library) {
 }
 
 // The library this process has loaded, or else `load`ed and kept: of the
-// build asked for (stock Vship 5.1.2's with `vship51`), as a process keeps
-// only one.
-const VshipLibrary& kept_library(const std::function<platform::DynamicLibrary()>& load, bool vship51 = false) {
+// build asked for, as a process keeps only one.
+const VshipLibrary& kept_library(const std::function<platform::DynamicLibrary()>& load, VshipBuild build) {
     LoadedLibrary& loaded = loaded_library();
     const std::lock_guard lock(loaded.mutex);
     if (!loaded.library) {
         loaded.library = std::make_unique<VshipLibrary>(load());
-        loaded.vship51 = vship51;
-    } else if (loaded.vship51 != vship51) {
-        throw VshipUnavailableError(std::string("this process has loaded ") +
-                                    (loaded.vship51 ? "stock Vship" : "the app's own Vship") + " already");
+        loaded.build = build;
+    } else if (loaded.build != build) {
+        throw VshipUnavailableError("this process has loaded " + std::string(vship_build_label(loaded.build)) +
+                                    " already");
     }
     return *loaded.library;
 }
@@ -324,9 +346,8 @@ struct ProbeListener {
 constexpr std::chrono::seconds failed_probe_retry{60};
 
 ProbeState& probe_state(VshipBuild build) {
-    static ProbeState fast;
-    static ProbeState stock;
-    return build == VshipBuild::stock ? stock : fast;
+    static std::array<ProbeState, 4> states;
+    return states.at(static_cast<std::size_t>(build));
 }
 
 ProbeListener& probe_listener() {
@@ -351,16 +372,16 @@ std::optional<GpuVendor> vendor_from(const std::string& text) {
 // is Intel's). Any failure is an answer, no GPU, as VMAF's and VMAF v1's
 // probes take one: one that escaped would leave the probe unasked, and a
 // run that waits for it (MainWindow::wait_for_gpu_checks) asking again for
-// good. With `vship51`, stock Vship 5.1.2's. `failed` is set when the probe
+// good. `failed` is set when the probe
 // crashed or failed rather than answering. A probe stopped by `cancel` (the
 // run's Cancel, or the app ending: stop_gpu_probes) is no answer: Cancelled
 // goes on.
-std::pair<std::optional<VshipDevice>, std::string> probe_isolated(bool vship51, bool& failed,
+std::pair<std::optional<VshipDevice>, std::string> probe_isolated(VshipBuild build, bool& failed,
                                                                   const CancelToken& cancel) {
     try {
+        const std::string what = std::string(vship_build_label(build)) + "'s GPU probe";
         const nlohmann::json result =
-            run_isolated("vship-probe", vship51 ? "stock Vship's GPU probe" : "Vship's GPU probe",
-                         {{"vship51", vship51}}, {}, cancel);
+            run_isolated("vship-probe", what, {{"vship_build", std::string(vship_build_value(build))}}, {}, cancel);
         return {vship_device_from(result.at("device")), result.at("reason").get<std::string>()};
     } catch (const IsolatedCrashError& error) {
         failed = true;
@@ -450,27 +471,40 @@ std::filesystem::path vulkan_folder() {
 
 std::filesystem::path vulkan_library_path() { return vulkan_folder() / "libvulkan.1.dylib"; }
 
-std::filesystem::path vship_library_path(bool vship51) {
+std::filesystem::path vship_library_path(VshipBuild build) {
 #ifdef __APPLE__
     static_cast<void>(vulkan_folder());  // the loader pointed at MoltenVK before Vship loads it
 #endif
-    return resource_folder() / "tools" / "vship" / (vship51 ? vship51_folder : vship_backend) /
-           platform::shared_library_name("libvship");
+    return resource_folder() / "tools" / "vship" / vship_folder(build) / platform::shared_library_name("libvship");
 }
 
-bool vship51_bundled() {
+std::string vship_build_api(VshipBuild build) {
+    return build == VshipBuild::hip ? "HIP" : build == VshipBuild::cuda ? "CUDA" : "Vulkan";
+}
+
+bool vship_build_bundled(VshipBuild build) {
     std::error_code missing;
-    return vship_bundled && std::filesystem::is_regular_file(vship_library_path(true), missing);
+    return vship_bundled && std::filesystem::is_regular_file(vship_library_path(build), missing);
+}
+
+std::vector<VshipBuild> bundled_vship_builds() {
+    std::vector<VshipBuild> builds{VshipBuild::fast};
+    for (const VshipBuild build : {VshipBuild::stock, VshipBuild::hip, VshipBuild::cuda}) {
+        if (vship_build_bundled(build)) {
+            builds.push_back(build);
+        }
+    }
+    return builds;
 }
 
 VshipBuild default_vship_build(std::string_view setting) {
     const VshipBuild chosen = vship_build_from(setting);
-    return chosen == VshipBuild::stock && !vship51_bundled() ? VshipBuild::fast : chosen;
+    return vship_build_bundled(chosen) ? chosen : VshipBuild::fast;
 }
 
-const VshipLibrary& vship_library(bool vship51) {
+const VshipLibrary& vship_library(VshipBuild build) {
     try {
-        return kept_library([vship51] { return platform::DynamicLibrary(vship_library_path(vship51)); }, vship51);
+        return kept_library([build] { return platform::DynamicLibrary(vship_library_path(build)); }, build);
     } catch (const platform::LibraryError& error) {
         throw VshipUnavailableError(error.what());
     }
@@ -496,64 +530,76 @@ std::optional<std::string> size_refusal(const VshipDevice& device, const std::st
 }
 
 std::string vship_build_name(const VshipDevice& device) {
-    return (device.vship51 ? "Vship " : "Vship-fast ") + device.version;
+    switch (device.build) {
+    case VshipBuild::stock:
+        return "Vship " + device.version;
+    case VshipBuild::hip:
+        return "Vship " + device.version + " HIP";
+    case VshipBuild::cuda:
+        return "Vship " + device.version + " CUDA";
+    default:
+        return "Vship-fast " + device.version;
+    }
 }
 
-std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(bool vship51) {
+std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(VshipBuild build) {
     // The rest is built on every system all the same, so that it stays
     // ready for the builds of the others.
     if constexpr (!vship_bundled) {
         return {std::nullopt, "Vship GPU acceleration is only bundled for Windows and macOS."};
     }
-    const std::filesystem::path path = vship_library_path(vship51);
+    const std::string api = vship_build_api(build);
+    const std::filesystem::path path = vship_library_path(build);
     std::error_code missing;
     if (!std::filesystem::is_regular_file(path, missing)) {
-        return {std::nullopt, vship51 ? "stock Vship's Vulkan library is missing" : "Vship's Vulkan library is missing"};
+        return {std::nullopt, (build == VshipBuild::stock ? "stock Vship's " : "Vship's ") + api + " library is missing"};
     }
-    if (const std::optional<std::string> unavailable = VulkanLoader().unavailable()) {
-        return {std::nullopt, "Vulkan: " + *unavailable};
+    if (vship_build_on_vulkan(build)) {
+        if (const std::optional<std::string> unavailable = VulkanLoader().unavailable()) {
+            return {std::nullopt, "Vulkan: " + *unavailable};
+        }
     }
     const VshipLibrary* library = nullptr;
     try {
         library = &kept_library(
-            [&path] {
+            [&path, &api] {
                 platform::DynamicLibrary loaded(path);
                 if (!has_api(loaded)) {
-                    throw OldVshipError("Vship's Vulkan library is older than 5.1");
+                    throw OldVshipError("Vship's " + api + " library is older than 5.1");
                 }
                 return loaded;
             },
-            vship51);
+            build);
     } catch (const OldVshipError& error) {
         return {std::nullopt, error.what()};
     } catch (const VshipUnavailableError& error) {  // the other build is loaded in this process
         return {std::nullopt, error.what()};
     } catch (const platform::LibraryError& error) {
-        return {std::nullopt, std::string("Vship's Vulkan library could not be loaded: ") + error.what()};
+        return {std::nullopt, "Vship's " + api + " library could not be loaded" + vship_needs(build) + ": " + error.what()};
     }
     int count = 0;
     if (const int error = library->get_device_count(&count); error != 0) {
-        return {std::nullopt, "Vulkan: " + library->message(error)};
+        return {std::nullopt, api + ": " + library->message(error)};
     }
     // (integrated, number, name): a discrete GPU first, then Vship's order.
     std::vector<std::tuple<bool, int, std::string>> usable;
     std::vector<std::string> failures;
     for (int gpu_id = 0; gpu_id < count; ++gpu_id) {
         if (const int error = library->gpu_full_check(gpu_id); error != 0) {
-            failures.push_back("Vulkan GPU " + std::to_string(gpu_id) + ": " + library->message(error));
+            failures.push_back(api + " GPU " + std::to_string(gpu_id) + ": " + library->message(error));
             continue;
         }
         vship_api::DeviceInfo info;
         if (const int error = library->get_device_info(&info, gpu_id); error != 0) {
-            failures.push_back("Vulkan GPU " + std::to_string(gpu_id) + ": " + library->message(error));
+            failures.push_back(api + " GPU " + std::to_string(gpu_id) + ": " + library->message(error));
             continue;
         }
         const std::string name = replace_invalid_utf8(std::string(info.name, strnlen(info.name, sizeof info.name)));
-        usable.emplace_back(info.integrated != 0, gpu_id, name.empty() ? "Vulkan GPU " + std::to_string(gpu_id) : name);
+        usable.emplace_back(info.integrated != 0, gpu_id, name.empty() ? api + " GPU " + std::to_string(gpu_id) : name);
     }
     if (usable.empty()) {
         if (count == 0) {
-            failures.push_back("Vulkan: no GPU was found");
+            failures.push_back(api + ": no GPU was found");
         }
         std::string reasons;
         for (const std::string& failure : failures) {
@@ -563,17 +609,20 @@ std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(bool vship
     }
     const auto& [integrated, gpu_id, name] = *std::min_element(usable.begin(), usable.end());
     const vship_api::Version version = library->get_version();
-    return {VshipDevice{vship_backend, name, gpu_id,
+    const std::optional<GpuVendor> vendor = build == VshipBuild::hip    ? std::optional(GpuVendor::amd)
+                                            : build == VshipBuild::cuda ? std::optional(GpuVendor::nvidia)
+                                                                        : VulkanLoader().vendor_of(name);
+    return {VshipDevice{vship_backend(build), name, gpu_id,
                         std::to_string(version.major) + "." + std::to_string(version.minor) + "." +
                             std::to_string(version.minorMinor),
-                        VulkanLoader().vendor_of(name), vship51},
+                        vendor, build},
             ""};
 }
 
 nlohmann::json vship_device_json(const VshipDevice& device) {
     return {{"backend", device.backend}, {"name", device.name},
             {"gpu_id", device.gpu_id},   {"version", device.version},
-            {"vendor", vendor_text(device.vendor)}, {"vship51", device.vship51}};
+            {"vendor", vendor_text(device.vendor)}, {"build", std::string(vship_build_value(device.build))}};
 }
 
 std::optional<VshipDevice> vship_device_from(const nlohmann::json& text) {
@@ -586,7 +635,7 @@ std::optional<VshipDevice> vship_device_from(const nlohmann::json& text) {
     text.at("gpu_id").get_to(device.gpu_id);
     text.at("version").get_to(device.version);
     device.vendor = vendor_from(text.at("vendor").get<std::string>());
-    device.vship51 = text.value("vship51", false);
+    device.build = vship_build_from(text.value("build", std::string()));
     return device;
 }
 
@@ -600,13 +649,13 @@ std::pair<std::optional<VshipDevice>, std::string> detect_vship_device(VshipBuil
     ProbeState& state = probe_state(build);
     const std::lock_guard lock(state.mutex);
     if (!state.probed) {
-        const bool vship51 = build == VshipBuild::stock;
         bool failed = false;
         // Kept only once whole: a probe cancelled (Cancelled, 5.1.2's below
         // too) leaves this build unasked, not without a GPU.
         std::pair<std::optional<VshipDevice>, std::string> probed =
-            isolation_program() ? probe_isolated(vship51, failed, cancel) : probe_vship_device(vship51);
-        if (!vship51 && !probed.first && isolation_program() && vship51_bundled()) {
+            isolation_program() ? probe_isolated(build, failed, cancel) : probe_vship_device(build);
+        if (build == VshipBuild::fast && !probed.first && isolation_program() &&
+            vship_build_bundled(VshipBuild::stock)) {
             // Vship-fast compiles every shader as it starts on a GPU: one of
             // its own that the driver refuses, or crashes on, leaves it no
             // GPU where stock Vship 5.1.2 may have one. Its reason stays the
@@ -628,10 +677,11 @@ std::pair<std::optional<VshipDevice>, std::string> detect_vship_device(VshipBuil
         const auto& [device, reason] = *state.probed;
         if (device) {
             app_log::write(app_log::Level::info, "vml.perceptual_vship",
-                           vship_build_name(*device) + " (Vulkan) GPU: " + device->name);
+                           vship_build_name(*device) + (vship_build_on_vulkan(device->build) ? " (Vulkan)" : "") +
+                               " GPU: " + device->name);
         } else {
             app_log::write(app_log::Level::warning, "vml.perceptual_vship",
-                           std::string(vship51 ? "Vship 5.1.2" : "Vship-fast") + " GPU unavailable: " + reason);
+                           std::string(vship_build_label(build)) + " GPU unavailable: " + reason);
         }
         {
             const std::lock_guard known_lock(state.known_mutex);
@@ -671,7 +721,7 @@ bool vship_probe_ready(VshipBuild build) {
 }
 
 void forget_failed_vship_probe() {
-    for (const VshipBuild build : {VshipBuild::fast, VshipBuild::stock}) {
+    for (const VshipBuild build : {VshipBuild::fast, VshipBuild::stock, VshipBuild::hip, VshipBuild::cuda}) {
         ProbeState& state = probe_state(build);
         const std::lock_guard lock(state.mutex);
         if (state.probed && !state.probed->first &&
@@ -684,7 +734,7 @@ void forget_failed_vship_probe() {
 VshipBuild vship_build_in_use(VshipBuild chosen) {
     if (chosen == VshipBuild::fast) {
         const auto known = known_vship_device(VshipBuild::fast);
-        if (known && known->first && known->first->vship51) {
+        if (known && known->first && known->first->build == VshipBuild::stock) {
             return VshipBuild::stock;
         }
     }

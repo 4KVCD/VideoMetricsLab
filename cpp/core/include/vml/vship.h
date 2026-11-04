@@ -213,17 +213,25 @@ struct VshipLibrary {
     std::string handler_error(void* handler, int code) const;
 };
 
-// Where Vship's Vulkan build is: Vship-fast's, or with `vship51` stock Vship
-// 5.1.2's, which a video can be set to (VshipBuild::stock), and which
+// Where a Vship build is. Stock Vship 5.1.2's Vulkan build is also what
 // Vship-fast's metrics fall back to when Vship-fast fails (MetricRouting in
-// vship_run.cpp). A package may bundle only Vship-fast.
-std::filesystem::path vship_library_path(bool vship51 = false);
+// vship_run.cpp). A package may bundle only Vship-fast, and HIP's and CUDA's
+// are Windows' alone.
+std::filesystem::path vship_library_path(VshipBuild build = VshipBuild::fast);
 
-// Whether stock Vship 5.1.2 is bundled.
-bool vship51_bundled();
+// Whether a build is bundled, and those that are, in VshipBuild's order.
+bool vship_build_bundled(VshipBuild build);
+std::vector<VshipBuild> bundled_vship_builds();
+
+// Whether a build runs on Vulkan, whose memory and device numbers the GPU
+// decoders share; HIP's and CUDA's have their own.
+inline bool vship_build_on_vulkan(VshipBuild build) { return build == VshipBuild::fast || build == VshipBuild::stock; }
+
+// The API a build runs on, as messages name it: "Vulkan", "HIP" or "CUDA".
+std::string vship_build_api(VshipBuild build);
 
 // The Vship build new videos use, by Settings' default_vship_build
-// (vship_build_from): Vship-fast where stock Vship 5.1.2 is not bundled.
+// (vship_build_from): Vship-fast where the one chosen is not bundled.
 VshipBuild default_vship_build(std::string_view setting);
 
 // The Vulkan the app bundles on macOS (tools/vulkan): Khronos' loader, with
@@ -233,30 +241,30 @@ std::filesystem::path vulkan_library_path();
 
 // The GPU Vship runs on.
 struct VshipDevice {
-    std::string backend;  // the build it runs on, "vulkan", as scores record it
+    std::string backend;  // the API it runs on, "vulkan", "hip" or "cuda", as scores record it
     std::string name;
     int gpu_id = 0;
     std::string version;  // "5.1.2"
     // Who made the GPU, as the Vulkan loader says (GpuVendor::none for
     // another maker). Nothing when it could not be told.
     std::optional<GpuVendor> vendor;
-    // Found by stock Vship 5.1.2's probe, where Vship-fast could use no GPU:
-    // the metrics run on 5.1.2.
-    bool vship51 = false;
-    // Why Vship-fast could use no GPU, where `vship51`: for the run's note
-    // that its metrics fell back to 5.1.2. Kept in the process that probed,
+    // The build whose probe found it: stock Vship 5.1.2 where Vship-fast could
+    // use no GPU, and the metrics then run on 5.1.2.
+    VshipBuild build = VshipBuild::fast;
+    // Why Vship-fast could use no GPU, where 5.1.2 then found it: for the run's
+    // note that its metrics fell back to 5.1.2. Kept in the process that probed,
     // not in vship_device_json.
     std::string fast_failure{};
 };
 
-// The build `device` was found by, as the app shows it: "Vship-fast 5.1.2"
-// or "Vship 5.1.2".
+// The build `device` was found by, as the app shows it: "Vship-fast 5.1.2",
+// "Vship 5.1.2", "Vship 5.1.1 HIP" or "Vship 5.1.2 CUDA".
 std::string vship_build_name(const VshipDevice& device);
 
-// Vship's library, Vship-fast's or with `vship51` stock Vship 5.1.2's,
-// loaded once in this process: a process loads only one of the two (the
-// fallback runs in a process of its own). Throws VshipUnavailableError.
-const VshipLibrary& vship_library(bool vship51 = false);
+// A build's library, loaded once in this process: a process loads only one
+// build (the fallback runs in a process of its own). Throws
+// VshipUnavailableError.
+const VshipLibrary& vship_library(VshipBuild build = VshipBuild::fast);
 
 // Why `device` does not calculate `key` on frames of `size`, or nothing if
 // it does: Vship 5.1.2's Vulkan CVVDP hung Intel's GPU above 1920x1080, and
@@ -266,10 +274,10 @@ const VshipLibrary& vship_library(bool vship51 = false);
 std::optional<std::string> size_refusal(const VshipDevice& device, const std::string& key, std::pair<int, int> size,
                                         std::optional<std::pair<int, int>> computed = std::nullopt);
 
-// Loads Vship's build in this process, Vship-fast's or with `vship51` stock
-// Vship 5.1.2's, and returns the GPU it would use, a discrete one first, or
-// the reasons none was found.
-std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(bool vship51 = false);
+// Loads a build in this process and returns the GPU it would use, a discrete
+// one first, or the reasons none was found. HIP's and CUDA's never touch the
+// Vulkan driver, which they may be chosen to stay clear of.
+std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(VshipBuild build = VshipBuild::fast);
 
 // The probe's answer as the isolated "vship-probe" task sends it.
 nlohmann::json vship_probe_result(const std::pair<std::optional<VshipDevice>, std::string>& probed);
@@ -283,7 +291,7 @@ std::optional<VshipDevice> vship_device_from(const nlohmann::json& text);
 // there would end the run), and kept; or a reason the user can read for why
 // there is none. Where Vship-fast can use none (it compiles every shader as
 // it starts on a GPU), stock Vship 5.1.2's answer is Vship-fast's, a device
-// with `vship51`, if it finds one. The check runs under `cancel`: a run's own
+// of that build, if it finds one. The check runs under `cancel`: a run's own
 // token inside a run, gpu_probes_token() elsewhere; cancelled, it throws
 // Cancelled and keeps no answer.
 std::pair<std::optional<VshipDevice>, std::string> detect_vship_device(VshipBuild build, const CancelToken& cancel);

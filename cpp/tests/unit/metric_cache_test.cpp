@@ -1127,5 +1127,23 @@ TEST(Npz, ReadsWhatItWrites) {
     EXPECT_FALSE(read_npz(folder / "b.npz").has_value());
 }
 
+// A video set to Vship Vulkan, HIP or CUDA asks for one saved score; set to Vship-fast, for another.
+TEST(MetricCache, StockVshipsBuildsShareTheirSavedScores) {
+    const auto ids_of = [](VshipBuild build) {
+        VmafOptions options;
+        options.vship_build = build;
+        const VideoInfo video;
+        std::vector<std::string> ids;
+        for (const MetricRequestSpec& spec :
+             analysis_request(options, {"ssimulacra2", "cvvdp"}, {}, CvvdpSettings{}, video, video).metrics) {
+            ids.push_back(spec.implementation_compatibility_id);
+        }
+        return ids;
+    };
+    EXPECT_EQ(ids_of(VshipBuild::hip), ids_of(VshipBuild::stock));
+    EXPECT_EQ(ids_of(VshipBuild::cuda), ids_of(VshipBuild::stock));
+    EXPECT_NE(ids_of(VshipBuild::fast), ids_of(VshipBuild::stock));
+}
+
 }  // namespace
 }  // namespace vml

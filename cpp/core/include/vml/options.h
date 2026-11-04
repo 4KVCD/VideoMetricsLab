@@ -55,17 +55,19 @@ const std::vector<ResampleTarget>& resample_target_choices();
 std::filesystem::path synthetic_scale_direction_variant_path(const std::filesystem::path& distorted,
                                                              ScaleDirection direction);
 
-// Which of the two bundled Vship builds calculates SSIMULACRA2, Butteraugli
-// and CVVDP on the GPU: Vship-fast, which computes as libjxl and pycvvdp do,
-// or stock Vship 5.1.2. Their scores differ slightly, and each build's are
-// saved and reused apart.
-enum class VshipBuild { fast, stock };
+// Which bundled Vship build calculates SSIMULACRA2, Butteraugli and CVVDP on
+// the GPU: Vship-fast, which computes as libjxl and pycvvdp do, or stock Vship:
+// its Vulkan build (5.1.2), or for a GPU whose Vulkan driver has problems its HIP
+// (5.1.1, AMD) or CUDA (5.1.2, NVIDIA) build. Vship-fast's scores differ slightly
+// and are saved and reused apart; stock Vship's three share theirs, as one.
+enum class VshipBuild { fast, stock, hip, cuda };
 
-// A build as settings, run files and the command line name it: "vship-fast"
-// or "vship"; and back, any other text being Vship-fast.
+// A build as settings, run files and the command line name it: "vship-fast",
+// "vship", "vship-hip" or "vship-cuda"; and back, any other text being Vship-fast.
 std::string_view vship_build_value(VshipBuild build);
 VshipBuild vship_build_from(std::string_view value);
-// A build's name for the log: "Vship-fast" or "Vship 5.1.2".
+// A build's name for the log: "Vship-fast", "Vship 5.1.2", "Vship 5.1.1 HIP" or
+// "Vship 5.1.2 CUDA".
 std::string_view vship_build_label(VshipBuild build);
 
 // Where FFmpeg starts reading each video of a ranged run (ffmpeg_range_seek,

@@ -81,7 +81,7 @@ cannot, with libvmaf's CUDA code on an NVIDIA GPU; scores PSNR, SSIM and XPSNR i
 extractors, as the Python app does; scores SSIMULACRA2, Butteraugli and
 CVVDP on the GPU with the app's own Vship (Vship-fast's Vulkan build; the
 window's "GPU") or, with `--vship vship` or Settings > GPU metrics' choice,
-stock Vship's ("GPU - Vship"), in a pass each or (Settings > GPU metrics) in
+stock Vship's ("Vship Vulkan", "Vship HIP", "Vship CUDA"), in a pass each or (Settings > GPU metrics) in
 one, CVVDP on the display Settings chooses (Automatic unless it names a
 preset: the HDR display for an HDR reference, the SDR one otherwise) or on
 each `--cvvdp-display`; and scores SSIMULACRA2 and Butteraugli on the CPU with

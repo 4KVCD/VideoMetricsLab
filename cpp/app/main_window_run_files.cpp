@@ -116,7 +116,7 @@ void take_run_options(VmafOptions& options, const ComparisonResult& result) {
     const auto any = [&ids](bool (*made_by)(std::string_view)) { return std::any_of(ids.begin(), ids.end(), made_by); };
     if (any(score_identity::is_vship_fast_id)) {
         options.vship_build = VshipBuild::fast;
-    } else if (any(score_identity::is_vship51_id) && vship51_bundled() &&
+    } else if (any(score_identity::is_vship51_id) && vship_build_bundled(VshipBuild::stock) &&
                vship_build_in_use(VshipBuild::fast) == VshipBuild::fast) {
         options.vship_build = VshipBuild::stock;
     }

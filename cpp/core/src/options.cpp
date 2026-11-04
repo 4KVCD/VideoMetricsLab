@@ -29,14 +29,39 @@ bool VmafOptions::*bool_option(std::string_view name) {
 
 }  // namespace
 
-std::string_view vship_build_value(VshipBuild build) { return build == VshipBuild::stock ? "vship" : "vship-fast"; }
+std::string_view vship_build_value(VshipBuild build) {
+    switch (build) {
+    case VshipBuild::stock:
+        return "vship";
+    case VshipBuild::hip:
+        return "vship-hip";
+    case VshipBuild::cuda:
+        return "vship-cuda";
+    default:
+        return "vship-fast";
+    }
+}
 
 VshipBuild vship_build_from(std::string_view value) {
-    return value == vship_build_value(VshipBuild::stock) ? VshipBuild::stock : VshipBuild::fast;
+    for (const VshipBuild build : {VshipBuild::stock, VshipBuild::hip, VshipBuild::cuda}) {
+        if (value == vship_build_value(build)) {
+            return build;
+        }
+    }
+    return VshipBuild::fast;
 }
 
 std::string_view vship_build_label(VshipBuild build) {
-    return build == VshipBuild::stock ? "Vship 5.1.2" : "Vship-fast";
+    switch (build) {
+    case VshipBuild::stock:
+        return "Vship 5.1.2";
+    case VshipBuild::hip:
+        return "Vship 5.1.1 HIP";
+    case VshipBuild::cuda:
+        return "Vship 5.1.2 CUDA";
+    default:
+        return "Vship-fast";
+    }
 }
 
 std::filesystem::path synthetic_scale_direction_variant_path(const std::filesystem::path& distorted,

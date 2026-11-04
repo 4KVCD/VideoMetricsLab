@@ -516,7 +516,7 @@ TEST(PerceptualRouting, AFailedGpuTaskMovesToVship51ThenToTheCpuAtAnyLength) {
         }
         PerceptualRequest request = routed_request(7200.0);
         VshipDevice gpu = test_gpu;
-        gpu.vship51 = vship51 == "found the GPU" || vship51 == "chosen";
+        gpu.build = vship51 == "found the GPU" || vship51 == "chosen" ? VshipBuild::stock : VshipBuild::fast;
         if (vship51 == "found the GPU") {
             gpu.fast_failure = "a shader failed";
         } else if (vship51 == "chosen") {
@@ -526,7 +526,7 @@ TEST(PerceptualRouting, AFailedGpuTaskMovesToVship51ThenToTheCpuAtAnyLength) {
         const PerceptualTaskOutput output = run_perceptual_task(request, {"ssimulacra2", "cvvdp"}, false,
                                                                 recording_hooks(routed), CancelToken(), routes);
         EXPECT_EQ(routed.build, request.options.vship_build);
-        EXPECT_EQ(routed.vship51.empty(), vship51 == "not bundled" || gpu.vship51);
+        EXPECT_EQ(routed.vship51.empty(), vship51 == "not bundled" || gpu.build != VshipBuild::fast);
         if (vship51 == "found the GPU") {
             // Vship-fast's failed check is said first, as a GPU fallback.
             EXPECT_EQ(routed.statuses.front(), "The app's own Vship could not use the GPU (a shader failed); "

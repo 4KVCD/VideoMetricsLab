@@ -248,22 +248,16 @@ QGroupBox* SettingsPanel::build_defaults_box() {
 QGroupBox* SettingsPanel::build_gpu_box() {
     auto* gpu_box = new QGroupBox(app::tr("GPU metrics"));
     auto* gpu_layout = new QVBoxLayout(gpu_box);
-    if (vship51_bundled()) {
+    if (vship_build_bundled(VshipBuild::stock)) {
         // The entries' data: Settings' default_vship_build values.
         auto* build_row = new QHBoxLayout;
         build_row->addWidget(new QLabel(app::tr("New videos use:")));
         vship_build_default = new QComboBox;
-        vship_build_default->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-        vship_build_default->addItem(vship_choice_label(VshipBuild::fast),
-                                     QString::fromUtf8(vship_build_value(VshipBuild::fast)));
-        vship_build_default->addItem(vship_choice_label(VshipBuild::stock),
-                                     QString::fromUtf8(vship_build_value(VshipBuild::stock)));
-        vship_build_default->setCurrentIndex(
-            default_vship_build(settings_.default_vship_build) == VshipBuild::stock ? 1 : 0);
+        add_vship_choices(*vship_build_default, bundled_vship_builds());
+        show_vship_choice(*vship_build_default, default_vship_build(settings_.default_vship_build));
         vship_build_default->setToolTip(app::tr(
             "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command "
-            "line without --vship: GPU, the app's own build, or GPU - Vship, stock Vship. Each video's own is set in "
-            "the Options panel (Vship compute)."));
+            "line without --vship. Each video's own is set in the Options panel (Vship compute)."));
         connect(vship_build_default, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
         build_row->addWidget(vship_build_default);
         build_row->addStretch(1);

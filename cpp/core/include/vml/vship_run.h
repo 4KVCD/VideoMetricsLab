@@ -68,7 +68,7 @@ std::vector<std::vector<std::string>> vship_passes(const std::vector<std::string
 // replace the same functions): finding the GPU a Vship build uses, and
 // whether its GPU check failed where none was found (none: it did not),
 // finding the black bars, Vship's passes on that GPU (Vship-fast's, or
-// 5.1.2's on a device with `vship51`), the same passes on stock Vship 5.1.2
+// 5.1.2's on a device of that build), the same passes on stock Vship 5.1.2
 // after Vship-fast failed (none where it is not bundled), and the CPU's tools
 // with the black bars already found, if they were.
 struct PerceptualRoutes {
@@ -99,7 +99,7 @@ PerceptualRoutes app_perceptual_routes();
 // one pass; or on the CPU. What Vship-fast fails on the GPU is calculated
 // again with stock Vship 5.1.2 where it is bundled, but a metric refused for
 // the size compared at (size_refusal); with stock Vship 5.1.2 chosen, or on
-// a GPU only 5.1.2 found (VshipDevice::vship51), every metric runs on 5.1.2,
+// a GPU only 5.1.2 found (VshipDevice::build), every metric runs on 5.1.2,
 // and never on Vship-fast. A metric moves from
 // the GPU to the CPU where the GPU cannot calculate it, whatever the
 // video's length: without a GPU Vship can use, and after it failed on the

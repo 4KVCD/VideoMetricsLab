@@ -275,11 +275,8 @@
   "CVVDP judges each frame together with the frames before it, so it needs every frame: it is not available while libvmaf frame subsample is above 1.": "CVVDP は各フレームを直前のフレームと合わせて判断するため、全フレームが必要です：libvmaf のフレーム間引きが 1 より大きい間は使えません。",
   "CVVDP is calculated on the GPU only, and no GPU that Vship can use was found.": "CVVDP は GPU でのみ計算されますが、Vship が使える GPU が見つかりませんでした。",
   "\n\nCalculated with {build}, not with this video's {chosen}; their scores differ slightly, so the next run calculates it again with {chosen}.": "\n\nこの動画の設定である {chosen} ではなく {build} で計算されました。両者のスコアはわずかに異なるため、次回の実行で {chosen} で再計算します。",
-  "CVVDP is calculated on the GPU only, and no GPU that stock Vship can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP は GPU でのみ計算されますが、オリジナルの Vship が使える GPU が見つかりませんでした。Vship の計算を GPU にすると計算できます。",
   "New videos use:": "新しい動画で使用:",
-  "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command line without --vship: GPU, the app's own build, or GPU - Vship, stock Vship. Each video's own is set in the Options panel (Vship compute).": "新しく追加する動画と、--vship を指定しないコマンドラインで SSIMULACRA2、Butteraugli、CVVDP を計算する Vship：アプリ独自のビルドである GPU、またはオリジナルの Vship である GPU - Vship。各動画の設定は［オプション］パネル（Vship の計算）で行います。",
   "Vship compute:": "Vship の計算:",
-  "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: GPU, the app's own build, or GPU - Vship, stock Vship. Their scores differ slightly, and each one's are saved apart: switching shows that one's saved scores, or calculates them on the next run. If GPU fails, stock Vship calculates them instead. Without a GPU Vship can use, or if stock Vship fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available.": "GPU で SSIMULACRA2、Butteraugli、CVVDP を計算する Vship：アプリ独自のビルドである GPU、またはオリジナルの Vship である GPU - Vship。両者のスコアはわずかに異なり、それぞれのスコアは別々に保存されます。切り替えると選んだ方の保存済みスコアが表示され、なければ次回の実行で計算されます。GPU が失敗した場合はオリジナルの Vship が代わりに計算します。Vship が使える GPU がない場合やオリジナルの Vship も失敗した場合、SSIMULACRA2 と Butteraugli は CPU（libjxl）で計算され、CVVDP は使用できません。",
   "At least one metric must stay shown.": "少なくとも 1 つの指標は表示したままにする必要があります。",
   "CVVDP preset": "CVVDP プリセット",
   "Saved your CVVDP preset \"{name}\".": "CVVDP プリセット「{name}」を保存しました。",
@@ -844,7 +841,14 @@
   "{group} median": "{group} の中央値",
   "{test} against {anchor}. Sequences in both: {count}. Negative: less bitrate for the same score.": "{anchor} に対する {test}。両方にあるシーケンス：{count}。負の値：同じスコアでビットレートが少ない。",
   "{video} (reference {reference}, {rate})": "{video}（参照動画 {reference}、{rate}）",
-  "{video}: its bitrate is the whole file's, soundtrack included": "{video}：ビットレートは音声トラックを含むファイル全体のものです"
+  "{video}: its bitrate is the whole file's, soundtrack included": "{video}：ビットレートは音声トラックを含むファイル全体のものです",
+  "GPU (fastest and most accurate)": "GPU (最速で最も正確)",
+  "Vship Vulkan (preferred)": "Vship Vulkan (推奨)",
+  "Vship HIP (use only if Vulkan has problems)": "Vship HIP (Vulkan に問題がある場合のみ使用)",
+  "Vship CUDA (use only if Vulkan has problems)": "Vship CUDA (Vulkan に問題がある場合のみ使用)",
+  "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU. GPU, the app's own build, is the fastest and most accurate. Vship Vulkan is stock Vship; Vship HIP (AMD) and Vship CUDA (NVIDIA) are stock Vship too, for a GPU whose Vulkan driver has problems, and all three share their saved scores. GPU's scores differ slightly and are saved apart: switching shows those saved, or calculates them on the next run. If GPU fails, Vship Vulkan calculates them instead. Without a GPU the chosen Vship can use, or if it fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available.": "GPU で SSIMULACRA2、Butteraugli、CVVDP を計算する Vship を選びます。アプリ独自のビルドである GPU が最速で最も正確です。Vship Vulkan は標準の Vship です。Vship HIP (AMD) と Vship CUDA (NVIDIA) も標準の Vship で、Vulkan ドライバーに問題がある GPU 向けです。この 3 つは保存済みスコアを共有します。GPU のスコアはわずかに異なり、別に保存されます。切り替えると保存済みのスコアを表示するか、次回の実行で計算します。GPU が失敗すると、代わりに Vship Vulkan が計算します。選択した Vship が使える GPU がない場合、またはそれも失敗した場合、SSIMULACRA2 と Butteraugli は CPU (libjxl) で計算され、CVVDP は利用できません。",
+  "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command line without --vship. Each video's own is set in the Options panel (Vship compute).": "新しく追加した動画と、--vship なしのコマンドラインで SSIMULACRA2、Butteraugli、CVVDP を計算する Vship です。動画ごとの設定はオプションパネル (Vship の計算) で行います。",
+  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP は GPU でのみ計算され、{build} が使える GPU が見つかりませんでした。Vship の計算を GPU に設定すると計算できます。"
  },
  "plurals": {
   "about {count} day": [

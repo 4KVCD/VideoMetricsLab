@@ -19,6 +19,7 @@
 #include "vml/metrics.h"
 #include "vml/score_identity.h"
 #include "vml/vship.h"
+#include "vship_names.h"
 #include "widgets.h"
 #include "window_helpers.h"
 
@@ -106,9 +107,10 @@ std::optional<QString> MainWindow::metric_unavailable_reason(const RowData& row_
                            "not available while libvmaf frame subsample is above 1.");
         }
         if (!vship_available(row_data.options.vship_build)) {
-            if (row_data.options.vship_build == VshipBuild::stock && vship_available(VshipBuild::fast)) {
-                return app::tr("CVVDP is calculated on the GPU only, and no GPU that stock Vship can use was found; "
-                               "with Vship compute set to GPU it can be calculated.");
+            if (row_data.options.vship_build != VshipBuild::fast && vship_available(VshipBuild::fast)) {
+                return app::tr("CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with "
+                               "Vship compute set to GPU it can be calculated.",
+                               {{"build", vship_short_name(row_data.options.vship_build)}});
             }
             return app::tr("CVVDP is calculated on the GPU only, and no GPU that Vship can use was found.");
         }
@@ -342,14 +344,16 @@ bool MainWindow::backend_matches(const RowData& row_data, const std::string& key
 }
 
 std::optional<VshipBuild> MainWindow::other_vship_build(const RowData& row_data, const MetricProvenance& provenance) {
-    // The Vship build that made a GPU score of Vship's, where it is not the
-    // one that calculates for the row (vship_build_in_use): Vship 5.1.2's
-    // after Vship-fast failed. Their scores differ slightly.
+    // The Vship build that made a GPU score of Vship's, where its scores are not
+    // those of the one that calculates for the row (vship_build_in_use): Vship
+    // 5.1.2's after Vship-fast failed. Their scores differ slightly; stock Vship's
+    // Vulkan, HIP and CUDA share theirs.
     const std::string& id = provenance.implementation_compatibility_id;
     const std::optional<VshipBuild> made = score_identity::is_vship51_id(id)      ? std::optional(VshipBuild::stock)
                                            : score_identity::is_vship_fast_id(id) ? std::optional(VshipBuild::fast)
                                                                                   : std::nullopt;
-    return made != vship_build_in_use(row_data.options.vship_build) ? made : std::nullopt;
+    const bool in_use_is_stock = vship_build_in_use(row_data.options.vship_build) != VshipBuild::fast;
+    return made && (*made == VshipBuild::stock) != in_use_is_stock ? made : std::nullopt;
 }
 
 QString MainWindow::other_scale_note() {

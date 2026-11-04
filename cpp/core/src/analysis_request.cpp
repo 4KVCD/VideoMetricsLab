@@ -115,9 +115,10 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
                 throw std::invalid_argument("No executable backend is registered for metric '" + key + "'");
             }
             spec.backend_id = std::string(definition.backend_id);
-            // Each Vship build's scores apart (score_identity.h), by the build
-            // that calculates here: 5.1.2's where Vship-fast can use no GPU.
-            const bool vship51 = vship_build_in_use(options.vship_build) == VshipBuild::stock;
+            // Vship-fast's scores apart from stock Vship's, whose Vulkan, HIP and
+            // CUDA builds share theirs (score_identity.h), by the build that
+            // calculates here: 5.1.2's where Vship-fast can use no GPU.
+            const bool vship51 = vship_build_in_use(options.vship_build) != VshipBuild::fast;
             if (key == "cvvdp") {
                 // GPU only (Vship), and every frame: the display and whether
                 // frames fill it are part of what the score means.

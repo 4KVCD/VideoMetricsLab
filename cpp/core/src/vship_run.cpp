@@ -1030,7 +1030,7 @@ struct PassPlan {
     std::optional<CropBox> source_crop;
     std::optional<CropBox> distorted_crop;
     HardwareDecoding decoding;
-    bool vship51 = false;
+    VshipBuild build = VshipBuild::fast;
 };
 
 // One pass of Vship's metrics over a pair of videos (the Python app's
@@ -1050,7 +1050,7 @@ public:
           on_progress_(on_progress),
           on_status_(on_status),
           cancel_(cancel),
-          library_(vship_library(plan.vship51)),
+          library_(vship_library(plan.build)),
           decode_(plan.decoding) {
         if (plan.keys.empty() || !std::all_of(plan.keys.begin(), plan.keys.end(), is_perceptual_metric)) {
             throw std::invalid_argument("A Vship pass scores SSIMULACRA2, Butteraugli and CVVDP only.");
@@ -1248,6 +1248,7 @@ private:
                 // cannot start, the app's VVdeC on the CPU, vvdec-vulkan then off for the run
                 const VmafOptions& options = request_.options;
                 if (backend == software_decoder && native_ &&
+                    vship_build_on_vulkan(plan_.build) &&  // it copies into Vulkan's memory (NativeFrameStream)
                     vvdec_chosen(decode, vvdec_wanted(options.gpu_decode, options.vvc_on_gpu))) {
                     if (on_status_) {
                         on_status_({"VVC decoded on the GPU by vvdec-vulkan", StatusKind::vvdec_used});
@@ -1274,8 +1275,9 @@ private:
     std::unique_ptr<GpuFrameStream> open_decoder(const VideoPlan& video, const DecodePlan& decode,
                                                  const std::string& backend) const {
         // NVIDIA's decoder on CUDA's first GPU, where FFmpeg's -hwaccel cuda
-        // decodes too: Vship's number is Vulkan's, a list in another order.
-        const int device = backend == nvidia_decoder ? 0 : plan_.device.gpu_id;
+        // decodes too: Vship's number is Vulkan's, a list in another order. On
+        // HIP or CUDA it is theirs, which the other decoders do not number by.
+        const int device = backend == nvidia_decoder || !vship_build_on_vulkan(plan_.build) ? 0 : plan_.device.gpu_id;
         // Asked first, because a stream the decoder refuses once the pass has
         // started (10-bit H.264, say) means making the whole pass again.
         const auto [supported, refusal] = decoder_supports(device, decode, backend);
@@ -1703,21 +1705,23 @@ private:
     // The build that calculated the scores, as their provenance names it:
     // Vship-fast, or stock Vship with the version it says.
     std::string build_name() const {
-        if (!plan_.vship51) {
+        if (plan_.build == VshipBuild::fast) {
             return "Vship-fast " + plan_.device.version;
         }
         const vship_api::Version version = library_.get_version();
+        const std::string api = plan_.build == VshipBuild::hip ? " HIP" : plan_.build == VshipBuild::cuda ? " CUDA" : "";
         return "Vship " + std::to_string(version.major) + "." + std::to_string(version.minor) + "." +
-               std::to_string(version.minorMinor);
+               std::to_string(version.minorMinor) + api;
     }
 
     // The id a score of `key` is saved under (score_identity.h): Vship-fast's,
-    // or Vship 5.1's for stock Vship 5.1.2's.
+    // or Vship 5.1's for stock Vship's builds.
     std::string score_id(const std::string& key) const {
+        const bool vship51 = plan_.build != VshipBuild::fast;
         if (key == "cvvdp") {
-            return std::string(plan_.vship51 ? score_identity::vship51_cvvdp : score_identity::cvvdp);
+            return std::string(vship51 ? score_identity::vship51_cvvdp : score_identity::cvvdp);
         }
-        return plan_.vship51 ? score_identity::vship51_gpu(key) : score_identity::vship_gpu(key);
+        return vship51 ? score_identity::vship51_gpu(key) : score_identity::vship_gpu(key);
     }
 
     // The pairs (by their place, `frames` in all) whose frames are in range:
@@ -1854,7 +1858,7 @@ nlohmann::json request_json(const PerceptualRequest& request, const PassPlan& pl
             {"decoding",
              {{"source", plan.decoding.source ? nlohmann::json(*plan.decoding.source) : nlohmann::json()},
               {"distorted", plan.decoding.distorted ? nlohmann::json(*plan.decoding.distorted) : nlohmann::json()}}},
-            {"vship51", plan.vship51}};
+            {"vship_build", std::string(vship_build_value(plan.build))}};
 }
 
 // A metric's frames, times and values into the scores file.
@@ -1985,7 +1989,7 @@ PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const Pass
         throw VshipUnavailableError("The GPU metrics do not support resolution round-trip tests yet.");
     }
     if (!isolation_program()) {
-        if (plan.vship51) {
+        if (plan.build != VshipBuild::fast) {
             // This process has Vship-fast's library (vship_library).
             throw VshipUnavailableError("Stock Vship runs only in a process of its own");
         }
@@ -2057,11 +2061,12 @@ PerceptualFailures size_refusals(const PerceptualRequest& request, const std::ve
 // _VshipTask).
 class VshipTask {
 public:
-    // `vship51`: on stock Vship 5.1.2, the fallback, rather than Vship-fast;
+    // `build`: on stock Vship 5.1.2, the fallback, rather than the build found;
     // always on a device only 5.1.2 found.
     VshipTask(const PerceptualRequest& request, const std::vector<std::string>& keys, const VshipDevice& device,
               const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
-              bool together, const PerceptualHooks& hooks, const CancelToken& cancel, bool vship51 = false)
+              bool together, const PerceptualHooks& hooks, const CancelToken& cancel,
+              std::optional<VshipBuild> build = std::nullopt)
         : request_(request),
           keys_(keys),
           device_(device),
@@ -2070,7 +2075,7 @@ public:
           together_(together),
           hooks_(hooks),
           cancel_(cancel),
-          vship51_(vship51 || device.vship51) {}
+          build_(build.value_or(device.build)) {}
 
     PerceptualTaskOutput run() {
         const PerceptualFailures refused = refused_for_size();
@@ -2116,7 +2121,7 @@ private:
         PerceptualTaskOutput output;
         try {
             output = VshipTask(request_, keys, device_, source_crop_, distorted_crop_, together_, hooks_, cancel_,
-                               vship51_)
+                               build_)
                          .run();
         } catch (const Cancelled&) {
             throw;
@@ -2160,7 +2165,7 @@ private:
                                 ? plan_hardware_decoding(request_.environment.decoding, request_.options.gpu_vendor,
                                                          request_.source, request_.distorted, MacGpuDecoding::on)
                                 : HardwareDecoding{},
-                            vship51_};
+                            build_};
         return run_vship_pass(request_, plan, progress, hooks_.on_status, cancel_);
     }
 
@@ -2296,7 +2301,7 @@ private:
     bool together_;
     const PerceptualHooks& hooks_;
     const CancelToken& cancel_;
-    bool vship51_;
+    VshipBuild build_;
     MetricResultSet metrics_;
     PerceptualFailures failures_;
     std::vector<std::exception_ptr> errors_;
@@ -2370,10 +2375,10 @@ public:
             return without_gpu(reason);
         }
         device_ = *device;
-        if (device_->vship51 && !device_->fast_failure.empty() && hooks_.on_status) {
+        if (device_->build == VshipBuild::stock && !device_->fast_failure.empty() && hooks_.on_status) {
             // Vship-fast failed its check on this GPU, where stock Vship
             // 5.1.2 passed: a fallback, slower, said as the GPU's failures are.
-            // The window names the builds "GPU" and "GPU - Vship" (stock).
+            // The window names the builds "GPU" and "Vship Vulkan" (stock).
             hooks_.on_status({"The app's own Vship could not use the GPU (" + device_->fast_failure +
                                   "); calculating " + metric_labels(gpu_, " and ") + " with stock Vship\xE2\x80\xA6",
                               StatusKind::gpu_perceptual_failed});
@@ -2476,7 +2481,7 @@ private:
     // them (on a GPU only 5.1.2 found), and none refused for the size
     // compared at, which hung the GPU with it (size_refusal).
     std::vector<std::string> for_vship51(const std::vector<std::string>& keys, const CropPair& crops) const {
-        if (!routes_.run_vship51 || keys.empty() || device_->vship51) {
+        if (!routes_.run_vship51 || keys.empty() || device_->build != VshipBuild::fast) {
             return {};
         }
         const PerceptualFailures refused = size_refusals(request_, keys, *device_, crops.first, crops.second);
@@ -2751,11 +2756,13 @@ PerceptualRoutes app_perceptual_routes() {
                         const CancelToken& cancel) {
         return VshipTask(request, keys, device, crops.first, crops.second, together, hooks, cancel).run();
     };
-    if (vship51_bundled()) {
+    if (vship_build_bundled(VshipBuild::stock)) {
         routes.run_vship51 = [](const PerceptualRequest& request, const std::vector<std::string>& keys,
                                 const VshipDevice& device, const CropPair& crops, bool together,
                                 const PerceptualHooks& hooks, const CancelToken& cancel) {
-            return VshipTask(request, keys, device, crops.first, crops.second, together, hooks, cancel, true).run();
+            return VshipTask(request, keys, device, crops.first, crops.second, together, hooks, cancel,
+                             VshipBuild::stock)
+                .run();
         };
     }
     routes.run_cpu = [](const PerceptualRequest& request, const std::vector<std::string>& keys,
@@ -2895,7 +2902,7 @@ nlohmann::json vship_pass_task(const nlohmann::json& request, const std::filesys
     plan.decoding.distorted = decoding.at("distorted").is_null()
                                   ? std::nullopt
                                   : std::optional(decoding.at("distorted").get<std::string>());
-    plan.vship51 = request.value("vship51", false);
+    plan.build = vship_build_from(request.value("vship_build", std::string()));
     try {
         const PerceptualTaskOutput output = score_vship_pass(
             perceptual, plan,

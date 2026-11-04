@@ -199,14 +199,18 @@ void check_isolation(SelfTestReport& report) {
 
 // Vship's metrics (with each bundled build), VMAF and VMAF v1 on the GPU.
 void check_gpu_metrics(SelfTestReport& report) {
-    std::vector<VshipBuild> builds{VshipBuild::fast};
-    if (vship51_bundled()) {
-        builds.push_back(VshipBuild::stock);
-    }
-    for (const VshipBuild build : builds) {
+    // HIP's and CUDA's only on their makers' GPUs: elsewhere they cannot load.
+    std::optional<GpuVendor> maker;
+    for (const VshipBuild build : bundled_vship_builds()) {
+        if ((build == VshipBuild::hip && maker != GpuVendor::amd) ||
+            (build == VshipBuild::cuda && maker != GpuVendor::nvidia)) {
+            continue;
+        }
         const auto [vship_device, vship_reason] = detect_vship_device(build, gpu_probes_token());
         if (vship_device) {
-            report.ok(vship_build_name(*vship_device) + " GPU metrics (Vulkan: " + vship_device->name + ")");
+            maker = vship_device->vendor;
+            report.ok(vship_build_name(*vship_device) + " GPU metrics (" + vship_build_api(build) + ": " + vship_device->name +
+                      ")");
         } else {
             report.warn(std::string(vship_build_label(build)) + " GPU metrics unavailable; CPU fallback is enabled (" +
                         vship_reason + ")");

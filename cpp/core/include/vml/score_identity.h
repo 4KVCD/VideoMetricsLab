@@ -21,9 +21,10 @@ inline constexpr std::string_view xpsnr = "ffmpeg-xpsnr-v2";
 
 // The Vship scores' ids are version 2 for Vship-fast's, which computes as
 // libjxl and pycvvdp do, and version 1 for Vship 5.1's (stock Vship 5.1.2's
-// now, and the app's own before Vship-fast). A video's row is set to one of
-// the two builds (VshipBuild) and reads only that build's saved scores: they
-// differ slightly. A version 1 score is calculated again for a pair whose
+// now, HIP's and CUDA's with them, and the app's own before Vship-fast). A
+// video's row is set to a build (VshipBuild) and reads only Vship-fast's, or
+// only stock Vship's, saved scores: they differ slightly. A version 1 score is
+// calculated again for a pair whose
 // colours a later fix reads otherwise (stale_score in metric_cache.cpp).
 
 // CVVDP, which only Vship calculates, on the GPU: Vship-fast's, Vship 5.1's.

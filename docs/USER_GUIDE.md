@@ -54,15 +54,19 @@ These metrics are opt-in and do not add processing to runs where they are
 unchecked.
 
 Each video's Performance > Vship compute chooses the Vship: GPU, the app's own,
-or GPU - Vship, stock Vship (upstream's release). Settings > GPU metrics sets
-the one newly added videos start with, and the command line's default. The two
-give slightly different scores, and each one's are saved apart: switching a
-video shows the other one's saved scores, or calculates them on the next run.
+the fastest and most accurate; or stock Vship (upstream's release): Vship Vulkan,
+or for a GPU whose Vulkan driver has problems Vship HIP (AMD, Windows) or Vship
+CUDA (NVIDIA, Windows). Settings > GPU metrics sets the one newly added videos
+start with, and the command line's default. Stock Vship's three share their saved
+scores. GPU's differ slightly and are saved apart: switching a video between
+GPU and stock Vship shows the other's saved scores, or calculates them on the
+next run. HIP needs an AMD GPU and CUDA an NVIDIA one: on any other GPU, or on
+a run where they fail, the metrics go to the CPU as below.
 Where the app's own Vship fails on the GPU, stock Vship calculates its metrics
 instead, and such a score is marked "[Vship]" and calculated again with the
 app's own on the next run ("[GPU]" marks the reverse). On a PC whose GPU the
 app's own Vship cannot use at all but stock Vship can, a GPU video's scores
-are stock Vship's, kept and reused as its own. A video set to GPU - Vship
+are stock Vship's, kept and reused as its own. A video set to stock Vship
 never uses the app's own Vship: where stock Vship fails, SSIMULACRA2 and
 Butteraugli are calculated on the CPU, and CVVDP is not.
 
@@ -283,7 +287,7 @@ $run.videos[0].metrics.vmaf.score
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
 | `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only): VMAF as with `--vmaf-on cpu`, and SSIMULACRA2 and Butteraugli with libjxl rather than on the GPU. |
 | `--vmaf-on` `gpu\|cpu` | Where VMAF v0.6.1, VMAF NEG and VMAF v1 are calculated. Left out: as the app's Options panel was last set. |
-| `--vship` `vship-fast\|vship` | The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: `vship-fast`, the app's own (the window's GPU), or `vship`, stock Vship (the window's GPU - Vship), whose scores differ slightly and are saved apart. Left out: as Settings > GPU metrics sets it. |
+| `--vship` `vship-fast\|vship\|vship-hip\|vship-cuda` | The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU: `vship-fast`, the app's own (the window's GPU), or stock Vship: `vship` (the window's Vship Vulkan), or if Vulkan has problems `vship-hip` (AMD) or `vship-cuda` (NVIDIA). Stock Vship's three share their scores, which differ slightly from `vship-fast`'s and are saved apart. Left out: as Settings > GPU metrics sets it. |
 | `--vship-pass one\|each` | SSIMULACRA2, Butteraugli and CVVDP in one pass per video, which decodes it once (faster only on a very powerful GPU, and needs much GPU memory), or a pass for each. The scores are the same. Left out: as Settings > GPU metrics sets it. |
 | `--no-gpu-decode` | Decode the videos on the CPU, VVC too. |
 | `--gpu-decode auto\|nvidia\|intel\|amd` | Decode the videos on the GPU, as the Options panel's **GPU decode**: `auto`, the first GPU whose decoder takes each video (NVIDIA, Intel, then AMD), or that maker's, which the PC must have. A Mac uses its own. Left out: on or off as the app's Options panel was last set, the maker automatic. |
