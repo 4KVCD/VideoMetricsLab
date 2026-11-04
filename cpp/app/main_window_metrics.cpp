@@ -274,7 +274,12 @@ void MainWindow::on_table_item_changed(QTableWidgetItem* item) {
 }
 
 void MainWindow::on_metric_column_toggled(int column, bool checked) {
-    // The header's shortcuts apply to every row.
+    // The header's shortcuts apply to every row. Not during a run, which owns
+    // them: the box the click flipped goes back.
+    if (run_active_) {
+        metric_header_->set_checked(column, !checked);
+        return;
+    }
     std::vector<int> rows(rows_.size());
     std::iota(rows.begin(), rows.end(), 0);
     apply_metric_selection(rows, column, checked, true);

@@ -32,12 +32,27 @@
 // The window's text is app::tr's, as in main_window.cpp.
 namespace vml::app {
 
+namespace {
+
+// The Options panel's fields a row cannot change. A resolution test has its
+// own scaling algorithm and scales in no direction; a "Test both" row's
+// direction is what its name says.
+bool field_is_fixed_for(const RowData& row, const QString& field) {
+    return (field == "scale_algorithm" && row.options.resample_test) ||
+           (field == "scale_direction" && (row.options.resample_test || row.scale_direction_pinned));
+}
+
+}  // namespace
+
 void MainWindow::on_table_selection_changed() {
     // Shows the selected rows' options in the Options panel.
     std::set<int> rows;
     for (const QModelIndex& index : distorted_table_->selectionModel()->selectedIndexes()) {
         rows.insert(index.row());
     }
+    // The same rows shown again, as background work ends: what is being typed
+    // in the panel for them stays.
+    const bool same_rows = std::vector<int>(rows.begin(), rows.end()) == panel_target_rows_;
     panel_target_rows_.assign(rows.begin(), rows.end());
     if (rows.empty()) {
         options_panel_->setEnabled(false);
@@ -62,7 +77,9 @@ void MainWindow::on_table_selection_changed() {
                 "Editing settings for {count} selected videos -- editing anything below applies to all of them.",
                 static_cast<long long>(rows.size())));
     }
+    options_panel_->keep_typing = same_rows;
     write_panel_options(first.options);
+    options_panel_->keep_typing = false;
 }
 
 void MainWindow::write_panel_options(const VmafOptions& options) {
@@ -80,6 +97,13 @@ void MainWindow::write_panel_options(const VmafOptions& options) {
         selected.push_back(options);
     }
     options_panel_->show_options(options, selected);
+    const auto any_row_can_change = [this](const QString& field) {
+        return panel_target_rows_.empty() || std::any_of(panel_target_rows_.begin(), panel_target_rows_.end(), [&](int row) {
+                   return !field_is_fixed_for(*rows_[static_cast<std::size_t>(row)], field);
+               });
+    };
+    options_panel_->scale_algo_combo->setEnabled(any_row_can_change("scale_algorithm"));
+    options_panel_->scale_direction_combo->setEnabled(any_row_can_change("scale_direction"));
     const std::vector<std::string> requested = first != nullptr ? requested_metrics(*first) : std::vector<std::string>();
     for (const MetricColumn& metric : metric_columns()) {
         metric_header_->set_checked(metric.column, first != nullptr ? std::find(requested.begin(), requested.end(),
@@ -144,8 +168,10 @@ VmafOptions MainWindow::read_panel_options() const {
 void MainWindow::on_panel_field_edited(const QString& field) {
     // Applies one edited control to the selected rows. Only that field:
     // copying the whole panel over a mixed multi-row selection would copy the
-    // first selected row's other values over all the others.
-    if (syncing_panel_) {
+    // first selected row's other values over all the others. Nothing during a
+    // run, which owns these settings: a box being typed in commits its value
+    // when the panel is disabled.
+    if (syncing_panel_ || run_active_) {
         return;
     }
     const VmafOptions panel = read_panel_options();
@@ -194,14 +220,13 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         // other than the default is checked only when a row chooses it.
         (void)QtConcurrent::run([build = panel.vship_build] { detect_vship_device(build, gpu_probes_token()); });
     }
-    // Which GPU, how many threads, and how frames are scaled change how a
-    // comparison is made, not what it is (the recipe's identity): its scores
-    // stay.
-    const bool execution_only =
-        field == "gpu" || field == "n_threads" || field == "vmaf_on_gpu" || field == "scale_algorithm";
+    // Which GPU and how many threads change how a comparison is made, not what
+    // it is (the recipe's identity): its scores stay.
+    const bool execution_only = field == "gpu" || field == "n_threads" || field == "vmaf_on_gpu";
     std::vector<int> applied;
     for (const int row : panel_target_rows_) {
-        if (apply(rows_[static_cast<std::size_t>(row)]->options)) {
+        RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        if (!field_is_fixed_for(row_data, field) && apply(row_data.options)) {
             applied.push_back(row);
         }
     }

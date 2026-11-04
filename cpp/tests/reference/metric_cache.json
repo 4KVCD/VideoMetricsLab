@@ -314,7 +314,7 @@
     "model_choice_v1": "__auto__",
     "crop_mode": "none",
     "scale_direction": "distorted_to_source",
-    "scale_algorithm": "lanczos",
+    "scale_algorithm": "bicubic",
     "duration_limit": "0x1.e000000000000p+4",
     "resample_test": null
    },

@@ -458,6 +458,7 @@ private:
     // now: the question was cancelled, or the saved scores of rows whose
     // choice changed are looked up first (the run then starts by itself).
     bool settle_film_grain(const std::vector<int>& checked);
+    bool wait_for_saved_scores();
     void stop_waiting_for_saved_scores();
     // While a run waits for something before it starts: Run off, Cancel on,
     // and the status line saying what (put back after, unless it changed).

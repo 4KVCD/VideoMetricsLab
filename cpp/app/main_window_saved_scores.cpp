@@ -184,6 +184,9 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
             run->result.metric_results.copy_from(shown, key);
         }
     }
+    for (const std::string& key : run->result.metric_results.keys()) {
+        row_data.metric_failures.erase(key);  // a score now answers it
+    }
     row_data.completed_run = std::move(run);
     row_data.analysis_status = has_requested_results(row_data) ? std::optional(RowState::cached) : std::nullopt;
     row_data.status_detail =
@@ -303,6 +306,12 @@ void MainWindow::on_saved_results_cleared() {
     // run, as its question said, rather than skipped for the scores on show.
     // Not during a run (Settings is locked then; a clear asked for just
     // before it started): the run's rows are being calculated afresh.
+    for (std::size_t row = 0; row < rows_.size(); ++row) {
+        if (!rows_[row]->cvvdp_elsewhere.empty()) {
+            rows_[row]->cvvdp_elsewhere.clear();  // the other displays' saved scores went too
+            set_row_metrics(static_cast<int>(row));
+        }
+    }
     if (run_active_) {
         return;
     }
@@ -320,6 +329,9 @@ void MainWindow::on_saved_results_cleared() {
 void MainWindow::drop_metric_results(int row, const std::vector<std::string>& keys) {
     // Takes some of the row's scores away, keeping the rest on show.
     RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+    for (const std::string& key : keys) {
+        row_data.metric_failures.erase(key);
+    }
     const std::shared_ptr<CompletedRun> run = row_data.completed_run;
     const auto dropped = [&keys](const std::string& key) {
         return std::find(keys.begin(), keys.end(), key) != keys.end();

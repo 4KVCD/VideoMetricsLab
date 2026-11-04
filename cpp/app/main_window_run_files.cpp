@@ -213,6 +213,7 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
     row_data.status_detail = app::tr("Loaded from saved run");
     refresh_row_state(row);
     sync_frame_compare();
+    on_table_selection_changed();  // the row removed moved the rows after it
     read_unknown_profiles();
 }
 

@@ -1,5 +1,6 @@
 #include "options_panel.h"
 
+#include <QAbstractSpinBox>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
@@ -446,6 +447,12 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
                 "core, or half of them for each video when two are calculated in parallel."));
 }
 
+void OptionsPanel::commit_typed_values() {
+    for (QAbstractSpinBox* box : findChildren<QAbstractSpinBox*>()) {
+        box->interpretText();
+    }
+}
+
 void OptionsPanel::show_options(const VmafOptions& options, const std::vector<VmafOptions>& selected) {
     model_combo->setCurrentIndex(index_of(model_choices(), options.model_choice));
     custom_model_path = options.custom_model_path;
@@ -461,14 +468,23 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::vector<Vm
     show_vship_choice(*vship_build_combo, options.vship_build);
 
     crop_combo->setCurrentIndex(std::max(0, crop_combo->findData(static_cast<int>(options.crop_mode))));
-    threads_spin->setValue(options.n_threads);
-    subsample_spin->setValue(options.n_subsample);
+    const auto can_show = [this](const QAbstractSpinBox* box) { return !keep_typing || !box->hasFocus(); };
+    if (can_show(threads_spin)) {
+        threads_spin->setValue(options.n_threads);
+    }
+    if (can_show(subsample_spin)) {
+        subsample_spin->setValue(options.n_subsample);
+    }
     scale_algo_combo->setCurrentIndex(
         std::max(0, static_cast<int>(scale_algorithms.indexOf(QString::fromStdString(options.scale_algorithm)))));
     scale_direction_combo->setCurrentIndex(options.scale_direction == ScaleDirection::distorted_to_source ? 1 : 0);
 
-    range_start_edit->setTime(QTime(0, 0).addSecs(static_cast<int>(options.range_start)));
-    range_end_edit->setTime(QTime(0, 0).addSecs(static_cast<int>(options.range_end)));
+    if (can_show(range_start_edit)) {
+        range_start_edit->setTime(QTime(0, 0).addSecs(static_cast<int>(options.range_start)));
+    }
+    if (can_show(range_end_edit)) {
+        range_end_edit->setTime(QTime(0, 0).addSecs(static_cast<int>(options.range_end)));
+    }
 
     const auto any = [&selected](auto&& predicate) { return std::any_of(selected.begin(), selected.end(), predicate); };
     model_combo->setEnabled(any([](const VmafOptions& item) { return item.compute_vmaf; }));

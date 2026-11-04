@@ -694,10 +694,15 @@ void MainWindow::set_resample_row_info(int row, const ResampleTarget& target) {
     // to, and with which scaling algorithm (named as FFmpeg names it, as the
     // Options' list shows it, in every language).
     const VideoInfo& info = *source_info_;
-    const int down_h = resample_down_height(target.width, {info.width, info.height});
+    RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+    row_data.options.scale_algorithm = target.scaler;  // what the Options panel shows for it
+    // With a result, the picture its black bars left, which is what it scaled.
+    const std::shared_ptr<CompletedRun>& run = row_data.completed_run;
+    const Size picture = run ? content_size(run->result.source_info, run->result.source_crop) : Size(info.width, info.height);
+    const int down_h = resample_down_height(target.width, picture);
     QTableWidgetItem* item = distorted_table_->item(row, col_info);
     item->setText(app::tr("Downscale to {down}, upscale back to {back}",
-                          {{"down", size_text(target.width, down_h)}, {"back", size_text(info.width, info.height)}}) +
+                          {{"down", size_text(target.width, down_h)}, {"back", size_text(picture.first, picture.second)}}) +
                   " (" + QString::fromStdString(target.scaler) + ")");
     item->setToolTip(QString::fromStdString(format_hms(info.duration, 1)));
     distorted_table_->item(row, col_bitrate)->setText("N/A");

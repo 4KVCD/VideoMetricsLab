@@ -317,11 +317,15 @@ void MainWindow::invalidate_completed_results(const std::vector<int>& rows) {
         RowData& row_data = *rows_[static_cast<std::size_t>(row)];
         row_data.analysis_status.reset();
         row_data.status_detail.clear();
+        row_data.metric_failures.clear();
         if (row_data.completed_run) {
             lines.push_back(row_data.completed_run->graph_identity);
             paths.push_back(row_data.path);
         }
         row_data.completed_run.reset();
+        if (row_data.options.resample_test) {
+            set_resample_row_info(row, *row_data.options.resample_test);  // no crop now until its next result
+        }
         set_row_metrics(row);
     }
     if (!lines.empty()) {

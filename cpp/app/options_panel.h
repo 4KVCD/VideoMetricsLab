@@ -64,6 +64,12 @@ public:
     // `selected` every selected video's options, which decide what can be
     // edited. The window ignores its own handlers while this runs.
     void show_options(const VmafOptions& options, const std::vector<VmafOptions>& selected);
+    // Set while the rows shown are the ones already shown: show_options then
+    // leaves alone the number or time being typed, which is not yet a value.
+    bool keep_typing = false;
+    // Takes what is typed in the number and time boxes as their values. A run
+    // needs it: on macOS clicking a button leaves the focus where it is.
+    void commit_typed_values();
     // The VMAF GPU/CPU choice as a run would take it: CPU when there is no
     // GPU, whatever the video is set to.
     void show_vmaf_backend(bool on_gpu);

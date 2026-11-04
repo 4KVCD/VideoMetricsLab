@@ -129,6 +129,21 @@ CvvdpSettings cvvdp_from(const nlohmann::json& item) {
     return item.at("cvvdp").is_null() ? CvvdpSettings{} : CvvdpSettings::from_parameters(item.at("cvvdp"));
 }
 
+// Another scaling algorithm files a comparison apart, the default keeping the
+// identity saved comparisons have (FilesRequestsAndRecipesAsThePythonApp), but
+// not a resolution test, whose algorithm is its own.
+TEST(MetricCache, TheScalingAlgorithmFilesAComparisonApart) {
+    const auto identity_of = [](const std::string& algorithm, std::optional<ResampleTarget> resample_test) {
+        VmafOptions options;
+        options.scale_algorithm = algorithm;
+        options.resample_test = std::move(resample_test);
+        return analysis_request(options, {"psnr"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{}).recipe.identity();
+    };
+    EXPECT_NE(identity_of("lanczos", std::nullopt), identity_of("bicubic", std::nullopt));
+    const ResampleTarget target{1280, "720p"};
+    EXPECT_EQ(identity_of("lanczos", target), identity_of("bicubic", target));
+}
+
 // Every request's identity and hash, and the recipe's, are the Python app's
 // to the byte: a saved score is found by them.
 TEST(MetricCache, FilesRequestsAndRecipesAsThePythonApp) {

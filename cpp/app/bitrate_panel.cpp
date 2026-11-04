@@ -658,6 +658,10 @@ void BitratePanel::on_worker_finished(BitrateWorker* worker) {
         }
         refresh_table_values();
     }
+    // on_failed's reason stays on show: "complete" would be said over it.
+    const bool any_failed = std::any_of(entries_.begin(), entries_.end(), [this](const auto& item) {
+        return active_keys_.contains(item.first) && item.second.state == BitrateState::failed;
+    });
     stopping_ = false;
     worker_ = nullptr;
     active_keys_.clear();
@@ -665,9 +669,11 @@ void BitratePanel::on_worker_finished(BitrateWorker* worker) {
     if (!pending_.empty()) {
         start_pending();
     } else {
-        status_label->setText(stopped ? app::tr("Bitrate analysis stopped. Completed results are kept.")
-                                      : app::tr("Bitrate analysis complete. Values contain the first video "
-                                                "stream only."));
+        if (stopped || !any_failed) {
+            status_label->setText(stopped ? app::tr("Bitrate analysis stopped. Completed results are kept.")
+                                          : app::tr("Bitrate analysis complete. Values contain the first video "
+                                                    "stream only."));
+        }
         progress->setVisible(false);
         update_buttons();
     }

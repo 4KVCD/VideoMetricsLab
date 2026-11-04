@@ -117,6 +117,7 @@ void MainWindow::on_run_clicked() {
     if (worker_ != nullptr && worker_->isRunning()) {
         return;
     }
+    options_panel_->commit_typed_values();
     const std::vector<int> checked = checked_rows();
     if (!ready_to_run(checked)) {
         return;
@@ -151,7 +152,7 @@ void MainWindow::on_run_clicked() {
 // (else they are waited for, and the run starts by itself once they are).
 // Says why not, where it cannot.
 bool MainWindow::ready_to_run(const std::vector<int>& checked) {
-    if (source_probe_worker_ != nullptr && source_probe_worker_->isRunning()) {
+    if (source_probe_worker_ != nullptr) {  // until its answer has been taken
         dialogs_.inform(app::tr("Still reading reference"), app::tr("Wait for the reference video to finish loading."));
         return false;
     }
@@ -173,7 +174,18 @@ bool MainWindow::ready_to_run(const std::vector<int>& checked) {
         return false;
     }
     // Asked at the click, not seconds later once the GPU checks are done.
-    return settle_film_grain(checked) && !wait_for_gpu_checks(checked);
+    return settle_film_grain(checked) && !wait_for_saved_scores() && !wait_for_gpu_checks(checked);
+}
+
+bool MainWindow::wait_for_saved_scores() {
+    // Rows with saved scores on their way are not calculated again: the run
+    // starts by itself once they are in (on_cache_lookup_finished).
+    if (cache_worker_ == nullptr) {
+        return false;
+    }
+    run_waits_for_saved_scores_ = true;
+    show_waiting_to_run(app::tr("Looking up saved scores before the run\xE2\x80\xA6"));
+    return true;
 }
 
 bool MainWindow::settle_film_grain(const std::vector<int>& checked) {
@@ -212,14 +224,12 @@ bool MainWindow::settle_film_grain(const std::vector<int>& checked) {
         }
         show_panel_film_grain();
     }
-    if (changed.empty() || !start_cache_lookup(changed)) {
-        return true;
+    // Rows whose scores are now filed otherwise: wait_for_saved_scores has their
+    // saved ones found before the run, rather than calculated again.
+    if (!changed.empty()) {
+        start_cache_lookup(changed);
     }
-    // Rows whose scores are now filed otherwise: their saved ones are found
-    // before the run, rather than calculated again.
-    run_waits_for_saved_scores_ = true;
-    show_waiting_to_run(app::tr("Looking up saved scores before the run\xE2\x80\xA6"));
-    return false;
+    return true;
 }
 
 void MainWindow::stop_waiting_for_saved_scores() {
@@ -268,8 +278,9 @@ std::optional<std::vector<VmafJob>> MainWindow::plan_jobs(const std::vector<int>
     for (const int row : rows) {
         const std::shared_ptr<RowData>& row_data = rows_[static_cast<std::size_t>(row)];
         if (!row_data->video_info) {
-            if (std::any_of(probe_workers_.begin(), probe_workers_.end(),
-                            [](ProbeWorker* worker) { return worker->isRunning(); })) {
+            // Listed until its last answer has been taken. A worker whose thread
+            // has ended can still have its answers on their way here.
+            if (!probe_workers_.empty()) {
                 dialogs_.inform(app::tr("Still reading videos"),
                                 app::tr("Wait for every checked test video to finish loading before running."));
                 return std::nullopt;
@@ -1019,7 +1030,9 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
     if (final) {
         row_data.analysis_status.reset();  // a result so far leaves the video in progress
     }
-    if (!row_data.options.resample_test) {
+    if (row_data.options.resample_test) {
+        set_resample_row_info(*row, *row_data.options.resample_test);  // the sizes, with the crop the run used
+    } else {
         set_row_info(*row, result.distorted_info);  // its Scaling cell, with the crops the run used
     }
     if (final) {

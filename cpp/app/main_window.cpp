@@ -814,6 +814,9 @@ void MainWindow::on_default_settings_changed() {
     if (!run_active_) {
         start_cache_lookup(apply_film_grain_default());
         show_panel_film_grain();
+        if (panel_target_rows_.empty()) {
+            write_panel_options(default_options_);  // the heading's ticks are what a new video starts with
+        }
     }
 }
 

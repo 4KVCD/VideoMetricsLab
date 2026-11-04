@@ -30,11 +30,13 @@ struct ComparisonRecipe {
     // neither has one (film_grain_scoring.h).
     nlohmann::json film_grain = nullptr;
 
-    // The settings that decide what the comparison is (identity_dict): the
-    // scaling algorithm is not one (the Python app counts a comparison
-    // scaled another way as the same one), and the manual crops, which the
-    // app no longer has, are null. The film grain is in it only where it is
-    // not null, so that every other comparison keeps the identity it had.
+    // The settings that decide what the comparison is (identity_dict). The
+    // scaling algorithm is one, as whether a comparison scales can depend on
+    // black bars found only when it runs; a resolution test has its own. It
+    // is in it only where it is not the default, so that every other
+    // comparison keeps the identity it had. The manual crops, which the app
+    // no longer has, are null. The film grain is in it only where it is not
+    // null, for the same reason.
     // Which decoder made a video's pictures is not in it: a VVC video's scores
     // are the same ones whether VVdeC or FFmpeg decoded it.
     nlohmann::json identity() const;
