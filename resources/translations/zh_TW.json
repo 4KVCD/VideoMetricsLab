@@ -577,6 +577,7 @@
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "尚無法安全地支援可變影格速率的影片。比較前請將兩部影片轉換成相同的固定影格速率。",
   "Frame rates do not match ({source} vs {test} fps).": "影格速率不一致（{source} 與 {test} fps）。",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "兩部影片裁切後的形狀不同：來源為 {source}，測試為 {test}。評分會把其中一部拉伸以符合另一部，結果將毫無意義。如果其中一部有黑邊，請將黑邊處理設為「自動偵測」，以便在比較前去除黑邊。",
+  "The two videos are stored at different rotations: source {source} degrees versus distorted {test} degrees. Compared as stored, one would be sideways or upside down against the other and the result would be meaningless.": "這兩部影片以不同的旋轉角度儲存：來源 {source} 度，失真 {test} 度。按儲存狀態比較時，其中一部相對另一部會側倒或顛倒，結果沒有意義。",
   "FFmpeg could not prepare lossless perceptual-metric frames.": "FFmpeg 無法為感知指標準備無損影格。",
   "FFmpeg produced no frame pairs for perceptual metrics.": "FFmpeg 沒有為感知指標產生影格配對。",
   "{metric} did not produce a numeric score: {value}": "{metric} 沒有產生數值分數：{value}",

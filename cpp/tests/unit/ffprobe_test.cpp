@@ -9,6 +9,7 @@
 
 #include "reference.h"
 #include "test_videos.h"
+#include "vml/geometry.h"
 #include "vml/platform/system.h"
 
 namespace vml {
@@ -55,6 +56,25 @@ TEST(Ffprobe, ReadsTheVideosDetailsAsThePythonAppDoes) {
         EXPECT_EQ(info.format_name, expected["format_name"].get<std::string>());
         EXPECT_EQ(info.start_offset, *test::reference_number(expected["start_offset"]));
     }
+}
+
+// A rotation tag as ffprobe gives it, and a pair stored at different rotations
+// refused: compared as stored, one would be on its side against the other.
+TEST(Ffprobe, ReadsARotationTagAndAPairMustShareIt) {
+    const auto video_turned = [](const std::string& side_data) {
+        return video_info_from_probe(
+            "a.mp4", R"({"streams":[{"codec_type":"video","codec_name":"h264","width":640,"height":268,)"
+                     R"("pix_fmt":"yuv420p","r_frame_rate":"24/1","avg_frame_rate":"24/1","nb_frames":"24",)"
+                     R"("duration":"1.0")" + side_data + R"(}],"format":{"duration":"1.0"}})");
+    };
+    const VideoInfo upright = video_turned("");
+    const VideoInfo upside_down = video_turned(R"(,"side_data_list":[{"side_data_type":"Display Matrix","rotation":-180}])");
+    const VideoInfo sideways = video_turned(R"(,"side_data_list":[{"side_data_type":"Display Matrix","rotation":90}])");
+    EXPECT_EQ(upright.rotation, 0);
+    EXPECT_EQ(upside_down.rotation, 180);
+    EXPECT_EQ(sideways.rotation, 90);
+    EXPECT_EQ(pair_problem(upside_down, upside_down, 0, 0), std::nullopt);
+    EXPECT_NE(pair_problem(upside_down, upright, 0, 0), std::nullopt);
 }
 
 // Matroska's statistics tags tell a stream's rate, unless FFmpeg wrote the

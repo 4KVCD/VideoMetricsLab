@@ -348,7 +348,7 @@ std::vector<std::string> preview_command(const std::string& ffmpeg, const std::s
     const std::vector<std::string> decoding = hwaccel_args(hwaccel);
     append(command, decoding);
     append(command, input);
-    command.insert(command.end(), {"-ss", format_fixed(start, 3), "-i", path, "-map", "0:" + std::string(video_stream),
+    command.insert(command.end(), {"-ss", format_fixed(start, 3), as_stored, "-i", path, "-map", "0:" + std::string(video_stream),
                                    "-frames:v", std::to_string(frames), "-vf", before.luma(hwaccel)});
     append(command, luma_output);
     return command;
@@ -546,7 +546,7 @@ std::vector<std::string> raw_previews_command(const std::string& ffmpeg, const V
     append(command, decoding);
     const std::vector<std::string> input = info.input_options();
     append(command, input);
-    command.insert(command.end(), {"-i", platform::path_text(info.path), "-map", "0:" + std::string(video_stream),
+    command.insert(command.end(), {as_stored, "-i", platform::path_text(info.path), "-map", "0:" + std::string(video_stream),
                                    "-vf", filters});
     append(command, luma_output);
     return command;
@@ -821,9 +821,9 @@ std::pair<std::vector<Pictures>, std::vector<std::string>> run_byte_previews(
             std::vector<ByteRange> parts = parameter_sets;
             parts.emplace_back(*access, 0);
             input.insert(input.begin(), {"-f", "hevc"});
-            input.insert(input.end(), {"-i", pieced_input(path, parts)});
+            input.insert(input.end(), {as_stored, "-i", pieced_input(path, parts)});
         } else {
-            input.insert(input.end(), {"-skip_initial_bytes", std::to_string(offset), "-i", path});
+            input.insert(input.end(), {"-skip_initial_bytes", std::to_string(offset), as_stored, "-i", path});
         }
         try {
             previews.push_back(run_detection(

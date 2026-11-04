@@ -94,6 +94,9 @@ struct VideoInfo {
     // one given, and its frame count, length and bitrate come from its
     // counted frames.
     bool timed_raw = false;
+    // The degrees its rotation tag says a player turns it by (0, 90, 180 or
+    // 270). The app does not: width and height, and every picture, are as stored.
+    int rotation = 0;
     // Set for a video whose picture size changes partway through (FFmpeg
     // rebuilt its filters for it): the size every one of its frames is
     // scaled to first, so that the whole video is scored at one size

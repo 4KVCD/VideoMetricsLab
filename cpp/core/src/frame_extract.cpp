@@ -390,7 +390,7 @@ std::vector<std::string> build_frame_command(const std::string& ffmpeg, const Fr
     std::vector<std::string> command = ffmpeg_command_start(ffmpeg, {"-loglevel", "error"});
     const std::vector<std::string> grain = picture_grain_options(frame_video_info(comparison, side));
     append(command, grain);
-    command.insert(command.end(), {"-ss", format_fixed(start.seek, 9), "-i",
+    command.insert(command.end(), {"-ss", format_fixed(start.seek, 9), as_stored, "-i",
                                    platform::path_text(error ? frame_input_path(comparison, side) : input)});
     add_png_output(command, filters);
     return command;

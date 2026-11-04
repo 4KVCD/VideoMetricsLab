@@ -43,14 +43,14 @@ VideoInfo pq_video(const char* name) {
     return info;
 }
 
-// `command` with the file input {"-i", the video's path} in it replaced by
-// `fed`: what a fed video's command is to be, all else the same.
+// `command` with the file input {as_stored, "-i", the video's path} in it
+// replaced by `fed`: what a fed video's command is to be, all else the same.
 Arguments with_fed_input(Arguments command, const VideoInfo& video, const Arguments& fed) {
-    const Arguments file{"-i", input_path(video.path)};
+    const Arguments file{as_stored, "-i", input_path(video.path)};
     const auto at = std::search(command.begin(), command.end(), file.begin(), file.end());
     EXPECT_NE(at, command.end());
     const auto index = at - command.begin();
-    command.erase(at, at + 2);
+    command.erase(at, at + static_cast<std::ptrdiff_t>(file.size()));
     command.insert(command.begin() + index, fed.begin(), fed.end());
     return command;
 }

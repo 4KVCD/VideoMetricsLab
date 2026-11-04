@@ -23,6 +23,13 @@ inline constexpr std::string_view video_stream = "V:0";
 // argument, so a Windows path with its drive works).
 std::string input_path(const std::filesystem::path& path);
 
+// The input option every FFmpeg that decodes a video for comparing takes: it
+// would otherwise turn a video with a rotation tag, in software only. The app's
+// own decoders and FFmpeg's hardware decoders do not, so the same file would
+// give each route other pictures. Videos are compared as stored; a pair stored
+// at different rotations is refused (geometry.h's pair_problem).
+inline constexpr const char* as_stored = "-noautorotate";
+
 // How most of the app's FFmpeg commands start: FFmpeg, not reading the app's
 // standard input, without its banner, then `flags`.
 std::vector<std::string> ffmpeg_command_start(const std::string& ffmpeg, std::initializer_list<std::string> flags);

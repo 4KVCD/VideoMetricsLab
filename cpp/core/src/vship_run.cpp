@@ -1383,7 +1383,7 @@ private:
                 append(command, decode);
                 const std::vector<std::string> input = with_seek(video.info.decode_options(), seek);
                 append(command, input);
-                command.insert(command.end(), {"-i", input_path(video.info.path)});
+                command.insert(command.end(), {as_stored, "-i", input_path(video.info.path)});
             }
             command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", chain});
             command.insert(command.end(), {"-fps_mode", "passthrough"});

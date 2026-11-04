@@ -577,6 +577,7 @@
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "可変フレームレートの動画にはまだ安全に対応していません。比較する前に、両方の動画を同じ固定フレームレートに変換してください。",
   "Frame rates do not match ({source} vs {test} fps).": "フレームレートが一致しません（{source} と {test} fps）。",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "クロップ後の 2 本の動画の形が異なります：ソース {source}、テスト {test}。採点すると一方をもう一方に引き伸ばすことになり、結果は無意味です。一方にレターボックスがある場合は、比較の前に黒帯が取り除かれるよう［黒帯の扱い］を［自動検出］にしてください。",
+  "The two videos are stored at different rotations: source {source} degrees versus distorted {test} degrees. Compared as stored, one would be sideways or upside down against the other and the result would be meaningless.": "2 つの動画は異なる回転で保存されています: ソース {source} 度、劣化側 {test} 度。保存されたまま比較すると一方が他方に対して横向きまたは逆さまになり、結果は意味を持ちません。",
   "FFmpeg could not prepare lossless perceptual-metric frames.": "FFmpeg が知覚指標用のロスレスフレームを準備できませんでした。",
   "FFmpeg produced no frame pairs for perceptual metrics.": "FFmpeg が知覚指標用のフレームペアを出力しませんでした。",
   "{metric} did not produce a numeric score: {value}": "{metric} が数値のスコアを出力しませんでした：{value}",

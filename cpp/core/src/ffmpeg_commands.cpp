@@ -307,7 +307,7 @@ std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const s
         const std::vector<std::string> options = decode(hwaccel);
         append(command, options);
         command.insert(command.end(), own->begin(), own->end());
-        command.insert(command.end(), {"-i", input_path(path)});
+        command.insert(command.end(), {as_stored, "-i", input_path(path)});
     }
     const std::vector<std::string> outputs = output_args(filtergraph);
     append(command, outputs);
@@ -369,7 +369,7 @@ std::vector<std::string> build_resample_command(const std::string& ffmpeg, const
         const std::vector<std::string> decode = hwaccel_args(hwaccel);
         append(command, decode);
         append(command, source_options);
-        command.insert(command.end(), {"-i", input_path(source)});
+        command.insert(command.end(), {as_stored, "-i", input_path(source)});
     }
     const std::vector<std::string> outputs = output_args(filtergraph);
     append(command, outputs);
@@ -411,7 +411,7 @@ std::vector<std::vector<std::string>> build_stream_commands(
             const std::vector<std::string> decode = hwaccel_args(hwaccel);
             append(made, decode);
             append(made, input);
-            made.insert(made.end(), {"-i", input_path(path)});
+            made.insert(made.end(), {as_stored, "-i", input_path(path)});
         }
         made.insert(made.end(), {"-lavfi", graph, "-progress", "pipe:1", "-nostats"});
         append(made, output);

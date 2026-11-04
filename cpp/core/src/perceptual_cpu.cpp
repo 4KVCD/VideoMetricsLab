@@ -806,7 +806,7 @@ std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const Vide
         }
         const std::vector<std::string> input = with_seek(video->decode_options(), *seek);
         append(command, input);
-        command.insert(command.end(), {"-i", input_path(video->path)});
+        command.insert(command.end(), {as_stored, "-i", input_path(video->path)});
     }
     command.insert(command.end(), {"-filter_complex", image_filtergraph(source, distorted, options, source_crop,
                                                                         distorted_crop, step)});

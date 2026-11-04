@@ -225,6 +225,12 @@ std::optional<std::string> untimed_pair_problem(const VideoInfo& source, const V
 
 std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, long long range_start,
                                         long long range_end) {
+    if (source.rotation != distorted.rotation) {
+        return "The two videos are stored at different rotations: source " + std::to_string(source.rotation) +
+               " degrees versus distorted " + std::to_string(distorted.rotation) +
+               " degrees. Compared as stored, one would be sideways or upside down against the other and the result "
+               "would be meaningless.";
+    }
     std::optional<std::string> problem = timeline_problem(source, distorted, range_start, range_end);
     const auto untimed = [](const VideoInfo& info) { return info.is_raw_stream() && !info.timed_raw; };
     const VideoInfo* raw = untimed(source) ? &source : untimed(distorted) ? &distorted : nullptr;

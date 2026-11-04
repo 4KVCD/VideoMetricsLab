@@ -350,6 +350,9 @@ const char* const templates[] = {
     "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them "
     "would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set "
     "black-bar handling to 'Auto-detect' so the bars are removed before comparison.",
+    "The two videos are stored at different rotations: source {source} degrees versus distorted {test} degrees. "
+    "Compared as stored, one would be sideways or upside down against the other and the result would be "
+    "meaningless.",
     "FFmpeg could not prepare lossless perceptual-metric frames.",
     "FFmpeg produced no frame pairs for perceptual metrics.",
     "{metric} did not produce a numeric score: {value}",

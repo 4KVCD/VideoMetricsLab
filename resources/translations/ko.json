@@ -577,6 +577,7 @@
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "가변 프레임 속도 영상은 아직 안전하게 지원되지 않습니다. 비교하기 전에 두 영상을 같은 고정 프레임 속도로 변환하세요.",
   "Frame rates do not match ({source} vs {test} fps).": "프레임 속도가 일치하지 않습니다({source} 대 {test} fps).",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "자른 뒤 두 영상의 모양이 다릅니다: 원본 {source}, 테스트 {test}. 채점하면 한쪽을 다른 쪽에 맞게 늘이게 되어 결과가 무의미합니다. 한쪽에 레터박스가 있다면 비교 전에 검은 띠가 제거되도록 검은 띠 처리를 '자동 감지'로 설정하세요.",
+  "The two videos are stored at different rotations: source {source} degrees versus distorted {test} degrees. Compared as stored, one would be sideways or upside down against the other and the result would be meaningless.": "두 동영상은 서로 다른 회전으로 저장되어 있습니다: 원본 {source}도, 왜곡 {test}도. 저장된 그대로 비교하면 한쪽이 다른 쪽에 비해 옆으로 누이거나 뒤집혀 결과가 의미 없습니다.",
   "FFmpeg could not prepare lossless perceptual-metric frames.": "FFmpeg가 지각 지표용 무손실 프레임을 준비하지 못했습니다.",
   "FFmpeg produced no frame pairs for perceptual metrics.": "FFmpeg가 지각 지표용 프레임 쌍을 만들지 않았습니다.",
   "{metric} did not produce a numeric score: {value}": "{metric}이(가) 숫자 점수를 내지 않았습니다: {value}",

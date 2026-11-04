@@ -146,7 +146,7 @@ std::vector<std::string> build_playback_command(const std::string& ffmpeg, const
     }
     const std::vector<std::string> grain = picture_grain_options(info);
     append(command, grain);
-    command.insert(command.end(), {"-i", resolved_text(frame_input_path(comparison, side))});
+    command.insert(command.end(), {as_stored, "-i", resolved_text(frame_input_path(comparison, side))});
 
     const std::optional<CropBox>& crop = side == FrameSide::source ? comparison.source_crop : comparison.distorted_crop;
     std::vector<std::string> ops;

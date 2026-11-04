@@ -222,6 +222,22 @@ bool statistics_are_the_files(const Json& format) {
     return encoder == nullptr || !encoder->is_string() || !encoder->get<std::string>().starts_with("Lavf");
 }
 
+// What the video's display matrix says a player turns it by: 0, 90, 180 or 270
+// degrees (ffprobe gives it as, say, -180).
+int display_rotation(const Json& video) {
+    const Json* side_data = member(video, "side_data_list");
+    if (side_data == nullptr || !side_data->is_array()) {
+        return 0;
+    }
+    for (const Json& item : *side_data) {
+        if (const Json* rotation = member(item, "rotation"); rotation != nullptr && rotation->is_number()) {
+            const int whole_turns_off = static_cast<int>(rotation->get<double>()) % 360;
+            return whole_turns_off < 0 ? whole_turns_off + 360 : whole_turns_off;
+        }
+    }
+    return 0;
+}
+
 // The video stream's bitrate, and whether it is the whole file's instead.
 // Without the video's own, the audio tracks' rates are taken from the
 // file's when every one is known; otherwise the file's rate is all there is.
@@ -324,6 +340,7 @@ VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_v
     info.bit_rate = rate;
     info.bit_rate_whole_file = whole_file;
 
+    info.rotation = display_rotation(*video);
     info.width = integer_member(*video, "width");
     info.height = integer_member(*video, "height");
     info.codec_name = string_member(*video, "codec_name", "unknown");
