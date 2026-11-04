@@ -343,7 +343,9 @@ double run_metric(const std::filesystem::path& executable, const std::string& me
             throw PerceptualRunError("butteraugli wrote no readable distortion map.", last_characters(combined, 2000));
         }
     }
-    return parse_score(metric, combined);
+    // The score is the last number on standard output. Standard error is
+    // only for what went wrong above: a warning's number is no score.
+    return parse_score(metric, as_text(output.standard_output));
 }
 
 // The frame pairs FFmpeg writes into a folder, handed out as they are

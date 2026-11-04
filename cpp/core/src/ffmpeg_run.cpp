@@ -51,16 +51,19 @@ TempFolder run_folder(std::string_view prefix) {
     return TempFolder::make<VmafRunError>(prefix, "A folder for the run's logs could not be made.");
 }
 
-// When a model= value names a custom file, copies it next to the log and
-// names it by its bare file name (see libvmaf_options).
+// When a model= value names a custom file, copies it next to the log under a
+// name of its own: FFmpeg's filter graph would take a bracket or comma of the
+// user's name for its syntax, and a bundled VMAF v1 model of the same name is
+// copied there too (see libvmaf_options).
 std::string model_for_run_folder(const std::string& model, const std::filesystem::path& folder) {
     const std::optional<std::string_view> named = model_file_of(model);
     if (!named) {
         return model;
     }
-    const std::filesystem::path file = platform::path_from_text(*named);
-    std::filesystem::copy_file(file, folder / file.filename(), std::filesystem::copy_options::overwrite_existing);
-    return model_option_for_file(platform::path_text(file.filename()));
+    constexpr std::string_view name = "custom_vmaf_model.json";
+    std::filesystem::copy_file(platform::path_from_text(*named), folder / name,
+                               std::filesystem::copy_options::overwrite_existing);
+    return model_option_for_file(name);
 }
 
 // The decode plans to try in turn until one runs: the test video, the
@@ -1273,7 +1276,7 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
                                             const std::optional<CropBox>& distorted_crop, const GpuPlan& plan,
                                             double fps, long long total_frames, const HardwareDecoding& decoding,
                                             const ProgressCallback& on_progress, const StatusCallback& on_status,
-                                            const CancelToken& cancel) {
+                                            const CancelToken& cancel, std::string* failure = nullptr) {
     logger.info(metric_names(plan) + " in the app: " + cpu_library_build() + ", " + std::to_string(plan.threads) +
                 " threads");
     const std::vector<std::string> keys = plan_keys(plan);
@@ -1317,6 +1320,9 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
     } catch (const std::exception& error) {
         xpsnr.reset();
         logger.error(metric_names(plan) + " in the app failed; FFmpeg calculates them: " + error.what());
+        if (failure != nullptr) {
+            *failure = error.what();
+        }
         if (on_status) {
             on_status(
                 {metric_names(plan) + " in the app failed (" + error.what() + "); calculating them with FFmpeg…"});
@@ -1329,7 +1335,10 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
     cancel.throw_if_cancelled();
     if (xpsnr) {
         const ParsedScores found = xpsnr->scores_or_failed({"xpsnr"});
-        if (found.has("xpsnr")) {
+        if (found.has("xpsnr") && !frames->frame.empty() && found.frame.back() < frames->frame.back()) {
+            frames->failed["xpsnr"] = "XPSNR's FFmpeg stopped at frame " + std::to_string(found.frame.back()) +
+                                      " of " + std::to_string(frames->frame.back());
+        } else if (found.has("xpsnr")) {
             merge_xpsnr(*frames, found);
         } else {
             frames->failed.insert(found.failed.begin(), found.failed.end());
@@ -1754,13 +1763,14 @@ std::optional<RunScores> score_xpsnr_beside(const RunFrames& run, const VmafOpti
     bool in_app = false;  // set on the XPSNR's thread, read once it has ended
     ScoresBeside xpsnr(
         [&, xpsnr_progress = progress.part(1)](const CancelToken& stop) {
+            std::string failure;
             std::optional<ParsedScores> scored =
                 run_cpu_metrics(run.environment, run.source, run.distorted, xpsnr_only, run.source_crop,
                                 run.distorted_crop, *plan, run.distorted.fps, run.total_frames, run.decoding,
-                                xpsnr_progress, nullptr, stop);
+                                xpsnr_progress, nullptr, stop, &failure);
             if (!scored) {
                 scored.emplace();  // it failed in the app, and FFmpeg's would be wrong
-                scored->failed["xpsnr"] = xpsnr_refusal;
+                scored->failed["xpsnr"] = std::string("XPSNR in the app failed (") + failure + "). " + xpsnr_refusal;
             }
             in_app = !scored->frame.empty();
             return std::move(*scored);
@@ -1975,6 +1985,16 @@ std::optional<RunScores> score_gpu_and_cpu(const RunFrames& run, const VmafOptio
     return score_apart(run, gpu_options, cpu_options, *gpu, cpu, model, on_progress, on_status);
 }
 
+// A video whose container gives no duration was expected to be a frame long
+// (estimate_total_frames): its result, and Video Compare's frame box, then count
+// what was scored.
+void count_scored_frames(ComparisonResult& result, const ParsedScores& scores) {
+    if (result.compared_frame_count <= 1 && !scores.frame.empty()) {
+        result.compared_frame_count =
+            std::max<long long>(result.compared_frame_count, scores.frame.back() - scores.frame.front() + 1);
+    }
+}
+
 // What a comparison's result says of the videos and the options, before its scores.
 ComparisonResult result_of_pair(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options,
                                 const std::string& model, const std::optional<CropBox>& source_crop,
@@ -2043,6 +2063,7 @@ ComparisonResult score_pair_once(const RunEnvironment& environment, const VideoI
                 FrameMetricResult{key, part.frame, part.time, part.metrics.at(key), std::move(provenance)});
         }
         result.metric_failures.insert(part.failed.begin(), part.failed.end());
+        count_scored_frames(result, part);
     }
     return result;
 }
@@ -2267,6 +2288,7 @@ ComparisonResult resample_test_by_ffmpeg(const RunEnvironment& environment, cons
     result.distorted = synthetic_resample_distorted_path(source.path, *options.resample_test);
     result.resample_target = options.resample_test;
     result.metric_failures = scores.failed;
+    count_scored_frames(result, scores);
     for (const std::string& key : scores.order) {
         std::map<std::string, std::string> parameters;
         if (key == "vmaf_neg") {
