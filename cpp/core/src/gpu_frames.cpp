@@ -640,6 +640,13 @@ public:
         listing_thread_ = std::thread([this] { read_listing(); });
     }
 
+    // start(), with FFmpeg ended or paused by `cancel`, for a read that nothing
+    // else stops. next() then fails: the caller asks `cancel` why.
+    void start_within(const CancelToken& cancel) {
+        start();
+        within_run_.emplace(cancel.attach(*ffmpeg_));
+    }
+
     // How many packets next() has passed over or hidden (LeadingPictures).
     int leading_passed_over() const { return leading_.skipped(); }
 
@@ -963,6 +970,7 @@ private:
     std::atomic<bool> closed_{false};
     // After what its error thread uses (note_error_line), so that it goes first.
     std::optional<platform::ChildProcess> ffmpeg_;
+    std::optional<CancelToken::Attached> within_run_;  // after FFmpeg, so that it goes first
     std::thread listing_thread_;
 };
 
@@ -1624,11 +1632,11 @@ std::optional<PictureGrid> prove_picture_grid(const VideoInfo& info, std::string
         return std::nullopt;
     }
     PacketReader start(ffmpeg, info.path, codec, {"-copyts"});
-    start.start();
+    start.start_within(cancel);
     const std::optional<Rational> time_base = start.wait_time_base(cancel);
     const std::optional<long long> first = lowest_pts(start, packets_for_first_picture);
     PacketReader tail(ffmpeg, info.path, codec, {"-copyts", "-sseof", tail_seconds});
-    tail.start();
+    tail.start_within(cancel);
     const std::optional<long long> last = highest_pts_to_the_end(tail);
     if (!time_base || !first || !last ||
         !pictures_fill_grid(*first, *last, *packets - start.leading_passed_over(), *time_base, frame_rate(info))) {
@@ -1664,8 +1672,11 @@ const std::optional<PictureGrid>& picture_grid(const VideoInfo& info, std::strin
     } catch (const Cancelled&) {
         throw;
     } catch (const std::exception& error) {
+        cancel.throw_if_cancelled();
         logger.info(platform::path_text(info.path.filename()) + ": no seek to the range: " + error.what());
     }
+    // A Cancel ended the reading: that says nothing about the file, so it is not kept.
+    cancel.throw_if_cancelled();
     const std::lock_guard lock(mutex);
     return proved.try_emplace(file, grid).first->second;
 }
@@ -1704,9 +1715,9 @@ bool opens_without_earlier_pictures(std::string_view codec, const std::vector<st
 // it. Past the range the pictures would be numbered wrongly where nothing checks
 // them one by one (FFmpeg's graph).
 bool seek_lands_before_range(const VideoInfo& info, std::string_view codec, double seconds, long long decode_start,
-                             const PictureGrid& grid, const std::string& ffmpeg) {
+                             const PictureGrid& grid, const std::string& ffmpeg, const CancelToken& cancel) {
     PacketReader probe(ffmpeg, info.path, codec, {"-copyts", "-ss", format_fixed(seconds, 9)});
-    probe.start();
+    probe.start_within(cancel);
     std::vector<std::uint8_t> data;
     long long pts = 0;
     int flags = 0;
@@ -1735,13 +1746,15 @@ std::optional<RangeSeek> find_range_seek(const VideoInfo& info, std::string_view
     }
     const double seconds = seek_seconds(decode_start, rate);
     try {
-        if (!seek_lands_before_range(info, codec, seconds, decode_start, *grid, ffmpeg)) {
+        if (!seek_lands_before_range(info, codec, seconds, decode_start, *grid, ffmpeg, cancel)) {
+            cancel.throw_if_cancelled();
             logger.info(platform::path_text(info.path.filename()) +
                         ": decoded from its start to the range (a seek there lands past it, or on a picture that "
                         "needs earlier ones)");
             return std::nullopt;
         }
     } catch (const GpuDecodeFailedError& error) {
+        cancel.throw_if_cancelled();
         logger.info(platform::path_text(info.path.filename()) + ": no seek to the range: " + error.what());
         return std::nullopt;
     }
@@ -2166,7 +2179,8 @@ bool GpuFrameStream::skip_after_seek(long long count, const CancelToken& cancel,
         const auto now = std::chrono::steady_clock::now();
         if (on_skipped && now - reported >= std::chrono::milliseconds(250)) {
             reported = now;
-            on_skipped(number + 1 - saved);
+            // The seek lands on the keyframe before where it aimed: none saved yet.
+            on_skipped(std::max(0LL, number + 1 - saved));
         }
     }
 }
