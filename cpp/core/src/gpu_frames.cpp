@@ -1626,15 +1626,19 @@ std::optional<PictureGrid> prove_picture_grid(const VideoInfo& info, std::string
 }
 
 // A process's proofs: a pass of each metric's task asks for the same files.
+// Kept apart by whether counting the packets pays, which depends on the range:
+// a range near the start gets none for a file without a stated count, and a
+// range further in still gets its own.
 const std::optional<PictureGrid>& picture_grid(const VideoInfo& info, std::string_view codec, long long decode_start,
                                                const std::string& ffmpeg, const std::string& ffprobe,
                                                const CancelToken& cancel) {
-    using FileAsItIs = std::tuple<std::filesystem::path, std::uintmax_t, std::filesystem::file_time_type>;
+    using FileAsItIs = std::tuple<std::filesystem::path, std::uintmax_t, std::filesystem::file_time_type, bool>;
     static std::mutex mutex;
     static std::map<FileAsItIs, std::optional<PictureGrid>> proved;
     std::error_code ignored;  // a file that cannot be read has no size or time, and fails to prove below
-    const FileAsItIs file{info.path, std::filesystem::file_size(info.path, ignored),
-                          std::filesystem::last_write_time(info.path, ignored)};
+    const std::uintmax_t bytes = std::filesystem::file_size(info.path, ignored);
+    const FileAsItIs file{info.path, bytes, std::filesystem::last_write_time(info.path, ignored),
+                          counting_packets_pays(static_cast<long long>(bytes), decode_start)};
     {
         const std::lock_guard lock(mutex);
         if (const auto known = proved.find(file); known != proved.end()) {
