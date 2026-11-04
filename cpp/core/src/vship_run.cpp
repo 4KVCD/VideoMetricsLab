@@ -1150,8 +1150,8 @@ private:
     // follows the run's GPU decode setting, per video and per codec;
     // hardware decoding is bit-exact, so it changes only the speed. A video
     // without chroma siting is read with the other's (shared_chroma_location),
-    // and one without a colour matrix with the other's, or the reference's
-    // guess (with_shared_matrix).
+    // one without colour tags with the other's, and one without a colour
+    // matrix with the other's or the reference's guess (with_shared_colours).
     void plan_videos() {
         const auto [source_size, distorted_size] =
             vship_scaled_sizes(request_.source, request_.distorted, request_.options.scale_direction,
@@ -1161,7 +1161,7 @@ private:
         if (chroma_location_shared(request_.source.chroma_location, request_.distorted.chroma_location)) {
             logger.info("Vship: one video gives no chroma siting; both are read as " + source_siting);
         }
-        const auto [source_read, distorted_read] = with_shared_matrix(request_.source, request_.distorted);
+        const auto [source_read, distorted_read] = with_shared_colours(request_.source, request_.distorted);
         if (matrix_shared(request_.source, request_.distorted)) {
             logger.info("Vship: the videos are read with one colour matrix, " + source_read.color_space);
         }
@@ -1317,8 +1317,8 @@ private:
         }
         // A video only the app's decoder makes the pictures of (VML_FEED=all:
         // every one it takes) is fed to FFmpeg by it (grain_feed.h); the
-        // feeding is made from the file's own details, not the matrix the
-        // other video lent it (with_shared_matrix).
+        // feeding is made from the file's own details, not the colours the
+        // other video lent it (with_shared_colours).
         const VideoInfo& file = video.side == "source" ? request_.source : request_.distorted;
         std::unique_ptr<PictureFeed> feed;
         if (fed_to_ffmpeg(file)) {

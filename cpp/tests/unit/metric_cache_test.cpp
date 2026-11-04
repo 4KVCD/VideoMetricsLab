@@ -992,6 +992,43 @@ TEST(MetricCache, AnUntaggedPairIsReadWithOneMatrix) {
     EXPECT_FALSE(matrix_shared(source, distorted));
 }
 
+// A video without colour tags is read with the other's, whichever it is; a
+// score saved before that is calculated again only where that reads it
+// otherwise.
+TEST(MetricCache, AnUntaggedVideoIsReadWithTheOthersColours) {
+    VideoInfo hlg;
+    hlg.pix_fmt = "yuv420p10le";
+    hlg.height = 720;
+    hlg.color_transfer = "arib-std-b67";
+    hlg.color_primaries = "bt2020";
+    hlg.color_space = "bt2020nc";
+    VideoInfo untagged = hlg;
+    untagged.color_transfer.clear();
+    untagged.color_primaries.clear();
+    untagged.color_space.clear();
+
+    for (const auto& [source_read, distorted_read] :
+         {with_shared_colours(hlg, untagged), with_shared_colours(untagged, hlg)}) {
+        EXPECT_EQ(source_read.color_transfer, "arib-std-b67");
+        EXPECT_EQ(distorted_read.color_transfer, "arib-std-b67");
+        EXPECT_EQ(distorted_read.color_primaries, "bt2020");
+        EXPECT_EQ(distorted_read.color_space, "bt2020nc");
+    }
+    EXPECT_TRUE(colours_lent(hlg, untagged));
+    EXPECT_FALSE(colours_lent(hlg, hlg));
+    EXPECT_FALSE(colours_lent(untagged, untagged));
+
+    const AnalysisRequest request =
+        analysis_request(VmafOptions{}, {"ssimulacra2"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{});
+    const MetricRequestSpec& spec = *request.metric("ssimulacra2");
+    const MetricProvenance saved{"Vship/ssimulacra2", "Vship-fast 5.1.2", "gpu",
+                                 score_identity::vship_gpu("ssimulacra2"),
+                                 {{"coverage_step", "1"},
+                                  {"color_tags", nlohmann::json(score_identity::vship_colour_tags_unlent).dump()}}};
+    EXPECT_FALSE(answers(spec, saved, colour_tags(hlg, untagged)));
+    EXPECT_TRUE(answers(spec, saved, colour_tags(hlg, hlg)));
+}
+
 // What each request loads from a comparison folder the Python app saved:
 // the same scores, frames and provenance, and nothing where it finds none.
 TEST(MetricCache, LoadsThePythonAppsSavedScores) {

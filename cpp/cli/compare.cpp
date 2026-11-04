@@ -221,11 +221,6 @@ std::string resolved(const std::filesystem::path& path) { return comparable(reso
 
 // ------------------------------------------------------------------- colours
 
-// Whether the video says its transfer or its primaries.
-bool has_colour_tags(const VideoInfo& info) {
-    return !is_untagged_tag(info.color_transfer) || !is_untagged_tag(info.color_primaries);
-}
-
 // The note for a video read without colour tags: that it was read as SDR
 // (colour.h's video_colour's guess), as HDR10 without its tags is too, with
 // the colour matrix the pair is read with (with_shared_matrix): its own, the
@@ -270,22 +265,6 @@ VideoInfo with_assumed_colour(VideoInfo info, const std::optional<std::string>& 
         info.color_space = colours.matrix;
     }
     return info;
-}
-
-// Gives `to` the colour tags of `from` when only `from` has them (its
-// transfer and primaries, and its matrix unless `to` says its own), as
-// --colour would give them: an encode keeps its source's colours, so a y4m
-// encode of a tagged HDR10 source is HDR10 too. Returns whether it did.
-bool take_colour_tags(VideoInfo& to, const VideoInfo& from) {
-    if (has_colour_tags(to) || !has_colour_tags(from)) {
-        return false;
-    }
-    to.color_transfer = from.color_transfer;
-    to.color_primaries = from.color_primaries;
-    if (is_untagged_tag(to.color_space)) {
-        to.color_space = from.color_space;
-    }
-    return true;
 }
 
 // The note for a video that took the other's colour tags (take_colour_tags).

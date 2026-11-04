@@ -214,6 +214,43 @@ bool matrix_shared(const VideoInfo& source, const VideoInfo& distorted) {
     return matrix(source_read) != matrix(source) || matrix(distorted_read) != matrix(distorted);
 }
 
+bool has_colour_tags(const VideoInfo& info) {
+    return !is_untagged_tag(info.color_transfer) || !is_untagged_tag(info.color_primaries);
+}
+
+bool take_colour_tags(VideoInfo& to, const VideoInfo& from) {
+    if (has_colour_tags(to) || !has_colour_tags(from)) {
+        return false;
+    }
+    to.color_transfer = from.color_transfer;
+    to.color_primaries = from.color_primaries;
+    // RGB's "matrix" is no way of reading YUV (with_shared_matrix leaves such a pair too).
+    if (is_untagged_tag(to.color_space) && !is_rgb_format(to.pix_fmt) && !is_rgb_format(from.pix_fmt)) {
+        to.color_space = from.color_space;
+    }
+    return true;
+}
+
+std::pair<VideoInfo, VideoInfo> with_shared_colours(VideoInfo source, VideoInfo distorted) {
+    if (!take_colour_tags(distorted, source)) {
+        take_colour_tags(source, distorted);
+    }
+    return with_shared_matrix(std::move(source), std::move(distorted));
+}
+
+bool colours_lent(const VideoInfo& source, const VideoInfo& distorted) {
+    const auto read_alike = [](const VideoInfo& one, const VideoInfo& other) {
+        const std::optional<VideoColour> first = colour_of(one);
+        const std::optional<VideoColour> second = colour_of(other);
+        return first.has_value() == second.has_value() &&
+               (!first || (first->matrix == second->matrix && first->transfer == second->transfer &&
+                           first->primaries == second->primaries));
+    };
+    const auto [source_lent, distorted_lent] = with_shared_colours(source, distorted);
+    const auto [source_before, distorted_before] = with_shared_matrix(source, distorted);
+    return !read_alike(source_lent, source_before) || !read_alike(distorted_lent, distorted_before);
+}
+
 std::optional<std::string_view> ffmpeg_matrix_name(int matrix) {
     const auto found = ffmpeg_matrices.find(matrix);
     return found != ffmpeg_matrices.end() ? std::optional(found->second) : std::nullopt;

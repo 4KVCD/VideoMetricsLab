@@ -739,8 +739,8 @@ FrameRange cpu_range(const VmafOptions& options, const VideoInfo& source, int st
 std::string image_filtergraph(const VideoInfo& source_info, const VideoInfo& distorted_info,
                               const VmafOptions& options, const std::optional<CropBox>& source_crop,
                               const std::optional<CropBox>& distorted_crop, int step) {
-    // Read with one colour matrix, as Vship reads them (with_shared_matrix).
-    const auto [source, distorted] = with_shared_matrix(source_info, distorted_info);
+    // Read with the same colours as Vship reads them (with_shared_colours).
+    const auto [source, distorted] = with_shared_colours(source_info, distorted_info);
     GraphPlan plan{source, distorted, source_crop, distorted_crop, std::nullopt, std::nullopt,
                    content_size(source, source_crop), {}, options.scale_algorithm};
     const Size distorted_size = content_size(distorted, distorted_crop);
@@ -1109,8 +1109,8 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
         const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
         return static_cast<double>(units) / std::max(seconds, 1e-6);
     };
-    // Tagged with the colours the pictures are read with (with_shared_matrix).
-    const auto [source_read, distorted_read] = with_shared_matrix(source, distorted);
+    // Tagged with the colours the pictures are read with (with_shared_colours).
+    const auto [source_read, distorted_read] = with_shared_colours(source, distorted);
     const auto [width, height] =
         compared_dimensions(source, distorted, options.scale_direction, source_crop, distorted_crop);
     const int workers = scoring_workers(static_cast<long long>(width) * height, keys, request.concurrent_cpu_tasks,

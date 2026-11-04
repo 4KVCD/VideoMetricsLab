@@ -80,10 +80,16 @@ inline constexpr std::string_view film_grain_left_out = "without";
 // the other's, or both untagged with the reference's guess
 // (with_shared_matrix in colour.h). "/4", CPU: the version that converts an
 // 8-bit video to RGB as precisely as a deeper one (to_rgb in
-// perceptual_cpu.cpp). A score of an older mapping is calculated again
-// where it would differ (stale_score in metric_cache.cpp).
-inline constexpr std::string_view vship_colour_tags = "ffvship-5.1.1/3";
-inline constexpr std::string_view cpu_colour_tags = "vship-5.1.1/4";
+// perceptual_cpu.cpp). Then, GPU "/4" and CPU "/5": the version that reads a
+// video without colour tags with the other's (with_shared_colours). A score
+// of an older mapping is calculated again where it would differ (stale_score
+// in metric_cache.cpp).
+inline constexpr std::string_view vship_colour_tags = "ffvship-5.1.1/4";
+inline constexpr std::string_view cpu_colour_tags = "vship-5.1.1/5";
+// The mappings before those, whose scores differ only for a pair whose videos
+// with_shared_colours reads otherwise (colours_lent).
+inline constexpr std::string_view vship_colour_tags_unlent = "ffvship-5.1.1/3";
+inline constexpr std::string_view cpu_colour_tags_unlent = "vship-5.1.1/4";
 // The CPU mapping before "/4", whose scores differ only for a pair with an
 // 8-bit video: FFmpeg converted 4:2:0 and 4:2:2 ones to RGB in 8 bits, about
 // 2 steps of 255 too dark.

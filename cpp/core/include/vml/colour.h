@@ -88,6 +88,25 @@ std::pair<VideoInfo, VideoInfo> with_shared_matrix(VideoInfo source, VideoInfo d
 // matrix than its own tags or height give.
 bool matrix_shared(const VideoInfo& source, const VideoInfo& distorted);
 
+// Whether the video says its transfer or its primaries.
+bool has_colour_tags(const VideoInfo& info);
+
+// Gives `to` the colour tags of `from` when only `from` has them: its transfer
+// and primaries, and its matrix unless `to` says its own. An encode keeps its
+// source's colours, so an untagged encode of a tagged source is read as that
+// source: left to video_colour's guess from the matrix, an HLG source's encode
+// was read as PQ and scored as badly broken (SSIMULACRA2 46.68 became -64497).
+// Returns whether it did.
+bool take_colour_tags(VideoInfo& to, const VideoInfo& from);
+
+// A pair's videos as they are read: one without colour tags with the other's
+// (take_colour_tags), then with one colour matrix (with_shared_matrix).
+std::pair<VideoInfo, VideoInfo> with_shared_colours(VideoInfo source, VideoInfo distorted);
+
+// Whether with_shared_colours reads either video otherwise than
+// with_shared_matrix alone did, as saved scores were made before it.
+bool colours_lent(const VideoInfo& source, const VideoInfo& distorted);
+
 // FFmpeg's name for an H.273 matrix (setparams' colorspace=), for the
 // matrices FFmpeg can convert with; nothing for the others.
 std::optional<std::string_view> ffmpeg_matrix_name(int matrix);

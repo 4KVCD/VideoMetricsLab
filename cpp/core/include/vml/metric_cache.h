@@ -48,7 +48,7 @@ std::filesystem::path recipe_directory(const std::filesystem::path& base, const 
 
 // What the rules against known-wrong saved SSIMULACRA2, Butteraugli and
 // CVVDP scores read of a video: its pixel format, transfer tag, chroma
-// siting, colour matrix, range and height (video_infos).
+// siting, colour matrix, range, height and primaries (video_infos).
 struct ColourTags {
     std::string pix_fmt;
     std::string color_transfer;
@@ -56,6 +56,7 @@ struct ColourTags {
     std::string color_space;
     std::string color_range;
     int height = 0;
+    std::string color_primaries;
 };
 std::vector<ColourTags> colour_tags(const VideoInfo& source, const VideoInfo& distorted);
 
