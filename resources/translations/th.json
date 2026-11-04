@@ -848,7 +848,11 @@
   "Vship CUDA (use only if Vulkan has problems)": "Vship CUDA (ใช้เฉพาะเมื่อ Vulkan มีปัญหา)",
   "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU. GPU, the app's own build, is the fastest and most accurate. Vship Vulkan is stock Vship; Vship HIP (AMD) and Vship CUDA (NVIDIA) are stock Vship too, for a GPU whose Vulkan driver has problems, and all three share their saved scores. GPU's scores differ slightly and are saved apart: switching shows those saved, or calculates them on the next run. If GPU fails, Vship Vulkan calculates them instead. Without a GPU the chosen Vship can use, or if it fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available.": "Vship ตัวใดคำนวณ SSIMULACRA2, Butteraugli และ CVVDP บน GPU โดย GPU ซึ่งเป็นรุ่นของแอปเอง เร็วที่สุดและแม่นยำที่สุด Vship Vulkan คือ Vship ต้นฉบับ ส่วน Vship HIP (AMD) และ Vship CUDA (NVIDIA) ก็เป็น Vship ต้นฉบับเช่นกัน สำหรับ GPU ที่ไดรเวอร์ Vulkan มีปัญหา และทั้งสามใช้คะแนนที่บันทึกไว้ร่วมกัน คะแนนของ GPU ต่างออกไปเล็กน้อยและบันทึกแยกกัน เมื่อสลับจะแสดงคะแนนที่บันทึกไว้ หรือคำนวณในการรันครั้งถัดไป หาก GPU ล้มเหลว Vship Vulkan จะคำนวณแทน หากไม่มี GPU ที่ Vship ที่เลือกใช้ได้ หรือมันล้มเหลวด้วย SSIMULACRA2 และ Butteraugli จะคำนวณบน CPU (libjxl) และ CVVDP จะใช้ไม่ได้",
   "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command line without --vship. Each video's own is set in the Options panel (Vship compute).": "Vship ที่คำนวณ SSIMULACRA2, Butteraugli และ CVVDP สำหรับวิดีโอที่เพิ่มใหม่ และในบรรทัดคำสั่งเมื่อไม่มี --vship ส่วนของแต่ละวิดีโอตั้งค่าได้ในแผงตัวเลือก (การคำนวณ Vship)",
-  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP คำนวณบน GPU เท่านั้น และไม่พบ GPU ที่ {build} ใช้ได้ หากตั้งการคำนวณ Vship เป็น GPU จะคำนวณได้"
+  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP คำนวณบน GPU เท่านั้น และไม่พบ GPU ที่ {build} ใช้ได้ หากตั้งการคำนวณ Vship เป็น GPU จะคำนวณได้",
+  "Custom": "กำหนดเอง",
+  "Width:": "ความกว้าง:",
+  "Height:": "ความสูง:",
+  "With black bars cut, the height follows the picture without them.": "เมื่อตัดแถบดำออก ความสูงจะเป็นไปตามภาพที่ไม่มีแถบดำ"
  },
  "plurals": {
   "about {count} day": [

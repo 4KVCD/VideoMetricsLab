@@ -46,6 +46,10 @@ struct ResampleTarget {
 
 // The resolution tests offered, largest first.
 const std::vector<ResampleTarget>& resample_target_choices();
+// The test of a width typed: the listed one of that width, with its saved
+// scores, or one named by its width alone, as the height depends on the black
+// bars found in the run ("1002w").
+ResampleTarget resample_target_of_width(int width);
 
 // A made-up path that stands for a second run of the same test video with
 // the other scale direction (the Python app's

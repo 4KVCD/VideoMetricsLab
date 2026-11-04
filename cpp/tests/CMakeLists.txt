@@ -105,6 +105,7 @@ if(TARGET vml_app)
         app/bitrate_panel_test.cpp
         app/chart_test.cpp
         app/film_grain_control_test.cpp
+        app/resample_target_dialog_test.cpp
         app/frame_compare_test.cpp
         app/graph_panel_test.cpp
         app/i18n_test.cpp

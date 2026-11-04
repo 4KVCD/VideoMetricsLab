@@ -94,6 +94,31 @@ TEST(Decisions, GpuDecodingIsChosenAsThePythonAppChoosesIt) {
 // bits; not playback's FFmpeg fallback) where FFmpeg has VideoToolbox and
 // the GPU decodes the codec, in the 4:2:0 8- or 10-bit pictures at an even
 // size the download takes; not otherwise.
+// A resolution test's size from a width or a height typed: even, the picture's
+// shape, within the widths the reference has, and none on a reference too small
+// or too flat. A listed width keeps its name, and so its saved scores.
+TEST(Decisions, AResolutionTestsSizeFollowsAWidthOrHeightTyped) {
+    const Size film(3840, 2160);
+    EXPECT_EQ(resample_size_for_height(720, film), Size(1280, 720));
+    EXPECT_EQ(resample_size_for_width(1921, film), Size(1920, 1080));
+    EXPECT_EQ(resample_size_for_width(99999, film), Size(3838, 2158));
+
+    const Size portrait(1080, 1920);
+    EXPECT_EQ(resample_size_for_height(1280, portrait), Size(720, 1280));
+    EXPECT_EQ(resample_size_for_width(1, portrait), Size(16, 28));
+
+    const Size scope(4096, 1712);
+    EXPECT_EQ(resample_smallest_width(scope), 38);
+    EXPECT_EQ(resample_size_for_width(1, scope), Size(38, 16));
+    EXPECT_EQ(resample_size_for_height(418, scope), Size(1000, 418));
+
+    EXPECT_GT(resample_smallest_width({17, 10}), resample_largest_width({17, 10}));
+    EXPECT_GT(resample_smallest_width({300, 10}), resample_largest_width({300, 10}));
+
+    EXPECT_EQ(resample_target_of_width(1920).label, "1080p");
+    EXPECT_EQ(resample_target_of_width(1002).label, "1002w");
+}
+
 TEST(Decisions, AMacsGpuDecodesWhereTheCallerAllowsIt) {
     DecodingCapabilities mac;
     mac.hwaccels = {"videotoolbox"};

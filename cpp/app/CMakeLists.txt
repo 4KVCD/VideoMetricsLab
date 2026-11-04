@@ -27,6 +27,7 @@ add_library(vml_app STATIC
     main_window_metrics.cpp
     main_window_options.cpp
     main_window_rows.cpp
+    resample_target_dialog.cpp
     main_window_run.cpp
     main_window_run_files.cpp
     main_window_saved_scores.cpp

@@ -51,6 +51,16 @@ inline Size resample_analysis_dimensions(const VideoInfo& source, const std::opt
 // The height a resolution test scales a picture of `size` down to, `width`
 // wide: even, and the picture's own shape.
 int resample_down_height(int width, Size size);
+// The widths a resolution test may have on a reference of `size`: below its
+// own width, and neither side under about 16 pixels. The smallest is above
+// the largest on a reference too small or too flat for any.
+int resample_smallest_width(Size size);
+int resample_largest_width(Size size);
+// The size a resolution test has on the whole picture, from a width or a
+// height typed: even, within those widths, the picture's own shape. So the
+// height may not be the one typed, by 2 or so.
+Size resample_size_for_width(int width, Size size);
+Size resample_size_for_height(int height, Size size);
 
 // A sample aspect ratio ("4:3") as a fraction; an unknown or unset one means
 // square pixels.

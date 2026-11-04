@@ -135,9 +135,9 @@ or sorted into order; each row's metrics are ticked in its cells or for
 every row in the headings, and hidden or shown from the metrics menu; the
 Options panel sets the selected videos' own settings, CVVDP's display and
 its presets among them; "Test both" adds a row scoring a video the other
-way round, and a resolution test a row scoring the reference scaled down
-and back up. Calculate metrics runs the ticked videos as the command line
-does, with each video's progress on a line of its own, Pause, Cancel and
+way round, and a resolution test a row scoring the reference scaled down,
+to a listed size or a width or height typed, and back up. Calculate metrics
+runs the ticked videos as the command line does, with each video's progress on a line of its own, Pause, Cancel and
 the videos in parallel changed while it runs, and shows their scores in the
 table, each metric's best and worst in green and red if asked (Highlight
 best/worst results). Scores are saved as a run goes, and a video added

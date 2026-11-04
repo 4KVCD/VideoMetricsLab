@@ -4,12 +4,9 @@
 #include "main_window.h"
 
 #include <QCheckBox>
-#include <QComboBox>
 #include <QDialog>
-#include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFont>
-#include <QFormLayout>
 #include <QHeaderView>
 #include <QItemSelection>
 #include <QItemSelectionModel>
@@ -28,6 +25,7 @@
 #include "formatting.h"
 #include "graph_panel.h"
 #include "i18n.h"
+#include "resample_target_dialog.h"
 #include "theme.h"
 #include "vml/app_log.h"
 #include "vml/ffmpeg_run.h"
@@ -644,52 +642,26 @@ void MainWindow::add_test_videos(const std::vector<std::filesystem::path>& paths
 }
 
 void MainWindow::on_add_resample_test() {
-    // Adds a resolution test for the width the user picks.
+    // Adds a resolution test for the size the user picks.
     if (!source_info_) {
         QMessageBox::warning(this, app::tr("No reference"), app::tr("Please select a reference video first."));
         return;
     }
-    std::vector<ResampleTarget> targets;
-    for (const ResampleTarget& target : resample_target_choices()) {
-        if (target.width < source_info_->width) {
-            targets.push_back(target);
-        }
-    }
-    if (targets.empty()) {
-        dialogs_.inform(
-            app::tr("No smaller resolution available"),
-            app::tr("The smallest resolution test is {smallest} pixels wide, which is not below this "
-                    "reference's {width}-pixel width.",
-                    {{"smallest", resample_target_choices().back().width}, {"width", source_info_->width}}));
+    const Size reference(source_info_->width, source_info_->height);
+    const int smallest = resample_smallest_width(reference);
+    if (smallest > resample_largest_width(reference)) {
+        dialogs_.inform(app::tr("No smaller resolution available"),
+                        app::tr("The smallest resolution test is {smallest} pixels wide, which is not below this "
+                                "reference's {width}-pixel width.",
+                                {{"smallest", smallest}, {"width", source_info_->width}}));
         return;
     }
-    // The size, and the scaling algorithm of both steps (the Options' one
-    // first, which made every test before tests had one of their own).
-    QDialog dialog(this);
-    dialog.setWindowTitle(app::tr("Add resolution test"));
-    auto* form = new QFormLayout(&dialog);
-    auto* sizes = new QComboBox;
-    for (const ResampleTarget& target : targets) {
-        sizes->addItem(QString::fromStdString(target.label));
+    // The Options' scaling algorithm first, which made every test before tests
+    // had one of their own.
+    ResampleTargetDialog dialog(reference, default_options_.scale_algorithm, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        add_resample_test(dialog.target());
     }
-    sizes->setCurrentIndex(std::min(1, static_cast<int>(targets.size()) - 1));
-    auto* scalers = new QComboBox;
-    for (const std::string_view scaler : resample_scalers) {
-        scalers->addItem(QString::fromUtf8(scaler.data(), static_cast<qsizetype>(scaler.size())));
-    }
-    scalers->setCurrentText(QString::fromStdString(default_options_.scale_algorithm));
-    form->addRow(app::tr("Downscale to (then scale back up):"), sizes);
-    form->addRow(app::tr("Scaling algorithm:"), scalers);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    form->addRow(buttons);
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-    ResampleTarget target = targets[static_cast<std::size_t>(sizes->currentIndex())];
-    target.scaler = scalers->currentText().toStdString();
-    add_resample_test(target);
 }
 
 void MainWindow::add_resample_test(const ResampleTarget& target) {

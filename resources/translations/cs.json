@@ -848,7 +848,11 @@
   "Vship CUDA (use only if Vulkan has problems)": "Vship CUDA (použijte, jen pokud má Vulkan problémy)",
   "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU. GPU, the app's own build, is the fastest and most accurate. Vship Vulkan is stock Vship; Vship HIP (AMD) and Vship CUDA (NVIDIA) are stock Vship too, for a GPU whose Vulkan driver has problems, and all three share their saved scores. GPU's scores differ slightly and are saved apart: switching shows those saved, or calculates them on the next run. If GPU fails, Vship Vulkan calculates them instead. Without a GPU the chosen Vship can use, or if it fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available.": "Který Vship počítá SSIMULACRA2, Butteraugli a CVVDP na GPU. GPU, vlastní sestavení aplikace, je nejrychlejší a nejpřesnější. Vship Vulkan je původní Vship; Vship HIP (AMD) a Vship CUDA (NVIDIA) jsou také původní Vship, pro GPU, jehož ovladač Vulkan má problémy, a všechny tři sdílejí uložená skóre. Skóre GPU se mírně liší a ukládají se zvlášť: přepnutí ukáže uložená, nebo je spočítá při dalším spuštění. Pokud GPU selže, spočítá je místo něj Vship Vulkan. Bez GPU, které zvolený Vship může použít, nebo pokud selže i on, se SSIMULACRA2 a Butteraugli počítají na CPU (libjxl) a CVVDP není k dispozici.",
   "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command line without --vship. Each video's own is set in the Options panel (Vship compute).": "Vship, který počítá SSIMULACRA2, Butteraugli a CVVDP pro nově přidaná videa a na příkazovém řádku bez --vship. Pro každé video se nastavuje v panelu Možnosti (výpočet Vship).",
-  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP se počítá jen na GPU a nebylo nalezeno žádné GPU, které může {build} použít; s výpočtem Vship nastaveným na GPU ho lze spočítat."
+  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP se počítá jen na GPU a nebylo nalezeno žádné GPU, které může {build} použít; s výpočtem Vship nastaveným na GPU ho lze spočítat.",
+  "Custom": "Vlastní",
+  "Width:": "Šířka:",
+  "Height:": "Výška:",
+  "With black bars cut, the height follows the picture without them.": "Při oříznutí černých pruhů se výška řídí obrazem bez nich."
  },
  "plurals": {
   "about {count} day": [

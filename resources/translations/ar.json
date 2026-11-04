@@ -848,7 +848,11 @@
   "Vship CUDA (use only if Vulkan has problems)": "Vship CUDA (استخدمه فقط إذا واجه Vulkan مشاكل)",
   "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU. GPU, the app's own build, is the fastest and most accurate. Vship Vulkan is stock Vship; Vship HIP (AMD) and Vship CUDA (NVIDIA) are stock Vship too, for a GPU whose Vulkan driver has problems, and all three share their saved scores. GPU's scores differ slightly and are saved apart: switching shows those saved, or calculates them on the next run. If GPU fails, Vship Vulkan calculates them instead. Without a GPU the chosen Vship can use, or if it fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available.": "أي Vship يحسب SSIMULACRA2 وButteraugli وCVVDP على GPU. يُعد GPU، إصدار التطبيق الخاص، الأسرع والأدق. Vship Vulkan هو Vship الأصلي؛ وVship HIP (AMD) وVship CUDA (NVIDIA) هما أيضًا Vship الأصلي، لبطاقة GPU يواجه تعريف Vulkan فيها مشاكل، وتتشارك الثلاثة درجاتها المحفوظة. تختلف درجات GPU قليلًا وتُحفظ منفصلة: يعرض التبديل المحفوظ منها أو يحسبها في التشغيل التالي. إذا فشل GPU، يحسبها Vship Vulkan بدلًا منه. بدون GPU يمكن لـ Vship المختار استخدامه، أو إذا فشل هو أيضًا، يُحسب SSIMULACRA2 وButteraugli على CPU (libjxl)، ولا يتوفر CVVDP.",
   "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command line without --vship. Each video's own is set in the Options panel (Vship compute).": "Vship الذي يحسب SSIMULACRA2 وButteraugli وCVVDP لمقاطع الفيديو المضافة حديثًا، وفي سطر الأوامر بدون --vship. يُضبط لكل فيديو في لوحة الخيارات (حساب Vship).",
-  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "يُحسب CVVDP على GPU فقط، ولم يُعثر على GPU يمكن لـ {build} استخدامه؛ يمكن حسابه عند ضبط حساب Vship على GPU."
+  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "يُحسب CVVDP على GPU فقط، ولم يُعثر على GPU يمكن لـ {build} استخدامه؛ يمكن حسابه عند ضبط حساب Vship على GPU.",
+  "Custom": "مخصص",
+  "Width:": "العرض:",
+  "Height:": "الارتفاع:",
+  "With black bars cut, the height follows the picture without them.": "عند قص الأشرطة السوداء، يتبع الارتفاع الصورة بدونها."
  },
  "plurals": {
   "about {count} day": [

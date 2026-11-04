@@ -848,7 +848,11 @@
   "Vship CUDA (use only if Vulkan has problems)": "Vship CUDA (Vulkan に問題がある場合のみ使用)",
   "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU. GPU, the app's own build, is the fastest and most accurate. Vship Vulkan is stock Vship; Vship HIP (AMD) and Vship CUDA (NVIDIA) are stock Vship too, for a GPU whose Vulkan driver has problems, and all three share their saved scores. GPU's scores differ slightly and are saved apart: switching shows those saved, or calculates them on the next run. If GPU fails, Vship Vulkan calculates them instead. Without a GPU the chosen Vship can use, or if it fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available.": "GPU で SSIMULACRA2、Butteraugli、CVVDP を計算する Vship を選びます。アプリ独自のビルドである GPU が最速で最も正確です。Vship Vulkan は標準の Vship です。Vship HIP (AMD) と Vship CUDA (NVIDIA) も標準の Vship で、Vulkan ドライバーに問題がある GPU 向けです。この 3 つは保存済みスコアを共有します。GPU のスコアはわずかに異なり、別に保存されます。切り替えると保存済みのスコアを表示するか、次回の実行で計算します。GPU が失敗すると、代わりに Vship Vulkan が計算します。選択した Vship が使える GPU がない場合、またはそれも失敗した場合、SSIMULACRA2 と Butteraugli は CPU (libjxl) で計算され、CVVDP は利用できません。",
   "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command line without --vship. Each video's own is set in the Options panel (Vship compute).": "新しく追加した動画と、--vship なしのコマンドラインで SSIMULACRA2、Butteraugli、CVVDP を計算する Vship です。動画ごとの設定はオプションパネル (Vship の計算) で行います。",
-  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP は GPU でのみ計算され、{build} が使える GPU が見つかりませんでした。Vship の計算を GPU に設定すると計算できます。"
+  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP は GPU でのみ計算され、{build} が使える GPU が見つかりませんでした。Vship の計算を GPU に設定すると計算できます。",
+  "Custom": "カスタム",
+  "Width:": "幅：",
+  "Height:": "高さ：",
+  "With black bars cut, the height follows the picture without them.": "黒帯をカットすると、高さは黒帯を除いた映像に合わせて決まります。"
  },
  "plurals": {
   "about {count} day": [

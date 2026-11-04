@@ -848,7 +848,11 @@
   "Vship CUDA (use only if Vulkan has problems)": "Vship CUDA (chỉ dùng khi Vulkan gặp vấn đề)",
   "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU. GPU, the app's own build, is the fastest and most accurate. Vship Vulkan is stock Vship; Vship HIP (AMD) and Vship CUDA (NVIDIA) are stock Vship too, for a GPU whose Vulkan driver has problems, and all three share their saved scores. GPU's scores differ slightly and are saved apart: switching shows those saved, or calculates them on the next run. If GPU fails, Vship Vulkan calculates them instead. Without a GPU the chosen Vship can use, or if it fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available.": "Vship nào tính SSIMULACRA2, Butteraugli và CVVDP trên GPU. GPU, bản dựng riêng của ứng dụng, là nhanh nhất và chính xác nhất. Vship Vulkan là Vship gốc; Vship HIP (AMD) và Vship CUDA (NVIDIA) cũng là Vship gốc, dành cho GPU có trình điều khiển Vulkan gặp vấn đề, và cả ba dùng chung điểm đã lưu. Điểm của GPU hơi khác và được lưu riêng: khi chuyển sẽ hiển thị điểm đã lưu hoặc tính ở lần chạy sau. Nếu GPU thất bại, Vship Vulkan sẽ tính thay. Nếu không có GPU mà Vship đã chọn dùng được, hoặc nó cũng thất bại, SSIMULACRA2 và Butteraugli được tính trên CPU (libjxl) và không có CVVDP.",
   "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command line without --vship. Each video's own is set in the Options panel (Vship compute).": "Vship tính SSIMULACRA2, Butteraugli và CVVDP cho video mới thêm và trên dòng lệnh khi không có --vship. Của từng video được đặt trong bảng Tùy chọn (tính toán Vship).",
-  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP chỉ được tính trên GPU và không tìm thấy GPU mà {build} dùng được; khi đặt tính toán Vship thành GPU thì có thể tính."
+  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP chỉ được tính trên GPU và không tìm thấy GPU mà {build} dùng được; khi đặt tính toán Vship thành GPU thì có thể tính.",
+  "Custom": "Tùy chỉnh",
+  "Width:": "Chiều rộng:",
+  "Height:": "Chiều cao:",
+  "With black bars cut, the height follows the picture without them.": "Khi cắt bỏ viền đen, chiều cao theo hình ảnh không có viền."
  },
  "plurals": {
   "about {count} day": [

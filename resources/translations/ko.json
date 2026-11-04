@@ -848,7 +848,11 @@
   "Vship CUDA (use only if Vulkan has problems)": "Vship CUDA (Vulkan에 문제가 있을 때만 사용)",
   "Which Vship calculates SSIMULACRA2, Butteraugli and CVVDP on the GPU. GPU, the app's own build, is the fastest and most accurate. Vship Vulkan is stock Vship; Vship HIP (AMD) and Vship CUDA (NVIDIA) are stock Vship too, for a GPU whose Vulkan driver has problems, and all three share their saved scores. GPU's scores differ slightly and are saved apart: switching shows those saved, or calculates them on the next run. If GPU fails, Vship Vulkan calculates them instead. Without a GPU the chosen Vship can use, or if it fails too, SSIMULACRA2 and Butteraugli are calculated on the CPU (libjxl), and CVVDP is not available.": "GPU에서 SSIMULACRA2, Butteraugli, CVVDP를 계산할 Vship입니다. 앱 자체 빌드인 GPU가 가장 빠르고 정확합니다. Vship Vulkan은 기본 Vship이고, Vship HIP(AMD)와 Vship CUDA(NVIDIA)도 기본 Vship으로 Vulkan 드라이버에 문제가 있는 GPU용이며, 이 셋은 저장된 점수를 공유합니다. GPU의 점수는 약간 다르며 따로 저장됩니다. 전환하면 저장된 점수를 보여 주거나 다음 실행에서 계산합니다. GPU가 실패하면 대신 Vship Vulkan이 계산합니다. 선택한 Vship이 사용할 수 있는 GPU가 없거나 그것도 실패하면 SSIMULACRA2와 Butteraugli는 CPU(libjxl)에서 계산되고 CVVDP는 사용할 수 없습니다.",
   "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command line without --vship. Each video's own is set in the Options panel (Vship compute).": "새로 추가한 동영상과 --vship 없는 명령줄에서 SSIMULACRA2, Butteraugli, CVVDP를 계산하는 Vship입니다. 동영상별 설정은 옵션 패널(Vship 계산)에서 합니다.",
-  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP는 GPU에서만 계산되며 {build}이(가) 사용할 수 있는 GPU를 찾지 못했습니다. Vship 계산을 GPU로 설정하면 계산할 수 있습니다."
+  "CVVDP is calculated on the GPU only, and no GPU that {build} can use was found; with Vship compute set to GPU it can be calculated.": "CVVDP는 GPU에서만 계산되며 {build}이(가) 사용할 수 있는 GPU를 찾지 못했습니다. Vship 계산을 GPU로 설정하면 계산할 수 있습니다.",
+  "Custom": "사용자 지정",
+  "Width:": "너비:",
+  "Height:": "높이:",
+  "With black bars cut, the height follows the picture without them.": "검은 막대를 자르면 높이는 막대를 제외한 화면을 따릅니다."
  },
  "plurals": {
   "about {count} day": [

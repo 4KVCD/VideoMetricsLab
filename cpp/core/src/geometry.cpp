@@ -13,6 +13,9 @@ namespace vml {
 
 namespace {
 
+// The even number nearest, a half to even, as Python's round() rounds a half.
+int nearest_even(double value) { return static_cast<int>(std::nearbyint(value / 2)) * 2; }
+
 // Whether two videos last as long, to within a tenth of a second or two
 // frames: compared to their end, neither has frames the other lacks.
 bool durations_match(const VideoInfo& source, const VideoInfo& distorted) {
@@ -139,9 +142,25 @@ Size analysis_dimensions(const VideoInfo& source, const VideoInfo& distorted, co
 }
 
 int resample_down_height(int width, Size size) {
-    // The half height rounded as Python's round() rounds it, a half to even.
-    const double half = static_cast<double>(width) * size.second / size.first / 2;
-    return std::max(2, static_cast<int>(std::nearbyint(half)) * 2);
+    return std::max(2, nearest_even(static_cast<double>(width) * size.second / size.first));
+}
+
+int resample_smallest_width(Size size) {
+    constexpr int smallest_side = 16;
+    return std::max(smallest_side, nearest_even(static_cast<double>(smallest_side) * size.first / size.second));
+}
+
+int resample_largest_width(Size size) { return (size.first - 1) / 2 * 2; }
+
+Size resample_size_for_width(int width, Size size) {
+    // min after max, not std::clamp: the two limits can cross (resample_smallest_width).
+    const int at_least_smallest = std::max(nearest_even(width), resample_smallest_width(size));
+    const int kept = std::min(at_least_smallest, resample_largest_width(size));
+    return {kept, resample_down_height(kept, size)};
+}
+
+Size resample_size_for_height(int height, Size size) {
+    return resample_size_for_width(nearest_even(static_cast<double>(height) * size.first / size.second), size);
 }
 
 std::pair<int, int> sar_fraction(const std::string& sar) {

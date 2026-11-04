@@ -83,6 +83,15 @@ const std::vector<ResampleTarget>& resample_target_choices() {
     return choices;
 }
 
+ResampleTarget resample_target_of_width(int width) {
+    for (const ResampleTarget& listed : resample_target_choices()) {
+        if (listed.width == width) {
+            return listed;
+        }
+    }
+    return {width, std::to_string(width) + "w"};
+}
+
 std::vector<std::string> VmafOptions::requested_metrics() const {
     std::vector<std::string> keys;
     for (const MetricDefinition& metric : metrics()) {
