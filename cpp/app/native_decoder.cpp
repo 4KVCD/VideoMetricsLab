@@ -1199,34 +1199,24 @@ bool FfmpegNativeVideo::Session::give(const AVFrame* frame, std::int64_t time_ns
     made->full_range = frame->color_range == AVCOL_RANGE_JPEG;
     made->hdr10 = hdr10_;
 #ifdef _WIN32
-    if (frame->format == AV_PIX_FMT_D3D11) {
+    constexpr AVPixelFormat gpu_format = AV_PIX_FMT_D3D11;
+#else
+    constexpr AVPixelFormat gpu_format = AV_PIX_FMT_VIDEOTOOLBOX;
+#endif
+    if (frame->format == gpu_format) {
+#ifdef _WIN32
         // A slice of the decoder's texture array, held with the frame.
         const auto* frames = reinterpret_cast<const AVHWFramesContext*>(frame->hw_frames_ctx->data);
         made->ten_bit = frames->sw_format == AV_PIX_FMT_P010LE;
         made->texture = reinterpret_cast<ID3D11Texture2D*>(frame->data[0]);
         made->subresource = static_cast<unsigned>(reinterpret_cast<std::intptr_t>(frame->data[1]));
-        AVFrame* kept = av_frame_clone(frame);
-        if (kept == nullptr) {
-            return false;
-        }
-        made->keep = std::shared_ptr<AVFrame>(kept, [](AVFrame* held) { av_frame_free(&held); });
-    } else {
-        const AVPixFmtDescriptor* description = av_pix_fmt_desc_get(static_cast<AVPixelFormat>(frame->format));
-        if (description == nullptr) {
-            return false;
-        }
-        made->ten_bit = description->comp[0].depth > 8;
-        if (!upload(frame, *made)) {
-            return false;
-        }
-    }
 #else
-    if (frame->format == AV_PIX_FMT_VIDEOTOOLBOX) {
         // VideoToolbox's pixel buffer, held with the frame.
         made->picture = reinterpret_cast<CVPixelBufferRef>(frame->data[3]);
         const OSType layout = CVPixelBufferGetPixelFormatType(made->picture);
         made->ten_bit = layout == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange ||
                         layout == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange;
+#endif
         AVFrame* kept = av_frame_clone(frame);
         if (kept == nullptr) {
             return false;
@@ -1242,7 +1232,6 @@ bool FfmpegNativeVideo::Session::give(const AVFrame* frame, std::int64_t time_ns
             return false;
         }
     }
-#endif
     if (video_.scale_to_ && !decoding_->downscale_failed) {
         scale_down(frame, *made);
     }
@@ -1255,9 +1244,7 @@ bool FfmpegNativeVideo::Session::give(const AVFrame* frame, std::int64_t time_ns
 // P010, which `made` then holds: converted first when it is not 4:2:0.
 // False when it cannot be.
 bool FfmpegNativeVideo::Session::upload(const AVFrame* frame, NativeFrame& made) {
-#ifdef _WIN32
-    const DXGI_FORMAT format = made.ten_bit ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
-    // NV12 and P010 textures have even sizes; the picture is drawn from its
+    // NV12's and P010's layouts have even sizes; the picture is drawn from its
     // own size.
     const int width = (frame->width + 1) & ~1;
     const int height = (frame->height + 1) & ~1;
@@ -1270,6 +1257,8 @@ bool FfmpegNativeVideo::Session::upload(const AVFrame* frame, NativeFrame& made)
         }
         picture = converted.get();
     }
+#ifdef _WIN32
+    const DXGI_FORMAT format = made.ten_bit ? DXGI_FORMAT_P010 : DXGI_FORMAT_NV12;
     ID3D11Device* gpu = video_.device_->device();
     if (!decoding_->uploads) {
         decoding_->uploads = std::make_shared<UploadTextures>(gpu);
@@ -1305,19 +1294,7 @@ bool FfmpegNativeVideo::Session::upload(const AVFrame* frame, NativeFrame& made)
     return true;
 #else
     // Into a pixel buffer of its own (an IOSurface, which the GPU reads as
-    // it is), NV12's or P010's layout: even sizes, the picture drawn from its
-    // own.
-    const int width = (frame->width + 1) & ~1;
-    const int height = (frame->height + 1) & ~1;
-    OwnedFrame converted;
-    const AVFrame* picture = frame;
-    if (!is_420(static_cast<AVPixelFormat>(frame->format))) {
-        converted = converted_to_420(decoding_->converter, frame, made.ten_bit);
-        if (!converted) {
-            return false;
-        }
-        picture = converted.get();
-    }
+    // it is).
     HeldPixelBuffer buffer = video_.device_->take_buffer(width, height, made.ten_bit);
     if (!buffer || CVPixelBufferLockBaseAddress(buffer.get(), 0) != kCVReturnSuccess) {
         return false;

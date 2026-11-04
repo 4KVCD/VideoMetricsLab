@@ -1,5 +1,7 @@
 #include "native_device.h"
 
+#include "native_common.h"
+
 #include <dxgi1_2.h>
 
 #include <algorithm>
@@ -50,29 +52,6 @@ std::optional<std::string> load_ffmpeg_libraries() {
     // decoder decodes it.
     av_log_set_level(AV_LOG_QUIET);
     return problem;
-}
-
-namespace {
-
-struct SharedDevice {
-    std::mutex mutex;
-    std::shared_ptr<NativeDevice> device;
-};
-
-SharedDevice& shared_device() {
-    static SharedDevice shared;
-    return shared;
-}
-
-}  // namespace
-
-void NativeDevice::release_shared() {
-    std::shared_ptr<NativeDevice> going;
-    {
-        SharedDevice& shared = shared_device();
-        const std::lock_guard lock(shared.mutex);
-        going = std::move(shared.device);
-    }
 }
 
 std::shared_ptr<NativeDevice> NativeDevice::shared() {

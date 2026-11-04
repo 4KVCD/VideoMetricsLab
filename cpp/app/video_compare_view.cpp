@@ -74,7 +74,11 @@ std::string crop_text(const std::optional<CropBox>& crop) {
 
 // --------------------------------------------------------------- the surfaces
 
-StreamSurface::StreamSurface(VideoCompareView* view) : QWidget(view), view_(view) {
+StreamSurface::StreamSurface(VideoCompareView* view)
+    : QWidget(view),
+      view_(view),
+      drag_(
+          *this, [view] { return view->can_drag_frame(); }, [view](QPointF moved) { view->drag_frame(moved); }) {
     setFocusPolicy(Qt::StrongFocus);
     // It paints all of itself: nothing behind it is painted first.
     setAttribute(Qt::WA_OpaquePaintEvent);
@@ -176,58 +180,38 @@ void StreamSurface::paintEvent(QPaintEvent* event) {
     }
 }
 
-bool StreamSurface::can_drag() const {
-    const std::optional<VideoCompareView::ZoomContext> context = view_->zoom_context();
-    return context && view_->zoom().factor && view_->zoom().can_drag(context->view, context->frame, context->ratio);
-}
-
-void StreamSurface::refresh_cursor() {
-    // An open hand where the frame can be dragged; else the usual one.
-    if (!drag_from_) {
-        if (can_drag()) {
-            setCursor(Qt::OpenHandCursor);
-        } else {
-            unsetCursor();
-        }
-    }
-}
-
 void StreamSurface::mousePressEvent(QMouseEvent* event) {
     setFocus(Qt::MouseFocusReason);
-    if (event->button() == Qt::LeftButton && can_drag()) {
-        drag_from_ = event->position();
-        setCursor(Qt::ClosedHandCursor);
-        event->accept();
-        return;
+    if (!drag_.press(event)) {
+        QWidget::mousePressEvent(event);
     }
-    QWidget::mousePressEvent(event);
 }
 
 void StreamSurface::mouseMoveEvent(QMouseEvent* event) {
-    if (!drag_from_) {
+    if (!drag_.move(event)) {
         QWidget::mouseMoveEvent(event);
-        return;
     }
-    const QPointF moved = event->position() - *drag_from_;
-    drag_from_ = event->position();
-    if (const std::optional<VideoCompareView::ZoomContext> context = view_->zoom_context();
-        context && view_->zoom().drag(moved.x(), moved.y(), context->view, context->frame, context->ratio)) {
-        view_->zoom_changed();
-    }
-    event->accept();
 }
 
 void StreamSurface::mouseReleaseEvent(QMouseEvent* event) {
-    if (drag_from_ && event->button() == Qt::LeftButton) {
-        drag_from_.reset();
-        refresh_cursor();
-        event->accept();
-        return;
+    if (!drag_.release(event)) {
+        QWidget::mouseReleaseEvent(event);
     }
-    QWidget::mouseReleaseEvent(event);
 }
 
 // ------------------------------------------------------------------- the view
+
+bool VideoCompareView::can_drag_frame() const {
+    const std::optional<ZoomContext> context = zoom_context();
+    return context && zoom_.factor && zoom_.can_drag(context->view, context->frame, context->ratio);
+}
+
+void VideoCompareView::drag_frame(QPointF moved) {
+    if (const std::optional<ZoomContext> context = zoom_context();
+        context && zoom_.drag(moved.x(), moved.y(), context->view, context->frame, context->ratio)) {
+        zoom_changed();
+    }
+}
 
 VideoCompareView::VideoCompareView(std::function<std::string()> ffmpeg, Zoom& zoom, QWidget* parent)
     : QWidget(parent), ffmpeg_(std::move(ffmpeg)), zoom_(zoom), decoded_videos_(default_compare_decoded_videos) {

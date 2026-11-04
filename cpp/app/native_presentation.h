@@ -93,6 +93,8 @@ private:
         Placement placement;
         std::optional<std::array<float, 16>> shading;
     };
+    // The presenter takes the window's present size.
+    void follow_window();
     void present_paced();
     void draw(const Due& due);
 

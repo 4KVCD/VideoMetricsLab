@@ -5,6 +5,8 @@
 // Metal shaders both it and the presenter draw with (native_metal.h).
 #include "native_device.h"
 
+#include "native_common.h"
+
 #import <CoreMedia/CoreMedia.h>
 #import <CoreVideo/CoreVideo.h>
 #import <Metal/Metal.h>
@@ -143,16 +145,6 @@ fragment float4 scale_fragment(float4 at [[position]], constant Scale& scale [[b
 }
 )";
 
-struct SharedDevice {
-    std::mutex mutex;
-    std::shared_ptr<NativeDevice> device;
-};
-
-SharedDevice& shared_device() {
-    static SharedDevice shared;
-    return shared;
-}
-
 // A pixel buffer's planes as Metal reads and writes them: R and RG, of 8
 // bits (NV12's layout) or 16 (P010's); nothing for another layout.
 std::optional<std::pair<MTLPixelFormat, MTLPixelFormat>> plane_formats(CVPixelBufferRef buffer) {
@@ -264,15 +256,6 @@ struct NativeDevice::Pools {
         }
     }
 };
-
-void NativeDevice::release_shared() {
-    std::shared_ptr<NativeDevice> going;
-    {
-        SharedDevice& shared = shared_device();
-        const std::lock_guard lock(shared.mutex);
-        going = std::move(shared.device);
-    }
-}
 
 std::shared_ptr<NativeDevice> NativeDevice::shared() {
     SharedDevice& shared = shared_device();

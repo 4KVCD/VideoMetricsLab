@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "frame_drag.h"
 #include "native_decoder.h"
 #include "native_presentation.h"
 #include "native_soundtrack.h"
@@ -39,7 +40,7 @@ class PairedFrameWidget : public QWidget {
 
 public:
     explicit PairedFrameWidget(VideoCompareView* view);
-    void refresh_cursor();
+    void refresh_cursor() { drag_.refresh_cursor(); }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -48,10 +49,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
-    bool can_drag() const;
-
-    VideoCompareView* view_;
-    std::optional<QPointF> drag_from_;
+    FrameDrag drag_;
 };
 
 class NativePool {

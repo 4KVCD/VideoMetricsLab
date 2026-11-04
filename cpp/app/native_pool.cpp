@@ -57,7 +57,10 @@ private:
 
 // ---------------------------------------------------------- the paired frame
 
-PairedFrameWidget::PairedFrameWidget(VideoCompareView* view) : QWidget(view), view_(view) {
+PairedFrameWidget::PairedFrameWidget(VideoCompareView* view)
+    : QWidget(view),
+      drag_(
+          *this, [view] { return view->can_drag_frame(); }, [view](QPointF moved) { view->drag_frame(moved); }) {
     setFocusPolicy(Qt::StrongFocus);
     setAttribute(Qt::WA_NativeWindow);
     setAttribute(Qt::WA_DontCreateNativeAncestors);
@@ -71,54 +74,23 @@ void PairedFrameWidget::paintEvent(QPaintEvent* /*event*/) {
     QPainter(this).fillRect(rect(), QColor("#171717"));
 }
 
-bool PairedFrameWidget::can_drag() const {
-    const std::optional<VideoCompareView::ZoomContext> context = view_->zoom_context();
-    return context && view_->zoom().factor && view_->zoom().can_drag(context->view, context->frame, context->ratio);
-}
-
-void PairedFrameWidget::refresh_cursor() {
-    if (!drag_from_) {
-        if (can_drag()) {
-            setCursor(Qt::OpenHandCursor);
-        } else {
-            unsetCursor();
-        }
-    }
-}
-
 void PairedFrameWidget::mousePressEvent(QMouseEvent* event) {
     setFocus(Qt::MouseFocusReason);
-    if (event->button() == Qt::LeftButton && can_drag()) {
-        drag_from_ = event->position();
-        setCursor(Qt::ClosedHandCursor);
-        event->accept();
-        return;
+    if (!drag_.press(event)) {
+        QWidget::mousePressEvent(event);
     }
-    QWidget::mousePressEvent(event);
 }
 
 void PairedFrameWidget::mouseMoveEvent(QMouseEvent* event) {
-    if (!drag_from_) {
+    if (!drag_.move(event)) {
         QWidget::mouseMoveEvent(event);
-        return;
     }
-    const QPointF moved = event->position() - *drag_from_;
-    drag_from_ = event->position();
-    if (const std::optional<VideoCompareView::ZoomContext> context = view_->zoom_context();
-        context && view_->zoom().drag(moved.x(), moved.y(), context->view, context->frame, context->ratio)) {
-        view_->zoom_changed();
-    }
-    event->accept();
 }
 
 void PairedFrameWidget::mouseReleaseEvent(QMouseEvent* event) {
-    if (drag_from_ && event->button() == Qt::LeftButton) {
-        drag_from_.reset();
-        refresh_cursor();
-        event->accept();
-        return;
+    if (!drag_.release(event)) {
+        QWidget::mouseReleaseEvent(event);
     }
-    QWidget::mouseReleaseEvent(event);
 }
 
 // ------------------------------------------------------------------ the pool

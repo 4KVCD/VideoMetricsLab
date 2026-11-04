@@ -2,10 +2,9 @@
 
 #include <d3d11.h>
 
-#include <map>
 #include <stdexcept>
-#include <tuple>
 
+#include "native_common.h"
 #include "native_device.h"
 #include "vml/model_select.h"
 #include "vml/native_playback.h"
@@ -68,19 +67,6 @@ const PresenterApi& presenter_api() {
     return api;
 }
 
-// YUV-to-RGB rows for frames of one kind, worked out once each.
-const std::array<float, 12>& rows_for(const NativeFrame& frame) {
-    static std::mutex mutex;
-    static std::map<std::tuple<std::string, bool, bool>, std::array<float, 12>> made;
-    const std::lock_guard lock(mutex);
-    const auto key = std::make_tuple(frame.matrix, frame.full_range, frame.ten_bit);
-    auto found = made.find(key);
-    if (found == made.end()) {
-        found = made.emplace(key, yuv_to_rgb(frame.matrix, frame.full_range, frame.ten_bit)).first;
-    }
-    return found->second;
-}
-
 }  // namespace
 
 std::optional<QString> NativePresentation::unavailable() { return presenter_api().problem; }
@@ -127,24 +113,7 @@ NativePresentation::~NativePresentation() {
     presenter_api().destroy(presenter_);
 }
 
-void NativePresentation::present(NativeFramePtr frame, const Placement& placement,
-                                 const std::optional<std::array<float, 16>>& shading) {
-    presenter_api().follow(presenter_, window_);
-    {
-        const std::lock_guard lock(mutex_);
-        due_.push_back({std::move(frame), placement, shading});
-        // At most presenter_waiting_frames wait; past that the oldest is dropped.
-        while (due_.size() > presenter_waiting_frames) {
-            due_.pop_front();
-        }
-    }
-    due_ready_.notify_all();
-}
-
-std::optional<QString> NativePresentation::error() const {
-    const std::lock_guard lock(mutex_);
-    return error_;
-}
+void NativePresentation::follow_window() { presenter_api().follow(presenter_, window_); }
 
 void NativePresentation::present_paced() {
     // Draws the waiting frames in order, one each time the swapchain takes a

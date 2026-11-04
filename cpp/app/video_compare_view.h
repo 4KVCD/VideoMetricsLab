@@ -28,6 +28,7 @@
 #include <utility>
 #include <vector>
 
+#include "frame_drag.h"
 #include "playback_worker.h"
 #ifdef VML_NATIVE_PLAYBACK
 #include "native_pool.h"
@@ -57,7 +58,7 @@ public:
     // Paints its new frame: only where the last was drawn, when drawn the
     // same way (the bars beside it stay as painted).
     void update_frame();
-    void refresh_cursor();
+    void refresh_cursor() { drag_.refresh_cursor(); }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -71,7 +72,6 @@ private:
     using DrawnKey = std::tuple<int, int, double, int, int>;
     DrawnKey drawn_key() const;
     QImage& frame_image();
-    bool can_drag() const;
 
     VideoCompareView* view_;
     FramePixels pixels_;
@@ -79,13 +79,17 @@ private:
     std::optional<QImage> image_;  // made from the pixels when first painted
     // Where the last paint drew a fitted frame, for what view and frame size.
     std::optional<std::pair<DrawnKey, QRect>> drawn_;
-    std::optional<QPointF> drag_from_;
+    FrameDrag drag_;
 };
 
 class VideoCompareView : public QWidget {
     Q_OBJECT
 
 public:
+    // A zoomed frame being dragged on the surface showing it.
+    bool can_drag_frame() const;
+    void drag_frame(QPointF moved);
+
     // Makes the decoder of one video: the view's tests make stand-ins.
     using DecoderFactory = std::function<PlaybackDecoder*(const FrameComparison& comparison, FrameSide side,
                                                           long long start_frame, const PreviewColorSettings& colors,

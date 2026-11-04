@@ -20,11 +20,10 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
-#include <map>
 #include <stdexcept>
-#include <tuple>
 #include <vector>
 
+#include "native_common.h"
 #include "native_device.h"
 #include "native_metal.h"
 #include "vml/native_playback.h"
@@ -75,19 +74,6 @@ struct Presenter {
     // or restored (removed with the presenter).
     std::vector<id> observers;
 };
-
-// YUV-to-RGB rows for frames of one kind, worked out once each.
-const std::array<float, 12>& rows_for(const NativeFrame& frame) {
-    static std::mutex mutex;
-    static std::map<std::tuple<std::string, bool, bool>, std::array<float, 12>> made;
-    const std::lock_guard lock(mutex);
-    const auto key = std::make_tuple(frame.matrix, frame.full_range, frame.ten_bit);
-    auto found = made.find(key);
-    if (found == made.end()) {
-        found = made.emplace(key, yuv_to_rgb(frame.matrix, frame.full_range, frame.ten_bit)).first;
-    }
-    return found->second;
-}
 
 // The shader's constants, as native/d3d11_tonemap.cpp's present_constants
 // makes them: `source` the part drawn in the picture's pixels, `width` and
@@ -313,24 +299,7 @@ NativePresentation::~NativePresentation() {
     delete presenter;
 }
 
-void NativePresentation::present(NativeFramePtr frame, const Placement& placement,
-                                 const std::optional<std::array<float, 16>>& shading) {
-    follow(*static_cast<Presenter*>(presenter_));
-    {
-        const std::lock_guard lock(mutex_);
-        due_.push_back({std::move(frame), placement, shading});
-        // At most presenter_waiting_frames wait; past that the oldest is dropped.
-        while (due_.size() > presenter_waiting_frames) {
-            due_.pop_front();
-        }
-    }
-    due_ready_.notify_all();
-}
-
-std::optional<QString> NativePresentation::error() const {
-    const std::lock_guard lock(mutex_);
-    return error_;
-}
+void NativePresentation::follow_window() { follow(*static_cast<Presenter*>(presenter_)); }
 
 void NativePresentation::present_paced() {
     // Draws the waiting frames in order, one each time the layer has a

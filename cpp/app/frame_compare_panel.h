@@ -9,7 +9,6 @@
 #include <QImage>
 #include <QMetaType>
 #include <QPixmap>
-#include <QPointF>
 #include <QString>
 #include <QThread>
 #include <QWidget>
@@ -26,6 +25,7 @@
 #include <vector>
 
 #include "display_hdr.h"
+#include "frame_drag.h"
 #include "vml/cancel.h"
 #include "vml/frame_extract.h"
 #include "vml/platform/system.h"
@@ -94,8 +94,6 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
-    bool can_drag() const;
-    void refresh_cursor();
     void fit_screen_text();
 
     Zoom& zoom_;
@@ -106,7 +104,7 @@ private:
     // The frame scaled down smoothly, at the size last drawn: a drag paints
     // often, and scaling a 4K frame each time is slow.
     QPixmap scaled_;
-    std::optional<QPointF> drag_from_;
+    FrameDrag drag_;
 };
 
 // Extracts the frame of each side asked for, in turn, on a thread of its

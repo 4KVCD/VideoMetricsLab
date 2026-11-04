@@ -146,7 +146,21 @@ double parse_timestamp(const QString& value) {
 
 // ------------------------------------------------------------------ FrameView
 
-FrameView::FrameView(Zoom& zoom, QWidget* parent) : QWidget(parent), zoom_(zoom) {
+FrameView::FrameView(Zoom& zoom, QWidget* parent)
+    : QWidget(parent),
+      zoom_(zoom),
+      drag_(
+          *this,
+          [this] {
+              return !image_.isNull() &&
+                     zoom_.can_drag({width(), height()}, {image_.width(), image_.height()}, devicePixelRatioF());
+          },
+          [this](QPointF moved) {
+              if (!image_.isNull() && zoom_.drag(moved.x(), moved.y(), {width(), height()},
+                                                 {image_.width(), image_.height()}, devicePixelRatioF())) {
+                  update();
+              }
+          }) {
     setFocusPolicy(Qt::StrongFocus);
     // The black screen's text: the message, and the tab's keys under it.
     screen_text_ = new QWidget(this);
@@ -191,24 +205,8 @@ void FrameView::fit_screen_text() {
 }
 
 void FrameView::zoom_changed() {
-    refresh_cursor();
+    drag_.refresh_cursor();
     update();
-}
-
-bool FrameView::can_drag() const {
-    return !image_.isNull() &&
-           zoom_.can_drag({width(), height()}, {image_.width(), image_.height()}, devicePixelRatioF());
-}
-
-void FrameView::refresh_cursor() {
-    // An open hand where the frame can be dragged; else the usual one.
-    if (!drag_from_) {
-        if (can_drag()) {
-            setCursor(Qt::OpenHandCursor);
-        } else {
-            unsetCursor();
-        }
-    }
 }
 
 void FrameView::resizeEvent(QResizeEvent* event) {
@@ -216,45 +214,28 @@ void FrameView::resizeEvent(QResizeEvent* event) {
         fit_screen_text();
     }
     QWidget::resizeEvent(event);
-    refresh_cursor();
+    drag_.refresh_cursor();
 }
 
 void FrameView::mousePressEvent(QMouseEvent* event) {
     // Takes the keyboard focus, for the keys that switch and step, and
     // starts dragging a frame larger than the view.
     setFocus(Qt::MouseFocusReason);
-    if (event->button() == Qt::LeftButton && can_drag()) {
-        drag_from_ = event->position();
-        setCursor(Qt::ClosedHandCursor);
-        event->accept();
-        return;
+    if (!drag_.press(event)) {
+        QWidget::mousePressEvent(event);
     }
-    QWidget::mousePressEvent(event);
 }
 
 void FrameView::mouseMoveEvent(QMouseEvent* event) {
-    if (!drag_from_) {
+    if (!drag_.move(event)) {
         QWidget::mouseMoveEvent(event);
-        return;
     }
-    const QPointF position = event->position();
-    const QPointF moved = position - *drag_from_;
-    drag_from_ = position;
-    if (!image_.isNull() &&
-        zoom_.drag(moved.x(), moved.y(), {width(), height()}, {image_.width(), image_.height()}, devicePixelRatioF())) {
-        update();
-    }
-    event->accept();
 }
 
 void FrameView::mouseReleaseEvent(QMouseEvent* event) {
-    if (drag_from_ && event->button() == Qt::LeftButton) {
-        drag_from_.reset();
-        refresh_cursor();
-        event->accept();
-        return;
+    if (!drag_.release(event)) {
+        QWidget::mouseReleaseEvent(event);
     }
-    QWidget::mouseReleaseEvent(event);
 }
 
 void FrameView::paintEvent(QPaintEvent* /*event*/) {
