@@ -1273,8 +1273,8 @@ std::pair<bool, std::string> decoder_supports(int device, const DecodePlan& plan
     if (!decodes_codec(plan.codec, backend)) {
         return {false, plan.codec + " is not decoded by the " + std::string(backend) + " decoder"};
     }
-    if (plan.software_only && backend != software_decoder) {
-        return {false, "only the software decoder adds the H.274 film grain the video is scored with"};
+    if (plan.software_only && backend != software_decoder && backend != vvdec_decoder) {
+        return {false, "only the app's VVC decoders add the H.274 film grain the video is scored with"};
     }
     if (backend == software_decoder && plan.scaled() && !plan.software_only) {
         // On the caller's one thread it is slower than FFmpeg's scaling. (A
@@ -2040,9 +2040,10 @@ void GpuFrameStream::start() {
 }
 
 void GpuFrameStream::throw_final_if_software_only(const GpuDecodeFailedError& error) const {
-    if (state_->software_only) {
+    if (state_->software_only && state_->backend != vvdec_decoder) {
         // The only decoder for its pictures: decoding them again by another
-        // route would fail the same way.
+        // route would fail the same way. (VVdeC on the CPU is another for
+        // vvdec-vulkan's.)
         throw FilmGrainRefusal(std::string("the app could not decode its pictures: ") + error.what());
     }
 }
