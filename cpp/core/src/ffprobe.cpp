@@ -189,13 +189,15 @@ double stream_duration(const Json& stream, double container) {
 
 // One stream's own bitrate, from what the container records: its bit_rate,
 // or Matroska's statistics tags (BPS, or NUMBER_OF_BYTES over its length).
-// 0 when there is none. The statistics are used only if they fit in the
-// file: FFmpeg copies them from its input into what it writes, even through
-// a re-encode.
-long long stream_bit_rate(const Json& stream, double duration, long long file_size) {
+// 0 when there is none. The statistics are used only if they are the file's
+// (see statistics_are_the_files) and fit in it.
+long long stream_bit_rate(const Json& stream, double duration, long long file_size, bool statistics_are_true) {
     const long long rate = whole(member(stream, "bit_rate"));
     if (rate > 0) {
         return rate;
+    }
+    if (!statistics_are_true) {
+        return 0;
     }
     const long long size = whole(tag(stream, "NUMBER_OF_BYTES"));
     long long tagged = whole(tag(stream, "BPS"));
@@ -211,13 +213,23 @@ long long stream_bit_rate(const Json& stream, double duration, long long file_si
     return tagged;
 }
 
+// Whether a file's statistics tags describe it. FFmpeg writes none of its own,
+// and copies its input's into what it writes, even through a re-encode, where
+// they can be far from the truth and still fit in the file. So in a file it
+// wrote they cannot be told from stale ones, and are not used.
+bool statistics_are_the_files(const Json& format) {
+    const Json* encoder = tag(format, "ENCODER");
+    return encoder == nullptr || !encoder->is_string() || !encoder->get<std::string>().starts_with("Lavf");
+}
+
 // The video stream's bitrate, and whether it is the whole file's instead.
 // Without the video's own, the audio tracks' rates are taken from the
 // file's when every one is known; otherwise the file's rate is all there is.
 std::pair<long long, bool> video_bit_rate(const Json& video, const Json& streams, const Json& format,
                                           double duration) {
     const long long file_size = whole(member(format, "size"));
-    if (const long long own = stream_bit_rate(video, duration, file_size); own != 0) {
+    const bool statistics_are_true = statistics_are_the_files(format);
+    if (const long long own = stream_bit_rate(video, duration, file_size, statistics_are_true); own != 0) {
         return {own, false};
     }
     const long long total = whole(member(format, "bit_rate"));
@@ -236,7 +248,8 @@ std::pair<long long, bool> video_bit_rate(const Json& video, const Json& streams
             if (string_member(stream, "codec_type") != "audio") {
                 continue;
             }
-            const long long rate = stream_bit_rate(stream, stream_duration(stream, container), file_size);
+            const long long rate =
+                stream_bit_rate(stream, stream_duration(stream, container), file_size, statistics_are_true);
             every_rate_known = every_rate_known && rate != 0;
             audio_rates += rate;
         }

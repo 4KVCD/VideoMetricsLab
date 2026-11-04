@@ -57,5 +57,21 @@ TEST(Ffprobe, ReadsTheVideosDetailsAsThePythonAppDoes) {
     }
 }
 
+// Matroska's statistics tags tell a stream's rate, unless FFmpeg wrote the
+// file: then they are its input's, even through a re-encode.
+TEST(Ffprobe, StatisticsTagsCountUnlessFfmpegCopiedThem) {
+    const auto rate_when_written_by = [](const std::string& writer) {
+        const std::string probe = R"({"streams":[{"codec_type":"video","codec_name":"hevc","width":1280,"height":720,)"
+                                  R"("pix_fmt":"yuv420p","r_frame_rate":"24/1","avg_frame_rate":"24/1",)"
+                                  R"("tags":{"BPS":"100000"}}],)"
+                                  R"("format":{"duration":"10.0","size":"789000","bit_rate":"631200",)"
+                                  R"("format_name":"matroska,webm","tags":{"ENCODER":")" +
+                                  writer + R"("}}})";
+        return video_info_from_probe("a.mkv", probe).bit_rate;
+    };
+    EXPECT_EQ(rate_when_written_by("libebml v1.4.5 + libmatroska v1.7.1"), 100000);
+    EXPECT_EQ(rate_when_written_by("Lavf63.1.101"), 631200);
+}
+
 }  // namespace
 }  // namespace vml
