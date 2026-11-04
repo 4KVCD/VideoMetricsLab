@@ -1167,6 +1167,17 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const V
     return {shared_source, shared_distorted};
 }
 
+std::optional<CropBox> test_crop_beside_source_box(const CropBox& source_box, const VideoInfo& test) {
+    const auto [width, height] = test.frame_size();
+    const int extra_width = width - source_box.w;
+    const int extra_height = height - source_box.h;
+    const bool only_the_odd_line = (extra_width == 0 || extra_width == 1) && (extra_height == 0 || extra_height == 1);
+    if (!only_the_odd_line || (extra_width == 0 && extra_height == 0)) {
+        return std::nullopt;
+    }
+    return CropBox{source_box.w, source_box.h, 0, 0};
+}
+
 std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_for(CropMode mode, const std::string& ffmpeg,
                                                                     const VideoInfo& source,
                                                                     const VideoInfo& distorted,
@@ -1177,8 +1188,10 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_for(CropMode mod
     switch (mode) {
     case CropMode::none:
         return {};
-    case CropMode::source_only:  // (the run's settings line says so: "black bars source")
-        return {detect_crop(ffmpeg, source, cancel, source_hwaccel, scale_algorithm), std::nullopt};
+    case CropMode::source_only: {  // (the run's settings line says so: "black bars source")
+        const CropBox source_box = detect_crop(ffmpeg, source, cancel, source_hwaccel, scale_algorithm);
+        return {source_box, test_crop_beside_source_box(source_box, distorted)};
+    }
     case CropMode::automatic:
         break;
     }

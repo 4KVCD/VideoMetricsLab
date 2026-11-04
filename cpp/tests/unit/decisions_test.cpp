@@ -469,6 +469,21 @@ TEST(Decisions, AWholeFrameBoxIsNoBoxOnEveryRoute) {
               std::pair(std::optional(source_whole), std::optional(half_whole)));
 }
 
+TEST(Decisions, SourceOnlyCutsOnlyTheTestVideosOddLine) {
+    const auto frame = [](int width, int height) {
+        VideoInfo info;
+        info.width = width;
+        info.height = height;
+        return info;
+    };
+    const CropBox whole_on_even_samples{852, 480, 0, 0};
+    const CropBox letterboxed{852, 400, 0, 40};
+    EXPECT_EQ(test_crop_beside_source_box(whole_on_even_samples, frame(853, 481)), whole_on_even_samples);
+    EXPECT_EQ(test_crop_beside_source_box(letterboxed, frame(853, 401)), (CropBox{852, 400, 0, 0}));
+    EXPECT_EQ(test_crop_beside_source_box(letterboxed, frame(852, 400)), std::nullopt);
+    EXPECT_EQ(test_crop_beside_source_box(letterboxed, frame(853, 481)), std::nullopt);
+}
+
 // The black bars of a video whose codec the app's own decoder decodes
 // (app_decoders.h: VVC) are sampled from that decoder's pictures, grain or
 // not; every other video's as before, by FFmpeg, and so a raw stream's.

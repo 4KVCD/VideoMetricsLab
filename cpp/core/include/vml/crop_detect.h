@@ -83,6 +83,11 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const V
                                                                          std::optional<CropBox> source_crop,
                                                                          std::optional<CropBox> distorted_crop);
 
+// What Source only cuts from the test video, which is compared at its full frame:
+// nothing, but for the odd line a box on even samples leaves out of an odd-sized
+// frame. Kept, it would stretch the source by a pixel to fit, moving every line.
+std::optional<CropBox> test_crop_beside_source_box(const CropBox& source_box, const VideoInfo& test);
+
 // The two videos' crops as `mode` asks: none for CropMode::none; for automatic, both videos' boxes (detect_pair)
 // made to cover the same picture (common_picture); for source_only, the source's box (detect_crop) and the test
 // video's full frame, as an encode cropped when it was made shows the source's picture without its bars.
