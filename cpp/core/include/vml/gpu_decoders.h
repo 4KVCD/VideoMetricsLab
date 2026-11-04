@@ -40,13 +40,13 @@ struct GpuDecoder {
     // How FFmpeg decodes with this maker's GPU. Empty for the app's own decoders
     // (software, vvdec), which are only reached by name.
     GpuVendor vendor = GpuVendor::none;  // none for Apple's too: a Mac's route is chosen by its hwaccel (pick_hwaccel)
-    std::string_view hwaccel;
-    std::string_view output_format;                    // -hwaccel_output_format
-    std::span<const std::string_view> hwaccel_codecs;  // those it reliably decodes; Apple's are asked of the Mac
-    bool ffmpeg_downloads = false;                     // FFmpeg's decoder hands frames over in system memory itself
+    std::string_view hwaccel = {};
+    std::string_view output_format = {};                    // -hwaccel_output_format
+    std::span<const std::string_view> hwaccel_codecs = {};  // those it reliably decodes; Apple's are asked of the Mac
+    bool ffmpeg_downloads = false;                          // FFmpeg's decoder hands frames over in system memory
 
     // The video decoded in this process.
-    std::string_view library;  // empty: none yet, so FFmpeg decodes for it, through its pipes (Apple's)
+    std::string_view library = {};  // empty: none yet, so FFmpeg decodes for it, through its pipes (Apple's)
     HandOver hand_over = HandOver::never;
     bool cuda_copies = false;              // CUDA reads its pictures on the GPU: page-locks memory, copies luma there
     bool streams_share_no_memory = false;  // two of its streams may download at the same time (downloads_at_once)
