@@ -527,6 +527,12 @@ std::filesystem::path executable_path() {
 
 std::string path_text(const std::filesystem::path& path) { return narrow(path.native()); }
 
+std::string name_as_compared(std::string_view name) {
+    std::wstring wide = widen(name);
+    CharLowerBuffW(wide.data(), static_cast<DWORD>(wide.size()));
+    return narrow(wide);
+}
+
 std::filesystem::path path_from_text(std::string_view utf8) { return std::filesystem::path(widen(utf8)); }
 
 std::optional<std::string> fopen_path(const std::filesystem::path& path) {

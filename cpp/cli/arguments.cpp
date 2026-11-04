@@ -232,7 +232,10 @@ options:
                         well, frame by frame (CVVDP second by second); with
                         --csv also in FOLDER as <first>_minus_<second>.csv
   --csv FOLDER          write each video's per-frame scores to FOLDER as
-                        <video>.csv
+                        <video>.csv (further --cvvdp-display scores as
+                        <video>_<display>.csv); nothing is overwritten: a
+                        name taken gets a number, <video>_2.csv, which is
+                        said, and is in the --json
   --json FILE           also write the results as JSON to FILE; - prints the
                         JSON instead of the tables
   -q, --quiet           no progress, only the results

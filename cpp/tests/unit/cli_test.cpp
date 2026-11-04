@@ -157,6 +157,68 @@ TEST(CommandLine, FindsTestVideosAsThePythonApp) {
     std::filesystem::remove_all(folder, error);
 }
 
+// ? and [seq] stand for a character, however many bytes it takes in UTF-8.
+TEST(CommandLine, PatternsMatchWholeCharacters) {
+    const test::Folder temporary;
+    const std::filesystem::path folder = temporary / "videos";
+    std::filesystem::create_directory(folder);
+    const auto name = [](const char* utf8) { return platform::path_from_text(utf8); };
+    for (const char* file : {"\xC3\xA9t\xC3\xA9.mkv", "\xE6\x97\xA5.mkv", "ab.mkv", "ref.mkv"}) {
+        std::ofstream(folder / name(file)).close();
+    }
+    const auto found = [&](const char* pattern) {
+        std::vector<std::string> names;
+        for (const std::filesystem::path& path :
+             expand_tests({platform::path_text(folder / name(pattern))}, folder / "ref.mkv")) {
+            names.push_back(platform::path_text(path.filename()));
+        }
+        return names;
+    };
+    using Names = std::vector<std::string>;
+    EXPECT_EQ(found("?.mkv"), Names{"\xE6\x97\xA5.mkv"});
+    EXPECT_EQ(found("?t?.mkv"), Names{"\xC3\xA9t\xC3\xA9.mkv"});
+    EXPECT_EQ(found("[\xC3\xA0-\xC3\xAF]t*"), Names{"\xC3\xA9t\xC3\xA9.mkv"});
+    EXPECT_EQ(found("[!a\xC3\xA9r]*.mkv"), Names{"\xE6\x97\xA5.mkv"});
+#ifdef _WIN32
+    EXPECT_EQ(found("\xC3\x89T*"), Names{"\xC3\xA9t\xC3\xA9.mkv"});  // names ignore case in every language
+#endif
+}
+
+// --csv: a further display's scores beside the video's; a name taken is kept,
+// and the new file's name said and given in the JSON.
+TEST(CommandLine, CsvFilesKeepWhatIsThereAndSayWhereTheyWent) {
+    const test::Folder temporary;
+    const std::filesystem::path folder = temporary / "scores";
+    std::filesystem::create_directory(folder);
+    std::vector<TestVideo> videos(1);
+    TestVideo& video = videos[0];
+    video.path = "a b.mkv";  // written as a_b
+    video.result.emplace().metric_results.add(FrameMetricResult{"vmaf", {0}, {0.0}, {90.0F}, {}});
+    TestVideo& other = video.other_displays.emplace_back();
+    other.path = video.path;
+    other.display = "standard_hdr_pq";
+    other.for_display_only = true;
+    other.notes = {"calculated on the CPU"};
+    other.result.emplace().metric_results.add(SequenceMetricResult{"cvvdp", 8.5, {}, {0}, {0.0}, {}});
+    std::ofstream(folder / "a_b.csv") << "an earlier run's";
+    std::vector<std::string> said;
+    const auto ignore = [](const std::string&) {};
+    const auto say = [&said](const std::string& text) { said.push_back(text); };
+
+    ASSERT_TRUE(write_csvs(videos, folder, ignore, say));
+    EXPECT_EQ(said, std::vector<std::string>{"note: a_b.csv is there already, so this is written as a_b_2.csv"});
+    std::ifstream kept(folder / "a_b.csv");
+    EXPECT_EQ(std::string(std::istreambuf_iterator<char>(kept), {}), "an earlier run's");
+    EXPECT_TRUE(std::filesystem::exists(folder / "a_b_standard_hdr_pq.csv"));
+
+    const VideoInfo source;
+    const nlohmann::ordered_json document = results_document(source, videos, summarize(videos), false);
+    const nlohmann::ordered_json& entry = document["videos"][0];
+    EXPECT_EQ(entry["csv"], platform::path_text(folder / "a_b_2.csv"));
+    EXPECT_EQ(entry["cvvdp_displays"][1]["csv"], platform::path_text(folder / "a_b_standard_hdr_pq.csv"));
+    EXPECT_EQ(entry["cvvdp_displays"][1]["notes"][0], "calculated on the CPU");
+}
+
 // The devices command says where each metric is calculated as the Python
 // app's says it (devices.json, made by its devices command with stand-ins
 // for what it checks), after the app's name and version, each app's own.

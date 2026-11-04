@@ -39,6 +39,7 @@ struct TestVideo {
     // The metrics that failed and why, in the order they failed.
     std::vector<std::pair<std::string, std::string>> failures;
     bool from_cache = false;  // nothing had to be calculated
+    std::optional<std::filesystem::path> csv_file;  // where --csv wrote its scores
     std::string display;      // the preset CVVDP models, when CVVDP is asked for
     // CVVDP on each further --cvvdp-display: a TestVideo of its own for each,
     // with CVVDP alone, run as a comparison of its own.

@@ -175,6 +175,11 @@ std::optional<long long> modified_ns(const std::filesystem::path& file);
 // picture of a 4K frame took 64 ms rather than 15.
 std::optional<std::string> read_file(const std::filesystem::path& path);
 
+// A file name in the form the system compares names in: on Windows, whose
+// file systems ignore case, in lower case (every language's letters).
+// Elsewhere, as it is.
+std::string name_as_compared(std::string_view name);
+
 // A path as UTF-8 text, and back; the app keeps paths as UTF-8.
 std::string path_text(const std::filesystem::path& path);
 std::filesystem::path path_from_text(std::string_view utf8);

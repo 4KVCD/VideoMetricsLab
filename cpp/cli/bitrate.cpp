@@ -156,6 +156,10 @@ bool write_csvs(const std::vector<BitrateVideo>& videos, const std::optional<Bit
                 write_bitrate_csvs(video, folder, !arguments.no_adjust_start, reserved);
             progress.message(name_of(video.path) + ": bitrate figures in " + platform::path_text(paths.front()) +
                              " and beside it");
+            if (const std::optional<std::string> note = name_taken_note(
+                    paths.front(), platform::path_text(video.path.stem()), "_bitrate_frames.csv")) {
+                progress.problem(*note);
+            }
         } catch (const std::exception& failure) {
             written = false;
             progress.problem(name_of(video.path) + ": the CSV files could not be written (" + failure.what() + ")");

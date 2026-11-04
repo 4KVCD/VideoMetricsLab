@@ -53,6 +53,13 @@ bool is_raw_yuv(const std::filesystem::path& path);
 // FFmpeg and ffprobe would read it at 25 frames a second. `which` names the video, from its first word.
 std::string raw_stream_needs_fps(const std::string& which, const VideoInfo& info);
 
+// What the reader of a CSV file of `label` written as `written` should know
+// where its name was taken, by a file of an earlier run or another video of
+// the same name, so that the name it would have had holds other scores:
+// nothing is overwritten.
+std::optional<std::string> name_taken_note(const std::filesystem::path& written, const std::string& label,
+                                           const std::string& suffix);
+
 // The run's progress on stderr, nothing with --quiet: lines that stay, and
 // a line for each video. On a terminal the videos share one line, redrawn
 // in place as the window draws its lines: at once when what it says apart

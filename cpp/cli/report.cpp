@@ -32,6 +32,9 @@ void add_other_display_rows(const TestVideo& video, std::vector<std::vector<std:
                             std::vector<std::string>& lines) {
     const MetricDefinition& definition = metric_definition("cvvdp");
     for (const TestVideo& other : video.other_displays) {
+        for (const std::string& note : other.notes) {
+            lines.push_back("  note: CVVDP on " + python_string_repr(other.display) + ": " + note);
+        }
         const std::optional<Json> summary = other.result ? metric_summary(*other.result, "cvvdp") : std::nullopt;
         if (!summary) {
             const std::string reason = !other.error.empty() ? other.error
@@ -54,6 +57,12 @@ Json display_entry(const TestVideo& target) {
     Json entry{{"display", target.display}, {"score", summary ? summary->at("score") : Json(nullptr)}};
     if (target.result) {
         entry["from_saved_scores"] = target.from_cache;
+    }
+    if (target.csv_file) {
+        entry["csv"] = platform::path_text(*target.csv_file);
+    }
+    if (!target.notes.empty()) {
+        entry["notes"] = target.notes;
     }
     std::string reason = target.error;
     if (reason.empty()) {
@@ -330,6 +339,9 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
         if (!video.notes.empty()) {
             entry["notes"] = video.notes;
         }
+        if (video.csv_file) {
+            entry["csv"] = platform::path_text(*video.csv_file);
+        }
         if (!video.failures.empty()) {
             Json failed = Json::object();
             for (const auto& [key, reason] : video.failures) {
@@ -372,7 +384,31 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
     return document;
 }
 
-bool write_csvs(const std::vector<TestVideo>& videos, const std::filesystem::path& folder,
+namespace {
+
+// One video's (or one further display's) scores in `folder`, under a name no
+// other file has. False, and said, when the file cannot be written.
+bool write_csv_of(TestVideo& video, const std::string& name, const std::filesystem::path& folder,
+                  std::set<std::filesystem::path>& reserved, const std::function<void(const std::string&)>& message,
+                  const std::function<void(const std::string&)>& failed) {
+    const std::filesystem::path path = unique_output_path(folder, name, ".csv", reserved);
+    try {
+        export_csv(*video.result, path);
+    } catch (const std::exception& failure) {
+        failed(video.label() + ": the CSV could not be written (" + failure.what() + ")");
+        return false;
+    }
+    video.csv_file = path;
+    message(video.label() + ": per-frame scores in " + platform::path_text(path));
+    if (const std::optional<std::string> note = name_taken_note(path, name, ".csv")) {
+        failed(*note);
+    }
+    return true;
+}
+
+}  // namespace
+
+bool write_csvs(std::vector<TestVideo>& videos, const std::filesystem::path& folder,
                 const std::function<void(const std::string&)>& message,
                 const std::function<void(const std::string&)>& failed) {
     std::error_code error;
@@ -382,21 +418,16 @@ bool write_csvs(const std::vector<TestVideo>& videos, const std::filesystem::pat
         return false;
     }
     bool written = true;
-    for (const TestVideo& video : videos) {
-        if (!video.result) {
-            continue;
+    std::set<std::filesystem::path> reserved;
+    for (TestVideo& video : videos) {
+        const std::string name = platform::path_text(video.path.stem());
+        if (video.result) {
+            written = write_csv_of(video, name, folder, reserved, message, failed) && written;
         }
-        // Each name checked against the files already written, as the
-        // Python app checks it (they are written one by one).
-        std::set<std::filesystem::path> reserved;
-        const std::filesystem::path path = unique_output_path(
-            folder, safe_filename_stem(platform::path_text(video.path.stem())), ".csv", reserved);
-        try {
-            export_csv(*video.result, path);
-            message(video.name() + ": per-frame scores in " + platform::path_text(path));
-        } catch (const std::exception& failure) {
-            written = false;
-            failed(video.name() + ": the CSV could not be written (" + failure.what() + ")");
+        for (TestVideo& other : video.other_displays) {
+            if (other.result) {
+                written = write_csv_of(other, name + "_" + other.display, folder, reserved, message, failed) && written;
+            }
         }
     }
     return written;

@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <fstream>
 
+#include "vml/export_csv.h"
 #include "vml/geometry.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
@@ -94,6 +95,16 @@ void add_table(std::vector<std::string>& lines, const std::vector<std::vector<st
 }
 
 bool is_raw_yuv(const std::filesystem::path& path) { return ascii_lower(platform::path_text(path.extension())) == ".yuv"; }
+
+std::optional<std::string> name_taken_note(const std::filesystem::path& written, const std::string& label,
+                                           const std::string& suffix) {
+    const std::string wanted = output_stem(label) + suffix;
+    const std::string name = platform::path_text(written.filename());
+    if (name == wanted) {
+        return std::nullopt;
+    }
+    return "note: " + wanted + " is there already, so this is written as " + name;
+}
 
 std::string raw_stream_needs_fps(const std::string& which, const VideoInfo& info) {
     return which + " is a raw " + codec_label(info.codec_name) +

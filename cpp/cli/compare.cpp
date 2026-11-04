@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <cctype>
 #include <cerrno>
 #include <chrono>
 #include <condition_variable>
@@ -21,6 +20,7 @@
 #include "common.h"
 #include "report.h"
 #include "vml/app_log.h"
+#include "vml/append.h"
 #include "vml/cancel.h"
 #include "vml/colour.h"
 #include "vml/crop_detect.h"
@@ -63,34 +63,64 @@ using Clock = std::chrono::steady_clock;
 
 bool has_magic(std::string_view text) { return text.find_first_of("*?[") != std::string_view::npos; }
 
-// A character as Windows compares names: ignoring case. Elsewhere, as it is.
-char folded(char c) {
-#ifdef _WIN32
-    return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-#else
-    return c;
-#endif
+// The first character of UTF-8 text. A byte that starts no whole sequence is
+// a character of its own: a name on Linux need not be UTF-8.
+std::string_view first_character(std::string_view text) {
+    const auto lead = static_cast<unsigned char>(text.front());
+    const std::size_t length = lead < 0xC0 ? 1 : lead < 0xE0 ? 2 : lead < 0xF0 ? 3 : 4;
+    if (length > text.size()) {
+        return text.substr(0, 1);
+    }
+    for (std::size_t i = 1; i < length; ++i) {
+        if ((static_cast<unsigned char>(text[i]) & 0xC0) != 0x80) {
+            return text.substr(0, 1);
+        }
+    }
+    return text.substr(0, length);
+}
+
+// Whether a character is in the set of a [seq]: its characters, and ranges
+// such as a-z. (UTF-8 text sorts in the order of its code points.)
+bool in_character_set(std::string_view character, std::string_view set) {
+    for (std::size_t i = 0; i < set.size();) {
+        const std::string_view low = first_character(set.substr(i));
+        i += low.size();
+        if (i + 1 < set.size() && set[i] == '-') {
+            const std::string_view high = first_character(set.substr(i + 1));
+            i += 1 + high.size();
+            if (low <= character && character <= high) {
+                return true;
+            }
+        } else if (character == low) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Whether `name` matches a shell pattern (* ? [seq] [!seq]), as Python's
-// fnmatch matches it.
+// fnmatch matches it, character by character; both as the system compares
+// names (platform::name_as_compared).
 bool name_matches(std::string_view name, std::string_view pattern) {
     if (pattern.empty()) {
         return name.empty();
     }
     if (pattern.front() == '*') {
-        for (std::size_t skipped = 0; skipped <= name.size(); ++skipped) {
+        for (std::size_t skipped = 0;; skipped += first_character(name.substr(skipped)).size()) {
             if (name_matches(name.substr(skipped), pattern.substr(1))) {
                 return true;
             }
+            if (skipped == name.size()) {
+                return false;
+            }
         }
-        return false;
     }
     if (name.empty()) {
         return false;
     }
+    const std::string_view character = first_character(name);
     if (pattern.front() == '?') {
-        return name_matches(name.substr(1), pattern.substr(1));
+        return name_matches(name.substr(character.size()), pattern.substr(1));
     }
     if (pattern.front() == '[') {
         // A "]" first in the set (after any "!") is one of its characters.
@@ -108,20 +138,11 @@ bool name_matches(std::string_view name, std::string_view pattern) {
             if (negated) {
                 set.remove_prefix(1);
             }
-            const char c = folded(name.front());
-            bool in_set = false;
-            for (std::size_t i = 0; i < set.size(); ++i) {
-                if (i + 2 < set.size() && set[i + 1] == '-') {
-                    in_set = in_set || (c >= folded(set[i]) && c <= folded(set[i + 2]));
-                    i += 2;
-                } else {
-                    in_set = in_set || c == folded(set[i]);
-                }
-            }
-            return in_set != negated && name_matches(name.substr(1), pattern.substr(close + 1));
+            return in_character_set(character, set) != negated &&
+                   name_matches(name.substr(character.size()), pattern.substr(close + 1));
         }
     }
-    return folded(name.front()) == folded(pattern.front()) && name_matches(name.substr(1), pattern.substr(1));
+    return name.front() == pattern.front() && name_matches(name.substr(1), pattern.substr(1));
 }
 
 // The files and folders a pattern names, as Python's glob.glob finds them:
@@ -131,6 +152,7 @@ std::vector<std::filesystem::path> glob(const std::string& pattern) {
     std::vector<std::filesystem::path> found{whole.root_path()};
     for (const std::filesystem::path& part : whole.relative_path()) {
         const std::string text = platform::path_text(part);
+        const std::string compared_text = platform::name_as_compared(text);
         std::vector<std::filesystem::path> next;
         for (const std::filesystem::path& folder : found) {
             if (!has_magic(text)) {
@@ -145,7 +167,7 @@ std::vector<std::filesystem::path> glob(const std::string& pattern) {
                 if (name.starts_with(".") && !text.starts_with(".")) {
                     continue;
                 }
-                if (name_matches(name, text)) {
+                if (name_matches(platform::name_as_compared(name), compared_text)) {
                     next.push_back(folder / entry->path().filename());
                 }
             }
@@ -159,12 +181,9 @@ std::vector<std::filesystem::path> glob(const std::string& pattern) {
     return found;
 }
 
-// A path's text as Python compares paths: on Windows ignoring the case of
-// ASCII letters (Python's lower() folds other letters too).
+// A path's text as Python compares paths: on Windows ignoring case.
 std::string comparable(const std::filesystem::path& path) {
-    std::string text = platform::path_text(path);
-    std::transform(text.begin(), text.end(), text.begin(), folded);
-    return text;
+    return platform::name_as_compared(platform::path_text(path));
 }
 
 // Whether `a` sorts before `b` as Python sorts paths: part by part, so that
@@ -692,7 +711,7 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
                                       const std::string& /*stderr_tail*/, const MetricFailures& failures) {
         keep(index, result);
         TestVideo& target = video(index);
-        target.failures = failures.empty() ? MetricFailures{{"", message}} : failures;
+        append(target.failures, failures.empty() ? MetricFailures{{"", message}} : failures);
         progress.finished(index, target.label() + ": some metrics FAILED: " + message);
     };
     run_jobs(
@@ -1093,7 +1112,13 @@ void ComparisonPlanner::leave_out_cvvdp_if_unable(TestVideo& video) const {
     }
     if (reason) {
         std::erase(video.metrics, "cvvdp");
-        video.notes.push_back(*reason);
+        // Asked for by name, its absence is a failure of the run; ticked by
+        // default in the settings, a note.
+        if (arguments_.metrics) {
+            video.failures.emplace_back("cvvdp", *reason);
+        } else {
+            video.notes.push_back(*reason);
+        }
     }
 }
 
@@ -1266,7 +1291,7 @@ std::optional<std::string> model_file_wrong(const CompareArguments& arguments, c
 // which is for a program to read; and written to the CSV files and the JSON
 // file asked for (the tables are printed as well then). False when a file
 // could not be written.
-bool write_results(const CompareArguments& arguments, const VideoInfo& source, const std::vector<TestVideo>& videos,
+bool write_results(const CompareArguments& arguments, const VideoInfo& source, std::vector<TestVideo>& videos,
                    bool cancelled, Progress& progress) {
     const std::vector<Summaries> summaries = summarize(videos);
     const std::optional<nlohmann::ordered_json> difference =
@@ -1276,7 +1301,6 @@ bool write_results(const CompareArguments& arguments, const VideoInfo& source, c
         progress.problem("No difference: " + (missing != videos.end() ? missing->name() : "a video") +
                          " has no result.");
     }
-    const nlohmann::ordered_json document = results_document(source, videos, summaries, cancelled, difference);
     bool written = true;
     if (arguments.csv) {
         const auto message = [&progress](const std::string& text) { progress.message(text); };
@@ -1287,6 +1311,8 @@ bool write_results(const CompareArguments& arguments, const VideoInfo& source, c
             written = write_difference_csv(videos, folder, message, failed) && written;
         }
     }
+    // After the CSV files: it says where each one went.
+    const nlohmann::ordered_json document = results_document(source, videos, summaries, cancelled, difference);
     const std::optional<std::filesystem::path> json_file =
         arguments.json_path ? std::optional(python_path(*arguments.json_path)) : std::nullopt;
     if (json_file && platform::path_text(*json_file) == "-") {

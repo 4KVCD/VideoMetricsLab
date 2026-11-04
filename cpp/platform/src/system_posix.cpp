@@ -290,6 +290,8 @@ std::filesystem::path executable_path() {
 
 std::string path_text(const std::filesystem::path& path) { return path.string(); }
 
+std::string name_as_compared(std::string_view name) { return std::string(name); }
+
 std::filesystem::path path_from_text(std::string_view utf8) { return std::filesystem::path(utf8); }
 
 std::optional<std::string> fopen_path(const std::filesystem::path& path) { return path.string(); }

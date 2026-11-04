@@ -121,6 +121,10 @@ int bdrate(const BdrateArguments& arguments) {
             print_error("warning: " + warning);
         }
     }
+    if (report.metrics.empty()) {
+        print_error("neither the anchor nor the test has a column of scores of a metric");
+        return exit_usage;
+    }
     if (report.sequences.empty()) {
         print_error("the anchor and the test have no sequence in common");
         return exit_usage;

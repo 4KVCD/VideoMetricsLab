@@ -31,6 +31,9 @@ void export_difference_csv(const ComparisonResult& first, const ComparisonResult
 // A label reduced to something usable as a file name: letters, digits and
 // "-_." kept, everything else "_".
 std::string safe_filename_stem(const std::string& label);
+// The name a label's output file starts with: safe_filename_stem, or "run" for
+// a label with nothing left.
+std::string output_stem(const std::string& label);
 
 // The label of export_difference_csv's file, "<first>_minus_<second>", each
 // name cut to 60 characters so that two long names still make a usable path.

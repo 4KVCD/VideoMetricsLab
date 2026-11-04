@@ -244,6 +244,11 @@ std::string difference_label(const std::string& first, const std::string& second
     return cut(first) + "_minus_" + cut(second);
 }
 
+std::string output_stem(const std::string& label) {
+    std::string stem = safe_filename_stem(label);
+    return stem.empty() ? "run" : stem;
+}
+
 std::filesystem::path unique_output_path(const std::filesystem::path& folder, const std::string& label,
                                          const std::string& suffix, std::set<std::filesystem::path>& reserved) {
     return unique_output_paths(folder, label, {suffix}, reserved).front();
@@ -252,10 +257,7 @@ std::filesystem::path unique_output_path(const std::filesystem::path& folder, co
 std::vector<std::filesystem::path> unique_output_paths(const std::filesystem::path& folder, const std::string& label,
                                                        const std::vector<std::string>& suffixes,
                                                        std::set<std::filesystem::path>& reserved) {
-    std::string stem = safe_filename_stem(label);
-    if (stem.empty()) {
-        stem = "run";
-    }
+    const std::string stem = output_stem(label);
     const auto paths_for = [&](const std::string& name) {
         std::vector<std::filesystem::path> paths;
         for (const std::string& suffix : suffixes) {
