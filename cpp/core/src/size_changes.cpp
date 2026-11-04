@@ -171,7 +171,9 @@ SizeChangeMarks::SizeChangeMarks(VideoInfo& source, VideoInfo& test) : source_(s
 
 bool SizeChangeMarks::after(const VideoSizeChanged& changed, const std::string& scale_algorithm) {
     if (const std::optional<std::filesystem::path>& video = changed.video()) {
-        VideoInfo* rebuilt = *video == test_.path ? &test_ : *video == source_.path ? &source_ : nullptr;
+        // A video against itself has two FFmpegs of one path: the one not marked yet rebuilt.
+        const bool the_test = *video == test_.path && (!test_.scaled_to || *video != source_.path);
+        VideoInfo* rebuilt = the_test ? &test_ : *video == source_.path ? &source_ : nullptr;
         if (rebuilt != nullptr) {
             if (rebuilt->scaled_to) {
                 return false;  // its FFmpeg rebuilt them though it was told to keep them

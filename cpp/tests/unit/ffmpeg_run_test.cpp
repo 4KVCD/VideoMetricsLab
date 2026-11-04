@@ -323,6 +323,22 @@ TEST(SizeChanges, ATestVideoRebuiltAtItsOwnSizeKeepsIt) {
     EXPECT_EQ(coded_smaller.scaled_to, std::pair(1280, 720));
 }
 
+// Compared against itself, a video that changes size rebuilds in both of its FFmpegs.
+TEST(SizeChanges, AVideoAgainstItselfIsMarkedOnBothSides) {
+    VideoInfo source;
+    source.path = "grows_against_itself.266";
+    source.width = 640;
+    source.height = 360;
+    VideoInfo test = source;
+    SizeChangeMarks marks(source, test);
+    const VideoSizeChanged changed(source.path, std::pair(1280, 720));
+    EXPECT_TRUE(marks.after(changed, "bicubic"));
+    EXPECT_TRUE(test.scaled_to.has_value());
+    EXPECT_TRUE(marks.after(changed, "bicubic"));
+    EXPECT_TRUE(source.scaled_to.has_value());
+    EXPECT_FALSE(marks.after(changed, "bicubic"));
+}
+
 // FFmpeg 9.0.1's word that it rebuilt its filters as a video's size changed,
 // and its error output at watched_log_level cut back to the lines
 // "-loglevel error" shows for the same failure, without their levels; a line
