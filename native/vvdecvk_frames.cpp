@@ -105,6 +105,17 @@ void set_environment(int device) {
 // decoding has stopped. Called with vvdec_lock held.
 void take_picture(Decoder *d, vvdecFrame *frame) {
     if (!frame) return;
+    // A stream that grows partway (a new sequence, or a picture scaled by its reference's rules): the copies are of
+    // the rectangle the params say, so a larger picture would give its top left corner with no error.
+    const Params &p = d->params;
+    if (static_cast<int>(frame->width) != p.width || static_cast<int>(frame->height) != p.height ||
+        static_cast<int>(frame->bitDepth) != p.bit_depth) {
+        d->fail("a picture is " + std::to_string(frame->width) + "x" + std::to_string(frame->height) + " in " +
+                std::to_string(frame->bitDepth) + " bits, not " + std::to_string(p.width) + "x" +
+                std::to_string(p.height) + " in " + std::to_string(p.bit_depth));
+        vvdec_frame_unref(d->dec, frame);
+        return;
+    }
     std::unique_lock<std::mutex> guard(d->mutex);
     for (;;) {
         if (d->failed || d->aborted) break;
@@ -202,7 +213,15 @@ NVF_API int nvf_push(void *handle, const unsigned char *data, int size, long lon
     Decoder *d = static_cast<Decoder *>(handle);
     if (d->stopped()) return status(d);
     std::lock_guard<std::mutex> lock(d->vvdec_lock);
-    vvdec_accessUnit_alloc_payload(d->unit, size);  // keeps a payload that is large enough
+    if (size > d->unit->payloadSize) {  // the call allocates anew each time: a packet that fits needs no new one
+        vvdec_accessUnit_free_payload(d->unit);
+        vvdec_accessUnit_alloc_payload(d->unit, size);
+        if (!d->unit->payload) {
+            d->unit->payloadSize = 0;
+            d->fail("no memory for a packet of " + std::to_string(size) + " bytes");
+            return NVF_ERROR;
+        }
+    }
     memcpy(d->unit->payload, data, static_cast<size_t>(size));
     d->unit->payloadUsedSize = size;
     d->unit->cts = static_cast<uint64_t>(pts);
