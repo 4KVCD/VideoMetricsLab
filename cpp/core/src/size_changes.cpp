@@ -4,9 +4,11 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <map>
 #include <mutex>
 #include <optional>
-#include <set>
+#include <regex>
+#include <string>
 #include <system_error>
 
 #include "vml/app_log.h"
@@ -18,10 +20,11 @@ namespace {
 
 const app_log::Logger logger("vml.size_changes");
 
-// The videos found to change size, by their keys (noted_key).
+// The videos found to change size, by their keys (noted_key), each with
+// whether it was only rebuilt at its own size.
 struct Noted {
     std::mutex mutex;
-    std::set<std::string, std::less<>> keys;
+    std::map<std::string, bool, std::less<>> keeps_its_size;
 };
 
 Noted& noted() {
@@ -41,33 +44,64 @@ std::string noted_key(const std::filesystem::path& video) {
 }
 
 // Notes that `video`'s picture size changes, for this process's runs of it.
-void note_size_change(const std::filesystem::path& video) {
+// What is noted first stays: a run marked by the note has not looked again.
+void note_size_change(const std::filesystem::path& video, bool keeps_its_size) {
     std::string key = noted_key(video);
     Noted& videos = noted();
     const std::lock_guard lock(videos.mutex);
-    videos.keys.insert(std::move(key));
+    videos.keeps_its_size.try_emplace(std::move(key), keeps_its_size);
 }
 
-// Whether `video`'s picture size was found to change.
-bool size_changes(const std::filesystem::path& video) {
+// Whether `video` was found to change size, and if so whether it was only
+// rebuilt at its own size.
+std::optional<bool> noted_keeps_its_size(const std::filesystem::path& video) {
     const std::string key = noted_key(video);
     Noted& videos = noted();
     const std::lock_guard lock(videos.mutex);
-    return videos.keys.contains(key);
+    const auto found = videos.keeps_its_size.find(key);
+    return found != videos.keeps_its_size.end() ? std::optional(found->second) : std::nullopt;
 }
+
+constexpr std::string_view rebuild_words = "Reconfiguring filter graph";
 
 }  // namespace
 
 bool filters_rebuilt(std::string_view ffmpeg_line) {
-    return ffmpeg_line.find("Reconfiguring filter graph") != std::string_view::npos;
+    return ffmpeg_line.find(rebuild_words) != std::string_view::npos;
 }
 
-std::function<void(std::string_view)> rebuild_watcher(std::shared_ptr<std::atomic<bool>> rebuilt) {
-    return [rebuilt = std::move(rebuilt)](std::string_view line) {
-        if (filters_rebuilt(line)) {
-            *rebuilt = true;
-        }
-    };
+std::optional<std::pair<int, int>> rebuilt_size(std::string_view ffmpeg_output) {
+    // "... changed to yuv420p(tv, smpte170m), 640x360, unspecified alpha"
+    const std::size_t at = ffmpeg_output.find(rebuild_words);
+    if (at == std::string_view::npos) {
+        return std::nullopt;
+    }
+    const std::string line(ffmpeg_output.substr(at, ffmpeg_output.find('\n', at) - at));
+    static const std::regex size_words(R"(, (\d{1,6})x(\d{1,6})(,|\s|$))");
+    std::smatch found;
+    if (!std::regex_search(line, found, size_words)) {
+        return std::nullopt;
+    }
+    return std::pair(std::stoi(found[1].str()), std::stoi(found[2].str()));
+}
+
+void FilterRebuild::note(std::string_view ffmpeg_line) {
+    if (rebuilt_ || !filters_rebuilt(ffmpeg_line)) {
+        return;
+    }
+    if (const auto size = rebuilt_size(ffmpeg_line)) {
+        width_ = size->first;
+        height_ = size->second;
+    }
+    rebuilt_ = true;  // last: whoever sees it sees the size
+}
+
+std::optional<std::pair<int, int>> FilterRebuild::size() const {
+    return rebuilt_ && width_ > 0 ? std::optional(std::pair<int, int>(width_, height_)) : std::nullopt;
+}
+
+std::function<void(std::string_view)> rebuild_watcher(std::shared_ptr<FilterRebuild> rebuild) {
+    return [rebuild = std::move(rebuild)](std::string_view line) { rebuild->note(line); };
 }
 
 std::string error_lines_of(std::string_view error_output) {
@@ -118,11 +152,13 @@ std::pair<int, int> size_change_target(const VideoInfo& test, const VideoInfo& s
 }
 
 void mark_size_changes(VideoInfo& source, VideoInfo& test) {
-    if (!source.scaled_to && size_changes(source.path)) {
+    if (!source.scaled_to && noted_keeps_its_size(source.path)) {
         source.scaled_to = std::pair(source.width, source.height);
     }
-    if (!test.scaled_to && size_changes(test.path)) {
-        test.scaled_to = size_change_target(test, source);
+    if (!test.scaled_to) {
+        if (const std::optional<bool> keeps_its_size = noted_keeps_its_size(test.path)) {
+            test.scaled_to = *keeps_its_size ? std::pair(test.width, test.height) : size_change_target(test, source);
+        }
     }
 }
 
@@ -137,7 +173,7 @@ bool SizeChangeMarks::after(const VideoSizeChanged& changed, const std::string& 
             if (rebuilt->scaled_to) {
                 return false;  // its FFmpeg rebuilt them though it was told to keep them
             }
-            mark(*rebuilt, scale_algorithm);
+            mark(*rebuilt, changed.new_size(), scale_algorithm);
             if (rebuilt == &test_) {
                 test_guessed_ = false;
             }
@@ -145,16 +181,17 @@ bool SizeChangeMarks::after(const VideoSizeChanged& changed, const std::string& 
         }
     }
     if (!test_.scaled_to) {
-        mark(test_, scale_algorithm);
+        mark(test_, changed.new_size(), scale_algorithm);
         test_guessed_ = !source_.scaled_to;  // with the source marked, only the test is left to rebuild
         return true;
     }
     if (!source_.scaled_to) {
         // With the test video marked, it was the source.
-        mark(source_, scale_algorithm);
+        mark(source_, changed.new_size(), scale_algorithm);
         if (test_guessed_) {
             test_.scaled_to.reset();  // tried again: it is marked once it rebuilds with the source marked
             test_guessed_ = false;
+            test_keeps_its_size_ = false;
             logger.info(platform::path_text(test_.path.filename()) + ": scored at its own size again; it is " +
                         platform::path_text(source_.path.filename()) + " whose size changes");
         }
@@ -164,19 +201,28 @@ bool SizeChangeMarks::after(const VideoSizeChanged& changed, const std::string& 
 }
 
 void SizeChangeMarks::finished() const {
-    for (const VideoInfo* video : {&source_, &test_}) {
-        if (video->scaled_to) {
-            note_size_change(video->path);
-        }
+    if (source_.scaled_to) {
+        note_size_change(source_.path, false);  // as a test video later, it is scaled to its reference
+    }
+    if (test_.scaled_to) {
+        note_size_change(test_.path, test_keeps_its_size_);
     }
 }
 
-void SizeChangeMarks::mark(VideoInfo& video, const std::string& scale_algorithm) {
-    video.scaled_to = &video == &test_ ? size_change_target(test_, source_) : std::pair(video.width, video.height);
+void SizeChangeMarks::mark(VideoInfo& video, std::optional<std::pair<int, int>> new_size,
+                           const std::string& scale_algorithm) {
+    const std::pair own_size(video.width, video.height);
+    const bool keeps_its_size = new_size == own_size;
+    if (&video == &test_) {
+        test_keeps_its_size_ = keeps_its_size;
+    }
+    video.scaled_to = &video == &test_ && !keeps_its_size ? size_change_target(test_, source_) : own_size;
+    const std::string scored_at = "every frame is scored at " + std::to_string(video.scaled_to->first) + "x" +
+                                  std::to_string(video.scaled_to->second);
     logger.info(platform::path_text(video.path.filename()) +
-                ": its picture size changes partway through; every frame is scored at " +
-                std::to_string(video.scaled_to->first) + "x" + std::to_string(video.scaled_to->second) +
-                ", scaled with " + scale_algorithm);
+                (keeps_its_size ? ": FFmpeg rebuilt its filters partway through at the video's own size; " + scored_at
+                                : ": its picture size changes partway through; " + scored_at + ", scaled with " +
+                                      scale_algorithm));
 }
 
 }  // namespace vml

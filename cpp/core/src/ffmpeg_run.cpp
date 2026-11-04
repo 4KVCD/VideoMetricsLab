@@ -104,12 +104,12 @@ private:
 
 // The options of an FFmpeg run in `folder` whose error output is watched for
 // FFmpeg rebuilding its filters (a video's size changed: size_changes.h),
-// which sets `rebuilt`, and which inherits `inherited` (its pipes' ends).
+// told to `rebuild`, and which inherits `inherited` (its pipes' ends).
 platform::ProcessOptions watched_options(const std::filesystem::path& folder,
-                                         const std::shared_ptr<std::atomic<bool>>& rebuilt,
+                                         const std::shared_ptr<FilterRebuild>& rebuild,
                                          std::vector<int> inherited = {}) {
     platform::ProcessOptions options{folder};
-    options.on_error_line = rebuild_watcher(rebuilt);
+    options.on_error_line = rebuild_watcher(rebuild);
     options.inherited_descriptors = std::move(inherited);
     return options;
 }
@@ -121,7 +121,7 @@ FfmpegOutcome run_ffmpeg(const std::vector<std::string>& command, long long tota
                          const ProgressCallback& on_progress, const CancelToken& cancel,
                          const std::filesystem::path& folder) {
     cancel.throw_if_cancelled();  // not one more FFmpeg after a Cancel
-    const auto rebuilt = std::make_shared<std::atomic<bool>>(false);
+    const auto rebuilt = std::make_shared<FilterRebuild>();
     platform::ChildProcess ffmpeg = platform::ChildProcess::start(command, watched_options(folder, rebuilt));
     const CancelToken::Attached attached = cancel.attach(ffmpeg);
     ProgressLines progress;
@@ -136,7 +136,7 @@ FfmpegOutcome run_ffmpeg(const std::vector<std::string>& command, long long tota
     cancel.throw_if_cancelled();
     std::string errors = ffmpeg.standard_error();  // waits for the error output's end, and so its lines
     if (*rebuilt) {
-        throw VideoSizeChanged();
+        throw VideoSizeChanged(std::nullopt, rebuilt->size());
     }
     return FfmpegOutcome{code, std::move(errors)};
 }
@@ -157,15 +157,15 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
                               const ProgressCallback& on_progress, const CancelToken& cancel,
                               const std::filesystem::path& folder) {
     cancel.throw_if_cancelled();
-    std::vector<std::shared_ptr<std::atomic<bool>>> rebuilt;
+    std::vector<std::shared_ptr<FilterRebuild>> rebuilt;
     std::vector<platform::ChildProcess> processes;
     for (std::size_t index = 0; index < commands.size(); ++index) {
-        rebuilt.push_back(std::make_shared<std::atomic<bool>>(false));
+        rebuilt.push_back(std::make_shared<FilterRebuild>());
         processes.push_back(platform::ChildProcess::start(
             commands[index], watched_options(folder, rebuilt.back(), take_descriptors(index))));
     }
     const auto any_rebuilt = [&rebuilt] {
-        return std::any_of(rebuilt.begin(), rebuilt.end(), [](const auto& flag) { return flag->load(); });
+        return std::any_of(rebuilt.begin(), rebuilt.end(), [](const auto& rebuild) { return static_cast<bool>(*rebuild); });
     };
     // Attached once all are in place: the vector moves them as it grows.
     std::vector<CancelToken::Attached> attached;
@@ -227,7 +227,7 @@ FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& comma
     cancel.throw_if_cancelled();
     for (std::size_t index = 0; index < processes.size(); ++index) {
         if (*rebuilt[index]) {
-            throw VideoSizeChanged(videos.at(index));
+            throw VideoSizeChanged(videos.at(index), rebuilt[index]->size());
         }
     }
     const auto cause = std::find_if(failed.begin(), failed.end(),

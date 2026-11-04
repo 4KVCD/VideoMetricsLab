@@ -13,6 +13,11 @@
 // that sees it stops (VideoSizeChanged) and is made again with the video
 // marked (SizeChangeMarks), and the videos marked are remembered for this
 // process's later runs of them (as long as the file is not written again).
+//
+// FFmpeg rebuilds its filters for other changes too (a stream's colour tags
+// flipping, say). That needs the same run with its filters kept, but such a
+// video keeps its size: FFmpeg says the size it rebuilt them for, and a test
+// video rebuilt at its own size is scored as if nothing had happened.
 #pragma once
 
 #include <atomic>
@@ -31,27 +36,51 @@ namespace vml {
 
 // FFmpeg rebuilt its filters partway through a run: a video's picture size
 // (or format) changed. `video` is the one it rebuilt them for, where the
-// FFmpeg decoded only it; nothing where one FFmpeg decoded both.
+// FFmpeg decoded only it, nothing where one FFmpeg decoded both; `new_size`
+// is the size it rebuilt them for, where it said.
 class VideoSizeChanged : public std::runtime_error {
 public:
-    explicit VideoSizeChanged(std::optional<std::filesystem::path> video = std::nullopt)
-        : VideoSizeChanged("FFmpeg rebuilt its filters partway through the video", std::move(video)) {}
-    VideoSizeChanged(const std::string& message, std::optional<std::filesystem::path> video)
-        : std::runtime_error(message), video_(std::move(video)) {}
+    explicit VideoSizeChanged(std::optional<std::filesystem::path> video = std::nullopt,
+                              std::optional<std::pair<int, int>> new_size = std::nullopt)
+        : VideoSizeChanged("FFmpeg rebuilt its filters partway through the video", std::move(video), new_size) {}
+    VideoSizeChanged(const std::string& message, std::optional<std::filesystem::path> video,
+                     std::optional<std::pair<int, int>> new_size = std::nullopt)
+        : std::runtime_error(message), video_(std::move(video)), new_size_(new_size) {}
 
     const std::optional<std::filesystem::path>& video() const { return video_; }
+    const std::optional<std::pair<int, int>>& new_size() const { return new_size_; }
 
 private:
     std::optional<std::filesystem::path> video_;
+    std::optional<std::pair<int, int>> new_size_;
 };
 
 // Whether a line of FFmpeg's error output says that it rebuilt its filters.
 bool filters_rebuilt(std::string_view ffmpeg_line);
 
+// The picture size named by the first filters_rebuilt line of FFmpeg's error
+// output, if it names one.
+std::optional<std::pair<int, int>> rebuilt_size(std::string_view ffmpeg_output);
+
+// What an FFmpeg watched for filters_rebuilt has said of it. True once it
+// rebuilt them; the lines are read on a thread of their own.
+class FilterRebuild {
+public:
+    void note(std::string_view ffmpeg_line);
+    explicit operator bool() const { return rebuilt_; }
+    // The size of its first rebuild, where FFmpeg named it.
+    std::optional<std::pair<int, int>> size() const;
+
+private:
+    std::atomic<int> width_{0};
+    std::atomic<int> height_{0};
+    std::atomic<bool> rebuilt_{false};
+};
+
 // A ProcessOptions::on_error_line for an FFmpeg watched for filters_rebuilt:
-// sets `rebuilt` when FFmpeg says it (shared, as the line is read on a
-// thread of its own).
-std::function<void(std::string_view)> rebuild_watcher(std::shared_ptr<std::atomic<bool>> rebuilt);
+// tells `rebuild` each line (shared, as the line is read on a thread of its
+// own).
+std::function<void(std::string_view)> rebuild_watcher(std::shared_ptr<FilterRebuild> rebuild);
 
 // The -loglevel of an FFmpeg watched for filters_rebuilt where only its
 // errors are wanted: FFmpeg says it rebuilt at the info level, and with each
@@ -70,7 +99,8 @@ std::pair<int, int> size_change_target(const VideoInfo& test, const VideoInfo& s
 
 // The pair as this process found it: a video noted by an earlier run that
 // finished (SizeChangeMarks::finished) is scaled_to its target, the test
-// video to size_change_target, the source to its own probed size.
+// video to size_change_target (its own size if it was rebuilt at that size),
+// the source to its own probed size.
 void mark_size_changes(VideoInfo& source, VideoInfo& test);
 
 // The marks a pair's runs are made with (run_vmaf, run_perceptual_task):
@@ -86,7 +116,8 @@ public:
 
     // After a run stopped (`changed`): marks the pair for the next run, and
     // logs each video marked, its frames scaled with `scale_algorithm`. False
-    // when nothing is left to try.
+    // when nothing is left to try. A test video rebuilt at its own size is
+    // marked with that size, not size_change_target.
     bool after(const VideoSizeChanged& changed, const std::string& scale_algorithm);
 
     // After a run that finished: notes its marked videos for this process's
@@ -94,11 +125,12 @@ public:
     void finished() const;
 
 private:
-    void mark(VideoInfo& video, const std::string& scale_algorithm);
+    void mark(VideoInfo& video, std::optional<std::pair<int, int>> new_size, const std::string& scale_algorithm);
 
     VideoInfo& source_;
     VideoInfo& test_;
     bool test_guessed_ = false;  // the test video is marked on a guess (one FFmpeg decoded both)
+    bool test_keeps_its_size_ = false;  // the test video was marked because of a rebuild at its own size
 };
 
 // Why a pair cannot be scored when FFmpeg rebuilt its filters with both

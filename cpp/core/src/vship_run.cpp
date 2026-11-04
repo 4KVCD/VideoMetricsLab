@@ -315,7 +315,7 @@ private:
         // FFmpeg rebuilding its filters partway (the video's size changed:
         // size_changes.h) stops the reading: what it sends after is not what
         // the pass scores.
-        const auto rebuilt = std::make_shared<std::atomic<bool>>(false);
+        const auto rebuilt = std::make_shared<FilterRebuild>();
         options.on_error_line = rebuild_watcher(rebuilt);
         std::optional<platform::ChildProcess> process;
         try {
@@ -383,7 +383,7 @@ private:
             process_ = nullptr;
         }
         if (*rebuilt) {  // every line read: standard_error waited for the output's end
-            throw VideoSizeChanged(video_);
+            throw VideoSizeChanged(video_, rebuilt->size());
         }
         if (failure) {
             std::rethrow_exception(failure);

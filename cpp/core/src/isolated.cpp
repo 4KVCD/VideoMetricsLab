@@ -142,11 +142,13 @@ public:
 
     // Its result, or its error, once it said either, and whether the error
     // was a video's size changing (VideoSizeChanged, which the parent's run
-    // answers by making the run again), with the video where it was known.
+    // answers by making the run again), with the video and the new size where
+    // they were known.
     std::optional<nlohmann::json> result;
     std::optional<std::string> failure;
     bool size_changed = false;
     std::optional<std::filesystem::path> changed_video;
+    std::optional<std::pair<int, int>> changed_size;
     // Whether the error was a film grain refusal (FilmGrainRefusal), which
     // the parent's fallbacks pass on rather than trying another route.
     bool film_grain_refused = false;
@@ -232,6 +234,9 @@ void ChildConversation::take(const std::string& text) {
         if (const auto video = message.find("changed_video"); video != message.end() && video->is_string()) {
             changed_video = platform::path_from_text(video->get<std::string>());
         }
+        if (const auto size = message.find("changed_size"); size != message.end() && size->is_array()) {
+            changed_size = size->get<std::pair<int, int>>();
+        }
     } else if (message.is_object() && message.contains("log") && message["log"].is_object()) {
         const nlohmann::json& line = message["log"];
         app_log::write(line.value("level", static_cast<int>(app_log::Level::info)),
@@ -311,7 +316,7 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
     }
     if (conversation.failure) {
         if (conversation.size_changed) {
-            throw VideoSizeChanged(*conversation.failure, conversation.changed_video);
+            throw VideoSizeChanged(*conversation.failure, conversation.changed_video, conversation.changed_size);
         }
         if (conversation.film_grain_refused) {
             throw FilmGrainRefusal(*conversation.failure);
@@ -434,6 +439,9 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
         nlohmann::json message = {{"error", error.what()}, {"size_changed", true}};
         if (error.video()) {
             message["changed_video"] = platform::path_text(*error.video());
+        }
+        if (error.new_size()) {
+            message["changed_size"] = *error.new_size();
         }
         send_isolated_message(message);
         exit_code = 1;

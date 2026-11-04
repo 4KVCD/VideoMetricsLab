@@ -418,7 +418,7 @@ public:
                 return std::nullopt;
             }
             if (*rebuilt_) {
-                throw VideoSizeChanged();
+                throw VideoSizeChanged(std::nullopt, rebuilt_->size());
             }
             if (ffmpeg_.wait_for(std::chrono::milliseconds(0))) {
                 if (complete(index_)) {
@@ -429,7 +429,7 @@ public:
                 cancel_.throw_if_cancelled();
                 static_cast<void>(ffmpeg_.standard_error());  // waits for the error output's end, and so its lines
                 if (*rebuilt_) {
-                    throw VideoSizeChanged();
+                    throw VideoSizeChanged(std::nullopt, rebuilt_->size());
                 }
                 if (ffmpeg_.wait() != 0) {
                     throw failure("FFmpeg could not prepare lossless perceptual-metric frames.");
@@ -444,29 +444,31 @@ public:
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
         if (*rebuilt_) {
-            throw VideoSizeChanged();
+            throw VideoSizeChanged(std::nullopt, rebuilt_->size());
         }
         ++index_;
         return found;
     }
 
-    // After a pair's tool failed: whether FFmpeg had rebuilt its filters, and
-    // so the failure was a pair of pictures of two sizes, made as FFmpeg's
-    // word of it was on its way. FFmpeg is ended first, its pictures no
-    // longer wanted, so that all it wrote has been read.
-    bool rebuilt_before_failure() {
+    // After a pair's tool failed: throws VideoSizeChanged if FFmpeg had rebuilt
+    // its filters, and so the failure was a pair of pictures of two sizes, made
+    // as FFmpeg's word of it was on its way. FFmpeg is ended first, its pictures
+    // no longer wanted, so that all it wrote has been read.
+    void throw_if_rebuilt_before_failure() {
         ffmpeg_.terminate();
         ffmpeg_.wait();
         static_cast<void>(ffmpeg_.standard_error());  // waits for the error output's end, and so its lines
-        return *rebuilt_;
+        if (*rebuilt_) {
+            throw VideoSizeChanged(std::nullopt, rebuilt_->size());  // the task is made again, the video scaled first
+        }
     }
 
 private:
-    // The options of an FFmpeg watched for rebuilding its filters, which
-    // sets `rebuilt`.
-    static platform::ProcessOptions watched(const std::shared_ptr<std::atomic<bool>>& rebuilt) {
+    // The options of an FFmpeg watched for rebuilding its filters, told to
+    // `rebuild`.
+    static platform::ProcessOptions watched(const std::shared_ptr<FilterRebuild>& rebuild) {
         platform::ProcessOptions options;
-        options.on_error_line = rebuild_watcher(rebuilt);
+        options.on_error_line = rebuild_watcher(rebuild);
         return options;
     }
 
@@ -545,7 +547,7 @@ private:
     int backlog_;
     const std::atomic<bool>& stop_;
     const CancelToken& cancel_;
-    std::shared_ptr<std::atomic<bool>> rebuilt_ = std::make_shared<std::atomic<bool>>(false);  // before ffmpeg_
+    std::shared_ptr<FilterRebuild> rebuilt_ = std::make_shared<FilterRebuild>();  // before ffmpeg_
     platform::ChildProcess ffmpeg_;
     CancelToken::Attached attached_;  // after ffmpeg_, so that it goes first
     long long index_ = 1;  // the number of the next pair
@@ -937,9 +939,7 @@ std::vector<std::vector<double>> CpuScoringPool::score_all(PngPairs& pairs, int 
         thread.join();
     }
     if (scores_.failure) {
-        if (pairs.rebuilt_before_failure()) {
-            throw VideoSizeChanged();  // the task is made again, the video scaled first
-        }
+        pairs.throw_if_rebuilt_before_failure();
         std::rethrow_exception(scores_.failure);
     }
     return std::move(scores_.by_pair);

@@ -717,7 +717,7 @@ Pictures run_detection(const std::function<std::vector<std::string>(const std::o
         hwaccel.reset();
     }
     if (filters_rebuilt(output.lines)) {
-        throw VideoSizeChanged(platform::path_from_text(path));
+        throw VideoSizeChanged(platform::path_from_text(path), rebuilt_size(output.lines));
     }
     if (output.code != 0 || !output.read_error.empty()) {
         throw CropDetectError("Crop detection failed for " + path + ": " + failure_of(output));

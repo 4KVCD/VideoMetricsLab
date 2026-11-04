@@ -284,6 +284,38 @@ TEST(FfmpegRun, TellsARefusedFrameWriteFromOtherFailures) {
                                           "'auto_scale_0'\n"));
 }
 
+// A test video FFmpeg rebuilt its filters for at its own size (its colour tags
+// flipped) stays at that size, in this run and this process's later runs; one
+// rebuilt at another size goes to the source's width.
+TEST(SizeChanges, ATestVideoRebuiltAtItsOwnSizeKeepsIt) {
+    VideoInfo source;
+    source.path = "source.mkv";
+    source.width = 1280;
+    source.height = 720;
+    VideoInfo flipped;
+    flipped.path = "tags_flip.ts";
+    flipped.width = 640;
+    flipped.height = 360;
+    VideoInfo resized = flipped;
+    resized.path = "size_changes.ts";
+
+    SizeChangeMarks flipped_marks(source, flipped);
+    ASSERT_TRUE(flipped_marks.after(VideoSizeChanged(flipped.path, std::pair(640, 360)), "bicubic"));
+    EXPECT_EQ(flipped.scaled_to, std::pair(640, 360));
+    flipped_marks.finished();
+    SizeChangeMarks resized_marks(source, resized);
+    ASSERT_TRUE(resized_marks.after(VideoSizeChanged(resized.path, std::pair(320, 180)), "bicubic"));
+    EXPECT_EQ(resized.scaled_to, std::pair(1280, 720));
+    resized_marks.finished();
+
+    flipped.scaled_to.reset();
+    resized.scaled_to.reset();
+    mark_size_changes(source, flipped);
+    mark_size_changes(source, resized);
+    EXPECT_EQ(flipped.scaled_to, std::pair(640, 360));
+    EXPECT_EQ(resized.scaled_to, std::pair(1280, 720));
+}
+
 // FFmpeg 9.0.1's word that it rebuilt its filters as a video's size changed,
 // and its error output at watched_log_level cut back to the lines
 // "-loglevel error" shows for the same failure, without their levels; a line
@@ -292,6 +324,10 @@ TEST(SizeChanges, ReadsFfmpegsLines) {
     EXPECT_TRUE(filters_rebuilt("[vf#0:0 @ 0000017c52a6b5c0] [info] Reconfiguring filter graph because video "
                                 "parameters changed to yuv420p10le(tv, unknown), 1280x720, unspecified alpha"));
     EXPECT_FALSE(filters_rebuilt("[info] Stream mapping:"));
+    EXPECT_EQ(rebuilt_size("[vf#0:0 @ 0000017c52a6b5c0] [info] Reconfiguring filter graph because video parameters "
+                           "changed to yuv420p(tv, smpte170m), 640x360, unspecified alpha\nother, 2x2,\n"),
+              std::pair(640, 360));
+    EXPECT_EQ(rebuilt_size("other, 2x2,\n"), std::nullopt);
     const std::string written =
         "no level first\n"
         "[info] Input #0, lavfi, from 'testsrc2=size=64x64:rate=1:duration=1':\n"
