@@ -12,6 +12,7 @@
 #include "vml/av2_stream.h"
 #include "vml/difference.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/ffprobe.h"
 #include "vml/number_format.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
@@ -440,7 +441,7 @@ BitrateData PacketList::finish(const std::filesystem::path& path) const {
 // ------------------------------------------------------------- reading a video
 
 std::vector<std::string> bitrate_command(const std::string& ffprobe, const VideoInfo& info) {
-    std::vector<std::string> command{ffprobe, "-v", "error"};
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
     const std::vector<std::string> input = info.probe_options();
     append(command, input);
     command.insert(command.end(), {"-select_streams", std::string(video_stream), "-show_packets", "-show_entries",

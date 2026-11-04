@@ -372,20 +372,24 @@ std::string run_ffprobe(const std::vector<std::string>& command, const std::file
 
 }  // namespace
 
+std::vector<std::string> ffprobe_command_start(const std::string& ffprobe) {
+    return {ffprobe, "-v", "error", "-export_side_data", "film_grain"};
+}
+
 VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe, const CancelToken& cancel) {
     if (is_av2_file(path)) {
         return probe_av2(path, cancel);  // ffprobe cannot read AV2
     }
-    const std::vector<std::string> command{ffprobe, "-v", "error", "-print_format", "json", "-show_format",
-                                           "-show_streams", text(path)};
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
+    command.insert(command.end(), {"-print_format", "json", "-show_format", "-show_streams", text(path)});
     return video_info_from_probe(path, run_ffprobe(command, path, std::chrono::seconds(60), cancel));
 }
 
 std::optional<long long> stated_frame_count(const std::filesystem::path& path, const std::string& ffprobe,
                                             const CancelToken& cancel) {
-    const std::vector<std::string> command{
-        ffprobe, "-v", "error", "-select_streams", "v:0", "-print_format", "json", "-show_entries",
-        "stream=nb_frames:stream_tags=NUMBER_OF_FRAMES,NUMBER_OF_FRAMES-eng", text(path)};
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
+    command.insert(command.end(), {"-select_streams", "v:0", "-print_format", "json", "-show_entries",
+                                   "stream=nb_frames:stream_tags=NUMBER_OF_FRAMES,NUMBER_OF_FRAMES-eng", text(path)});
     const Json probe = Json::parse(run_ffprobe(command, path, std::chrono::seconds(60), cancel));
     const Json* streams = member(probe, "streams");
     if (streams == nullptr || streams->empty()) {
@@ -414,9 +418,9 @@ std::optional<long long> stated_frame_count(const std::filesystem::path& path, c
 
 long long count_video_packets(const std::filesystem::path& path, const std::string& ffprobe,
                               const CancelToken& cancel) {
-    const std::vector<std::string> command{
-        ffprobe, "-v", "error", "-select_streams", "v:0", "-count_packets", "-print_format", "json", "-show_entries",
-        "stream=nb_read_packets", text(path)};
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
+    command.insert(command.end(), {"-select_streams", "v:0", "-count_packets", "-print_format", "json",
+                                   "-show_entries", "stream=nb_read_packets", text(path)});
     const Json probe = Json::parse(run_ffprobe(command, path, std::chrono::minutes(5), cancel));
     const Json* streams = member(probe, "streams");
     const Json* packets = streams != nullptr && !streams->empty() ? member(streams->at(0), "nb_read_packets") : nullptr;
@@ -443,7 +447,7 @@ VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprob
     // whole file, so it has as long as a slow disk needs. (The csv format
     // adds a comma after some streams' count: "480,".) A raw YUV file is
     // read with its size and pixel format (probe_options).
-    std::vector<std::string> command{ffprobe, "-v", "error"};
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
     const std::vector<std::string> input = info.probe_options();
     append(command, input);
     command.insert(command.end(), {"-select_streams", "v:0", "-count_packets", "-show_entries",
@@ -468,9 +472,10 @@ VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprob
 
 VideoInfo probe_raw_yuv(const std::filesystem::path& path, const std::string& size, const std::string& pix_fmt,
                         double fps, const std::string& ffprobe, const CancelToken& cancel) {
-    const std::vector<std::string> command{
-        ffprobe, "-v", "error", "-f", "rawvideo", "-video_size", size, "-pixel_format", pix_fmt, "-framerate",
-        python_repr(fps), "-print_format", "json", "-show_format", "-show_streams", text(path)};
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
+    command.insert(command.end(), {"-f", "rawvideo", "-video_size", size, "-pixel_format", pix_fmt, "-framerate",
+                                   python_repr(fps), "-print_format", "json", "-show_format", "-show_streams",
+                                   text(path)});
     return timed_raw_stream(video_info_from_probe(path, run_ffprobe(command, path, std::chrono::seconds(60), cancel)),
                             fps, ffprobe, cancel);
 }

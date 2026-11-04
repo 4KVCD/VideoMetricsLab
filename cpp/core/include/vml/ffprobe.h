@@ -5,6 +5,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 #include <string_view>
 
 #include "vml/cancel.h"
@@ -18,6 +19,12 @@ class ProbeError : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
 };
+
+// How every ffprobe the app starts begins. ffprobe decodes a few pictures to fill
+// in what a file does not say, and FFmpeg 9.0's own VVC decoder crashes adding
+// film grain with chroma to a 4:0:0 picture (cpp/tests/media/README.md). Asked to
+// export the grain, it adds none, and what ffprobe reports is otherwise the same.
+std::vector<std::string> ffprobe_command_start(const std::string& ffprobe);
 
 // The video's details, read by running `ffprobe` (the program to run) on
 // `path`. Throws ProbeError when they cannot be read.

@@ -964,11 +964,11 @@ private:
 // The video stream's configuration (FFmpeg's extradata), as ffprobe shows
 // it; empty when there is none or it cannot be read.
 std::vector<unsigned char> extradata(const std::string& ffprobe, const std::filesystem::path& video) {
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
+    command.insert(command.end(), {"-select_streams", std::string(video_stream), "-show_entries", "stream=extradata",
+                                   "-show_data", "-of", "default=noprint_wrappers=1", input_path(video)});
     const std::optional<platform::ProcessOutput> output =
-        platform::finished_program({ffprobe, "-v", "error", "-select_streams", std::string(video_stream),
-                                    "-show_entries", "stream=extradata", "-show_data", "-of",
-                                    "default=noprint_wrappers=1", input_path(video)},
-                                   std::chrono::seconds(60));
+        platform::finished_program(command, std::chrono::seconds(60));
     if (!output) {
         return {};
     }
