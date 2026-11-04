@@ -7,6 +7,7 @@
 #include <sstream>
 #include <tuple>
 
+#include "vml/append.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/frame_sync.h"
@@ -212,7 +213,7 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
         chains.test.push_back(scaled_to(distorted.resample_via->first, distorted.resample_via->second));
         chains.test.push_back(scaled_to(distorted_w, distorted_h));
     }
-    chains.test.insert(chains.test.end(), numbering.begin(), numbering.end());
+    append(chains.test, numbering);
 
     // The source is cropped before the format conversion, as the test video
     // is, so chroma at a crop's edge is not filtered with the bars' samples.
@@ -233,7 +234,7 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
     if (sizes_differ && !upscale_distorted) {
         chains.source.push_back(scaled_to(distorted_w, distorted_h));
     }
-    chains.source.insert(chains.source.end(), numbering.begin(), numbering.end());
+    append(chains.source, numbering);
     return chains;
 }
 
@@ -295,7 +296,7 @@ std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const s
     const auto decode = [several_graphs](const std::optional<std::string>& hwaccel) {
         return several_graphs ? split_hwaccel_args(hwaccel) : hwaccel_args(hwaccel);
     };
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-y"};
+    std::vector<std::string> command = ffmpeg_command_start(ffmpeg, {"-y"});
     for (const auto& [hwaccel, path, own, fed] :
          {std::tuple{decoding.distorted, distorted, &inputs.distorted, &inputs.distorted_fed},
           std::tuple{decoding.source, source, &inputs.source, &inputs.source_fed}}) {
@@ -304,12 +305,12 @@ std::vector<std::string> build_ffmpeg_command(const std::string& ffmpeg, const s
             continue;
         }
         const std::vector<std::string> options = decode(hwaccel);
-        command.insert(command.end(), options.begin(), options.end());
+        append(command, options);
         command.insert(command.end(), own->begin(), own->end());
         command.insert(command.end(), {"-i", input_path(path)});
     }
     const std::vector<std::string> outputs = output_args(filtergraph);
-    command.insert(command.end(), outputs.begin(), outputs.end());
+    append(command, outputs);
     return command;
 }
 
@@ -360,17 +361,17 @@ std::vector<std::string> build_resample_command(const std::string& ffmpeg, const
                                                 const std::optional<std::string>& hwaccel,
                                                 const std::vector<std::string>& source_options,
                                                 const std::optional<std::vector<std::string>>& source_fed) {
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-y"};
+    std::vector<std::string> command = ffmpeg_command_start(ffmpeg, {"-y"});
     if (source_fed) {
         command.insert(command.end(), source_fed->begin(), source_fed->end());
     } else {
         const std::vector<std::string> decode = hwaccel_args(hwaccel);
-        command.insert(command.end(), decode.begin(), decode.end());
-        command.insert(command.end(), source_options.begin(), source_options.end());
+        append(command, decode);
+        append(command, source_options);
         command.insert(command.end(), {"-i", input_path(source)});
     }
     const std::vector<std::string> outputs = output_args(filtergraph);
-    command.insert(command.end(), outputs.begin(), outputs.end());
+    append(command, outputs);
     return command;
 }
 
@@ -402,17 +403,17 @@ std::vector<std::vector<std::string>> build_stream_commands(
                                    const std::vector<std::string>& input,
                                    const std::optional<std::vector<std::string>>& fed, const std::string& graph,
                                    const std::vector<std::string>& output) {
-        std::vector<std::string> made{ffmpeg, "-nostdin", "-hide_banner", "-y"};
+        std::vector<std::string> made = ffmpeg_command_start(ffmpeg, {"-y"});
         if (fed) {
             made.insert(made.end(), fed->begin(), fed->end());
         } else {
             const std::vector<std::string> decode = hwaccel_args(hwaccel);
-            made.insert(made.end(), decode.begin(), decode.end());
-            made.insert(made.end(), input.begin(), input.end());
+            append(made, decode);
+            append(made, input);
             made.insert(made.end(), {"-i", input_path(path)});
         }
         made.insert(made.end(), {"-lavfi", graph, "-progress", "pipe:1", "-nostats"});
-        made.insert(made.end(), output.begin(), output.end());
+        append(made, output);
         return made;
     };
     return {command(distorted, decoding.distorted, inputs.distorted, inputs.distorted_fed, graphs.first,

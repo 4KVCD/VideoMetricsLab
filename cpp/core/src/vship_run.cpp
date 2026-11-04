@@ -19,6 +19,7 @@
 #include <thread>
 
 #include "vml/app_log.h"
+#include "vml/append.h"
 #include "vml/build_info.h"
 #include "vml/colour.h"
 #include "vml/crop_detect.h"
@@ -1374,18 +1375,18 @@ private:
             std::vector<std::string> command{request_.environment.ffmpeg, "-hide_banner", "-loglevel",
                                              watched_log_level, "-nostats", "-nostdin"};
             if (fed != nullptr) {
-                command.insert(command.end(), fed->input_arguments().begin(), fed->input_arguments().end());
+                append(command, fed->input_arguments());
             } else {
                 const std::vector<std::string> decode = hwaccel_args(accel);
-                command.insert(command.end(), decode.begin(), decode.end());
+                append(command, decode);
                 const std::vector<std::string> input = with_seek(video.info.decode_options(), seek);
-                command.insert(command.end(), input.begin(), input.end());
+                append(command, input);
                 command.insert(command.end(), {"-i", input_path(video.info.path)});
             }
             command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", chain});
             command.insert(command.end(), {"-fps_mode", "passthrough"});
             const std::vector<std::string> piped = vship_piped_as(pixel_format);
-            command.insert(command.end(), piped.begin(), piped.end());
+            append(command, piped);
             commands.push_back(std::move(command));
         }
         return commands;
@@ -2220,7 +2221,7 @@ private:
             alone.push_back({key});
         }
         run_groups(alone, passes_before, passes_before + static_cast<int>(shared.size()));
-        errors_.insert(errors_.end(), failed_before.begin(), failed_before.end());  // the retries' own first
+        append(errors_, failed_before);  // the retries' own first
     }
 
     // Runs `passes` as passes first + 1 onwards of `count`, keeping each
@@ -2639,7 +2640,7 @@ private:
             std::erase_if(failures, [&key](const auto& failure) { return failure.first == key; });
         }
         std::vector<std::string> cpu_keys = cpu_;
-        cpu_keys.insert(cpu_keys.end(), gpu_failed.begin(), gpu_failed.end());
+        append(cpu_keys, gpu_failed);
         if (cpu_keys.empty()) {
             gpu_output.failures = failures;
             return gpu_output;

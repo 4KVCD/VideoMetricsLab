@@ -8,6 +8,7 @@
 #include <numeric>
 #include <string>
 
+#include "vml/append.h"
 #include "vml/platform/system.h"
 
 namespace vml::av2 {
@@ -631,7 +632,7 @@ std::optional<TemporalUnit> Reader::next_section5() {
             pending_offset_ = at;
             break;
         }
-        unit.data.insert(unit.data.end(), obu.begin(), obu.end());
+        append(unit.data, obu);
     }
     unit.number = units_read_++;
     unit.container_pts = unit.number;

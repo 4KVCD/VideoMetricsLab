@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "vml/app_decoders.h"
+#include "vml/append.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
 #include "vml/number_format.h"
@@ -98,7 +99,7 @@ std::vector<std::string> VideoInfo::input_options() const {
         options = {"-reinit_filter", "0"};
     }
     const std::vector<std::string> reading = probe_options();
-    options.insert(options.end(), reading.begin(), reading.end());
+    append(options, reading);
     return options;
 }
 

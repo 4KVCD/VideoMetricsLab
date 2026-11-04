@@ -11,6 +11,7 @@
 #include <system_error>
 #include <vector>
 
+#include "vml/append.h"
 #include "vml/av2_probe.h"
 #include "vml/number_format.h"
 #include "vml/platform/process.h"
@@ -441,7 +442,7 @@ VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprob
     // read with its size and pixel format (probe_options).
     std::vector<std::string> command{ffprobe, "-v", "error"};
     const std::vector<std::string> input = info.probe_options();
-    command.insert(command.end(), input.begin(), input.end());
+    append(command, input);
     command.insert(command.end(), {"-select_streams", "v:0", "-count_packets", "-show_entries",
                                    "stream=nb_read_packets", "-of", "default=noprint_wrappers=1:nokey=1",
                                    text(info.path)});

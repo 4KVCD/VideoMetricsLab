@@ -28,6 +28,7 @@
 #include "widgets.h"
 #include "window_helpers.h"
 #include "vml/app_log.h"
+#include "vml/append.h"
 #include "vml/crop_detect.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/film_grain_scoring.h"
@@ -200,14 +201,14 @@ bool MainWindow::settle_film_grain(const std::vector<int>& checked) {
             return false;
         }
         const std::vector<std::filesystem::path> chosen = choose_film_grain(rows, reference, answer->with);
-        changed.insert(changed.end(), chosen.begin(), chosen.end());
+        append(changed, chosen);
         if (answer->dont_ask_again) {
             // The other videos without a choice take it too, unchecked ones included.
             settings_.film_grain_default = answer->with ? "with" : "without";
             save_settings();
             settings_panel_->show_film_grain_default();
             const std::vector<std::filesystem::path> others = apply_film_grain_default();
-            changed.insert(changed.end(), others.begin(), others.end());
+            append(changed, others);
         }
         show_panel_film_grain();
     }

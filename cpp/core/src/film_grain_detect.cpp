@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <utility>
 
+#include "vml/append.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -357,7 +358,7 @@ std::optional<unsigned> film_grain_in_av1(std::string_view obus) {
 std::vector<std::string> film_grain_scan_command(const std::string& ffmpeg, const VideoInfo& info) {
     std::vector<std::string> command{ffmpeg, "-nostdin", "-v", "error"};
     const std::vector<std::string> input = info.input_options();
-    command.insert(command.end(), input.begin(), input.end());
+    append(command, input);
     // The first video stream (V: not a cover picture), copied from its first
     // key frame on.
     command.insert(command.end(), {"-i", platform::path_text(info.path), "-map", "0:V:0", "-c:v", "copy",

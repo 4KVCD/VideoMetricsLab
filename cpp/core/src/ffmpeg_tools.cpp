@@ -230,6 +230,12 @@ ToolsStatus check_tools(const Settings& settings) {
     return ToolsStatus{std::move(ffmpeg), ffprobe.get()};
 }
 
+std::vector<std::string> ffmpeg_command_start(const std::string& ffmpeg, std::initializer_list<std::string> flags) {
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner"};
+    command.insert(command.end(), flags);
+    return command;
+}
+
 bool lists_filter(std::string_view filters_output, std::string_view name) {
     // " .S zscale            V->V       Apply resizing, ...": the name is a
     // filter line's second field (the legend's lines have "=" there, or

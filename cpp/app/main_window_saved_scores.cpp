@@ -18,6 +18,7 @@
 #include "main_window.h"
 #include "widgets.h"
 #include "window_helpers.h"
+#include "vml/append.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/metric_cache.h"
 
@@ -52,7 +53,7 @@ bool MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& pa
     // again. Asked only about `paths`, editing one row while the saved scores
     // load would leave the others empty, and calculated again in full.
     std::vector<std::filesystem::path> asked = cancel_cache_lookup();
-    asked.insert(asked.end(), paths.begin(), paths.end());
+    append(asked, paths);
     const int generation = ++cache_generation_;
     QStringList texts;
     std::map<QString, SavedScoresQuery> queries;

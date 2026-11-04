@@ -28,6 +28,7 @@
 #include "i18n.h"
 #include "rate_curve_chart.h"
 #include "theme.h"
+#include "vml/append.h"
 #include "vml/bd_rate.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
@@ -384,7 +385,7 @@ RateTable BdRatePanel::merged(const Side& side) {
                 all.columns.push_back(column);
             }
         }
-        all.encodes.insert(all.encodes.end(), table.encodes.begin(), table.encodes.end());
+        append(all.encodes, table.encodes);
     }
     for (const std::string& key : all_metric_keys()) {
         if (metric_keys.contains(key)) {

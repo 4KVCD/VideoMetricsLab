@@ -13,6 +13,7 @@
 #include <tuple>
 #include <variant>
 
+#include "vml/append.h"
 #include "vml/frame_range.h"
 #include "vml/frame_sync.h"
 #include "vml/number_format.h"
@@ -505,7 +506,7 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
         return std::nullopt;
     }
     std::vector<MetricRequestSpec> loaded_for = specs;  // the requests a loaded score answers
-    loaded_for.insert(loaded_for.end(), supplemental.begin(), supplemental.end());
+    append(loaded_for, supplemental);
     if (context) {
         return comparison_from(*context, recipe, std::move(results), loaded_for);
     }

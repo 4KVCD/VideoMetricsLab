@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "vml/append.h"
 #include "vml/difference.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
@@ -87,11 +88,11 @@ CsvTable csv_table(const MetricResultSet& metrics) {
     const SequenceMetricResult* cvvdp = metrics.sequence("cvvdp");
     for (const std::string& key : keys) {
         if (const FrameMetricResult* column = metrics.frame(key)) {
-            table.frames.insert(table.frames.end(), column->frame.begin(), column->frame.end());
+            append(table.frames, column->frame);
         }
     }
     if (cvvdp != nullptr && cvvdp->has_timeline()) {
-        table.frames.insert(table.frames.end(), cvvdp->frame.begin(), cvvdp->frame.end());
+        append(table.frames, cvvdp->frame);
     }
     std::sort(table.frames.begin(), table.frames.end());
     table.frames.erase(std::unique(table.frames.begin(), table.frames.end()), table.frames.end());

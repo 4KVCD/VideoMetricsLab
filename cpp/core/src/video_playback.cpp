@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <string_view>
 
+#include "vml/append.h"
 #include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_scoring.h"
@@ -123,7 +124,7 @@ std::vector<std::string> build_playback_command(const std::string& ffmpeg, const
     const Size size = playback_dimensions(comparison, maximum);
     const bool gpu = processing != PlaybackProcessing::cpu;
     const bool interop = processing == PlaybackProcessing::interop;
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error"};
+    std::vector<std::string> command = ffmpeg_command_start(ffmpeg, {"-loglevel", "error"});
     if (interop) {
         // NVDEC's pictures handed to a Vulkan device made from the CUDA one.
         command.insert(command.end(), {"-init_hw_device", "cuda=decode", "-init_hw_device", "vulkan=preview@decode",
@@ -139,12 +140,12 @@ std::vector<std::string> build_playback_command(const std::string& ffmpeg, const
     const SeekPoint start = seek_point(seek_seconds(info, start_frame, fps), lead);
     command.insert(command.end(), {"-ss", format_fixed(start.seek, 9)});
     const std::vector<std::string> accel_args = hwaccel_args(accel);
-    command.insert(command.end(), accel_args.begin(), accel_args.end());
+    append(command, accel_args);
     if (interop && accel == "cuda") {
         command.insert(command.end(), {"-hwaccel_device", "decode"});  // the device the Vulkan one is made from
     }
     const std::vector<std::string> grain = picture_grain_options(info);
-    command.insert(command.end(), grain.begin(), grain.end());
+    append(command, grain);
     command.insert(command.end(), {"-i", resolved_text(frame_input_path(comparison, side))});
 
     const std::optional<CropBox>& crop = side == FrameSide::source ? comparison.source_crop : comparison.distorted_crop;

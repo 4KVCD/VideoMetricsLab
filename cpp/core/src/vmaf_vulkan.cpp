@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <system_error>
 
+#include "vml/append.h"
 #include "vml/gpu_frames.h"
 #include "vml/model_select.h"
 #include "vml/platform/system.h"
@@ -467,8 +468,8 @@ VulkanProbeFrames vulkan_probe_frames(int bits, int count, int width, int height
             append_sample(ref_frame, std::clamp<std::int64_t>(reference[at], 0, 255) * peak / 255, wide);
             append_sample(dis_frame, std::clamp<std::int64_t>(distorted, 0, 255) * peak / 255, wide);
         }
-        ref_frame.insert(ref_frame.end(), chroma.begin(), chroma.end());
-        dis_frame.insert(dis_frame.end(), chroma.begin(), chroma.end());
+        append(ref_frame, chroma);
+        append(dis_frame, chroma);
         frames.reference.push_back(std::move(ref_frame));
         frames.distorted.push_back(std::move(dis_frame));
     }

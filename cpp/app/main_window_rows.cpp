@@ -28,6 +28,7 @@
 #include "resample_target_dialog.h"
 #include "theme.h"
 #include "vml/app_log.h"
+#include "vml/append.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_scoring.h"
@@ -840,7 +841,7 @@ void MainWindow::on_rows_dragged(const QList<int>& rows, int target) {
     const int at =
         target - static_cast<int>(std::count_if(rows.begin(), rows.end(), [target](int row) { return row < target; }));
     std::vector<int> order(rest.begin(), rest.begin() + at);
-    order.insert(order.end(), moved.begin(), moved.end());
+    append(order, moved);
     order.insert(order.end(), rest.begin() + at, rest.end());
     std::vector<int> identity(order.size());
     std::iota(identity.begin(), identity.end(), 0);
@@ -909,7 +910,7 @@ void MainWindow::on_header_clicked(int column) {
     QHeaderView* header = distorted_table_->horizontalHeader();
     header->setSortIndicator(column, order);
     header->setSortIndicatorShown(true);
-    present.insert(present.end(), missing.begin(), missing.end());
+    append(present, missing);
     apply_row_order(present);
 }
 

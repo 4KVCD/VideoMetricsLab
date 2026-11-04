@@ -8,6 +8,7 @@
 #include <numeric>
 #include <utility>
 
+#include "vml/append.h"
 #include "vml/av2_stream.h"
 #include "vml/difference.h"
 #include "vml/ffmpeg_tools.h"
@@ -286,8 +287,8 @@ BitratePlot step_difference_plot(const BitratePlot& first, const BitratePlot& se
     std::vector<double> bounds;
     bounds.reserve(2 * (a.starts.size() + b.starts.size()));
     for (const Steps* steps : {&a, &b}) {
-        bounds.insert(bounds.end(), steps->starts.begin(), steps->starts.end());
-        bounds.insert(bounds.end(), steps->ends.begin(), steps->ends.end());
+        append(bounds, steps->starts);
+        append(bounds, steps->ends);
     }
     std::ranges::sort(bounds);
     bounds.erase(std::unique(bounds.begin(), bounds.end()), bounds.end());
@@ -441,7 +442,7 @@ BitrateData PacketList::finish(const std::filesystem::path& path) const {
 std::vector<std::string> bitrate_command(const std::string& ffprobe, const VideoInfo& info) {
     std::vector<std::string> command{ffprobe, "-v", "error"};
     const std::vector<std::string> input = info.probe_options();
-    command.insert(command.end(), input.begin(), input.end());
+    append(command, input);
     command.insert(command.end(), {"-select_streams", std::string(video_stream), "-show_packets", "-show_entries",
                                    "packet=pts_time,dts_time,duration_time,size,pos,flags", "-of",
                                    "compact=p=0:nk=0", platform::path_text(info.path)});

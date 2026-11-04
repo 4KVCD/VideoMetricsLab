@@ -23,6 +23,7 @@
 #include <tuple>
 
 #include "vml/app_log.h"
+#include "vml/append.h"
 #include "vml/av2_stream.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
@@ -1378,11 +1379,11 @@ std::vector<std::string> packet_reader_command(const std::string& ffmpeg, const 
     // -copyinkf copies every packet, as a decoder would be given them (the
     // reader checks that the first is a keyframe).
     std::vector<std::string> command{ffmpeg, "-hide_banner", "-nostdin", "-y", "-loglevel", "warning"};
-    command.insert(command.end(), input_options.begin(), input_options.end());
+    append(command, input_options);
     command.insert(command.end(), {"-i", input_path(video), "-map", stream, "-c:v", "copy", "-copyinkf"});
-    command.insert(command.end(), filters.begin(), filters.end());
+    append(command, filters);
     command.insert(command.end(), {"-f", "data", "pipe:1", "-map", stream, "-c:v", "copy", "-copyinkf"});
-    command.insert(command.end(), filters.begin(), filters.end());
+    append(command, filters);
     command.insert(command.end(), {"-flush_packets", "1", "-f", "framecrc", listing_pipe});
     return command;
 }

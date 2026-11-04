@@ -9,6 +9,7 @@
 #include <tuple>
 
 #include "vml/app_log.h"
+#include "vml/append.h"
 #include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_scoring.h"
@@ -357,8 +358,8 @@ std::string fed_still(const std::string& ffmpeg, const FrameComparison& comparis
                       const CancelToken& cancel, const PreviewColorSettings& colors, const SeekPoint& start) {
     // VVC's decoder asks ffprobe nothing (gpu_frames.cpp's configuration).
     PictureFeed feed(frame_video_info(comparison, side), ffmpeg, "", cancel, FeedWindow{start.seek, 0, start.skip});
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error"};
-    command.insert(command.end(), feed.input_arguments().begin(), feed.input_arguments().end());
+    std::vector<std::string> command = ffmpeg_command_start(ffmpeg, {"-loglevel", "error"});
+    append(command, feed.input_arguments());
     add_png_output(command, frame_filter(comparison, side, colors));
     StillOutput output = run_still(command, cancel);
     feed.finish();  // a feeding that failed gives no still
@@ -386,9 +387,9 @@ std::vector<std::string> build_frame_command(const std::string& ffmpeg, const Fr
     }
     std::error_code error;
     const std::filesystem::path input = std::filesystem::weakly_canonical(frame_input_path(comparison, side), error);
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error"};
+    std::vector<std::string> command = ffmpeg_command_start(ffmpeg, {"-loglevel", "error"});
     const std::vector<std::string> grain = picture_grain_options(frame_video_info(comparison, side));
-    command.insert(command.end(), grain.begin(), grain.end());
+    append(command, grain);
     command.insert(command.end(), {"-ss", format_fixed(start.seek, 9), "-i",
                                    platform::path_text(error ? frame_input_path(comparison, side) : input)});
     add_png_output(command, filters);

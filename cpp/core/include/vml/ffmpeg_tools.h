@@ -3,6 +3,7 @@
 #pragma once
 
 #include <filesystem>
+#include <initializer_list>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -21,6 +22,10 @@ inline constexpr std::string_view video_stream = "V:0";
 // makes it, because FFmpeg may run in a folder of its own (a plain
 // argument, so a Windows path with its drive works).
 std::string input_path(const std::filesystem::path& path);
+
+// How most of the app's FFmpeg commands start: FFmpeg, not reading the app's
+// standard input, without its banner, then `flags`.
+std::vector<std::string> ffmpeg_command_start(const std::string& ffmpeg, std::initializer_list<std::string> flags);
 
 // The oldest FFmpeg the app's filter graphs work with.
 inline const std::vector<int> minimum_ffmpeg_version{9};

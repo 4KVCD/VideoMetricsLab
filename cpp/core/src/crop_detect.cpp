@@ -25,6 +25,7 @@
 
 #include "vml/app_decoders.h"
 #include "vml/app_log.h"
+#include "vml/append.h"
 #include "vml/black_bars_rule.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_scoring.h"
@@ -342,13 +343,13 @@ const std::vector<std::string> luma_output{"-fps_mode", "passthrough", "-f", "yu
 std::vector<std::string> preview_command(const std::string& ffmpeg, const std::string& path,
                                          const std::vector<std::string>& input, double start, int frames,
                                          const std::optional<std::string>& hwaccel, const BeforeSampling& before) {
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-nostats"};
+    std::vector<std::string> command = ffmpeg_command_start(ffmpeg, {"-nostats"});
     const std::vector<std::string> decoding = hwaccel_args(hwaccel);
-    command.insert(command.end(), decoding.begin(), decoding.end());
-    command.insert(command.end(), input.begin(), input.end());
+    append(command, decoding);
+    append(command, input);
     command.insert(command.end(), {"-ss", format_fixed(start, 3), "-i", path, "-map", "0:" + std::string(video_stream),
                                    "-frames:v", std::to_string(frames), "-vf", before.luma(hwaccel)});
-    command.insert(command.end(), luma_output.begin(), luma_output.end());
+    append(command, luma_output);
     return command;
 }
 
@@ -514,13 +515,13 @@ std::string pieced_input(const std::string& path, const std::vector<ByteRange>& 
 std::vector<std::string> byte_preview_command(const std::string& ffmpeg, const std::vector<std::string>& input,
                                               int frames, const std::optional<std::string>& hwaccel,
                                               const BeforeSampling& before) {
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-nostats"};
+    std::vector<std::string> command = ffmpeg_command_start(ffmpeg, {"-nostats"});
     const std::vector<std::string> decoding = hwaccel_args(hwaccel);
-    command.insert(command.end(), decoding.begin(), decoding.end());
-    command.insert(command.end(), input.begin(), input.end());
+    append(command, decoding);
+    append(command, input);
     command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-frames:v", std::to_string(frames), "-vf",
                                    before.luma(hwaccel)});
-    command.insert(command.end(), luma_output.begin(), luma_output.end());
+    append(command, luma_output);
     return command;
 }
 
@@ -539,14 +540,14 @@ std::vector<std::string> raw_previews_command(const std::string& ffmpeg, const V
     }
     const std::string filters = "trim=end_frame=" + std::to_string(frames.back() + 1) + ",select=gt(" + picked +
                                 "\\,0)," + before.luma(hwaccel);
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-nostats"};
+    std::vector<std::string> command = ffmpeg_command_start(ffmpeg, {"-nostats"});
     const std::vector<std::string> decoding = hwaccel_args(hwaccel);
-    command.insert(command.end(), decoding.begin(), decoding.end());
+    append(command, decoding);
     const std::vector<std::string> input = info.input_options();
-    command.insert(command.end(), input.begin(), input.end());
+    append(command, input);
     command.insert(command.end(), {"-i", platform::path_text(info.path), "-map", "0:" + std::string(video_stream),
                                    "-vf", filters});
-    command.insert(command.end(), luma_output.begin(), luma_output.end());
+    append(command, luma_output);
     return command;
 }
 
@@ -747,10 +748,10 @@ Pictures run_fed_preview(const std::string& ffmpeg, const VideoInfo& info, const
     VideoInfo coded = info;
     coded.with_film_grain = false;
     PictureFeed feed(coded, ffmpeg, "", cancel, window);
-    std::vector<std::string> command{ffmpeg, "-nostdin", "-hide_banner", "-nostats"};
-    command.insert(command.end(), feed.input_arguments().begin(), feed.input_arguments().end());
+    std::vector<std::string> command = ffmpeg_command_start(ffmpeg, {"-nostats"});
+    append(command, feed.input_arguments());
     command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-vf", BeforeSampling{}.luma({})});
-    command.insert(command.end(), luma_output.begin(), luma_output.end());
+    append(command, luma_output);
     DetectionOutput output = run_ffmpeg(command, cancel, 60s);
     feed.finish();  // a window fed in part gives no pictures
     if (output.code != 0 || !output.read_error.empty()) {

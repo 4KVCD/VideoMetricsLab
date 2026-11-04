@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "vml/app_log.h"
+#include "vml/append.h"
 #include "vml/build_info.h"
 #include "vml/colour.h"
 #include "vml/ffmpeg_tools.h"
@@ -765,8 +766,8 @@ std::string image_filtergraph(const VideoInfo& source_info, const VideoInfo& dis
         if (const std::optional<std::string> trim = range_trim_filter(range, seek)) {
             filters.push_back(*trim);
         }
-        filters.insert(filters.end(), numbering.begin(), numbering.end());
-        filters.insert(filters.end(), plan.sample.begin(), plan.sample.end());
+        append(filters, numbering);
+        append(filters, plan.sample);
         for (std::string& filter : prepare(crop, info, target, plan.scale_algorithm)) {
             filters.push_back(std::move(filter));
         }
@@ -804,7 +805,7 @@ std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const Vide
             continue;
         }
         const std::vector<std::string> input = with_seek(video->decode_options(), *seek);
-        command.insert(command.end(), input.begin(), input.end());
+        append(command, input);
         command.insert(command.end(), {"-i", input_path(video->path)});
     }
     command.insert(command.end(), {"-filter_complex", image_filtergraph(source, distorted, options, source_crop,
@@ -814,7 +815,7 @@ std::vector<std::string> png_pairs_command(const std::string& ffmpeg, const Vide
     for (const auto& [label, pattern] : {std::pair{"[distorted]", "test-%08d.png"},
                                          std::pair{"[reference]", "reference-%08d.png"}}) {
         command.insert(command.end(), {"-map", label});
-        command.insert(command.end(), output_args.begin(), output_args.end());
+        append(command, output_args);
         command.push_back(platform::path_text(folder / pattern));
     }
     return command;

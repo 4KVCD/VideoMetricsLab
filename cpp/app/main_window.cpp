@@ -45,6 +45,7 @@
 #include "settings_panel.h"
 #include "theme.h"
 #include "vml/app_log.h"
+#include "vml/append.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/hardware_decoding.h"
 #include "vml/metrics.h"
@@ -540,7 +541,7 @@ QWidget* MainWindow::build_files_panel() {
     // a disabled QGroupBox disables its children, the table's scroll bar
     // among them, so a long queue could not be scrolled while it runs.
     file_action_widgets_ = {source_browse_button_};
-    file_action_widgets_.insert(file_action_widgets_.end(), file_buttons.begin(), file_buttons.end());
+    append(file_action_widgets_, file_buttons);
     file_action_widgets_.push_back(metrics_button_);
     return files_box_;
 }

@@ -8,6 +8,7 @@
 #include <regex>
 #include <set>
 
+#include "vml/append.h"
 #include "vml/gpu_decoders.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
@@ -1080,7 +1081,7 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
     };
     try {
         std::vector<std::string> extras = parse_known(top, arguments);
-        extras.insert(extras.end(), command_extras.begin(), command_extras.end());
+        append(extras, command_extras);
         if (!extras.empty()) {
             std::string listed;
             for (const std::string& extra : extras) {
