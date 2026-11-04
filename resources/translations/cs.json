@@ -787,6 +787,7 @@
   "The range starts after the end of one of the videos.": "Rozsah začíná po konci jednoho z videí.",
   "The range contains no frame of the videos.": "Rozsah neobsahuje žádný snímek videí.",
   "The chosen size is not smaller than the video without its black bars.": "Zvolená velikost není menší než video bez černých pruhů.",
+  "Its saved score was made with other black bars: it is calculated again on the next run.": "Jeho uložené skóre vzniklo s jinými černými pruhy: při dalším spuštění se vypočítá znovu.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nNebylo nalezeno žádné podporované GPU, proto se počítají na CPU. Nástroje pro CPU hodnotí vždy jeden pár statických obrázků: asi 1 s pro SSIMULACRA2 a 2 s pro Butteraugli na snímek 4K, takže film trvá dny (odhady výše předpokládají CPU jako ten, na kterém byly změřeny). Nastavte rozsah, chcete-li hodnotit jen část videí.\n\nPřesto spočítat?",
   "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Délky se neshodují ({source} vs {test} s). Pokud porovnáváte jen jejich společnou část, nastavte rozsah v rámci obou souborů.",
   "Difference": "Rozdíl",

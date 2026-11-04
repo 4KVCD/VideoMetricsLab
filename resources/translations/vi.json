@@ -787,6 +787,7 @@
   "The range starts after the end of one of the videos.": "Khoảng bắt đầu sau khi một trong hai video đã kết thúc.",
   "The range contains no frame of the videos.": "Khoảng này không chứa khung hình nào của video.",
   "The chosen size is not smaller than the video without its black bars.": "Kích thước đã chọn không nhỏ hơn video khi không có các dải đen.",
+  "Its saved score was made with other black bars: it is calculated again on the next run.": "Điểm đã lưu được tính với các dải đen khác: điểm sẽ được tính lại ở lần chạy tiếp theo.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nKhông tìm thấy GPU được hỗ trợ, nên chúng được tính trên CPU. Công cụ CPU chấm từng cặp ảnh tĩnh một: khoảng 1 giây cho SSIMULACRA2 và 2 giây cho Butteraugli mỗi khung hình 4K, nên một bộ phim mất nhiều ngày (ước tính trên giả định CPU giống máy đã dùng để đo). Hãy đặt một khoảng để chỉ chấm một phần video.\n\nVẫn tính?",
   "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Thời lượng không khớp ({source} so với {test} giây). Đặt một khoảng nằm trong cả hai tệp nếu bạn chỉ so sánh một phần chung.",
   "Difference": "Chênh lệch",

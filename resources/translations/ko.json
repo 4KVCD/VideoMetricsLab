@@ -787,6 +787,7 @@
   "The range starts after the end of one of the videos.": "범위가 영상 중 하나의 끝 뒤에서 시작합니다.",
   "The range contains no frame of the videos.": "범위에 영상의 프레임이 하나도 없습니다.",
   "The chosen size is not smaller than the video without its black bars.": "선택한 크기가 검은 여백을 제외한 동영상보다 작지 않습니다.",
+  "Its saved score was made with other black bars: it is calculated again on the next run.": "저장된 점수는 다른 검은 띠로 계산되었습니다. 다음 실행에서 다시 계산합니다.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\n지원되는 GPU를 찾지 못해 CPU에서 계산합니다. CPU 도구는 정지 이미지 한 쌍씩 채점합니다. 4K 프레임당 SSIMULACRA2는 약 1초, Butteraugli는 약 2초가 걸려 영화 한 편에 며칠이 걸립니다(위 예상은 측정에 쓴 것과 비슷한 CPU 기준). 영상의 일부만 채점하려면 범위를 설정하세요.\n\n그래도 계산하시겠습니까?",
   "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "길이가 일치하지 않습니다({source} 대 {test}초). 공통된 부분만 비교한다면 두 파일 안에 있는 범위를 설정하세요.",
   "Difference": "차이",

@@ -33,6 +33,10 @@ namespace vml {
 
 namespace {
 
+// Why a saved score is not kept beside a run's new scores (JobRun::saved_scores_fit).
+constexpr const char* saved_with_other_black_bars =
+    "Its saved score was made with other black bars: it is calculated again on the next run.";
+
 // Videos in progress at once: one per CPU lane, plus the one on the GPU. A
 // video's CPU and GPU tasks run in separate queues, so one queue can run
 // ahead of the other, but not without limit: each video in progress has a
@@ -234,6 +238,8 @@ private:
     void send_snapshots() const;
     std::optional<PerceptualTaskOutput> perceptual_so_far() const;
     std::optional<ComparisonResult> merged() const;
+    bool saved_scores_fit() const;
+    bool task_calculates(const std::string& key) const;
     void send_result_so_far() const;
 
     Scheduler& scheduler_;
@@ -392,11 +398,7 @@ std::string JobRun::describe() const {
         // Those the run does not calculate again (a VMAF beside the NEG it
         // keeps on the CPU, say: plan_tasks).
         std::vector<std::string> keys = job_.cached_metrics.keys();
-        std::erase_if(keys, [this](const std::string& key) {
-            return std::any_of(job_.tasks.begin(), job_.tasks.end(), [&key](const MetricTask& task) {
-                return contains(task.metric_keys, key) || contains(task.cpu_beside, key);
-            });
-        });
+        std::erase_if(keys, [this](const std::string& key) { return task_calculates(key); });
         kept = metric_labels(keys);
     }
     const VmafOptions& options = job_.options;
@@ -667,6 +669,13 @@ void JobRun::finish() {
             }
         }
     }
+    if (job_.cached_result && !saved_scores_fit()) {
+        for (const std::string& key : job_.cached_metrics.keys()) {
+            if (!task_calculates(key)) {
+                set_failure(metric_failures, key, saved_with_other_black_bars);
+            }
+        }
+    }
     // Cancelled before any task finished, the video is cancelled, whatever
     // scores of it are saved.
     const bool calculated = perceptual.has_value() || std::any_of(tasks_.begin(), tasks_.end(), [](const TaskState& state) {
@@ -844,6 +853,35 @@ std::optional<PerceptualTaskOutput> JobRun::perceptual_so_far() const {
 // JobRun._merged): FFmpeg's, with VMAF, NEG and VMAF v1 from the GPU's task
 // beside it, and the perceptual metrics so far. Nothing until a task, or a
 // pass of Vship's, has finished.
+bool JobRun::task_calculates(const std::string& key) const {
+    return std::any_of(job_.tasks.begin(), job_.tasks.end(), [&key](const MetricTask& task) {
+        return contains(task.metric_keys, key) || contains(task.cpu_beside, key);
+    });
+}
+
+// Whether the saved scores are of the picture this run scored. The black-bar
+// detection can find another box than the one they were made with (v2.4's
+// replaced FFmpeg's cropdetect): together they would mix scores of different
+// pictures without a word.
+bool JobRun::saved_scores_fit() const {
+    const ComparisonResult& saved = *job_.cached_result;
+    const auto same_box = [](const std::optional<CropBox>& first, const std::optional<CropBox>& second,
+                             const VideoInfo& info) {
+        const auto [width, height] = info.frame_size();
+        const auto cuts_nothing = [&](const std::optional<CropBox>& box) { return !box || box->is_noop(width, height); };
+        return first == second || (cuts_nothing(first) && cuts_nothing(second));
+    };
+    const auto fits = [&](const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop) {
+        return same_box(saved.source_crop, source_crop, job_.source_info) &&
+               same_box(saved.distorted_crop, distorted_crop, job_.distorted_info);
+    };
+    const std::optional<PerceptualTaskOutput> perceptual = perceptual_so_far();
+    return (!perceptual || fits(perceptual->source_crop, perceptual->distorted_crop)) &&
+           std::all_of(tasks_.begin(), tasks_.end(), [&fits](const TaskState& state) {
+               return !state.result || fits(state.result->source_crop, state.result->distorted_crop);
+           });
+}
+
 std::optional<ComparisonResult> JobRun::merged() const {
     const ComparisonResult* ffmpeg = nullptr;
     const ComparisonResult* gpu = nullptr;
@@ -856,7 +894,7 @@ std::optional<ComparisonResult> JobRun::merged() const {
         std::swap(ffmpeg, gpu);
     }
     // The saved scores the run keeps, if it keeps any.
-    const bool cached = job_.cached_result && !job_.cached_metrics.empty();
+    const bool cached = job_.cached_result && !job_.cached_metrics.empty() && saved_scores_fit();
     std::optional<ComparisonResult> result;
     if (ffmpeg != nullptr) {
         result = *ffmpeg;

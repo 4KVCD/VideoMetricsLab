@@ -346,6 +346,7 @@ const char* const templates[] = {
     "The range starts after the end of one of the videos.",
     "The range contains no frame of the videos.",
     "The chosen size is not smaller than the video without its black bars.",
+    "Its saved score was made with other black bars: it is calculated again on the next run.",
     "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them "
     "would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set "
     "black-bar handling to 'Auto-detect' so the bars are removed before comparison.",

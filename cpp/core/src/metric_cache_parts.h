@@ -52,6 +52,10 @@ bool is_auto_perceptual(const MetricRequestSpec& spec);
 // A JSON file's data, or nothing for a file that is missing or not JSON.
 std::optional<nlohmann::json> read_json(const std::filesystem::path& path);
 
+// Removes the scores saved in `directory` if its context cut other black bars
+// than `context`, which replaces it: they would answer as this picture's.
+void forget_scores_of_another_picture(const std::filesystem::path& directory, const nlohmann::json& context);
+
 // Whether a score file's metadata is of the format this app writes.
 bool current_format(const nlohmann::json& metadata);
 

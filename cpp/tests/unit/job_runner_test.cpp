@@ -503,6 +503,7 @@ TEST(JobRunner, AResultBuiltOnSavedScoresHasTheVideosFilmGrainAsScored) {
     job.metric_keys = {"vmaf", "ssimulacra2"};
     job.tasks = {{std::string(perceptual_task), {"ssimulacra2"}}};
     job.cached_result = result_with({{"vmaf", {0, 3, 6}}}, "version=vmaf_v0.6.1");  // no film grain read
+    job.cached_result->source_crop = CropBox{3840, 1608, 0, 276};  // the box output_with's task finds
     job.cached_metrics = job.cached_result->metric_results;
     const std::vector<VmafJob> jobs{job};
     Reported reported;
@@ -521,6 +522,34 @@ TEST(JobRunner, AResultBuiltOnSavedScoresHasTheVideosFilmGrainAsScored) {
     EXPECT_EQ(result.source_info.film_grain, 0u);
     EXPECT_EQ(result.distorted_info.film_grain, film_grain_h274);
     EXPECT_EQ(result.distorted_info.with_film_grain, false);
+}
+
+// Saved scores of another black-bar box are not mixed with the run's new ones:
+// the detection changes between versions, and they would mix different pictures.
+TEST(JobRunner, SavedScoresOfOtherBlackBarsAreNotKeptBesideNewOnes) {
+    VmafJob job = job_of({});
+    job.metric_keys = {"vmaf", "ssimulacra2"};
+    job.tasks = {{std::string(perceptual_task), {"ssimulacra2"}}};
+    job.cached_result = result_with({{"vmaf", {0, 3, 6}}}, "version=vmaf_v0.6.1");
+    job.cached_result->source_crop = CropBox{3840, 1600, 0, 280};
+    job.cached_metrics = job.cached_result->metric_results;
+    const std::vector<VmafJob> jobs{job};
+    Reported reported;
+    run_jobs(
+        jobs, 1, reported.events(),
+        [](const VmafJob&, const VmafOptions&, const ProgressCallback&, const StatusCallback&,
+           const CancelToken&) -> ComparisonResult { throw std::logic_error("no FFmpeg task"); },
+        [](const VmafJob&, const std::vector<std::string>&, bool, int, const PerceptualHooks&, const CancelToken&) {
+            return output_with({{"ssimulacra2", {0, 3, 6}}}, 9);  // its box: 3840x1608
+        },
+        false, 24, CancelToken());
+
+    ASSERT_EQ(reported.partial.size(), 1u);
+    const ComparisonResult& result = reported.partial.at(0).result;
+    EXPECT_EQ(reported.partial.at(0).failures.size(), 1u);
+    EXPECT_FALSE(result.has_metric("vmaf"));
+    EXPECT_TRUE(result.has_metric("ssimulacra2"));
+    EXPECT_EQ(result.source_crop, (CropBox{3840, 1608, 0, 276}));
 }
 
 // Saved scores, scored on frames 0 and 1.

@@ -1166,7 +1166,9 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
                                    const ComparisonResult& result, const std::string& label,
                                    const std::vector<MetricRequestSpec>& specs) {
     const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
-    write_atomically(directory / "context.json", python_json_compact(context_json(result, label, recipe)), ".tmp");
+    const std::string context = python_json_compact(context_json(result, label, recipe));
+    forget_scores_of_another_picture(directory, nlohmann::json::parse(context));
+    write_atomically(directory / "context.json", context, ".tmp");
     // A score saved under a request it does not answer would answer it from
     // then on: loading checks the saved request, not the score. A perceptual
     // score is saved under its own implementation's id (stored_spec), which

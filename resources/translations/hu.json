@@ -787,6 +787,7 @@
   "The range starts after the end of one of the videos.": "A tartomány az egyik videó vége után kezdődik.",
   "The range contains no frame of the videos.": "A tartomány a videók egyetlen képkockáját sem tartalmazza.",
   "The chosen size is not smaller than the video without its black bars.": "A választott méret nem kisebb, mint a videó a fekete sávok nélkül.",
+  "Its saved score was made with other black bars: it is calculated again on the next run.": "A mentett pontszám más fekete sávokkal készült: a következő futtatáskor újra kiszámítjuk.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nNem található támogatott GPU, ezért a CPU-n számítódnak. A CPU-s eszközök egyszerre egy állóképpárt pontoznak: 4K képkockánként kb. 1 mp az SSIMULACRA2 és 2 mp a Butteraugli, így egy film napokig tart (a fenti becslések a méréshez használthoz hasonló CPU-t feltételeznek). Állítson be tartományt, hogy csak a videók egy részét pontozza.\n\nMégis számolja?",
   "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Az időtartamok nem egyeznek ({source} és {test} mp). Ha csak egy közös részüket hasonlítja össze, állítson be mindkét fájlon belüli tartományt.",
   "Difference": "Különbség",

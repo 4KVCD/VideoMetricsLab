@@ -441,6 +441,22 @@ long long range_frame_count(const ComparisonResult& result, const ComparisonReci
 
 }  // namespace
 
+void cache_parts::forget_scores_of_another_picture(const std::filesystem::path& directory,
+                                                   const nlohmann::json& context) {
+    const std::optional<nlohmann::json> saved = current_context(directory);
+    if (!saved || same_crops(*saved, context)) {
+        return;
+    }
+    std::error_code error;
+    for (std::filesystem::directory_iterator entry(directory, error), end; !error && entry != end;
+         entry.increment(error)) {
+        if (entry->path().extension() == ".npz") {
+            std::error_code not_removed;  // left: the context's own check (made_by, range) still applies
+            std::filesystem::remove(entry->path(), not_removed);
+        }
+    }
+}
+
 std::optional<std::pair<ComparisonResult, std::string>> load_result(
     const std::filesystem::path& base, const std::filesystem::path& source, const std::filesystem::path& distorted,
     const ComparisonRecipe& recipe, const std::vector<MetricRequestSpec>& specs,
@@ -451,11 +467,19 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
     const std::optional<OtherRecipeFolder> automatic = auto_folder_for_source_only(base, source, distorted, recipe, context);
     // A range: the whole videos' scores cut to it, where it has none of its
     // own (and, for Source only, Auto's over the whole videos).
-    const std::optional<OtherRecipeFolder> whole = whole_video_folder(base, source, distorted, recipe, context);
+    std::optional<OtherRecipeFolder> whole_videos = whole_video_folder(base, source, distorted, recipe, context);
+    // With no comparison of the range's own, Auto's over the range must have cut
+    // the same source box as the whole videos' Source only: one result takes both.
+    const bool other_box = whole_videos && automatic &&
+                           whole_videos->context.value("source_crop", nlohmann::json()) !=
+                               automatic->context.value("source_crop", nlohmann::json());
+    const std::optional<OtherRecipeFolder> whole = other_box ? std::nullopt : std::move(whole_videos);
     const std::optional<OtherRecipeFolder> automatic_whole =
         recipe.range_start > 0 || recipe.range_end > 0
             ? auto_folder_for_source_only(base, source, distorted, whole_video_recipe(recipe),
-                                          whole ? std::optional(whole->context) : context)
+                                          whole       ? std::optional(whole->context)
+                                          : automatic ? std::optional(automatic->context)
+                                                      : context)
             : std::nullopt;
     if (!context && !automatic && !whole && !automatic_whole) {
         return std::nullopt;

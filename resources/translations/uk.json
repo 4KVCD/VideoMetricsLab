@@ -787,6 +787,7 @@
   "The range starts after the end of one of the videos.": "Діапазон починається після кінця одного з відео.",
   "The range contains no frame of the videos.": "Діапазон не містить жодного кадру відео.",
   "The chosen size is not smaller than the video without its black bars.": "Вибраний розмір не менший за відео без чорних смуг.",
+  "Its saved score was made with other black bars: it is calculated again on the next run.": "Збережену оцінку отримано з іншими чорними смугами: її буде обчислено заново під час наступного запуску.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nПідтримуваний GPU не знайдено, тож вони обчислюються на CPU. Інструменти CPU оцінюють по одній парі статичних зображень: близько 1 с для SSIMULACRA2 і 2 с для Butteraugli на кадр 4K, тож фільм займає дні (оцінки вище припускають CPU на кшталт того, на якому їх виміряно). Задайте діапазон, щоб оцінити лише частину відео.\n\nВсе одно обчислити?",
   "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Тривалості не збігаються ({source} проти {test} с). Задайте діапазон у межах обох файлів, якщо порівнюєте лише їхню спільну частину.",
   "Difference": "Різниця",
