@@ -13,6 +13,7 @@
 #include "vml/app_log.h"
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
+#include "vml/geometry.h"
 #include "vml/gpu_decoders.h"
 #include "vml/isolated.h"
 #include "vml/platform/process.h"
@@ -287,7 +288,7 @@ bool downloads_from_gpu(const std::string& pix_fmt, int width, int height) {
     // An odd-sized video decodes on NVIDIA's GPUs to the decoder's own,
     // larger picture with its chroma a row out; the software decode is the
     // video's own picture.
-    if ((width & 1) != 0 || (height & 1) != 0) {
+    if (is_odd_size(width, height)) {
         return false;
     }
     const std::string name = ascii_lower(pix_fmt);

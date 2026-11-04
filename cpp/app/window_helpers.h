@@ -4,6 +4,7 @@
 
 #include <QString>
 
+#include <chrono>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -16,6 +17,11 @@ namespace vml::app {
 
 inline QString qt_text(std::string_view text) {
     return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
+}
+
+// A steady clock in seconds: for the differences between two readings.
+inline double seconds_now() {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
 inline QString text_of(const std::filesystem::path& path) { return QString::fromStdString(platform::path_text(path)); }

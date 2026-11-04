@@ -301,7 +301,7 @@ CudaScorer::CudaScorer(int width, int height, int bit_depth,
         pictures.pic_prealloc_method = VMAF_CUDA_PICTURE_PREALLOCATION_METHOD_DEVICE;
         check_libvmaf(library_.cuda_preallocate_pictures(context_, pictures), "Allocating pictures");
         if (!on_device) {
-            upload_ = std::make_unique<CudaUpload>(width, height, bit_depth <= 8 ? 1 : 2);
+            upload_ = std::make_unique<CudaUpload>(width, height, static_cast<int>(bytes_per_sample(bit_depth)));
         }
     } catch (...) {
         close();
@@ -309,8 +309,7 @@ CudaScorer::CudaScorer(int width, int height, int bit_depth,
     }
     // A frame as FFmpeg writes it: the luma plane, then the chroma planes,
     // whose size FFmpeg rounds up for an odd width or height.
-    const auto w = static_cast<std::size_t>(width), h = static_cast<std::size_t>(height);
-    frame_bytes_ = (w * h + 2 * ((w + 1) / 2) * ((h + 1) / 2)) * (bit_depth <= 8 ? 1 : 2);
+    frame_bytes_ = PackedFrame(width, height, bit_depth).bytes();
 }
 
 CudaScorer::~CudaScorer() { close(); }

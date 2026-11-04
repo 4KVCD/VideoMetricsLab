@@ -40,6 +40,7 @@
 #include "vml/film_grain_scoring.h"
 #include "vml/number_format.h"
 #include "vml/run_file.h"
+#include "vml/stats.h"
 #include "vml/time_format.h"
 
 // The tab's text is app::tr's (i18n.h), as in main_window.cpp.
@@ -218,8 +219,7 @@ double start_time(const MetricCurve& curve, std::size_t index) {
 // The median of `values`, as numpy's: the middle one, or the mean of the two.
 double median(std::vector<double> values) {
     std::sort(values.begin(), values.end());
-    const std::size_t middle = values.size() / 2;
-    return values.size() % 2 == 1 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
+    return numpy_median(values);
 }
 
 ScoreStats stats_of(std::span<const float> values, const MetricDefinition& metric) {

@@ -48,6 +48,9 @@ inline Size resample_analysis_dimensions(const VideoInfo& source, const std::opt
     return content_size(source, source_crop);
 }
 
+// Whether a picture has an odd width or height, which 4:2:0 cannot halve.
+inline bool is_odd_size(int width, int height) { return (width & 1) != 0 || (height & 1) != 0; }
+
 // The height a resolution test scales a picture of `size` down to, `width`
 // wide: even, and the picture's own shape.
 int resample_down_height(int width, Size size);

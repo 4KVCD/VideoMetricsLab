@@ -51,8 +51,6 @@ QString path_key(const std::filesystem::path& path) {
     return qt_text(platform::path_text(error ? path : resolved)).toCaseFolded();
 }
 
-QString file_name(const std::filesystem::path& path) { return qt_text(platform::path_text(path.filename())); }
-
 // A bitrate as shown: in kb/s, or Mb/s from 1000 kb/s.
 QString rate_text(double kbps) {
     if (kbps >= 10'000) {
@@ -526,7 +524,7 @@ void BitratePanel::on_file_started(const QString& path) {
     if (BitrateEntry* entry = entry_for(path)) {
         entry->state = BitrateState::reading;
         status_label->setText(
-            app::tr("Analyzing {name}\xE2\x80\xA6", {{"name", file_name(platform::path_from_text(path.toStdString()))}}));
+            app::tr("Analyzing {name}\xE2\x80\xA6", {{"name", name_of(platform::path_from_text(path.toStdString()))}}));
         progress->setValue(0);
         refresh_table_values();
     }
@@ -573,7 +571,7 @@ void BitratePanel::on_failed(const QString& path, const QString& error) {
     entry->error = error;
     refresh_table_values();
     status_label->setText(app::tr("Could not analyze {name}: {error}",
-                                  {{"name", file_name(entry->path)}, {"error", error}}));
+                                  {{"name", name_of(entry->path)}, {"error", error}}));
 }
 
 void BitratePanel::on_worker_finished(BitrateWorker* worker) {
@@ -644,7 +642,7 @@ void BitratePanel::set_table_row(int row, const BitrateEntry& entry) {
     use->setCheckState(entry.enabled ? Qt::Checked : Qt::Unchecked);
     use->setData(Qt::DecorationRole, swatch_of(entry.color));
     use->setToolTip(app::tr("Click the color square to change this video's color in both graphs."));
-    QStringList values{file_name(entry.path),
+    QStringList values{name_of(entry.path),
                        entry.info ? media_info_string(*entry.info) : QString(),
                        entry.data ? qt_text(format_hms(entry.data->duration(), 2)) : QString(),
                        entry.data ? python_format("{count:,}", {{"count", entry.data->frame_count()}}) : QString(),
@@ -788,7 +786,7 @@ void BitratePanel::refresh_plot() {
         } else {
             chart->set_series(entry->series, {std::span(plot->times), std::span(plot->values), plot, entry->color, true});
         }
-        current_plots_.emplace_back(file_name(entry->path), plot);
+        current_plots_.emplace_back(name_of(entry->path), plot);
     }
     refresh_difference();
     on_hover_left();

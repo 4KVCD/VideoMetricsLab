@@ -62,12 +62,6 @@ double numpy_std(std::span<const double> values) {
     return std::sqrt(numpy_mean(squares));
 }
 
-// np.median of sorted values: the middle one, or the mean of the middle two.
-double numpy_median(std::span<const double> ordered) {
-    const std::size_t middle = ordered.size() / 2;
-    return ordered.size() % 2 == 1 ? numpy_mean(ordered.subspan(middle, 1)) : numpy_mean(ordered.subspan(middle - 1, 2));
-}
-
 // The q-th percentile of sorted values, interpolated linearly as numpy does.
 double percentile(std::span<const double> ordered, double q) {
     const double position = static_cast<double>(ordered.size() - 1) * q / 100.0;
@@ -118,6 +112,11 @@ std::vector<double> without_nan(std::span<const double> values) {
 }
 
 }  // namespace
+
+double numpy_median(std::span<const double> ordered) {
+    const std::size_t middle = ordered.size() / 2;
+    return ordered.size() % 2 == 1 ? numpy_mean(ordered.subspan(middle, 1)) : numpy_mean(ordered.subspan(middle - 1, 2));
+}
 
 double numpy_sum(std::span<const double> values) {
     // numpy's reduction starts from addition's identity, 0.0.

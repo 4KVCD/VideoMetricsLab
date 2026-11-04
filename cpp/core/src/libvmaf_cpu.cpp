@@ -29,9 +29,6 @@ constexpr std::array<CpuFeature, 3> cpu_features{{
 constexpr std::size_t picture_memory = std::size_t{200} << 20;
 constexpr std::size_t xpsnr_picture_memory = std::size_t{270} << 20;
 
-// A number kept to `decimals`, as Python's float(f"{value:.6f}") keeps it.
-double rounded(double value, int decimals) { return python_float(format_fixed(value, decimals)).value_or(value); }
-
 bool has(const std::vector<std::string>& metrics, std::string_view key) {
     return std::find(metrics.begin(), metrics.end(), key) != metrics.end();
 }
@@ -90,11 +87,10 @@ std::string cpu_library_build() { return "libvmaf-fast " + libvmaf_fast_version(
 CpuScorer::CpuScorer(int width, int height, int bit_depth, std::vector<std::string> metrics, int n_subsample,
                      int threads, int frame_rate)
     : library_(libvmaf()), metrics_(std::move(metrics)), step_(static_cast<unsigned>(std::max(1, n_subsample))) {
-    const std::size_t sample = bit_depth <= 8 ? 1 : 2;
     rows_ = static_cast<std::size_t>(height);
-    row_bytes_ = static_cast<std::size_t>(width) * sample;
+    row_bytes_ = static_cast<std::size_t>(width) * bytes_per_sample(bit_depth);
     luma_bytes_ = rows_ * row_bytes_;
-    frame_bytes_ = luma_bytes_ + 2 * ((static_cast<std::size_t>(width) + 1) / 2) * ((rows_ + 1) / 2) * sample;
+    frame_bytes_ = PackedFrame(width, height, bit_depth).bytes();
     threads = std::max(0, threads);
     const VmafConfiguration configuration{VMAF_LOG_LEVEL_ERROR, static_cast<unsigned>(threads), step_, 0, 0};
     VmafContext* context = nullptr;
@@ -321,7 +317,7 @@ PairScores CpuScorer::finish() {
             double value = 0;
             check_libvmaf(library_.feature_score_at_index(context_, name.c_str(), &value, frame),
                           "Reading " + metric + " for frame " + std::to_string(frame));
-            column.push_back(rounded(value, feature.decimals));
+            column.push_back(python_round(value, feature.decimals));
         }
         result.by_metric.emplace_back(metric, std::move(column));
     }
@@ -341,7 +337,7 @@ bool cpu_scores_xpsnr() {
 
 int cpu_pairs(int width, int height, int bit_depth, int threads, bool xpsnr) {
     const std::size_t picture = static_cast<std::size_t>((width + 31) & ~31) * static_cast<std::size_t>(height) *
-                                (bit_depth <= 8 ? 1 : 2);
+                                bytes_per_sample(bit_depth);
     const std::size_t memory = xpsnr ? xpsnr_picture_memory : picture_memory;
     const auto fit = static_cast<long long>(memory / (2 * picture));
     const long long wanted = std::min(8, std::max(1, threads)) + 1;
@@ -376,7 +372,7 @@ PairScores score_decoded_cpu(const VideoInfo& source, const VideoInfo& distorted
         plans.push_back(plan);
     }
     const std::size_t luma_bytes = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) *
-                                   (bit_depth > 8 ? 2 : 1);
+                                   bytes_per_sample(bit_depth);
     if (std::any_of(plans.begin(), plans.end(),
                     [&](const DecodePlan& plan) { return plan.frame_bytes() != luma_bytes; })) {
         throw GpuDecodeUnavailableError("the decoders' frames are not the size compared at");

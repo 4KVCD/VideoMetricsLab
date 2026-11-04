@@ -15,6 +15,17 @@
 
 namespace vml {
 
+std::string csv_cell(const std::string& text) {
+    if (text.find_first_of(",\"\r\n") == std::string::npos) {
+        return text;
+    }
+    std::string quoted = "\"";
+    for (const char c : text) {
+        quoted += c == '"' ? std::string("\"\"") : std::string(1, c);
+    }
+    return quoted + "\"";
+}
+
 namespace {
 
 using Json = nlohmann::ordered_json;
@@ -67,17 +78,6 @@ void flatten(const Json& value, const std::string& name, std::vector<std::pair<s
         return;
     }
     cells.emplace_back(name, value.is_string() ? value.get<std::string>() : value.is_null() ? "" : value.dump());
-}
-
-std::string csv_cell(const std::string& text) {
-    if (text.find_first_of(",\"\r\n") == std::string::npos) {
-        return text;
-    }
-    std::string quoted = "\"";
-    for (const char c : text) {
-        quoted += c == '"' ? std::string("\"\"") : std::string(1, c);
-    }
-    return quoted + "\"";
 }
 
 }  // namespace

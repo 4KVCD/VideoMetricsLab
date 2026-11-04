@@ -215,7 +215,7 @@ bool full_range_gray(const ColourTags& info) {
     static const std::regex gray("gray(?:(?:9|10|12|14|16)(?:le|be)?)?");
     const std::string range = ascii_lower(python_strip(info.color_range));
     return std::regex_match(ascii_lower(python_strip(info.pix_fmt)), gray) &&
-           (range == "pc" || range == "jpeg" || range == "full");
+           is_full_range_name(range);
 }
 
 // Whether a saved XPSNR is FFmpeg's xpsnr filter's of a pair compared at more

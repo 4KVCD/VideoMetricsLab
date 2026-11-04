@@ -15,7 +15,9 @@
 #include "vml/ffmpeg_run.h"
 #include "vml/film_grain_detect.h"
 #include "vml/frame_sync.h"
+#include "vml/colour.h"
 #include "vml/geometry.h"
+#include "vml/number_format.h"
 #include "vml/gpu_frames.h"
 #include "vml/hardware_decoding.h"
 #include "vml/model_select.h"
@@ -117,6 +119,29 @@ TEST(Decisions, AResolutionTestsSizeFollowsAWidthOrHeightTyped) {
 
     EXPECT_EQ(resample_target_of_width(1920).label, "1080p");
     EXPECT_EQ(resample_target_of_width(1002).label, "1002w");
+}
+
+// Python's round() from the number's exact binary value: 2.5 is a true half, to
+// even; 2.675 is just under its half.
+TEST(Decisions, RoundingIsPythons) {
+    EXPECT_EQ(python_round(2.5, 0), 2.0);
+    EXPECT_EQ(python_round(3.5, 0), 4.0);
+    EXPECT_EQ(python_round(2.675, 2), 2.67);
+}
+
+// The names of full range are one test; an untagged video's rule differs by where
+// it is read: for a video's own picture "unknown" counts as untagged.
+TEST(Decisions, FullRangeByNameAndUntagged) {
+    EXPECT_TRUE(is_full_range_name("jpeg"));
+    EXPECT_FALSE(is_full_range_name("unknown"));
+    VideoInfo video;
+    video.pix_fmt = "yuvj420p";
+    video.color_range = "unknown";
+    EXPECT_TRUE(video.full_range());
+    video.pix_fmt = "yuv420p";
+    EXPECT_FALSE(video.full_range());
+    video.color_range = "pc";
+    EXPECT_TRUE(video.full_range());
 }
 
 TEST(Decisions, AMacsGpuDecodesWhereTheCallerAllowsIt) {

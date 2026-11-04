@@ -193,7 +193,7 @@ bool scale_check(const std::string& ffmpeg, const std::string& algorithm, int de
     }
     const int exit_code = child.wait();
     reader.join();
-    const std::size_t sample = depth > 8 ? 2 : 1;
+    const std::size_t sample = bytes_per_sample(depth);
     const std::size_t luma = static_cast<std::size_t>(stack_width) * stack_height * sample;
     if (exit_code != 0 || made.size() != luma * 3 / 2) {
         why = "FFmpeg did not make the check's picture (" + std::to_string(made.size()) + " bytes, exit code " +

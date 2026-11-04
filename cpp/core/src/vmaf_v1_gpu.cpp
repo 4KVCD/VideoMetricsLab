@@ -18,6 +18,7 @@
 #include "vml/host_frames.h"
 #include "vml/isolated.h"
 #include "vml/model_select.h"
+#include "vml/geometry.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -735,7 +736,7 @@ V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::
     }
     s.check(engine.create_v1(&s.gpu, *device, width, height, bit_depth, flags, values.data()), "Starting Vulkan");
     if (shared != nullptr) {
-        if ((width & 1) != 0 || (height & 1) != 0) {
+        if (is_odd_size(width, height)) {
             throw VmafV1Error("an odd size is not handed over on the GPU");
         }
         s.shared.emplace(engine, s.gpu, *shared);
@@ -753,7 +754,7 @@ V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::
     if (!s.on_gpu.contains(v1_cambi) || !s.on_gpu.contains(v1_speed)) {
         s.start_cpu_features(options, width, height, bit_depth, threads);
     }
-    s.sample = bit_depth <= 8 ? 1 : 2;
+    s.sample = bytes_per_sample(bit_depth);
     s.packed = PackedFrame(width, height, bit_depth);
     frame_bytes_ = s.packed.bytes();
 }
@@ -991,7 +992,7 @@ V1Reference v1_cpu_reference(const std::filesystem::path& model, int width, int 
         static_cast<unsigned>(2 * (std::max(1, threads) + 2))};
     check_libvmaf(library.preallocate_pictures(handles.context, pool), "Allocating pictures");
     const PackedFrame packed(width, height, bit_depth);
-    const std::size_t sample = bit_depth <= 8 ? 1 : 2;
+    const std::size_t sample = bytes_per_sample(bit_depth);
     for (std::size_t index = 0; index < reference.size(); ++index) {
         std::array<VmafPicture, 2> pictures{};
         const std::array<const std::vector<std::uint8_t>*, 2> frames{&reference[index], &distorted[index]};

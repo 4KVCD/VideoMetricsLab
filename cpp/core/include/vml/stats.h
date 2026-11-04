@@ -47,6 +47,9 @@ struct ScoreStats {
 // error grows with log2(n) rather than n, in numpy's exact order.
 double numpy_sum(std::span<const double> values);
 
+// np.median of sorted values: the middle one, or the mean of the middle two.
+double numpy_median(std::span<const double> ordered);
+
 // One number for a whole run, by the metric's way of averaging, or nothing
 // when no frame has a score. NaN frames (not calculated) are left out;
 // infinities are not, because for XPSNR they mean an identical frame.

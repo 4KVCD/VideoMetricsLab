@@ -33,8 +33,6 @@ using Json = nlohmann::ordered_json;
 // What the JSON is: its own format, not compare's results (results_format).
 constexpr const char* bitrate_format = "bitrate-1";
 
-std::string name_of(const std::filesystem::path& path) { return platform::path_text(path.filename()); }
-
 // kb/s as the table shows it: Mb/s, to a thousandth.
 std::string mbps_text(double kbps) { return format_fixed(kbps / 1000, 3); }
 

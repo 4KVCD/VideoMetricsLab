@@ -16,6 +16,7 @@
 #include "vml/geometry.h"
 #include "vml/platform/system.h"
 #include "vml/video_playback.h"
+#include "window_helpers.h"
 
 namespace vml::app {
 
@@ -36,10 +37,6 @@ constexpr double audio_resume_seconds = 1.0;
 constexpr double found_for_seconds = 2.0;
 
 const QColor background("#171717");
-
-double seconds_now() {
-    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
-}
 
 // Whether `path` is a file: found less than found_for_seconds ago, or on disk
 // now. A file found missing is looked for again at once.

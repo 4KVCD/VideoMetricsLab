@@ -88,7 +88,7 @@ void check_libvmaf(int error, const std::string& what) {
     }
 }
 
-double to_6_decimals(double value) { return python_float(format_fixed(value, 6)).value_or(value); }
+double to_6_decimals(double value) { return python_round(value, 6); }
 
 Libvmaf::Libvmaf(const std::filesystem::path& path)
     : library(path),

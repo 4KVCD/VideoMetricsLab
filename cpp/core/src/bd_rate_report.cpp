@@ -10,6 +10,7 @@
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/results_summary.h"
 #include "vml/translatable.h"
 
 namespace vml {
@@ -281,18 +282,6 @@ std::string table_row(const std::string& name, const BdRateRow& row, const BdRat
         line += " " + bd_rate_percent_text(row.percent.at(metric)) + " |";
     }
     return line + "\n";
-}
-
-// A CSV cell: quoted where it holds a comma, a quote or a line break.
-std::string csv_cell(const std::string& text) {
-    if (text.find_first_of(",\"\r\n") == std::string::npos) {
-        return text;
-    }
-    std::string quoted = "\"";
-    for (const char c : text) {
-        quoted += c == '"' ? std::string("\"\"") : std::string(1, c);
-    }
-    return quoted + "\"";
 }
 
 // A row of the CSV file: the name, then the group and counts (where `sequence`

@@ -157,8 +157,7 @@ VideoColour video_colour(const VideoInfo& info, bool rgb, bool full_range_untagg
     }
 
     const std::string range_name = ascii_lower(info.color_range);
-    if (range_name == "pc" || range_name == "jpeg" || range_name == "full" ||
-        (range_name.empty() && full_range_untagged)) {
+    if (is_full_range_name(range_name) || (range_name.empty() && full_range_untagged)) {
         colour.full_range = true;
     } else if (range_name.empty() || range_name == "unknown" || range_name == "unspecified" || range_name == "tv" ||
                range_name == "mpeg" || range_name == "limited") {

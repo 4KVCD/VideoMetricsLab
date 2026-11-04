@@ -80,8 +80,7 @@ std::optional<double> parse_percent(const QString& text) {
 QString percent_text(double factor) {
     // As Python's f"{round(factor * 100, 1):g}%": round() gives the double
     // nearest the correctly rounded tenth, as reading that tenth back does.
-    const double rounded = python_float(format_fixed(factor * 100, 1)).value_or(factor * 100);
-    return QString::fromStdString(format_general(rounded) + "%");
+    return QString::fromStdString(format_general(python_round(factor * 100, 1)) + "%");
 }
 
 }  // namespace vml::app

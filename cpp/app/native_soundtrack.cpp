@@ -26,6 +26,7 @@
 #include "native_probe.h"
 #include "vml/app_log.h"
 #include "vml/platform/system.h"
+#include "window_helpers.h"
 
 #ifdef _WIN32
 using Microsoft::WRL::ComPtr;
@@ -48,10 +49,6 @@ constexpr REFERENCE_TIME buffer_hns = 1'000'000;
 constexpr int queue_buffers = 4;
 constexpr double queue_buffer_ms = 25;
 #endif
-
-double seconds_now() {
-    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
-}
 
 QString error_text(int code) {
     std::array<char, AV_ERROR_MAX_STRING_SIZE> text{};

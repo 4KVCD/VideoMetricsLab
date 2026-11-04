@@ -20,6 +20,12 @@
 
 namespace vml {
 
+// Whether a colour range's name, in lower case, says full range. A video with
+// no tag has its own rule where it is read (VideoInfo::full_range, video_colour).
+inline bool is_full_range_name(std::string_view lowered) {
+    return lowered == "pc" || lowered == "jpeg" || lowered == "full";
+}
+
 // A colour tag that has no value here.
 class UnsupportedColourError : public std::invalid_argument {
 public:

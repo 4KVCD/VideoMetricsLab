@@ -255,11 +255,11 @@ VulkanScorer::VulkanScorer(int width, int height, int bit_depth,
             }
         }
     }
-    const std::size_t sample = bit_depth <= 8 ? 1 : 2;
+    const std::size_t sample = bytes_per_sample(bit_depth);
     const auto columns = static_cast<std::size_t>(width), rows = static_cast<std::size_t>(height);
     luma_stride_ = static_cast<std::ptrdiff_t>(columns * sample);
     luma_bytes_ = columns * rows * sample;
-    frame_bytes_ = luma_bytes_ + 2 * ((columns + 1) / 2) * ((rows + 1) / 2) * sample;
+    frame_bytes_ = PackedFrame(width, height, bit_depth).bytes();
 }
 
 VulkanScorer::~VulkanScorer() { release(); }

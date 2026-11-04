@@ -22,6 +22,9 @@
 
 namespace vml::cli {
 
+// A file's name, without its folder, as the reports show it.
+std::string name_of(const std::filesystem::path& path);
+
 // Writes `text` and a line end to stderr.
 void print_error(const std::string& text);
 

@@ -20,8 +20,6 @@ namespace {
 
 using Json = nlohmann::ordered_json;
 
-std::string name_of(const std::filesystem::path& path) { return platform::path_text(path.filename()); }
-
 // A video's media information on one line.
 std::string media_text(const VideoInfo& info) {
     return std::to_string(info.width) + "x" + std::to_string(info.height) + ", " + format_fixed(info.fps, 3) +

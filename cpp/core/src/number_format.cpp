@@ -7,6 +7,8 @@
 #include <string_view>
 #include <system_error>
 
+#include "vml/python_text.h"
+
 namespace vml {
 
 namespace {
@@ -96,6 +98,10 @@ std::string python_repr(double value) {
     }
     text += std::to_string(magnitude);
     return text;
+}
+
+double python_round(double value, int decimals) {
+    return python_float(format_fixed(value, decimals)).value_or(value);
 }
 
 std::string format_fixed(double value, int decimals) {

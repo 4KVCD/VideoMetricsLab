@@ -1,5 +1,7 @@
 #include "vml/video.h"
 
+#include "vml/colour.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -81,7 +83,7 @@ bool VideoInfo::is_raw_stream() const {
 
 bool VideoInfo::full_range() const {
     const std::string range = ascii_lower(color_range);
-    if (range == "pc" || range == "jpeg" || range == "full") {
+    if (is_full_range_name(range)) {
         return true;
     }
     const bool untagged = range.empty() || range == "unknown" || range == "unspecified";

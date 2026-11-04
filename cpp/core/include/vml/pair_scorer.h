@@ -32,6 +32,9 @@ struct Plane {
 // A 4:2:0 frame's Y, U and V planes, wherever each one is.
 using FramePlanes = std::array<Plane, 3>;
 
+// The bytes of a sample at `bit_depth`: 16 bits hold everything above 8.
+inline std::size_t bytes_per_sample(int bit_depth) { return bit_depth <= 8 ? 1 : 2; }
+
 // Where the planes of a packed frame are: 4:2:0, as FFmpeg's rawvideo writes
 // it, 16-bit little-endian samples above 8 bits, each plane's rows packed and
 // the planes one after the other.
@@ -39,7 +42,7 @@ class PackedFrame {
 public:
     PackedFrame() = default;
     PackedFrame(int width, int height, int bit_depth) {
-        const std::size_t sample = bit_depth <= 8 ? 1 : 2;
+        const std::size_t sample = bytes_per_sample(bit_depth);
         const auto columns = static_cast<std::size_t>(width), rows = static_cast<std::size_t>(height);
         const std::size_t chroma_bytes = ((columns + 1) / 2) * ((rows + 1) / 2) * sample;
         offsets_ = {0, columns * rows * sample, columns * rows * sample + chroma_bytes};

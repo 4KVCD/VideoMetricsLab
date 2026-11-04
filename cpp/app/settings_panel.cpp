@@ -40,6 +40,7 @@
 #include "vml/platform/system.h"
 #include "vml/vship.h"
 #include "vship_names.h"
+#include "window_helpers.h"
 
 // The panel's text is app::tr's: inside a Q_OBJECT class, tr() is Qt's.
 namespace vml::app {
@@ -61,8 +62,6 @@ const std::vector<std::pair<std::string, QString>> default_metric_boxes{
     {"butteraugli", "Butteraugli"},
     {"cvvdp", "CVVDP"},
 };
-
-QString text_of(const std::filesystem::path& path) { return QString::fromStdString(platform::path_text(path)); }
 
 QString text_of(const std::string& text) { return QString::fromStdString(text); }
 

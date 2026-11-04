@@ -1,10 +1,8 @@
 #include "vml/run_file.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cerrno>
 #include <cmath>
-#include <cstdlib>
 #include <fstream>
 #include <limits>
 #include <variant>
@@ -37,39 +35,12 @@ Json json_float(double value) {
     return value;
 }
 
-// Python's float() of a text: surrounding spaces, "inf", "nan" and the
-// like allowed, nothing else after the number.
-double python_float(const std::string& text) {
-    std::size_t first = 0;
-    std::size_t last = text.size();
-    while (first < last && std::isspace(static_cast<unsigned char>(text[first])) != 0) {
-        ++first;
+// Python's float() of a text, which raises on anything but a number.
+double float_or_throw(const std::string& text) {
+    if (const std::optional<double> number = python_float(text)) {
+        return *number;
     }
-    while (last > first && std::isspace(static_cast<unsigned char>(text[last - 1])) != 0) {
-        --last;
-    }
-    const std::string number = text.substr(first, last - first);
-    std::string folded = number;
-    for (char& c : folded) {
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-    const bool negative = !folded.empty() && folded.front() == '-';
-    const std::string bare = !folded.empty() && (folded.front() == '-' || folded.front() == '+') ? folded.substr(1) : folded;
-    if (bare == "inf" || bare == "infinity") {
-        return negative ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
-    }
-    if (bare == "nan") {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
-    // Digits only from here: strtod would also take hexadecimal, which
-    // Python's float() does not.
-    const bool digits = !bare.empty() && bare.find_first_not_of("0123456789.e+-") == std::string::npos;
-    char* end = nullptr;
-    const double value = digits ? std::strtod(number.c_str(), &end) : 0.0;
-    if (!digits || end != number.c_str() + number.size()) {
-        throw std::invalid_argument("could not convert string to float: " + python_string_repr(text));
-    }
-    return value;
+    throw std::invalid_argument("could not convert string to float: " + python_string_repr(text));
 }
 
 // A score read back from json_float's form.
@@ -78,7 +49,7 @@ double float_from_json(const nlohmann::json& value) {
         return std::numeric_limits<double>::quiet_NaN();
     }
     if (value.is_string()) {
-        return python_float(value.get<std::string>());
+        return float_or_throw(value.get<std::string>());
     }
     if (value.is_boolean()) {
         return value.get<bool>() ? 1.0 : 0.0;

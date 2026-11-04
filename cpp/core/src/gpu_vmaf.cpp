@@ -15,6 +15,7 @@
 #include "vml/host_frames.h"
 #include "vml/isolated.h"
 #include "vml/libvmaf_cpu.h"
+#include "vml/geometry.h"
 #include "vml/number_format.h"
 #include "vml/platform/pipe.h"
 #include "vml/platform/system.h"
@@ -240,7 +241,7 @@ GpuModels scores_on_gpu(bool compute_vmaf, bool compute_vmaf_neg, const std::str
                         std::vector<std::pair<std::string, std::string>>* check_failures) {
     // Deeper than 10 bits, or at an odd size, the frame pairs could not
     // cross FFmpeg's overlay, which the Python app can pair them with.
-    if (!enabled || bit_depth > 10 || (size && ((size->first & 1) != 0 || (size->second & 1) != 0))) {
+    if (!enabled || bit_depth > 10 || (size && is_odd_size(size->first, size->second))) {
         return {};
     }
     GpuModels models = gpu_models(compute_vmaf, compute_vmaf_neg, model, compute_vmaf_v1, model_v1);
@@ -713,7 +714,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     }
     // The decoders write each luma plane into memory of the size compared at.
     const std::size_t luma_bytes = static_cast<std::size_t>(plan.width) * static_cast<std::size_t>(plan.height) *
-                                   (plan.bit_depth > 8 ? 2 : 1);
+                                   bytes_per_sample(plan.bit_depth);
     if (std::any_of(plans.begin(), plans.end(), [&](const DecodePlan& p) { return p.frame_bytes() != luma_bytes; })) {
         throw GpuDecodeUnavailableError("the decoders' frames are not the size compared at");
     }

@@ -24,6 +24,8 @@ std::string right_justified(const std::string& text, std::size_t width) {
 
 }  // namespace
 
+std::string name_of(const std::filesystem::path& path) { return platform::path_text(path.filename()); }
+
 void print_error(const std::string& text) { platform::write_text(platform::Stream::error, text + "\n"); }
 
 std::string text_file(std::string text) {

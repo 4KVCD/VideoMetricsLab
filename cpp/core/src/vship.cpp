@@ -834,8 +834,7 @@ std::optional<std::pair<VshipImageFormat, std::string>> passthrough_format(const
     // 2^(depth-8), so (v << 6) / 256 and v / 4 are the same float. Full
     // range divides by 2^depth - 1, where the two differ.
     const std::string range = ascii_lower(info.color_range);
-    if (image.pixel_format == "yuv420p10le" && native == "p010le" && !image.full_range && range != "pc" &&
-        range != "jpeg" && range != "full") {
+    if (image.pixel_format == "yuv420p10le" && native == "p010le" && !image.full_range && !is_full_range_name(range)) {
         VshipImageFormat sixteen = format_yuv("420", 16);
         return std::pair(sixteen, std::string("p010le"));
     }

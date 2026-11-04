@@ -99,9 +99,6 @@ struct AnswerKey {
     auto operator<=>(const AnswerKey&) const = default;
 };
 
-// Python's round(value, digits): the decimal nearest, read back.
-double python_round(double value, int digits) { return std::strtod(format_fixed(value, digits).c_str(), nullptr); }
-
 // The key for a file, or nothing when the file cannot be identified (then
 // nothing is kept).
 std::optional<AnswerKey> answer_key(const std::filesystem::path& path, double sampled_duration) {
@@ -774,7 +771,7 @@ Pictures run_preview_through_the_app(const std::string& ffmpeg, const VideoInfo&
         // so that a start on a half millisecond is rounded as that text
         // rounds it); the window's length to the frame before the last
         // wanted, so that it ends with that one (WindowCut)
-        const double start_ms = python_float(format_fixed(start, 3)).value_or(start);
+        const double start_ms = python_round(start, 3);
         const double frame = info.fps > 0 ? 1.0 / info.fps : 1.0 / 24;
         return run_fed_preview(ffmpeg, info, FeedWindow{start_ms, frame * (frames - 1)}, cancel);
     } catch (const FilmGrainRefusal& refusal) {

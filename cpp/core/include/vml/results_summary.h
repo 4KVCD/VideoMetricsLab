@@ -48,4 +48,7 @@ void add_media(nlohmann::ordered_json& entry, const VideoInfo& info);
 // holds a comma, a quote or a line break.
 std::string results_csv(const nlohmann::ordered_json& document);
 
+// A CSV cell: quoted where it holds a comma, a quote or a line break.
+std::string csv_cell(const std::string& text);
+
 }  // namespace vml

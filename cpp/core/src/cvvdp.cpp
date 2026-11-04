@@ -16,9 +16,6 @@ namespace {
 
 using Json = nlohmann::ordered_json;
 
-// Python's round(value, digits): the decimal text {:.Nf} gives, read back.
-double rounded(double value, int digits) { return python_float(format_fixed(value, digits)).value(); }
-
 // Python's int() of a resolution: the whole part.
 long long whole(double value) { return static_cast<long long>(value); }
 
@@ -153,13 +150,13 @@ void CvvdpDisplay::validate() const {
 
 nlohmann::ordered_json CvvdpDisplay::identity() const {
     return Json{{"resolution", Json::array({whole(width), whole(height)})},
-                {"diagonal_inches", rounded(diagonal_inches, 4)},
-                {"viewing_distance_m", rounded(viewing_distance_m, 4)},
-                {"peak_luminance", rounded(peak_luminance, 4)},
-                {"contrast", rounded(contrast, 4)},
-                {"ambient_lux", rounded(ambient_lux, 4)},
-                {"reflectivity", rounded(reflectivity, 6)},
-                {"exposure", rounded(exposure, 4)},
+                {"diagonal_inches", python_round(diagonal_inches, 4)},
+                {"viewing_distance_m", python_round(viewing_distance_m, 4)},
+                {"peak_luminance", python_round(peak_luminance, 4)},
+                {"contrast", python_round(contrast, 4)},
+                {"ambient_lux", python_round(ambient_lux, 4)},
+                {"reflectivity", python_round(reflectivity, 6)},
+                {"exposure", python_round(exposure, 4)},
                 {"hdr", hdr}};
 }
 

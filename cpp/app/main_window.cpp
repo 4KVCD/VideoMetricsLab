@@ -151,9 +151,7 @@ MainWindow::MainWindow() {
 
     // A run's clock, and its tick: once a second, its lines' new figures and
     // the time it has taken.
-    clock_ = [] {
-        return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    };
+    clock_ = seconds_now;
     run_tick_timer_ = new QTimer(this);
     run_tick_timer_->setInterval(1000);
     connect(run_tick_timer_, &QTimer::timeout, this, [this] { on_run_tick(); });

@@ -794,8 +794,7 @@ std::optional<int> xpsnr_frame_rate(const VideoInfo& info) {
 // rows are not padded (ffmpeg_scores_xpsnr): up to 12 bits, and an even size
 // above 2048x1152 (FFmpeg's filter reads beyond the picture of an odd one).
 bool xpsnr_in_app(int width, int height, int bit_depth) {
-    const bool odd = width % 2 != 0 || height % 2 != 0;
-    if (bit_depth > 12 || (static_cast<long long>(width) * height > 2048LL * 1152 && odd)) {
+    if (bit_depth > 12 || (static_cast<long long>(width) * height > 2048LL * 1152 && is_odd_size(width, height))) {
         return false;
     }
     return cpu_scores_xpsnr();
