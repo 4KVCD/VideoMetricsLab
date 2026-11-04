@@ -1566,13 +1566,20 @@ struct PictureGrid {
 };
 
 // The lowest shown timestamp among the packets `reader` gives, up to `limit`, as
-// the reader gives them: its packets come in decode order. Nothing without one.
+// the reader gives them: its packets come in decode order. Nothing without one,
+// and nothing for a file whose packets are marked to be discarded (an MP4 cut
+// mid-GOP by stream copy, whose edit list hides the pictures before the cut): a
+// run from the start never hands them out, so counting from them would number
+// every picture after a seek too high.
 std::optional<long long> lowest_pts(PacketReader& reader, int limit) {
     std::optional<long long> lowest;
     std::vector<std::uint8_t> data;
     long long pts = 0;
     int flags = 0;
     for (int read = 0; read < limit && reader.next(data, pts, flags); ++read) {
+        if (flags & discard_flag) {
+            return std::nullopt;
+        }
         if (!(flags & no_picture_flag) && (!lowest || pts < *lowest)) {
             lowest = pts;
         }
