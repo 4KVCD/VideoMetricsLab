@@ -44,6 +44,7 @@ struct State {
     std::ofstream file;  // the log, while it is written
     std::filesystem::path path;
     std::uintmax_t size = 0;  // the log's length in bytes
+    std::uintmax_t next_rotation = 0;  // the length to try again at, after a rotation that failed
     Forward forward;
     std::optional<int> console;  // the lowest level written to standard error
 };
@@ -156,10 +157,22 @@ std::filesystem::path numbered(const std::filesystem::path& path, int number) {
 
 // Python's RotatingFileHandler.doRollover: each older file one number up,
 // the oldest dropped, the log the first of them, and a new log started. A
-// file another program holds stays where it is, and the log goes on in it.
+// log another program holds stays where it is with the older ones, the log
+// goes on in it, and this is tried again only after another bit of log.
 void rotate(State& log) {
     log.file.close();
     std::error_code error;
+    std::filesystem::path moved = log.path;
+    moved += ".rotating";
+    std::filesystem::rename(log.path, moved, error);
+    if (error) {
+        log.file.open(log.path, std::ios::binary | std::ios::app);
+        const std::uintmax_t held = std::filesystem::file_size(log.path, error);
+        log.size = error ? 0 : held;
+        log.next_rotation = log.size + max_bytes / 8;
+        return;
+    }
+    log.next_rotation = 0;
     for (int number = backups - 1; number > 0; --number) {
         const std::filesystem::path from = numbered(log.path, number);
         if (std::filesystem::exists(from, error)) {
@@ -170,7 +183,10 @@ void rotate(State& log) {
     }
     const std::filesystem::path first = numbered(log.path, 1);
     std::filesystem::remove(first, error);
-    std::filesystem::rename(log.path, first, error);
+    std::filesystem::rename(moved, first, error);
+    if (error) {
+        std::filesystem::rename(moved, log.path, error);  // goes on in it rather than leave it under another name
+    }
     log.file.open(log.path, std::ios::binary | std::ios::app);
     const std::uintmax_t size = std::filesystem::file_size(log.path, error);
     log.size = error ? 0 : size;
@@ -193,7 +209,7 @@ void write_line(int level, std::string_view name, std::string_view text) {
     }
     const std::string line = file_line(level, name, text);
     // As Python's shouldRollover: never an empty file.
-    if (log.size > 0 && log.size + line.size() >= max_bytes) {
+    if (log.size > 0 && log.size + line.size() >= std::max<std::uintmax_t>(max_bytes, log.next_rotation)) {
         rotate(log);
     }
     log.file.write(line.data(), static_cast<std::streamsize>(line.size()));
@@ -327,6 +343,7 @@ std::vector<std::string> export_logs(const std::filesystem::path& destination,
     if (failure.empty()) {
         std::ofstream out(destination, std::ios::binary | std::ios::trunc);
         out.write(static_cast<const char*>(archive), static_cast<std::streamsize>(size));
+        out.close();  // the last of it may fail only now
         if (!out) {
             failure = platform::path_text(destination) + " could not be written";
         }

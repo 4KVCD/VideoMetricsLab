@@ -29,6 +29,14 @@ std::string name_of(const std::filesystem::path& path) { return platform::path_t
 
 void print_error(const std::string& text) { platform::write_text(platform::Stream::error, text + "\n"); }
 
+bool print_results(const std::string& text) {
+    if (platform::write_text(platform::Stream::output, text)) {
+        return true;
+    }
+    print_error("The results could not be written to the standard output.");
+    return false;
+}
+
 std::string text_file(std::string text) {
 #ifdef _WIN32
     std::string crlf;

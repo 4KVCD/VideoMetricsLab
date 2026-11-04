@@ -155,7 +155,10 @@ std::vector<std::filesystem::path> glob(const std::string& pattern) {
         const std::string compared_text = platform::name_as_compared(text);
         std::vector<std::filesystem::path> next;
         for (const std::filesystem::path& folder : found) {
-            if (!has_magic(text)) {
+            // A folder really named so ("[Group] Show") is not a pattern. Python's
+            // glob would read it as a set of letters, and find nothing.
+            std::error_code named;
+            if (!has_magic(text) || std::filesystem::exists(folder / part, named)) {
                 next.push_back(folder / part);
                 continue;
             }
@@ -922,6 +925,12 @@ std::filesystem::path apply_settings(const Settings& settings) {
     return cache_folder;
 }
 
+// Whether looking for `video`'s film grain failed (detect_film_grain).
+bool film_grain_not_known(const VideoInfo& video) {
+    const std::string codec = ascii_lower(video.codec_name);
+    return !video.film_grain && (codec == "h264" || codec == "hevc" || codec == "vvc" || codec == "av1");
+}
+
 // Plans each test video's comparison with the reference: the metrics it can
 // be compared on, notes on what the reader should know, and the jobs that
 // calculate what is not saved: its own, and one of CVVDP alone for each
@@ -1130,6 +1139,11 @@ void ComparisonPlanner::add_film_grain_notes(TestVideo& video) const {
     const std::pair<const VideoInfo*, const char*> sides[] = {{&video.source, "the reference"},
                                                               {&*video.info, "the test video"}};
     for (const auto& [info, which] : sides) {
+        if (film_grain_not_known(*info)) {
+            video.notes.push_back(std::string("the film grain of ") + which +
+                                  " could not be looked for (FFmpeg failed or took too long): whether its score "
+                                  "includes any is not known");
+        }
         const FilmGrainScoring grain = effective_film_grain(*info);
         if (!grain.why_without.empty()) {
             video.notes.push_back(std::string("the film grain of ") + which + " is left out: " + grain.why_without);
@@ -1140,7 +1154,8 @@ void ComparisonPlanner::add_film_grain_notes(TestVideo& video) const {
 void ComparisonPlanner::note_argument_use(const VideoInfo& video) {
     raw_stream_used_ = raw_stream_used_ || video.is_raw_stream();
     raw_yuv_used_ = raw_yuv_used_ || video.format_name == "rawvideo";
-    film_grain_used_ = film_grain_used_ || effective_film_grain(video).scoring != GrainScoring::none;
+    film_grain_used_ = film_grain_used_ || effective_film_grain(video).scoring != GrainScoring::none ||
+                       film_grain_not_known(video);
     vvc_used_ = vvc_used_ || ascii_lower(video.codec_name) == "vvc";
 }
 
@@ -1156,6 +1171,15 @@ std::vector<std::string> ComparisonPlanner::unused_argument_notes() const {
     if ((arguments_.size || arguments_.pix_fmt) && !raw_yuv_used_) {
         notes.emplace_back("--size and --pix-fmt are not used: they are for raw YUV files, and neither the "
                            "reference nor any test video is one.");
+    }
+    const auto asked = [this](const char* metric) {
+        return std::find(asked_.begin(), asked_.end(), metric) != asked_.end();
+    };
+    if ((!arguments_.cvvdp_displays.empty() || arguments_.cvvdp_fill) && !asked("cvvdp")) {
+        notes.emplace_back("--cvvdp-display and --cvvdp-fill are not used: CVVDP is not among the metrics.");
+    }
+    if (arguments_.model_v1 != "auto" && !asked("vmaf_v1")) {
+        notes.emplace_back("--model-v1 is not used: VMAF v1 is not among the metrics.");
     }
     if (arguments_.film_grain && !film_grain_used_) {
         notes.emplace_back("--film-grain is not used: neither the reference nor any test video has film grain.");
@@ -1295,11 +1319,9 @@ bool write_results(const CompareArguments& arguments, const VideoInfo& source, s
     const std::optional<std::filesystem::path> json_file =
         arguments.json_path ? std::optional(python_path(*arguments.json_path)) : std::nullopt;
     if (json_file && platform::path_text(*json_file) == "-") {
-        platform::write_text(platform::Stream::output, python_json_dumps(document) + "\n");
-        return written;
+        return print_results(python_json_dumps(document) + "\n") && written;
     }
-    platform::write_text(platform::Stream::output,
-                         results_table(source, videos, summaries, cancelled, difference) + "\n");
+    written = print_results(results_table(source, videos, summaries, cancelled, difference) + "\n") && written;
     if (json_file) {
         if (const std::optional<std::string> failure = write_json_file(*json_file, document)) {
             print_error("The JSON file could not be written: " + *failure);
@@ -1320,6 +1342,15 @@ int compare(const CompareArguments& arguments) {
     // The test videos, found first (it reads only the file system), so that
     // a wrong command is said before any work.
     const std::vector<std::filesystem::path> tests = expand_tests(arguments.tests, python_path(arguments.reference));
+    if (arguments.json_path && *arguments.json_path != "-") {
+        // Written after the run, it would replace the video.
+        const std::string json_file = resolved(python_path(*arguments.json_path));
+        const auto is_it = [&json_file](const std::filesystem::path& video) { return resolved(video) == json_file; };
+        if (is_it(python_path(arguments.reference)) || std::any_of(tests.begin(), tests.end(), is_it)) {
+            print_error("--json names one of the videos: " + *arguments.json_path);
+            return exit_usage;
+        }
+    }
     if (arguments.difference) {
         if (const std::optional<std::string> refused = difference_refusal(tests.size())) {
             print_error(*refused);

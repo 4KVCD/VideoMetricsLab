@@ -838,6 +838,9 @@ double frame_rate(const std::string& text) {
     if (!(*value > 0) || !std::isfinite(*value)) {
         throw ArgumentError{"must be above 0"};
     }
+    if (*value < 0.001 || *value > 10000) {  // a mistyped value, which FFmpeg would take or fail on oddly
+        throw ArgumentError{"must be between 0.001 and 10000"};
+    }
     return *value;
 }
 

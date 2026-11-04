@@ -127,8 +127,16 @@ Settings Settings::load_from(const std::filesystem::path& path) {
     contents << stream.rdbuf();
     Json data;
     try {
-        data = Json::parse(contents.str());
-    } catch (const Json::exception&) {
+        data = Json::parse(python_json_readable(contents.str()));
+    } catch (const Json::exception& error) {
+        // The defaults replace it at the next save: a copy for the user to look at.
+        std::filesystem::path copy = path;
+        copy += ".unreadable";
+        std::error_code ignored;
+        std::filesystem::copy_file(path, copy, std::filesystem::copy_options::overwrite_existing, ignored);
+        app_log::Logger("vml.settings")
+            .warning("The settings could not be read, and the defaults are used (copy kept as " +
+                     platform::path_text(copy) + "): " + error.what());
         return settings;
     }
     if (!data.is_object()) {

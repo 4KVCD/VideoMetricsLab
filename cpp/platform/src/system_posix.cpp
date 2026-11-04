@@ -10,6 +10,7 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 #ifdef __APPLE__
+#include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/pwr_mgt/IOPMLib.h>
 #include <mach-o/dyld.h>
 #include <mach/mach.h>
@@ -290,7 +291,31 @@ std::filesystem::path executable_path() {
 
 std::string path_text(const std::filesystem::path& path) { return path.string(); }
 
-std::string name_as_compared(std::string_view name) { return std::string(name); }
+std::string name_as_compared(std::string_view name) {
+#ifdef __APPLE__
+    // APFS and HFS+ keep or give names decomposed (NFD): "e" and an accent are
+    // two characters there and one in what the user typed. As the file system
+    // compares them, composed.
+    const CFStringRef text = CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8*>(name.data()),
+                                                     static_cast<CFIndex>(name.size()), kCFStringEncodingUTF8, false);
+    if (text == nullptr) {
+        return std::string(name);  // not UTF-8
+    }
+    const CFMutableStringRef composed = CFStringCreateMutableCopy(nullptr, 0, text);
+    CFRelease(text);
+    CFStringNormalize(composed, kCFStringNormalizationFormC);
+    const CFRange whole = CFRangeMake(0, CFStringGetLength(composed));
+    CFIndex bytes = 0;
+    CFStringGetBytes(composed, whole, kCFStringEncodingUTF8, 0, false, nullptr, 0, &bytes);
+    std::string result(static_cast<std::size_t>(bytes), '\0');
+    CFStringGetBytes(composed, whole, kCFStringEncodingUTF8, 0, false, reinterpret_cast<UInt8*>(result.data()), bytes,
+                     nullptr);
+    CFRelease(composed);
+    return result;
+#else
+    return std::string(name);
+#endif
+}
 
 std::filesystem::path path_from_text(std::string_view utf8) { return std::filesystem::path(utf8); }
 

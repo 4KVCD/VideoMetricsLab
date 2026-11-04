@@ -176,7 +176,8 @@ std::optional<long long> modified_ns(const std::filesystem::path& file);
 std::optional<std::string> read_file(const std::filesystem::path& path);
 
 // A file name in the form the system compares names in: on Windows, whose
-// file systems ignore case, in lower case (every language's letters).
+// file systems ignore case, in lower case (every language's letters); on
+// macOS, whose file systems ignore how an accent is written, composed (NFC).
 // Elsewhere, as it is.
 std::string name_as_compared(std::string_view name);
 

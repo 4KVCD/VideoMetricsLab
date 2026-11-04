@@ -28,6 +28,10 @@ std::string name_of(const std::filesystem::path& path);
 // Writes `text` and a line end to stderr.
 void print_error(const std::string& text);
 
+// The results to standard output; false, having said so, when they could not
+// all be written there.
+bool print_results(const std::string& text);
+
 // `text` with its lines ended as Python writes a text file on this system:
 // CR LF on Windows.
 std::string text_file(std::string text);

@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <utility>
 
+#include "vml/app_log.h"
 #include "vml/append.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
@@ -14,6 +15,8 @@
 namespace vml {
 
 namespace {
+
+const app_log::Logger logger("vml.film_grain_detect");
 
 constexpr std::array<std::pair<FilmGrainKind, std::string_view>, 5> kind_names{{
     {film_grain_h274, "h274"},
@@ -384,11 +387,13 @@ std::optional<unsigned> detect_film_grain(const VideoInfo& info, const std::stri
     }
     platform::ProcessOutput output;
     try {
-        // Seconds even for 4K from a slow disk; a file whose packets are never
-        // marked as key frames would be read to its end, which the limit stops.
-        output = platform::run_program(film_grain_scan_command(ffmpeg, info), std::chrono::seconds(10), {},
+        // Seconds even for 4K from a slow disk, more on a busy PC; a file whose
+        // packets are never marked as key frames would be read to its end,
+        // which the limit stops.
+        output = platform::run_program(film_grain_scan_command(ffmpeg, info), std::chrono::seconds(30), {},
                                        [&cancel] { return cancel.cancelled(); });
-    } catch (const platform::ProcessError&) {
+    } catch (const platform::ProcessError& error) {
+        logger.warning("Looking for film grain in " + platform::path_text(info.path.filename()) + ": " + error.what());
         return std::nullopt;  // no FFmpeg to run: unknown, as for a failed reading
     }
     if (output.stopped) {
@@ -397,6 +402,8 @@ std::optional<unsigned> detect_film_grain(const VideoInfo& info, const std::stri
     // Only the exit code: FFmpeg's VVC parser logs errors for --fga 3's
     // messages while the copy itself is fine.
     if (output.timed_out || output.exit_code != 0) {
+        logger.warning("Looking for film grain in " + platform::path_text(info.path.filename()) +
+                       (output.timed_out ? " took too long" : " failed"));
         return std::nullopt;
     }
     if (codec == "av1") {

@@ -39,7 +39,7 @@ HANDLE handle_of(Stream stream) {
 
 }  // namespace
 
-void write_text(Stream stream, std::string_view text) {
+bool write_text(Stream stream, std::string_view text) {
     static std::mutex writing;
     const std::lock_guard lock(writing);
     const HANDLE handle = handle_of(stream);
@@ -49,8 +49,7 @@ void write_text(Stream stream, std::string_view text) {
         // console's code page.
         const std::wstring wide = widen(text);
         DWORD written = 0;
-        WriteConsoleW(handle, wide.data(), static_cast<DWORD>(wide.size()), &written, nullptr);
-        return;
+        return WriteConsoleW(handle, wide.data(), static_cast<DWORD>(wide.size()), &written, nullptr) != 0;
     }
     // A file or a pipe: UTF-8 bytes, lines ended with CR LF.
     std::string bytes;
@@ -61,8 +60,15 @@ void write_text(Stream stream, std::string_view text) {
         }
         bytes += c;
     }
-    DWORD written = 0;
-    WriteFile(handle, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr);
+    for (std::size_t done = 0; done < bytes.size();) {
+        DWORD written = 0;
+        if (!WriteFile(handle, bytes.data() + done, static_cast<DWORD>(bytes.size() - done), &written, nullptr) ||
+            written == 0) {
+            return false;
+        }
+        done += written;
+    }
+    return true;
 }
 
 bool is_terminal(Stream stream) {

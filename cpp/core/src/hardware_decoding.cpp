@@ -108,11 +108,16 @@ int bit_depth(const std::string& pix_fmt) {
     }
     // The semi-planar hardware-surface formats: "p010" means 10 significant
     // bits stored in 16.
-    constexpr std::array<std::pair<const char*, int>, 3> surfaces{{{"p016", 16}, {"p012", 12}, {"p010", 10}}};
+    constexpr std::array<std::pair<const char*, int>, 14> surfaces{
+        {{"p016", 16}, {"p012", 12}, {"p010", 10}, {"p210", 10}, {"p212", 12}, {"p216", 16}, {"p410", 10},
+         {"p412", 12}, {"p416", 16}, {"y210", 10}, {"y212", 12}, {"y216", 16}, {"rgb48", 16}, {"bgr48", 16}}};
     for (const auto& [prefix, depth] : surfaces) {
         if (name.starts_with(prefix)) {
             return depth;
         }
+    }
+    if (name.starts_with("rgba64") || name.starts_with("bgra64")) {
+        return 16;
     }
     // The depth digits come right after the planar "p", at the end of the
     // name (yuv420p10le, gbrp12be), which keeps nv12 and rgb24 from being
@@ -213,7 +218,11 @@ DecodingCapabilities DecodingCapabilities::detect(const std::string& ffmpeg) {
     }
     try {
         const platform::ProcessOutput output =
-            platform::run_program({ffmpeg, "-hide_banner", "-hwaccels"}, std::chrono::seconds(15));
+            platform::run_program({ffmpeg, "-hide_banner", "-hwaccels"}, std::chrono::seconds(30));
+        if (output.timed_out) {
+            logger.warning("FFmpeg took too long to name its hardware decoders: this run decodes on the CPU");
+            capabilities.hwaccels_said = false;
+        }
         // The names are listed one per line after "Hardware acceleration
         // methods:".
         bool listing = false;
@@ -258,6 +267,9 @@ DecodingCapabilities DecodingCapabilities::remembered(const std::string& ffmpeg)
     // Asked outside the lock: two threads may both ask the first time, and
     // give the same answer.
     DecodingCapabilities capabilities = detect(ffmpeg);
+    if (!capabilities.hwaccels_said) {
+        return capabilities;  // asked again next time
+    }
     const std::lock_guard lock(mutex);
     return known.try_emplace(ffmpeg, std::move(capabilities)).first->second;
 }

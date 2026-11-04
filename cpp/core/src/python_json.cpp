@@ -237,6 +237,36 @@ void write_flat(std::string& out, const Json& value, std::string_view item_separ
 
 }  // namespace
 
+std::string python_json_readable(std::string text) {
+    if (text.find("\\udc") == std::string::npos) {
+        return text;  // nearly always
+    }
+    std::string readable;
+    readable.reserve(text.size());
+    bool after_first_of_a_pair = false;
+    for (std::size_t at = 0; at < text.size();) {
+        if (text[at] != '\\' || at + 1 == text.size()) {
+            readable.push_back(text[at++]);
+            continue;
+        }
+        if (text[at + 1] != 'u' || at + 6 > text.size()) {
+            readable.append(text, at, 2);  // another escape, whose second character is not one to read as a start
+            at += 2;
+            after_first_of_a_pair = false;
+            continue;
+        }
+        const std::string_view digits = std::string_view(text).substr(at + 2, 4);
+        if (digits.starts_with("dc") && !after_first_of_a_pair) {
+            readable += "\\ufffd";
+        } else {
+            readable.append(digits.data() - 2, 6);
+        }
+        after_first_of_a_pair = digits[0] == 'd' && digits[1] >= '8' && digits[1] <= 'b';
+        at += 6;
+    }
+    return readable;
+}
+
 std::string python_json_dumps(const nlohmann::ordered_json& value, int indent) {
     std::string out;
     write_value(out, value, indent, 0);

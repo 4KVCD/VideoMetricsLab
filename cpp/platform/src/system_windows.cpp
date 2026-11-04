@@ -70,7 +70,9 @@ std::optional<std::filesystem::path> find_on_path(std::string_view name) {
     if (has_extension) {
         extensions.assign(1, L"");
     }
-    std::vector<std::filesystem::path> folders{std::filesystem::current_path()};
+    // Only PATH: an ffmpeg.exe in a downloads folder the app was started from
+    // would otherwise make the scores.
+    std::vector<std::filesystem::path> folders;
     const std::wstring path = widen(environment_variable("PATH").value_or(""));
     for (std::size_t start = 0; start <= path.size();) {
         const std::size_t end = std::min(path.find(L';', start), path.size());
@@ -541,15 +543,19 @@ std::optional<std::string> fopen_path(const std::filesystem::path& path) {
         if (name.empty()) {
             return std::string();
         }
+        // Windows' "Use Unicode UTF-8" setting: every name fits, and the call
+        // fails if given this flag or asked what was lost.
+        const bool utf8 = GetACP() == CP_UTF8;
+        const DWORD flags = utf8 ? 0 : WC_NO_BEST_FIT_CHARS;
         BOOL lost = FALSE;
-        const int bytes = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, name.data(), static_cast<int>(name.size()),
-                                              nullptr, 0, nullptr, &lost);
+        const int bytes = WideCharToMultiByte(CP_ACP, flags, name.data(), static_cast<int>(name.size()), nullptr, 0,
+                                              nullptr, utf8 ? nullptr : &lost);
         if (bytes <= 0 || lost) {
             return std::nullopt;
         }
         std::string text(static_cast<std::size_t>(bytes), '\0');
-        WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, name.data(), static_cast<int>(name.size()), text.data(),
-                            bytes, nullptr, nullptr);
+        WideCharToMultiByte(CP_ACP, flags, name.data(), static_cast<int>(name.size()), text.data(), bytes, nullptr,
+                            nullptr);
         return text;
     };
     if (std::optional<std::string> text = in_code_page(path.native())) {

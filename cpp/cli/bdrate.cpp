@@ -131,12 +131,12 @@ int bdrate(const BdrateArguments& arguments) {
     }
     const Json document = bd_rate_json(report, arguments.anchor, arguments.test);
     if (arguments.json_path && *arguments.json_path == "-") {
-        platform::write_text(platform::Stream::output, python_json_dumps(document) + "\n");
-        return exit_ok;
+        return print_results(python_json_dumps(document) + "\n") ? exit_ok : exit_failed;
     }
     const auto name_of = [](const std::string& path) { return platform::path_text(python_path(path).filename()); };
-    platform::write_text(platform::Stream::output,
-                         bd_rate_table(report, name_of(arguments.anchor), name_of(arguments.test)));
+    if (!print_results(bd_rate_table(report, name_of(arguments.anchor), name_of(arguments.test)))) {
+        return exit_failed;
+    }
     if (arguments.json_path) {
         if (const std::optional<std::string> failure = write_json_file(python_path(*arguments.json_path), document)) {
             print_error("The JSON file could not be written: " + *failure);

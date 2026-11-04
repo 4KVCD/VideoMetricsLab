@@ -44,9 +44,11 @@ bool matches(std::string_view name, std::string_view pattern) {
 std::vector<std::filesystem::path> matching_folders(const std::filesystem::path& folder, const std::string& pattern) {
     std::vector<std::filesystem::path> found;
     std::error_code error;
-    for (const auto& entry : std::filesystem::directory_iterator(folder, error)) {
-        if (entry.is_directory(error) && matches(platform::path_text(entry.path().filename()), pattern)) {
-            found.push_back(entry.path());
+    for (auto entry = std::filesystem::directory_iterator(folder, error);
+         !error && entry != std::filesystem::directory_iterator(); entry.increment(error)) {
+        std::error_code not_a_folder;
+        if (entry->is_directory(not_a_folder) && matches(platform::path_text(entry->path().filename()), pattern)) {
+            found.push_back(entry->path());
         }
     }
     std::sort(found.begin(), found.end());

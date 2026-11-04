@@ -29,6 +29,12 @@ std::string python_json_compact(const nlohmann::json& value);
 // NaN or an infinity.
 std::string python_json_line(const nlohmann::ordered_json& value);
 
+// JSON text these write made readable by nlohmann's parser: a file name's byte
+// that is not UTF-8 is written as Python does, a lone \\udcXX (Linux's names
+// can have them), which that parser refuses along with the whole file. Each
+// becomes U+FFFD: the name is then not the file's, the rest of the file is kept.
+std::string python_json_readable(std::string text);
+
 // Python's str() of a value read from JSON: a text itself; anything else as
 // JSON writes it.
 std::string python_str(const nlohmann::json& value);

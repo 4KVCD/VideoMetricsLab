@@ -280,7 +280,7 @@ void save_run(const ComparisonResult& result, const std::filesystem::path& path,
 
 std::pair<ComparisonResult, std::string> run_from_text(const std::string& text) {
     try {
-        const nlohmann::json data = nlohmann::json::parse(text);
+        const nlohmann::json data = nlohmann::json::parse(python_json_readable(text));
         if (!data.is_object()) {
             throw std::invalid_argument("'" + python_type_name(data) + "' object has no attribute 'get'");
         }

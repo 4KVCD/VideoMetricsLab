@@ -37,6 +37,7 @@
 #include "vml/number_format.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
+#include "vml/python_json.h"
 #include "vml/python_text.h"
 #include "vml/size_changes.h"
 
@@ -103,7 +104,8 @@ struct AnswerKey {
 
 // The key for a file, or nothing when the file cannot be identified (then
 // nothing is kept).
-std::optional<AnswerKey> answer_key(const std::filesystem::path& path, double sampled_duration) {
+std::optional<AnswerKey> answer_key(const VideoInfo& info, double sampled_duration) {
+    const std::filesystem::path& path = info.path;
     std::error_code error;
     const std::filesystem::path resolved = std::filesystem::weakly_canonical(std::filesystem::absolute(path, error), error);
     if (error) {
@@ -114,7 +116,11 @@ std::optional<AnswerKey> answer_key(const std::filesystem::path& path, double sa
     if (error || !written) {
         return std::nullopt;
     }
-    return AnswerKey{platform::path_text(resolved), static_cast<long long>(size), *written,
+    std::string name = platform::path_text(resolved);
+    if (info.format_name == "rawvideo") {  // the same file read at another --size has other pictures
+        name += "|" + std::to_string(info.width) + "x" + std::to_string(info.height);
+    }
+    return AnswerKey{std::move(name), static_cast<long long>(size), *written,
                      python_round(sampled_duration, 3), python_round(dark_limit, 6)};
 }
 
@@ -220,7 +226,7 @@ private:
         text << file.rdbuf();
         nlohmann::json data;
         try {
-            data = nlohmann::json::parse(text.str());
+            data = nlohmann::json::parse(python_json_readable(text.str()));
         } catch (const nlohmann::json::exception&) {
             return;
         }
@@ -265,7 +271,7 @@ private:
         partial += ".partial";
         {
             std::ofstream file(partial, std::ios::binary);
-            file << data.dump();
+            file << data.dump(-1, ' ', false, nlohmann::ordered_json::error_handler_t::replace);  // Linux's names
             if (!file) {
                 logger.warning("Could not keep black-bar answers in " + platform::path_text(*path) + ": " +
                                platform::path_text(partial) + " could not be written");
@@ -1019,7 +1025,7 @@ void forget_crop_answers() { answers().forget(); }
 
 void forget_crop_answer(const VideoInfo& info) {
     // (a video whose size changes keeps no answer, but one found before it was seen to change may be kept)
-    if (const std::optional<AnswerKey> key = answer_key(info.path, info.duration)) {
+    if (const std::optional<AnswerKey> key = answer_key(info, info.duration)) {
         answers().drop(*key);
     }
 }
@@ -1030,7 +1036,7 @@ CropBox detect_crop(const std::string& ffmpeg, const VideoInfo& info, const Canc
     // A video whose size changes is sampled scaled, and its box is not kept:
     // the key knows the file, not how its frames are scaled.
     const std::optional<AnswerKey> key =
-        info.scaled_to ? std::nullopt : answer_key(info.path, sampled_duration);
+        info.scaled_to ? std::nullopt : answer_key(info, sampled_duration);
     if (key) {
         if (const std::optional<CropBox> kept = answers().claim(*key, cancel)) {
             return *kept;

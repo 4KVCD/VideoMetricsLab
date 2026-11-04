@@ -503,7 +503,7 @@ std::optional<std::pair<nlohmann::json, std::map<std::string, NpyArray>>> read_s
     if (!text) {
         return std::nullopt;
     }
-    nlohmann::json metadata = nlohmann::json::parse(*text, nullptr, false);
+    nlohmann::json metadata = nlohmann::json::parse(python_json_readable(*text), nullptr, false);
     if (!metadata.is_object()) {
         return std::nullopt;
     }
@@ -886,7 +886,7 @@ std::optional<nlohmann::json> parameter(const MetricProvenance& provenance, cons
     if (found == provenance.parameters.end()) {
         return std::nullopt;
     }
-    return nlohmann::json::parse(found->second, nullptr, false);
+    return nlohmann::json::parse(python_json_readable(found->second), nullptr, false);
 }
 
 void loaded_model(const MetricResultSet& results, const std::vector<MetricRequestSpec>& specs, const std::string& key,
@@ -927,7 +927,7 @@ std::optional<nlohmann::json> read_json(const std::filesystem::path& path) {
     if (!text) {
         return std::nullopt;
     }
-    nlohmann::json data = nlohmann::json::parse(*text, nullptr, false);
+    nlohmann::json data = nlohmann::json::parse(python_json_readable(*text), nullptr, false);
     if (data.is_discarded()) {
         return std::nullopt;
     }

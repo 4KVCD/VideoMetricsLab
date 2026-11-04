@@ -348,9 +348,9 @@ int bitrate(const BitrateArguments& arguments) {
     }
     const Json document = bitrate_json(*videos, difference);
     if (arguments.json_path && *arguments.json_path == "-") {
-        platform::write_text(platform::Stream::output, python_json_dumps(document) + "\n");
+        ok = print_results(python_json_dumps(document) + "\n") && ok;
     } else {
-        platform::write_text(platform::Stream::output, bitrate_table(*videos, difference));
+        ok = print_results(bitrate_table(*videos, difference)) && ok;
         if (arguments.json_path) {
             const std::optional<std::string> failure = write_json_file(python_path(*arguments.json_path), document);
             if (failure) {

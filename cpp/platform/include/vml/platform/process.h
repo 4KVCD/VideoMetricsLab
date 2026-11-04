@@ -5,7 +5,7 @@
 // Every program is started without a console window. terminate() ends it
 // and every program it started. On Windows they also end with the app,
 // however the app ends: each program is in a job object that is closed with
-// the app. (On Linux and macOS that is still to do.)
+// the app.
 #pragma once
 
 #include <atomic>

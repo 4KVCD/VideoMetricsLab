@@ -45,6 +45,13 @@ Ordered decoded(const Ordered& value) {
     return value;
 }
 
+// A byte of a Linux file name that is not UTF-8 costs that name, not the file.
+TEST(PythonJson, LoneBytesOfANameDoNotStopTheReading) {
+    const std::string written = R"({"a\udc80": "\ud83d\udc80 \\udc80"})";
+    const nlohmann::json read = nlohmann::json::parse(python_json_readable(written));
+    EXPECT_EQ(read.at("a\xEF\xBF\xBD"), "\xF0\x9F\x92\x80 \\udc80");
+}
+
 TEST(PythonJson, WritesAsPythonsJsonDumps) {
     const nlohmann::json reference = test::load_reference("python_json.json");
     ASSERT_FALSE(reference.empty());

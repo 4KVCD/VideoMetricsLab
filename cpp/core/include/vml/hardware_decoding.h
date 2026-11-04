@@ -49,6 +49,9 @@ struct HardwareDecoding {
 // Windows the codecs D3D11VA can decode on its GPU.
 struct DecodingCapabilities {
     std::set<std::string> hwaccels;
+    // False where FFmpeg took too long to say them: hwaccels is then not an
+    // answer to remember (a busy PC).
+    bool hwaccels_said = true;
     std::vector<GpuVendor> vendors;
     std::set<std::string> videotoolbox_codecs;
     // The codecs for which the GPU FFmpeg's D3D11VA decoding uses offers a

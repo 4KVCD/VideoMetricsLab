@@ -30,12 +30,12 @@ extern "C" void on_signal(int) {
 
 }  // namespace
 
-void write_text(Stream stream, std::string_view text) {
+bool write_text(Stream stream, std::string_view text) {
     static std::mutex writing;
     const std::lock_guard lock(writing);
     FILE* file = stream == Stream::output ? stdout : stderr;
-    std::fwrite(text.data(), 1, text.size(), file);
-    std::fflush(file);
+    const std::size_t written = std::fwrite(text.data(), 1, text.size(), file);
+    return std::fflush(file) == 0 && written == text.size();
 }
 
 bool is_terminal(Stream stream) { return isatty(stream == Stream::output ? STDOUT_FILENO : STDERR_FILENO) != 0; }
