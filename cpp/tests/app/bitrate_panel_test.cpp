@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <span>
@@ -26,6 +27,7 @@
 #include "series_colors.h"
 #include "test_videos.h"
 #include "frame_types.h"
+#include "vml/analysis_request.h"
 #include "vml/platform/system.h"
 
 namespace vml::app {
@@ -47,7 +49,7 @@ protected:
         info.codec_name = "h264";
         info.pix_fmt = "yuv420p";
         panel.on_analyzed({QString::fromStdString(platform::path_text(path)), info, std::move(data),
-                          std::move(frame_types)});
+                          std::move(frame_types), file_identity(path)});
     }
     static void failed(BitratePanel& panel, const std::filesystem::path& path, const QString& error) {
         panel.on_failed(QString::fromStdString(platform::path_text(path)), error);
@@ -192,6 +194,30 @@ TEST_F(BitratePanelTest, AFailedFilesReasonStaysWithIt) {
     ASSERT_EQ(panel->table->rowCount(), 1);
     EXPECT_EQ(cell(*panel, 0, col_file).toStdString(), "fine.mkv");
     EXPECT_EQ(panel->table->item(0, col_status)->toolTip().toStdString(), "");
+}
+
+// A video encoded again under the same name, as a finished run hands it over:
+// the old figures go, and a read that then fails leaves none behind either.
+TEST_F(BitratePanelTest, AFileChangedSinceItWasReadIsNotShownAsItWas) {
+    VideoColors colors;
+    const auto panel = make_panel(colors, "no-such-ffprobe");
+    const test::Folder folder;
+    const std::filesystem::path path = folder / "encode.mkv";
+    std::ofstream(path) << "first encode";
+    panel->add_files({path});
+    analyzed(*panel, path, two_seconds(path));
+    panel->add_files({path}, {}, true);  // the same file: read once
+    EXPECT_TRUE(entry(*panel, 0).data);
+    EXPECT_TRUE(idle(*panel));
+
+    std::ofstream(path) << "the second encode, of another size";
+    panel->add_files({path}, {}, true);
+    EXPECT_FALSE(entry(*panel, 0).data);
+
+    analyzed(*panel, path, two_seconds(path));
+    failed(*panel, path, "gone");
+    EXPECT_FALSE(entry(*panel, 0).data);
+    EXPECT_EQ(cell(*panel, 0, col_average).toStdString(), "");
 }
 
 // A video has the session's colour, whatever order the tabs met it in; a

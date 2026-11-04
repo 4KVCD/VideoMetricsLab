@@ -1891,6 +1891,7 @@ void GraphPanel::on_file_writes_idle() {
 }
 
 void GraphPanel::on_file_write_failed(const QString& description, const QString& error) {
+    export_destination_.reset();  // not complete: on_file_writes_idle comes next, and must not say it is
     status_label_->setText(
         app::tr("Could not {description}: {error}", {{"description", description}, {"error", error}}));
     status_label_->show();

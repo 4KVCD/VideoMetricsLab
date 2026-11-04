@@ -30,6 +30,7 @@
 #include "frame_types.h"
 #include "i18n.h"
 #include "series_colors.h"
+#include "vml/analysis_request.h"
 #include "vml/ffprobe.h"
 #include "vml/platform/system.h"
 #include "vml/time_format.h"
@@ -112,6 +113,12 @@ QPixmap swatch_of(const QColor& color) {
     return swatch;
 }
 
+void forget_what_was_read(BitrateEntry& entry) {
+    entry.data.reset();
+    entry.frame_types.reset();
+    entry.plots.clear();
+}
+
 // The point of a line nearest `time`, the earlier one when they tie; none
 // for a line without points.
 std::optional<std::size_t> nearest_point(const std::vector<double>& times, double time) {
@@ -141,9 +148,16 @@ void BitrateWorker::run() {
         const QString name = qt_text(platform::path_text(path));
         emit file_started(name);
         try {
+            // Taken first: a file written to during the read counts as changed.
+            std::string read_as = file_identity(path);
             const VideoInfo info = known ? *known : probe_video(path, ffprobe_, cancel_);
             if (cancel_.cancelled()) {
                 return;
+            }
+            // Its seconds and rates would be those of FFmpeg's guess at 25 frames a second.
+            if (info.is_raw_stream() && !info.timed_raw) {
+                emit failed(name, app::tr("A raw stream records no frame rate, so its bitrate cannot be worked out."));
+                continue;
             }
             FrameTypeReader type_reader(info, cancel_);
             // Here, off the window's thread: the summary walks every packet.
@@ -153,7 +167,7 @@ void BitrateWorker::run() {
                 }));
             auto types = std::make_shared<const std::vector<std::uint8_t>>(type_reader.types_of(*data));
             if (!cancel_.cancelled()) {
-                emit analyzed({name, info, std::move(data), std::move(types)});
+                emit analyzed({name, info, std::move(data), std::move(types), std::move(read_as)});
             }
         } catch (const Cancelled&) {
             return;
@@ -341,10 +355,15 @@ void BitratePanel::add_files(const std::vector<std::filesystem::path>& paths,
         const auto found = std::find_if(entries_.begin(), entries_.end(),
                                         [&key](const auto& item) { return item.first == key; });
         if (found != entries_.end()) {
+            BitrateEntry& entry = found->second;
             if (info != infos.end()) {
-                found->second.info = info->second;
+                entry.info = info->second;
             }
-            if (analyze && !found->second.data) {
+            // Encoded again under the same name: what was read is of another video.
+            if (analyze && entry.data && file_identity(path) != entry.read_as) {
+                forget_what_was_read(entry);
+            }
+            if (analyze && !entry.data) {
                 added.push_back(key);
             }
             continue;
@@ -601,6 +620,7 @@ void BitratePanel::on_analyzed(const BitrateAnalyzed& analyzed) {
     entry->info = analyzed.info;
     entry->data = analyzed.data;
     entry->frame_types = analyzed.frame_types;
+    entry->read_as = analyzed.read_as;
     entry->plots.clear();
     entry->state = BitrateState::complete;
     progress->setValue(100);
@@ -615,7 +635,9 @@ void BitratePanel::on_failed(const QString& path, const QString& error) {
     }
     entry->state = BitrateState::failed;
     entry->error = error;
+    forget_what_was_read(*entry);  // read again and failed: the file is no longer what it was
     refresh_table_values();
+    refresh_plot();
     status_label->setText(app::tr("Could not analyze {name}: {error}",
                                   {{"name", name_of(entry->path)}, {"error", error}}));
 }

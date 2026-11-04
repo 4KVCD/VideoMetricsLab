@@ -23,6 +23,8 @@ struct RateTable {
         double kbps = 0;
         std::map<std::string, std::optional<double>> scores;  // by metric key; none for an empty cell
         std::map<std::string, std::string> text;              // the other columns' cells, by column name
+        std::string reference;  // the reference's path, for a scored video; a CSV file's rows have none
+        bool operator==(const Encode&) const = default;
     };
     std::vector<std::string> metric_keys;  // its metric columns, in the registry's order
     std::vector<std::string> columns;      // every column's name, in lower case

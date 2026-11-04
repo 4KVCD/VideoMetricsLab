@@ -12,12 +12,15 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <memory>
+#include <numeric>
 #include <string>
 #include <vector>
 
 #include "rate_curve_chart.h"
 #include "theme.h"
+#include "vml/platform/system.h"
 
 namespace vml::app {
 namespace {
@@ -135,6 +138,55 @@ TEST(BdRatePanel, ShowsTheBdRatesOfTwoEncoders) {
     EXPECT_EQ(panel.results->rowCount(), 0);
     EXPECT_FALSE(panel.chart->plot());
     EXPECT_TRUE(panel.test.name_edit->text().isEmpty());  // Clear forgot the name too
+}
+
+// A line scored again gives the tab its new scores; a line gone from the list
+// keeps those it had; one that lost its bitrate leaves, and that is said.
+TEST(BdRatePanel, ScoredVideosFollowTheirLines) {
+    QTemporaryDir folder;
+    ASSERT_TRUE(folder.isValid());
+    std::vector<GraphPanel::Run> runs{scored_run("refs/clip.y4m", 2000000, false, "q27"),
+                                      scored_run("refs/clip.y4m", 1000000, false, "q32")};
+    BdRatePanel panel([&runs] { return runs; });
+    panel.choose_videos = [](const QStringList& items) {
+        std::vector<int> all(static_cast<std::size_t>(items.size()));
+        std::iota(all.begin(), all.end(), 0);
+        return all;
+    };
+    QStringList informed;
+    panel.dialogs.inform = [&informed](const QString& title, const QString&) { informed.append(title); };
+    panel.anchor.add_videos_button->click();
+    const auto rate_of = [&panel](const std::size_t source) {
+        return panel.anchor.sources.at(source).second.encodes.front().kbps;
+    };
+    ASSERT_EQ(panel.anchor.sources.size(), 2u);
+    EXPECT_EQ(rate_of(0), 2000);
+
+    runs[0] = scored_run("refs/clip.y4m", 3000000, false, "q27");
+    panel.bring_videos_up_to_date();
+    EXPECT_EQ(rate_of(0), 3000);
+
+    runs.erase(runs.begin());  // q27 no longer listed
+    runs[0] = scored_run("refs/clip.y4m", 0, false, "q32");
+    panel.bring_videos_up_to_date();
+    ASSERT_EQ(panel.anchor.sources.size(), 1u);
+    EXPECT_EQ(rate_of(0), 3000);
+    EXPECT_EQ(informed, QStringList{"Bitrate unknown"});
+}
+
+// Sequences go by the reference's file name: two files of one name are said.
+TEST(BdRatePanel, WarnsOfTwoReferencesOfOneName) {
+    std::vector<GraphPanel::Run> runs{scored_run("one/clip.y4m", 2000000, false, "a"),
+                                      scored_run("two/clip.y4m", 1000000, false, "b")};
+    int asked = 0;
+    BdRatePanel panel([&runs] { return runs; });
+    panel.choose_videos = [&asked](const QStringList&) { return std::vector<int>{asked++}; };
+    panel.anchor.add_videos_button->click();
+    panel.test.add_videos_button->click();
+    const QString warning = "clip: its encodes have different references, " +
+                            QString::fromStdString(platform::path_text(std::filesystem::path("one/clip.y4m"))) + ", " +
+                            QString::fromStdString(platform::path_text(std::filesystem::path("two/clip.y4m")));
+    EXPECT_TRUE(panel.warnings().contains(warning)) << panel.warnings().join('|').toStdString();
 }
 
 // The chart with encodes the BD-rate could not use: a rate of 0 is not

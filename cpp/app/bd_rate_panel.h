@@ -42,6 +42,11 @@ public:
 
     // The results table's colours again, for the theme now in use.
     void refresh_theme();
+    // The scored videos added take the scores of their lines as they are now:
+    // a line scored again has others. A video no longer listed keeps those it
+    // had, which are still its: a list is often cleared between the anchor's
+    // videos and the test's.
+    void bring_videos_up_to_date();
 
     // Its questions and messages; the tests answer them.
     Dialogs dialogs;
@@ -87,6 +92,9 @@ public:
     // The warnings the warnings button lists: the report's and the tab's own.
     const QStringList& warnings() const { return warnings_; }
 
+protected:
+    void showEvent(QShowEvent* event) override;
+
 private:
     QGroupBox* build_side(Side& side, const QString& title);
     void add_options_row(QVBoxLayout* root);
@@ -94,6 +102,9 @@ private:
     void add_chart(QVBoxLayout* root);
 
     void on_add_videos(Side& side);
+    // bring_videos_up_to_date for a side: whether anything changed, and the
+    // names of the videos that no longer have a bitrate, which leave.
+    bool update_videos_of(Side& side, const std::vector<GraphPanel::Run>& runs, QStringList& without_rate);
     void on_import(Side& side);
     void on_clear(Side& side);
     void on_export();

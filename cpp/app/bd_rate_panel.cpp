@@ -149,6 +149,12 @@ RateTable table_of(RateTable::Encode encode) {
 
 }  // namespace
 
+// Where a scored video's encodes are kept in a side's sources.
+QString video_source_key(const GraphPanel::Run& run) {
+    return QStringLiteral("video:") +
+           (run.identity.empty() ? qt_text(platform::path_text(run.result->distorted)) : qt_text(run.identity));
+}
+
 BdRatePanel::BdRatePanel(std::function<std::vector<GraphPanel::Run>()> runs, QWidget* parent)
     : QWidget(parent), runs_(std::move(runs)) {
     dialogs = standard_dialogs(this);
@@ -313,9 +319,7 @@ void BdRatePanel::on_add_videos(Side& side) {
             unknown.append(name);
             continue;
         }
-        const QString key = QStringLiteral("video:") +
-                            (run.identity.empty() ? qt_text(platform::path_text(run.result->distorted))
-                                                  : qt_text(run.identity));
+        const QString key = video_source_key(run);
         std::erase_if(side.sources, [&key](const auto& source) { return source.first == key; });
         side.sources.emplace_back(key, table_of(*encode));
         side.whole_file_rates.erase(key);
@@ -329,6 +333,61 @@ void BdRatePanel::on_add_videos(Side& side) {
                                {{"videos", unknown.join(QLatin1Char('\n'))}}));
     }
     side_changed(side);
+}
+
+void BdRatePanel::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    bring_videos_up_to_date();
+}
+
+void BdRatePanel::bring_videos_up_to_date() {
+    const auto has_videos = [](const Side& side) {
+        return std::ranges::any_of(side.sources,
+                                   [](const auto& source) { return source.first.startsWith(QStringLiteral("video:")); });
+    };
+    if (!has_videos(anchor) && !has_videos(test)) {
+        return;
+    }
+    const std::vector<GraphPanel::Run> runs = runs_();
+    QStringList without_rate;
+    for (Side* side : {&anchor, &test}) {
+        if (update_videos_of(*side, runs, without_rate)) {
+            side_changed(*side);
+        }
+    }
+    if (!without_rate.isEmpty()) {
+        dialogs.inform(app::tr("Bitrate unknown"),
+                       app::tr("These videos were taken out, as their bitrate is no longer known:\n{videos}",
+                               {{"videos", without_rate.join(QLatin1Char('\n'))}}));
+    }
+}
+
+bool BdRatePanel::update_videos_of(Side& side, const std::vector<GraphPanel::Run>& runs, QStringList& without_rate) {
+    bool changed = false;
+    for (const GraphPanel::Run& run : runs) {
+        const QString key = video_source_key(run);
+        const auto source =
+            std::ranges::find_if(side.sources, [&key](const auto& item) { return item.first == key; });
+        if (source == side.sources.end()) {
+            continue;
+        }
+        const std::optional<RateTable::Encode> encode = rate_encode(*run.result);
+        const QString name = qt_text(platform::path_text(run.result->distorted.filename()));
+        if (!encode) {
+            side.sources.erase(source);
+            side.whole_file_rates.erase(key);
+            without_rate.append(name);
+            changed = true;
+        } else if (source->second.encodes.front() != *encode) {
+            source->second = table_of(*encode);
+            side.whole_file_rates.erase(key);
+            if (run.result->distorted_info.bit_rate_whole_file) {
+                side.whole_file_rates[key] = name;
+            }
+            changed = true;
+        }
+    }
+    return changed;
 }
 
 void BdRatePanel::on_import(Side& side) {

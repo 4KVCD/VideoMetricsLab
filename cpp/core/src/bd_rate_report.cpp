@@ -349,6 +349,7 @@ std::optional<RateTable::Encode> rate_encode(const ComparisonResult& result) {
     }
     RateTable::Encode encode;
     encode.sequence = platform::path_text(result.source.stem());
+    encode.reference = platform::path_text(result.source);
     encode.kbps = static_cast<double>(bits_per_second) / 1000;
     for (const MetricDefinition& metric : metrics()) {
         const std::string key(metric.key);
@@ -371,6 +372,33 @@ std::vector<std::string> group_columns(const RateTable& table) {
     return columns;
 }
 
+namespace {
+
+// A sequence is known by its reference's file name: encodes of two files of
+// one name (the same clip in two folders, or two clips) count as one sequence.
+void warn_of_references_sharing_a_name(const RateTable& anchor, const RateTable& test,
+                                       std::vector<std::string>& warnings) {
+    std::map<std::string, std::set<std::string>> references;
+    for (const RateTable* table : {&anchor, &test}) {
+        for (const RateTable::Encode& encode : table->encodes) {
+            if (!encode.reference.empty()) {
+                references[encode.sequence].insert(encode.reference);
+            }
+        }
+    }
+    for (const auto& [sequence, paths] : references) {
+        if (paths.size() > 1) {
+            std::string listed;
+            for (const std::string& path : paths) {
+                listed += (listed.empty() ? "" : ", ") + path;
+            }
+            warnings.push_back(sequence + ": its encodes have different references, " + listed);
+        }
+    }
+}
+
+}  // namespace
+
 BdRateReport bd_rate_report(const RateTable& anchor, const RateTable& test, const BdRateOptions& options) {
     BdRateReport report;
     report.metrics = shown_metrics(anchor, test, options);
@@ -389,6 +417,7 @@ BdRateReport bd_rate_report(const RateTable& anchor, const RateTable& test, cons
             }
         }
     }
+    warn_of_references_sharing_a_name(anchor, test, report.warnings);
     const auto anchor_sequences = by_sequence(anchor);
     const auto test_sequences = by_sequence(test);
     for (const auto& [name, encodes] : anchor_sequences) {

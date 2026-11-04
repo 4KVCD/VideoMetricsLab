@@ -56,6 +56,7 @@ struct BitrateEntry {
     std::optional<VideoInfo> info;
     std::shared_ptr<const BitrateData> data;
     std::shared_ptr<const std::vector<std::uint8_t>> frame_types;  // read_frame_types: a type per frame, or none
+    std::string read_as;  // the file's identity (file_identity) when `data` was read: its name may be used again
     bool enabled = true;
     BitrateState state = BitrateState::ready;
     long long packets_read = 0;  // while it is read
@@ -70,6 +71,7 @@ struct BitrateAnalyzed {
     VideoInfo info;
     std::shared_ptr<const BitrateData> data;
     std::shared_ptr<const std::vector<std::uint8_t>> frame_types;
+    std::string read_as;  // BitrateEntry::read_as
 };
 
 // Reads each file's packets in turn, off the window's thread: its details

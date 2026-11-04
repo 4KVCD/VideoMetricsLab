@@ -8,6 +8,7 @@
 #include "graph_panel.h"
 
 #include <QCheckBox>
+#include <QCoreApplication>
 #include <QImage>
 #include <QLabel>
 #include <QSpinBox>
@@ -79,6 +80,7 @@ protected:
     static const ChartSeries& drawn(MetricPage& page, int series_id) { return page.chart_->series_.at(series_id); }
     static void export_png(GraphPanel& panel) { panel.on_export_png(); }
     static void export_csvs(GraphPanel& panel) { panel.on_export_csv(); }
+    static QString status(const GraphPanel& panel) { return panel.status_label_->text(); }
     // What the exported image's table says: its headings, and each line's
     // label, colour and cells.
     static auto export_table(GraphPanel& panel) { return panel.export_table(); }
@@ -266,6 +268,23 @@ TEST_F(GraphPanelTest, ExportsTheDifferenceTheBandShows) {
     ASSERT_TRUE(panel.wait_until_file_writes_idle(std::chrono::seconds(10)));
     EXPECT_TRUE(std::filesystem::exists(folder / "a_2.csv"));
     EXPECT_FALSE(std::filesystem::exists(folder / "a_minus_b_2.csv"));
+}
+
+// An export that cannot be written says so, and not that it is complete.
+TEST_F(GraphPanelTest, AFailedExportDoesNotSayItIsComplete) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F})), "a", {}, true}});
+    page(panel, "vmaf");
+    const test::Folder folder;
+    const std::filesystem::path not_a_folder = folder / "a file";
+    std::ofstream(not_a_folder) << "x";
+    const QString out = QString::fromStdString(platform::path_text(not_a_folder));
+    panel.dialogs.choose_folder = [&out](const QString&, const QString&) { return out; };
+    export_csvs(panel);
+    ASSERT_TRUE(panel.wait_until_file_writes_idle(std::chrono::seconds(10)));
+    QCoreApplication::sendPostedEvents();  // what the writer's thread said
+    EXPECT_TRUE(status(panel).startsWith("Could not")) << status(panel).toStdString();
 }
 
 // The readout pairs two lines by frame, as the Difference band does: every
