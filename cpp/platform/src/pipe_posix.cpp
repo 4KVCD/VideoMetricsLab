@@ -1,10 +1,14 @@
-// InboundPipe and OutboundPipe on Linux and macOS: a FIFO in the temporary
-// folder.
+// InboundPipe on Linux and macOS: a socket pair, whose writing end FFmpeg
+// inherits. A FIFO would be the same to FFmpeg, but on macOS a reader gets 8 KB
+// of one at a time, whatever it asks for: two 4K videos' frames then come at
+// no more than 48 pairs a second, however fast everything else is.
+// OutboundPipe on both: a FIFO in the temporary folder.
 #include "vml/platform/pipe.h"
 
 #include "pipe_name.h"
 
 #include <fcntl.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -15,49 +19,62 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <thread>
 
 namespace vml::platform {
 
 struct InboundPipe::State {
-    int descriptor = -1;  // the FIFO, once its writer opened it
+    int descriptor = -1;          // the reading end
+    std::atomic<int> writer{-1};  // the writing end, until taken or closed
 };
 
 namespace {
 
-// The start of the names of a process's FIFOs: the ones it reads, and the
-// ones it names for a process it starts to write (OutboundPipe::unique_path).
-std::string pipe_prefix(int process_id) { return "vml-vmaf-" + std::to_string(process_id) + "-"; }
+// The start of the names of the FIFOs a process names for a process it starts
+// to write (OutboundPipe::unique_path).
 std::string feed_prefix(int process_id) { return "vml-feed-" + std::to_string(process_id) + "-"; }
+
+// Asks for a socket's buffer (`option`, SO_SNDBUF or SO_RCVBUF) of `bytes`, or
+// half of that and so on until the system takes it: macOS refuses what is past
+// kern.ipc.maxsockbuf, and Linux silently gives no more than its own limit.
+// Nothing here depends on what it gives: a smaller buffer is only slower.
+void ask_for_buffer(int end, int option, std::size_t bytes) {
+    int asked = static_cast<int>(std::min<std::size_t>(bytes, std::numeric_limits<int>::max()));
+    while (asked > 0 && setsockopt(end, SOL_SOCKET, option, &asked, sizeof asked) != 0) {
+        asked /= 2;
+    }
+}
 
 }  // namespace
 
-InboundPipe::InboundPipe(std::string_view name, std::size_t)
-    : path_((std::filesystem::temp_directory_path() / (pipe_prefix(getpid()) +
-                                                        random_part() + "-" + std::string(name)))
-                .string()),
-      state_(std::make_unique<State>()) {
-    if (mkfifo(path_.c_str(), 0600) != 0) {
-        throw PipeError("The pipe " + path_ + " could not be made: " + std::strerror(errno));
+InboundPipe::InboundPipe(std::string_view, std::size_t buffer_bytes) : state_(std::make_unique<State>()) {
+    int ends[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, ends) != 0) {
+        throw PipeError(std::string("The pipe could not be made: ") + std::strerror(errno));
     }
+    // Neither end goes to a program by chance (close on exec): a copy of the
+    // writing end in another program would keep the reader from ever seeing
+    // the end, and one of the reading end would keep a writer writing after
+    // this side closed it.
+    for (const int end : ends) {
+        fcntl(end, F_SETFD, FD_CLOEXEC);
+    }
+    ask_for_buffer(ends[1], SO_SNDBUF, buffer_bytes);
+    ask_for_buffer(ends[0], SO_RCVBUF, buffer_bytes);
+    state_->descriptor = ends[0];
+    state_->writer = ends[1];
+    path_ = "pipe:" + std::to_string(ends[1]);
 }
 
 InboundPipe::~InboundPipe() {
     close();
-    unlink(path_.c_str());
+    no_writer_will_come();
 }
 
-void InboundPipe::connect() {
-    // Opening a FIFO to read waits for its writer. A copy of the reading end
-    // in a program started meanwhile would keep the FIFO open after this
-    // side closes it, so none goes to another program (close on exec).
-    do {
-        state_->descriptor = open(path_.c_str(), O_RDONLY | O_CLOEXEC);
-    } while (state_->descriptor < 0 && errno == EINTR);
-    if (state_->descriptor < 0) {
-        throw PipeError("Waiting for the writer of " + path_ + " failed: " + std::strerror(errno));
-    }
-}
+int InboundPipe::take_writer() { return state_->writer.exchange(-1); }
+
+void InboundPipe::connect() {}
 
 void InboundPipe::gather(std::size_t, const std::atomic<bool>&, const std::atomic<bool>&) {}
 
@@ -83,17 +100,14 @@ void InboundPipe::close() {
     }
 }
 
-void InboundPipe::touch(const std::string& path) {
-    // A reader waiting in open() counts as the FIFO's reader, so a writer
-    // that does not wait for one can open it then (and fails, ENXIO, before).
-    const int writer = open(path.c_str(), O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+void InboundPipe::no_writer_will_come() {
+    const int writer = state_->writer.exchange(-1);
     if (writer >= 0) {
         ::close(writer);
     }
 }
 
-void InboundPipe::remove_left_by(int process_id) {
-    const std::string prefix = pipe_prefix(process_id);
+void OutboundPipe::remove_left_by(int process_id) {
     const std::string feeds = feed_prefix(process_id);
     // Never throws: a folder that cannot be read leaves them (the run's
     // result stands).
@@ -106,15 +120,15 @@ void InboundPipe::remove_left_by(int process_id) {
          entry.increment(error)) {
         const std::string name = entry->path().filename().string();
         std::error_code type_error;
-        if ((name.starts_with(prefix) || name.starts_with(feeds)) && entry->is_fifo(type_error)) {
+        if (name.starts_with(feeds) && entry->is_fifo(type_error)) {
             unlink(entry->path().c_str());
         }
     }
 }
 
-// OutboundPipe. A FIFO holds what the system gives it (64 KB on macOS and
-// Linux), whatever buffer_bytes asks: each write waits for the reader to make
-// room, as a full named pipe's does.
+// OutboundPipe. A FIFO holds what the system gives it, whatever buffer_bytes
+// asks (on macOS 8 KB at a time reach the reader): each write waits for the
+// reader to make room, as a full named pipe's does.
 //
 // Its writing end is open from the start, so that the reader's open() never
 // waits: on macOS a reader waiting there for a writer misses one that opens

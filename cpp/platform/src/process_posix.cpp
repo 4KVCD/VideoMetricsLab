@@ -344,6 +344,16 @@ struct ChildProcess::State {
 };
 
 ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, const ProcessOptions& options) {
+    // The program's, or nobody's if it does not start: closed here at the
+    // end, whichever way this ends.
+    const struct InheritedDescriptors {
+        const std::vector<int>& descriptors;
+        ~InheritedDescriptors() {
+            for (const int descriptor : descriptors) {
+                ::close(descriptor);
+            }
+        }
+    } closed_at_the_end{options.inherited_descriptors};
     if (arguments.empty()) {
         throw ProcessError("no program to start");
     }
@@ -378,8 +388,27 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     short flags = own_group ? POSIX_SPAWN_SETPGROUP : 0;
 #ifdef __APPLE__
     flags |= POSIX_SPAWN_CLOEXEC_DEFAULT;
-#elif defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 34))
-    posix_spawn_file_actions_addclosefrom_np(&actions, STDERR_FILENO + 1);
+    for (const int descriptor : options.inherited_descriptors) {
+        posix_spawn_file_actions_addinherit_np(&actions, descriptor);
+    }
+#else
+    // These actions run in order: what is closed is closed around the
+    // inherited ones, which dup2 onto themselves then keeps past the exec.
+    std::vector<int> inherited = options.inherited_descriptors;
+    std::sort(inherited.begin(), inherited.end());
+#if defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 34))
+    int next_to_close = STDERR_FILENO + 1;
+    for (const int descriptor : inherited) {
+        for (; next_to_close < descriptor; ++next_to_close) {
+            posix_spawn_file_actions_addclose(&actions, next_to_close);
+        }
+        next_to_close = descriptor + 1;
+    }
+    posix_spawn_file_actions_addclosefrom_np(&actions, next_to_close);
+#endif
+    for (const int descriptor : inherited) {
+        posix_spawn_file_actions_adddup2(&actions, descriptor, descriptor);
+    }
 #endif
     posix_spawnattr_t attributes;
     posix_spawnattr_init(&attributes);

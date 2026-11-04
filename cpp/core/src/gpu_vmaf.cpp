@@ -342,7 +342,7 @@ struct StreamReader::State {
     BufferQueue pixels;  // frames read; nullptr: the end
     std::atomic<bool> stopped{false};
     std::atomic<bool> writer_gone{false};
-    std::atomic<bool> connected{false};  // FFmpeg opened the pipe (or ffmpeg_ended did)
+    std::atomic<bool> connected{false};  // the wait for a writer is over (InboundPipe::connect)
     std::atomic<bool> finished{false};   // the reading thread has ended
     std::atomic<bool> stopped_while_reading{false};
     std::exception_ptr error;            // set before the final nullptr in pixels
@@ -360,6 +360,8 @@ StreamReader::~StreamReader() {
 }
 
 const std::string& StreamReader::path() const { return state_->pipe.path(); }
+
+int StreamReader::take_writer() { return state_->pipe.take_writer(); }
 
 void StreamReader::start() { state_->thread = std::thread([this] { read_frames(); }); }
 
@@ -441,11 +443,12 @@ void StreamReader::drop_rest() { state_->free.put(nullptr); }
 void StreamReader::ffmpeg_ended() {
     State& s = *state_;
     s.writer_gone = true;
-    // A named pipe can be opened here at once. A FIFO can be only once the
-    // reading thread waits for its writer, which it does a moment after it
-    // starts.
+    s.pipe.no_writer_will_come();
+    // Again until the reading thread has gone past waiting for a writer,
+    // which it does a moment after it starts: for a named pipe, opened now
+    // and read only after that.
     for (int attempt = 0; attempt < 200 && s.thread.joinable() && !s.connected && !s.finished; ++attempt) {
-        platform::InboundPipe::touch(s.pipe.path());
+        s.pipe.no_writer_will_come();
         if (s.connected || s.finished) {
             break;
         }
@@ -603,6 +606,11 @@ std::optional<PairScores> GpuAttempt::finish(bool ffmpeg_succeeded) {
         throw LibvmafError("GPU VMAF failed: " + message_of(s.error));
     }
     return ffmpeg_succeeded ? std::move(s.result) : std::nullopt;
+}
+
+std::vector<int> GpuAttempt::take_output_descriptors(std::size_t output) {
+    const int writer = (output == 0 ? state_->distorted : state_->reference)->take_writer();
+    return writer >= 0 ? std::vector<int>{writer} : std::vector<int>{};
 }
 
 bool GpuAttempt::closed_pipe_of(std::size_t output) const {

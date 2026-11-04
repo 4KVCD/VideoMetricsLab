@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "test_videos.h"
+#include "vml/platform/pipe.h"
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -94,6 +95,47 @@ TEST(Process, ReadsAFrameBiggerThanItsPipeWhole) {
 // output then lasted as long as the copy: of two videos compared at once,
 // one waited for the other's FFmpeg to end. Here the pipe is the test's,
 // made as one that could be handed down.
+#ifndef _WIN32
+// A descriptor a program inherits is its own: what it writes arrives, and the
+// reader sees the end when it ends. This process keeps no copy, whether the
+// program started or not.
+TEST(Process, AProgramInheritsADescriptorThatEndsWithIt) {
+    InboundPipe pipe("inherited", 64 * 1024);
+    const int writer = pipe.take_writer();
+    ASSERT_GE(writer, 0);
+    EXPECT_EQ(pipe.path(), "pipe:" + std::to_string(writer));
+    EXPECT_EQ(pipe.take_writer(), -1);  // once only
+    ProcessOptions options;
+    options.inherited_descriptors = {writer};
+    ChildProcess process =
+        ChildProcess::start({"/bin/sh", "-c", "printf x >&" + std::to_string(writer)}, options);
+    char bytes[2] = {};
+    EXPECT_EQ(pipe.read(bytes, 1), 1u);
+    EXPECT_EQ(bytes[0], 'x');
+    EXPECT_EQ(pipe.read(bytes, 1), 0u);
+    EXPECT_EQ(fcntl(writer, F_GETFD), -1);
+    EXPECT_EQ(process.wait(), 0);
+
+    InboundPipe never_started("never", 64 * 1024);
+    ProcessOptions failing;
+    failing.inherited_descriptors = {never_started.take_writer()};
+    const int number = failing.inherited_descriptors[0];
+    EXPECT_THROW(ChildProcess::start({"/nonexistent/program"}, failing), ProcessError);
+    EXPECT_EQ(fcntl(number, F_GETFD), -1);
+    EXPECT_EQ(never_started.read(bytes, 1), 0u);
+}
+
+// A reader whose writer will not come finds the end, as often as it is said.
+TEST(Process, APipeWithNoWriterEnds) {
+    InboundPipe pipe("no writer", 64 * 1024);
+    pipe.no_writer_will_come();
+    pipe.no_writer_will_come();
+    EXPECT_EQ(pipe.take_writer(), -1);
+    char byte = 0;
+    EXPECT_EQ(pipe.read(&byte, 1), 0u);
+}
+#endif
+
 TEST(Process, AProgramGetsNoneOfTheAppsHandlesButItsOwn) {
 #ifdef _WIN32
     SECURITY_ATTRIBUTES inheritable{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};

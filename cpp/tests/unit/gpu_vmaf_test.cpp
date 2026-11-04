@@ -4,22 +4,63 @@
 
 #include <gtest/gtest.h>
 
-#include <fstream>
 #include <future>
 #include <string>
 #include <thread>
 #include <vector>
 
+#ifdef _WIN32
+#include <fstream>
+#else
+#include <unistd.h>
+#endif
+
 namespace vml {
 namespace {
 
-// Writes `bytes` to the pipe at `path` as FFmpeg does, opening it as a file.
-std::thread write_to(const std::string& path, std::string bytes) {
-    return std::thread([path, bytes = std::move(bytes)] {
-        std::ofstream pipe(path, std::ios::binary);
-        ASSERT_TRUE(pipe.is_open());
-        pipe.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-    });
+// The end of `reader`'s pipe FFmpeg writes to, as FFmpeg has it: opened as a
+// file on Windows, inherited elsewhere. Closed when it goes.
+class Writer {
+public:
+    explicit Writer(StreamReader& reader)
+#ifdef _WIN32
+        : pipe_(reader.path(), std::ios::binary) {
+        EXPECT_TRUE(pipe_.is_open());
+    }
+#else
+        : descriptor_(reader.take_writer()) {
+        EXPECT_GE(descriptor_, 0);
+    }
+    ~Writer() { close(descriptor_); }
+#endif
+    Writer(const Writer&) = delete;
+    Writer& operator=(const Writer&) = delete;
+
+    void write_all(const std::string& bytes) {
+#ifdef _WIN32
+        pipe_.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        pipe_.flush();
+#else
+        std::size_t written = 0;
+        while (written < bytes.size()) {
+            const ssize_t count = write(descriptor_, bytes.data() + written, bytes.size() - written);
+            ASSERT_GT(count, 0);
+            written += static_cast<std::size_t>(count);
+        }
+#endif
+    }
+
+private:
+#ifdef _WIN32
+    std::ofstream pipe_;
+#else
+    int descriptor_;
+#endif
+};
+
+// Writes `bytes` to `reader`'s pipe as FFmpeg does.
+std::thread write_to(StreamReader& reader, std::string bytes) {
+    return std::thread([&reader, bytes = std::move(bytes)] { Writer(reader).write_all(bytes); });
 }
 
 // A YUV4MPEG stream as FFmpeg's yuv4mpegpipe writes it, of 4x2 8-bit 4:2:0
@@ -50,7 +91,7 @@ std::string read_error(StreamReader& reader) {
 TEST(GpuVmaf, ReadsFfmpegsFramesFromAPipe) {
     StreamReader reader("test", 12);
     reader.start();
-    std::thread writer = write_to(reader.path(), stream_of(5));
+    std::thread writer = write_to(reader, stream_of(5));
     for (int n = 0; n < 5; ++n) {
         std::vector<std::uint8_t>* frame = reader.pull();
         ASSERT_NE(frame, nullptr) << "frame " << n;
@@ -86,7 +127,7 @@ TEST(GpuVmaf, AStreamThatIsNotFfmpegsIsAnError) {
         reader.start();
         // As a run does once FFmpeg has gone: a frame cut short is then
         // known to stay short, not waited for.
-        write_to(reader.path(), stream).join();
+        write_to(reader, stream).join();
         reader.ffmpeg_ended();
         EXPECT_EQ(read_error(reader), message);
         reader.stop();
@@ -99,7 +140,7 @@ TEST(GpuVmaf, AStreamThatIsNotFfmpegsIsAnError) {
 TEST(GpuVmaf, KnowsWhichPipesTheAppClosed) {
     StreamReader finished("finished", 12);
     finished.start();
-    write_to(finished.path(), stream_of(1)).join();
+    write_to(finished, stream_of(1)).join();
     finished.ffmpeg_ended();
     EXPECT_EQ(read_error(finished), "");  // read to its end
     finished.stop();
@@ -108,11 +149,9 @@ TEST(GpuVmaf, KnowsWhichPipesTheAppClosed) {
     StreamReader writing("writing", 12);
     writing.start();
     std::promise<void> closed;
-    std::thread writer([path = writing.path(), done = closed.get_future()] {
-        std::ofstream pipe(path, std::ios::binary);
-        const std::string frame = stream_of(1);
-        pipe.write(frame.data(), static_cast<std::streamsize>(frame.size()));
-        pipe.flush();
+    std::thread writer([&writing, done = closed.get_future()] {
+        Writer pipe(writing);
+        pipe.write_all(stream_of(1));
         done.wait();  // holds the pipe open, as an FFmpeg still decoding does
     });
     EXPECT_NE(writing.pull(), nullptr);  // the frame written: the pipe is being read

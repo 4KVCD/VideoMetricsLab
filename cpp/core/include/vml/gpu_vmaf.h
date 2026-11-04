@@ -160,8 +160,12 @@ public:
     StreamReader(const StreamReader&) = delete;
     StreamReader& operator=(const StreamReader&) = delete;
 
-    // The path FFmpeg writes to.
+    // What FFmpeg writes to.
     const std::string& path() const;
+
+    // The descriptor the FFmpeg writing to path() inherits, as
+    // platform::InboundPipe::take_writer: -1 when it opens path() as a file.
+    int take_writer();
 
     // Starts the reading thread.
     void start();
@@ -178,8 +182,8 @@ public:
     void drop_rest();
 
     // Says FFmpeg has gone, so the reader stops waiting for more. FFmpeg
-    // opens no output that got no frame, so a pipe it never opened is
-    // opened here to end the wait for it.
+    // opens no output that got no frame, and one that never started opens
+    // none: a wait for a writer that will not come ends here.
     void ffmpeg_ended();
 
     // Stops reading, even while waiting for FFmpeg.
@@ -217,6 +221,11 @@ public:
     // the video's frames ([vmaf_dist] or [vmaf_ref]) as they come, as
     // YUV4MPEG into its pipe (gpu_output_args).
     std::pair<std::vector<std::string>, std::vector<std::string>> output_args() const;
+
+    // The descriptors output_args's first FFmpeg (0) or second (1) inherits
+    // (platform::ProcessOptions::inherited_descriptors), for the moment it
+    // starts: once taken they are that FFmpeg's to close. None on Windows.
+    std::vector<int> take_output_descriptors(std::size_t output);
 
     // Call once FFmpeg has ended: the scores, or nothing when FFmpeg failed
     // (the caller then retries or gives up), a video's frames cut short by

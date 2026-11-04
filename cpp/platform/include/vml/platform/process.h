@@ -61,6 +61,12 @@ struct ProcessOptions {
     // without its line ending, on the thread that reads it. Its end is kept
     // for standard_error() all the same.
     std::function<void(std::string_view)> on_error_line = nullptr;
+    // Descriptors the program inherits under their own numbers (only
+    // elsewhere than on Windows), beside its three: the app's others never go
+    // to it. They become the program's: this process's copies are closed once
+    // it has started or could not, so that their reader sees the end exactly
+    // when the program ends.
+    std::vector<int> inherited_descriptors = {};
 };
 
 // A program run to its end: its exit code, everything it wrote to standard

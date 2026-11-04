@@ -102,14 +102,16 @@ void InboundPipe::close() {
     }
 }
 
-void InboundPipe::touch(const std::string& path) {
-    const HANDLE writer = CreateFileW(widen(path).c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+int InboundPipe::take_writer() { return -1; }
+
+void InboundPipe::no_writer_will_come() {
+    const HANDLE writer = CreateFileW(widen(path_).c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (writer != INVALID_HANDLE_VALUE) {
         CloseHandle(writer);
     }
 }
 
-void InboundPipe::remove_left_by(int) {}
+void OutboundPipe::remove_left_by(int) {}
 
 struct OutboundPipe::State {
     HANDLE pipe = nullptr;

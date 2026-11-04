@@ -300,7 +300,7 @@ nlohmann::json run_isolated(std::string_view task, std::string_view what, const 
     ChildConversation conversation(child, on_message, cancel);
     conversation.run();
     const int exit_code = child.wait();
-    platform::InboundPipe::remove_left_by(child.process_id());  // a Cancel's kill left them
+    platform::OutboundPipe::remove_left_by(child.process_id());  // a Cancel's kill left them
     if (conversation.ended_after_answer) {
         app_log::write(app_log::Level::warning, "vml.isolated",
                        std::string(what) + " did not end within " + std::to_string(answered_wait.count()) +

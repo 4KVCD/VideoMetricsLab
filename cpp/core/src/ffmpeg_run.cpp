@@ -104,11 +104,13 @@ private:
 
 // The options of an FFmpeg run in `folder` whose error output is watched for
 // FFmpeg rebuilding its filters (a video's size changed: size_changes.h),
-// which sets `rebuilt`.
+// which sets `rebuilt`, and which inherits `inherited` (its pipes' ends).
 platform::ProcessOptions watched_options(const std::filesystem::path& folder,
-                                         const std::shared_ptr<std::atomic<bool>>& rebuilt) {
+                                         const std::shared_ptr<std::atomic<bool>>& rebuilt,
+                                         std::vector<int> inherited = {}) {
     platform::ProcessOptions options{folder};
     options.on_error_line = rebuild_watcher(rebuilt);
+    options.inherited_descriptors = std::move(inherited);
     return options;
 }
 
@@ -143,20 +145,24 @@ FfmpegOutcome run_ffmpeg(const std::vector<std::string>& command, long long tota
 // one: the first reports the progress, and one that fails ends the other.
 // Returns the outcome of the first to fail of those whose pipe the app did
 // not close (`closed_by_app`, by command), else of the first to fail, or the
-// first's. Throws Cancelled, platform::ProcessError when one cannot start,
-// and VideoSizeChanged when one rebuilt its filters, naming its video of
-// `videos`, the one each command decodes (both are ended then).
+// first's. `take_descriptors` gives what a command inherits, asked as it
+// starts: a command that never starts leaves its pipe to be closed by its
+// owner. Throws Cancelled, platform::ProcessError when one cannot start, and
+// VideoSizeChanged when one rebuilt its filters, naming its video of `videos`,
+// the one each command decodes (both are ended then).
 FfmpegOutcome run_ffmpeg_pair(const std::vector<std::vector<std::string>>& commands,
                               const std::vector<std::filesystem::path>& videos,
+                              const std::function<std::vector<int>(std::size_t)>& take_descriptors,
                               const std::function<bool(std::size_t)>& closed_by_app, long long total_frames,
                               const ProgressCallback& on_progress, const CancelToken& cancel,
                               const std::filesystem::path& folder) {
     cancel.throw_if_cancelled();
     std::vector<std::shared_ptr<std::atomic<bool>>> rebuilt;
     std::vector<platform::ChildProcess> processes;
-    for (const std::vector<std::string>& command : commands) {
+    for (std::size_t index = 0; index < commands.size(); ++index) {
         rebuilt.push_back(std::make_shared<std::atomic<bool>>(false));
-        processes.push_back(platform::ChildProcess::start(command, watched_options(folder, rebuilt.back())));
+        processes.push_back(platform::ChildProcess::start(
+            commands[index], watched_options(folder, rebuilt.back(), take_descriptors(index))));
     }
     const auto any_rebuilt = [&rebuilt] {
         return std::any_of(rebuilt.begin(), rebuilt.end(), [](const auto& flag) { return flag->load(); });
@@ -591,6 +597,9 @@ ParsedScores execute_gpu_run(const RunEnvironment& environment, const VideoInfo&
                 logger.info("FFmpeg: " + python_list2cmdline(command));
             }
             outcome = run_ffmpeg_pair(commands, {distorted.path, source.path},
+                                      [&attempt](std::size_t command) {
+                                          return attempt.take_output_descriptors(command);
+                                      },
                                       [&attempt](std::size_t command) { return attempt.closed_pipe_of(command); },
                                       total_frames, on_progress, cancel, folder.path());
         } catch (const platform::ProcessError& error) {

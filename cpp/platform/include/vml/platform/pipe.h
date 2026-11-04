@@ -1,8 +1,9 @@
-// Pipes another program opens by their path as it opens a file. InboundPipe,
-// which this process reads: how FFmpeg hands its frames over for VMAF on the
-// GPU; a named pipe (\\.\pipe\...) on Windows, a FIFO in the temporary
-// folder elsewhere. OutboundPipe, which this process writes: how FFmpeg gets
-// pictures the app decodes itself; a named pipe on Windows, a FIFO elsewhere.
+// Pipes between this process and a program it starts. InboundPipe, which this
+// process reads: how FFmpeg hands its frames over for VMAF on the GPU; a named
+// pipe (\\.\pipe\...) on Windows, a socket pair elsewhere, whose writing end
+// the program inherits. OutboundPipe, which this process writes: how FFmpeg
+// gets pictures the app decodes itself, opening it by its path as it opens a
+// file; a named pipe on Windows, a FIFO elsewhere.
 #pragma once
 
 #include <atomic>
@@ -31,27 +32,35 @@ inline constexpr std::size_t frame_pipe_bytes = 8 * 1024 * 1024;
 
 class InboundPipe {
 public:
-    // A new pipe, its path unique to this process and ending in `name`.
-    // `buffer_bytes` is how much a named pipe holds; a FIFO holds what the
-    // system gives it. Throws PipeError.
+    // A new pipe. `buffer_bytes` is how much a named pipe holds, its path
+    // unique to this process and ending in `name`. A socket pair holds that
+    // much in each direction's buffer or the most the system gives (macOS: 8
+    // MB, kern.ipc.maxsockbuf). Throws PipeError.
     InboundPipe(std::string_view name, std::size_t buffer_bytes);
     ~InboundPipe();
     InboundPipe(const InboundPipe&) = delete;
     InboundPipe& operator=(const InboundPipe&) = delete;
 
-    // The path the writer opens.
+    // What the writer is told to write to: a named pipe's path, which it
+    // opens as a file; elsewhere FFmpeg's name for the inherited writing end,
+    // "pipe:N".
     const std::string& path() const { return path_; }
+
+    // The writing end, for the program that writes (ProcessOptions::
+    // inherited_descriptors, which closes this process's copy): once only.
+    // -1 after that, once no_writer_will_come closed it, and always on
+    // Windows, whose writer opens the path.
+    int take_writer();
 
     // Waits for the writer to open the pipe. A writer that opened it, wrote
     // and closed it already counts: what it wrote is still there to read.
-    // Throws PipeError.
+    // Throws PipeError. A socket pair is connected from the start.
     void connect();
 
     // Waits until `bytes` are in the pipe (or half of what it holds), until
     // `writer_gone` says no more will come, or until `stop` is set, so that
     // a read takes them at once instead of in the pieces they arrive in.
-    // Elsewhere than on Windows a FIFO holds too little for that, and this
-    // returns at once.
+    // Only on Windows: elsewhere this returns at once.
     void gather(std::size_t bytes, const std::atomic<bool>& stop, const std::atomic<bool>& writer_gone);
 
     // Reads up to `bytes` into `into`: how many were read, 0 at the end.
@@ -67,18 +76,13 @@ public:
     // writing then fails, instead of waiting for room that would never come.
     void close();
 
-    // Opens the pipe at `path` to write and closes it at once. A reader
-    // waiting in connect() for a writer that never comes (FFmpeg opens no
-    // output that gets no frame) then finds the pipe empty. Does nothing to
-    // a pipe whose writer has it already, and, for a FIFO, to one whose
-    // reader is not waiting in connect() yet.
-    static void touch(const std::string& path);
-
-    // Removes the pipes a process that has ended left: its FIFOs (named by
-    // its id), which an ending it did not choose (a Cancel's SIGKILL) left in
-    // the temporary folder. Windows' pipes go with their last handle: there
-    // it does nothing.
-    static void remove_left_by(int process_id);
+    // Says no writer may come, so that a reader waiting for one finds the
+    // pipe empty: FFmpeg opens no output that gets no frame, and one that
+    // never started never will. A named pipe is opened to write and closed
+    // at once, which does nothing to one whose writer has it; a socket
+    // pair's writing end is closed, unless it was taken (whoever took it
+    // then holds the reader's end of the stream). Can be called repeatedly.
+    void no_writer_will_come();
 
 private:
     std::string path_;
@@ -133,6 +137,12 @@ public:
     // nothing to a pipe whose reader has it. A FIFO's name goes with it:
     // only once its reader is done (or never came) may it be touched.
     static void touch(const std::string& path);
+
+    // Removes the pipes a process that has ended left: its FIFOs (named by
+    // its id), which an ending it did not choose (a Cancel's SIGKILL) left in
+    // the temporary folder. Windows' pipes go with their last handle: there
+    // it does nothing.
+    static void remove_left_by(int process_id);
 
 private:
     struct State;  // each system's own (pipe_windows.cpp, pipe_posix.cpp)

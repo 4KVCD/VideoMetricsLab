@@ -632,6 +632,10 @@ public:
         platform::ProcessOptions options;
         options.output_pipe_bytes = packet_pipe_bytes;
         options.on_error_line = [this](std::string_view line) { note_error_line(line); };
+        // (Nothing once close() has said no writer will come.)
+        if (const int writer = listing_pipe_.take_writer(); writer >= 0) {
+            options.inherited_descriptors.push_back(writer);
+        }
         ffmpeg_.emplace(platform::ChildProcess::start(command_, options));
         listing_thread_ = std::thread([this] { read_listing(); });
     }
@@ -684,7 +688,7 @@ public:
             ffmpeg_->terminate();
             ffmpeg_->wait_for(std::chrono::seconds(10));
         }
-        platform::InboundPipe::touch(listing_pipe_.path());  // releases a listing thread still waiting for FFmpeg
+        listing_pipe_.no_writer_will_come();  // releases a listing thread still waiting for an FFmpeg
     }
 
     // The packets' time base, once the listing has said it: nothing when it
@@ -695,12 +699,12 @@ public:
         while (!time_base_ && !listing_ended_ && std::chrono::steady_clock::now() < deadline) {
             if (!listed_.wait_for(lock, std::chrono::milliseconds(100),
                                   [this] { return time_base_.has_value() || listing_ended_; })) {
-                // As in next(): FFmpeg may have ended without opening the
-                // listing's pipe.
+                // As in next(): FFmpeg may have ended without opening a named
+                // pipe for its listing.
                 lock.unlock();
                 cancel.throw_if_cancelled();
                 if (ffmpeg_ && ffmpeg_->wait_for(std::chrono::milliseconds(0))) {
-                    platform::InboundPipe::touch(listing_pipe_.path());
+                    listing_pipe_.no_writer_will_come();
                 }
                 lock.lock();
             }
@@ -723,11 +727,12 @@ private:
         while (listing_.empty() && !listing_ended_) {
             if (!listed_.wait_for(lock, std::chrono::milliseconds(200),
                                   [this] { return !listing_.empty() || listing_ended_; })) {
-                // If FFmpeg ended without opening the listing's pipe, the
-                // pipe is opened here, so that the wait for it ends.
+                // If FFmpeg ended without opening a named pipe for its
+                // listing, it is opened here, so that the wait for it ends.
+                // (A socket pair's end went with FFmpeg: this does nothing.)
                 lock.unlock();
                 if (ffmpeg_ && ffmpeg_->wait_for(std::chrono::milliseconds(0))) {
-                    platform::InboundPipe::touch(listing_pipe_.path());
+                    listing_pipe_.no_writer_will_come();
                 }
                 lock.lock();
             }
