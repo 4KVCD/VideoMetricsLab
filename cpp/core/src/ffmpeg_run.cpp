@@ -2124,43 +2124,50 @@ ComparisonResult run_vmaf(const RunEnvironment& environment, const VideoInfo& so
 
 namespace {
 
-// A resolution test scored as a comparison of the source with a test video
-// NVIDIA's decoder makes from it (VideoInfo::resample_via): its decoders
-// scale as FFmpeg's scale filter does, so the test video's pictures are
-// build_resample_filtergraph's, and VMAF runs on the GPU and PSNR, SSIM and
-// XPSNR in the app, from the same frames. Nothing where it cannot be: then
-// FFmpeg makes the test (resample_test_run).
+// A resolution test scored as a comparison of the source with a test video made
+// from it (VideoInfo::resample_via), so that VMAF runs on the GPU and PSNR, SSIM
+// and XPSNR in the app, from the same frames. NVIDIA's decoder makes its pictures,
+// scaling as FFmpeg's scale filter does; with any other maker's, FFmpeg's scale
+// filters make them, the same pictures, in the comparison's pipes (video_chains).
+// Nothing where it cannot be, or where only FFmpeg's filters could make it and the
+// CPU scores VMAF: then FFmpeg makes the test, decoding the video once
+// (resample_test_run).
 std::optional<ComparisonResult> resample_test_on_gpu(const RunEnvironment& environment, const VideoInfo& source,
                                                      const VmafOptions& options,
                                                      const std::optional<CropBox>& source_crop,
                                                      const ProgressCallback& on_progress,
                                                      const StatusCallback& on_status, const CancelToken& cancel) {
     const ResampleTarget& target = *options.resample_test;
-    const bool cropped = source_crop && !source_crop->is_noop(source.width, source.height);
-    // The decoders keep a crop on even samples; FFmpeg scales back to the
-    // crop's own size.
-    if (!options.gpu_decode || source.scaled_to ||
-        (cropped && ((source_crop->x | source_crop->y | source_crop->w | source_crop->h) & 1) != 0)) {
-        return std::nullopt;
-    }
-    const HardwareDecoding decoding = plan_hardware_decoding(environment.decoding, options.gpu_vendor, source, source);
-    const std::optional<std::pair<std::string, std::string>> decoders = decoders_here(decoding);
-    if (!decoders || !gpu_decoder(decoders->first).scales_in_two_steps ||
-        !gpu_decoder(decoders->second).scales_in_two_steps) {
+    if (source.scaled_to) {
         return std::nullopt;
     }
     const auto [width, height] = resample_analysis_dimensions(source, source_crop);
     VideoInfo test = source;
     test.resample_via = std::pair(target.width, resample_down_height(target.width, {width, height}));
-    try {
-        const DecodePlan plan =
-            plan_decode(test, source_crop, 6, true, std::pair(width, height), options.scale_algorithm);
-        if (const std::optional<std::string> refusal = scaling_refusal(plan, environment.ffmpeg)) {
-            logger.info("Resolution test made by FFmpeg: " + *refusal);
+    const HardwareDecoding decoding = options.gpu_decode ? plan_hardware_decoding(environment.decoding,
+                                                                                  options.gpu_vendor, source, source)
+                                                         : HardwareDecoding{};
+    const std::optional<std::pair<std::string, std::string>> decoders = decoders_here(decoding);
+    if (decoders && gpu_decoder(decoders->first).scales_in_two_steps &&
+        gpu_decoder(decoders->second).scales_in_two_steps) {
+        // The decoders keep a crop on even samples; FFmpeg scales back to the
+        // crop's own size.
+        const bool cropped = source_crop && !source_crop->is_noop(source.width, source.height);
+        if (cropped && ((source_crop->x | source_crop->y | source_crop->w | source_crop->h) & 1) != 0) {
             return std::nullopt;
         }
-    } catch (const GpuDecodeUnavailableError& error) {
-        logger.info(std::string("Resolution test made by FFmpeg: ") + error.what());
+        try {
+            const DecodePlan plan =
+                plan_decode(test, source_crop, 6, true, std::pair(width, height), options.scale_algorithm);
+            if (const std::optional<std::string> refusal = scaling_refusal(plan, environment.ffmpeg)) {
+                logger.info("Resolution test made by FFmpeg: " + *refusal);
+                return std::nullopt;
+            }
+        } catch (const GpuDecodeUnavailableError& error) {
+            logger.info(std::string("Resolution test made by FFmpeg: ") + error.what());
+            return std::nullopt;
+        }
+    } else if (!options.vmaf_on_gpu || gpu_vmaf_backend(cancel).backend.empty()) {
         return std::nullopt;
     }
     try {
@@ -2175,8 +2182,6 @@ std::optional<ComparisonResult> resample_test_on_gpu(const RunEnvironment& envir
     } catch (const VideoSizeChanged&) {
         throw;  // run_resample_test refuses it
     } catch (const std::exception& error) {
-        // No part of it fell back to FFmpeg's filters: they refuse the test
-        // video (video_chains), as they would compare the source with itself.
         logger.warning(std::string("The resolution test on the GPU failed; FFmpeg makes it: ") + error.what());
         return std::nullopt;
     }

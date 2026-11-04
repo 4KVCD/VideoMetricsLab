@@ -18,6 +18,7 @@
 #include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/platform/system.h"
+#include "vml/run_json.h"
 #include "vml/size_changes.h"
 
 namespace vml {
@@ -180,6 +181,29 @@ TEST(FfmpegRun, ARangesFramesAreKeptAtTheHeadOfBothChains) {
     const std::vector<std::string> command =
         build_ffmpeg_command("ffmpeg", test.path, source.path, graph, HardwareDecoding{});
     EXPECT_EQ(std::count(command.begin(), command.end(), "-t"), 0);
+}
+
+// A resolution test's test video has no file of its own: FFmpeg's chain of the
+// source's video makes it, scaled down and back up after the analysis format
+// and before the frames are numbered, as build_resample_filtergraph does.
+TEST(FfmpegRun, AResolutionTestsTestVideoIsScaledDownAndBackInItsOwnChain) {
+    const VideoInfo source = pair_named("4k against 1080p").first;
+    VideoInfo test = source;
+    test.resample_via = std::pair(1920, 1080);
+    const auto [test_graph, source_graph] = build_stream_graphs(source, test, options_named("vmaf", "plain"),
+                                                                std::nullopt, std::nullopt, HardwareDecoding{});
+    const std::size_t format = test_graph.find("format=");
+    const std::size_t down = test_graph.find("scale=1920:1080:flags=");
+    const std::size_t up = test_graph.find("scale=3840:2160:flags=");
+    const std::size_t numbering = test_graph.find("settb=");
+    ASSERT_NE(down, std::string::npos) << test_graph;
+    EXPECT_LT(format, down) << test_graph;
+    EXPECT_LT(down, up) << test_graph;
+    EXPECT_LT(up, numbering) << test_graph;
+    EXPECT_EQ(source_graph.find("scale="), std::string::npos) << source_graph;
+    // The child process that scores it is told too, or it would compare the
+    // source with itself.
+    EXPECT_EQ(video_from(video_json(test)), test);
 }
 
 // A Mac's GPU decoder hands its frames over in system memory itself, so a

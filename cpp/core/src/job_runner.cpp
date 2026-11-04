@@ -1120,9 +1120,7 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     const bool vmaf_family_left = contains(keys, "vmaf") || contains(keys, "vmaf_neg") || contains(keys, "vmaf_v1");
     GpuModels on_gpu;
     std::vector<std::pair<std::string, std::string>> check_failures;  // (key, why) of scores_on_gpu
-    // A resolution test's VMAF is FFmpeg's: its test video is made in
-    // FFmpeg's filter graph, from the source.
-    if (vmaf_family_left && !options.resample_test) {
+    if (vmaf_family_left) {
         // The size frames are compared at, where it is known before the run:
         // with black bars kept. Pictures with their black bars cut are
         // always even-sized.

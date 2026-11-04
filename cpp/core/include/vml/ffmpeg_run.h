@@ -314,7 +314,8 @@ std::filesystem::path synthetic_resample_distorted_path(const std::filesystem::p
 
 // Runs a resolution test (VmafOptions::resample_test): the source scaled
 // down to the target width and back up to its own size, compared with the
-// untouched source, with FFmpeg's metric filters. It needs only the source.
+// untouched source, on the GPU where VMAF is placed there and otherwise with
+// FFmpeg's metric filters. It needs only the source.
 // Throws VmafRunError when the run fails, and Cancelled.
 ComparisonResult run_resample_test(const RunEnvironment& environment, const VideoInfo& source, VmafOptions options,
                                    const ProgressCallback& on_progress, const StatusCallback& on_status,

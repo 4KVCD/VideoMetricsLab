@@ -32,9 +32,13 @@ const app_log::Logger logger("vml.grain_feed");
 bool feeding_all() { return platform::environment_variable("VML_FEED").value_or("") == "all"; }
 
 // The pictures fed: the whole picture at its own size, every plane, 10-bit
-// samples in the low bits of 16 (yuv420p10le's layout). Throws
+// samples in the low bits of 16 (yuv420p10le's layout); a resolution test's
+// scaling is left to FFmpeg's filters, after the feed. Throws
 // GpuDecodeUnavailableError where the software decoder takes no such plan.
-DecodePlan feed_plan(const VideoInfo& info) { return plan_decode(info, std::nullopt, 6); }
+DecodePlan feed_plan(VideoInfo info) {
+    info.resample_via.reset();
+    return plan_decode(info, std::nullopt, 6);
+}
 
 // rawvideo's name for the plan's pictures: 4:2:0 alone, as the decoder
 // gives them (any other format would be converted on the way, which FFmpeg's

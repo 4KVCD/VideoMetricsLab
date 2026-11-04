@@ -148,7 +148,9 @@ std::vector<std::string> output_args(const std::string& filtergraph) {
 // its pictures itself does it once for all of them), cropped, converted to
 // the analysis format (the deeper video's) and, for a test video of the
 // other range, to the source's range (VideoInfo::full_range), scaled to the
-// compared size, and its frames numbered.
+// compared size, for a resolution test's test video scaled down and back up
+// (VideoInfo::resample_via, as build_resample_filtergraph does), and its frames
+// numbered.
 struct VideoChains {
     std::vector<std::string> test;    // the test video's (input 0)
     std::vector<std::string> source;  // the source's
@@ -157,18 +159,15 @@ struct VideoChains {
 VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options,
                          const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
                          const HardwareDecoding& decoding, bool split) {
-    if (source.resample_via || distorted.resample_via) {
-        // Its frames exist only as the app's decoders make them: FFmpeg
-        // would compare the source with itself (build_resample_filtergraph
-        // makes a resolution test in FFmpeg).
-        throw VmafRunError("FFmpeg cannot read a resolution test's test video");
-    }
     const auto [distorted_w, distorted_h] = content_size(distorted, distorted_crop);
     const auto [source_w, source_h] = content_size(source, source_crop);
     const bool sizes_differ = source_w != distorted_w || source_h != distorted_h;
     const bool upscale_distorted = sizes_differ && options.scale_direction == ScaleDirection::distorted_to_source;
     const std::string analysis_format = analysis_pix_fmt({source.pix_fmt, distorted.pix_fmt});
     const std::vector<std::string> numbering = numbering_filters(frame_rate(distorted));
+    const auto scaled_to = [&options](int width, int height) {
+        return "scale=" + std::to_string(width) + ":" + std::to_string(height) + ":flags=" + options.scale_algorithm;
+    };
     // A GPU decoder's 8-bit picture (NV12) widened to a deeper analysis
     // format is made planar first: FFmpeg widens NV12 with a plain shift, but
     // a planar picture, as its software decoding gives it, with full-range
@@ -207,8 +206,11 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
         chains.test.push_back(std::string("scale=out_range=") + (source.full_range() ? "pc" : "tv"));
     }
     if (upscale_distorted) {
-        chains.test.push_back("scale=" + std::to_string(source_w) + ":" + std::to_string(source_h) +
-                              ":flags=" + options.scale_algorithm);
+        chains.test.push_back(scaled_to(source_w, source_h));
+    }
+    if (distorted.resample_via) {
+        chains.test.push_back(scaled_to(distorted.resample_via->first, distorted.resample_via->second));
+        chains.test.push_back(scaled_to(distorted_w, distorted_h));
     }
     chains.test.insert(chains.test.end(), numbering.begin(), numbering.end());
 
@@ -229,8 +231,7 @@ VideoChains video_chains(const VideoInfo& source, const VideoInfo& distorted, co
     }
     chains.source.push_back("format=" + analysis_format);
     if (sizes_differ && !upscale_distorted) {
-        chains.source.push_back("scale=" + std::to_string(distorted_w) + ":" + std::to_string(distorted_h) +
-                                ":flags=" + options.scale_algorithm);
+        chains.source.push_back(scaled_to(distorted_w, distorted_h));
     }
     chains.source.insert(chains.source.end(), numbering.begin(), numbering.end());
     return chains;
