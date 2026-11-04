@@ -1173,12 +1173,28 @@ public:
             run_.join();
         }
     }
-    // Its scores, once joined; throws what its run threw.
-    std::optional<ParsedScores> result() {
-        if (error_) {
-            std::rethrow_exception(error_);
+    // Its scores, once joined. Where its run failed, `keys` are failed, so
+    // that the scores beside them stand; what ends the whole run goes on up.
+    ParsedScores scores_or_failed(const std::vector<std::string>& keys) {
+        try {
+            if (error_) {
+                std::rethrow_exception(error_);
+            }
+        } catch (const Cancelled&) {
+            throw;
+        } catch (const VideoSizeChanged&) {
+            throw;  // the run is made again, the video marked (run_vmaf)
+        } catch (const FilmGrainRefusal&) {
+            throw;  // final, for the run's other metrics too
+        } catch (const std::exception& error) {
+            logger.error(std::string("A part of the run failed, the others' scores stand: ") + error.what());
+            ParsedScores none;
+            for (const std::string& key : keys) {
+                none.failed[key] = error.what();
+            }
+            return none;
         }
-        return std::move(scores_);
+        return std::move(scores_).value_or(ParsedScores{});
     }
 
 private:
@@ -1303,8 +1319,11 @@ std::optional<ParsedScores> run_cpu_metrics(const RunEnvironment& environment, c
     }
     cancel.throw_if_cancelled();
     if (xpsnr) {
-        if (const std::optional<ParsedScores> found = xpsnr->result()) {
-            merge_xpsnr(*frames, *found);
+        const ParsedScores found = xpsnr->scores_or_failed({"xpsnr"});
+        if (found.has("xpsnr")) {
+            merge_xpsnr(*frames, found);
+        } else {
+            frames->failed.insert(found.failed.begin(), found.failed.end());
         }
     } else if (left_to_ffmpeg) {
         frames->failed["xpsnr"] = xpsnr_refusal;
@@ -1744,7 +1763,7 @@ std::optional<RunScores> score_xpsnr_beside(const RunFrames& run, const VmafOpti
                                        progress.part(0), on_status, run.cancel));
     xpsnr.join();
     run.cancel.throw_if_cancelled();
-    scores.parts.push_back(std::move(*xpsnr.result()));
+    scores.parts.push_back(xpsnr.scores_or_failed({"xpsnr"}));
     if (in_app) {
         insert_keys(scores.cpu_keys, *plan);
     }
@@ -1900,14 +1919,10 @@ RunScores score_apart(const RunFrames& run, const VmafOptions& gpu_options, cons
     }
     cpu_part.join();
     run.cancel.throw_if_cancelled();
-    std::optional<ParsedScores> cpu_scores = cpu_part.result();
-    if (!cpu_scores) {
-        throw VmafRunError("PSNR, SSIM and XPSNR gave no scores");
-    }
+    scores.parts.push_back(cpu_part.scores_or_failed(cpu_options.requested_metrics()));
     if (in_app) {
         insert_keys(scores.cpu_keys, *cpu);
     }
-    scores.parts.push_back(std::move(*cpu_scores));
     scores.parts.push_back(std::move(*gpu_scores));
     return scores;
 }
