@@ -57,8 +57,12 @@ fi
 #    libvmaf.dylib, libjxl's two tools, Video Compare's FFmpeg libraries,
 #    dav1d and dav2d (a pinned commit: dav2d has no release yet), and the
 #    software decoder the GPU metrics decode with in the app (not in git).
-step "Building libvmaf-fast"
-"$project/scripts/build_libvmaf_fast_macos.sh" | sed 's/^/    /'
+if $allow_local_libvmaf; then
+    step "Keeping the local libvmaf-fast build"
+else
+    step "Building libvmaf-fast"
+    "$project/scripts/build_libvmaf_fast_macos.sh" | sed 's/^/    /'
+fi
 step "Building libjxl's ssimulacra2 and butteraugli_main"
 "$project/scripts/build_libjxl_macos.sh" | sed 's/^/    /'
 step "Building FFmpeg's libraries for Video Compare"
@@ -207,7 +211,12 @@ while IFS= read -r file; do
         [[ "$library" == "$own_name" ]] && continue
         case "$library" in
             /usr/lib/* | /System/Library/*) ;;
-            @rpath/* | @loader_path/* | @executable_path/*) ;;
+            @rpath/* | @loader_path/* | @executable_path/*)
+                if [[ -z "$(find "$contents" -name "$(basename "$library")" -print -quit)" ]]; then
+                    echo "$(basename "$file") links $library, which is not in the bundle" >&2
+                    exit 1
+                fi
+                ;;
             *) echo "$(basename "$file") links $library, which is neither in the bundle nor the system's" >&2; exit 1 ;;
         esac
     done < <(otool -L "$file" | tail -n +2 | awk '{print $1}')

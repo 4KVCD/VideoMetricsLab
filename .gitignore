@@ -12,6 +12,7 @@ gui_stderr.log
 # build_software_frames_macos.sh)
 resources/native/*.dll
 resources/native/*.dylib
+resources/native/*.source
 # macOS's tools, built by scripts/build_*_macos.sh (the release script runs them)
 resources/tools/libvmaf/libvmaf.dylib
 resources/tools/libjxl/ssimulacra2

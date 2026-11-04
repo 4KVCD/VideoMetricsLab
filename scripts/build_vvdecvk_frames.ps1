@@ -40,4 +40,9 @@ New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
     (Join-Path $native 'vvdecvk_frames.cpp') $library -o (Join-Path $outputDirectory 'vvdecvk_frames.dll') `
     '-Wl,--no-insert-timestamp'
 if ($LASTEXITCODE -ne 0) { throw 'vvdecvk_frames.dll build failed' }
+# What it was built from, as git cannot say for a DLL it ignores: scripts/build_release.ps1 checks it.
+$commit = (& git -C $Source rev-parse HEAD).Trim()
+if (& git -C $Source status --porcelain) { $commit += '-with-changes' }
+$module = (Get-FileHash (Join-Path $native 'vvdecvk_frames.cpp') -Algorithm SHA256).Hash
+Set-Content -Encoding ascii -Path (Join-Path $outputDirectory 'vvdecvk_frames.dll.source') -Value "$commit $module"
 Write-Host "vvdecvk_frames.dll: $(Join-Path $outputDirectory 'vvdecvk_frames.dll')"

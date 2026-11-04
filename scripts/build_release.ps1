@@ -193,6 +193,12 @@ $vvdecVulkan = Join-Path $appFiles 'native/vvdecvk_frames.dll'
 if (-not (Test-Path $vvdecVulkan)) {
     throw 'resources/native has no vvdecvk_frames.dll: build it with scripts/build_vvdecvk_frames.ps1'
 }
+$vvdecVulkanCommit = '76755238cbd60747d0270b8348ef2295cd230bd5'  # vvdec-vulkan's release v1.1
+$module = (Get-FileHash (Join-Path $projectDirectory 'native/vvdecvk_frames.cpp') -Algorithm SHA256).Hash
+$builtFrom = Get-Content "$vvdecVulkan.source" -ErrorAction SilentlyContinue
+if ($builtFrom -ne "$vvdecVulkanCommit $module") {
+    throw "vvdecvk_frames.dll was built from '$builtFrom', not vvdec-vulkan $vvdecVulkanCommit and this tree's native/vvdecvk_frames.cpp ($module): build it with scripts/build_vvdecvk_frames.ps1"
+}
 Copy-Item $vvdecVulkan $native
 Copy-Item (Join-Path $projectDirectory 'resources/tools/ffmpeg/licenses/COPYING.vvdec.txt') (Join-Path $native 'licenses')
 
