@@ -64,6 +64,9 @@ nlohmann::json ComparisonRecipe::identity() const {
     if (!film_grain.is_null()) {
         identity["film_grain"] = film_grain;
     }
+    if (coded_at_another_size) {
+        identity["coded_at_another_size"] = true;
+    }
     return identity;
 }
 
@@ -93,6 +96,7 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
         };
         request.recipe.film_grain = {{"source", text(source_grain)}, {"distorted", text(distorted_grain)}};
     }
+    request.recipe.coded_at_another_size = source.coded_at_another_size || distorted.coded_at_another_size;
     request.perceptual_backends = automatic_perceptual_backends;
     for (const auto& [key, backend] : perceptual_backends) {
         if (!request.perceptual_backends.contains(key)) {

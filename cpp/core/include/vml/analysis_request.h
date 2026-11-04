@@ -29,6 +29,10 @@ struct ComparisonRecipe {
     // "distorted": ..}, each film_grain_identity's text or null; null where
     // neither has one (film_grain_scoring.h).
     nlohmann::json film_grain = nullptr;
+    // Whether a video is coded at another size than its header says
+    // (VideoInfo::coded_at_another_size), whose scores before 2.4 read it at
+    // the wrong size on some routes.
+    bool coded_at_another_size = false;
 
     // The settings that decide what the comparison is (identity_dict). The
     // scaling algorithm is one, as whether a comparison scales can depend on
@@ -36,7 +40,7 @@ struct ComparisonRecipe {
     // is in it only where it is not the default, so that every other
     // comparison keeps the identity it had. The manual crops, which the app
     // no longer has, are null. The film grain is in it only where it is not
-    // null, for the same reason.
+    // null, and coded_at_another_size only where true, for the same reason.
     // Which decoder made a video's pictures is not in it: a VVC video's scores
     // are the same ones whether VVdeC or FFmpeg decoded it.
     nlohmann::json identity() const;

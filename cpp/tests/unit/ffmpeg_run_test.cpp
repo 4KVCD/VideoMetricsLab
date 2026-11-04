@@ -314,6 +314,13 @@ TEST(SizeChanges, ATestVideoRebuiltAtItsOwnSizeKeepsIt) {
     mark_size_changes(source, resized);
     EXPECT_EQ(flipped.scaled_to, std::pair(640, 360));
     EXPECT_EQ(resized.scaled_to, std::pair(1280, 720));
+
+    VideoInfo coded_smaller = flipped;
+    coded_smaller.path = "coded_smaller.mkv";
+    coded_smaller.scaled_to.reset();
+    coded_smaller.coded_at_another_size = true;
+    mark_size_changes(source, coded_smaller);
+    EXPECT_EQ(coded_smaller.scaled_to, std::pair(1280, 720));
 }
 
 // FFmpeg 9.0.1's word that it rebuilt its filters as a video's size changed,

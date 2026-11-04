@@ -26,6 +26,10 @@ public:
 // export the grain, it adds none, and what ffprobe reports is otherwise the same.
 std::vector<std::string> ffprobe_command_start(const std::string& ffprobe);
 
+// Whether ffprobe's listing of frames (frame=width,height, csv=p=0) has one of
+// another size than this.
+bool listed_sizes_differ(std::string_view listed, int width, int height);
+
 // The video's details, read by running `ffprobe` (the program to run) on
 // `path`. Throws ProbeError when they cannot be read.
 VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe);

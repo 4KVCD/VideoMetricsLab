@@ -97,6 +97,12 @@ struct VideoInfo {
     // The degrees its rotation tag says a player turns it by (0, 90, 180 or
     // 270). The app does not: width and height, and every picture, are as stored.
     int rotation = 0;
+    // Whether its first pictures are not the size above: AV1 may code its
+    // frames smaller than its sequence header says, which is the size above.
+    // FFmpeg rebuilds nothing for a stream that starts so, and its hardware
+    // decoders give pictures of the header's size that are not the video
+    // (SizeChangeMarks marks such a video from the start).
+    bool coded_at_another_size = false;
     // Set for a video whose picture size changes partway through (FFmpeg
     // rebuilt its filters for it): the size every one of its frames is
     // scaled to first, so that the whole video is scored at one size

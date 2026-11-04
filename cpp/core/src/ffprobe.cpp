@@ -406,13 +406,51 @@ std::vector<std::string> ffprobe_command_start(const std::string& ffprobe) {
     return {ffprobe, "-v", "error", "-export_side_data", "film_grain"};
 }
 
+bool listed_sizes_differ(std::string_view listed, int width, int height) {
+    const std::string header = std::to_string(width) + "," + std::to_string(height);
+    for (const std::string_view line : python_splitlines(listed)) {
+        std::string_view size = python_strip(line);
+        // Width and height, then a column for each kind of side data a frame has (HDR videos' do).
+        const std::size_t after_width = size.find(',');
+        if (const std::size_t end = after_width == size.npos ? size.npos : size.find(',', after_width + 1);
+            end != size.npos) {
+            size = size.substr(0, end);
+        }
+        if (!size.empty() && size != header) {
+            return true;
+        }
+    }
+    return false;
+}
+
+namespace {
+
+// Whether any of an AV1 video's first pictures is coded at another size than
+// its header says (VideoInfo::coded_at_another_size), as decoded in software.
+// Not known, as for a file ffprobe cannot decode: as its header says.
+bool av1_coded_at_another_size(const VideoInfo& info, const std::string& ffprobe, const CancelToken& cancel) {
+    std::string listed;
+    try {
+        listed = run_ffprobe({ffprobe, "-v", "error", "-select_streams", "v:0", "-read_intervals", "%+#8",
+                              "-show_entries", "frame=width,height", "-of", "csv=p=0", text(info.path)},
+                             info.path, std::chrono::seconds(30), cancel);
+    } catch (const ProbeError&) {
+        return false;
+    }
+    return listed_sizes_differ(listed, info.width, info.height);
+}
+
+}  // namespace
+
 VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe, const CancelToken& cancel) {
     if (is_av2_file(path)) {
         return probe_av2(path, cancel);  // ffprobe cannot read AV2
     }
     std::vector<std::string> command = ffprobe_command_start(ffprobe);
     command.insert(command.end(), {"-print_format", "json", "-show_format", "-show_streams", text(path)});
-    return video_info_from_probe(path, run_ffprobe(command, path, std::chrono::seconds(60), cancel));
+    VideoInfo info = video_info_from_probe(path, run_ffprobe(command, path, std::chrono::seconds(60), cancel));
+    info.coded_at_another_size = ascii_lower(info.codec_name) == "av1" && av1_coded_at_another_size(info, ffprobe, cancel);
+    return info;
 }
 
 std::optional<long long> stated_frame_count(const std::filesystem::path& path, const std::string& ffprobe,

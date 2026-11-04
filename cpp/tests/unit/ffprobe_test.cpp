@@ -60,6 +60,15 @@ TEST(Ffprobe, ReadsTheVideosDetailsAsThePythonAppDoes) {
 
 // A rotation tag as ffprobe gives it, and a pair stored at different rotations
 // refused: compared as stored, one would be on its side against the other.
+// An HDR video's frames list a column for their side data after the size.
+TEST(Ffprobe, FrameSizesAreReadWithoutTheirSideData) {
+    EXPECT_FALSE(listed_sizes_differ("3840,2160,\n3840,2160,\n", 3840, 2160));
+    EXPECT_FALSE(listed_sizes_differ("3840,2160\n", 3840, 2160));
+    EXPECT_TRUE(listed_sizes_differ("3840,2160,\n2560,1440,\n", 3840, 2160));
+    EXPECT_TRUE(listed_sizes_differ("1920,1080\n", 3840, 2160));
+    EXPECT_FALSE(listed_sizes_differ("", 3840, 2160));
+}
+
 TEST(Ffprobe, ReadsARotationTagAndAPairMustShareIt) {
     const auto video_turned = [](const std::string& side_data) {
         return video_info_from_probe(

@@ -31,6 +31,9 @@ nlohmann::json video_json(const VideoInfo& info) {
     if (info.rotation != 0) {  // likewise
         text["rotation"] = info.rotation;
     }
+    if (info.coded_at_another_size) {  // likewise
+        text["coded_at_another_size"] = true;
+    }
     if (info.scaled_to) {  // only where set, so that other videos' text stays as it was
         text["scaled_to"] = {info.scaled_to->first, info.scaled_to->second};
     }
@@ -71,6 +74,7 @@ VideoInfo video_from(const nlohmann::json& text) {
     text.at("start_offset").get_to(info.start_offset);
     text.at("timed_raw").get_to(info.timed_raw);
     info.rotation = text.value("rotation", 0);
+    info.coded_at_another_size = text.value("coded_at_another_size", false);
     if (const auto scaled = text.find("scaled_to"); scaled != text.end()) {
         info.scaled_to = std::pair(scaled->at(0).get<int>(), scaled->at(1).get<int>());
     }

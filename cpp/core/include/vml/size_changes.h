@@ -98,9 +98,10 @@ std::string error_lines_of(std::string_view error_output);
 std::pair<int, int> size_change_target(const VideoInfo& test, const VideoInfo& source);
 
 // The pair as this process found it: a video noted by an earlier run that
-// finished (SizeChangeMarks::finished) is scaled_to its target, the test
-// video to size_change_target (its own size if it was rebuilt at that size),
-// the source to its own probed size.
+// finished (SizeChangeMarks::finished), or coded at another size than its
+// header says (VideoInfo::coded_at_another_size), is scaled_to its target, the
+// test video to size_change_target (its own size if it was rebuilt at that
+// size), the source to its own probed size.
 void mark_size_changes(VideoInfo& source, VideoInfo& test);
 
 // The marks a pair's runs are made with (run_vmaf, run_perceptual_task):

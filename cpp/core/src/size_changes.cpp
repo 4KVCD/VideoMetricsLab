@@ -152,8 +152,11 @@ std::pair<int, int> size_change_target(const VideoInfo& test, const VideoInfo& s
 }
 
 void mark_size_changes(VideoInfo& source, VideoInfo& test) {
-    if (!source.scaled_to && noted_keeps_its_size(source.path)) {
+    if (!source.scaled_to && (source.coded_at_another_size || noted_keeps_its_size(source.path))) {
         source.scaled_to = std::pair(source.width, source.height);
+    }
+    if (!test.scaled_to && test.coded_at_another_size) {
+        test.scaled_to = size_change_target(test, source);
     }
     if (!test.scaled_to) {
         if (const std::optional<bool> keeps_its_size = noted_keeps_its_size(test.path)) {
