@@ -441,6 +441,7 @@ void MetricPage::set_timeline_curve(int series_id, const SeriesEntry& entry) {
 
 void MetricPage::remove_curves(const std::vector<int>& series_ids) {
     if (erase_curves(series_ids)) {
+        hover_label_->set_text(placeholder_);  // it may be saying a gone line's numbers
         refresh_difference();
     }
 }
@@ -631,7 +632,7 @@ void MetricPage::refresh_readout_layout() {
     for (const QString& label : visible_labels()) {
         series_width_ = std::max(series_width_, length_of("[" + label + "]"));
     }
-    main_width_ = std::max(field_width(*metric_), length_of("no " + qt_text(metric_->label)));
+    main_width_ = std::max(field_width(*metric_), length_of(app::tr("no {metric}", {{"metric", qt_text(metric_->label)}})));
     columns_.clear();
     for (const MetricDefinition* metric : extra_columns()) {
         columns_.emplace_back(metric, field_width(*metric));
@@ -645,7 +646,8 @@ QString MetricPage::readout_row(const QString& prefix, std::optional<double> val
     // by the value, so that the columns line up. A line without a column's
     // value leaves it blank rather than shifting the rest along.
     const QString label = qt_text(metric_->label);
-    const QString main = value ? label + "=" + qt_text(metric_->format_value(*value)) : "no " + label;
+    const QString main =
+        value ? label + "=" + qt_text(metric_->format_value(*value)) : app::tr("no {metric}", {{"metric", label}});
     if (columns_.empty()) {
         return prefix + main;
     }
@@ -1829,7 +1831,7 @@ void GraphPanel::on_export_csv() {
     for (const auto& [id, entry] : entries_) {
         const std::filesystem::path out =
             unique_output_path(path_of(folder), entry.label.toStdString(), ".csv", reserved);
-        file_writes_->submit(QStringLiteral("export %1").arg(name_of(out)),
+        file_writes_->submit(app::tr("export {name}", {{"name", name_of(out)}}),
                              [result = entry.result, out] { export_csv(*result, out); });
     }
     long long files = static_cast<long long>(entries_.size());
@@ -1841,7 +1843,7 @@ void GraphPanel::on_export_csv() {
         const std::filesystem::path out = unique_output_path(
             path_of(folder), difference_label(first.label.toStdString(), second.label.toStdString()), ".csv",
             reserved);
-        file_writes_->submit(QStringLiteral("export %1").arg(name_of(out)),
+        file_writes_->submit(app::tr("export {name}", {{"name", name_of(out)}}),
                              [first = first.result, second = second.result, out] {
                                  export_difference_csv(*first, *second, out);
                              });

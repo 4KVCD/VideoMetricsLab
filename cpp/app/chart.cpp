@@ -210,7 +210,18 @@ ChartWidget::ChartWidget(QString y_axis_label, std::optional<double> fixed_y_max
 
 void ChartWidget::set_series(int key, ChartSeries series) {
     series_.insert_or_assign(key, std::move(series));
+    forget_view_off_the_data();
     invalidate(true);
+}
+
+void ChartWidget::forget_view_off_the_data() {
+    // A zoom into the end of a longer line that has gone would show nothing.
+    if (view_) {
+        const auto [lo, hi] = data_x_range();
+        if (view_->start >= hi || view_->start + view_->span <= lo) {
+            view_.reset();
+        }
+    }
 }
 
 void ChartWidget::renumber(const std::map<int, int>& renumbered) {
@@ -238,6 +249,7 @@ void ChartWidget::remove_series(const std::vector<int>& keys) {
         removed = series_.erase(key) > 0 || removed;
     }
     if (removed) {
+        forget_view_off_the_data();
         invalidate(true);
     }
 }
@@ -246,6 +258,7 @@ void ChartWidget::set_series_visible(int key, bool visible) {
     const auto found = series_.find(key);
     if (found != series_.end() && found->second.visible != visible) {
         found->second.visible = visible;
+        forget_view_off_the_data();
         invalidate(true);
     }
 }
@@ -835,7 +848,9 @@ void ChartWidget::mouseMoveEvent(QMouseEvent* event) {
         const double span = pan_view_->span;
         const double shift =
             (pan_origin_->x() - pos.x()) / static_cast<double>(std::max(1, plot_rect().width())) * span;
-        view_ = View{pan_view_->start + shift, span};
+        // Over the data, not drifting off its ends, as the wheel keeps it.
+        const auto [data_lo, data_hi] = data_x_range();
+        view_ = View{std::clamp(pan_view_->start + shift, data_lo, std::max(data_lo, data_hi - span)), span};
         invalidate();
         emit view_changed();
         return;

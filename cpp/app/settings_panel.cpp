@@ -504,7 +504,7 @@ void SettingsPanel::clear_saved_results() {
     // changes before the queue gets to this, it must not delete a folder the
     // user was never asked about.
     cleared_ = std::make_shared<int>(0);
-    file_writes_.submit("clear saved results", [directory, removed = cleared_] {
+    file_writes_.submit(app::tr("clear saved results"), [directory, removed = cleared_] {
         // The black bars kept with the saved results go too: cleared, they
         // start afresh.
         forget_crop_answers();

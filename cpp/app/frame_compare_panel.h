@@ -299,6 +299,8 @@ private:
     const QImage* current_image() const;
     void show_or_request();
     void request_current_frames();
+    bool show_kept_frame(const CacheKey& key);
+    void show_chosen_video();
     FrameComparisonEntry apply_auto_crop(const FrameComparisonEntry& entry) const;
     void ensure_auto_crop(const FrameComparisonEntry* entry);
     void on_auto_crop_ready(const PairKey& key, const VideoInfo& source, const VideoInfo& distorted,

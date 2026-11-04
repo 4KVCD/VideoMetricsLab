@@ -99,6 +99,7 @@ public:
     // The time range of the shown lines; the time range in view (zoomed, or
     // all of it); the value axis's range.
     std::pair<double, double> data_x_range() const;
+    void forget_view_off_the_data();
     std::pair<double, double> x_range() const;
     std::pair<double, double> y_range() const { return y_range_; }
     // Shows all of the time range again.

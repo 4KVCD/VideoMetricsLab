@@ -655,10 +655,12 @@ void FrameComparePanel::set_runs(std::vector<FrameComparisonEntry> entries) {
     const long long maximum = shortest - 1;
     frame_ = std::min(frame_, maximum);
     set_ranges(maximum);
+    sync_seek_widgets();  // the frame may have come down to the shorter video's end
     update_enabled_state();
     update_labels();
     if (entries_.empty()) {
         viewer->set_message(app::tr(nothing_to_compare));
+        content_stack_->setCurrentWidget(viewer);
         if (video_view != nullptr) {
             video_view->clear();
         }
@@ -714,13 +716,7 @@ void FrameComparePanel::cycle_distorted(int direction) {
         const QSignalBlocker blocker(video_combo);
         video_combo->setCurrentIndex(static_cast<int>(current_index_));
     }
-    ++generation_;
-    update_labels();
-    if (is_video_mode()) {
-        load_current_video();
-    } else {
-        show_or_request();
-    }
+    show_chosen_video();
 }
 
 void FrameComparePanel::set_decoded_videos(int count) {
@@ -838,7 +834,8 @@ bool FrameComparePanel::eventFilter(QObject* watched, QEvent* event) {
     // modifier (as the keypad's do elsewhere), and its keys just after one
     // can too.
     const bool unmodified = key != nullptr && (key->modifiers() & ~Qt::KeypadModifier) == Qt::NoModifier;
-    if (key != nullptr && key->key() == Qt::Key_S && unmodified) {
+    // A release counts with a modifier held too: it pressed none of its own.
+    if (key != nullptr && key->key() == Qt::Key_S && (unmodified || type == QEvent::KeyRelease)) {
         if (!key->isAutoRepeat()) {
             showing_source_ = type == QEvent::KeyPress;
             update_labels();
@@ -867,7 +864,10 @@ bool FrameComparePanel::eventFilter(QObject* watched, QEvent* event) {
         }
         return true;
     }
-    if ((type == QEvent::WindowDeactivate || type == QEvent::Hide) && showing_source_) {
+    // The panel or the window going: the filter also sees its children hide,
+    // as the frame's own text does when the frame arrives.
+    if ((type == QEvent::WindowDeactivate || (type == QEvent::Hide && (watched == this || watched == window()))) &&
+        showing_source_) {
         showing_source_ = false;
         update_labels();
         show_or_request();
@@ -934,6 +934,11 @@ void FrameComparePanel::load_current_video(std::optional<bool> playing) {
     if (!view.load(entry->comparison, position_ms, play, color_settings(), series,
                    source_resolution_combo->currentData().toBool())) {
         play_button->setText(app::tr("\xE2\x96\xB6 Play"));
+    } else if (!play && fps > 0 && std::abs(view.position() - position_ms) * fps > 500) {
+        // Still on the frame it was left at: another test video of the series
+        // goes on from there, while still frames moved on (more than half a
+        // frame away).
+        view.set_position(position_ms);
     }
     view.show_source(showing_source_);
     update_enabled_state();
@@ -1055,8 +1060,13 @@ void FrameComparePanel::on_video_selected(int index) {
         return;
     }
     current_index_ = static_cast<std::size_t>(index);
+    show_chosen_video();
+}
+
+void FrameComparePanel::show_chosen_video() {
     ++generation_;
     update_labels();
+    update_enabled_state();  // a pair that plays and one of still frames have other controls
     if (is_video_mode()) {
         load_current_video();
     } else {
@@ -1454,18 +1464,10 @@ void FrameComparePanel::show_or_request() {
     ensure_auto_crop(entry);
     const std::optional<CacheKey> key = cache_key(shown_side());
     if (key) {
-        const auto found =
-            std::find_if(cache_.begin(), cache_.end(), [&key](const auto& item) { return item.first == *key; });
-        if (found != cache_.end()) {
-            std::pair<CacheKey, QImage> item = *found;  // kept as the newest
-            cache_.erase(found);
-            cache_.push_back(std::move(item));
-            viewer->set_image(cache_.back().second);
+        if (show_kept_frame(*key)) {
             return;
         }
-        if (const auto error = errors_.find(*key); error != errors_.end()) {
-            viewer->set_message(app::tr("Could not load frame:\n{error}", {{"error", tr_message(error->second)}}));
-        } else {
+        if (!errors_.contains(*key)) {
             // Without the keys: shown at each step to a frame not kept yet,
             // they would flash between the frames.
             viewer->set_message(shown_side() == FrameSide::source
@@ -1475,6 +1477,22 @@ void FrameComparePanel::show_or_request() {
         }
     }
     seek_timer_->start();
+}
+
+bool FrameComparePanel::show_kept_frame(const CacheKey& key) {
+    // The frame kept for `key`, or why there is none: true where it is shown.
+    const auto found = std::find_if(cache_.begin(), cache_.end(), [&key](const auto& item) { return item.first == key; });
+    if (found != cache_.end()) {
+        std::pair<CacheKey, QImage> item = *found;  // kept as the newest
+        cache_.erase(found);
+        cache_.push_back(std::move(item));
+        viewer->set_image(cache_.back().second);
+        return true;
+    }
+    if (const auto error = errors_.find(key); error != errors_.end()) {
+        viewer->set_message(app::tr("Could not load frame:\n{error}", {{"error", tr_message(error->second)}}));
+    }
+    return false;
 }
 
 void FrameComparePanel::request_current_frames() {
@@ -1503,6 +1521,12 @@ void FrameComparePanel::request_current_frames() {
     if (sides.empty()) {
         show_or_request();
         return;
+    }
+    if (sides.front() != preferred) {
+        // Only the other side is still to come: nothing would draw this one,
+        // kept since it was last shown, and the last frame would stay under
+        // this frame's label.
+        show_kept_frame(*cache_key(preferred));
     }
     cancel_workers();
     auto* worker = new FrameExtractWorker(generation_, ffmpeg_(), entry->comparison, frame_, std::move(sides),

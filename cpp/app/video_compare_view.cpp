@@ -220,6 +220,7 @@ VideoCompareView::VideoCompareView(std::function<std::string()> ffmpeg, Zoom& zo
     QPalette palette = this->palette();
     palette.setColor(QPalette::Window, background);
     setPalette(palette);
+    setProperty("keeps_its_palette", true);  // the video's surround, whatever the theme (theme.cpp)
     make_decoder = [this](const FrameComparison& comparison, FrameSide side, long long start_frame,
                           const PreviewColorSettings& colors, std::optional<Size> maximum, QObject* owner) {
         return new StreamDecodeWorker(ffmpeg_(), comparison, side, start_frame, colors, std::nullopt, maximum, owner);
@@ -1261,7 +1262,9 @@ void VideoCompareView::check_end() {
             shortest = shortest ? std::min(*shortest, seconds) : seconds;
         }
     }
-    if (shortest && wanted_playing_ && position() / 1000.0 >= *shortest - 1 / series_.front().fps) {
+    // position() is in whole milliseconds, up to half of one short of the last
+    // frame's time, and this runs only when a frame is shown.
+    if (shortest && wanted_playing_ && (position() + 0.5) / 1000.0 >= *shortest - 1 / series_.front().fps) {
         set_playing(false);
         status(QStringLiteral("Playback ended"));
     }

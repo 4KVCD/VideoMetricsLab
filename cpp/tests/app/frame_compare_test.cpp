@@ -217,6 +217,13 @@ TEST_F(FramePanelTest, HoldingSShowsTheSource) {
     QTest::keyRelease(panel->viewer, Qt::Key_S);
     EXPECT_FALSE(showing_source(*panel));
     EXPECT_TRUE(panel->showing_label->text().startsWith("TEST"));
+    // A part of the panel hiding while it is held (a frame's text as the frame
+    // arrives) leaves it held; let go with Shift down, it ends all the same.
+    QTest::keyPress(panel->viewer, Qt::Key_S);
+    panel->video_combo->hide();
+    EXPECT_TRUE(showing_source(*panel));
+    QTest::keyRelease(panel->viewer, Qt::Key_S, Qt::ShiftModifier);
+    EXPECT_FALSE(showing_source(*panel));
     panel->cancel();
 }
 

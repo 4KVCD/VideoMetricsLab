@@ -149,9 +149,13 @@ void refresh() {
     const QWidgetList widgets = QApplication::allWidgets();
     // A palette left from before the switch follows the application's again:
     // a widget whose child has a style sheet can miss Qt's update. The sheets
-    // below set what they need anew; the app sets no palette of its own.
+    // below set what they need anew; the app sets no palette of its own but
+    // for a widget that says it keeps one.
     const QColor window = QApplication::palette().window().color();
     for (QWidget* widget : widgets) {
+        if (widget->property("keeps_its_palette").toBool()) {
+            continue;
+        }
         if (widget->testAttribute(Qt::WA_SetPalette) || widget->palette().window().color() != window) {
             widget->setPalette(QPalette());
         }

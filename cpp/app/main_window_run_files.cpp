@@ -333,7 +333,9 @@ std::vector<std::shared_ptr<CompletedRun>> MainWindow::selected_runs() const {
     }
     std::vector<std::shared_ptr<CompletedRun>> runs;
     for (const int row : rows) {
-        if (const std::shared_ptr<CompletedRun>& run = rows_[static_cast<std::size_t>(row)]->completed_run) {
+        // A result so far, during its run, is not its scores yet (exported_runs).
+        const std::shared_ptr<CompletedRun>& run = rows_[static_cast<std::size_t>(row)]->completed_run;
+        if (run && !run->partial) {
             runs.push_back(run);
         }
     }
@@ -373,7 +375,7 @@ void MainWindow::submit_save(const ComparisonResult& result, const std::filesyst
     // Saves a result off the window's thread: a long video's takes a while.
     // Only saving waits for it, so the rest of the window stays usable.
     save_button_->setEnabled(false);
-    file_writes_->submit(QStringLiteral("save %1").arg(name_of(path)),
+    file_writes_->submit(app::tr("save {name}", {{"name", name_of(path)}}),
                          [result, path, label = label.toStdString()] { save_run(result, path, label); });
 }
 
