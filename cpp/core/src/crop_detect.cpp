@@ -30,6 +30,7 @@
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
+#include "vml/gpu_decoders.h"
 #include "vml/gpu_frames.h"
 #include "vml/grain_feed.h"
 #include "vml/hardware_decoding.h"
@@ -933,6 +934,23 @@ std::pair<std::vector<Pictures>, std::vector<std::string>> sample_raw_stream(
     return {previews, failures};
 }
 
+// The decoder of a video's previews. After -ss, FFmpeg's QSV decoders give
+// pictures from before it (285K, driver 32.0.101.8860, FFmpeg 9.0.1: usually
+// 3 to 5 frames early, though a whole decode is exact), so another GPU would
+// judge other pictures and could find another box. FFmpeg's D3D11VA gives the
+// right ones, also where its default adapter is another GPU's. A codec it does
+// not decode (VP8) goes to software.
+std::optional<std::string> preview_decoder(const std::optional<std::string>& gpu_decoder, const VideoInfo& info) {
+    if (gpu_decoder != "qsv") {
+        return gpu_decoder;
+    }
+    const GpuDecoder* d3d11va = decoder_of_hwaccel("d3d11va");
+    const std::string codec = ascii_lower(info.codec_name);
+    const bool decodes =
+        d3d11va != nullptr && std::ranges::find(d3d11va->hwaccel_codecs, codec) != d3d11va->hwaccel_codecs.end();
+    return decodes ? std::optional<std::string>("d3d11va") : std::nullopt;
+}
+
 // detect_crop's work, without the kept answers: HandBrake's previews
 // (black_bars_rule.h), each a decoder's run of its own, one after another.
 CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double sampled_duration,
@@ -941,7 +959,7 @@ CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double
     const std::string path = platform::path_text(info.path);
     const BeforeSampling before{hw_native_format(info.pix_fmt), size_change_scale(info, scale_algorithm)};
     const std::vector<double> times = preview_times(sampled_duration);
-    std::optional<std::string> hwaccel = gpu_decoder;  // dropped for the rest once it fails
+    std::optional<std::string> hwaccel = preview_decoder(gpu_decoder, info);  // dropped for the rest once it fails
     cancel.throw_if_cancelled();
     // One decoder slot for all of the video's previews: they run in turn
     const DecoderSlot slot(cancel);
