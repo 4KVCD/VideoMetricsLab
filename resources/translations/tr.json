@@ -784,6 +784,7 @@
   "A range needs the videos' frame rates, which are not known.": "Aralık için videoların kare hızları gerekir, ancak bilinmiyor.",
   "The range starts after the end of one of the videos.": "Aralık videolardan birinin sonundan sonra başlıyor.",
   "The range contains no frame of the videos.": "Aralık videoların hiçbir karesini içermiyor.",
+  "The chosen size is not smaller than the video without its black bars.": "Seçilen boyut, siyah çubukları olmayan videodan küçük değil.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nDesteklenen bir GPU bulunamadı, bu yüzden CPU'da hesaplanırlar. CPU araçları her seferinde bir durağan görüntü çiftini puanlar: 4K kare başına SSIMULACRA2 için yaklaşık 1 sn, Butteraugli için 2 sn; yani bir film günler sürer (yukarıdaki tahminler ölçümün yapıldığına benzer bir CPU varsayar). Videoların yalnızca bir bölümünü puanlamak için bir aralık belirleyin.\n\nYine de hesaplansın mı?",
   "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Süreler eşleşmiyor ({source} / {test} saniye). Yalnızca ortak bir bölümü karşılaştırıyorsanız iki dosyanın içinde kalan bir aralık belirleyin.",
   "Difference": "Fark",

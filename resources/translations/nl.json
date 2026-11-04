@@ -784,6 +784,7 @@
   "A range needs the videos' frame rates, which are not known.": "Een bereik heeft de framerates van de video's nodig, die niet bekend zijn.",
   "The range starts after the end of one of the videos.": "Het bereik begint na het einde van een van de video's.",
   "The range contains no frame of the videos.": "Het bereik bevat geen enkel beeld van de video's.",
+  "The chosen size is not smaller than the video without its black bars.": "De gekozen grootte is niet kleiner dan de video zonder zwarte balken.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nEr is geen ondersteunde GPU gevonden, dus ze worden op de CPU berekend. De CPU-programma's beoordelen één paar stilstaande beelden tegelijk: ongeveer 1 s voor SSIMULACRA2 en 2 s voor Butteraugli per 4K-frame, dus een film duurt dagen (de schattingen hierboven gaan uit van een CPU zoals die waarop ze zijn gemeten). Stel een bereik in om alleen een deel van de video's te beoordelen.\n\nToch berekenen?",
   "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Duur komt niet overeen ({source} vs {test} s). Stel een bereik binnen beide bestanden in als u alleen een gemeenschappelijk deel vergelijkt.",
   "Difference": "Verschil",

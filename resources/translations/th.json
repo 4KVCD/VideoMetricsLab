@@ -784,6 +784,7 @@
   "A range needs the videos' frame rates, which are not known.": "ช่วงต้องใช้อัตราเฟรมของวิดีโอ ซึ่งไม่ทราบค่า",
   "The range starts after the end of one of the videos.": "ช่วงเริ่มหลังจุดสิ้นสุดของวิดีโอหนึ่ง",
   "The range contains no frame of the videos.": "ช่วงนี้ไม่มีเฟรมใดของวิดีโอเลย",
+  "The chosen size is not smaller than the video without its black bars.": "ขนาดที่เลือกไม่เล็กกว่าวิดีโอเมื่อไม่รวมแถบสีดำ",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nไม่พบ GPU ที่รองรับ จึงคำนวณบน CPU เครื่องมือ CPU ให้คะแนนภาพนิ่งทีละคู่: ประมาณ 1 วินาทีสำหรับ SSIMULACRA2 และ 2 วินาทีสำหรับ Butteraugli ต่อเฟรม 4K ภาพยนตร์หนึ่งเรื่องจึงใช้เวลาหลายวัน (ค่าประมาณข้างต้นสมมติ CPU แบบเดียวกับที่ใช้วัด) ตั้งค่าช่วงเพื่อให้คะแนนเฉพาะบางส่วนของวิดีโอ\n\nคำนวณต่อหรือไม่",
   "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "ความยาวไม่ตรงกัน ({source} กับ {test} วินาที) ตั้งค่าช่วงให้อยู่ในทั้งสองไฟล์ หากเปรียบเทียบเฉพาะส่วนที่ตรงกัน",
   "Difference": "ผลต่าง",

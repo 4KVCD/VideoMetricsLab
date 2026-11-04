@@ -784,6 +784,7 @@
   "A range needs the videos' frame rates, which are not known.": "範圍需要影片的影格速率，但影格速率未知。",
   "The range starts after the end of one of the videos.": "範圍在其中一部影片結束之後才開始。",
   "The range contains no frame of the videos.": "範圍內沒有影片的任何一格畫面。",
+  "The chosen size is not smaller than the video without its black bars.": "所選尺寸不小於去除黑邊後的影片。",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\n找不到支援的 GPU，因此在 CPU 上計算。CPU 工具一次只能為一對靜止畫面評分：每個 4K 影格 SSIMULACRA2 約 1 秒、Butteraugli 約 2 秒，因此一部電影需要好幾天（上面的估算假設 CPU 與測量時所用的相當）。設定範圍即可只為影片的一部分評分。\n\n仍要計算嗎？",
   "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "長度不一致（{source} 與 {test} 秒）。如果只比較兩者共同的部分，請設定一個在兩個檔案之內的範圍。",
   "Difference": "差值",

@@ -784,6 +784,7 @@
   "A range needs the videos' frame rates, which are not known.": "Для диапазона нужна частота кадров видео, а она неизвестна.",
   "The range starts after the end of one of the videos.": "Диапазон начинается после конца одного из видео.",
   "The range contains no frame of the videos.": "Диапазон не содержит ни одного кадра видео.",
+  "The chosen size is not smaller than the video without its black bars.": "Выбранный размер не меньше размера видео без чёрных полос.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nПоддерживаемый GPU не найден, поэтому они вычисляются на CPU. Инструменты CPU оценивают по одной паре неподвижных изображений за раз: около 1 с для SSIMULACRA2 и 2 с для Butteraugli на кадр 4K, так что фильм займёт дни (оценки выше предполагают CPU, подобный тому, на котором проводились замеры). Задайте диапазон, чтобы оценить только часть видео.\n\nВсё равно вычислить?",
   "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "Длительности не совпадают ({source} и {test} с). Задайте диапазон в пределах обоих файлов, если сравниваете только их общую часть.",
   "Difference": "Разница",

@@ -2203,6 +2203,12 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
     if (!options.resample_test) {
         throw std::invalid_argument("not a resolution test");
     }
+    if (options.range_start > 0 || options.range_end > 0) {
+        if (const std::optional<std::string> problem =
+                pair_problem(source, source, options.range_start, options.range_end)) {
+            throw VmafRunError(*problem);
+        }
+    }
     // Every scaling of the run, and its result, with the test's own
     // scaling algorithm.
     options.scale_algorithm = options.resample_test->scaler;
@@ -2218,6 +2224,11 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
             on_status({"Detecting black bars in source..."});
         }
         source_crop = detect_crop(environment.ffmpeg, source, cancel, decoding.source, options.scale_algorithm);
+    }
+    // A size chosen against the whole frame: with its bars cut, the picture
+    // may be no larger, and the test would scale it up or not at all.
+    if (options.resample_test->width >= resample_analysis_dimensions(source, source_crop).first) {
+        throw VmafRunError("The chosen size is not smaller than the video without its black bars.");
     }
     if (std::optional<ComparisonResult> on_gpu =
             resample_test_on_gpu(environment, source, options, source_crop, on_progress, on_status, cancel)) {

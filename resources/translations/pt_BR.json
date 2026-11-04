@@ -784,6 +784,7 @@
   "A range needs the videos' frame rates, which are not known.": "Um intervalo precisa das taxas de quadros dos vídeos, que não são conhecidas.",
   "The range starts after the end of one of the videos.": "O intervalo começa depois do fim de um dos vídeos.",
   "The range contains no frame of the videos.": "O intervalo não contém nenhum quadro dos vídeos.",
+  "The chosen size is not smaller than the video without its black bars.": "O tamanho escolhido não é menor que o vídeo sem as barras pretas.",
   "\n\nNo supported GPU was found, so they are calculated on the CPU. The CPU tools score one still image pair at a time: about 1 s for SSIMULACRA2 and 2 s for Butteraugli per 4K frame, so a film takes days (the estimates above assume a CPU like the one they were measured on). Set a range to score only a part of the videos.\n\nCalculate anyway?": "\n\nNenhuma GPU compatível foi encontrada, então elas são calculadas na CPU. As ferramentas de CPU pontuam um par de imagens estáticas por vez: cerca de 1 s para o SSIMULACRA2 e 2 s para o Butteraugli por quadro 4K, então um filme leva dias (as estimativas acima supõem uma CPU como aquela em que foram medidas). Defina um intervalo para pontuar só uma parte dos vídeos.\n\nCalcular mesmo assim?",
   "Durations do not match ({source} vs {test} seconds). Set a range within both files if comparing only a part they share.": "As durações não coincidem ({source} vs. {test} segundos). Defina um intervalo dentro dos dois arquivos se estiver comparando só uma parte em comum.",
   "Difference": "Diferença",
