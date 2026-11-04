@@ -21,8 +21,8 @@ Size content_size(const VideoInfo& info, const std::optional<CropBox>& crop);
 
 // For a video whose size changes partway through (VideoInfo::scaled_to), the
 // filters that come first in its chain, before its crop: every frame scaled
-// to that size with `scale_algorithm`, in its own pixel format. Nothing for
-// any other video.
+// to that size with `scale_algorithm`, in its own pixel format, its colour
+// matrix tag cleared. Nothing for any other video.
 std::optional<std::string> size_change_scale(const VideoInfo& info, const std::string& scale_algorithm);
 
 // A video whose size changes as the viewers show it, at its own (probed)
