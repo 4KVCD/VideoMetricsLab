@@ -492,21 +492,31 @@ bool deliver_picture(Decoder *d, const Api &api, typename Api::Picture &picture)
     return true;
 }
 
-// Takes every picture dav1d or dav2d has ready (at the end: every one it
-// holds). False when decoding has stopped.
+// Asks dav1d or dav2d for a picture: delivers it if it has one, and says if it
+// had (`given`). False when decoding has stopped.
 template <typename Api>
-bool get_pictures(Decoder *d, const Api &api) {
-    while (true) {
-        if (d->stopped()) return false;
-        typename Api::Picture picture{};
-        int result = api.get_picture(d->dav, &picture);
-        if (result == kDav1dAgain || result == kDav2dEof) return true;  // more data wanted; dav2d drained
-        if (result < 0) {
-            d->fail(std::string(api.name) + " failed decoding (error " + std::to_string(result) + ")");
-            return false;
-        }
-        if (!deliver_picture(d, api, picture)) return false;
+bool get_picture(Decoder *d, const Api &api, bool &given) {
+    given = false;
+    if (d->stopped()) return false;
+    typename Api::Picture picture{};
+    int result = api.get_picture(d->dav, &picture);
+    if (result == kDav1dAgain || result == kDav2dEof) return true;  // more data wanted; dav2d drained
+    if (result < 0) {
+        d->fail(std::string(api.name) + " failed decoding (error " + std::to_string(result) + ")");
+        return false;
     }
+    given = true;
+    return deliver_picture(d, api, picture);
+}
+
+// At the end: every picture dav1d or dav2d holds. False when decoding has stopped.
+template <typename Api>
+bool drain_pictures(Decoder *d, const Api &api) {
+    bool given = true;
+    while (given) {
+        if (!get_picture(d, api, given)) return false;
+    }
+    return true;
 }
 
 template <typename Api>
@@ -523,7 +533,11 @@ bool send_data(Decoder *d, const Api &api, typename Api::Data &data) {
             return false;
         }
         // Taken (data is empty), or the decoder wants its pictures taken first.
-        if (!get_pictures(d, api)) {
+        // Only one is asked for: a second ask with no data sent between means
+        // the video has ended to dav1d, which then waits for the pictures in
+        // the making, so that its frame threads no longer work side by side.
+        bool given = false;
+        if (!get_picture(d, api, given)) {
             api.data_unref(&data);
             return false;
         }
@@ -832,10 +846,10 @@ NVF_API int nvf_finish(void *handle) {
     Decoder *d = static_cast<Decoder *>(handle);
     if (!d->stopped()) {
         if (d->engine == Engine::dav1d) {
-            get_pictures(d, g_dav1d);
+            drain_pictures(d, g_dav1d);
         } else if (d->engine == Engine::dav2d) {
             g_dav2d.send_data(d->dav, nullptr);  // the end: dav2d gives the pictures it holds
-            get_pictures(d, g_dav2d);
+            drain_pictures(d, g_dav2d);
         } else {
             send_packet(d, nullptr);
         }
