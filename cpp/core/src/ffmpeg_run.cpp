@@ -2061,8 +2061,10 @@ ComparisonResult score_pair(const RunEnvironment& environment, const VideoInfo& 
         return score_pair_once(environment, source, distorted, options, source_crop, distorted_crop, decoding,
                                on_progress, on_status, cancel, result_distorted_path);
     } catch (const VmafRunError& error) {
-        if (!range_may_seek(run_range(options, source).decode_start, frame_rate(source))) {
-            throw;
+        // (The proofs are kept: this asks for what the run was given.)
+        const RangeSeeks seeks = reading_near_range(options, environment, source, distorted, cancel).range_seeks;
+        if (!seeks.source && !seeks.distorted) {
+            throw;  // read from the videos' start already: the same again would fail the same way
         }
         turn_off_range_seek(error.what());
     }
@@ -2328,8 +2330,9 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
         return resample_test_by_ffmpeg(environment, source, options, source_crop, decoding, on_progress, on_status,
                                        cancel);
     } catch (const VmafRunError& error) {
-        if (!range_may_seek(run_range(options, source).decode_start, frame_rate(source))) {
-            throw;
+        if (!ffmpeg_range_seek(source, run_range(options, source).decode_start, environment.ffmpeg,
+                               environment.ffprobe, cancel)) {
+            throw;  // read from the video's start already: the same again would fail the same way
         }
         turn_off_range_seek(error.what());
     }

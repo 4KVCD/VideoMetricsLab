@@ -1229,7 +1229,7 @@ private:
     // shifted to 10-bit (as FFmpeg converts full-range 10-bit), scaled where
     // it is to the size compared at with the comparison's filter. Nothing
     // when FFmpeg decodes the video.
-    std::unique_ptr<GpuFrameStream> native_decoder(const VideoPlan& video, const std::string& backend) const {
+    std::unique_ptr<GpuFrameStream> native_decoder(const VideoPlan& video, const std::string& backend) {
         static const std::map<std::string, int, std::less<>> shifts{
             {"yuv420p", 0}, {"yuv420p16le", 0}, {"yuv420p10le", 6}};
         std::string reason;  // why FFmpeg decodes it, for the log
@@ -1274,7 +1274,7 @@ private:
     // `backend`'s decoder for the video, as plan_decode laid its frames out;
     // GpuDecodeUnavailableError where it cannot decode it.
     std::unique_ptr<GpuFrameStream> open_decoder(const VideoPlan& video, const DecodePlan& decode,
-                                                 const std::string& backend) const {
+                                                 const std::string& backend) {
         // NVIDIA's decoder on CUDA's first GPU, where FFmpeg's -hwaccel cuda
         // decodes too: Vship's number is Vulkan's, a list in another order. On
         // HIP or CUDA it is theirs, which the other decoders do not number by.
@@ -1288,6 +1288,7 @@ private:
         DecodePlan seeking = decode;
         plan_range_seek(seeking, video.info, range_.decode_start, request_.environment.ffmpeg,
                         request_.environment.ffprobe, cancel_);
+        read_near_range_ = read_near_range_ || seeking.seek.has_value();
         auto decoder = std::make_unique<GpuFrameStream>(video.info, seeking, device, 4, backend,
                                                         request_.environment.ffmpeg, request_.environment.ffprobe);
         logger.info("Vship: the " + video.label + " is decoded by the " + backend + " decoder in the scoring process");
@@ -1359,6 +1360,7 @@ private:
             fed != nullptr ? std::nullopt
                            : ffmpeg_range_seek(video.info, range_.decode_start, request_.environment.ffmpeg,
                                                request_.environment.ffprobe, cancel_);
+        read_near_range_ = read_near_range_ || seek.has_value();
         std::vector<std::optional<std::string>> attempts{fed != nullptr ? std::nullopt : video.hwaccel};
         if (attempts.front()) {
             attempts.emplace_back(std::nullopt);
@@ -1620,7 +1622,8 @@ private:
         }
         if (const std::optional<std::string> short_run =
                 short_comparison(expected_frames_, frames * step_, range_.decode_start, request_.source.fps, step_)) {
-            if (range_may_seek(range_.decode_start, frame_rate(request_.source))) {
+            // (Not once seeking is off: this pass is then the one from the start.)
+            if (read_near_range_ && range_may_seek(range_.decode_start, frame_rate(request_.source))) {
                 throw SeekRefused(*short_run);  // a video really cut short, or a seek short of its promise: to tell
             }
             throw ComparisonCutShortError(*short_run);
@@ -1804,6 +1807,7 @@ private:
     Rational numbering_rate_;
     FrameRange range_;  // the frames compared and decoded
     long long expected_frames_ = 0;
+    bool read_near_range_ = false;  // a video of the pass starts near the range, not at its start
     long long total_units_ = 1;
     std::mutex decode_mutex_;
     HardwareDecoding decode_;  // where each video is decoded, as statuses report it

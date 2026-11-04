@@ -1158,7 +1158,7 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
     const auto total = static_cast<long long>(by_pair.size());
     if (const std::optional<std::string> short_reason =
             short_comparison(expected, total * step, range.decode_start, source.fps, step)) {
-        if (range_may_seek(range.decode_start, frame_rate(source))) {
+        if (options.range_seeks.source || options.range_seeks.distorted) {
             // A video really cut short, or a seek that gave less than it promised: from the start, to tell
             turn_off_range_seek(*short_reason);
             return run_cpu_perceptual_task(request, keys, crops, on_progress, on_status, cancel);
