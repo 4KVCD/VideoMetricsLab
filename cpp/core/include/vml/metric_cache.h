@@ -56,8 +56,9 @@ struct ColourTags {
     std::string color_space;
     std::string color_range;
     int height = 0;
-    std::string color_primaries;
+    std::string color_primaries{};  // last and defaulted: a list that leaves it out knows it is not read
 };
+ColourTags colour_tags_of(const VideoInfo& video);
 std::vector<ColourTags> colour_tags(const VideoInfo& source, const VideoInfo& distorted);
 
 // Whether a score made with `provenance` answers `spec`: made by a

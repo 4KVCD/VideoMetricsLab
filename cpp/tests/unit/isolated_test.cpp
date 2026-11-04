@@ -117,8 +117,12 @@ TEST(Isolated, DescribesExitCodesAsThePythonAppDoes) {
     EXPECT_EQ(describe_exit_code(0), "exit code 0");
     EXPECT_EQ(describe_exit_code(3), "exit code 3");
     EXPECT_EQ(describe_exit_code(65535), "exit code 65535");
+#ifdef _WIN32
     EXPECT_EQ(describe_exit_code(static_cast<int>(0xC0000005u)), "exit code 0xC0000005");
     EXPECT_EQ(describe_exit_code(-1), "exit code 0xFFFFFFFF");
+#else
+    EXPECT_EQ(describe_exit_code(-11), "signal 11");  // as ChildProcess::wait says a killed process
+#endif
 }
 
 }  // namespace

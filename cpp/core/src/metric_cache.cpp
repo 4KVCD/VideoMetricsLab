@@ -1095,11 +1095,13 @@ std::filesystem::path recipe_directory(const std::filesystem::path& base, const 
     return directory;
 }
 
+ColourTags colour_tags_of(const VideoInfo& video) {
+    return {video.pix_fmt,     video.color_transfer, video.chroma_location, video.color_space,
+            video.color_range, video.height,         video.color_primaries};
+}
+
 std::vector<ColourTags> colour_tags(const VideoInfo& source, const VideoInfo& distorted) {
-    return {{source.pix_fmt, source.color_transfer, source.chroma_location, source.color_space, source.color_range,
-             source.height, source.color_primaries},
-            {distorted.pix_fmt, distorted.color_transfer, distorted.chroma_location, distorted.color_space,
-             distorted.color_range, distorted.height, distorted.color_primaries}};
+    return {colour_tags_of(source), colour_tags_of(distorted)};
 }
 
 bool answers(const MetricRequestSpec& spec, const MetricProvenance& provenance, const std::vector<ColourTags>& infos) {
