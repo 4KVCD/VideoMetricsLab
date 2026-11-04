@@ -105,7 +105,8 @@ void take_run_options(VmafOptions& options, const ComparisonResult& result) {
     // (one of Vship 5.1.2's beside it was a fallback's, and is marked), else
     // Vship 5.1.2 where one is its and it is bundled, but where Vship-fast's
     // metrics run on 5.1.2 here (vship_build_in_use) anyway; with none, the
-    // row's own.
+    // row's own. A row on stock Vship keeps its Vulkan, HIP or CUDA, which
+    // share their scores: the one chosen may be the one that works here.
     std::vector<std::string> ids;
     // The range its scores are of: under another, a later run would keep them
     // and save them as that range's.
@@ -124,7 +125,8 @@ void take_run_options(VmafOptions& options, const ComparisonResult& result) {
     const auto any = [&ids](bool (*made_by)(std::string_view)) { return std::any_of(ids.begin(), ids.end(), made_by); };
     if (any(score_identity::is_vship_fast_id)) {
         options.vship_build = VshipBuild::fast;
-    } else if (any(score_identity::is_vship51_id) && vship_build_bundled(VshipBuild::stock) &&
+    } else if (options.vship_build == VshipBuild::fast && any(score_identity::is_vship51_id) &&
+               vship_build_bundled(VshipBuild::stock) &&
                vship_build_in_use(VshipBuild::fast) == VshipBuild::fast) {
         options.vship_build = VshipBuild::stock;
     }

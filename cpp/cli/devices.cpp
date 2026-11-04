@@ -26,7 +26,8 @@ std::vector<std::string> device_lines(const DeviceFindings& found) {
         }
     }
     if (found.vship) {
-        const std::string vship = "GPU: " + found.vship->name + " (" + vship_build_name(*found.vship) + ", Vulkan)";
+        const std::string vship = "GPU: " + found.vship->name + " (" + vship_build_name(*found.vship) + ", " +
+                                  vship_build_api(found.vship->build) + ")";
         lines.push_back("CVVDP: " + vship);
         for (const std::string key : {"ssimulacra2", "butteraugli"}) {
             lines.push_back(std::string(metric_definition(key).label) + ": " + vship);
@@ -40,7 +41,8 @@ std::vector<std::string> device_lines(const DeviceFindings& found) {
     if (found.other_vship) {
         const auto& [device, reason] = *found.other_vship;
         lines.push_back("With --vship " + std::string(vship_build_value(found.other_build)) + ": " +
-                        (device ? "GPU: " + device->name + " (" + vship_build_name(*device) + ", Vulkan)"
+                        (device ? "GPU: " + device->name + " (" + vship_build_name(*device) + ", " +
+                                      vship_build_api(device->build) + ")"
                                 : "not available (" + reason + ")"));
     }
     if (!found.vmaf.backend.empty()) {
