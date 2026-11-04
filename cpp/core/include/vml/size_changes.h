@@ -136,6 +136,10 @@ private:
 
 // Why a pair cannot be scored when FFmpeg rebuilt its filters with both
 // videos marked.
+// Why a resolution test cannot be made of a video whose size changes: its
+// frames are scaled down and up again at the size they come in.
+inline constexpr const char* size_change_in_resample_test =
+    "The video's picture size changes partway through; a resolution round-trip test needs a video of one size.";
 inline constexpr const char* size_change_unfixed =
     "FFmpeg rebuilt its filters partway through the videos even with each scaled to one size; they cannot be "
     "compared";

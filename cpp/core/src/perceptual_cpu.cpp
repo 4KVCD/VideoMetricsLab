@@ -187,9 +187,17 @@ std::vector<std::string> prepare(const std::optional<CropBox>& crop, const Video
     for (std::string& filter : crop_filter(crop, info)) {
         filters.push_back(std::move(filter));
     }
-    if (target) {
-        filters.push_back("scale=" + std::to_string(target->first) + ":" + std::to_string(target->second) +
+    const auto scale_to = [&](const Size& size) {
+        filters.push_back("scale=" + std::to_string(size.first) + ":" + std::to_string(size.second) +
                           ":flags=" + scale_algorithm);
+    };
+    if (info.resample_via) {
+        scale_to(*info.resample_via);  // a resolution test's picture: down, then back
+        scale_to(target.value_or(content_size(info, crop)));
+    } else if (target) {
+        scale_to(*target);
+    }
+    if (target || info.resample_via) {
         filters.push_back("format=" + info.pix_fmt);
     }
     return filters;
@@ -1082,18 +1090,12 @@ PerceptualTaskOutput run_cpu_perceptual_task(const PerceptualRequest& request, c
         throw std::invalid_argument("a CPU perceptual task takes SSIMULACRA2 and Butteraugli only");
     }
     const VideoInfo& source = request.source;
-    const VideoInfo& distorted = request.distorted;
     VmafOptions options = request.options;
-    if (options.resample_test) {
-        throw PerceptualRunError("Perceptual CPU metrics do not support resolution round-trip tests yet.");
-    }
-    validate_pair(source, distorted, options);
+    validate_pair(source, request.distorted, options);
     const std::vector<std::filesystem::path> executables = metric_executables(keys);
     const int step = common_step(request, keys);
-    const auto [source_crop, distorted_crop] =
-        crops ? *crops
-              : resolve_crops(request.environment.ffmpeg, source, distorted, options.crop_mode,
-                              options.scale_algorithm, cancel, on_status);
+    const auto [source_crop, distorted_crop] = crops ? *crops : perceptual_crops(request, on_status, cancel);
+    const VideoInfo distorted = with_resample_test_video(request, source_crop).distorted;
     const FrameRange range = cpu_range(options, source, step);
     for (const auto& [video, seek] : {std::pair{&source, &options.range_seeks.source},
                                       std::pair{&distorted, &options.range_seeks.distorted}}) {

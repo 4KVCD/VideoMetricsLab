@@ -1186,7 +1186,7 @@ private:
             // decoding scales it into (other pictures, other scores). P010
             // comes out of it the same as planes.
             if (video.passthrough && video.passthrough->second == "nv12" &&
-                content_size(video.info, video.crop) != video.size) {
+                (video.info.resample_via || content_size(video.info, video.crop) != video.size)) {
                 video.passthrough.reset();
             }
             video.image = video.passthrough ? video.passthrough->first : vship_image_format(video.info);
@@ -1997,9 +1997,6 @@ void run_vship_child(const PerceptualRequest& request, const PassPlan& plan, con
 PerceptualTaskOutput run_vship_pass(const PerceptualRequest& request, const PassPlan& plan,
                                     const ProgressCallback& on_progress, const StatusCallback& on_status,
                                     const CancelToken& cancel) {
-    if (request.options.resample_test) {
-        throw VshipUnavailableError("The GPU metrics do not support resolution round-trip tests yet.");
-    }
     if (!isolation_program()) {
         if (plan.build != VshipBuild::fast) {
             // This process has Vship-fast's library (vship_library).
@@ -2079,7 +2076,7 @@ public:
               const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop,
               bool together, const PerceptualHooks& hooks, const CancelToken& cancel,
               std::optional<VshipBuild> build = std::nullopt)
-        : request_(request),
+        : request_(with_resample_test_video(request, source_crop)),
           keys_(keys),
           device_(device),
           source_crop_(source_crop),
@@ -2305,7 +2302,7 @@ private:
         };
     }
 
-    const PerceptualRequest& request_;
+    const PerceptualRequest request_;
     std::vector<std::string> keys_;
     const VshipDevice& device_;
     std::optional<CropBox> source_crop_;
@@ -2760,8 +2757,7 @@ PerceptualRoutes app_perceptual_routes() {
     routes.gpu_check_failed = vship_check_failed;
     routes.find_crops = [](const PerceptualRequest& request, const StatusCallback& on_status,
                            const CancelToken& cancel) {
-        return resolve_crops(request.environment.ffmpeg, request.source, request.distorted, request.options.crop_mode,
-                             request.options.scale_algorithm, cancel, on_status);
+        return perceptual_crops(request, on_status, cancel);
     };
     routes.run_gpu = [](const PerceptualRequest& request, const std::vector<std::string>& keys,
                         const VshipDevice& device, const CropPair& crops, bool together, const PerceptualHooks& hooks,
@@ -2789,6 +2785,13 @@ PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const
                                          bool together, const PerceptualHooks& hooks, const CancelToken& cancel,
                                          const PerceptualRoutes& routes) {
     PerceptualRequest scored = request;
+    if (scored.options.resample_test) {
+        // Every scaling of the test with its own scaling algorithm, as resample_test_run's
+        scored.options.scale_algorithm = scored.options.resample_test->scaler;
+        if (scored.source.scaled_to) {
+            throw PerceptualRunError(size_change_in_resample_test);
+        }
+    }
     SizeChangeMarks marks(scored.source, scored.distorted);
     // The task's scores may come from the GPU's pictures: its Vship passes decode where run_pass plans it, and its
     // black bars may be a box found from them (another task's)
@@ -2825,6 +2828,9 @@ PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const
             }
         } catch (const VideoSizeChanged& changed) {
             cancel.throw_if_cancelled();  // not made again after a Cancel
+            if (scored.options.resample_test) {
+                throw PerceptualRunError(size_change_in_resample_test);
+            }
             if (!marks.after(changed, scored.options.scale_algorithm)) {
                 throw PerceptualRunError(size_change_unfixed);
             }

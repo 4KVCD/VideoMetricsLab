@@ -683,9 +683,7 @@ void MainWindow::add_resample_test(const ResampleTarget& target) {
     row_data.options.resample_test = target;
     row_data.video_info = *source_info_;
     set_resample_row_info(row, target);
-    // Drawn again now it is a resolution test: drawn when added, its
-    // SSIMULACRA2, Butteraugli and CVVDP cells showed tick boxes, not n/a.
-    set_row_metrics(row);
+    set_row_metrics(row);  // drawn again now it has its video
     start_cache_lookup({path});
 }
 

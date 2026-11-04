@@ -93,14 +93,8 @@ std::vector<std::string> MainWindow::requested_metrics(const RowData& row_data) 
 }
 
 std::optional<QString> MainWindow::metric_unavailable_reason(const RowData& row_data, const std::string& key) {
-    // No perceptual metric takes a resolution test. CVVDP needs every frame,
-    // as it judges each one together with the frames before it, and a
-    // supported GPU, as the app has no CPU version of it.
-    if (row_data.options.resample_test && metric_definition(key).backend_id == "perceptual") {
-        return app::tr("{label} is not available for resolution round-trip tests; the other selected metrics are still "
-                       "calculated.",
-                       {{"label", qt_text(metric_definition(key).label)}});
-    }
+    // CVVDP needs every frame, as it judges each one together with the frames
+    // before it, and a supported GPU, as the app has no CPU version of it.
     if (key == "cvvdp") {
         if (row_data.options.n_subsample > 1) {
             return app::tr("CVVDP judges each frame together with the frames before it, so it needs every frame: it is "

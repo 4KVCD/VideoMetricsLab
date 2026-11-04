@@ -118,4 +118,17 @@ CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const
                        CropMode crop_mode, const std::string& scale_algorithm, const CancelToken& cancel,
                        const StatusCallback& on_status);
 
+// A request's crops. As resolve_crops, but for a resolution test: the source's
+// own bars on both of its pictures, as its test video is the source. Throws
+// PerceptualRunError also when the test's size is not below the cropped
+// picture's.
+CropPair perceptual_crops(const PerceptualRequest& request, const StatusCallback& on_status,
+                          const CancelToken& cancel);
+
+// The request with a resolution test's test video in it, which is the source
+// scaled down and back (VideoInfo::resample_via): that size depends on the
+// `crop`, and it reaches a pass's process with the video. Any other request as
+// it is.
+PerceptualRequest with_resample_test_video(PerceptualRequest request, const std::optional<CropBox>& crop);
+
 }  // namespace vml

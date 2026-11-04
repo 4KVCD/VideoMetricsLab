@@ -88,7 +88,7 @@ struct PerceptualRoutes {
 
 // The app's routes: the Vship probe (after forgetting one that failed a
 // while ago, forget_failed_vship_probe; under the run's token, so that its
-// Cancel ends the probe asked for again), resolve_crops, Vship's passes on
+// Cancel ends the probe asked for again), perceptual_crops, Vship's passes on
 // Vship-fast and, where it is bundled, on stock Vship 5.1.2, and
 // run_cpu_perceptual_task.
 PerceptualRoutes app_perceptual_routes();

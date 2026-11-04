@@ -69,4 +69,34 @@ CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const
     return crops;
 }
 
+CropPair perceptual_crops(const PerceptualRequest& request, const StatusCallback& on_status,
+                          const CancelToken& cancel) {
+    const VmafOptions& options = request.options;
+    if (!options.resample_test) {
+        return resolve_crops(request.environment.ffmpeg, request.source, request.distorted, options.crop_mode,
+                             options.scale_algorithm, cancel, on_status);
+    }
+    // The source's own bars, whether Auto or Source only, as VMAF's part of the test (resample_test_run)
+    std::optional<CropBox> crop;
+    if (options.crop_mode != CropMode::none) {
+        if (on_status) {
+            on_status({"Detecting black bars in source..."});
+        }
+        crop = crops_for(CropMode::source_only, request.environment.ffmpeg, request.source, request.source, cancel,
+                         std::nullopt, std::nullopt, options.scale_algorithm)
+                   .first;
+    }
+    if (options.resample_test->width >= resample_analysis_dimensions(request.source, crop).first) {
+        throw PerceptualRunError(resample_not_smaller);
+    }
+    return {crop, crop};
+}
+
+PerceptualRequest with_resample_test_video(PerceptualRequest request, const std::optional<CropBox>& crop) {
+    if (request.options.resample_test) {
+        request.distorted.resample_via = resample_via_size(request.source, crop, request.options.resample_test->width);
+    }
+    return request;
+}
+
 }  // namespace vml

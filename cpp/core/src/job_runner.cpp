@@ -962,6 +962,11 @@ std::optional<ComparisonResult> JobRun::merged() const {
             result->scale_direction = options_.scale_direction;
             result->scale_algorithm = options_.scale_algorithm;
             result->compared_frame_count = perceptual->compared_frame_count;
+            if (options_.resample_test) {  // as resample_test_on_gpu's
+                result->distorted = synthetic_resample_distorted_path(job_.source_info.path, *options_.resample_test);
+                result->resample_target = options_.resample_test;
+                result->scale_algorithm = options_.resample_test->scaler;
+            }
         }
         result->metric_results.add_all(perceptual->metrics);
     }

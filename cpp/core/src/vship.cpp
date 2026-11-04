@@ -945,9 +945,18 @@ std::string vship_filter_chain(const VideoInfo& info, const std::optional<CropBo
     if (crop && !crop->is_noop(info.frame_size().first, info.frame_size().second)) {
         operations.push_back(crop->as_filter());
     }
-    if (content_size(info, crop) != target_size) {
-        operations.push_back("scale=" + std::to_string(target_size.first) + ":" + std::to_string(target_size.second) +
+    const auto scale_to = [&](std::pair<int, int> size) {
+        operations.push_back("scale=" + std::to_string(size.first) + ":" + std::to_string(size.second) +
                              ":flags=" + algorithm);
+    };
+    if (info.resample_via) {
+        // A resolution test's picture: down, then back. Out of a GPU's NV12 first, as swscale scales NV12 otherwise
+        // than planes (other pictures, other scores), and the two scales would stay in NV12 between them.
+        operations.push_back("format=" + pixel_format);
+        scale_to(*info.resample_via);
+        scale_to(target_size);
+    } else if (content_size(info, crop) != target_size) {
+        scale_to(target_size);
     }
     if (full_range) {
         // FFmpeg brings full-range gray to the limited range as it gives it

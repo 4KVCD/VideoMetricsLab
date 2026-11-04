@@ -54,6 +54,15 @@ inline bool is_odd_size(int width, int height) { return (width & 1) != 0 || (hei
 // The height a resolution test scales a picture of `size` down to, `width`
 // wide: even, and the picture's own shape.
 int resample_down_height(int width, Size size);
+// Why a resolution test's size cannot be used: a size chosen against the whole
+// frame may be no smaller once the bars are cut, and the test would scale the
+// picture up or not at all.
+inline constexpr const char* resample_not_smaller =
+    "The chosen size is not smaller than the video without its black bars.";
+// The size a resolution test first scales `source` down to, `width` wide.
+inline Size resample_via_size(const VideoInfo& source, const std::optional<CropBox>& crop, int width) {
+    return {width, resample_down_height(width, resample_analysis_dimensions(source, crop))};
+}
 // The widths a resolution test may have on a reference of `size`: below its
 // own width, and neither side under about 16 pixels. The smallest is above
 // the largest on a reference too small or too flat for any.

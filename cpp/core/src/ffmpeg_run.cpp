@@ -2198,19 +2198,13 @@ std::optional<ComparisonResult> resample_test_on_gpu(const RunEnvironment& envir
     }
     const auto [width, height] = resample_analysis_dimensions(source, source_crop);
     VideoInfo test = source;
-    test.resample_via = std::pair(target.width, resample_down_height(target.width, {width, height}));
+    test.resample_via = resample_via_size(source, source_crop, target.width);
     const HardwareDecoding decoding = options.gpu_decode ? plan_hardware_decoding(environment.decoding,
                                                                                   options.gpu_vendor, source, source)
                                                          : HardwareDecoding{};
     const std::optional<std::pair<std::string, std::string>> decoders = decoders_here(decoding);
     if (decoders && gpu_decoder(decoders->first).scales_in_two_steps &&
         gpu_decoder(decoders->second).scales_in_two_steps) {
-        // The decoders keep a crop on even samples; FFmpeg scales back to the
-        // crop's own size.
-        const bool cropped = source_crop && !source_crop->is_noop(source.width, source.height);
-        if (cropped && ((source_crop->x | source_crop->y | source_crop->w | source_crop->h) & 1) != 0) {
-            return std::nullopt;
-        }
         try {
             const DecodePlan plan =
                 plan_decode(test, source_crop, 6, true, std::pair(width, height), options.scale_algorithm);
@@ -2339,7 +2333,7 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
     // A size chosen against the whole frame: with its bars cut, the picture
     // may be no larger, and the test would scale it up or not at all.
     if (options.resample_test->width >= resample_analysis_dimensions(source, source_crop).first) {
-        throw VmafRunError("The chosen size is not smaller than the video without its black bars.");
+        throw VmafRunError(resample_not_smaller);
     }
     if (std::optional<ComparisonResult> on_gpu =
             resample_test_on_gpu(environment, source, options, source_crop, on_progress, on_status, cancel)) {
@@ -2380,9 +2374,7 @@ ComparisonResult run_resample_test(const RunEnvironment& environment, const Vide
                 return result;
             }
         } catch (const VideoSizeChanged&) {
-            // Its frames are scaled down and up again at the size they come in.
-            throw VmafRunError("The video's picture size changes partway through; a resolution round-trip test "
-                               "needs a video of one size.");
+            throw VmafRunError(size_change_in_resample_test);
         } catch (const Cancelled&) {
             throw;
         } catch (const std::exception&) {

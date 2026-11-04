@@ -1178,6 +1178,10 @@ DecodePlan plan_decode(const VideoInfo& info, const std::optional<CropBox>& crop
         if (plan.via_w <= 0 || plan.via_h <= 0) {
             throw GpuDecodeUnavailableError("the size it is scaled to first is empty");
         }
+        // The decoders keep a crop on even samples; FFmpeg scales back to the crop's own size.
+        if (crop && !crop->is_noop(info.width, info.height) && ((crop->x | crop->y | crop->w | crop->h) & 1) != 0) {
+            throw GpuDecodeUnavailableError("a resolution test with an odd crop is scaled by FFmpeg");
+        }
     }
     plan.shift = depth > 8 ? shift : 0;
     plan.luma_only = luma_only;

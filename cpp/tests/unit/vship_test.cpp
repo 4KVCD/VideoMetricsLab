@@ -173,6 +173,20 @@ TEST(Vship, AMacsGpuDecodedFramesAreDownloadedBeforeTheFilters) {
               "crop=3840:1608:0:276,scale=1920:804:flags=lanczos,format=p010le");
 }
 
+// A resolution test's picture is cut first, as its source's is, brought out of
+// a GPU's NV12, then scaled down and back to the size it is compared at, though
+// that is its own size.
+TEST(Vship, AResolutionTestsPictureIsScaledDownAndBack) {
+    VideoInfo info = plain_video("yuv420p");
+    info.width = 1920;
+    info.height = 1080;
+    info.resample_via = std::pair(640, 480);
+    EXPECT_EQ(vship_filter_chain(info, CropBox{1440, 1080, 240, 0}, std::pair(1440, 1080), "yuv420p", 1, "lanczos",
+                                 std::string("d3d11va"), Rational{24, 1}, false),
+              "settb=AVTB,setpts=N*1000000/24,hwdownload,format=nv12,crop=1440:1080:240:0,format=yuv420p,"
+              "scale=640:480:flags=lanczos,scale=1440:1080:flags=lanczos,format=yuv420p");
+}
+
 // The filters and outputs FFmpeg is given, the sizes compared at, and the
 // sizes a metric is refused at on a GPU.
 TEST(Vship, PlansFfmpegAndSizesAsThePythonApp) {
