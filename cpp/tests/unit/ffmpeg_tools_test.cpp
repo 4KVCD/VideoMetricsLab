@@ -63,6 +63,8 @@ TEST(FfmpegTools, AnFfmpegWithoutZscaleIsNamedForWhatItCannotDo) {
     EXPECT_FALSE(lists_filter(listing, "libplacebo"));
     EXPECT_FALSE(lists_filter(" .. scale  V->V  Scale like zscale does.\n", "zscale"));
     EXPECT_FALSE(lists_filter("", "zscale"));
+    // Windows' line ends, and blank lines at the end.
+    EXPECT_TRUE(lists_filter(" .S zscale  V->V  Apply.\r\n\r\n\n", "zscale"));
 
     const std::string refused = "[AVFilterGraph @ 0x7909408000] No such filter: 'zscale'\nError : Filter not found";
     EXPECT_EQ(explain_ffmpeg_error(refused), missing_zscale_text());

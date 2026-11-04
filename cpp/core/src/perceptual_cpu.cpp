@@ -142,18 +142,14 @@ std::size_t number_end(std::string_view text, std::size_t start) {
 // Python app's _tool_version).
 std::string tool_version(const std::filesystem::path& executable) {
     for (const char* flag : {"--version", "-version", "-V"}) {
-        platform::ProcessOutput output;
-        try {
-            output = platform::run_program({platform::path_text(executable), flag}, std::chrono::seconds(5));
-        } catch (const platform::ProcessError&) {
+        const std::optional<platform::ProcessOutput> output =
+            platform::finished_program({platform::path_text(executable), flag}, std::chrono::seconds(5));
+        if (!output) {
             return "unknown";
         }
-        if (output.timed_out) {
-            return "unknown";
-        }
-        if (output.exit_code == 0) {
+        if (output->exit_code == 0) {
             const std::string text =
-                as_text(!output.standard_output.empty() ? output.standard_output : output.standard_error);
+                as_text(!output->standard_output.empty() ? output->standard_output : output->standard_error);
             const std::string_view stripped = python_strip(text);
             if (stripped.empty()) {
                 return "unknown";

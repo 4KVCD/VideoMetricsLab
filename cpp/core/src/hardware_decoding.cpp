@@ -217,21 +217,13 @@ DecodingCapabilities DecodingCapabilities::detect(const std::string& ffmpeg) {
         // The names are listed one per line after "Hardware acceleration
         // methods:".
         bool listing = false;
-        std::size_t start = 0;
-        while (start < output.standard_output.size()) {
-            std::size_t end = output.standard_output.find('\n', start);
-            if (end == std::string::npos) {
-                end = output.standard_output.size();
-            }
-            std::string line = output.standard_output.substr(start, end - start);
-            line.erase(0, line.find_first_not_of(" \t\r"));
-            line.erase(line.find_last_not_of(" \t\r") + 1);
+        for (const std::string_view listed : python_splitlines(output.standard_output)) {
+            const std::string line(python_strip(listed));
             if (ascii_lower(line).starts_with("hardware acceleration methods")) {
                 listing = true;
             } else if (listing && !line.empty()) {
                 capabilities.hwaccels.insert(line);
             }
-            start = end + 1;
         }
     } catch (const platform::ProcessError&) {
         // No FFmpeg to ask: no hardware decoding.

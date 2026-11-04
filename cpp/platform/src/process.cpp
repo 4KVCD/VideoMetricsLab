@@ -4,8 +4,29 @@
 #include <algorithm>
 #include <cstdint>
 #include <thread>
+#include <utility>
+#include <vector>
 
 namespace vml::platform {
+
+std::optional<ProcessOutput> finished_program(const std::vector<std::string>& arguments,
+                                              std::chrono::milliseconds timeout) {
+    try {
+        ProcessOutput output = run_program(arguments, timeout);
+        return output.timed_out ? std::nullopt : std::optional(std::move(output));
+    } catch (const ProcessError&) {
+        return std::nullopt;
+    }
+}
+
+std::string read_to_end(ChildProcess& process) {
+    std::string all;
+    std::vector<char> chunk(1 << 16);
+    while (const std::size_t count = process.read(chunk.data(), chunk.size())) {
+        all.append(chunk.data(), count);
+    }
+    return all;
+}
 
 std::size_t ChildProcess::read_full(void* into, std::size_t bytes, const std::atomic<bool>& stop) {
     auto* const start = static_cast<std::uint8_t*>(into);

@@ -182,12 +182,7 @@ bool scale_check(const std::string& ffmpeg, const std::string& algorithm, int de
         {ffmpeg, "-hide_banner", "-nostdin", "-v", "error", "-filter_complex", graph, "-map", "[out]", "-frames:v", "1",
          "-f", "rawvideo", "-pix_fmt", format, "pipe:1"});
     std::string made;
-    std::thread reader([&child, &made] {
-        std::array<char, 64 * 1024> chunk{};
-        while (const std::size_t read = child.read(chunk.data(), chunk.size())) {
-            made.append(chunk.data(), read);
-        }
-    });
+    std::thread reader([&child, &made] { made = platform::read_to_end(child); });
     if (!child.wait_for(std::chrono::seconds(30))) {
         child.terminate();
     }
@@ -968,27 +963,20 @@ private:
 // The video stream's configuration (FFmpeg's extradata), as ffprobe shows
 // it; empty when there is none or it cannot be read.
 std::vector<unsigned char> extradata(const std::string& ffprobe, const std::filesystem::path& video) {
-    platform::ProcessOutput output;
-    try {
-        output = platform::run_program({ffprobe, "-v", "error", "-select_streams", std::string(video_stream),
-                                        "-show_entries", "stream=extradata", "-show_data", "-of",
-                                        "default=noprint_wrappers=1", input_path(video)},
-                                       std::chrono::seconds(60));
-    } catch (const platform::ProcessError&) {
-        return {};
-    }
-    if (output.timed_out) {
+    const std::optional<platform::ProcessOutput> output =
+        platform::finished_program({ffprobe, "-v", "error", "-select_streams", std::string(video_stream),
+                                    "-show_entries", "stream=extradata", "-show_data", "-of",
+                                    "default=noprint_wrappers=1", input_path(video)},
+                                   std::chrono::seconds(60));
+    if (!output) {
         return {};
     }
     const auto is_hex = [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); };
     const auto nibble = [](char c) { return c <= '9' ? c - '0' : c - 'a' + 10; };
     std::vector<unsigned char> data;
-    const std::string_view text = output.standard_output;
-    for (std::size_t start = 0; start < text.size();) {
-        const std::size_t end = std::min(text.find('\n', start), text.size());
+    for (const std::string_view listed : python_splitlines(output->standard_output)) {
         // A line of the dump: "00000010: 0160 0000 0300 0000  .`......".
-        const std::string_view line = python_strip(text.substr(start, end - start));
-        start = end + 1;
+        const std::string_view line = python_strip(listed);
         if (line.size() < 10 || !std::all_of(line.begin(), line.begin() + 8, is_hex) || line.substr(8, 2) != ": ") {
             continue;
         }

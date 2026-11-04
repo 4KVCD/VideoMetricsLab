@@ -155,10 +155,7 @@ double keyframe_lead(const std::string& ffmpeg, const std::filesystem::path& pat
     std::string listing;
     {
         const CancelToken::Attached attached = cancel.attach(process);
-        std::vector<char> buffer(1 << 16);
-        while (const std::size_t count = process.read(buffer.data(), buffer.size())) {
-            listing.append(buffer.data(), count);
-        }
+        listing = platform::read_to_end(process);
         process.wait();
     }
     cancel.throw_if_cancelled();
@@ -328,10 +325,7 @@ StillOutput run_still(const std::vector<std::string>& command, const CancelToken
     platform::ChildProcess process = platform::ChildProcess::start(command);
     StillOutput output;
     const CancelToken::Attached attached = cancel.attach(process);
-    std::vector<char> buffer(1 << 20);
-    while (const std::size_t count = process.read(buffer.data(), buffer.size())) {
-        output.png.append(buffer.data(), count);
-    }
+    output.png = platform::read_to_end(process);
     output.exit_code = process.wait();
     if (output.exit_code != 0) {
         output.error = std::string(python_strip(replace_invalid_utf8(process.standard_error())));

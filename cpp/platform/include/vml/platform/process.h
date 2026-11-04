@@ -184,4 +184,12 @@ void end_programs_now();
 ProcessOutput run_program(const std::vector<std::string>& arguments, std::chrono::milliseconds timeout,
                           const ProcessOptions& options = {}, const std::function<bool()>& stop = nullptr);
 
+// run_program's result, or nothing when the program could not be started or
+// ran past `timeout`, for a question that then has no answer.
+std::optional<ProcessOutput> finished_program(const std::vector<std::string>& arguments,
+                                              std::chrono::milliseconds timeout);
+
+// Everything left on a process's standard output, up to its end.
+std::string read_to_end(ChildProcess& process);
+
 }  // namespace vml::platform

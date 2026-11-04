@@ -234,31 +234,24 @@ bool lists_filter(std::string_view filters_output, std::string_view name) {
     // " .S zscale            V->V       Apply resizing, ...": the name is a
     // filter line's second field (the legend's lines have "=" there, or
     // nothing).
-    std::size_t start = 0;
-    while (start < filters_output.size()) {
-        const std::size_t end = std::min(filters_output.find('\n', start), filters_output.size());
-        std::istringstream fields{std::string(filters_output.substr(start, end - start))};
+    for (const std::string_view line : python_splitlines(filters_output)) {
+        std::istringstream fields{std::string(line)};
         std::string flags;
         std::string filter;
         if (fields >> flags >> filter && filter == name) {
             return true;
         }
-        start = end + 1;
     }
     return false;
 }
 
 std::optional<bool> ffmpeg_has_zscale(const std::string& ffmpeg) {
-    try {
-        const platform::ProcessOutput output =
-            platform::run_program({ffmpeg, "-hide_banner", "-filters"}, tool_check_timeout);
-        if (output.timed_out || output.exit_code != 0) {
-            return std::nullopt;
-        }
-        return lists_filter(output.standard_output, "zscale");
-    } catch (const platform::ProcessError&) {
+    const std::optional<platform::ProcessOutput> output =
+        platform::finished_program({ffmpeg, "-hide_banner", "-filters"}, tool_check_timeout);
+    if (!output || output->exit_code != 0) {
         return std::nullopt;
     }
+    return lists_filter(output->standard_output, "zscale");
 }
 
 std::string missing_zscale_text() {
