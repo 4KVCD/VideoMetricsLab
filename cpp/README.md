@@ -219,9 +219,8 @@ Actions > CI > Run workflow), at the end of each phase of the work and
 before a release: on Windows, with Qt, so that the window and its tests
 are built and run there too (those
 that need a GPU or FFmpeg skip themselves), and with Linux's sanitizer
-preset, both suites. Until the port reaches Linux and macOS, it does not
-build their release presets. During the port, the unit tests run on the
-development PC before each commit.
+preset, both suites. It does not build the Linux and macOS release presets.
+The unit tests run on the development PC before each commit.
 
 ## Rules for the code
 

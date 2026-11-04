@@ -320,15 +320,12 @@ commit it pins), on the same loader and MoltenVK as Vship:
   twice. FFmpeg's VideoToolbox decoder works one frame at a time; the limit
   is its, or the chip's.
 
-### Still to do
+### Left out on purpose
 
-- VVC's film grain: Video Compare decodes a VVC video scored with its H.274
-  grain with VVdeC (FFmpeg's libvvdec), which adds it at any depth; the
-  macOS FFmpeg build has no VVdeC yet, so there it shows without its grain
-  ("film grain not shown (no VVdeC)").
-- HDR on an HDR display (EDR): the presenter's layer takes PQ in BT.2020 for
-  it, but the app does not yet ask macOS whether the display shows HDR
-  (`query_display_hdr`), so HDR video is mapped to SDR.
+- vvdec-vulkan is not ported to macOS: VVC is decoded on the CPU there, by
+  VVdeC (`scripts/build_ffmpeg_decoders_macos.sh`). Through MoltenVK 1.4.2 on
+  an M1 Pro, 14 of its 39 shaders do not translate to Metal, and its shaders
+  wait on each other within a dispatch, for which Metal promises nothing.
 
 ### For the Linux port
 
