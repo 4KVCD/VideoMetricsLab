@@ -1015,7 +1015,12 @@ void FfmpegNativeVideo::Session::make_seek() {
     }
     // Accurate: the frames before it are decoded, not given, but the one on
     // screen at it is.
-    keep_from_ns_ = target_ns - (counted_ ? counted_time_ns(1) : decoding_->frame_ns) / 2;
+    const std::int64_t frame_ns = counted_ ? counted_time_ns(1) : decoding_->frame_ns;
+    keep_from_ns_ = target_ns - frame_ns / 2;
+    // As if the frame before it was the last given: where the GPU's decoder
+    // fails before giving another, software goes on from the frame sought
+    // (decode_on_in_software), not from before the seek.
+    last_given_ns_ = target_ns - frame_ns;
     const std::lock_guard lock(video_.mutex_);
     video_.seeks_made_ = std::max(video_.seeks_made_, asked);
     if (!sought) {
