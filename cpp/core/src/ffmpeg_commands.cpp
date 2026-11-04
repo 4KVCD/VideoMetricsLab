@@ -332,7 +332,8 @@ std::string build_resample_filtergraph(const VideoInfo& source, const VmafOption
 
     // A range's frames kept first, as in video_chains: both videos are the source's, cut alike.
     std::vector<std::string> base;
-    if (const std::optional<std::string> trim = range_trim_filter(run_range(options, source))) {
+    const FrameRange range = run_range(options, source);
+    if (const std::optional<std::string> trim = range_trim_filter(range, options.range_seeks.source)) {
         base.push_back(*trim);
     }
     if (hwaccel) {

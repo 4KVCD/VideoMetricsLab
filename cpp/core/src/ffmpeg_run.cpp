@@ -2210,6 +2210,69 @@ std::optional<ComparisonResult> resample_test_on_gpu(const RunEnvironment& envir
     }
 }
 
+// resample_test_run's run through FFmpeg, as its reading of the video is set.
+ComparisonResult resample_test_by_ffmpeg(const RunEnvironment& environment, const VideoInfo& source,
+                                         VmafOptions options, const std::optional<CropBox>& source_crop,
+                                         const HardwareDecoding& decoding, const ProgressCallback& on_progress,
+                                         const StatusCallback& on_status, const CancelToken& cancel) {
+    // The comparison is at the source's own size, the downscale being undone
+    // before it: Auto's VMAF models come from that.
+    const auto [width, height] = resample_analysis_dimensions(source, source_crop);
+    const std::string model = resolve_run_models(options, width, height);
+    const long long total_frames = estimate_total_frames(source, options, nullptr);
+    const long long decoded_frames = estimate_decoded_frames(source, options, nullptr);
+    const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt}));
+    const FrameRange range = run_range(options, source);
+    const ParsedScores scores = without_wrong_xpsnr(options, depth, [&](const VmafOptions& scored) {
+        VmafOptions seeking = scored;
+        seeking.range_seeks.source =
+            ffmpeg_range_seek(source, range.decode_start, environment.ffmpeg, environment.ffprobe, cancel);
+        const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
+                                       const std::optional<std::string>& xpsnr_log_name, const PairFeeds& feeds) {
+            const std::string graph = build_resample_filtergraph(source, seeking, source_crop, plan.source,
+                                                                 "vmaf_log.json", run_model, xpsnr_log_name,
+                                                                 environment.cores);
+            if (const PictureFeed* fed = feeds.source()) {
+                return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, {},
+                                              fed->input_arguments());
+            }
+            return build_resample_command(environment.ffmpeg, source.path, graph, plan.source,
+                                          with_seek(source.decode_options(), seeking.range_seeks.source));
+        };
+        return execute_run(build_command, scored, model, source.fps, decoded_frames, decoding, "vmaf_resample_",
+                           on_progress, on_status, cancel, environment, &source, nullptr);
+    });
+
+    if (!scores.order.empty() || scores.failed.empty()) {
+        const long long compared = scores.frame.empty() ? 0 : static_cast<long long>(scores.frame.back()) + 1 - range.start;
+        if (const std::optional<std::string> short_run =
+                short_comparison(total_frames, compared, range.start, source.fps, options.n_subsample)) {
+            throw VmafRunError(*short_run);
+        }
+    }
+    // Both branches come from the same source, and after the round trip the test
+    // video is back at the source's own size.
+    ComparisonResult result = result_of_pair(source, source, options, model, source_crop, source_crop, total_frames);
+    result.distorted = synthetic_resample_distorted_path(source.path, *options.resample_test);
+    result.resample_target = options.resample_test;
+    result.metric_failures = scores.failed;
+    for (const std::string& key : scores.order) {
+        std::map<std::string, std::string> parameters;
+        if (key == "vmaf_neg") {
+            parameters["model"] = nlohmann::json("version=vmaf_v0.6.1neg").dump();
+        } else if (key == "vmaf") {
+            parameters["model"] = nlohmann::json(model).dump();
+        } else if (key == "vmaf_v1") {
+            parameters["model"] = nlohmann::json(options.model_v1).dump();
+        }
+        MetricProvenance provenance = current_ffmpeg_provenance(key, environment.ffmpeg_version, std::move(parameters));
+        mark_range(provenance, run_range(options, source));
+        result.metric_results.add(
+            FrameMetricResult{key, scores.frame, scores.time, scores.metrics.at(key), std::move(provenance)});
+    }
+    return result;
+}
+
 // run_resample_test's run. Throws VideoSizeChanged when FFmpeg rebuilt its
 // filters (size_changes.h).
 ComparisonResult resample_test_run(const RunEnvironment& environment, const VideoInfo& source, VmafOptions options,
@@ -2249,51 +2312,19 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
             resample_test_on_gpu(environment, source, options, source_crop, on_progress, on_status, cancel)) {
         return std::move(*on_gpu);
     }
-    // The comparison is at the source's own size, the downscale being undone
-    // before it: Auto's VMAF models come from that.
-    const auto [width, height] = resample_analysis_dimensions(source, source_crop);
-    const std::string model = resolve_run_models(options, width, height);
-    const long long total_frames = estimate_total_frames(source, options, nullptr);
-    const long long decoded_frames = estimate_decoded_frames(source, options, nullptr);
-    const int depth = bit_depth(analysis_pix_fmt({source.pix_fmt}));
-    const ParsedScores scores = without_wrong_xpsnr(options, depth, [&](const VmafOptions& scored) {
-        const auto build_command = [&](const HardwareDecoding& plan, const std::string& run_model,
-                                       const std::optional<std::string>& xpsnr_log_name, const PairFeeds& feeds) {
-            const std::string graph = build_resample_filtergraph(source, scored, source_crop, plan.source,
-                                                                 "vmaf_log.json", run_model, xpsnr_log_name,
-                                                                 environment.cores);
-            if (const PictureFeed* fed = feeds.source()) {
-                return build_resample_command(environment.ffmpeg, source.path, graph, plan.source, {},
-                                              fed->input_arguments());
-            }
-            return build_resample_command(environment.ffmpeg, source.path, graph, plan.source,
-                                          source.decode_options());
-        };
-        return execute_run(build_command, scored, model, source.fps, decoded_frames, decoding, "vmaf_resample_",
-                           on_progress, on_status, cancel, environment, &source, nullptr);
-    });
-
-    // Both branches come from the same source, and after the round trip the test
-    // video is back at the source's own size.
-    ComparisonResult result = result_of_pair(source, source, options, model, source_crop, source_crop, total_frames);
-    result.distorted = synthetic_resample_distorted_path(source.path, *options.resample_test);
-    result.resample_target = options.resample_test;
-    result.metric_failures = scores.failed;
-    for (const std::string& key : scores.order) {
-        std::map<std::string, std::string> parameters;
-        if (key == "vmaf_neg") {
-            parameters["model"] = nlohmann::json("version=vmaf_v0.6.1neg").dump();
-        } else if (key == "vmaf") {
-            parameters["model"] = nlohmann::json(model).dump();
-        } else if (key == "vmaf_v1") {
-            parameters["model"] = nlohmann::json(options.model_v1).dump();
+    // A run that fails where FFmpeg may have read the range from a seek, which it
+    // cannot check picture by picture (ffmpeg_range_seek), is made again from the
+    // video's start, as score_pair's: a video really cut short then fails for good.
+    try {
+        return resample_test_by_ffmpeg(environment, source, options, source_crop, decoding, on_progress, on_status,
+                                       cancel);
+    } catch (const VmafRunError& error) {
+        if (!range_may_seek(run_range(options, source).decode_start, frame_rate(source))) {
+            throw;
         }
-        MetricProvenance provenance = current_ffmpeg_provenance(key, environment.ffmpeg_version, std::move(parameters));
-        mark_range(provenance, run_range(options, source));
-        result.metric_results.add(
-            FrameMetricResult{key, scores.frame, scores.time, scores.metrics.at(key), std::move(provenance)});
+        turn_off_range_seek(error.what());
     }
-    return result;
+    return resample_test_by_ffmpeg(environment, source, options, source_crop, decoding, on_progress, on_status, cancel);
 }
 
 }  // namespace
