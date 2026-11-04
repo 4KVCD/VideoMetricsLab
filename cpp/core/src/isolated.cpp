@@ -93,6 +93,11 @@ IsolatedCrashError::IsolatedCrashError(const std::string& what, int exit_code)
     : std::runtime_error(what + " crashed (" + describe_exit_code(exit_code) + ")"), exit_code_(exit_code) {}
 
 std::string describe_exit_code(int exit_code) {
+#ifndef _WIN32
+    if (exit_code < 0) {
+        return "signal " + std::to_string(-exit_code);  // as ChildProcess::wait says a killed process
+    }
+#endif
     const auto code = static_cast<std::uint32_t>(exit_code);
     if (code <= 0xFFFF) {
         return "exit code " + std::to_string(exit_code);

@@ -5,7 +5,6 @@
 #include <cmath>
 #include <fstream>
 #include <functional>
-#include <random>
 #include <regex>
 #include <stdexcept>
 #include <string_view>
@@ -24,6 +23,7 @@
 #include "vml/model_select.h"
 #include "vml/npz.h"
 #include "vml/platform/system.h"
+#include "vml/temp_files.h"
 #include "vml/python_json.h"
 #include "vml/python_text.h"
 #include "vml/result_json.h"
@@ -332,29 +332,11 @@ std::filesystem::path metric_path(const std::filesystem::path& directory, const 
 
 // Writes `bytes` to `path` through a temporary file that is then renamed
 // over it, so that a crash never leaves half a file.
-void write_atomically(const std::filesystem::path& path, const std::string& bytes, const std::string& suffix) {
+void write_atomically(const std::filesystem::path& path, const std::string& bytes) {
     std::filesystem::create_directories(path.parent_path());
-    std::random_device random;
-    const std::filesystem::path temp =
-        path.parent_path() /
-        platform::path_from_text("." + platform::path_text(path.filename()) + "." + std::to_string(random()) + suffix);
-    {
-        std::ofstream file(temp, std::ios::binary);
+    write_file_whole(path, [&bytes](std::ostream& file) {
         file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-        file.close();
-        if (!file) {
-            std::error_code ignored;
-            std::filesystem::remove(temp, ignored);
-            throw std::runtime_error("Could not write " + platform::path_text(path));
-        }
-    }
-    std::error_code error;
-    std::filesystem::rename(temp, path, error);
-    if (error) {
-        std::error_code ignored;
-        std::filesystem::remove(temp, ignored);
-        throw std::filesystem::filesystem_error("Could not save the scores", path, error);
-    }
+    });
 }
 
 // The metadata saved with a score: the cache format, the kind of score, the
@@ -404,8 +386,7 @@ void store_metric(const std::filesystem::path& directory, const FrameMetricResul
                      npz_bytes({{"metadata", npy_text(described)},
                                 {"frame", npy_int32(result.frame)},
                                 {"time", npy_float64(result.time)},
-                                {"values", npy_float32(result.values)}}),
-                     ".npz");
+                                {"values", npy_float32(result.values)}}));
 }
 
 void store_metric(const std::filesystem::path& directory, const SequenceMetricResult& result,
@@ -420,7 +401,7 @@ void store_metric(const std::filesystem::path& directory, const SequenceMetricRe
         arrays.emplace_back("time", npy_float64(result.time));
         arrays.emplace_back("values", npy_float32(result.values));
     }
-    write_atomically(metric_path(directory, stored), npz_bytes(arrays), ".npz");
+    write_atomically(metric_path(directory, stored), npz_bytes(arrays));
 }
 
 nlohmann::json optional_text(const std::optional<std::string>& text) {
@@ -1196,7 +1177,7 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
     const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
     const std::string context = python_json_compact(context_json(result, label, recipe));
     forget_scores_of_another_picture(directory, nlohmann::json::parse(context));
-    write_atomically(directory / "context.json", context, ".tmp");
+    write_atomically(directory / "context.json", context);
     // A score saved under a request it does not answer would answer it from
     // then on: loading checks the saved request, not the score. A perceptual
     // score is saved under its own implementation's id (stored_spec), which
@@ -1280,7 +1261,9 @@ int clear_metrics(const std::filesystem::path& base, const std::filesystem::path
     bool scores_left = false;
     for (std::filesystem::directory_iterator entry(directory, error);
          !error && entry != std::filesystem::directory_iterator(); entry.increment(error)) {
-        scores_left = scores_left || entry->path().extension() == ".npz";
+        // Not a save that a crash cut short (write_file_whole's ".name.N.npz" of old).
+        scores_left = scores_left || (entry->path().extension() == ".npz" &&
+                                      !platform::path_text(entry->path().filename()).starts_with('.'));
     }
     if (!error && !scores_left) {
         std::filesystem::remove_all(directory, error);

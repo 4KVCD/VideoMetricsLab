@@ -1,13 +1,16 @@
 #include "vml/temp_files.h"
 
+#include <cerrno>
 #include <charconv>
 #include <chrono>
 #include <climits>
 #include <fstream>
 #include <random>
+#include <stdexcept>
 #include <system_error>
 
 #include "vml/platform/system.h"
+#include "vml/python_text.h"
 
 namespace vml {
 
@@ -85,6 +88,34 @@ int remove_leftovers(const std::filesystem::path& folder) {
         }
     }
     return removed;
+}
+
+void write_file_whole(const std::filesystem::path& path, const std::function<void(std::ostream&)>& write) {
+    std::random_device random;
+    const std::filesystem::path temp =
+        path.parent_path() /
+        platform::path_from_text("." + platform::path_text(path.filename()) + "." + std::to_string(random()) + ".tmp");
+    const auto failed = [&temp, &path](const std::error_code& why) {
+        std::error_code ignored;
+        std::filesystem::remove(temp, ignored);
+        return std::runtime_error(python_os_error(why, path));
+    };
+    errno = 0;
+    std::ofstream file(temp, std::ios::binary);
+    const int opened = errno;
+    if (file) {
+        write(file);
+    }
+    file.close();
+    if (!file) {
+        const int code = opened != 0 ? opened : (errno != 0 ? errno : EIO);
+        throw failed(std::error_code(code, std::generic_category()));
+    }
+    std::error_code renamed;
+    std::filesystem::rename(temp, path, renamed);
+    if (renamed) {
+        throw failed(renamed);
+    }
 }
 
 std::optional<std::filesystem::path> make_temp_folder(std::string_view prefix) {

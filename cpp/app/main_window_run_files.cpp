@@ -60,8 +60,7 @@ std::optional<CvvdpSettings> cvvdp_display_of(const SequenceMetricResult& cvvdp)
 // The metric columns follow the row's options: they are set from the
 // scores the run holds, or its PSNR, SSIM and XPSNR would show N/A.
 void take_run_options(VmafOptions& options, const ComparisonResult& result) {
-    const FrameScores frames = frame_scores_from_results(result.metric_results);
-    const auto has = [&frames](const char* key) { return frames.metrics.contains(key); };
+    const auto has = [&result](const char* key) { return result.metric_results.frame(key) != nullptr; };
     options.extra_features.clear();
     if (has("psnr")) {
         options.extra_features.emplace_back("name=psnr");
@@ -214,16 +213,21 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
     refresh_row_state(row);
     sync_frame_compare();
     on_table_selection_changed();  // the row removed moved the rows after it
-    read_unknown_profiles();
+    read_details_of_loaded_run(result);
 }
 
-void MainWindow::read_unknown_profiles() {
-    // A run saved before 2.3 has no profile in its videos' details, and
-    // pick_decode leaves H.264 of no known profile to software decoding on
-    // Intel's and AMD's GPUs: the files of the window's videos without one
-    // are read for theirs, off the window's thread. A file that cannot be
-    // read leaves its video as it is.
+void MainWindow::read_details_of_loaded_run(const ComparisonResult& result) {
+    // A run file does not say where its videos' pictures start, without which
+    // Video Compare shows other frames than it says, and one saved before 2.3
+    // gives no profile, and pick_decode leaves H.264 of no known profile to
+    // software decoding on Intel's and AMD's GPUs: the run's files, and those
+    // of the window's other videos without a profile, are read for them, off
+    // the window's thread. A file that cannot be read leaves its video as it is.
     QStringList paths;
+    paths.append(text_of(result.source_info.path));
+    if (!paths.contains(text_of(result.distorted_info.path))) {
+        paths.append(text_of(result.distorted_info.path));
+    }
     const auto add = [&paths](const VideoInfo& info) {
         if (h264_profile_unknown(info) && !paths.contains(text_of(info.path))) {
             paths.append(text_of(info.path));
@@ -240,32 +244,31 @@ void MainWindow::read_unknown_profiles() {
     if (paths.isEmpty()) {
         return;
     }
-    // Only the profile is taken: no film grain scan.
+    // Only those details are taken: no film grain scan.
     auto* worker = new ProbeWorker(paths, find_tool("ffprobe", settings_), std::string(), this);
     probe_workers_.push_back(worker);
-    connect(worker, &ProbeWorker::probed, this, [this](const Probed& probed) { take_profile(probed); });
+    connect(worker, &ProbeWorker::probed, this, [this](const Probed& probed) { take_read_details_of_file(probed); });
     // As the rows' readers end: a "Reading..." shown while this one read is
     // then taken down.
     connect(worker, &ProbeWorker::finished_all, this, [this, worker] { on_probe_finished(worker); });
     worker->start();
 }
 
-void MainWindow::take_profile(const Probed& probed) {
-    // A file's profile, just read, for the window's details of that file
-    // that have none: the reference's, its rows', and their results' (saved
-    // again with it).
+void MainWindow::take_read_details_of_file(const Probed& probed) {
+    // A file's details, just read (take_read_details), for the window's details
+    // of that file: the reference's, its rows', and their results'.
     if (!probed.info) {
         return;
     }
-    bool taken = source_info_ && take_read_profile(*source_info_, *probed.info);
+    bool taken = source_info_ && take_read_details(*source_info_, *probed.info);
     for (const std::shared_ptr<RowData>& row_data : rows_) {
         if (row_data->video_info) {
-            taken = take_read_profile(*row_data->video_info, *probed.info) || taken;
+            taken = take_read_details(*row_data->video_info, *probed.info) || taken;
         }
         if (row_data->completed_run) {
             ComparisonResult& result = row_data->completed_run->result;
-            taken = take_read_profile(result.source_info, *probed.info) || taken;
-            taken = take_read_profile(result.distorted_info, *probed.info) || taken;
+            taken = take_read_details(result.source_info, *probed.info) || taken;
+            taken = take_read_details(result.distorted_info, *probed.info) || taken;
         }
     }
     if (taken) {

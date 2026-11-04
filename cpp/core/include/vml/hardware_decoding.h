@@ -124,10 +124,12 @@ bool h264_444_profile(const VideoInfo& video);
 // (one of a run saved before 2.3), which may be in a 4:4:4 profile.
 bool h264_profile_unknown(const VideoInfo& video);
 
-// Gives `saved`, a saved run's details of a video, the profile of `read`,
-// the same file's details read again, where it has none: true when it did.
-// Only the profile: the rest stays as the run measured it.
-bool take_read_profile(VideoInfo& saved, const VideoInfo& read);
+// Gives `saved`, a saved run's details of a video, from `read`, the same file's
+// details read again, what a run file does not keep or may not have: where its
+// pictures start and its container (without them Video Compare seeks to other
+// frames), and its profile where it has none. True when it changed anything.
+// Only those: the rest stays as the run measured it.
+bool take_read_details(VideoInfo& saved, const VideoInfo& read);
 
 // The -hwaccel for `video`, as pick_decode gives it for its codec, format and
 // size, but only a GPU's decoder that decodes its profile exactly: H.264 in

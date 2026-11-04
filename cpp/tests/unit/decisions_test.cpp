@@ -257,20 +257,22 @@ TEST(Decisions, ASavedVideoTakesOnlyTheProfileReadFromItsFile) {
     VideoInfo read = saved;
     read.profile = "High";
     read.width = 3840;  // the file's details now: not taken
-    EXPECT_TRUE(take_read_profile(saved, read));
+    read.start_offset = 0.5;
+    EXPECT_TRUE(take_read_details(saved, read));
     EXPECT_EQ(saved.profile, "High");
+    EXPECT_EQ(saved.start_offset, 0.5);
     EXPECT_EQ(saved.width, 1920);
     read.profile = "High 4:4:4 Predictive";
-    EXPECT_FALSE(take_read_profile(saved, read));  // it has one
+    EXPECT_FALSE(take_read_details(saved, read));  // it has one
     EXPECT_EQ(saved.profile, "High");
 
     saved.profile.clear();
     VideoInfo other = read;
     other.path = "E:/videos/test.mkv";
-    EXPECT_FALSE(take_read_profile(saved, other));
+    EXPECT_FALSE(take_read_details(saved, other));
     other = read;
     other.codec_name = "hevc";
-    EXPECT_FALSE(take_read_profile(saved, other));
+    EXPECT_FALSE(take_read_details(saved, other));
     EXPECT_EQ(saved.profile, "");
 }
 

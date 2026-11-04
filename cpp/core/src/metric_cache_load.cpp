@@ -57,7 +57,7 @@ bool fit_seconds(SequenceMetricResult& metric, long long end, long long video_fr
         return false;
     }
     std::vector<CvvdpWindow> windows;
-    for (std::size_t at = 0; at < metric.frame.size() && metric.frame[at] < end; ++at) {
+    for (std::size_t at = 0; at < metric.frame.size() && metric.frame[at] < std::min(end, reached); ++at) {
         const long long next = at + 1 < metric.frame.size() ? metric.frame[at + 1] : reached;
         windows.push_back({metric.frame[at], std::min({next, end, reached}) - metric.frame[at], metric.values[at]});
     }

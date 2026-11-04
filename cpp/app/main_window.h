@@ -408,8 +408,8 @@ private:
     void on_load_saved_run();
     void load_saved_run(const std::filesystem::path& path);
     void adopt_source_from_run(const ComparisonResult& result);
-    void read_unknown_profiles();
-    void take_profile(const Probed& probed);
+    void read_details_of_loaded_run(const ComparisonResult& result);
+    void take_read_details_of_file(const Probed& probed);
     bool offer_to_switch_source(const ComparisonResult& result);
     bool offer_to_take_reference_film_grain(const ComparisonResult& result);
     std::vector<std::shared_ptr<CompletedRun>> selected_runs() const;

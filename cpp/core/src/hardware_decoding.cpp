@@ -332,14 +332,19 @@ bool h264_profile_unknown(const VideoInfo& video) {
     return ascii_lower(video.codec_name) == "h264" && video.profile.empty();
 }
 
-bool take_read_profile(VideoInfo& saved, const VideoInfo& read) {
+bool take_read_details(VideoInfo& saved, const VideoInfo& read) {
     // Another codec is another file by now: nothing of it is taken.
-    if (!saved.profile.empty() || read.profile.empty() || saved.path != read.path ||
-        saved.codec_name != read.codec_name) {
+    if (saved.path != read.path || saved.codec_name != read.codec_name) {
         return false;
     }
-    saved.profile = read.profile;
-    return true;
+    const bool changed = (saved.profile.empty() && !read.profile.empty()) ||
+                         saved.start_offset != read.start_offset || saved.format_name != read.format_name;
+    if (saved.profile.empty()) {
+        saved.profile = read.profile;
+    }
+    saved.start_offset = read.start_offset;
+    saved.format_name = read.format_name;
+    return changed;
 }
 
 namespace {

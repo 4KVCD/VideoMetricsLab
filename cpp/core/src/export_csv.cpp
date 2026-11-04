@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <cerrno>
 #include <cmath>
 #include <fstream>
 #include <limits>
@@ -17,6 +16,7 @@
 #include "vml/model_select.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
+#include "vml/temp_files.h"
 #include "vml/python_text.h"
 
 namespace vml {
@@ -96,8 +96,16 @@ CsvTable csv_table(const MetricResultSet& metrics) {
     }
     std::sort(table.frames.begin(), table.frames.end());
     table.frames.erase(std::unique(table.frames.begin(), table.frames.end()), table.frames.end());
+    // A CVVDP score alone, with no per-second values: a row to hold it.
+    const bool score_alone = cvvdp != nullptr && table.frames.empty();
+    if (score_alone) {
+        table.frames.push_back(0);
+    }
 
     table.times.assign(table.frames.size(), blank);
+    if (score_alone) {
+        table.times.front() = 0.0;
+    }
     table.names = keys;
     const auto fill = [&table](const std::vector<int>& at, const std::vector<double>& their_times,
                                const auto& their_values, std::vector<double>& column) {
@@ -126,6 +134,8 @@ CsvTable csv_table(const MetricResultSet& metrics) {
             for (const int frame : cvvdp->frame) {
                 video[table.row_of(frame)] = cvvdp->score;
             }
+        } else {
+            video.front() = cvvdp->score;  // no seconds to put it on: the first row
         }
         table.names.emplace_back("cvvdp_second_jod");
         table.names.emplace_back("cvvdp_video_jod");
@@ -134,37 +144,23 @@ CsvTable csv_table(const MetricResultSet& metrics) {
 }
 
 void write_csv_table(const CsvTable& table, const std::filesystem::path& path) {
-    // A failure says why, as the Python app's OSError does ("[Errno 13]
-    // Permission denied: '...'"); the path alone left a user guessing.
-    errno = 0;
-    std::ofstream file(path, std::ios::binary);
-    const int opened = errno;
-    const auto failed = [&] {
-        const int code = opened != 0 ? opened : (errno != 0 ? errno : EIO);
-        return std::runtime_error(python_os_error(std::error_code(code, std::generic_category()), path));
-    };
-    if (!file) {
-        throw failed();
-    }
     // Python's csv.writer: comma-separated, rows ended with CR LF; none of
     // these cells needs quotes.
-    std::string header = "frame,time_s";
-    for (const std::string& name : table.names) {
-        header += "," + name;
-    }
-    file << header << "\r\n";
-    for (std::size_t row = 0; row < table.frames.size(); ++row) {
-        std::string line = std::to_string(table.frames[row]) + "," + format_fixed(table.times[row], 6);
+    write_file_whole(path, [&table](std::ostream& file) {
+        std::string header = "frame,time_s";
         for (const std::string& name : table.names) {
-            const double value = table.values.at(name)[row];
-            line += "," + (std::isnan(value) ? std::string() : python_repr(value));
+            header += "," + name;
         }
-        file << line << "\r\n";
-    }
-    file.close();
-    if (!file) {
-        throw failed();
-    }
+        file << header << "\r\n";
+        for (std::size_t row = 0; row < table.frames.size(); ++row) {
+            std::string line = std::to_string(table.frames[row]) + "," + format_fixed(table.times[row], 6);
+            for (const std::string& name : table.names) {
+                const double value = table.values.at(name)[row];
+                line += "," + (std::isnan(value) ? std::string() : python_repr(value));
+            }
+            file << line << "\r\n";
+        }
+    });
 }
 
 }  // namespace
@@ -265,17 +261,25 @@ std::vector<std::filesystem::path> unique_output_paths(const std::filesystem::pa
         }
         return paths;
     };
-    const auto taken = [&reserved](const std::vector<std::filesystem::path>& paths) {
+    // Reserved as the system compares names: "Clip" and "clip", still to be
+    // written, are one file on Windows.
+    const auto as_compared = [](const std::filesystem::path& path) {
+        return path.parent_path() /
+               platform::path_from_text(platform::name_as_compared(platform::path_text(path.filename())));
+    };
+    const auto taken = [&reserved, &as_compared](const std::vector<std::filesystem::path>& paths) {
         std::error_code error;
         return std::any_of(paths.begin(), paths.end(), [&](const std::filesystem::path& path) {
-            return reserved.contains(path) || std::filesystem::exists(path, error);
+            return reserved.contains(as_compared(path)) || std::filesystem::exists(path, error);
         });
     };
     std::vector<std::filesystem::path> candidates = paths_for(stem);
     for (int counter = 2; taken(candidates); ++counter) {
         candidates = paths_for(stem + "_" + std::to_string(counter));
     }
-    reserved.insert(candidates.begin(), candidates.end());
+    for (const std::filesystem::path& path : candidates) {
+        reserved.insert(as_compared(path));
+    }
     return candidates;
 }
 

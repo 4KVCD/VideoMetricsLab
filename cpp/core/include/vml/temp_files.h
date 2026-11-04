@@ -14,7 +14,9 @@
 
 #include <array>
 #include <filesystem>
+#include <functional>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <string_view>
 
@@ -32,6 +34,12 @@ inline constexpr std::array<std::string_view, 9> temp_prefixes{
     "vml-vship-pts-",  // FFmpeg's frame timestamps for Vship
     "vml-vmaf-v1-",    // libvmaf's list of features
 };
+
+// Writes the file `path` through a temporary file beside it, renamed over it
+// once whole: a full disk or a crash leaves what was there. `write` writes to
+// the temporary file. Throws std::runtime_error saying why, as Python's OSError
+// does.
+void write_file_whole(const std::filesystem::path& path, const std::function<void(std::ostream&)>& write);
 
 // `name`, one of temp_prefixes, followed by this process's id and a dash:
 // the start of a temporary file or folder name whose owner remove_leftovers

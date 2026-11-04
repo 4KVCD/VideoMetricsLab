@@ -8,17 +8,56 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include "test_videos.h"
 #include "vml/export_csv.h"
+#include "vml/platform/system.h"
+#include "vml/temp_files.h"
 
 namespace vml {
 namespace {
+
+// A CVVDP score with no per-second values still reaches the CSV.
+TEST(ExportCsv, ACvvdpScoreWithoutSecondsIsWritten) {
+    const test::Folder folder;
+    ComparisonResult result;
+    result.metric_results.add(SequenceMetricResult{"cvvdp", 8.5, {}, {}, {}, {}});
+    const std::filesystem::path out = folder / "run.csv";
+    export_csv(result, out);
+    std::ifstream file(out);
+    std::stringstream text;
+    text << file.rdbuf();
+    EXPECT_NE(text.str().find(",8.5"), std::string::npos) << text.str();
+}
+
+// Two labels that name one file on this system, still to be written, get two
+// files; and a write that fails leaves the file that was there, and no other.
+TEST(ExportCsv, FilesAreKeptApartAndReplacedWhole) {
+    const test::Folder folder;
+    std::set<std::filesystem::path> reserved;
+    const std::filesystem::path first = unique_output_path(folder / "", "Clip", ".csv", reserved);
+    const std::filesystem::path second = unique_output_path(folder / "", "clip", ".csv", reserved);
+    EXPECT_NE(platform::name_as_compared(platform::path_text(first.filename())),
+              platform::name_as_compared(platform::path_text(second.filename())));
+
+    write_file_whole(first, [](std::ostream& file) { file << "kept"; });
+    EXPECT_THROW(write_file_whole(first, [](std::ostream& file) { file.setstate(std::ios::failbit); }),
+                 std::runtime_error);
+    std::ifstream kept(first);
+    std::string text;
+    kept >> text;
+    EXPECT_EQ(text, "kept");
+    EXPECT_EQ(std::distance(std::filesystem::directory_iterator(first.parent_path()),
+                            std::filesystem::directory_iterator()),
+              1);
+}
 
 constexpr float inf = std::numeric_limits<float>::infinity();
 constexpr float nan = std::numeric_limits<float>::quiet_NaN();

@@ -642,7 +642,7 @@ std::optional<TemporalUnit> Reader::next_section5() {
 
 std::shared_ptr<const std::vector<TemporalUnit>> closed_keyframes(const std::filesystem::path& path) {
     std::error_code ignored;
-    const std::string key = path.string() + '|' + std::to_string(std::filesystem::file_size(path, ignored)) + '|' +
+    const std::string key = platform::path_text(path) + '|' + std::to_string(std::filesystem::file_size(path, ignored)) + '|' +
                             std::to_string(platform::modified_ns(path).value_or(0));
     static std::mutex mutex;
     static std::map<std::string, std::shared_ptr<const std::vector<TemporalUnit>>> scanned;
