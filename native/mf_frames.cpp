@@ -543,6 +543,17 @@ bool pull(Decoder *d) {
                 d->fail(text);
                 return false;
             }
+            // A decoder may give the coded height (1088 for 1080): past that,
+            // the pictures would be read cut, and below the video's, padded.
+            const auto other_size = [](int shown, int video) { return shown < video || shown > ((video + 15) & ~15); };
+            if (other_size(d->shown.width, d->params.width) || other_size(d->shown.height, d->params.height)) {
+                char text[160];
+                snprintf(text, sizeof text, "a picture is %dx%d, not the %dx%d video", d->shown.width, d->shown.height,
+                         d->params.width, d->params.height);
+                out.pSample->Release();
+                d->fail(text);
+                return false;
+            }
             d->delivered = true;
         }
         if (out.pSample && !deliver(d, out.pSample)) return false;

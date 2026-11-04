@@ -1069,6 +1069,14 @@ NVF_API int nvf_finish(void *handle) {
     Decoder *d = static_cast<Decoder *>(handle);
     if (!d->stopped()) {
         AMF_RESULT result = d->session.decoder->Drain();
+        // Full: nothing was done, and it is asked again once pictures have
+        // left (as FFmpeg's AMF code does), for as long as a driver could need.
+        const ULONGLONG give_up_at = GetTickCount64() + 10000;
+        while (result == AMF_INPUT_FULL && !d->stopped() && GetTickCount64() < give_up_at) {
+            if (!d->handing_over) collect(d, false);
+            Sleep(1);
+            result = d->session.decoder->Drain();
+        }
         if (result != AMF_OK && result != AMF_INPUT_FULL) {
             d->fail("Finishing the video failed (" + result_text(result) + ")");
         } else if (d->handing_over) {  // the collecting thread takes the rest, to the end

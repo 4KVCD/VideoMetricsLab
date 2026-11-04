@@ -899,7 +899,8 @@ void FfmpegNativeVideo::Session::run() {
         make_seek();
         if (at_end_) {
             std::unique_lock lock(video_.mutex_);
-            video_.changed_.wait(lock, [this] { return video_.cancelled_ || video_.wanted_ms_.has_value(); });
+            // A seek in a video that gave no picture cannot be made (make_seek): only Cancel ends this.
+            video_.changed_.wait(lock, [this] { return video_.cancelled_ || (video_.wanted_ms_ && origin_ns_); });
             continue;
         }
         if (!video_.wait_for_room()) {

@@ -393,6 +393,11 @@ private:
             log_partial_frame(command, frames, *cut, still_running, code, process->output_error(), errors);
             throw VshipInputError("FFmpeg ended partway through a " + label_ + " frame.");
         }
+        // Reading failing between two frames looks like the video's end.
+        if (const int read_error = process->output_error(); read_error != 0 && !stopping_) {
+            throw VshipInputError("Reading FFmpeg's " + label_ + " frames failed (system error " +
+                                  std::to_string(read_error) + ").");
+        }
         return {frames, code, errors};
     }
 
@@ -1128,10 +1133,12 @@ public:
             // reset ends FFmpeg's GPU decoding as well), and nothing is run
             // on it again.
             stop_lanes();
-            const bool lanes_failed = !lane_errors().empty();
+            const std::vector<std::pair<std::string, std::exception_ptr>> lanes = lane_errors();
             close();
-            if (lanes_failed) {
-                throw VshipUnavailableError(error.what());
+            if (!lanes.empty()) {
+                const std::string first = message_of(lanes.front().second);
+                logger.error("Vship pass: " + lanes.front().first + " failed: " + first);
+                throw VshipUnavailableError(first + " (and: " + error.what() + ")");
             }
             throw;
         } catch (const VshipUnavailableError& error) {

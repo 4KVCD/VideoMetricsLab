@@ -39,6 +39,7 @@
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/size_changes.h"
 #include "scale_filter.h"
 
 namespace vml {
@@ -1874,6 +1875,22 @@ private:
     std::atomic<bool> closed_{false};
 };
 
+// What the decoders' failures say of the video itself (the fail() texts of
+// nvdec_frames, vpl_frames, amf_frames and mf_frames). One file such as this
+// says nothing against the GPU's decoding of the other videos of the batch.
+bool says_the_size_changes(std::string_view said) {
+    return said.starts_with("the video's picture size changes") ||
+           (said.starts_with("a picture is ") && !said.starts_with("a picture is not ")) ||
+           said.starts_with("the decoder's picture (");
+}
+
+// "Format" may be no more than the colour tags. FFmpeg, which decodes the video
+// then, rebuilds its filters and says at which size if it is the size.
+bool says_the_file_is_unsuited(std::string_view said) {
+    return said.starts_with("the video is ") || said.starts_with("the video decodes at ") ||
+           said.starts_with("the video's format changes") || said.starts_with("this GPU's decoder cannot");
+}
+
 struct GpuFrameStream::State {
     std::optional<RangeSeek> seek;
     std::optional<Picture> first_in_range;  // skip_after_seek's, for next() to give
@@ -1893,6 +1910,7 @@ struct GpuFrameStream::State {
     std::string backend;
     std::string decoder;    // for messages
     std::string file_name;  // the video's, for the log
+    std::filesystem::path video;
     PictureChecks checks;
     const DecoderLibrary* library = nullptr;
     // AV1's sequence header or FFV1's configuration, which the decoder may
@@ -1971,6 +1989,7 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
     : state_(std::make_shared<State>(backend)) {
     State& state = *state_;
     state.file_name = platform::path_text(info.path.filename());
+    state.video = info.path;
     if (!decodes_codec(plan.codec, backend)) {
         throw GpuDecodeUnavailableError(plan.codec + " is not decoded by the " + std::string(backend) + " decoder");
     }
@@ -2132,8 +2151,11 @@ std::optional<GpuFrameStream::Picture> GpuFrameStream::next_picture(const Cancel
             throw GpuDecodeFailedError("decoding was stopped", state.backend);
         }
         const std::string said = state.error_text();
+        if (state.backend != vvdec_decoder && says_the_size_changes(said)) {
+            throw VideoSizeChanged(said, state.video);  // software decoding scales it (size_changes.h)
+        }
         throw GpuDecodeFailedError(said.empty() ? state.decoder + " failed" : said, state.backend,
-                                   state.backend != software_decoder);
+                                   state.backend != software_decoder && !says_the_file_is_unsuited(said));
     }
 }
 
