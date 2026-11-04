@@ -147,7 +147,9 @@ struct TaskSnapshot {
     std::string waiting_for;  // what a waiting task waits for: "GPU" or "CPU"
     RunStatus step;           // its latest status
     // The last decode plan its statuses named: where it decodes each video,
-    // for the window's "Decoder: ...".
+    // for the window's "Decoder: ...". A video vvdec-vulkan decodes has
+    // vvdec_decoder here, which is not one of FFmpeg's decoders: this copy is
+    // only for showing.
     std::optional<HardwareDecoding> decode;
 };
 

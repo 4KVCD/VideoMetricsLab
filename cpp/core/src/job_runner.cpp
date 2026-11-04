@@ -17,6 +17,8 @@
 #include "vml/ffmpeg_run.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
+#include "vml/gpu_decoders.h"
+#include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
 #include "vml/isolated.h"
@@ -212,6 +214,7 @@ private:
         std::string waiting_for;  // "GPU" or "CPU" while it waits
         RunStatus step;           // its latest status
         std::optional<HardwareDecoding> decode;  // the last decode plan a status named
+        bool on_vvdec_vulkan = false;            // its VVC videos are decoded on the GPU (a vvdec_used status)
 
         bool finished() const { return result.has_value() || perceptual.has_value(); }
     };
@@ -233,6 +236,7 @@ private:
     // The rest are called with mutex_ held.
     std::vector<TaskSnapshot> snapshots() const;
     // Task `task`'s snapshot for its metrics `keys`, as `backend` in `lane`.
+    std::optional<HardwareDecoding> shown_decoding(const TaskState& state) const;
     TaskSnapshot snapshot_of(std::size_t task, const std::string& backend, const std::string& lane,
                              const std::vector<std::string>& keys) const;
     void send_snapshots() const;
@@ -562,7 +566,11 @@ void JobRun::report_status(std::size_t task, const RunStatus& status) {
     logger.info(name() + ": " + status.text);
     if (status.kind == StatusKind::gpu_decoder_failed || status.kind == StatusKind::vvdec_used ||
         status.kind == StatusKind::vvdec_off) {
-        // For the run's process (distrust_failed_decoder, take_child_status), logged above: not a step
+        // For the run's process (distrust_failed_decoder, take_child_status), logged above: not a step, though the
+        // task's decoder line changes (shown_decoding)
+        const std::lock_guard lock(mutex_);
+        tasks_[task].on_vvdec_vulkan = status.kind == StatusKind::vvdec_used;
+        send_snapshots();
         return;
     }
     const std::lock_guard lock(mutex_);
@@ -798,8 +806,24 @@ TaskSnapshot JobRun::snapshot_of(std::size_t task, const std::string& backend, c
                                                   : "starting";
     snapshot.waiting_for = state.waiting_for;
     snapshot.step = state.step;
-    snapshot.decode = state.decode;
+    snapshot.decode = shown_decoding(state);
     return snapshot;
+}
+
+// A task's plan as its decoder line shows it. vvdec-vulkan is not one of FFmpeg's decoders, so a plan has nothing for
+// a video it decodes: each VVC video is marked here instead, for the line alone.
+std::optional<HardwareDecoding> JobRun::shown_decoding(const TaskState& state) const {
+    std::optional<HardwareDecoding> shown = state.decode;
+    if (!shown || !state.on_vvdec_vulkan || vvdec_turned_off()) {
+        return shown;
+    }
+    if (ascii_lower(job_.source_info.codec_name) == "vvc") {
+        shown->source = std::string(vvdec_decoder);
+    }
+    if (ascii_lower(job_.distorted_info.codec_name) == "vvc") {
+        shown->distorted = std::string(vvdec_decoder);
+    }
+    return shown;
 }
 
 void JobRun::send_snapshots() const {

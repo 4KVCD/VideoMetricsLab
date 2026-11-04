@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "vml/film_grain_detect.h"
+#include "vml/gpu_decoders.h"
 
 namespace vml {
 namespace {
@@ -173,6 +174,37 @@ TEST(JobRunner, AVideosTasksRunAtOnceAndMakeOneResult) {
 // PSNR and XPSNR scored beside VMAF on the GPU from one decode (plan_tasks's
 // share_decode) are one run of all three, and are shown as the CPU's task
 // they were, with the GPU's progress.
+TEST(JobRunner, AVvcVideoOnVvdecVulkanShowsAsDecodedOnTheGpu) {
+    std::vector<VmafJob> jobs{job_of({{"ffmpeg", {"psnr"}}})};
+    jobs[0].source_info.codec_name = "vvc";
+    jobs[0].distorted_info.codec_name = "h264";
+    Reported reported;
+    RunEvents events = reported.events();
+    std::vector<std::optional<HardwareDecoding>> shown;  // the plan after each status below
+    events.task_progress = [&shown](std::size_t, const std::vector<TaskSnapshot>& tasks) {
+        shown.push_back(tasks.at(0).decode);
+    };
+    std::size_t before_statuses = 0;
+    run_jobs(
+        jobs, 1, events,
+        [&](const VmafJob&, const VmafOptions&, const ProgressCallback&, const StatusCallback& on_status,
+            const CancelToken&) {
+            before_statuses = shown.size();
+            RunStatus planned{"Running", StatusKind::step};
+            planned.decoding = HardwareDecoding{};
+            on_status(planned);
+            on_status({"VVC decoded on the GPU by vvdec-vulkan", StatusKind::vvdec_used});
+            on_status({"it refused", StatusKind::vvdec_off});
+            return result_with({{"psnr", {0, 1}}});
+        },
+        24, CancelToken());
+
+    ASSERT_GE(shown.size(), before_statuses + 3);
+    EXPECT_EQ(shown.at(before_statuses), HardwareDecoding{});
+    EXPECT_EQ(shown.at(before_statuses + 1), (HardwareDecoding{std::string(vvdec_decoder), std::nullopt}));
+    EXPECT_EQ(shown.at(before_statuses + 2), HardwareDecoding{});
+}
+
 TEST(JobRunner, CpuMetricsBesideTheGpusAreOneRunShownAsTheirOwnTask) {
     MetricTask shared{std::string(gpu_vmaf_task), {"vmaf", "psnr", "xpsnr"}};
     shared.cpu_beside = {"psnr", "xpsnr"};
