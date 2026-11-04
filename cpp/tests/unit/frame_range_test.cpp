@@ -47,6 +47,21 @@ TEST(FrameRange, EndsAtTheSecondAfterTheLastFrames) {
 
 // The whole video; a range at 24 fps with and without the metrics that look
 // around; the warm-up at 4 frames at least below 4 fps; subsampled.
+TEST(FrameRange, AScoresRangeFramesGiveTheSecondsTheyCameFrom) {
+    const double ntsc = 24000.0 / 1001.0;
+    MetricProvenance provenance;
+    EXPECT_EQ(scored_seconds(provenance, ntsc), std::nullopt);  // the whole videos
+    for (const auto& [first, end] : {std::pair<long long, long long>{0, 13}, {20, 30}, {3599, 3600}}) {
+        mark_range(provenance, frame_range(first, end, ntsc, 1, false));
+        EXPECT_EQ(scored_seconds(provenance, ntsc), std::pair(first, end));
+    }
+    mark_range(provenance, frame_range(40, 0, ntsc, 1, false));  // to the end
+    EXPECT_EQ(scored_seconds(provenance, ntsc), std::pair(40LL, 0LL));
+    // A video that ended within the range's last second: the range's end.
+    mark_range(provenance, frame_range(0, 13, ntsc, 1, false), 300);
+    EXPECT_EQ(scored_seconds(provenance, ntsc), std::pair(0LL, 13LL));
+}
+
 TEST(FrameRange, DecodesTheFramesItsMetricsLookAt) {
     EXPECT_TRUE(frame_range(0, 0, 24.0, 1, true).whole());
     EXPECT_EQ(frame_range(0, 0, 24.0, 1, true), (FrameRange{0, std::nullopt, 0, std::nullopt}));

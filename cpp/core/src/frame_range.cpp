@@ -75,6 +75,35 @@ std::optional<std::string> range_trim_filter(const FrameRange& range, const std:
     return trim;
 }
 
+namespace {
+
+// The first second that starts at `frame` or after it.
+long long second_reaching(long long frame, double fps) {
+    long long second = static_cast<long long>(static_cast<double>(frame) / fps);
+    while (first_frame_of_second(second, fps) < frame) {
+        ++second;
+    }
+    while (second > 0 && first_frame_of_second(second - 1, fps) >= frame) {
+        --second;
+    }
+    return second;
+}
+
+}  // namespace
+
+std::optional<std::pair<long long, long long>> scored_seconds(const MetricProvenance& provenance, double fps) {
+    const auto marked = provenance.parameters.find("range_frames");
+    if (marked == provenance.parameters.end() || fps <= 0.0) {
+        return std::nullopt;
+    }
+    const nlohmann::json frames = nlohmann::json::parse(marked->second, nullptr, false);
+    if (!frames.is_array() || frames.size() != 2 || !frames[0].is_number_integer()) {
+        return std::nullopt;
+    }
+    const long long start = second_reaching(frames[0].get<long long>(), fps);
+    return std::pair(start, frames[1].is_number_integer() ? second_reaching(frames[1].get<long long>(), fps) : 0);
+}
+
 void mark_range(MetricProvenance& provenance, const FrameRange& range, std::optional<long long> reached) {
     if (range.whole()) {
         return;

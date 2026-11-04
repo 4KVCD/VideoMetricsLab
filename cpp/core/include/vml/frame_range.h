@@ -20,6 +20,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "vml/range_seek.h"
 #include "vml/results.h"
@@ -72,5 +73,9 @@ std::optional<std::string> range_trim_filter(const FrameRange& range,
 // whole videos.
 void mark_range(MetricProvenance& provenance, const FrameRange& range,
                 std::optional<long long> reached = std::nullopt);
+
+// The whole seconds a score's range_frames came from, [first, second) (0: to
+// the end); nothing for a score of the whole videos.
+std::optional<std::pair<long long, long long>> scored_seconds(const MetricProvenance& provenance, double fps);
 
 }  // namespace vml

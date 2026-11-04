@@ -107,11 +107,19 @@ void take_run_options(VmafOptions& options, const ComparisonResult& result) {
     // metrics run on 5.1.2 here (vship_build_in_use) anyway; with none, the
     // row's own.
     std::vector<std::string> ids;
+    // The range its scores are of: under another, a later run would keep them
+    // and save them as that range's.
+    options.range_start = 0;
+    options.range_end = 0;
     for (const std::string& key : result.metric_results.keys()) {
         const FrameMetricResult* frame = result.metric_results.frame(key);
         const SequenceMetricResult* sequence = result.metric_results.sequence(key);
-        ids.push_back(frame != nullptr ? frame->provenance.implementation_compatibility_id
-                                       : sequence->provenance.implementation_compatibility_id);
+        const MetricProvenance& provenance = frame != nullptr ? frame->provenance : sequence->provenance;
+        ids.push_back(provenance.implementation_compatibility_id);
+        if (const auto seconds = scored_seconds(provenance, result.source_info.fps)) {
+            options.range_start = seconds->first;
+            options.range_end = seconds->second;
+        }
     }
     const auto any = [&ids](bool (*made_by)(std::string_view)) { return std::any_of(ids.begin(), ids.end(), made_by); };
     if (any(score_identity::is_vship_fast_id)) {

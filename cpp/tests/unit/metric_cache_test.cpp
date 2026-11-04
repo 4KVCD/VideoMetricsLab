@@ -259,6 +259,8 @@ TEST(MetricCache, ADurationLimitsScoresAnswerTheRangeFromZeroWhenTheyReachItsEnd
     own.metric_results = MetricResultSet();
     own.metric_results.add(vmaf);
     EXPECT_EQ(load("own", 1, own).frame("vmaf")->frame, (std::vector<int>{0, 1}));
+    // ... and never answer for the whole videos, wherever they were saved.
+    EXPECT_FALSE(load("own whole", 0, own).has("vmaf"));
 
     // A range from a later second: only a ranged run's scores are of it (none
     // was saved before ranges), so one without its mark is not taken.

@@ -72,12 +72,17 @@ bool fit_seconds(SequenceMetricResult& metric, long long end, long long video_fr
 }
 
 // A saved score as the score of `recipe`'s range (frame_range.h). A ranged
-// run's (range_frames) is the range's already. A duration limit's, saved
-// before ranges, under the same name (the range from 0 to the limit), had
-// the frames up to the limit and for VMAF one more: fit_frames, fit_seconds.
+// run's (range_frames) is the range's already, and never the whole videos'. A
+// duration limit's, saved before ranges, under the same name (the range from
+// 0 to the limit), had the frames up to the limit and for VMAF one more:
+// fit_frames, fit_seconds.
 bool fit_to_range(LoadedMetric& metric, const ComparisonRecipe& recipe, const nlohmann::json& context) {
-    if (recipe.range_end <= 0 || provenance_of(metric).parameters.contains("range_frames")) {
-        return true;  // the whole videos, or the range's own
+    const bool marked = provenance_of(metric).parameters.contains("range_frames");
+    if (recipe.range_start <= 0 && recipe.range_end <= 0) {
+        return !marked;
+    }
+    if (recipe.range_end <= 0 || marked) {
+        return true;  // the range's own
     }
     if (recipe.range_start > 0) {
         return false;  // no score saved before ranges is of it
