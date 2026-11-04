@@ -4,9 +4,10 @@
 
 #include "text_windows.h"  // first: it sets <windows.h> up
 
+#include "pipe_name.h"
+
 #include <algorithm>
 #include <cstdint>
-#include <random>
 
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
@@ -21,17 +22,6 @@ struct InboundPipe::State {
 };
 
 namespace {
-
-// 12 random hexadecimal digits, which make a pipe's name unique.
-std::string random_part() {
-    std::random_device random;
-    static constexpr char digits[] = "0123456789abcdef";
-    std::string text;
-    for (int i = 0; i < 12; ++i) {
-        text += digits[random() & 0xF];
-    }
-    return text;
-}
 
 }  // namespace
 

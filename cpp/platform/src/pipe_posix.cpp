@@ -2,6 +2,8 @@
 // folder.
 #include "vml/platform/pipe.h"
 
+#include "pipe_name.h"
+
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -13,7 +15,6 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <random>
 #include <thread>
 
 namespace vml::platform {
@@ -23,17 +24,6 @@ struct InboundPipe::State {
 };
 
 namespace {
-
-// 12 random hexadecimal digits, which make a pipe's name unique.
-std::string random_part() {
-    std::random_device random;
-    static constexpr char digits[] = "0123456789abcdef";
-    std::string text;
-    for (int i = 0; i < 12; ++i) {
-        text += digits[random() & 0xF];
-    }
-    return text;
-}
 
 // The start of the names of a process's FIFOs: the ones it reads, and the
 // ones it names for a process it starts to write (OutboundPipe::unique_path).

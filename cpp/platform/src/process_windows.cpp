@@ -18,7 +18,6 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <mutex>
 #include <string_view>
 #include <system_error>
@@ -27,6 +26,7 @@
 #include <vector>
 
 #include "error_lines.h"
+#include "read_ahead.h"
 #include "text_windows.h"
 
 namespace vml::platform {
@@ -324,13 +324,7 @@ ChildProcess::~ChildProcess() = default;
 
 std::optional<std::string> ChildProcess::read_line() {
     while (true) {
-        const std::size_t end = state_->unread.find('\n');
-        if (end != std::string::npos) {
-            std::string line = state_->unread.substr(0, end);
-            state_->unread.erase(0, end + 1);
-            if (!line.empty() && line.back() == '\r') {
-                line.pop_back();
-            }
+        if (std::optional<std::string> line = take_line(state_->unread)) {
             return line;
         }
         if (state_->output_ended) {
@@ -355,10 +349,7 @@ std::size_t ChildProcess::read(void* into, std::size_t bytes) {
         return 0;
     }
     if (!state_->unread.empty()) {  // what read_line read ahead
-        const std::size_t count = std::min(bytes, state_->unread.size());
-        std::memcpy(into, state_->unread.data(), count);
-        state_->unread.erase(0, count);
-        return count;
+        return take_bytes(state_->unread, into, bytes);
     }
     if (state_->output_ended) {
         return 0;

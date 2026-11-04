@@ -2,8 +2,22 @@
 #include "vml/platform/pipe.h"
 
 #include <cstdint>
+#include <random>
+#include <string>
+
+#include "pipe_name.h"
 
 namespace vml::platform {
+
+std::string random_part() {
+    std::random_device random;
+    static constexpr char digits[] = "0123456789abcdef";
+    std::string text;
+    for (int i = 0; i < 12; ++i) {
+        text += digits[random() & 0xF];
+    }
+    return text;
+}
 
 PipeWriteError pipe_write_error(unsigned long code) {
     // Windows' codes, here by number so that every system can test them.
