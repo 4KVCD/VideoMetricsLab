@@ -3,12 +3,14 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <optional>
+#include <regex>
 #include <string>
-#include <system_error>
+#include <string_view>
 #include <vector>
 
 #include "vml/append.h"
@@ -497,24 +499,47 @@ long long count_video_packets(const std::filesystem::path& path, const std::stri
                : 0;
 }
 
-VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprobe, const CancelToken& cancel) {
-    info.timed_raw = true;
-    info.fps = fps;
-    if (info.codec_name == "av2") {
-        // Its units were counted as it was probed (av2_probe.h).
-        info.nominal_fps = info.average_fps = fps;
-        info.duration = static_cast<double>(info.nb_frames) / fps;
-        std::error_code unknown;
-        const std::uintmax_t bytes = std::filesystem::file_size(info.path, unknown);
-        info.bit_rate = unknown || info.duration <= 0 ? 0 : std::llround(static_cast<double>(bytes) * 8 / info.duration);
-        info.bit_rate_whole_file = false;  // a raw stream's file is its video and nothing else
-        return info;
-    }
-    // ffprobe's parser splits the stream into its frames without decoding
-    // them (3.4 s for a 4K VVC film of 151,919 frames, 800 MB), but reads the
-    // whole file, so it has as long as a slow disk needs. (The csv format
-    // adds a comma after some streams' count: "480,".) A raw YUV file is
-    // read with its size and pixel format (probe_options).
+namespace {
+
+// Each codec whose raw streams' stored rate FFmpeg reports, and how many of
+// what it reports make a frame a second. Measured on streams made at known
+// rates, 24000/1001 among them: H.264's and MPEG-1's are reported doubled, as
+// H.264's headers count in fields, also for progressive video. Any other codec
+// goes unlisted because it stores none (EVC, APV, MJPEG), or what is reported
+// is its format's clock and not the video's (H.261 and H.263 read 30000/1001
+// made at 15 too), or no stream of it could be made to check (VC-1, CAVS, AVS3).
+struct StoredRate {
+    std::string_view codec;
+    int reports_per_frame;
+};
+constexpr std::array<StoredRate, 9> stored_rates{{{"h264", 2},
+                                                  {"mpeg1video", 2},
+                                                  {"hevc", 1},
+                                                  {"vvc", 1},
+                                                  {"av1", 1},
+                                                  {"mpeg2video", 1},
+                                                  {"mpeg4", 1},
+                                                  {"dirac", 1},
+                                                  {"avs2", 1}}};
+
+const StoredRate* stored_rate_of(std::string_view codec_name) {
+    const auto found = std::find_if(stored_rates.begin(), stored_rates.end(),
+                                    [codec_name](const StoredRate& rate) { return rate.codec == codec_name; });
+    return found == stored_rates.end() ? nullptr : &*found;
+}
+
+// What is reported above this was not stored. Told to read a stream at the
+// rate below, FFmpeg reports that rate where a stream has none (or its demuxer's
+// 1200000 ticks a second), and leaves a stored one as it is.
+constexpr double highest_reported_frame_rate = 1000;
+constexpr const char* rate_no_stream_stores = "1999";
+
+// The frames of `info`, a raw stream. ffprobe's parser splits the stream into
+// its frames without decoding them (3.4 s for a 4K VVC film of 151,919 frames,
+// 800 MB), but reads the whole file, so it has as long as a slow disk needs.
+// (The csv format adds a comma after some streams' count: "480,".) A raw YUV
+// file is read with its size and pixel format (probe_options).
+long long counted_frames(const VideoInfo& info, const std::string& ffprobe, const CancelToken& cancel) {
     std::vector<std::string> command = ffprobe_command_start(ffprobe);
     const std::vector<std::string> input = info.probe_options();
     append(command, input);
@@ -526,16 +551,73 @@ VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprob
     if (!frames || *frames <= 0) {
         throw ProbeError("ffprobe found no frames in " + text(info.path));
     }
-    info.nominal_fps = fps;
-    info.average_fps = fps;
-    info.nb_frames = *frames;
-    info.duration = static_cast<double>(*frames) / fps;
-    // A raw stream's file is its video and nothing else.
-    std::error_code unknown;
-    const std::uintmax_t bytes = std::filesystem::file_size(info.path, unknown);
-    info.bit_rate = unknown ? 0 : std::llround(static_cast<double>(bytes) * 8 / info.duration);
-    info.bit_rate_whole_file = false;
+    return *frames;
+}
+
+}  // namespace
+
+std::optional<double> stored_frame_rate(std::string_view codec_name, double reported) {
+    const StoredRate* rate = stored_rate_of(codec_name);
+    if (rate == nullptr || reported <= 0 || reported > highest_reported_frame_rate) {
+        return std::nullopt;
+    }
+    return reported / rate->reports_per_frame;
+}
+
+std::optional<double> frame_rate_in_stream(const VideoInfo& info, const std::string& ffprobe,
+                                           const CancelToken& cancel) {
+    if (stored_rate_of(info.codec_name) == nullptr) {
+        return std::nullopt;
+    }
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
+    command.insert(command.end(), {"-framerate", rate_no_stream_stores, "-select_streams", "v:0", "-show_entries",
+                                   "stream=r_frame_rate", "-of", "default=noprint_wrappers=1:nokey=1",
+                                   text(info.path)});
+    try {
+        const std::string reported(python_strip(run_ffprobe(command, info.path, std::chrono::seconds(60), cancel)));
+        return stored_frame_rate(info.codec_name, parse_frame_rate(reported));
+    } catch (const ProbeError&) {
+        return std::nullopt;  // it was read a moment ago: only its rate stays unknown
+    }
+}
+
+VideoInfo raw_stream_as_found(VideoInfo info, const std::string& ffprobe, const CancelToken& cancel) {
+    const std::optional<double> rate = frame_rate_in_stream(info, ffprobe, cancel);
+    if (info.codec_name != "av2") {  // its units were counted as it was probed (av2_probe.h)
+        info.nb_frames = counted_frames(info, ffprobe, cancel);
+    }
+    if (rate) {
+        info.set_frame_rate(*rate);
+    } else {
+        info.forget_frame_rate();
+    }
     return info;
+}
+
+VideoInfo timed_raw_stream(VideoInfo info, double fps, const std::string& ffprobe, const CancelToken& cancel) {
+    info.timed_raw = true;  // a raw YUV file is read at it (probe_options)
+    info.fps = fps;
+    if (info.codec_name != "av2") {  // its units were counted as it was probed (av2_probe.h)
+        info.nb_frames = counted_frames(info, ffprobe, cancel);
+    }
+    info.set_frame_rate(fps);
+    return info;
+}
+
+std::optional<double> typed_frame_rate(const std::string& text) {
+    static const std::regex fraction("([0-9]+)/([0-9]+)");
+    const std::string stripped(python_strip(text));
+    std::smatch parts;
+    if (!std::regex_match(stripped, parts, fraction)) {
+        return python_float(text);
+    }
+    constexpr long long exact = 1LL << 53;
+    const std::optional<long long> numerator = python_int(parts[1].str());
+    const std::optional<long long> denominator = python_int(parts[2].str());
+    if (!numerator || !denominator || *denominator == 0 || *numerator >= exact || *denominator >= exact) {
+        return std::nullopt;
+    }
+    return static_cast<double>(*numerator) / static_cast<double>(*denominator);
 }
 
 VideoInfo probe_raw_yuv(const std::filesystem::path& path, const std::string& size, const std::string& pix_fmt,

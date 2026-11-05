@@ -9,6 +9,7 @@
 #include <set>
 
 #include "vml/append.h"
+#include "vml/ffprobe.h"
 #include "vml/gpu_decoders.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
@@ -76,15 +77,15 @@ const char* const examples = R"(examples:
       HDR10 video in files with no colour tags, the first 2 seconds
   VideoMetricsLab-cli compare reference.mkv encode.mkv --range 1:00:00-1:02:00
       two minutes, an hour into the videos
-  VideoMetricsLab-cli compare reference.y4m encode.266 --fps 24000/1001
-      a raw VVC stream from an encoder, at 23.976 frames a second
+  VideoMetricsLab-cli compare reference.y4m encode.266
+      a raw VVC stream from an encoder, at the frame rate it stores
   VideoMetricsLab-cli compare reference.yuv encode.266 --size 1920x1080 --pix-fmt yuv420p10le --fps 24000/1001
       a raw YUV reference, 1080p 10-bit 4:2:0, and a raw VVC stream
   VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display "30-inch 4K HDR monitor, dim room"
       CVVDP on a display other than the app's default (repeat it for several)
   VideoMetricsLab-cli bitrate encodes\*.mkv
       each encode's length, frames and bitrate, as the Bitrate Viewer tab
-  VideoMetricsLab-cli bitrate encode.266 --fps 24000/1001 --csv bitrate
+  VideoMetricsLab-cli bitrate encode.266 --csv bitrate
       a raw VVC stream's bitrate, and its graphs' figures as CSV files
   VideoMetricsLab-cli bitrate a.mkv b.mkv --difference --csv bitrate
       a.mkv's bitrate minus b.mkv's as well, in bitrate\a_minus_b_bitrate_*.csv
@@ -166,10 +167,11 @@ options:
                         (H.274's outside VVC, AFGS1 in H.264) is always left
                         out
   --fps RATE            the frame rate of a raw video stream (a .264, .265,
-                        .266 or .obu file, with no container) or a raw YUV
-                        file (.yuv), which records none, such as 24000/1001,
-                        23.976 or 60: required for one. These scores are
-                        neither read from nor saved to the saved scores
+                        .266 or .obu file, with no container), such as
+                        24000/1001, 23.976 or 60, in place of the one it
+                        stores: required for one that stores none, and for a
+                        raw YUV file (.yuv), which records none. These scores
+                        are neither read from nor saved to the saved scores
   --size WIDTHxHEIGHT   the picture size of a raw YUV file (.yuv), which
                         records none, such as 1920x1080: required for one,
                         with --pix-fmt and --fps
@@ -259,7 +261,8 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   --fps RATE            a raw stream's frame rate (.266, .265, .264, .obu),
-                        such as 24000/1001; such a stream records none
+                        such as 24000/1001, in place of the one it stores:
+                        required for one that stores none
   --csv FOLDER          also write each video's frames, seconds and groups of
                         pictures to FOLDER as <video>_bitrate_frames.csv,
                         _seconds.csv and _gops.csv
@@ -818,27 +821,14 @@ std::pair<long long, long long> time_range(const std::string& text) {
 // A frame rate (--fps): a fraction of whole numbers below 2^53, as many as a
 // double holds exactly ("24000/1001"), or a number ("23.976"), above 0.
 double frame_rate(const std::string& text) {
-    static const std::regex fraction("([0-9]+)/([0-9]+)");
-    const std::string stripped(python_strip(text));
-    std::optional<double> value;
-    std::smatch parts;
-    if (std::regex_match(stripped, parts, fraction)) {
-        constexpr long long exact = 1LL << 53;
-        const std::optional<long long> numerator = python_int(parts[1].str());
-        const std::optional<long long> denominator = python_int(parts[2].str());
-        if (numerator && denominator && *denominator != 0 && *numerator < exact && *denominator < exact) {
-            value = static_cast<double>(*numerator) / static_cast<double>(*denominator);
-        }
-    } else {
-        value = python_float(text);
-    }
+    const std::optional<double> value = typed_frame_rate(text);
     if (!value) {
         throw ArgumentError{"invalid parse value: " + python_string_repr(text)};
     }
     if (!(*value > 0) || !std::isfinite(*value)) {
         throw ArgumentError{"must be above 0"};
     }
-    if (*value < 0.001 || *value > 10000) {  // a mistyped value, which FFmpeg would take or fail on oddly
+    if (*value < lowest_typed_frame_rate || *value > highest_typed_frame_rate) {
         throw ArgumentError{"must be between 0.001 and 10000"};
     }
     return *value;

@@ -48,6 +48,9 @@ void ProbeWorker::run() {
         Probed result{path, std::nullopt, QString()};
         try {
             result.info = probe_video(platform::path_from_text(path.toStdString()), ffprobe_, cancel_);
+            if (result.info->is_raw_stream()) {
+                result.info = raw_stream_as_found(*std::move(result.info), ffprobe_, cancel_);
+            }
             if (!ffmpeg_.empty()) {
                 result.info->film_grain = detect_film_grain(*result.info, ffmpeg_, cancel_);
             }

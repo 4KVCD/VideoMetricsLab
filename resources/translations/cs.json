@@ -512,7 +512,6 @@
   "Reading video packets…": "Čtení paketů videa…",
   "Analyzing {name}…": "Analýza {name}…",
   "Could not analyze {name}: {error}": "{name} nelze analyzovat: {error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "Surový proud nezaznamenává snímkovou frekvenci, takže jeho datový tok nelze určit.",
   "Bitrate analysis stopped. Completed results are kept.": "Analýza bitrate zastavena. Dokončené výsledky jsou zachovány.",
   "Bitrate analysis complete. Values contain the first video stream only.": "Analýza bitrate dokončena. Hodnoty zahrnují jen první video stream.",
   "Stopping…": "Zastavování…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship nepodporuje primární barvy {primaries}.",
   "Vship does not support the {range} range tag.": "Vship nepodporuje značku rozsahu {range}.",
   "Vship does not support {siting} chroma siting.": "Vship nepodporuje umístění chroma {siting}.",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} je surový stream {codec} bez časových značek, takže jeho snímková frekvence není známa. Nejprve ho vložte do kontejneru s jeho snímkovou frekvencí, např. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), s vlastní snímkovou frekvencí videa.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Video s proměnnou snímkovou frekvencí zatím není bezpečně podporováno. Před porovnáním převeďte obě videa na stejnou konstantní snímkovou frekvenci.",
   "Frame rates do not match ({source} vs {test} fps).": "Snímkové frekvence se neshodují ({source} vs {test} fps).",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "Videa mají po ořezu různý tvar: zdroj {source} vs test {test}. Hodnocení by jedno roztáhlo podle druhého a výsledek by neměl smysl. Pokud má jedno z nich pruhy (letterbox), nastavte Černé pruhy na Automatická detekce, aby se před porovnáním odstranily.",
@@ -860,7 +858,12 @@
   "Custom": "Vlastní",
   "Width:": "Šířka:",
   "Height:": "Výška:",
-  "With black bars cut, the height follows the picture without them.": "Při oříznutí černých pruhů se výška řídí obrazem bez nich."
+  "With black bars cut, the height follows the picture without them.": "Při oříznutí černých pruhů se výška řídí obrazem bez nich.",
+  "unknown frame rate": "neznámá snímková frekvence",
+  "Enter the frame rate": "Zadejte snímkovou frekvenci",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} je nezpracovaný video proud, který neukládá svou snímkovou frekvenci. Zadejte ji jako číslo nebo zlomek, například 24 nebo 24000/1001:",
+  "The reference is {fps:.3f} fps.": "Reference má {fps:.3f} snímků za sekundu.",
+  "The frame rate of {video} is not known.": "Snímková frekvence {video} není známa."
  },
  "plurals": {
   "about {count} day": [
@@ -972,6 +975,11 @@
    "a {count} další",
    "a {count} další",
    "a {count} dalších"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "Použít i pro {count} další video bez snímkové frekvence",
+   "Použít i pro {count} další videa bez snímkové frekvence",
+   "Použít i pro {count} dalších videí bez snímkové frekvence"
   ]
  }
 }

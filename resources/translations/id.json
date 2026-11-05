@@ -512,7 +512,6 @@
   "Reading video packets…": "Membaca paket video…",
   "Analyzing {name}…": "Menganalisis {name}…",
   "Could not analyze {name}: {error}": "Tidak dapat menganalisis {name}: {error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "Aliran mentah tidak mencatat laju bingkai, sehingga bitrate-nya tidak dapat dihitung.",
   "Bitrate analysis stopped. Completed results are kept.": "Analisis bitrate dihentikan. Hasil yang selesai tetap disimpan.",
   "Bitrate analysis complete. Values contain the first video stream only.": "Analisis bitrate selesai. Nilai hanya mencakup stream video pertama.",
   "Stopping…": "Menghentikan…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship tidak mendukung warna primer {primaries}.",
   "Vship does not support the {range} range tag.": "Vship tidak mendukung tag rentang {range}.",
   "Vship does not support {siting} chroma siting.": "Vship tidak mendukung posisi kroma {siting}.",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} adalah stream {codec} mentah tanpa stempel waktu, sehingga frame rate-nya tidak diketahui. Masukkan dulu ke dalam kontainer dengan frame rate-nya, mis. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), dengan frame rate video itu sendiri.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Video dengan frame rate variabel belum didukung dengan aman. Konversikan kedua video ke frame rate konstan yang sama sebelum membandingkan.",
   "Frame rates do not match ({source} vs {test} fps).": "Frame rate tidak cocok ({source} vs {test} fps).",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "Kedua video memiliki bentuk berbeda setelah dipotong: sumber {source} vs uji {test}. Penilaian akan meregangkan salah satunya agar pas dengan yang lain dan hasilnya tidak bermakna. Jika salah satunya berbilah (letterbox), atur Bilah hitam ke Deteksi otomatis untuk menghapusnya sebelum perbandingan.",
@@ -860,7 +858,12 @@
   "Custom": "Kustom",
   "Width:": "Lebar:",
   "Height:": "Tinggi:",
-  "With black bars cut, the height follows the picture without them.": "Jika bilah hitam dipotong, tinggi mengikuti gambar tanpa bilah tersebut."
+  "With black bars cut, the height follows the picture without them.": "Jika bilah hitam dipotong, tinggi mengikuti gambar tanpa bilah tersebut.",
+  "unknown frame rate": "kecepatan bingkai tidak diketahui",
+  "Enter the frame rate": "Masukkan kecepatan bingkai",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} adalah aliran video mentah yang tidak menyimpan kecepatan bingkainya. Masukkan sebagai angka atau pecahan, misalnya 24 atau 24000/1001:",
+  "The reference is {fps:.3f} fps.": "Referensi {fps:.3f} fps.",
+  "The frame rate of {video} is not known.": "Kecepatan bingkai {video} tidak diketahui."
  },
  "plurals": {
   "about {count} day": [
@@ -928,6 +931,9 @@
   ],
   "and {count} more": [
    "dan {count} lagi"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "Gunakan juga untuk {count} video lain tanpa kecepatan bingkai"
   ]
  }
 }

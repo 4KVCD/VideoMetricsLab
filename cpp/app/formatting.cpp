@@ -9,17 +9,24 @@
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/number_format.h"
+#include "vml/time_format.h"
 
 namespace vml::app {
 
 QString media_info_string(const VideoInfo& info) {
-    QString text = QString::fromStdString(std::format("{}x{}, {:.2f}fps, ", info.width, info.height, info.fps)) +
+    const QString rate = info.frame_rate_unknown() ? tr("unknown frame rate")
+                                                   : QString::fromStdString(std::format("{:.2f}fps", info.fps));
+    QString text = QString::fromStdString(std::format("{}x{}, ", info.width, info.height)) + rate + ", " +
                    QString::fromStdString(info.codec_name);
     const FilmGrainScoring grain = effective_film_grain(info);
     if (grain.scoring != GrainScoring::none) {
         text += ", " + (grain.scoring == GrainScoring::with ? tr("film grain") : tr("film grain left out"));
     }
     return text;
+}
+
+QString length_string(const VideoInfo& info) {
+    return info.frame_rate_unknown() ? QString() : QString::fromStdString(format_hms(info.duration, 1));
 }
 
 QString film_grain_note(const VideoInfo& info) {

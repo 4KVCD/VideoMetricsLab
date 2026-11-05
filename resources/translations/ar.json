@@ -512,7 +512,6 @@
   "Reading video packets…": "جارٍ قراءة حزم الفيديو…",
   "Analyzing {name}…": "جارٍ تحليل {name}…",
   "Could not analyze {name}: {error}": "تعذّر تحليل {name}: {error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "لا يسجّل البث الخام معدل الإطارات، لذا لا يمكن حساب معدل البت الخاص به.",
   "Bitrate analysis stopped. Completed results are kept.": "أُوقف تحليل معدل البت. النتائج المكتملة محفوظة.",
   "Bitrate analysis complete. Values contain the first video stream only.": "اكتمل تحليل معدل البت. القيم تشمل أول دفق فيديو فقط.",
   "Stopping…": "جارٍ الإيقاف…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "لا يدعم Vship الألوان الأساسية {primaries}.",
   "Vship does not support the {range} range tag.": "لا يدعم Vship وسم النطاق {range}.",
   "Vship does not support {siting} chroma siting.": "لا يدعم Vship موضع الكروما {siting}.",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} هو تدفق {codec} خام بلا طوابع زمنية، لذا فمعدل إطاراته غير معروف. ضعه أولًا في حاوية بمعدل إطاراته، مثلًا mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix)، مع معدل إطارات الفيديو الفعلي.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "لا يُدعم الفيديو ذو معدل الإطارات المتغير بأمان بعد. حوّل كلا الفيديوين إلى معدل الإطارات الثابت نفسه قبل مقارنتهما.",
   "Frame rates do not match ({source} vs {test} fps).": "معدلا الإطارات غير متطابقين ({source} مقابل {test} إطار/ث).",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "للفيديوين شكلان مختلفان بعد الاقتصاص: المصدر {source} مقابل الاختبار {test}. التقييم سيمطّ أحدهما ليلائم الآخر وستكون النتيجة بلا معنى. إن كان في أحدهما أشرطة (letterbox)، فاضبط «الأشرطة السوداء» على «اكتشاف تلقائي» لإزالتها قبل المقارنة.",
@@ -860,7 +858,12 @@
   "Custom": "مخصص",
   "Width:": "العرض:",
   "Height:": "الارتفاع:",
-  "With black bars cut, the height follows the picture without them.": "عند قص الأشرطة السوداء، يتبع الارتفاع الصورة بدونها."
+  "With black bars cut, the height follows the picture without them.": "عند قص الأشرطة السوداء، يتبع الارتفاع الصورة بدونها.",
+  "unknown frame rate": "معدل إطارات غير معروف",
+  "Enter the frame rate": "أدخل معدل الإطارات",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} هو تدفق فيديو خام لا يخزّن معدل إطاراته. أدخله كرقم أو كسر، مثل 24 أو 24000/1001:",
+  "The reference is {fps:.3f} fps.": "معدل إطارات المرجع {fps:.3f} إطارًا في الثانية.",
+  "The frame rate of {video} is not known.": "معدل إطارات {video} غير معروف."
  },
  "plurals": {
   "about {count} day": [
@@ -1038,6 +1041,14 @@
    "و{count} أخرى",
    "و{count} أخرى",
    "و{count} أخرى"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "استخدمه لـ {count} فيديو آخر بلا معدل إطارات",
+   "استخدمه لـ {count} فيديو آخر بلا معدل إطارات",
+   "استخدمه لـ {count} فيديو آخر بلا معدل إطارات",
+   "استخدمه لـ {count} فيديو آخر بلا معدل إطارات",
+   "استخدمه لـ {count} فيديو آخر بلا معدل إطارات",
+   "استخدمه لـ {count} فيديو آخر بلا معدل إطارات"
   ]
  }
 }

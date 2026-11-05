@@ -512,7 +512,6 @@
   "Reading video packets…": "正在读取视频数据包…",
   "Analyzing {name}…": "正在分析 {name}…",
   "Could not analyze {name}: {error}": "无法分析 {name}：{error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "原始流不记录帧率，因此无法算出其比特率。",
   "Bitrate analysis stopped. Completed results are kept.": "码率分析已停止。已完成的结果会保留。",
   "Bitrate analysis complete. Values contain the first video stream only.": "码率分析完成。数值只包含第一条视频流。",
   "Stopping…": "正在停止…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship 不支持 {primaries} 色彩原色。",
   "Vship does not support the {range} range tag.": "Vship 不支持 {range} 范围标记。",
   "Vship does not support {siting} chroma siting.": "Vship 不支持 {siting} 色度位置。",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} 是没有时间戳的原始 {codec} 流，因此无法知道其帧率。请先按其帧率将它放入容器，例如 mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix)（使用视频本身的帧率）。",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "尚不能安全地支持可变帧率视频。比较前请将两个视频转换为相同的恒定帧率。",
   "Frame rates do not match ({source} vs {test} fps).": "帧率不一致（{source} 与 {test} fps）。",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "两个视频裁切后的形状不同：源为 {source}，测试为 {test}。评分会把一个拉伸以适应另一个，结果将毫无意义。如果其中一个带有黑边，请将黑边处理设为“自动检测”，以便在比较前去除黑边。",
@@ -860,7 +858,12 @@
   "Custom": "自定义",
   "Width:": "宽度：",
   "Height:": "高度：",
-  "With black bars cut, the height follows the picture without them.": "裁掉黑边时，高度以去除黑边后的画面为准。"
+  "With black bars cut, the height follows the picture without them.": "裁掉黑边时，高度以去除黑边后的画面为准。",
+  "unknown frame rate": "帧率未知",
+  "Enter the frame rate": "输入帧率",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} 是未存储帧率的原始视频流。请以数字或分数形式输入，例如 24 或 24000/1001：",
+  "The reference is {fps:.3f} fps.": "参考视频为 {fps:.3f} fps。",
+  "The frame rate of {video} is not known.": "{video} 的帧率未知。"
  },
  "plurals": {
   "about {count} day": [
@@ -928,6 +931,9 @@
   ],
   "and {count} more": [
    "及其他 {count} 个"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "同时用于其他 {count} 个没有帧率的视频"
   ]
  }
 }

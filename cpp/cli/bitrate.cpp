@@ -41,9 +41,9 @@ std::string mbps_text(double kbps) { return format_fixed(kbps / 1000, 3); }
 double kbps_value(double kbps) { return std::round(kbps * 10) / 10; }
 
 // Each video named (files, or what patterns find), each read by ffprobe
-// first, so that a command that cannot be followed (a raw stream without
-// --fps) is refused before any packets are read. Nothing, with the refusal
-// printed, for such a command.
+// first, so that a command that cannot be followed (a raw stream that stores
+// no frame rate, without --fps) is refused before any packets are read.
+// Nothing, with the refusal printed, for such a command.
 std::optional<std::vector<BitrateVideo>> read_videos(const std::vector<std::filesystem::path>& paths,
                                                      const BitrateArguments& arguments, const std::string& ffprobe,
                                                      Progress& progress) {
@@ -59,13 +59,15 @@ std::optional<std::vector<BitrateVideo>> read_videos(const std::vector<std::file
             VideoInfo info = probe_video(path, ffprobe);
             if (info.is_raw_stream()) {
                 any_raw = true;
-                if (!arguments.fps) {
+                const std::optional<double> fps =
+                    arguments.fps ? arguments.fps : frame_rate_in_stream(info, ffprobe, CancelToken());
+                if (!fps) {
                     print_error(raw_stream_needs_fps(name_of(path), info));
                     return std::nullopt;
                 }
                 // Its packets read at that rate (VideoInfo::probe_options); its length and frames are counted from
                 // them, not from ffprobe's guess at 25 frames a second.
-                info.fps = *arguments.fps;
+                info.fps = *fps;
                 info.timed_raw = true;
             }
             video.info = std::move(info);

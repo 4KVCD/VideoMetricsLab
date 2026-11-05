@@ -138,7 +138,12 @@ std::vector<std::string> build_playback_command(const std::string& ffmpeg, const
     }
     const VideoInfo& info = frame_video_info(comparison, side);
     const SeekPoint start = seek_point(seek_seconds(info, start_frame, fps), lead);
-    command.insert(command.end(), {"-ss", format_fixed(start.seek, 9)});
+    if (info.is_raw_stream()) {
+        const std::vector<std::string> reading = info.input_options();
+        append(command, reading);
+    } else {
+        command.insert(command.end(), {"-ss", format_fixed(start.seek, 9)});
+    }
     const std::vector<std::string> accel_args = hwaccel_args(accel);
     append(command, accel_args);
     if (interop && accel == "cuda") {
@@ -150,7 +155,9 @@ std::vector<std::string> build_playback_command(const std::string& ffmpeg, const
 
     const std::optional<CropBox>& crop = side == FrameSide::source ? comparison.source_crop : comparison.distorted_crop;
     std::vector<std::string> ops;
-    if (const std::optional<std::string> trim = trim_filter(start)) {
+    if (info.is_raw_stream()) {
+        ops.push_back(raw_stream_start_filter(start_frame));  // likewise
+    } else if (const std::optional<std::string> trim = trim_filter(start)) {
         ops.push_back(*trim);  // before fps and setpts, which number the frames anew
     }
     if (gpu) {

@@ -512,7 +512,6 @@
   "Reading video packets…": "Đang đọc gói video…",
   "Analyzing {name}…": "Đang phân tích {name}…",
   "Could not analyze {name}: {error}": "Không phân tích được {name}: {error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "Luồng thô không ghi tốc độ khung hình nên không thể tính được bitrate của nó.",
   "Bitrate analysis stopped. Completed results are kept.": "Đã dừng phân tích bitrate. Các kết quả đã xong được giữ lại.",
   "Bitrate analysis complete. Values contain the first video stream only.": "Phân tích bitrate hoàn tất. Giá trị chỉ gồm luồng video đầu tiên.",
   "Stopping…": "Đang dừng…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship không hỗ trợ màu cơ bản {primaries}.",
   "Vship does not support the {range} range tag.": "Vship không hỗ trợ thẻ dải {range}.",
   "Vship does not support {siting} chroma siting.": "Vship không hỗ trợ vị trí chroma {siting}.",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} là luồng {codec} thô không có dấu thời gian, nên không biết tốc độ khung hình. Hãy đưa nó vào một container kèm tốc độ khung hình trước, ví dụ mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), với tốc độ khung hình thật của video.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Video có tốc độ khung hình thay đổi chưa được hỗ trợ an toàn. Hãy chuyển cả hai video sang cùng một tốc độ khung hình cố định trước khi so sánh.",
   "Frame rates do not match ({source} vs {test} fps).": "Tốc độ khung hình không khớp ({source} so với {test} fps).",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "Hai video có hình dạng khác nhau sau khi cắt: nguồn {source} so với thử {test}. Việc chấm điểm sẽ kéo giãn một video cho vừa video kia và kết quả sẽ vô nghĩa. Nếu một video có viền (letterbox), hãy đặt Viền đen thành Tự phát hiện để bỏ viền trước khi so sánh.",
@@ -860,7 +858,12 @@
   "Custom": "Tùy chỉnh",
   "Width:": "Chiều rộng:",
   "Height:": "Chiều cao:",
-  "With black bars cut, the height follows the picture without them.": "Khi cắt bỏ viền đen, chiều cao theo hình ảnh không có viền."
+  "With black bars cut, the height follows the picture without them.": "Khi cắt bỏ viền đen, chiều cao theo hình ảnh không có viền.",
+  "unknown frame rate": "không rõ tốc độ khung hình",
+  "Enter the frame rate": "Nhập tốc độ khung hình",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} là luồng video thô không lưu tốc độ khung hình. Hãy nhập dưới dạng số hoặc phân số, ví dụ 24 hoặc 24000/1001:",
+  "The reference is {fps:.3f} fps.": "Video tham chiếu có {fps:.3f} fps.",
+  "The frame rate of {video} is not known.": "Không rõ tốc độ khung hình của {video}."
  },
  "plurals": {
   "about {count} day": [
@@ -928,6 +931,9 @@
   ],
   "and {count} more": [
    "và {count} video khác"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "Dùng cho cả {count} video khác không có tốc độ khung hình"
   ]
  }
 }

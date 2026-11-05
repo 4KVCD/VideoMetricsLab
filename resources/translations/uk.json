@@ -512,7 +512,6 @@
   "Reading video packets…": "Читання відеопакетів…",
   "Analyzing {name}…": "Аналіз {name}…",
   "Could not analyze {name}: {error}": "Не вдалося проаналізувати {name}: {error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "Необроблений потік не містить частоти кадрів, тому його бітрейт обчислити неможливо.",
   "Bitrate analysis stopped. Completed results are kept.": "Аналіз бітрейту зупинено. Завершені результати збережено.",
   "Bitrate analysis complete. Values contain the first video stream only.": "Аналіз бітрейту завершено. Значення охоплюють лише перший відеопотік.",
   "Stopping…": "Зупинення…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship не підтримує основні кольори {primaries}.",
   "Vship does not support the {range} range tag.": "Vship не підтримує тег діапазону {range}.",
   "Vship does not support {siting} chroma siting.": "Vship не підтримує розташування кольоровості {siting}.",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} — це сирий потік {codec} без часових міток, тому його частота кадрів невідома. Спершу помістіть його в контейнер із його частотою кадрів, наприклад mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), з власною частотою кадрів відео.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Відео зі змінною частотою кадрів ще не підтримується безпечно. Перед порівнянням перетворіть обидва відео на однакову сталу частоту кадрів.",
   "Frame rates do not match ({source} vs {test} fps).": "Частоти кадрів не збігаються ({source} проти {test} кадр/с).",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "Після обрізання відео мають різну форму: вихідне {source} проти тестового {test}. Оцінювання розтягнуло б одне під інше, і результат був би безглуздим. Якщо одне з них має смуги (letterbox), установіть «Чорні смуги» на «Автовизначення», щоб прибрати їх перед порівнянням.",
@@ -860,7 +858,12 @@
   "Custom": "Власний",
   "Width:": "Ширина:",
   "Height:": "Висота:",
-  "With black bars cut, the height follows the picture without them.": "Якщо чорні смуги обрізаються, висота визначається за зображенням без них."
+  "With black bars cut, the height follows the picture without them.": "Якщо чорні смуги обрізаються, висота визначається за зображенням без них.",
+  "unknown frame rate": "невідома частота кадрів",
+  "Enter the frame rate": "Введіть частоту кадрів",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} — необроблений відеопотік, у якому не зберігається частота кадрів. Введіть її числом або дробом, наприклад 24 або 24000/1001:",
+  "The reference is {fps:.3f} fps.": "Частота кадрів еталона: {fps:.3f} кадр/с.",
+  "The frame rate of {video} is not known.": "Частота кадрів {video} невідома."
  },
  "plurals": {
   "about {count} day": [
@@ -972,6 +975,11 @@
    "і ще {count}",
    "і ще {count}",
    "і ще {count}"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "Використати і для {count} іншого відео без частоти кадрів",
+   "Використати і для {count} інших відео без частоти кадрів",
+   "Використати і для {count} інших відео без частоти кадрів"
   ]
  }
 }

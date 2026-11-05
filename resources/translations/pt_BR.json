@@ -512,7 +512,6 @@
   "Reading video packets…": "Lendo pacotes de vídeo…",
   "Analyzing {name}…": "Analisando {name}…",
   "Could not analyze {name}: {error}": "Não foi possível analisar {name}: {error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "Um fluxo bruto não registra a taxa de quadros, então sua taxa de bits não pode ser calculada.",
   "Bitrate analysis stopped. Completed results are kept.": "Análise de taxa de bits parada. Os resultados concluídos são mantidos.",
   "Bitrate analysis complete. Values contain the first video stream only.": "Análise de taxa de bits concluída. Os valores contêm apenas o primeiro fluxo de vídeo.",
   "Stopping…": "Parando…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "O Vship não suporta as primárias de cor {primaries}.",
   "Vship does not support the {range} range tag.": "O Vship não suporta a marcação de faixa {range}.",
   "Vship does not support {siting} chroma siting.": "O Vship não suporta a posição de croma {siting}.",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} é um fluxo {codec} bruto sem marcas de tempo, então sua taxa de quadros é desconhecida. Coloque-o primeiro em um contêiner com sua taxa de quadros, por ex. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), com a taxa de quadros do próprio vídeo.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Vídeo com taxa de quadros variável ainda não é suportado com segurança. Converta os dois vídeos para a mesma taxa de quadros constante antes de compará-los.",
   "Frame rates do not match ({source} vs {test} fps).": "As taxas de quadros não coincidem ({source} vs. {test} fps).",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "Os dois vídeos têm formatos diferentes depois do recorte: original {source} contra teste {test}. Pontuá-los esticaria um para caber no outro, e o resultado não teria sentido. Se um tiver letterbox, defina Barras pretas como \"Detectar automaticamente\" para que as barras sejam removidas antes da comparação.",
@@ -860,7 +858,12 @@
   "Custom": "Personalizado",
   "Width:": "Largura:",
   "Height:": "Altura:",
-  "With black bars cut, the height follows the picture without them.": "Ao cortar as barras pretas, a altura acompanha a imagem sem elas."
+  "With black bars cut, the height follows the picture without them.": "Ao cortar as barras pretas, a altura acompanha a imagem sem elas.",
+  "unknown frame rate": "taxa de quadros desconhecida",
+  "Enter the frame rate": "Digite a taxa de quadros",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} é um fluxo de vídeo bruto que não armazena sua taxa de quadros. Digite-a como número ou fração, por exemplo 24 ou 24000/1001:",
+  "The reference is {fps:.3f} fps.": "A referência tem {fps:.3f} fps.",
+  "The frame rate of {video} is not known.": "A taxa de quadros de {video} não é conhecida."
  },
  "plurals": {
   "about {count} day": [
@@ -950,6 +953,10 @@
   "and {count} more": [
    "e mais {count}",
    "e mais {count}"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "Usar também para {count} outro vídeo sem taxa de quadros",
+   "Usar também para {count} outros vídeos sem taxa de quadros"
   ]
  }
 }

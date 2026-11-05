@@ -512,7 +512,6 @@
   "Reading video packets…": "Leyendo paquetes de video…",
   "Analyzing {name}…": "Analizando {name}…",
   "Could not analyze {name}: {error}": "No se pudo analizar {name}: {error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "Un flujo sin procesar no registra la velocidad de fotogramas, así que no se puede calcular su tasa de bits.",
   "Bitrate analysis stopped. Completed results are kept.": "Análisis de tasa de bits detenido. Se conservan los resultados terminados.",
   "Bitrate analysis complete. Values contain the first video stream only.": "Análisis de tasa de bits terminado. Los valores solo incluyen el primer flujo de video.",
   "Stopping…": "Deteniendo…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship no admite los primarios de color {primaries}.",
   "Vship does not support the {range} range tag.": "Vship no admite la etiqueta de rango {range}.",
   "Vship does not support {siting} chroma siting.": "Vship no admite la ubicación de croma {siting}.",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} es un flujo {codec} sin contenedor ni marcas de tiempo, así que su velocidad de fotogramas es desconocida. Ponlo primero en un contenedor con su velocidad de fotogramas, p. ej. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), con la velocidad propia del video.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "El video de velocidad de fotogramas variable aún no se admite de forma segura. Convierte ambos videos a la misma velocidad constante antes de compararlos.",
   "Frame rates do not match ({source} vs {test} fps).": "Las velocidades de fotogramas no coinciden ({source} frente a {test} fps).",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "Los dos videos tienen formas distintas tras el recorte: original {source} frente a prueba {test}. Puntuarlos estiraría uno para ajustarlo al otro y el resultado no tendría sentido. Si uno tiene franjas negras (letterbox), configura Barras negras en \"Detectar automáticamente\" para quitarlas antes de comparar.",
@@ -860,7 +858,12 @@
   "Custom": "Personalizado",
   "Width:": "Ancho:",
   "Height:": "Alto:",
-  "With black bars cut, the height follows the picture without them.": "Al recortar las barras negras, la altura sigue a la imagen sin ellas."
+  "With black bars cut, the height follows the picture without them.": "Al recortar las barras negras, la altura sigue a la imagen sin ellas.",
+  "unknown frame rate": "velocidad de fotogramas desconocida",
+  "Enter the frame rate": "Introduzca la velocidad de fotogramas",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} es un flujo de vídeo sin contenedor que no guarda su velocidad de fotogramas. Introdúzcala como número o fracción, por ejemplo 24 o 24000/1001:",
+  "The reference is {fps:.3f} fps.": "La referencia tiene {fps:.3f} fps.",
+  "The frame rate of {video} is not known.": "No se conoce la velocidad de fotogramas de {video}."
  },
  "plurals": {
   "about {count} day": [
@@ -950,6 +953,10 @@
   "and {count} more": [
    "y {count} más",
    "y {count} más"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "Usarla también para {count} vídeo más sin velocidad de fotogramas",
+   "Usarla también para {count} vídeos más sin velocidad de fotogramas"
   ]
  }
 }

@@ -174,7 +174,8 @@ bool MainWindow::ready_to_run(const std::vector<int>& checked) {
         return false;
     }
     // Asked at the click, not seconds later once the GPU checks are done.
-    return settle_film_grain(checked) && !wait_for_saved_scores() && !wait_for_gpu_checks(checked);
+    return settle_frame_rates(checked) && settle_film_grain(checked) && !wait_for_saved_scores() &&
+           !wait_for_gpu_checks(checked);
 }
 
 bool MainWindow::wait_for_saved_scores() {
@@ -1054,6 +1055,9 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
 // long video's scores take seconds to write.
 void MainWindow::save_job_result(std::size_t job, const RowData& row_data, const ComparisonResult& result,
                                  const QString& label) {
+    if (result.source_info.is_raw_stream() || result.distorted_info.is_raw_stream()) {
+        return;  // the saved scores know a video by its file, not by the frame rate it was read at
+    }
     const AnalysisRequest request =
         analysis_request(job_options_[job], requested_metrics(row_data), automatic_perceptual_backends,
                          job_cvvdp_[job], result.source_info, result.distorted_info);

@@ -235,20 +235,16 @@ std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo
                " degrees. Compared as stored, one would be sideways or upside down against the other and the result "
                "would be meaningless.";
     }
-    std::optional<std::string> problem = timeline_problem(source, distorted, range_start, range_end);
-    const auto untimed = [](const VideoInfo& info) { return info.is_raw_stream() && !info.timed_raw; };
-    const VideoInfo* raw = untimed(source) ? &source : untimed(distorted) ? &distorted : nullptr;
-    if (!problem || raw == nullptr) {
-        return problem;
+    for (const VideoInfo* video : {&source, &distorted}) {
+        if (video->frame_rate_unknown()) {
+            return frame_rate_unknown_problem(*video);
+        }
     }
-    // An untimed raw stream's frame rate and length are FFmpeg's guesses, so
-    // the message says how to give it a real frame rate. It names mkvmerge,
-    // not FFmpeg: FFmpeg cannot copy a raw stream with B-frames into Matroska.
-    // (The command line's --fps times one: its problems are real ones.)
-    return platform::path_text(raw->path.filename()) + " is a raw " + codec_label(raw->codec_name) +
-           " stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate "
-           "first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's "
-           "own frame rate.";
+    return timeline_problem(source, distorted, range_start, range_end);
+}
+
+std::string frame_rate_unknown_problem(const VideoInfo& video) {
+    return "The frame rate of " + platform::path_text(video.path.filename()) + " is not known.";
 }
 
 }  // namespace vml

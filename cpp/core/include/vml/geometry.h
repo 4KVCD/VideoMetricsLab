@@ -94,10 +94,14 @@ std::optional<std::string> shape_problem(const VideoInfo& source, const VideoInf
 std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, long long range_start,
                                         long long range_end);
 
-// Video Compare's check: a raw stream whose frame rate (FFmpeg's guess)
-// disagrees with the other video's is refused, as pair_problem refuses it.
+// What is wrong with a video whose frame rate is not known
+// (VideoInfo::frame_rate_unknown).
+std::string frame_rate_unknown_problem(const VideoInfo& video);
+
+// Video Compare's check: a raw stream whose frame rate is not known, or
+// disagrees with the other video's, is refused, as pair_problem refuses it.
 // Video Compare shows other mismatched pairs anyway, but it places a raw
-// stream's frames by that guessed rate, so it would show the wrong frame.
+// stream's frames by that rate, so it would show the wrong frame.
 std::optional<std::string> untimed_pair_problem(const VideoInfo& source, const VideoInfo& distorted);
 
 // A raw stream's codec as messages name it: "H.264", "HEVC", "MPEG-2"...

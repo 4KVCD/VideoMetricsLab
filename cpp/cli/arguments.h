@@ -31,7 +31,7 @@ struct CompareArguments {
     std::optional<std::pair<long long, long long>> range;  // whole seconds; an end of 0: to the end
     std::optional<std::string> colour;
     std::optional<std::string> film_grain;  // "with" or "without" (VideoInfo::with_film_grain)
-    std::optional<double> fps;            // a raw stream's or raw YUV file's frame rate
+    std::optional<double> fps;            // a raw YUV file's frame rate, a raw stream's in place of what it stores
     std::optional<std::string> size;      // a raw YUV file's picture size, "1920x1080"
     std::optional<std::string> pix_fmt;   // a raw YUV file's pixel format, as FFmpeg names it
     std::vector<std::string> cvvdp_displays;
@@ -57,7 +57,7 @@ struct CompareArguments {
 // The bitrate command's arguments.
 struct BitrateArguments {
     std::vector<std::string> videos;  // files, or patterns such as encodes\*.mkv
-    std::optional<double> fps;        // a raw stream's frame rate
+    std::optional<double> fps;        // a raw stream's frame rate, in place of what it stores
     std::optional<std::string> csv;   // the folder for each video's CSV files
     bool no_adjust_start = false;     // the CSV files' times from the file's start (only with csv)
     bool difference = false;          // the first video's bitrate minus the second's (two videos only)

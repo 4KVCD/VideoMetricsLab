@@ -73,6 +73,9 @@ VideoInfo video_from(const nlohmann::json& text) {
     text.at("format_name").get_to(info.format_name);
     text.at("start_offset").get_to(info.start_offset);
     text.at("timed_raw").get_to(info.timed_raw);
+    if (info.frame_rate_unknown()) {
+        info.forget_frame_rate();  // saved before the rate was looked for: FFmpeg's guess
+    }
     info.rotation = text.value("rotation", 0);
     info.coded_at_another_size = text.value("coded_at_another_size", false);
     if (const auto scaled = text.find("scaled_to"); scaled != text.end()) {

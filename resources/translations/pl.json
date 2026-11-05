@@ -512,7 +512,6 @@
   "Reading video packets…": "Odczytywanie pakietów wideo…",
   "Analyzing {name}…": "Analizowanie {name}…",
   "Could not analyze {name}: {error}": "Nie można przeanalizować {name}: {error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "Surowy strumień nie zapisuje liczby klatek na sekundę, więc nie można obliczyć jego przepływności.",
   "Bitrate analysis stopped. Completed results are kept.": "Analizę bitrate zatrzymano. Gotowe wyniki zostają.",
   "Bitrate analysis complete. Values contain the first video stream only.": "Analiza bitrate zakończona. Wartości obejmują tylko pierwszy strumień wideo.",
   "Stopping…": "Zatrzymywanie…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship nie obsługuje barw podstawowych {primaries}.",
   "Vship does not support the {range} range tag.": "Vship nie obsługuje znacznika zakresu {range}.",
   "Vship does not support {siting} chroma siting.": "Vship nie obsługuje położenia chrominancji {siting}.",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} to surowy strumień {codec} bez znaczników czasu, więc jego liczba klatek na sekundę jest nieznana. Najpierw umieść go w kontenerze z jego liczbą klatek, np. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), z liczbą klatek samego wideo.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Wideo o zmiennej liczbie klatek na sekundę nie jest jeszcze bezpiecznie obsługiwane. Przed porównaniem przekonwertuj oba wideo do tej samej stałej liczby klatek.",
   "Frame rates do not match ({source} vs {test} fps).": "Liczby klatek na sekundę się różnią ({source} wobec {test} kl./s).",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "Po kadrowaniu oba wideo mają różne kształty: źródło {source}, test {test}. Ocena rozciągnęłaby jedno do drugiego, a wynik byłby bez znaczenia. Jeśli jedno ma czarne pasy (letterbox), ustaw Czarne pasy na „Wykrywanie automatyczne”, aby usunąć je przed porównaniem.",
@@ -860,7 +858,12 @@
   "Custom": "Niestandardowy",
   "Width:": "Szerokość:",
   "Height:": "Wysokość:",
-  "With black bars cut, the height follows the picture without them.": "Po przycięciu czarnych pasów wysokość zależy od obrazu bez nich."
+  "With black bars cut, the height follows the picture without them.": "Po przycięciu czarnych pasów wysokość zależy od obrazu bez nich.",
+  "unknown frame rate": "nieznana liczba klatek na sekundę",
+  "Enter the frame rate": "Wprowadź liczbę klatek na sekundę",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} to surowy strumień wideo, który nie zapisuje liczby klatek na sekundę. Wprowadź ją jako liczbę lub ułamek, na przykład 24 lub 24000/1001:",
+  "The reference is {fps:.3f} fps.": "Materiał odniesienia ma {fps:.3f} kl./s.",
+  "The frame rate of {video} is not known.": "Liczba klatek na sekundę {video} nie jest znana."
  },
  "plurals": {
   "about {count} day": [
@@ -972,6 +975,11 @@
    "i jeszcze {count}",
    "i jeszcze {count}",
    "i jeszcze {count}"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "Użyj także dla {count} innego wideo bez liczby klatek na sekundę",
+   "Użyj także dla {count} innych wideo bez liczby klatek na sekundę",
+   "Użyj także dla {count} innych wideo bez liczby klatek na sekundę"
   ]
  }
 }

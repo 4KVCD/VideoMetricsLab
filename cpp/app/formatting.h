@@ -18,6 +18,9 @@ inline const QString not_computed = QStringLiteral("N/A");
 // asks for film grain, as it is scored (film_grain_scoring.h).
 QString media_info_string(const VideoInfo& info);
 
+// How long the video lasts, h:mm:ss; nothing where its frame rate is not known.
+QString length_string(const VideoInfo& info);
+
 // The video's film grain for the Media info tooltip: its kinds, and whether
 // it is scored with it, or why it is left out where that is no choice. Empty
 // for a video with none, or not read.

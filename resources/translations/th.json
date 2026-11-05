@@ -512,7 +512,6 @@
   "Reading video packets…": "กำลังอ่านแพ็กเก็ตวิดีโอ…",
   "Analyzing {name}…": "กำลังวิเคราะห์ {name}…",
   "Could not analyze {name}: {error}": "วิเคราะห์ {name} ไม่ได้: {error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "สตรีมดิบไม่ได้บันทึกอัตราเฟรม จึงคำนวณบิตเรตของสตรีมนี้ไม่ได้",
   "Bitrate analysis stopped. Completed results are kept.": "หยุดการวิเคราะห์บิตเรตแล้ว เก็บผลลัพธ์ที่เสร็จแล้วไว้",
   "Bitrate analysis complete. Values contain the first video stream only.": "วิเคราะห์บิตเรตเสร็จ ค่าครอบคลุมเฉพาะสตรีมวิดีโอแรก",
   "Stopping…": "กำลังหยุด…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship ไม่รองรับแม่สี {primaries}",
   "Vship does not support the {range} range tag.": "Vship ไม่รองรับแท็กช่วง {range}",
   "Vship does not support {siting} chroma siting.": "Vship ไม่รองรับตำแหน่งโครมา {siting}",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} เป็นสตรีม {codec} ดิบที่ไม่มีการประทับเวลา จึงไม่ทราบอัตราเฟรม ให้ใส่ลงในคอนเทนเนอร์พร้อมอัตราเฟรมก่อน เช่น mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix) โดยใช้อัตราเฟรมจริงของวิดีโอ",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "ยังไม่รองรับวิดีโออัตราเฟรมแปรผันอย่างปลอดภัย แปลงวิดีโอทั้งสองเป็นอัตราเฟรมคงที่เดียวกันก่อนเปรียบเทียบ",
   "Frame rates do not match ({source} vs {test} fps).": "อัตราเฟรมไม่ตรงกัน ({source} กับ {test} fps)",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "วิดีโอทั้งสองมีสัดส่วนต่างกันหลังครอป: ต้นฉบับ {source} กับทดสอบ {test} การให้คะแนนจะยืดวิดีโอหนึ่งให้พอดีกับอีกวิดีโอ และผลลัพธ์จะไม่มีความหมาย หากวิดีโอหนึ่งมีแถบ (letterbox) ให้ตั้งแถบดำเป็นตรวจหาอัตโนมัติ เพื่อนำออกก่อนเปรียบเทียบ",
@@ -860,7 +858,12 @@
   "Custom": "กำหนดเอง",
   "Width:": "ความกว้าง:",
   "Height:": "ความสูง:",
-  "With black bars cut, the height follows the picture without them.": "เมื่อตัดแถบดำออก ความสูงจะเป็นไปตามภาพที่ไม่มีแถบดำ"
+  "With black bars cut, the height follows the picture without them.": "เมื่อตัดแถบดำออก ความสูงจะเป็นไปตามภาพที่ไม่มีแถบดำ",
+  "unknown frame rate": "ไม่ทราบอัตราเฟรม",
+  "Enter the frame rate": "ป้อนอัตราเฟรม",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} เป็นสตรีมวิดีโอดิบที่ไม่ได้เก็บอัตราเฟรมไว้ ป้อนเป็นตัวเลขหรือเศษส่วน เช่น 24 หรือ 24000/1001:",
+  "The reference is {fps:.3f} fps.": "วิดีโออ้างอิงมีอัตรา {fps:.3f} fps",
+  "The frame rate of {video} is not known.": "ไม่ทราบอัตราเฟรมของ {video}"
  },
  "plurals": {
   "about {count} day": [
@@ -928,6 +931,9 @@
   ],
   "and {count} more": [
    "และอีก {count} รายการ"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "ใช้กับวิดีโออื่นอีก {count} รายการที่ไม่มีอัตราเฟรมด้วย"
   ]
  }
 }

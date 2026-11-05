@@ -377,21 +377,31 @@ std::string still_grain(const VideoInfo& info) {
     return picture_grain_options(info).empty() ? "FFmpeg, grain added" : "FFmpeg, grain left out";
 }
 
+std::string raw_stream_start_filter(long long frame) { return "select=gte(n\\," + std::to_string(frame) + ")"; }
+
 std::vector<std::string> build_frame_command(const std::string& ffmpeg, const FrameComparison& comparison,
                                              FrameSide side, long long frame, const PreviewColorSettings& colors,
                                              double lead) {
     const SeekPoint start = frame_start(comparison, side, frame, lead);
+    const VideoInfo& info = frame_video_info(comparison, side);
     std::string filters = frame_filter(comparison, side, colors);
-    if (const std::optional<std::string> trim = trim_filter(start)) {
+    if (info.is_raw_stream()) {
+        filters = raw_stream_start_filter(frame) + "," + filters;
+    } else if (const std::optional<std::string> trim = trim_filter(start)) {
         filters = *trim + "," + filters;
     }
     std::error_code error;
     const std::filesystem::path input = std::filesystem::weakly_canonical(frame_input_path(comparison, side), error);
     std::vector<std::string> command = ffmpeg_command_start(ffmpeg, {"-loglevel", "error"});
-    const std::vector<std::string> grain = picture_grain_options(frame_video_info(comparison, side));
+    const std::vector<std::string> grain = picture_grain_options(info);
     append(command, grain);
-    command.insert(command.end(), {"-ss", format_fixed(start.seek, 9), as_stored, "-i",
-                                   platform::path_text(error ? frame_input_path(comparison, side) : input)});
+    if (info.is_raw_stream()) {
+        const std::vector<std::string> reading = info.input_options();
+        append(command, reading);
+    } else {
+        command.insert(command.end(), {"-ss", format_fixed(start.seek, 9)});
+    }
+    command.insert(command.end(), {as_stored, "-i", platform::path_text(error ? frame_input_path(comparison, side) : input)});
     add_png_output(command, filters);
     return command;
 }
@@ -404,8 +414,8 @@ std::string extract_frame_png(const std::string& ffmpeg, const FrameComparison& 
         throw FrameExtractError("Video file is missing: " + platform::path_text(path));
     }
     cancel.throw_if_cancelled();
-    const double lead = keyframe_lead(ffmpeg, path, cancel);
     const VideoInfo& info = frame_video_info(comparison, side);
+    const double lead = info.is_raw_stream() ? 0 : keyframe_lead(ffmpeg, path, cancel);  // a raw stream is not sought
     if (still_from_the_app(info)) {
         const SeekPoint start = frame_start(comparison, side, frame, lead);
         try {

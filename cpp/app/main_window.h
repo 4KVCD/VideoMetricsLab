@@ -152,6 +152,9 @@ struct RowData {
     // are looked up under it.
     std::optional<std::filesystem::path> media_path;
     std::optional<VideoInfo> video_info;
+    // Whether its frame rate was asked for as it was added (a raw stream that
+    // stores none): after a Cancel, only Calculate metrics asks again.
+    bool frame_rate_asked = false;
     VmafOptions options;
     // The metrics not run by FFmpeg that the row has ticked.
     std::set<std::string> extra_metric_keys;
@@ -326,6 +329,14 @@ private:
     void start_media_probe(const std::vector<std::filesystem::path>& paths);
     void on_probed(const Probed& probed);
     void on_probe_finished(ProbeWorker* worker);
+    // Asks the frame rate of the videos just added that have none (raw streams
+    // that store none), and of the reference.
+    void ask_new_frame_rates();
+    // The same for the reference (`reference`) and `videos`, and enters the
+    // answers. False once one is cancelled.
+    bool ask_frame_rates(bool reference, const std::vector<std::filesystem::path>& videos);
+    void enter_frame_rate(const std::filesystem::path& path, double fps);
+    void enter_reference_frame_rate(const std::filesystem::path& path, double fps);
     void apply_row_order(const std::vector<int>& order);
     void on_rows_dragged(const QList<int>& rows, int target);
     void on_header_clicked(int column);
@@ -458,6 +469,9 @@ private:
     // now: the question was cancelled, or the saved scores of rows whose
     // choice changed are looked up first (the run then starts by itself).
     bool settle_film_grain(const std::vector<int>& checked);
+    // The frame rates the checked rows and the reference still lack, asked for
+    // before the run. False when the question was cancelled: the run does not start.
+    bool settle_frame_rates(const std::vector<int>& checked);
     bool wait_for_saved_scores();
     void stop_waiting_for_saved_scores();
     // While a run waits for something before it starts: Run off, Cancel on,
@@ -520,6 +534,8 @@ private:
     QString reading_text_;        // the status line's "Reading..." while it shows
     bool run_active_ = false;
     bool closing_ = false;
+    bool asking_frame_rates_ = false;           // a frame rate question is open
+    bool reference_frame_rate_asked_ = false;   // RowData::frame_rate_asked, for the reference
     // Whether Vship-fast's metrics were last found to run on 5.1.2 here
     // (on_vship_checked).
     bool vship51_in_use_ = false;

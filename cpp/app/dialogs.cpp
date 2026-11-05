@@ -5,12 +5,14 @@
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QVBoxLayout>
 
 #include "i18n.h"
+#include "vml/ffprobe.h"
 
 namespace vml::app {
 
@@ -55,6 +57,51 @@ std::optional<FilmGrainAnswer> ask_film_grain(QWidget* parent, const QStringList
     return FilmGrainAnswer{with->isChecked(), again->isChecked()};
 }
 
+// The rate in `text`, where it is one someone could mean.
+std::optional<double> entered_frame_rate(const QString& text) {
+    const std::optional<double> rate = typed_frame_rate(text.toStdString());
+    if (rate && *rate >= lowest_typed_frame_rate && *rate <= highest_typed_frame_rate) {
+        return rate;
+    }
+    return std::nullopt;
+}
+
+std::optional<FrameRateAnswer> ask_frame_rate(QWidget* parent, const QString& video, double reference_fps, int others) {
+    QDialog dialog(parent);
+    dialog.setWindowTitle(tr("Enter the frame rate"));
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* text = new QLabel(tr("{video} is a raw video stream that does not store its frame rate. Enter it as a number "
+                               "or a fraction, such as 24 or 24000/1001:",
+                               {{"video", video}}),
+                            &dialog);
+    text->setTextFormat(Qt::PlainText);  // a file's name is not markup
+    text->setWordWrap(true);
+    layout->addWidget(text);
+    auto* entry = new QLineEdit(&dialog);
+    layout->addWidget(entry);
+    if (reference_fps > 0) {
+        layout->addWidget(new QLabel(tr("The reference is {fps:.3f} fps.", {{"fps", reference_fps}}), &dialog));
+    }
+    auto* for_the_others = new QCheckBox(ntr("Use it for {count} other video without a frame rate",
+                                             "Use it for {count} other videos without a frame rate",
+                                             static_cast<long long>(others)),
+                                         &dialog);
+    for_the_others->setVisible(others > 0);
+    layout->addWidget(for_the_others);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QPushButton* ok = buttons->button(QDialogButtonBox::Ok);
+    ok->setEnabled(false);
+    QObject::connect(entry, &QLineEdit::textChanged, ok,
+                     [ok](const QString& typed) { ok->setEnabled(entered_frame_rate(typed).has_value()); });
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    if (dialog.exec() != QDialog::Accepted) {
+        return std::nullopt;
+    }
+    return FrameRateAnswer{*entered_frame_rate(entry->text()), for_the_others->isChecked()};
+}
+
 }  // namespace
 
 Dialogs standard_dialogs(QWidget* parent) {
@@ -78,6 +125,9 @@ Dialogs standard_dialogs(QWidget* parent) {
             return QFileDialog::getExistingDirectory(parent, title, start);
         },
         [parent](const QStringList& videos) { return ask_film_grain(parent, videos); },
+        [parent](const QString& video, double reference_fps, int others) {
+            return ask_frame_rate(parent, video, reference_fps, others);
+        },
     };
 }
 

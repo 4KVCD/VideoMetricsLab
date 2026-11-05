@@ -512,7 +512,6 @@
   "Reading video packets…": "Videopakketten lezen…",
   "Analyzing {name}…": "{name} analyseren…",
   "Could not analyze {name}: {error}": "Kan {name} niet analyseren: {error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "Een ruwe stream bevat geen framesnelheid, dus de bitrate kan niet worden berekend.",
   "Bitrate analysis stopped. Completed results are kept.": "Bitrate-analyse gestopt. Voltooide resultaten zijn bewaard.",
   "Bitrate analysis complete. Values contain the first video stream only.": "Bitrate-analyse voltooid. De waarden gelden alleen voor de eerste videostream.",
   "Stopping…": "Stoppen…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship ondersteunt de primaire kleuren {primaries} niet.",
   "Vship does not support the {range} range tag.": "Vship ondersteunt de bereiktag {range} niet.",
   "Vship does not support {siting} chroma siting.": "Vship ondersteunt de chromapositie {siting} niet.",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} is een ruwe {codec}-stream zonder tijdstempels, dus de framerate is onbekend. Zet hem eerst met zijn framerate in een container, bijv. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), met de eigen framerate van de video.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Video met variabele framerate wordt nog niet veilig ondersteund. Zet beide video's om naar dezelfde constante framerate voordat u ze vergelijkt.",
   "Frame rates do not match ({source} vs {test} fps).": "Framerates komen niet overeen ({source} vs {test} fps).",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "De video's hebben na het bijsnijden een andere vorm: bron {source} vs test {test}. Beoordelen zou de ene uitrekken tot de andere en het resultaat zou zinloos zijn. Als een van beide balken heeft (letterbox), zet Zwarte balken op Automatisch detecteren om ze vóór de vergelijking te verwijderen.",
@@ -860,7 +858,12 @@
   "Custom": "Aangepast",
   "Width:": "Breedte:",
   "Height:": "Hoogte:",
-  "With black bars cut, the height follows the picture without them.": "Als zwarte balken worden weggesneden, volgt de hoogte het beeld zonder die balken."
+  "With black bars cut, the height follows the picture without them.": "Als zwarte balken worden weggesneden, volgt de hoogte het beeld zonder die balken.",
+  "unknown frame rate": "onbekende framesnelheid",
+  "Enter the frame rate": "Voer de framesnelheid in",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} is een onbewerkte videostream die zijn framesnelheid niet opslaat. Voer deze in als getal of breuk, bijvoorbeeld 24 of 24000/1001:",
+  "The reference is {fps:.3f} fps.": "De referentie heeft {fps:.3f} fps.",
+  "The frame rate of {video} is not known.": "De framesnelheid van {video} is niet bekend."
  },
  "plurals": {
   "about {count} day": [
@@ -950,6 +953,10 @@
   "and {count} more": [
    "en nog {count}",
    "en nog {count}"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "Ook gebruiken voor {count} andere video zonder framesnelheid",
+   "Ook gebruiken voor {count} andere video's zonder framesnelheid"
   ]
  }
 }

@@ -19,6 +19,12 @@ struct FilmGrainAnswer {
     bool dont_ask_again = false;  // the answer made Settings' default
 };
 
+// The frame rate entered for a raw stream that stores none.
+struct FrameRateAnswer {
+    double fps = 0;
+    bool for_the_others = false;  // also for the other videos without one
+};
+
 struct Dialogs {
     // A message with an OK button: information, and a failure (critical).
     std::function<void(const QString& title, const QString& text)> inform;
@@ -36,6 +42,11 @@ struct Dialogs {
     // Whether the `videos` named, which have film grain and no choice for it
     // yet, are scored with it or without: nothing for Cancel.
     std::function<std::optional<FilmGrainAnswer>(const QStringList& videos)> ask_film_grain;
+    // The frame rate of `video`, a raw stream that stores none: nothing for
+    // Cancel. `reference_fps` (0: not known) is shown, and `others` videos more
+    // have none.
+    std::function<std::optional<FrameRateAnswer>(const QString& video, double reference_fps, int others)>
+        ask_frame_rate;
 };
 
 // The real dialogs, over `parent`.

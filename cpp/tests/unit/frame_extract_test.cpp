@@ -156,6 +156,32 @@ TEST(FrameExtract, SeeksEarlierWhereKeyframesAreDecodedLongBeforeShown) {
     EXPECT_NE(argument(playback, "-filter_complex").find("[in0]trim=start=1.201200000,"), std::string::npos);
 }
 
+// FFmpeg ignores -ss on a raw stream and starts at its first frame, so every
+// frame asked for would show that one. It is read at its rate and counted.
+TEST(FrameExtract, ARawStreamsFramesAreCountedFromItsStart) {
+    FrameComparison comparison;
+    comparison.source_info.path = "source.266";
+    comparison.source_info.format_name = "vvc";
+    comparison.source_info.width = 1920;
+    comparison.source_info.height = 1080;
+    comparison.source_info.timed_raw = true;
+    comparison.source_info.fps = 60;
+    comparison.distorted_info = comparison.source_info;
+    comparison.fps = 60;
+    const auto argument = [](const std::vector<std::string>& command, const std::string& name) {
+        return *(std::find(command.begin(), command.end(), name) + 1);
+    };
+    const std::vector<std::string> still = build_frame_command("<ffmpeg>", comparison, FrameSide::source, 45);
+    EXPECT_EQ(std::find(still.begin(), still.end(), "-ss"), still.end());
+    EXPECT_EQ(argument(still, "-framerate"), "60.0");
+    EXPECT_EQ(argument(still, "-vf").substr(0, 16), "select=gte(n\\,45");
+    const std::vector<std::string> playback =
+        build_playback_command("<ffmpeg>", comparison, FrameSide::source, 45, {}, {}, std::nullopt, PlaybackProcessing::cpu);
+    EXPECT_EQ(std::find(playback.begin(), playback.end(), "-ss"), playback.end());
+    EXPECT_EQ(argument(playback, "-framerate"), "60.0");
+    EXPECT_NE(argument(playback, "-filter_complex").find("[in0]select=gte(n\\,45)"), std::string::npos);
+}
+
 // A test video scored scaled to one size because its size changes (a 720p
 // start, scored at the 1080p source's size) is shown as decoded: its crop,
 // in the 1920x1080 pixels it was scored at, in its own 1280x720 ones.

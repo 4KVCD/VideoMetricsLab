@@ -16,6 +16,7 @@
 #include <QRadioButton>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -32,6 +33,7 @@
 #include "series_colors.h"
 #include "vml/analysis_request.h"
 #include "vml/ffprobe.h"
+#include "vml/geometry.h"
 #include "vml/platform/system.h"
 #include "vml/time_format.h"
 #include "widgets.h"
@@ -163,13 +165,16 @@ void BitrateWorker::run() {
         try {
             // Taken first: a file written to during the read counts as changed.
             std::string read_as = file_identity(path);
-            const VideoInfo info = known ? *known : probe_video(path, ffprobe_, cancel_);
+            VideoInfo info = known ? *known : probe_video(path, ffprobe_, cancel_);
+            if (!known && info.is_raw_stream()) {
+                info = raw_stream_as_found(std::move(info), ffprobe_, cancel_);
+            }
             if (cancel_.cancelled()) {
                 return;
             }
-            // Its seconds and rates would be those of FFmpeg's guess at 25 frames a second.
-            if (info.is_raw_stream() && !info.timed_raw) {
-                emit failed(name, app::tr("A raw stream records no frame rate, so its bitrate cannot be worked out."));
+            // Its seconds and rates cannot be worked out until someone says its rate.
+            if (info.frame_rate_unknown()) {
+                emit frame_rate_wanted({name, info});
                 continue;
             }
             FrameTypeReader type_reader(info, cancel_);
@@ -571,6 +576,8 @@ void BitratePanel::start_pending() {
     connect(worker, &BitrateWorker::analyzed, this, [this](const BitrateAnalyzed& analyzed) { on_analyzed(analyzed); });
     connect(worker, &BitrateWorker::failed, this,
             [this](const QString& path, const QString& error) { on_failed(path, error); });
+    connect(worker, &BitrateWorker::frame_rate_wanted, this,
+            [this](const BitrateAnalyzed& wanted) { on_frame_rate_wanted(wanted); });
     connect(worker, &QThread::finished, this, [this, worker] { on_worker_finished(worker); });
     update_buttons();
     progress->setValue(0);
@@ -579,7 +586,10 @@ void BitratePanel::start_pending() {
 }
 
 BitrateEntry* BitratePanel::entry_for(const QString& path_text) {
-    const QString key = path_key(platform::path_from_text(path_text.toStdString()));
+    return entry_of_key(path_key(platform::path_from_text(path_text.toStdString())));
+}
+
+BitrateEntry* BitratePanel::entry_of_key(const QString& key) {
     const auto found =
         std::find_if(entries_.begin(), entries_.end(), [&key](const auto& item) { return item.first == key; });
     return found == entries_.end() ? nullptr : &found->second;
@@ -655,6 +665,49 @@ void BitratePanel::on_failed(const QString& path, const QString& error) {
                                   {{"name", name_of(entry->path)}, {"error", error}}));
 }
 
+void BitratePanel::on_frame_rate_wanted(const BitrateAnalyzed& wanted) {
+    if (BitrateEntry* entry = entry_for(wanted.path)) {
+        entry->info = wanted.info;
+        entry->state = BitrateState::queued;
+        refresh_table_values();
+        frame_rates_wanted_.push_back(path_key(entry->path));
+    }
+}
+
+void BitratePanel::ask_frame_rates() {
+    // Once the scan has ended: a dialog's own event loop must not wait inside it.
+    // The answered files are read in the next one. Everything is found again
+    // after each answer, by its key: the list may have changed meanwhile.
+    const std::vector<QString> keys = std::exchange(frame_rates_wanted_, {});
+    std::vector<QString> answered;
+    std::optional<double> for_the_others;
+    for (std::size_t index = 0; index < keys.size(); ++index) {
+        std::optional<double> fps = for_the_others;
+        if (const BitrateEntry* asked = entry_of_key(keys[index]); !fps && asked != nullptr) {
+            const std::optional<FrameRateAnswer> answer =
+                dialogs.ask_frame_rate(name_of(asked->path), 0, static_cast<int>(keys.size() - index - 1));
+            if (answer) {
+                fps = answer->fps;
+                for_the_others = answer->for_the_others ? fps : std::nullopt;
+            }
+        }
+        BitrateEntry* entry = entry_of_key(keys[index]);
+        if (entry == nullptr || !entry->info) {
+            continue;  // removed while it was asked about
+        }
+        if (fps) {
+            entry->info->set_frame_rate(*fps);
+            answered.push_back(keys[index]);
+        } else {
+            on_failed(qt_text(platform::path_text(entry->path)),
+                      tr_message(QString::fromStdString(frame_rate_unknown_problem(*entry->info))));
+        }
+    }
+    if (!answered.empty()) {
+        queue_keys(answered);
+    }
+}
+
 void BitratePanel::on_worker_finished(BitrateWorker* worker) {
     // Cleans up after a scan, and starts the next if files were queued.
     if (worker != worker_) {
@@ -679,6 +732,11 @@ void BitratePanel::on_worker_finished(BitrateWorker* worker) {
     worker_ = nullptr;
     active_keys_.clear();
     worker->deleteLater();
+    if (stopped) {
+        frame_rates_wanted_.clear();
+    } else if (!frame_rates_wanted_.empty()) {
+        QTimer::singleShot(0, this, [this] { ask_frame_rates(); });
+    }
     if (!pending_.empty()) {
         start_pending();
     } else {

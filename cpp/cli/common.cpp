@@ -116,7 +116,7 @@ std::optional<std::string> name_taken_note(const std::filesystem::path& written,
 
 std::string raw_stream_needs_fps(const std::string& which, const VideoInfo& info) {
     return which + " is a raw " + codec_label(info.codec_name) +
-           " stream, which records no frame rate: give its frame rate with --fps, such as --fps 24000/1001.";
+           " stream that does not store its frame rate: give it with --fps, such as --fps 24000/1001.";
 }
 
 }  // namespace vml::cli

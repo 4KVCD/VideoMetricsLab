@@ -10,6 +10,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QTimer>
 
 #include "formatting.h"
 #include "frame_compare_panel.h"
@@ -23,7 +24,6 @@
 #include "vml/film_grain_scoring.h"
 #include "vml/python_text.h"
 #include "vml/platform/system.h"
-#include "vml/time_format.h"
 #include "widgets.h"
 #include "window_helpers.h"
 
@@ -201,6 +201,7 @@ void MainWindow::forget_recalculations_unless(const std::filesystem::path& refer
 void MainWindow::apply_source_info(const std::filesystem::path& path, const VideoInfo& info) {
     forget_recalculations_unless(path);
     source_info_ = info;
+    reference_frame_rate_asked_ = false;
     // A reference just read (chosen again too) has no film grain choice:
     // Settings' default, or it is asked about at Calculate metrics.
     const std::optional<bool> with = film_grain_default_choice(settings_.film_grain_default);
@@ -223,8 +224,9 @@ void MainWindow::show_source_label() {
         source_info_label_->setToolTip(QString());
         return;
     }
-    source_info_label_->setText(media_info_string(*source_info_) + ", " + bitrate_string(*source_info_) + "  (" +
-                                QString::fromStdString(format_hms(source_info_->duration, 1)) + ")");
+    const QString length = length_string(*source_info_);
+    source_info_label_->setText(media_info_string(*source_info_) + ", " + bitrate_string(*source_info_) +
+                                (length.isEmpty() ? QString() : "  (" + length + ")"));
     source_info_label_->setToolTip(film_grain_note(*source_info_));
 }
 
@@ -366,6 +368,8 @@ void MainWindow::on_source_probe_finished(int generation, ProbeWorker* worker) {
             show_ready();
         }
         on_table_selection_changed();
+        // Not from inside this slot: a dialog's own event loop could end up back here.
+        QTimer::singleShot(0, this, [this] { ask_new_frame_rates(); });
     }
 }
 

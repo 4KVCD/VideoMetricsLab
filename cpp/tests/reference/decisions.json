@@ -11393,7 +11393,7 @@
   },
   {
    "name": "raw stream",
-   "problem": "raw.hevc is a raw HEVC stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.",
+   "problem": "The frame rate of raw.hevc is not known.",
    "source": {
     "fps": "0x1.9000000000000p+4",
     "duration": "0x1.e000000000000p+5",
@@ -11414,7 +11414,7 @@
   },
   {
    "name": "raw h264",
-   "problem": "c.264 is a raw H.264 stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.",
+   "problem": "The frame rate of c.264 is not known.",
    "source": {
     "fps": "0x1.7f9dcb5112287p+4",
     "duration": "0x1.e000000000000p+5",

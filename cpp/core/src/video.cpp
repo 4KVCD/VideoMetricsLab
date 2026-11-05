@@ -5,7 +5,10 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
+#include <filesystem>
 #include <string_view>
+#include <system_error>
 
 #include "vml/app_decoders.h"
 #include "vml/append.h"
@@ -70,6 +73,24 @@ long long VideoInfo::estimated_frame_count() const {
     }
     // Python's round(): halves go to the even neighbour.
     return std::max(1LL, static_cast<long long>(std::nearbyint(duration * fps)));
+}
+
+void VideoInfo::set_frame_rate(double frames_per_second) {
+    timed_raw = true;
+    fps = nominal_fps = average_fps = frames_per_second;
+    duration = static_cast<double>(nb_frames) / frames_per_second;
+    // A raw stream's file is its video and nothing else.
+    std::error_code unknown;
+    const std::uintmax_t bytes = std::filesystem::file_size(path, unknown);
+    bit_rate = unknown || duration <= 0 ? 0 : std::llround(static_cast<double>(bytes) * 8 / duration);
+    bit_rate_whole_file = false;
+}
+
+void VideoInfo::forget_frame_rate() {
+    timed_raw = false;
+    fps = nominal_fps = average_fps = duration = 0.0;
+    bit_rate = 0;
+    bit_rate_whole_file = false;
 }
 
 bool VideoInfo::is_raw_stream() const {

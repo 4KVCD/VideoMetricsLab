@@ -91,6 +91,8 @@ signals:
     void progress(const QString& path, long long done, long long total);
     void analyzed(const vml::app::BitrateAnalyzed& analyzed);
     void failed(const QString& path, const QString& error);
+    // A raw stream that stores no frame rate: its details, and nothing read.
+    void frame_rate_wanted(const vml::app::BitrateAnalyzed& wanted);
 
 protected:
     void run() override;
@@ -158,6 +160,7 @@ private:
     friend class BitratePanelTest;  // the panel's tests (tests/app)
 
     BitrateEntry* entry_for(const QString& path_text);
+    BitrateEntry* entry_of_key(const QString& key);
     int row_for_key(const QString& key) const;
     void on_add_files();
     void on_remove_selected();
@@ -169,6 +172,8 @@ private:
     void on_progress(const QString& path, long long done, long long total);
     void on_analyzed(const BitrateAnalyzed& analyzed);
     void on_failed(const QString& path, const QString& error);
+    void on_frame_rate_wanted(const BitrateAnalyzed& wanted);
+    void ask_frame_rates();
     void on_worker_finished(BitrateWorker* worker);
     void rebuild_table();
     void refresh_table_values();
@@ -194,6 +199,7 @@ private:
     std::vector<std::pair<QString, BitrateEntry>> entries_;
     std::vector<QString> pending_;  // queued, in order
     std::set<QString> active_keys_;  // being read by the worker
+    std::vector<QString> frame_rates_wanted_;  // to be asked for once the worker ends
     BitrateWorker* worker_ = nullptr;
     bool stopping_ = false;
     bool populating_ = false;

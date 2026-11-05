@@ -280,11 +280,12 @@ std::string taken_colour_note(const VideoInfo& info, const std::string& which, c
 
 // The video at `path` as the command reads it: a raw YUV file with --size,
 // --pix-fmt and --fps (ffprobe.h's probe_raw_yuv), a raw stream timed at
-// --fps (timed_raw_stream), any other video as ffprobe reads it, with the
-// film grain its stream describes (detect_film_grain), scored with it or
-// without as `with_film_grain` says (film_grain_choice). Nothing, with
-// `wrong` saying why, when the command does not give what it needs (`which`
-// names the video). Throws ProbeError when it cannot be read.
+// --fps or else the rate it stores (timed_raw_stream), any other video as
+// ffprobe reads it, with the film grain its stream describes
+// (detect_film_grain), scored with it or without as `with_film_grain` says
+// (film_grain_choice). Nothing, with `wrong` saying why, when the command
+// does not give what it needs (`which` names the video). Throws ProbeError
+// when it cannot be read.
 std::optional<VideoInfo> read_video(const std::filesystem::path& path, const CompareArguments& arguments,
                                     std::optional<bool> with_film_grain, const std::string& ffprobe,
                                     const std::string& ffmpeg, const std::string& which, std::string& wrong) {
@@ -305,11 +306,13 @@ std::optional<VideoInfo> read_video(const std::filesystem::path& path, const Com
     if (!info.is_raw_stream()) {
         return info;
     }
-    if (!arguments.fps) {
+    const std::optional<double> fps =
+        arguments.fps ? arguments.fps : frame_rate_in_stream(info, ffprobe, CancelToken());
+    if (!fps) {
         wrong = raw_stream_needs_fps(which, info);
         return std::nullopt;
     }
-    return timed_raw_stream(std::move(info), *arguments.fps, ffprobe);
+    return timed_raw_stream(std::move(info), *fps, ffprobe);
 }
 
 // ------------------------------------------------------------------- options

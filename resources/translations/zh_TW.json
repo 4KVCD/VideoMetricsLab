@@ -512,7 +512,6 @@
   "Reading video packets…": "正在讀取影片封包…",
   "Analyzing {name}…": "正在分析 {name}…",
   "Could not analyze {name}: {error}": "無法分析 {name}：{error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "原始串流不記錄影格速率，因此無法算出其位元速率。",
   "Bitrate analysis stopped. Completed results are kept.": "位元速率分析已停止。已完成的結果會保留。",
   "Bitrate analysis complete. Values contain the first video stream only.": "位元速率分析完成。數值只包含第一條視訊串流。",
   "Stopping…": "正在停止…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship 不支援 {primaries} 原色。",
   "Vship does not support the {range} range tag.": "Vship 不支援 {range} 範圍標記。",
   "Vship does not support {siting} chroma siting.": "Vship 不支援 {siting} 色度位置。",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} 是沒有時間戳記的原始 {codec} 串流，因此無法得知其影格率。請先依其影格率將它放入容器，例如 mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix)（使用影片本身的影格率）。",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "尚無法安全地支援可變影格速率的影片。比較前請將兩部影片轉換成相同的固定影格速率。",
   "Frame rates do not match ({source} vs {test} fps).": "影格速率不一致（{source} 與 {test} fps）。",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "兩部影片裁切後的形狀不同：來源為 {source}，測試為 {test}。評分會把其中一部拉伸以符合另一部，結果將毫無意義。如果其中一部有黑邊，請將黑邊處理設為「自動偵測」，以便在比較前去除黑邊。",
@@ -860,7 +858,12 @@
   "Custom": "自訂",
   "Width:": "寬度：",
   "Height:": "高度：",
-  "With black bars cut, the height follows the picture without them.": "裁切黑邊時，高度以去除黑邊後的畫面為準。"
+  "With black bars cut, the height follows the picture without them.": "裁切黑邊時，高度以去除黑邊後的畫面為準。",
+  "unknown frame rate": "影格率未知",
+  "Enter the frame rate": "輸入影格率",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} 是未儲存影格率的原始視訊串流。請以數字或分數輸入，例如 24 或 24000/1001：",
+  "The reference is {fps:.3f} fps.": "參考影片為 {fps:.3f} fps。",
+  "The frame rate of {video} is not known.": "{video} 的影格率未知。"
  },
  "plurals": {
   "about {count} day": [
@@ -928,6 +931,9 @@
   ],
   "and {count} more": [
    "及其他 {count} 部"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "同時用於其他 {count} 部沒有影格率的影片"
   ]
  }
 }

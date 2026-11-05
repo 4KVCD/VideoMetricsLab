@@ -11,6 +11,7 @@
 #include <QItemSelection>
 #include <QItemSelectionModel>
 #include <QMessageBox>
+#include <QScopedValueRollback>
 #include <QTableWidgetItem>
 #include <QTimer>
 
@@ -567,8 +568,13 @@ void MainWindow::set_row_info(int row, const std::optional<VideoInfo>& info, con
         // cell, and leaving it grey makes a probed row look disabled.
         theme::foreground(item, std::nullopt);
         const QString grain = film_grain_note(*info);
-        item->setToolTip(QString::fromStdString(format_hms(info->duration, 1)) +
-                         (grain.isEmpty() ? QString() : "\n" + grain));
+        QStringList tip;
+        for (const QString& line : {length_string(*info), grain}) {
+            if (!line.isEmpty()) {
+                tip.append(line);
+            }
+        }
+        item->setToolTip(tip.join('\n'));
         distorted_table_->item(row, col_bitrate)->setText(bitrate_string(*info));
         distorted_table_->item(row, col_bitrate)->setToolTip(bitrate_note(*info));
         RowData& row_data = *rows_[static_cast<std::size_t>(row)];
@@ -765,6 +771,111 @@ void MainWindow::on_probe_finished(ProbeWorker* worker) {
         show_ready();
     }
     on_table_selection_changed();
+    // Not from inside this slot: a dialog's own event loop could end up back here.
+    QTimer::singleShot(0, this, [this] { ask_new_frame_rates(); });
+}
+
+void MainWindow::ask_new_frame_rates() {
+    // Once for each video, as it is added. In a loop, as a video may come in
+    // while another's question is open. Cancel leaves the rest for Calculate
+    // metrics (settle_frame_rates) to ask about.
+    if (asking_frame_rates_ || run_active_ || closing_) {
+        return;
+    }
+    while (true) {
+        const bool reference = source_info_ && source_info_->frame_rate_unknown() && !reference_frame_rate_asked_;
+        reference_frame_rate_asked_ = reference_frame_rate_asked_ || reference;
+        std::vector<std::filesystem::path> videos;
+        for (const std::shared_ptr<RowData>& row_data : rows_) {
+            if (!row_data->options.resample_test && row_data->video_info &&
+                row_data->video_info->frame_rate_unknown() && !row_data->frame_rate_asked) {
+                row_data->frame_rate_asked = true;
+                videos.push_back(row_data->path);
+            }
+        }
+        if (!reference && videos.empty()) {
+            return;
+        }
+        ask_frame_rates(reference, videos);
+    }
+}
+
+bool MainWindow::settle_frame_rates(const std::vector<int>& checked) {
+    std::vector<std::filesystem::path> videos;
+    for (const int row : checked) {
+        const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        // A resolution test's video is the reference.
+        if (!row_data.options.resample_test && row_data.video_info && row_data.video_info->frame_rate_unknown()) {
+            videos.push_back(row_data.path);
+        }
+    }
+    return ask_frame_rates(source_info_->frame_rate_unknown(), videos);
+}
+
+bool MainWindow::ask_frame_rates(bool reference, const std::vector<std::filesystem::path>& videos) {
+    // Each answer is waited for in the dialog's own event loop, where a video
+    // still being read can come in: everything is found again after it, by path.
+    const QScopedValueRollback asking(asking_frame_rates_, true);
+    if (reference) {
+        const std::filesystem::path path = source_info_->path;
+        const std::optional<FrameRateAnswer> answer = dialogs_.ask_frame_rate(
+            app::tr("{name} (the reference)", {{"name", name_of(path)}}), 0, 0);
+        if (!answer) {
+            return false;
+        }
+        enter_reference_frame_rate(path, answer->fps);
+    }
+    for (std::size_t video = 0; video < videos.size(); ++video) {
+        const double reference_fps = source_info_ && !source_info_->frame_rate_unknown() ? source_info_->fps : 0;
+        const std::optional<FrameRateAnswer> answer = dialogs_.ask_frame_rate(
+            name_of(videos[video]), reference_fps, static_cast<int>(videos.size() - video - 1));
+        if (!answer) {
+            return false;
+        }
+        const std::size_t end = answer->for_the_others ? videos.size() : video + 1;
+        for (std::size_t each = video; each < end; ++each) {
+            enter_frame_rate(videos[each], answer->fps);
+        }
+        video = end - 1;
+    }
+    return true;
+}
+
+void MainWindow::enter_frame_rate(const std::filesystem::path& path, double fps) {
+    const std::optional<int> row = row_index_of_path(path);
+    if (!row) {
+        return;  // removed while it was asked about
+    }
+    RowData& row_data = *rows_[static_cast<std::size_t>(*row)];
+    if (!row_data.video_info || !row_data.video_info->frame_rate_unknown()) {
+        return;
+    }
+    VideoInfo info = *row_data.video_info;
+    info.set_frame_rate(fps);
+    set_row_info(*row, info, QString());
+    if (row_data.analysis_status == RowState::failed) {  // refused for having no rate
+        row_data.analysis_status.reset();
+        row_data.status_detail.clear();
+        refresh_row_state(*row);
+    }
+    set_row_metrics(*row);
+    sync_frame_compare();  // Video Compare's copy of its details
+}
+
+void MainWindow::enter_reference_frame_rate(const std::filesystem::path& path, double fps) {
+    if (!source_info_ || !same_path(source_info_->path, path) || !source_info_->frame_rate_unknown()) {
+        return;  // another reference was chosen while it was asked about
+    }
+    source_info_->set_frame_rate(fps);
+    for (std::size_t row = 0; row < rows_.size(); ++row) {
+        RowData& row_data = *rows_[row];
+        if (row_data.options.resample_test && row_data.video_info) {  // its copy of the reference
+            row_data.video_info = *source_info_;
+            set_resample_row_info(static_cast<int>(row), *row_data.options.resample_test);
+        }
+    }
+    show_source_label();
+    sync_frame_compare();  // Video Compare's copy of its details
 }
 
 void MainWindow::apply_row_order(const std::vector<int>& order) {

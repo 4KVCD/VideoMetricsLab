@@ -512,7 +512,6 @@
   "Reading video packets…": "動画パケットを読み込み中…",
   "Analyzing {name}…": "{name} を解析中…",
   "Could not analyze {name}: {error}": "{name} を解析できませんでした：{error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "ローストリームにはフレームレートの記録がないため、ビットレートを算出できません。",
   "Bitrate analysis stopped. Completed results are kept.": "ビットレート解析を停止しました。完了した結果は残ります。",
   "Bitrate analysis complete. Values contain the first video stream only.": "ビットレート解析が完了しました。値は最初の動画ストリームのみです。",
   "Stopping…": "停止中…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship は {primaries} 原色に対応していません。",
   "Vship does not support the {range} range tag.": "Vship は {range} レンジタグに対応していません。",
   "Vship does not support {siting} chroma siting.": "Vship は {siting} クロマ位置に対応していません。",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video} はタイムスタンプのない生の {codec} ストリームのため、フレームレートが分かりません。先にフレームレートを指定してコンテナに入れてください。例: mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix)（動画本来のフレームレートで）。",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "可変フレームレートの動画にはまだ安全に対応していません。比較する前に、両方の動画を同じ固定フレームレートに変換してください。",
   "Frame rates do not match ({source} vs {test} fps).": "フレームレートが一致しません（{source} と {test} fps）。",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "クロップ後の 2 本の動画の形が異なります：ソース {source}、テスト {test}。採点すると一方をもう一方に引き伸ばすことになり、結果は無意味です。一方にレターボックスがある場合は、比較の前に黒帯が取り除かれるよう［黒帯の扱い］を［自動検出］にしてください。",
@@ -860,7 +858,12 @@
   "Custom": "カスタム",
   "Width:": "幅：",
   "Height:": "高さ：",
-  "With black bars cut, the height follows the picture without them.": "黒帯をカットすると、高さは黒帯を除いた映像に合わせて決まります。"
+  "With black bars cut, the height follows the picture without them.": "黒帯をカットすると、高さは黒帯を除いた映像に合わせて決まります。",
+  "unknown frame rate": "フレームレート不明",
+  "Enter the frame rate": "フレームレートの入力",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} はフレームレートを保存していない生のビデオストリームです。24 や 24000/1001 のように、数値または分数で入力してください:",
+  "The reference is {fps:.3f} fps.": "基準動画は {fps:.3f} fps です。",
+  "The frame rate of {video} is not known.": "{video} のフレームレートは不明です。"
  },
  "plurals": {
   "about {count} day": [
@@ -928,6 +931,9 @@
   ],
   "and {count} more": [
    "ほか {count} 件"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "フレームレートのない他の {count} 本の動画にも使用する"
   ]
  }
 }

@@ -46,8 +46,8 @@ bool MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& pa
     // number): which saved scores apply depends on the reference and on each
     // row's settings, as they are now. None as the window closes: a reading
     // started then would hold up the closing.
-    if (paths.empty() || !source_info_ || !settings_.use_cache || closing_) {
-        return false;
+    if (paths.empty() || !source_info_ || !settings_.use_cache || closing_ || source_info_->is_raw_stream()) {
+        return false;  // a raw stream's scores are not saved (save_job_result)
     }
     // The rows the replaced lookup had not answered for are asked about
     // again. Asked only about `paths`, editing one row while the saved scores
@@ -143,6 +143,9 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
         return;
     }
     RowData& row_data = *rows_[static_cast<std::size_t>(*row)];
+    if (row_data.video_info && row_data.video_info->is_raw_stream()) {
+        return;  // asked about before it was read: an older version's scores, at FFmpeg's guessed rate
+    }
     if (lookup_token(source_info_->path, row_data.identity_path(), analysis_request_of(row_data)) != found.token) {
         return;
     }
@@ -219,6 +222,9 @@ void MainWindow::on_other_displays_found(int generation, const OtherDisplaysFoun
         return;
     }
     RowData& row_data = *rows_[static_cast<std::size_t>(*row)];
+    if (row_data.video_info && row_data.video_info->is_raw_stream()) {
+        return;  // as on_saved_found
+    }
     if (nlohmann::json(row_data.cvvdp.parameters()) != found.parameters) {
         return;  // the row's display changed meanwhile: its own lookup follows
     }

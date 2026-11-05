@@ -119,6 +119,11 @@ SeekPoint seek_point(double seconds, double lead);
 // nothing for none.
 std::optional<std::string> trim_filter(const SeekPoint& start);
 
+// The filter that gives a raw stream's frames from number `frame` on. It has no
+// timestamps for -ss to seek by: FFmpeg would ignore -ss and start at its first
+// frame. So it is decoded from its start, and its frames are counted.
+std::string raw_stream_start_filter(long long frame);
+
 // The HDR family a video's transfer tag declares ("HDR10 / PQ", "HLG"), or
 // nothing: never guessed from the bit depth.
 std::optional<std::string> hdr_kind(const VideoInfo& info);

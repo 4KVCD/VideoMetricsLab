@@ -121,7 +121,7 @@ AV2, AOM's codec after AV1 (not yet final), is decoded by dav2d, VideoLAN's
 AV2 decoder, on the CPU: FFmpeg knows no AV2 and no GPU decodes it, so the
 app reads AV2 files itself. It reads them as AOM's AV2 encoder (AVM's
 `avmenc`) writes them: WebM (its default), IVF (`--ivf`) and raw OBU streams
-(`--obu`, `.obu`; on the command line with `--fps`, as other raw streams).
+(`--obu`, `.obu`; these store no frame rate that can be read, so the app asks for it and the command line needs `--fps`).
 Their film grain can be scored with it or without it, as AV1's. dav2d's
 pictures are AVM's own decoder's, checked at 8 and 10 bits, with and without
 film grain. A WebM or IVF file's frame rate is found from its timestamps.
@@ -245,8 +245,8 @@ More examples:
 # CVVDP on two displays of your choice: a 30-inch HDR monitor and a 65-inch HDR TV
 .\VideoMetricsLab-cli.exe compare reference.mkv encode.mkv -m cvvdp --cvvdp-display "30-inch 4K HDR monitor, dim room" --cvvdp-display "65-inch 4K HDR TV, 1000 nits, living room"
 
-# A raw VVC stream straight from an encoder (no container), at 23.976 frames a second
-.\VideoMetricsLab-cli.exe compare reference.y4m encode.266 --fps 24000/1001
+# A raw VVC stream straight from an encoder (no container), at the frame rate it stores
+.\VideoMetricsLab-cli.exe compare reference.y4m encode.266
 
 # A raw YUV reference (pictures only: 1080p, 10-bit 4:2:0) and a raw VVC stream
 .\VideoMetricsLab-cli.exe compare reference.yuv encode.266 --size 1920x1080 --pix-fmt yuv420p10le --fps 24000/1001
@@ -262,7 +262,7 @@ $run.videos[0].metrics.vmaf.score
 .\VideoMetricsLab-cli.exe bitrate encodes\*.mkv
 
 # A raw VVC stream's bitrate, and its graphs' figures as CSV files in the folder bitrate
-.\VideoMetricsLab-cli.exe bitrate encode.266 --fps 24000/1001 --csv bitrate
+.\VideoMetricsLab-cli.exe bitrate encode.266 --csv bitrate
 
 # What would calculate each metric on this PC
 .\VideoMetricsLab-cli.exe devices
@@ -280,7 +280,7 @@ $run.videos[0].metrics.vmaf.score
 | `--range START-END` | Compare only that part of each video, from START to END (whole seconds, or H:MM:SS: `1:00-1:30`); without END, to the videos' end. |
 | `--colour pq-bt2020\|hlg-bt2020\|bt709` | The colours of a video with no colour tags (y4m, say); a tagged video keeps its own. Left out, such a video takes the other video's tags when that one has them (a y4m encode of a tagged HDR10 source is read as HDR10), and is otherwise taken as SDR, which changes CVVDP, SSIMULACRA2 and Butteraugli. Scores with colours given or taken are not saved. |
 | `--film-grain with\|without` | Score with the film grain a video's stream asks the player to add, as players show it, or without it, the coded pictures only. Left out: as Settings' **Film grain** default says; with, where it asks. |
-| `--fps RATE` | The frame rate of a raw video stream or raw YUV file (below), such as `24000/1001`, `23.976` or `60`. Required when the reference or a test video is one. These scores are not saved. |
+| `--fps RATE` | The frame rate of a raw video stream or raw YUV file (below), such as `24000/1001`, `23.976` or `60`, in place of a rate the stream stores. Required for a raw YUV file and for a raw stream that stores none, when the reference or a test video is one. These scores are not saved. |
 | `--size WIDTHxHEIGHT`, `--pix-fmt FORMAT` | The picture size and pixel format (as FFmpeg names it: `yuv420p`, `yuv420p10le`...) of a raw YUV file (below). Required with `--fps` for one. |
 | `--cvvdp-display PRESET` | The display CVVDP models, by preset name. Repeat it for a CVVDP score on each display. Left out: the app's default display, Automatic unless Settings name a preset: the HDR display (`30-inch 4K HDR monitor, dim room`, the official `standard_hdr_pq`) for an HDR reference (PQ or HLG), the SDR one (`30-inch 4K monitor, office`, `standard_4k`) otherwise. |
 | `--cvvdp-fill` | Scale the compared frames up to fill CVVDP's display, aspect kept, as the Options panel's **Scale the video to fill the display**. Left out: off, as the official tool (a 1080p video covers a quarter of a 4K display). These scores are saved apart. |
@@ -321,7 +321,7 @@ as it is, whatever its code page.
 The exit code is 0 when every video got every metric asked for that it can
 have (one it cannot, such as CVVDP with `--subsample`, is left out with a
 note, as in the app), 1 when a video failed or lost a metric, 2 for a wrong
-command (a raw stream without `--fps`, or a raw YUV file without `--size`,
+command (a raw stream that stores no frame rate without `--fps`, or a raw YUV file without `--size`,
 `--pix-fmt` and `--fps`, and `--difference` without two test videos, among them), when FFmpeg cannot be used or when
 there is no test video, and 130 after Ctrl+C.
 Ctrl+C stops the run as **Cancel** does; scores that had finished are saved.
@@ -333,10 +333,20 @@ Butteraugli run on the CPU. Text is English whatever the app's language.
 ### Raw video streams
 
 An encoder's output with no container (`.264`, `.265`, `.hevc`, `.266`,
-`.obu`, `.m2v`, `.m4v`, `.mjpeg`...) has no timestamps and records no frame
-rate, so the command line needs `--fps` for it. Its frames are counted when
-the run starts (the file is read once, not decoded) and timed at that rate,
-and FFmpeg decodes it. A raw stream scores exactly as the same stream in a
+`.obu`, `.m2v`, `.m4v`, `.mjpeg`...) has no timestamps, and may store no frame
+rate. The app reads the rate from the headers of H.264, HEVC, VVC, AV1,
+MPEG-1, MPEG-2, MPEG-4 Part 2, Dirac and AVS2 streams that store one. For any
+other, Media info says the frame rate is unknown and the app asks for it, as a
+number or a fraction such as 24000/1001, when the video is added and again at
+**Calculate metrics**; a rate in the headers is only what the encoder was told,
+so a stream can also store a wrong one, which the app then refuses as a mismatch
+with the reference. The Bitrate Viewer asks the same. Its scores are not kept in
+the saved scores, and Video Compare decodes it from its start to reach a frame,
+which takes a while far into a long stream. The command line reads the same
+rate from the same headers and needs `--fps` for any other raw stream; `--fps`
+also replaces a stored rate, for every raw stream of the command. Its frames are counted when the video is read (the file is read
+once, not decoded) and timed at that rate, and FFmpeg decodes it. A raw stream
+scores exactly as the same stream in a
 container: checked for H.264, HEVC, VVC, AV1 (OBU), EVC, MPEG-1, MPEG-2,
 MPEG-4 Part 2, H.263, H.261, MJPEG and Dirac. FFmpeg also reads raw AVS2,
 AVS3, CAVS, VC-1 and APV streams; these are not checked (FFmpeg's AVS2
@@ -352,8 +362,7 @@ through an H.264, HEVC, VVC, MPEG-1, MPEG-2, MJPEG or Dirac stream. Any other
 stream, or one that cannot be decoded from there (its only keyframe its
 first, or an H.264 or VVC stream with its parameter sets only at its start),
 is read from the start up to the last part sampled, which takes a while for
-a long stream (`--black-bars none` skips it). The app's window does not take
-raw streams.
+a long stream (`--black-bars none` skips it).
 
 A raw YUV file (`.yuv`) is pictures and nothing else: `--size`, `--pix-fmt`
 and `--fps` say what they are, for every `.yuv` file of the command. It is
@@ -366,12 +375,12 @@ has them, and `--colour` gives them otherwise.
 `bitrate VIDEO...` reads each video's video stream with ffprobe, as the
 **Bitrate Viewer** tab does, without decoding it, and prints a table of its
 length, frames, average bitrate and lowest and highest one-second bitrate.
-It needs only ffprobe. A raw stream needs `--fps`, as for `compare`; a raw
+It needs only ffprobe. A raw stream that stores no frame rate needs `--fps`, as for `compare`; a raw
 YUV file has no bitrate to read.
 
 | Option | Meaning |
 | --- | --- |
-| `--fps RATE` | A raw stream's frame rate, such as `24000/1001`. |
+| `--fps RATE` | A raw stream's frame rate, such as `24000/1001`, in place of a rate it stores. |
 | `--csv FOLDER` | Also write the tab's three graphs' figures as `<video>_bitrate_frames.csv` (each frame's time, size and whether it is a keyframe), `_bitrate_seconds.csv` (each second's kb/s) and `_bitrate_gops.csv` (each group of pictures' frames, bytes and kb/s). Times count from the stream's first frame, as the tab's **Adjust stream start time to zero** does. |
 | `--no-adjust-start` | With `--csv`: times from the file's start. |
 | `--difference` | With exactly two videos: the first's bitrate minus the second's as well, as the tab's **Difference** pairs them, from each stream's start. The table ends with the averages' difference (in Mb/s and %) and the mean, lowest and highest of the seconds both have (paired by number), the JSON gets a `difference` section, and with `--csv` it is written as `<first>_minus_<second>_bitrate_frames.csv` (each of the first's frames' size in bytes minus the second's frame of that number), `_bitrate_seconds.csv` and `_bitrate_gops.csv` (kb/s over time); a cell is empty where only one video has the frame or the time. |
@@ -379,8 +388,8 @@ YUV file has no bitrate to read.
 | `-q`, `--quiet` | No progress, only the results. |
 
 The exit code is 0 when every video was read, 1 when one could not be or a
-file could not be written, 2 for a wrong command (a raw stream without
-`--fps`) or when ffprobe cannot be used, and 130 after Ctrl+C.
+file could not be written, 2 for a wrong command (a raw stream that stores no
+frame rate, without `--fps`) or when ffprobe cannot be used, and 130 after Ctrl+C.
 
 ### BD-rate
 

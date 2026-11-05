@@ -53,8 +53,9 @@ void add_table(std::vector<std::string>& lines, const std::vector<std::vector<st
 // FFmpeg reads only when told their size, pixel format and frame rate.
 bool is_raw_yuv(const std::filesystem::path& path);
 
-// Why a raw stream (VideoInfo::is_raw_stream: a .266, .265, .264 or .obu file) cannot be read without --fps:
-// FFmpeg and ffprobe would read it at 25 frames a second. `which` names the video, from its first word.
+// Why a raw stream (VideoInfo::is_raw_stream: a .266, .265, .264 or .obu file) that stores no frame rate cannot be
+// read without --fps: FFmpeg and ffprobe would read it at 25 frames a second. `which` names the video, from its first
+// word.
 std::string raw_stream_needs_fps(const std::string& which, const VideoInfo& info);
 
 // What the reader of a CSV file of `label` written as `written` should know

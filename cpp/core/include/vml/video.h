@@ -89,10 +89,10 @@ struct VideoInfo {
     // How long after the file's start the video's first frame comes, in
     // seconds.
     double start_offset = 0.0;
-    // A raw stream or raw YUV file timed by the command line's --fps
-    // (ffprobe.h's timed_raw_stream, probe_raw_yuv): its frame rate is the
-    // one given, and its frame count, length and bitrate come from its
-    // counted frames.
+    // A raw stream or raw YUV file whose frame rate is known: found in its
+    // headers, entered in the window or given by the command line's --fps
+    // (ffprobe.h's raw_stream_as_found, timed_raw_stream, probe_raw_yuv). Its
+    // frame count, length and bitrate come from its counted frames.
     bool timed_raw = false;
     // The degrees its rotation tag says a player turns it by (0, 90, 180 or
     // 270). The app does not: width and height, and every picture, are as stored.
@@ -127,6 +127,16 @@ struct VideoInfo {
     std::pair<int, int> frame_size() const { return scaled_to.value_or(std::pair(width, height)); }
     // The frame count ffprobe reports, or else duration times fps.
     long long estimated_frame_count() const;
+    // Whether this is a raw stream whose frame rate nobody knows: its headers
+    // have none and none was entered. Its frames cannot be placed in time, so
+    // it cannot be compared until one is.
+    bool frame_rate_unknown() const { return is_raw_stream() && !timed_raw; }
+    // A raw stream's rate is now `frames_per_second` (above 0): its length
+    // and bitrate follow from its counted frames (nb_frames).
+    void set_frame_rate(double frames_per_second);
+    // A raw stream's rate is not known: FFmpeg's guess at 25 frames a second,
+    // and the length and bitrate worked out from it, are forgotten.
+    void forget_frame_rate();
     // A bare elementary stream (a .hevc or .264 file) or raw pictures (a
     // .yuv file), not a container: it has no timestamps, so its frame rate
     // cannot be known.

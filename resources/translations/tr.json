@@ -512,7 +512,6 @@
   "Reading video packets…": "Video paketleri okunuyor…",
   "Analyzing {name}…": "Analiz ediliyor: {name}…",
   "Could not analyze {name}: {error}": "Analiz edilemedi ({name}): {error}",
-  "A raw stream records no frame rate, so its bitrate cannot be worked out.": "Ham akış kare hızını kaydetmez, bu nedenle bit hızı hesaplanamaz.",
   "Bitrate analysis stopped. Completed results are kept.": "Bit hızı analizi durduruldu. Tamamlanan sonuçlar korunur.",
   "Bitrate analysis complete. Values contain the first video stream only.": "Bit hızı analizi tamamlandı. Değerler yalnızca ilk video akışını içerir.",
   "Stopping…": "Durduruluyor…",
@@ -575,7 +574,6 @@
   "Vship does not support the {primaries} color primaries.": "Vship renk birincillerini desteklemiyor: {primaries}.",
   "Vship does not support the {range} range tag.": "Vship aralık etiketini desteklemiyor: {range}.",
   "Vship does not support {siting} chroma siting.": "Vship renk konumlandırmasını desteklemiyor: {siting}.",
-  "{video} is a raw {codec} stream with no timestamps, so its frame rate is unknown. Put it in a container with its frame rate first, e.g. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix), with the video's own frame rate.": "{video}, zaman damgası olmayan ham bir {codec} akışıdır; bu yüzden kare hızı bilinmiyor. Önce kare hızıyla birlikte bir kapsayıcıya koyun, örn. mkvmerge -o video.mkv --default-duration 0:120fps <file> (MKVToolNix); videonun kendi kare hızıyla.",
   "Variable-frame-rate video is not supported safely yet. Convert both videos to the same constant frame rate before comparing them.": "Değişken kare hızlı video henüz güvenli biçimde desteklenmiyor. Karşılaştırmadan önce iki videoyu da aynı sabit kare hızına dönüştürün.",
   "Frame rates do not match ({source} vs {test} fps).": "Kare hızları eşleşmiyor ({source} / {test} fps).",
   "The two videos are different shapes after cropping: source {source} versus distorted {test}. Scoring them would stretch one to fit the other and the result would be meaningless. If one is letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.": "İki video kırpıldıktan sonra farklı şekillerde: kaynak {source}, test {test}. Puanlamak birini diğerine uydurmak için gerer ve sonuç anlamsız olur. Birinde letterbox varsa, bantların karşılaştırmadan önce kaldırılması için Siyah bantlar'ı \"Otomatik algıla\" yapın.",
@@ -860,7 +858,12 @@
   "Custom": "Özel",
   "Width:": "Genişlik:",
   "Height:": "Yükseklik:",
-  "With black bars cut, the height follows the picture without them.": "Siyah çubuklar kesildiğinde yükseklik, çubuklar olmadan görüntüyü izler."
+  "With black bars cut, the height follows the picture without them.": "Siyah çubuklar kesildiğinde yükseklik, çubuklar olmadan görüntüyü izler.",
+  "unknown frame rate": "bilinmeyen kare hızı",
+  "Enter the frame rate": "Kare hızını girin",
+  "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video}, kare hızını saklamayan ham bir video akışıdır. Sayı veya kesir olarak girin, örneğin 24 ya da 24000/1001:",
+  "The reference is {fps:.3f} fps.": "Referans {fps:.3f} fps.",
+  "The frame rate of {video} is not known.": "{video} kare hızı bilinmiyor."
  },
  "plurals": {
   "about {count} day": [
@@ -950,6 +953,10 @@
   "and {count} more": [
    "ve {count} tane daha",
    "ve {count} tane daha"
+  ],
+  "Use it for {count} other video without a frame rate": [
+   "Kare hızı olmayan {count} diğer video için de kullan",
+   "Kare hızı olmayan {count} diğer video için de kullan"
   ]
  }
 }
