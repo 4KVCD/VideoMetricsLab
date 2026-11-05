@@ -204,6 +204,8 @@ private:
         QString name;
         std::shared_ptr<const BitratePlot> plot;
         std::shared_ptr<const std::vector<std::uint8_t>> frame_types;
+        std::shared_ptr<const BitrateData> data;  // its frames' times, in the file's time
+        double start = 0;                         // the file's time at the graph's 0
     };
     std::vector<DrawnPlot> current_plots_;
     // The graph's values are divided by this and shown in this unit (see

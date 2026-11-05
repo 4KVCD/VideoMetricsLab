@@ -133,6 +133,19 @@ std::optional<std::size_t> nearest_point(const std::vector<double>& times, doubl
     return index;
 }
 
+// The frame on screen at `time`: the last to start by then, the first before
+// the video begins. `times` has at least one.
+std::size_t frame_on_screen(const std::vector<double>& times, double time) {
+    const auto after = std::upper_bound(times.begin(), times.end(), time);
+    return after == times.begin() ? 0 : static_cast<std::size_t>(after - times.begin()) - 1;
+}
+
+// The readout's frame: one number while the lines agree, else each line's in
+// their order, as videos differ in frame rate and start. `frames` has at least one.
+QString frames_text(const QStringList& frames) {
+    return frames.count(frames.front()) == frames.size() ? frames.front() : frames.join(QStringLiteral(", "));
+}
+
 }  // namespace
 
 // ------------------------------------------------------------------ the worker
@@ -871,7 +884,8 @@ void BitratePanel::refresh_plot() {
             series.mark_colors = frame_type_colors();
         }
         chart->set_series(entry->series, std::move(series));
-        current_plots_.push_back({name_of(entry->path), plot, line->frame_types});
+        const double start = adjust_start_checkbox->isChecked() ? entry->data->start_time() : 0;
+        current_plots_.push_back({name_of(entry->path), plot, line->frame_types, entry->data, start});
     }
     refresh_difference();
     on_hover_left();
@@ -892,15 +906,15 @@ void BitratePanel::refresh_difference() {
                             "graph with its own scale."));
     difference_.reset();
     if (possible && difference_box->isChecked()) {
-        const auto& [first_name, first, first_types] = current_plots_[0];
-        const auto& [second_name, second, second_types] = current_plots_[1];
-        auto plot = std::make_shared<BitratePlot>(frames ? frame_difference_plot(*first, *second)
-                                                         : step_difference_plot(*first, *second));
+        const DrawnPlot& first = current_plots_[0];
+        const DrawnPlot& second = current_plots_[1];
+        auto plot = std::make_shared<BitratePlot>(frames ? frame_difference_plot(*first.plot, *second.plot)
+                                                         : step_difference_plot(*first.plot, *second.plot));
         for (float& value : plot->values) {
             value /= static_cast<float>(value_scale_);  // in the lines' unit
         }
         difference_ = plot;
-        difference_label_ = QStringLiteral("%1 − %2").arg(first_name, second_name);
+        difference_label_ = QStringLiteral("%1 − %2").arg(first.name, second.name);
         // Flat: +- the readout's last decimal (on_hovered)
         chart->set_band(ChartBand{{std::span(plot->times), std::span(plot->values), plot, QColor(), true},
                                   difference_label_, value_scale_ > 1 ? 0.001 : 0.01});
@@ -915,11 +929,16 @@ void BitratePanel::refresh_difference() {
 }
 
 void BitratePanel::on_hovered(double time) {
-    // Each line's value at the time under the pointer, then their difference.
+    // The time and frame under the pointer, each line's value, then their difference.
     chart->set_cursor_time(time);
-    QStringList lines{app::tr("Time: {time}", {{"time", qt_text(format_hms(time, 3))}})};
-    for (const auto& [name, plot, frame_types] : current_plots_) {
+    QStringList lines;
+    QStringList frames;
+    const bool frame_graph = view_name() == "frame";
+    for (const auto& [name, plot, frame_types, packets, start] : current_plots_) {
         if (const auto index = nearest_point(plot->times, time)) {
+            // The frame graph's points are its frames: the one whose value is shown.
+            const std::size_t frame = frame_graph ? *index : frame_on_screen(packets->times, time + start);
+            frames.append(python_format("{frame:,}", {{"frame", static_cast<long long>(frame)}}));
             QString line = python_format("{name}: {value:,.2f} {unit}",
                                          {{"name", name},
                                           {"value", static_cast<double>(plot->values[*index]) / value_scale_},
@@ -930,6 +949,11 @@ void BitratePanel::on_hovered(double time) {
             lines.append(line);
         }
     }
+    QString heading = app::tr("Time: {time}", {{"time", qt_text(format_hms(time, 3))}});
+    if (!frames.isEmpty()) {
+        heading += QStringLiteral("   ") + app::tr("Frame {frame}", {{"frame", frames_text(frames)}});
+    }
+    lines.prepend(heading);
     if (difference_) {
         const auto index = nearest_point(difference_->times, time);
         if (index && std::isfinite(difference_->values[*index])) {

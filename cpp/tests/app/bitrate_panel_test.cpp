@@ -126,11 +126,11 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
     panel->frame_radio->click();
     EXPECT_EQ(panel->chart->y_axis_label().toStdString(), "Frame size (kbit)");
     hover(*panel, 0.6);  // nearest the frame at 0.5 s (4 kbit), not the next at 1 s
-    EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:00.600\nencode.mkv: 4.00 kbit");
+    EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:00.600   Frame 1\nencode.mkv: 4.00 kbit");
     panel->gop_radio->click();
     EXPECT_EQ(panel->chart->y_axis_label().toStdString(), "GOP bitrate (kb/s)");
     hover(*panel, 1.2);
-    EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:01.200\nencode.mkv: 20.00 kb/s");
+    EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:01.200   Frame 2\nencode.mkv: 20.00 kb/s");
 
     const std::filesystem::path png = folder / "plot.png";
     panel->dialogs.save_file = [&png](const QString&, const QString&, const QString&) {
@@ -142,6 +142,39 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
     panel->table->item(0, col_use)->setCheckState(Qt::Unchecked);
     EXPECT_FALSE(panel->chart->has_data());
     EXPECT_FALSE(panel->export_button->isEnabled());
+}
+
+// Beside the time, each line's frame in their order, as videos differ in frame
+// rate and start: on the frame graph the point whose value is shown, on a
+// stepped graph the frame on screen, from the file's start or its first frame.
+TEST_F(BitratePanelTest, TheFramesUnderThePointerAreBesideTheTime) {
+    VideoColors colors;
+    const auto panel = make_panel(colors);
+    const test::Folder folder;
+    const std::filesystem::path first = folder / "first.mkv";
+    const std::filesystem::path late = folder / "late.mkv";  // 4 frames a second, from 10 s
+    panel->add_files({first, late});
+    analyzed(*panel, first, two_seconds(first));
+    analyzed(*panel, late,
+             std::make_shared<const BitrateData>(bitrate_data(late, {10.0, 10.25, 10.5, 10.75}, {0.25, 0.25, 0.25, 0.25},
+                                                              {500, 500, 500, 500}, {true, false, true, false})));
+
+    hover(*panel, 0.9);
+    EXPECT_EQ(panel->hover_label->text().toStdString(),
+              "Time: 0:00:00.900   Frame 1, 3\nfirst.mkv: 12.00 kb/s\nlate.mkv: 16.00 kb/s");
+    panel->frame_radio->click();
+    hover(*panel, 0.9);  // nearer the frames at 1 s and 0.75 s
+    EXPECT_EQ(panel->hover_label->text().toStdString(),
+              "Time: 0:00:00.900   Frame 2, 3\nfirst.mkv: 16.00 kbit\nlate.mkv: 4.00 kbit");
+
+    panel->adjust_start_checkbox->setChecked(false);
+    hover(*panel, 10.3);  // past the first video's end: its last frame, as its last value
+    EXPECT_EQ(panel->hover_label->text().toStdString(),
+              "Time: 0:00:10.300   Frame 3, 1\nfirst.mkv: 4.00 kbit\nlate.mkv: 4.00 kbit");
+    panel->second_radio->click();
+    hover(*panel, 10.6);
+    EXPECT_EQ(panel->hover_label->text().toStdString(),
+              "Time: 0:00:10.600   Frame 3, 2\nfirst.mkv: 20.00 kb/s\nlate.mkv: 16.00 kb/s");
 }
 
 // A frame's type shows under the pointer in the frame graph; its colours only
@@ -158,15 +191,15 @@ TEST_F(BitratePanelTest, FrameTypesInTheFrameGraph) {
     QCheckBox* const box = frame_types_box(*panel);
     EXPECT_FALSE(box->isEnabled());
     hover(*panel, 0.6);
-    EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:00.600\nencode.mkv: 12.00 kb/s");
+    EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:00.600   Frame 1\nencode.mkv: 12.00 kb/s");
 
     panel->frame_radio->click();
     EXPECT_TRUE(box->isEnabled());
     EXPECT_EQ(marks_drawn(*panel, 0), 0u);
     hover(*panel, 0.6);
-    EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:00.600\nencode.mkv: 4.00 kbit (B)");
+    EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:00.600   Frame 1\nencode.mkv: 4.00 kbit (B)");
     hover(*panel, 1.6);  // a type not known adds nothing
-    EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:01.600\nencode.mkv: 4.00 kbit");
+    EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:01.600   Frame 3\nencode.mkv: 4.00 kbit");
 
     box->click();
     EXPECT_EQ(marks_drawn(*panel, 0), 4u);
@@ -302,7 +335,7 @@ TEST_F(BitratePanelTest, DrawsTheDifferenceOfTwoLines) {
     EXPECT_EQ(band_label(*panel).toStdString(), "first.mkv − second.mkv");
     hover(*panel, 1.2);
     EXPECT_EQ(panel->hover_label->text().toStdString(),
-              "Time: 0:00:01.200\nfirst.mkv: 20.00 kb/s\nsecond.mkv: 8.00 kb/s\n"
+              "Time: 0:00:01.200   Frame 2\nfirst.mkv: 20.00 kb/s\nsecond.mkv: 8.00 kb/s\n"
               "Δ (first.mkv − second.mkv) = 12.00 kb/s");
     panel->frame_radio->click();
     EXPECT_EQ(band_values(*panel), (std::vector<float>{4, 0, 12, 0}));
