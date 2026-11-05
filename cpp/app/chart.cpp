@@ -22,6 +22,7 @@
 #include <span>
 #include <vector>
 
+#include "screen_frame_clock.h"
 #include "theme.h"
 #include "window_helpers.h"
 #include "vml/number_format.h"
@@ -143,6 +144,13 @@ void draw_columns(QPainter& painter, std::span<const double> times, std::span<co
     end_column();
     painter.drawLines(lines.data(), static_cast<int>(lines.size()));
 }
+
+// How long the pointer waits for a frame of the screen that was asked for, in frames, should none come.
+constexpr int frames_without_a_frame = 3;
+// How long before a frame of the screen the pointer is reported. Measured at
+// 120 Hz on a busy PC: 97-100% of the frames got one report at 4 ms, against
+// 95-99% at 3 ms and 75-99% at 2 ms; the report takes about 0.8 ms.
+constexpr int hover_lead_ms = 4;
 
 }  // namespace
 
@@ -860,24 +868,59 @@ void ChartWidget::mouseMoveEvent(QMouseEvent* event) {
         emit left();
         return;
     }
-    if (hover_pace_->isActive()) {
-        pending_hover_ = pos;  // reported when this frame's time is up
+    if (waiting_for_hover_frame()) {
+        pending_hover_ = pos;  // reported at this frame's time
         return;
     }
     report_hover(pos);
+    ask_for_hover_frame();
 }
 
-void ChartWidget::report_hover(QPoint pos) {
-    // Says the time and value at `pos`, then waits a frame of the screen
-    // before saying the next. A mouse reports far more moves than a screen
-    // shows: each would repaint the readout, 500 times a second while the
-    // pointer sweeps the chart, keeping a core busy, and the moves between
-    // two frames are never seen.
-    emit hovered(time_at(pos.x()), value_at(pos.y()));
-    hover_pace_->start(frame_ms());
+void ChartWidget::report_hover(QPoint pos) { emit hovered(time_at(pos.x()), value_at(pos.y())); }
+
+bool ChartWidget::waiting_for_hover_frame() const {
+    return hover_frame_asked_ && hover_frame_asked_at_.elapsed() < frames_without_a_frame * frame_ms();
+}
+
+void ChartWidget::ask_for_hover_frame() {
+    // A mouse reports far more moves than a screen shows: each would repaint
+    // the readout, 500 times a second while the pointer sweeps the chart,
+    // keeping a core busy. So the pointer is reported once a frame of the
+    // screen. A timer cannot keep to that: it drifts against the frames, and a
+    // whole frame's wait (8.8 ms against a 120 Hz screen's 8.33) left 6-9% of
+    // them without a new position.
+    ScreenFrameClock& clock = ScreenFrameClock::instance();
+    const unsigned request = ++hover_frame_request_;
+    hover_frame_asked_ = true;
+    hover_frame_asked_at_.start();
+    connect(
+        &clock, &ScreenFrameClock::frame_started, this,
+        [this, request] {
+            if (request == hover_frame_request_) {  // not one asked for before the pointer left
+                on_hover_frame();
+            }
+        },
+        Qt::SingleShotConnection);
+    clock.request_frame(window()->windowHandle());
+}
+
+void ChartWidget::on_hover_frame() {
+    hover_frame_asked_ = false;
+    if (!pending_hover_) {
+        return;  // the pointer has stopped: its next move is reported at once
+    }
+    // The next frame is asked for now: asked for after the report, close to the
+    // frame's end, it can come a frame late (61-96% of a 120 Hz screen's frames
+    // got a report).
+    ask_for_hover_frame();
+    // The report is made shortly before the next frame, so that the frame shows
+    // the pointer's newest position: made now, it would be nearly a frame old.
+    hover_pace_->start(std::max(0, frame_ms() - hover_lead_ms));
 }
 
 void ChartWidget::forget_hover() {
+    ++hover_frame_request_;
+    hover_frame_asked_ = false;
     hover_pace_->stop();
     pending_hover_.reset();
 }

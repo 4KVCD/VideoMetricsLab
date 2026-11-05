@@ -10,6 +10,7 @@
 #pragma once
 
 #include <QColor>
+#include <QElapsedTimer>
 #include <QPixmap>
 #include <QPoint>
 #include <QRect>
@@ -182,6 +183,9 @@ private:
     void draw_series(QPainter& painter, const QRect& rect, const ChartSeries& series,
                      std::pair<double, double> range) const;
     void report_hover(QPoint pos);
+    bool waiting_for_hover_frame() const;
+    void ask_for_hover_frame();
+    void on_hover_frame();
     void forget_hover();
     void request_paint();
     int frame_ms() const;
@@ -205,10 +209,13 @@ private:
     // drawing is shown stretched, and drawn again once the size settles.
     // Drawn at every size, a dozen two-hour lines took 54 ms a step.
     QTimer* resize_settle_ = nullptr;
-    // The pointer is reported at most once per frame of the screen
-    // (report_hover): the last move since, when the frame's time is up.
+    // The pointer is reported once per frame of the screen (ask_for_hover_frame):
+    // the last move since, when this timer, started as the frame starts, is up.
     QTimer* hover_pace_ = nullptr;
     std::optional<QPoint> pending_hover_;
+    bool hover_frame_asked_ = false;
+    QElapsedTimer hover_frame_asked_at_;
+    unsigned hover_frame_request_ = 0;  // the frame asked for last, of those still to come
     // The chart is drawn again at most once per frame too (request_paint).
     QTimer* paint_pace_ = nullptr;
     bool paint_due_ = false;

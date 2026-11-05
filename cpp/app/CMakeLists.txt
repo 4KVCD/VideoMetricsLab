@@ -41,6 +41,7 @@ add_library(vml_app STATIC
     results_export.cpp
     row_state.cpp
     run_worker.cpp
+    screen_frame_clock.cpp
     self_test.cpp
     series_colors.cpp
     settings_panel.cpp
@@ -60,6 +61,10 @@ if(APPLE)
     target_link_libraries(vml_app PUBLIC "-framework AppKit")
 else()
     target_sources(vml_app PRIVATE display_hdr.cpp)
+endif()
+
+if(WIN32)
+    target_link_libraries(vml_app PUBLIC dwmapi)  # DwmFlush (screen_frame_clock.cpp)
 endif()
 
 if(WIN32 AND MSVC)
