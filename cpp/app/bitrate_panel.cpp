@@ -240,9 +240,9 @@ void BitratePanel::add_table(QVBoxLayout* root) {
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     table->setSelectionMode(QAbstractItemView::ExtendedSelection);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    table->setAlternatingRowColors(true);
     table->verticalHeader()->setVisible(false);
     QHeaderView* header = table->horizontalHeader();
+    header->setHighlightSections(false);  // a selected row would turn every heading bold
     header->setSectionResizeMode(col_file, QHeaderView::Stretch);
     for (int column = 0; column < table->columnCount(); ++column) {
         if (column != col_file) {

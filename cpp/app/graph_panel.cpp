@@ -990,6 +990,8 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     connect(stats_table_, &QTableWidget::cellClicked, this,
             [this](int row, int column) { on_stats_cell_clicked(row, column); });
     stats_table_->horizontalHeader()->setSectionsClickable(true);
+    // A clicked cell would turn its heading bold; only the chosen metric's is.
+    stats_table_->horizontalHeader()->setHighlightSections(false);
     connect(stats_table_->horizontalHeader(), &QHeaderView::sectionClicked, this,
             [this](int column) { on_stats_header_clicked(column); });
     stats_table_->setContextMenuPolicy(Qt::CustomContextMenu);

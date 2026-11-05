@@ -254,6 +254,7 @@ void BdRatePanel::add_results(QVBoxLayout* root) {
     results->setSelectionBehavior(QAbstractItemView::SelectRows);
     results->setSelectionMode(QAbstractItemView::SingleSelection);
     results->verticalHeader()->setVisible(false);
+    results->horizontalHeader()->setHighlightSections(false);  // a selected row would turn every heading bold
     results->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     for (int column = 1; column < results->columnCount(); ++column) {
         results->horizontalHeader()->setSectionResizeMode(column, QHeaderView::ResizeToContents);
