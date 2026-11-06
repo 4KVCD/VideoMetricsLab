@@ -20,7 +20,7 @@
   "name": "VideoMetricsLab",
   "applicationCategory": "MultimediaApplication",
   "operatingSystem": "Windows 10, Windows 11, macOS 14.4",
-  "softwareVersion": "2.3",
+  "softwareVersion": "2.4",
   "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
   "license": "https://opensource.org/licenses/MIT",
   "url": "https://4kvcd.github.io/VideoMetricsLab/",
@@ -84,9 +84,9 @@ before it ships.</p>
 libvmaf, installed separately. Free and open source, under the MIT licence.</p>
 
 <section class="news">
-<h2>New in v2.3</h2>
-<p>v2.3 adds VVC film grain support, adds AV2 decoding, improves VVC scoring speed up to <strong>2x</strong>, AMD GPU speed <strong>1.3x-2x</strong>, and adds back Vship as an option. Various bug fixes including wrong scoring for H.264 lossless, MPEG-2, and MPEG-4 Part 2 on certain GPUs. See the
-<a href="https://github.com/4KVCD/VideoMetricsLab/releases/tag/v2.3">release notes</a>.</p>
+<h2>New in v2.4</h2>
+<p>v2.4 adds an experimental GPU VVC decoder, BD-rate calculation, instant metric scores for any time range for a video that's already been scored, a difference graph for 2 videos' scores and bitrate and improves resolution test speed up to <strong>27x</strong>, along with various bug fixes. See the
+<a href="https://github.com/4KVCD/VideoMetricsLab/releases/tag/v2.4">release notes</a>.</p>
 </section>
 
 <h2>Features</h2>
@@ -111,17 +111,20 @@ libvmaf, installed separately. Free and open source, under the MIT licence.</p>
 <li>Frame-exact playback that switches instantly between the source and each encode (hold <strong>S</strong>), with zoom, at up to 120 fps in 4K HDR, with film grain shown as it is scored.</li>
 <li>Metric curves, statistics and per-frame scores (per second for ColorVideo VDP), with each metric's best and worst results highlighted.</li>
 <li>Bitrate by frame, second or GOP.</li>
+<li>A difference graph for 2 videos' scores and bitrate.</li>
+<li>BD-rate calculation: how much bitrate one encoder saves over another at the same quality.</li>
 </ul>
 
 <h3>Workflow</h3>
 <ul>
 <li>Black bars and resolution mismatches handled automatically.</li>
 <li>Results saved and reloaded automatically; a metric added later is the only one calculated.</li>
+<li>Metric scores for any time range of a video, instantly if the video has already been scored.</li>
 <li>Scores and statistics exported as CSV or JSON.</li>
 <li>Drag and drop videos, sort and reorder the list, and a dark theme.</li>
 <li>A command line, <code>VideoMetricsLab-cli</code>, for scripts, which also reads raw video streams and .yuv files.</li>
 <li>Two test videos calculated in parallel on many-core CPUs.</li>
-<li>A native C++ app: a 34 MB download on Windows.</li>
+<li>A native C++ app: a 48 MB download on Windows.</li>
 </ul>
 
 <h2>Screenshots</h2>
@@ -140,6 +143,10 @@ libvmaf, installed separately. Free and open source, under the MIT licence.</p>
 <figure>
 <img src="img/04-bitrate-viewer.png" width="3500" height="2013" loading="lazy" alt="Bitrate Viewer showing two test encodes' bitrate by frame">
 <figcaption>Bitrate Viewer: bitrate by frame, second or GOP, without calculating any metric.</figcaption>
+</figure>
+<figure>
+<img src="img/05-bd-rate.png" width="3500" height="2013" loading="lazy" alt="BD-rate tab with x265 against x264 on four test clips, and one clip's rate curves">
+<figcaption>BD-rate: how much bitrate one encoder saves over another at the same quality, for every metric.</figcaption>
 </figure>
 
 <footer>
