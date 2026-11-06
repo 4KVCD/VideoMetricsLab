@@ -283,19 +283,20 @@ QGroupBox* SettingsPanel::build_gpu_box() {
 }
 
 QHBoxLayout* SettingsPanel::build_vvc_decoder_row() {
-    // The entries' data: Settings' vvc_decode_on_gpu. GPU and CPU stay as they are in every language.
+    // The entries' data: Settings' vvc_decode_on_gpu. CPU stays as it is in every language.
     auto* row = new QHBoxLayout;
     row->addWidget(new QLabel(app::tr("VVC decoder:")));
     vvc_decoder = new QComboBox;
     vvc_decoder->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    vvc_decoder->addItem(QStringLiteral("GPU"), true);
+    vvc_decoder->addItem(app::tr("GPU (experimental)"), true);
     vvc_decoder->addItem(QStringLiteral("CPU"), false);
     vvc_decoder->setCurrentIndex(settings_.vvc_decode_on_gpu ? 0 : 1);
     vvc_decoder->setToolTip(app::tr(
-        "How a VVC video is decoded for every metric: GPU decodes it on the GPU, which frees the CPU but can be slower "
-        "than a fast CPU; CPU decodes it with VVdeC. The CPU decodes it anyway for a video that is scaled or has film "
-        "grain added, with CUDA VMAF, with GPU decoding off, for black-bar detection, in Video Compare, and where the "
-        "GPU's decoder cannot start.\n\nThe scores are the same either way. Applies from the next run."));
+        "How a VVC video is decoded for every metric: GPU (experimental) decodes it on the GPU, which frees the CPU "
+        "but can be slower than a fast CPU; CPU decodes it with VVdeC. The CPU decodes it anyway for a video that is "
+        "scaled or has AFGS1 film grain added, with CUDA VMAF, with GPU decoding off, for black-bar detection, in "
+        "Video Compare, and where the GPU's decoder cannot start.\n\nThe scores are the same either way. Applies from "
+        "the next run."));
     connect(vvc_decoder, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
     row->addWidget(vvc_decoder);
     row->addStretch(1);

@@ -222,10 +222,10 @@ options:
                         AMD), or that maker's, which this PC must have; a Mac
                         uses its own (default: the app's)
   --vvc-decoder {gpu,cpu}
-                        decode a VVC video on the GPU (vvdec-vulkan), else on
-                        the CPU (VVdeC); the scores are the same, and
-                        --no-gpu-decode decodes it on the CPU too (default: the
-                        app's)
+                        decode a VVC video on the GPU (vvdec-vulkan,
+                        experimental), else on the CPU (VVdeC); the scores are
+                        the same, and --no-gpu-decode decodes it on the CPU too
+                        (default: the app's)
   --parallel N          videos calculated at once on the CPU, 1-2 (default:
                         the app's)
   --recalculate         calculate every metric again instead of using saved

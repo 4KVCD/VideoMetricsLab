@@ -71,8 +71,9 @@ never uses the app's own Vship: where stock Vship fails, SSIMULACRA2 and
 Butteraugli are calculated on the CPU, and CVVDP is not.
 
 Settings > GPU metrics > VVC decoder chooses how a VVC video is decoded for
-every metric (Windows). CPU, the default, decodes it with VVdeC; GPU decodes
-it on the GPU, which frees the CPU but can be slower than a fast CPU. The
+every metric (Windows). CPU, the default, decodes it with VVdeC; GPU, which is
+experimental, decodes it on the GPU, which frees the CPU but can be slower than
+a fast CPU. The
 scores are the same, film grain too: the GPU adds H.274's grain as VVdeC
 does. The CPU decodes it anyway for a scaled video or one with AFGS1 grain
 added, with CUDA VMAF, with GPU decoding off, and for black-bar
@@ -291,7 +292,7 @@ $run.videos[0].metrics.vmaf.score
 | `--vship-pass one\|each` | SSIMULACRA2, Butteraugli and CVVDP in one pass per video, which decodes it once (faster only on a very powerful GPU, and needs much GPU memory), or a pass for each. The scores are the same. Left out: as Settings > GPU metrics sets it. |
 | `--no-gpu-decode` | Decode the videos on the CPU, VVC too. |
 | `--gpu-decode auto\|nvidia\|intel\|amd` | Decode the videos on the GPU, as the Options panel's **GPU decode**: `auto`, the first GPU whose decoder takes each video (NVIDIA, Intel, then AMD), or that maker's, which the PC must have. A Mac uses its own. Left out: on or off as the app's Options panel was last set, the maker automatic. |
-| `--vvc-decoder gpu\|cpu` | Decode a VVC video on the GPU (vvdec-vulkan) or on the CPU (VVdeC). The scores are the same. Left out: as Settings > GPU metrics sets it (the CPU unless changed). |
+| `--vvc-decoder gpu\|cpu` | Decode a VVC video on the GPU (vvdec-vulkan, experimental) or on the CPU (VVdeC). The scores are the same. Left out: as Settings > GPU metrics sets it (the CPU unless changed). |
 | `--threads N` | libvmaf threads. Left out: automatic. |
 | `--parallel 1\|2` | Videos calculated at once on the CPU. |
 | `--recalculate` | Ignore saved scores. |
