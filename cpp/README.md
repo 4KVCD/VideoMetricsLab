@@ -26,7 +26,7 @@ exactly. The Python app is no longer run: the files are fixed data, and a
 change that means to give another answer edits them, in the same commit.
 
 On real videos, `tests/golden/golden.py` holds the command line to an
-earlier run of it: it runs the cases in `cases.json` (80 runs covering the
+earlier run of it: it runs the cases in `cases.json` (70 covering the
 ways the app scores videos) with a `vml-cli`, each with a fresh profile
 (and the case's own settings, where it has any; some cases save scores in
 it first), and compares the exit codes, the tables, the per-frame CSV files

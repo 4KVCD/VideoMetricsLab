@@ -2,7 +2,7 @@
 
 Calculate VMAF, VMAF NEG, VMAF v1, SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD, Intel and Apple GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly to easily spot differences.
 
-VideoMetricsLab v2.3 adds VVC film grain support, adds AV2 decoding, improves VVC scoring speed up to 2x, AMD GPU speed 1.3x-2x, and adds back Vship as an option. Mac OS is now feature parity with Windows. Various bug fixes including wrong scoring for H.264 lossless, MPEG-2, and MPEG-4 Part 2 on certain GPUs. See the [changelog](CHANGELOG.md).
+VideoMetricsLab v2.4 adds an experimental GPU VVC decoder, BD-rate calculation, instant metric scores for any time range for a video that's already been scored, a difference graph for 2 videos' scores and bitrate and improves resolution test speed up to 27x, along with various bug fixes. See the [changelog](CHANGELOG.md).
 
 ## Features
 
@@ -21,15 +21,18 @@ VideoMetricsLab v2.3 adds VVC film grain support, adds AV2 decoding, improves VV
 - Frame-exact playback that switches instantly between the source and each encode (hold **S**), with zoom, at up to 120 fps in 4K HDR, with film grain shown as it is scored.
 - Metric curves, statistics and per-frame scores (per second for ColorVideo VDP), with each metric's best and worst results highlighted.
 - Bitrate by frame, second or GOP.
+- A difference graph for 2 videos' scores and bitrate.
+- BD-rate calculation: how much bitrate one encoder saves over another at the same quality.
 
 **Workflow**
 - Black bars and resolution mismatches handled automatically.
 - Results saved and reloaded automatically; a metric added later is the only one calculated.
+- Metric scores for any time range of a video, instantly if the video has already been scored.
 - Scores and statistics exported as CSV or JSON.
 - Drag and drop videos, sort and reorder the list, and a dark theme.
 - A command line, `VideoMetricsLab-cli`, for scripts, which also reads raw video streams and .yuv files.
 - Two test videos calculated in parallel on many-core CPUs.
-- A native C++ app: a 34 MB download on Windows.
+- A native C++ app: a 48 MB download on Windows.
 
 ## Videos
 
@@ -57,6 +60,13 @@ seek to an exact frame for close inspection.
 Analyze video-only bitrate independently by frame, second, or GOP.
 
 ![Bitrate Viewer results for two test encodes](docs/screenshots/04-bitrate-viewer.png)
+
+## BD-rate
+
+See how much bitrate one encoder saves over another at the same quality, for every metric, from videos you
+have scored or a CSV file.
+
+![BD-rate tab with x265 against x264 on four test clips, and one clip's rate curves](docs/screenshots/05-bd-rate.png)
 
 ## Quick start
 

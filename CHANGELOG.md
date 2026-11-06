@@ -1,5 +1,100 @@
 # Changelog
 
+## v2.4
+
+v2.4 adds an experimental GPU VVC decoder, BD-rate calculation, instant metric scores for any time range for a video
+that's already been scored, a difference graph for 2 videos' scores and bitrate and improves resolution test speed up to
+**27x**, along with various bug fixes.
+
+### New features
+
+- BD-rate calculation, showing how much bitrate one encoder saves over another at the same quality: a new tab, and the
+  command line's `bdrate`.
+- Metric scores for any time range of a video, instantly if the video has already been scored (Options, `--range`).
+- Better black bar detection, which finds bars the way HandBrake does (#9).
+- "Source only" black bars, for an encode that was cropped when it was made: bars are cut from the source only
+  (Options, `--black-bars source`).
+- Resolution tests, which score the source scaled down and back up, can now use a custom size, their own scaling
+  algorithm, and SSIMULACRA2, Butteraugli and ColorVideo VDP.
+- Experimental VVC decoding on the GPU, off by default (Settings, `--vvc-decoder`).
+- Stock Vship can again run on HIP (AMD) or CUDA (NVIDIA), for a GPU whose Vulkan driver has problems (#10).
+- A difference graph for 2 videos' scores and bitrate, in Metric Graphs and Bitrate Viewer (`--difference`).
+- Bitrate Viewer can mark each frame as I, P or B, shows the type when you hover over a frame (#11), and gives the frame
+  number under the pointer.
+- Raw video files, such as .266: the frame rate is read from the stream, or the app asks for it if the stream stores
+  none.
+- Saved scores and exported results say which build of the app made them.
+- Command line: `bitrate` reads a video's bitrate without a comparison, and `--fps` gives a raw video's frame rate.
+  Removed `--frames`; use `--range`. `--duration` now takes whole seconds.
+
+### Metric performance
+
+- Resolution tests up to **27x** faster.
+- PSNR, SSIM and XPSNR **1.2x-1.5x** faster when calculated with VMAF on the GPU, as the videos are no longer decoded a
+  second time for them.
+- VMAF on Macs **2x** faster.
+- Decoding 4K VVC with AFGS1 film grain **1.1x** faster.
+
+### System performance
+
+- The line that follows the pointer on Metric Graphs now moves at the screen's full refresh rate.
+
+### Bug fixes
+
+Wrong scores:
+
+- Fixed wrong XPSNR for some videos above 8 bits, such as cropped 10-bit films (16.8 dB for identical pictures).
+- Fixed changing a video's scaling algorithm, such as to Lanczos, keeping the scores saved with bicubic.
+- Fixed wrong scores in the window for an HLG source against an encode with no color tags: the encode was read as PQ.
+- Fixed wrong scores for AV1 videos whose pictures are smaller than their header says, such as SVT-AV1 resize encodes.
+- Fixed videos with a rotation tag scoring differently depending on how they were decoded. A source and encode stored
+  at different rotations now give an error instead of a meaningless score.
+- Fixed wrong scores for videos whose color tags change partway through.
+- Fixed partial scores being saved as the whole video's after loading a run that had a duration limit.
+- Fixed a resolution test of a video cut short saying all its frames were compared, and saving its partial scores.
+- Fixed Save results during a run saving unfinished scores that later loaded as complete.
+- Fixed raw video files being scored at FFmpeg's guess of 25 fps, which changes ColorVideo VDP and XPSNR.
+- Fixed videos above 8 bits in the p210, y210, p410 and rgb48 formats being compared at 8 bits.
+- Fixed full-range (yuvj) videos whose range reads "unknown" being scored as limited range by SSIMULACRA2, Butteraugli
+  and ColorVideo VDP.
+- Fixed XPSNR's average covering only part of the video, with no warning, when XPSNR stopped early.
+- Fixed `--film-grain without` scoring a video with its grain, and saying it had none, when the scan for grain failed.
+- Fixed a number in a warning from the CPU SSIMULACRA2 or Butteraugli tool being taken as the score.
+- Fixed a duration limit scoring one frame more than asked, with a wrong VMAF on that frame, which moved the average
+  slightly (`--duration`).
+- Fixed a raw .yuv file read again at another `--size` using the black bars found at the first size.
+- Fixed Windows' H.264 decoder on AMD GPUs cutting or padding a first picture of a different size than the video.
+- Fixed `--csv` run a second time writing a new file name without saying so, leaving scripts reading the old scores.
+
+Crashes and lost scores:
+
+- Fixed a failure in XPSNR losing the finished PSNR and SSIM scores, and a failure in a CPU metric losing the finished
+  GPU VMAF score.
+- Fixed one video a GPU decoder cannot take, such as an interlaced one, moving every later video in the list to the CPU.
+- Fixed `--json` overwriting a video when given that video's name.
+- Fixed a full disk or crash leaving a cut-off results or CSV file under its real name.
+- Fixed crashes when decoding, opening in Video Compare, or reading the details of grayscale (4:0:0) VVC videos with
+  AFGS1 film grain.
+- Fixed a video that changes picture size partway through failing when compared against itself.
+- Fixed a custom VMAF model with a bracket in its file name failing every run.
+
+Window and command line:
+
+- Fixed a value still being typed when a run started being applied during the run, throwing away finished scores.
+- Fixed Video Compare's picture freezing after a seek across a frame the GPU decoder cannot decode.
+- Fixed Video Compare showing one frame under another frame's label after going to still frames and back, and every
+  still of a raw video file being its first frame.
+- Fixed Video Compare's playback through FFmpeg often not stopping at the end of the video.
+- Fixed Metric Graphs' lines changing shape slightly while dragged, dragging moving the data out of view, and a zoom
+  showing nothing after its line was removed.
+- Fixed Bitrate Viewer keeping the old graph for a video encoded again under the same name, resetting the zoom when a
+  video was ticked on or off, and showing a raw video file's bitrate from a guessed frame rate.
+- Fixed command-line faults: file patterns with accented letters or under a folder with brackets in its name finding
+  nothing, `--fps 1e9` being accepted, an `ffmpeg.exe` in the current folder being used before the one on PATH, and
+  ColorVideo VDP being left out without an error when it could not run.
+- Fixed Bitrate Viewer's selected row being drawn in a solid color, and column titles in Bitrate Viewer and Metric Graphs
+  turning bold when something was selected.
+
 ## v2.3
 
 v2.3 adds VVC film grain support, adds AV2 decoding, improves VVC scoring speed up to **2x**, AMD GPU speed
