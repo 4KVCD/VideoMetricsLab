@@ -174,7 +174,7 @@ void BitrateWorker::run() {
             }
             // Its seconds and rates cannot be worked out until someone says its rate.
             if (info.frame_rate_unknown()) {
-                emit frame_rate_wanted({name, info});
+                emit frame_rate_wanted({name, info, nullptr, nullptr, {}});
                 continue;
             }
             FrameTypeReader type_reader(info, cancel_);
