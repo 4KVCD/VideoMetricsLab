@@ -2,7 +2,7 @@
 
 Calculate VMAF, VMAF NEG, VMAF v1, SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD, Intel and Apple GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly to easily spot differences.
 
-v2.3 adds VVC film grain support, adds AV2 decoding, improves VVC scoring speed up to **2x**, AMD GPU speed **1.3x-2x**, and adds back Vship as an option. Various bug fixes including wrong scoring for H.264 lossless, MPEG-2, and MPEG-4 Part 2 on certain GPUs. See the [changelog](CHANGELOG.md).
+VideoMetricsLab v2.3 adds VVC film grain support, adds AV2 decoding, improves VVC scoring speed up to 2x, AMD GPU speed 1.3x-2x, and adds back Vship as an option. Mac OS is now feature parity with Windows. Various bug fixes including wrong scoring for H.264 lossless, MPEG-2, and MPEG-4 Part 2 on certain GPUs. See the [changelog](CHANGELOG.md).
 
 ## Features
 
