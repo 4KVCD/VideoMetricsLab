@@ -9,28 +9,33 @@ VideoMetricsLab v2.4 adds an experimental GPU VVC decoder, BD-rate calculation, 
 **Metrics**
 - VMAF v0.6.1, VMAF NEG, VMAF v1, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli and ColorVideo VDP, for many test videos at once.
 - VMAF models for standard, phone, 4K and HFR viewing.
+- ColorVideo VDP scored for the display you choose, or automatically HDR or SDR to match the video.
 - Film grain scored as viewers see it, or without it: VVC, AV1 and AFGS1 grain, at any bit depth.
+- Resolution tests: how a video scores scaled down and back up, at any size, with your choice of scaling algorithm.
 
 **Fast on any GPU**
-- VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD, Intel and Apple GPUs with [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast): VMAF and VMAF NEG **3.2x-4.4x** faster than with CUDA on NVIDIA, and VMAF v1 up to **17x** faster.
-- SSIMULACRA2, Butteraugli and ColorVideo VDP on any GPU with [Vship-fast](https://github.com/4KVCD/Vship-fast) (Vulkan), as accurate as libjxl and pycvvdp; stock Vship for any video you choose or when Vship-fast fails, and libjxl on the CPU calculates SSIMULACRA2 and Butteraugli when no GPU can.
-- PSNR, SSIM and XPSNR **2.7x-11x** faster, calculated in the app.
-- GPU video decoding, with software decoding for the rest: VVC with Fraunhofer's VVdeC, and AV2 with VideoLAN's dav2d.
+- VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD, Intel and Apple GPUs with [libvmaf-fast](https://github.com/4KVCD/libvmaf-fast): VMAF and VMAF NEG **3.2x-4.4x** faster than with CUDA on NVIDIA, up to **28x** faster than on a 24-core CPU, and VMAF v1 up to **17x** faster.
+- SSIMULACRA2, Butteraugli and ColorVideo VDP on any GPU with [Vship-fast](https://github.com/4KVCD/Vship-fast) (Vulkan), as accurate as libjxl and pycvvdp, and faster than Vship's Vulkan build: Butteraugli **1.75x-2.5x**, ColorVideo VDP **1.6x-2.4x** and SSIMULACRA2 up to **1.6x**.
+- Stock Vship for any video you choose or when Vship-fast fails, on Vulkan, HIP (AMD) or CUDA (NVIDIA), and libjxl on the CPU calculates SSIMULACRA2 and Butteraugli when no GPU can.
+- PSNR, SSIM and XPSNR **2.7x-11x** faster than with FFmpeg, calculated in the app.
+- Resolution tests up to **27x** faster than with FFmpeg's libvmaf on the CPU.
+- GPU video decoding, with software decoding for the rest: VVC with Fraunhofer's VVdeC, **1.4x-2.3x** faster than FFmpeg's VVC decoder, AV2 with VideoLAN's dav2d, and an experimental GPU VVC decoder on Windows.
 
 **Compare and inspect**
-- Frame-exact playback that switches instantly between the source and each encode (hold **S**), with zoom, at up to 120 fps in 4K HDR, with film grain shown as it is scored.
+- Frame-exact playback that switches instantly between the source and each encode (hold **S**), with zoom, at up to 120 fps in 4K HDR, in HDR on an HDR display, with film grain shown as it is scored and the soundtrack, up to 7.1.
 - Metric curves, statistics and per-frame scores (per second for ColorVideo VDP), with each metric's best and worst results highlighted.
-- Bitrate by frame, second or GOP.
+- Bitrate by frame, second or GOP, with each frame's type (I, P or B).
 - A difference graph for 2 videos' scores and bitrate.
 - BD-rate calculation: how much bitrate one encoder saves over another at the same quality.
 
 **Workflow**
-- Black bars and resolution mismatches handled automatically.
+- Black bars found the way HandBrake finds them, and resolution mismatches handled automatically.
 - Results saved and reloaded automatically; a metric added later is the only one calculated.
 - Metric scores for any time range of a video, instantly if the video has already been scored.
 - Scores and statistics exported as CSV or JSON.
-- Drag and drop videos, sort and reorder the list, and a dark theme.
-- A command line, `VideoMetricsLab-cli`, for scripts, which also reads raw video streams and .yuv files.
+- Drag and drop videos, sort and reorder the list, and a dark theme, in 20 languages.
+- Raw video files such as .266 open directly, with their frame rate read from the stream.
+- A command line, `VideoMetricsLab-cli`, for scripts: comparisons, bitrate and BD-rate. It also reads raw video streams and .yuv files.
 - Two test videos calculated in parallel on many-core CPUs.
 - A native C++ app: a 48 MB download on Windows.
 
