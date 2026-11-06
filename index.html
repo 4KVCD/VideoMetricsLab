@@ -95,34 +95,39 @@ libvmaf, installed separately. Free and open source, under the MIT licence.</p>
 <ul>
 <li>VMAF v0.6.1, VMAF NEG, VMAF v1, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli and ColorVideo VDP, for many test videos at once.</li>
 <li>VMAF models for standard, phone, 4K and HFR viewing.</li>
+<li>ColorVideo VDP scored for the display you choose, or automatically HDR or SDR to match the video.</li>
 <li>Film grain scored as viewers see it, or without it: VVC, AV1 and AFGS1 grain, at any bit depth.</li>
+<li>Resolution tests: how a video scores scaled down and back up, at any size, with your choice of scaling algorithm.</li>
 </ul>
 
 <h3>Fast on any GPU</h3>
 <ul>
-<li>VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD, Intel and Apple GPUs with <a href="https://github.com/4KVCD/libvmaf-fast">libvmaf-fast</a>: VMAF and VMAF NEG <strong>3.2x-4.4x</strong> faster than with CUDA on NVIDIA, and VMAF v1 up to <strong>17x</strong> faster.</li>
-<li>SSIMULACRA2, Butteraugli and ColorVideo VDP on any GPU with <a href="https://github.com/4KVCD/Vship-fast">Vship-fast</a> (Vulkan), as accurate as libjxl and pycvvdp; stock Vship for any video you choose or when Vship-fast fails, and libjxl on the CPU calculates SSIMULACRA2 and Butteraugli when no GPU can.</li>
-<li>PSNR, SSIM and XPSNR <strong>2.7x-11x</strong> faster, calculated in the app.</li>
-<li>GPU video decoding, with software decoding for the rest: VVC with Fraunhofer's VVdeC, and AV2 with VideoLAN's dav2d.</li>
+<li>VMAF, VMAF NEG and VMAF v1 on NVIDIA, AMD, Intel and Apple GPUs with <a href="https://github.com/4KVCD/libvmaf-fast">libvmaf-fast</a>: VMAF and VMAF NEG <strong>3.2x-4.4x</strong> faster than with CUDA on NVIDIA, up to <strong>28x</strong> faster than on a 24-core CPU, and VMAF v1 up to <strong>17x</strong> faster.</li>
+<li>SSIMULACRA2, Butteraugli and ColorVideo VDP on any GPU with <a href="https://github.com/4KVCD/Vship-fast">Vship-fast</a> (Vulkan), as accurate as libjxl and pycvvdp, and faster than Vship's Vulkan build: Butteraugli <strong>1.75x-2.5x</strong>, ColorVideo VDP <strong>1.6x-2.4x</strong> and SSIMULACRA2 up to <strong>1.6x</strong>.</li>
+<li>Stock Vship for any video you choose or when Vship-fast fails, on Vulkan, HIP (AMD) or CUDA (NVIDIA), and libjxl on the CPU calculates SSIMULACRA2 and Butteraugli when no GPU can.</li>
+<li>PSNR, SSIM and XPSNR <strong>2.7x-11x</strong> faster than with FFmpeg, calculated in the app.</li>
+<li>Resolution tests up to <strong>27x</strong> faster than with FFmpeg's libvmaf on the CPU.</li>
+<li>GPU video decoding, with software decoding for the rest: VVC with Fraunhofer's VVdeC, <strong>1.4x-2.3x</strong> faster than FFmpeg's VVC decoder, AV2 with VideoLAN's dav2d, and an experimental GPU VVC decoder on Windows.</li>
 </ul>
 
 <h3>Compare and inspect</h3>
 <ul>
-<li>Frame-exact playback that switches instantly between the source and each encode (hold <strong>S</strong>), with zoom, at up to 120 fps in 4K HDR, with film grain shown as it is scored.</li>
+<li>Frame-exact playback that switches instantly between the source and each encode (hold <strong>S</strong>), with zoom, at up to 120 fps in 4K HDR, in HDR on an HDR display, with film grain shown as it is scored and the soundtrack, up to 7.1.</li>
 <li>Metric curves, statistics and per-frame scores (per second for ColorVideo VDP), with each metric's best and worst results highlighted.</li>
-<li>Bitrate by frame, second or GOP.</li>
+<li>Bitrate by frame, second or GOP, with each frame's type (I, P or B).</li>
 <li>A difference graph for 2 videos' scores and bitrate.</li>
 <li>BD-rate calculation: how much bitrate one encoder saves over another at the same quality.</li>
 </ul>
 
 <h3>Workflow</h3>
 <ul>
-<li>Black bars and resolution mismatches handled automatically.</li>
+<li>Black bars found the way HandBrake finds them, and resolution mismatches handled automatically.</li>
 <li>Results saved and reloaded automatically; a metric added later is the only one calculated.</li>
 <li>Metric scores for any time range of a video, instantly if the video has already been scored.</li>
 <li>Scores and statistics exported as CSV or JSON.</li>
-<li>Drag and drop videos, sort and reorder the list, and a dark theme.</li>
-<li>A command line, <code>VideoMetricsLab-cli</code>, for scripts, which also reads raw video streams and .yuv files.</li>
+<li>Drag and drop videos, sort and reorder the list, and a dark theme, in 20 languages.</li>
+<li>Raw video files such as .266 open directly, with their frame rate read from the stream.</li>
+<li>A command line, <code>VideoMetricsLab-cli</code>, for scripts: comparisons, bitrate and BD-rate. It also reads raw video streams and .yuv files.</li>
 <li>Two test videos calculated in parallel on many-core CPUs.</li>
 <li>A native C++ app: a 48 MB download on Windows.</li>
 </ul>
