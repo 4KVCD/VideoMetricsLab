@@ -212,9 +212,10 @@ options:
                         pass for each. The scores are the same (default: the
                         app's)
   --cpu                 calculate on the CPU every metric that can be (CVVDP
-                        is GPU only): VMAF as with --vmaf-on cpu, and
-                        SSIMULACRA2 and Butteraugli with libjxl's tools rather
-                        than on the GPU where one can
+                        is GPU only): VMAF as with --vmaf-on cpu, unless
+                        --vmaf-on says otherwise, and SSIMULACRA2 and
+                        Butteraugli with libjxl's tools rather than on the GPU
+                        where one can
   --no-gpu-decode       decode the videos on the CPU
   --gpu-decode {auto,nvidia,intel,amd}
                         decode the videos on the GPU: auto, the first GPU
