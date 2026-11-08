@@ -748,6 +748,11 @@ std::vector<QThread*> FrameComparePanel::live_workers() const {
             live.push_back(worker);
         }
     }
+    for (CropDetectWorker* worker : ending_crop_workers_) {
+        if (worker->isRunning()) {
+            live.push_back(worker);
+        }
+    }
     if (video_view != nullptr) {
         for (QThread* worker : video_view->live_workers()) {
             live.push_back(worker);
@@ -1612,6 +1617,7 @@ void FrameComparePanel::ensure_auto_crop(const FrameComparisonEntry* entry) {
                 break;
             }
         }
+        ending_crop_workers_.erase(worker);
         worker->deleteLater();
     });
     crop_workers_[key] = worker;
@@ -1659,9 +1665,17 @@ void FrameComparePanel::on_auto_crop_ready(const PairKey& key, const VideoInfo& 
 }
 
 void FrameComparePanel::cancel_crop_workers() {
-    for (const auto& [identity, worker] : crop_workers_) {
+    // A cancelled detection ends with no answer: it no longer counts as under
+    // way, so the tab shown again starts the pair's detection anew (left
+    // under way, it said "detecting black bars" for good and found none).
+    for (auto active = crop_workers_.begin(); active != crop_workers_.end();) {
+        CropDetectWorker* worker = active->second;
         if (worker->isRunning()) {
             worker->cancel();
+            ending_crop_workers_.insert(worker);
+            active = crop_workers_.erase(active);
+        } else {
+            ++active;  // not started or already ended: its finished signal removes it
         }
     }
 }

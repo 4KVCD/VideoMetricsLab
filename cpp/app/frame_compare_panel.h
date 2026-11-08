@@ -329,7 +329,10 @@ private:
     bool showing_source_ = false;
     int generation_ = 0;
     std::set<FrameExtractWorker*> workers_;
+    // Black-bar detections under way, by pair; and those cancelled but not
+    // yet ended, which a pair shown again does not wait for: it detects anew.
     std::map<PairKey, CropDetectWorker*> crop_workers_;
+    std::set<CropDetectWorker*> ending_crop_workers_;
     // Black bars found. By pair: the boxes compared, the picture both files
     // show. By file (path, size and time): the file's own bars, so that
     // another pair with the same file does not detect them again.
