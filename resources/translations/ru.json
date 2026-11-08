@@ -600,6 +600,7 @@
   "ffprobe failed for {path}:": "Ошибка ffprobe для {path}:",
   "Could not parse ffprobe output for {path}": "Не удалось разобрать вывод ffprobe для {path}",
   "No video stream found in {path}": "В {path} не найден видеопоток",
+  "{path} has its timestamps in decoding order, not in the order its pictures are shown (a raw stream copied into a container with no timestamps of its own), so its pictures cannot be placed. Add the raw stream instead, or mux it with a tool that writes the pictures' display times.": "Метки времени в {path} идут в порядке декодирования, а не в порядке показа кадров (сырой поток, скопированный в контейнер без собственных меток времени), поэтому его кадры нельзя расставить. Добавьте вместо него сырой поток или упакуйте его инструментом, который записывает время показа кадров.",
   "Video file is missing: {path}": "Видеофайл отсутствует: {path}",
   "Could not start ffprobe: {error}": "Не удалось запустить ffprobe: {error}",
   "ffprobe returned no packets for the first video stream.": "ffprobe не вернул пакетов для первого видеопотока.",

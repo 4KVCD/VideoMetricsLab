@@ -379,6 +379,9 @@ const char* const templates[] = {
     "ffprobe failed for {path}:",
     "Could not parse ffprobe output for {path}",
     "No video stream found in {path}",
+    "{path} has its timestamps in decoding order, not in the order its pictures are shown (a raw stream copied "
+    "into a container with no timestamps of its own), so its pictures cannot be placed. Add the raw stream "
+    "instead, or mux it with a tool that writes the pictures' display times.",
     "Video file is missing: {path}",
     "Could not start ffprobe: {error}",
     "ffprobe returned no packets for the first video stream.",

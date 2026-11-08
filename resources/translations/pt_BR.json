@@ -600,6 +600,7 @@
   "ffprobe failed for {path}:": "O ffprobe falhou para {path}:",
   "Could not parse ffprobe output for {path}": "Não foi possível interpretar a saída do ffprobe para {path}",
   "No video stream found in {path}": "Nenhum fluxo de vídeo encontrado em {path}",
+  "{path} has its timestamps in decoding order, not in the order its pictures are shown (a raw stream copied into a container with no timestamps of its own), so its pictures cannot be placed. Add the raw stream instead, or mux it with a tool that writes the pictures' display times.": "{path} tem os carimbos de tempo na ordem de decodificação, não na ordem em que suas imagens são exibidas (um fluxo bruto copiado para um contêiner sem carimbos de tempo próprios), então suas imagens não podem ser posicionadas. Adicione o fluxo bruto em vez dele, ou faça o mux com uma ferramenta que grave os tempos de exibição das imagens.",
   "Video file is missing: {path}": "Arquivo de vídeo ausente: {path}",
   "Could not start ffprobe: {error}": "Não foi possível iniciar o ffprobe: {error}",
   "ffprobe returned no packets for the first video stream.": "O ffprobe não retornou pacotes do primeiro fluxo de vídeo.",

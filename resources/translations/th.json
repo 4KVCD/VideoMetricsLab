@@ -600,6 +600,7 @@
   "ffprobe failed for {path}:": "ffprobe ล้มเหลวสำหรับ {path}:",
   "Could not parse ffprobe output for {path}": "แยกวิเคราะห์ผลลัพธ์ ffprobe สำหรับ {path} ไม่ได้",
   "No video stream found in {path}": "ไม่พบสตรีมวิดีโอใน {path}",
+  "{path} has its timestamps in decoding order, not in the order its pictures are shown (a raw stream copied into a container with no timestamps of its own), so its pictures cannot be placed. Add the raw stream instead, or mux it with a tool that writes the pictures' display times.": "{path} มีเวลากำกับตามลำดับการถอดรหัส ไม่ใช่ลำดับที่ภาพแสดง (สตรีมดิบที่คัดลอกลงคอนเทนเนอร์โดยไม่มีเวลากำกับของตัวเอง) จึงวางตำแหน่งภาพไม่ได้ ให้เพิ่มสตรีมดิบแทน หรือมักซ์ด้วยเครื่องมือที่เขียนเวลาแสดงของภาพ",
   "Video file is missing: {path}": "ไม่พบไฟล์วิดีโอ: {path}",
   "Could not start ffprobe: {error}": "เริ่ม ffprobe ไม่ได้: {error}",
   "ffprobe returned no packets for the first video stream.": "ffprobe ไม่ได้ส่งแพ็กเก็ตของสตรีมวิดีโอแรกกลับมา",

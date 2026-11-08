@@ -600,6 +600,7 @@
   "ffprobe failed for {path}:": "Az ffprobe hibát jelzett ({path}):",
   "Could not parse ffprobe output for {path}": "Az ffprobe kimenete nem értelmezhető ({path})",
   "No video stream found in {path}": "Nincs videóstream: {path}",
+  "{path} has its timestamps in decoding order, not in the order its pictures are shown (a raw stream copied into a container with no timestamps of its own), so its pictures cannot be placed. Add the raw stream instead, or mux it with a tool that writes the pictures' display times.": "A(z) {path} időbélyegei dekódolási sorrendben vannak, nem a képek megjelenítési sorrendjében (saját időbélyegek nélküli konténerbe másolt nyers adatfolyam), ezért a képei nem helyezhetők el. Adja hozzá helyette a nyers adatfolyamot, vagy muxolja olyan eszközzel, amely beírja a képek megjelenítési idejét.",
   "Video file is missing: {path}": "A videófájl hiányzik: {path}",
   "Could not start ffprobe: {error}": "Az ffprobe nem indítható: {error}",
   "ffprobe returned no packets for the first video stream.": "Az ffprobe nem adott vissza csomagokat az első videóstreamhez.",

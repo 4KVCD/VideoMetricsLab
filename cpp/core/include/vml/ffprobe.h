@@ -30,8 +30,24 @@ std::vector<std::string> ffprobe_command_start(const std::string& ffprobe);
 // another size than this.
 bool listed_sizes_differ(std::string_view listed, int width, int height);
 
+// ffprobe's timestamps (csv=p=0, one a line), in the order listed; nothing
+// when a line has none (N/A) or no number.
+std::optional<std::vector<long long>> listed_timestamps(std::string_view listed);
+
+// Whether a file's packets, as stored, look stamped in the order they are
+// decoded rather than shown: in a video whose pictures are reordered, stamps
+// that only ever rise. A file stamped right stores a reordered picture's
+// packet before its earlier-shown neighbours. Too few packets say nothing.
+bool stamps_rise_as_stored(const std::vector<long long>& packet_stamps);
+
+// Whether a video's decoded pictures, which come out in the order they are
+// shown, carry stamps that go back: the stamps are not the pictures' times.
+bool stamps_go_back_as_shown(const std::vector<long long>& picture_stamps);
+
 // The video's details, read by running `ffprobe` (the program to run) on
-// `path`. Throws ProbeError when they cannot be read.
+// `path`. Throws ProbeError when they cannot be read, and for a video whose
+// timestamps are in decoding order (a raw stream copied into MP4 or Matroska
+// with none of its own): no decoder can place its pictures.
 VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe);
 // The same, ended by `cancel`: ffprobe on a large file over a slow or
 // network disk can take many seconds, and closing the window or stopping a

@@ -70,6 +70,28 @@ TEST(Ffprobe, FrameSizesAreReadWithoutTheirSideData) {
     EXPECT_FALSE(listed_sizes_differ("", 3840, 2160));
 }
 
+// A raw VVC stream copied into MP4 by FFmpeg (-c copy) is stamped as decoded:
+// its packets' stamps only rise, and its pictures, shown, go back. A file
+// stamped right stores its reordered pictures out of order.
+TEST(Ffprobe, TimestampsInDecodingOrderAreToldFromRightOnes) {
+    const auto stamps = [](std::string_view listed) { return listed_timestamps(listed).value(); };
+    EXPECT_EQ(stamps("-512\n-256\n0\n\n256\n"), (std::vector<long long>{-512, -256, 0, 256}));
+    EXPECT_FALSE(listed_timestamps("0\nN/A\n512\n"));  // a raw stream's: no stamps to judge
+
+    std::vector<long long> as_decoded;
+    for (long long stamp = -512; stamp < 32 * 256 - 512; stamp += 256) {
+        as_decoded.push_back(stamp);
+    }
+    EXPECT_TRUE(stamps_rise_as_stored(as_decoded));
+    EXPECT_FALSE(stamps_rise_as_stored({0, 256, 512}));  // too few to say
+    EXPECT_FALSE(stamps_rise_as_stored(stamps("626\n292\n125\n42\n0\n83\n209\n167\n250\n459\n375\n334\n417\n542\n"
+                                              "501\n584\n")));  // an MKV stamped right
+    EXPECT_FALSE(stamps_rise_as_stored({0, 20, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280}));
+
+    EXPECT_TRUE(stamps_go_back_as_shown({768, 512, 1024, 256, 1280, 0}));
+    EXPECT_FALSE(stamps_go_back_as_shown({0, 42, 83, 125, 167}));
+}
+
 TEST(Ffprobe, ReadsARotationTagAndAPairMustShareIt) {
     const auto video_turned = [](const std::string& side_data) {
         return video_info_from_probe(

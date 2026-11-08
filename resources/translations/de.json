@@ -600,6 +600,7 @@
   "ffprobe failed for {path}:": "ffprobe ist für {path} fehlgeschlagen:",
   "Could not parse ffprobe output for {path}": "Ausgabe von ffprobe für {path} konnte nicht gelesen werden",
   "No video stream found in {path}": "Kein Videostream in {path} gefunden",
+  "{path} has its timestamps in decoding order, not in the order its pictures are shown (a raw stream copied into a container with no timestamps of its own), so its pictures cannot be placed. Add the raw stream instead, or mux it with a tool that writes the pictures' display times.": "{path} hat seine Zeitstempel in Decodierreihenfolge, nicht in der Reihenfolge, in der seine Bilder gezeigt werden (ein Rohstream, in einen Container ohne eigene Zeitstempel kopiert), daher lassen sich seine Bilder nicht zuordnen. Fügen Sie stattdessen den Rohstream hinzu oder muxen Sie ihn mit einem Werkzeug, das die Anzeigezeiten der Bilder schreibt.",
   "Video file is missing: {path}": "Videodatei fehlt: {path}",
   "Could not start ffprobe: {error}": "ffprobe konnte nicht gestartet werden: {error}",
   "ffprobe returned no packets for the first video stream.": "ffprobe hat für den ersten Videostream keine Pakete geliefert.",

@@ -600,6 +600,7 @@
   "ffprobe failed for {path}:": "ffprobe 处理 {path} 失败：",
   "Could not parse ffprobe output for {path}": "无法解析 ffprobe 对 {path} 的输出",
   "No video stream found in {path}": "在 {path} 中未找到视频流",
+  "{path} has its timestamps in decoding order, not in the order its pictures are shown (a raw stream copied into a container with no timestamps of its own), so its pictures cannot be placed. Add the raw stream instead, or mux it with a tool that writes the pictures' display times.": "{path} 的时间戳是解码顺序，而非画面的显示顺序（原始码流被复制到容器中，没有自己的时间戳），因此无法确定其画面的位置。请改为添加原始码流，或用能写入画面显示时间的工具重新封装。",
   "Video file is missing: {path}": "视频文件缺失：{path}",
   "Could not start ffprobe: {error}": "无法启动 ffprobe：{error}",
   "ffprobe returned no packets for the first video stream.": "ffprobe 没有返回第一条视频流的数据包。",

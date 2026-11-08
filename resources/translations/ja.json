@@ -600,6 +600,7 @@
   "ffprobe failed for {path}:": "{path} で ffprobe が失敗しました：",
   "Could not parse ffprobe output for {path}": "{path} の ffprobe の出力を解析できませんでした",
   "No video stream found in {path}": "{path} に動画ストリームが見つかりません",
+  "{path} has its timestamps in decoding order, not in the order its pictures are shown (a raw stream copied into a container with no timestamps of its own), so its pictures cannot be placed. Add the raw stream instead, or mux it with a tool that writes the pictures' display times.": "{path} のタイムスタンプは表示順ではなくデコード順になっています（独自のタイムスタンプを持たないままコンテナにコピーされた生ストリーム）。そのため画像の位置を決められません。代わりに生ストリームを追加するか、画像の表示時刻を書き込むツールで多重化してください。",
   "Video file is missing: {path}": "動画ファイルがありません：{path}",
   "Could not start ffprobe: {error}": "ffprobe を起動できませんでした：{error}",
   "ffprobe returned no packets for the first video stream.": "ffprobe が最初の動画ストリームのパケットを返しませんでした。",

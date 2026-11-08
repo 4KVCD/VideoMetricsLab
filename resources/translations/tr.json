@@ -600,6 +600,7 @@
   "ffprobe failed for {path}:": "ffprobe başarısız oldu ({path}):",
   "Could not parse ffprobe output for {path}": "ffprobe çıktısı ayrıştırılamadı: {path}",
   "No video stream found in {path}": "Video akışı bulunamadı: {path}",
+  "{path} has its timestamps in decoding order, not in the order its pictures are shown (a raw stream copied into a container with no timestamps of its own), so its pictures cannot be placed. Add the raw stream instead, or mux it with a tool that writes the pictures' display times.": "{path} zaman damgaları, resimlerin gösterilme sırasına göre değil kod çözme sırasına göre (kendi zaman damgaları olmadan bir kapsayıcıya kopyalanmış ham akış), bu yüzden resimleri yerleştirilemiyor. Bunun yerine ham akışı ekleyin ya da resimlerin gösterim zamanlarını yazan bir araçla birleştirin.",
   "Video file is missing: {path}": "Video dosyası eksik: {path}",
   "Could not start ffprobe: {error}": "ffprobe başlatılamadı: {error}",
   "ffprobe returned no packets for the first video stream.": "ffprobe ilk video akışı için paket döndürmedi.",

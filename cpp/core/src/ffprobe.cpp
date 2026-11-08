@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <regex>
 #include <string>
@@ -442,7 +443,78 @@ bool av1_coded_at_another_size(const VideoInfo& info, const std::string& ffprobe
     return listed_sizes_differ(listed, info.width, info.height);
 }
 
+// The packets and pictures read to judge a file's timestamps: enough to pass
+// a group of reordered pictures several times over.
+constexpr const char* stamps_judged = "%+#32";
+
+// Whether the video stream in ffprobe's JSON says its pictures are reordered
+// (has_b_frames). Some H.264 files say 0 until decoded: those are not judged.
+bool reorders_pictures(std::string_view probe_json) {
+    const Json data = Json::parse(replace_invalid_utf8(probe_json), nullptr, false);
+    const Json* streams = data.is_discarded() ? nullptr : member(data, "streams");
+    const Json* video = streams != nullptr ? video_stream(*streams) : nullptr;
+    return video != nullptr && integer_member(*video, "has_b_frames") > 0;
+}
+
+// The first packets' or pictures' timestamps (`entry`: packet=pts or
+// frame=pts); nothing when ffprobe cannot list them.
+std::optional<std::vector<long long>> first_timestamps(const VideoInfo& info, const char* entry,
+                                                       const std::string& ffprobe, const CancelToken& cancel) {
+    // Begun as every ffprobe is (ffprobe_command_start): listing pictures decodes them.
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
+    command.insert(command.end(), {"-select_streams", "v:0", "-read_intervals", stamps_judged, "-show_entries", entry,
+                                   "-of", "csv=p=0", text(info.path)});
+    try {
+        return listed_timestamps(run_ffprobe(command, info.path, std::chrono::seconds(30), cancel));
+    } catch (const ProbeError&) {
+        return std::nullopt;
+    }
+}
+
+// Whether a file's timestamps are in decoding order: its packets' stamps
+// only rise as stored (cheap: read, not decoded), and, decoded, its pictures'
+// go back. Raw streams carry no stamps of their own and are not asked.
+bool stamped_in_decoding_order(const VideoInfo& info, std::string_view probe_json, const std::string& ffprobe,
+                               const CancelToken& cancel) {
+    if (info.is_raw_stream() || !reorders_pictures(probe_json)) {
+        return false;
+    }
+    const auto packets = first_timestamps(info, "packet=pts", ffprobe, cancel);
+    if (!packets || !stamps_rise_as_stored(*packets)) {
+        return false;
+    }
+    const auto pictures = first_timestamps(info, "frame=pts", ffprobe, cancel);
+    return pictures && stamps_go_back_as_shown(*pictures);
+}
+
 }  // namespace
+
+std::optional<std::vector<long long>> listed_timestamps(std::string_view listed) {
+    std::vector<long long> stamps;
+    for (const std::string_view line : python_splitlines(listed)) {
+        const std::string_view stamp = python_strip(line);
+        if (stamp.empty()) {
+            continue;
+        }
+        const std::optional<long long> value = python_int(std::string(stamp));
+        if (!value) {
+            return std::nullopt;  // N/A: no stamp to judge by
+        }
+        stamps.push_back(*value);
+    }
+    return stamps;
+}
+
+bool stamps_rise_as_stored(const std::vector<long long>& packet_stamps) {
+    constexpr std::size_t fewest_judged = 16;
+    return packet_stamps.size() >= fewest_judged &&
+           std::adjacent_find(packet_stamps.begin(), packet_stamps.end(), std::greater_equal<>()) ==
+               packet_stamps.end();
+}
+
+bool stamps_go_back_as_shown(const std::vector<long long>& picture_stamps) {
+    return std::adjacent_find(picture_stamps.begin(), picture_stamps.end(), std::greater<>()) != picture_stamps.end();
+}
 
 VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe, const CancelToken& cancel) {
     if (is_av2_file(path)) {
@@ -450,7 +522,15 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
     }
     std::vector<std::string> command = ffprobe_command_start(ffprobe);
     command.insert(command.end(), {"-print_format", "json", "-show_format", "-show_streams", text(path)});
-    VideoInfo info = video_info_from_probe(path, run_ffprobe(command, path, std::chrono::seconds(60), cancel));
+    const std::string probe = run_ffprobe(command, path, std::chrono::seconds(60), cancel);
+    VideoInfo info = video_info_from_probe(path, probe);
+    if (stamped_in_decoding_order(info, probe, ffprobe, cancel)) {
+        throw ProbeError(text(path) +
+                         " has its timestamps in decoding order, not in the order its pictures are shown (a raw "
+                         "stream copied into a container with no timestamps of its own), so its pictures cannot be "
+                         "placed. Add the raw stream instead, or mux it with a tool that writes the pictures' "
+                         "display times.");
+    }
     info.coded_at_another_size = ascii_lower(info.codec_name) == "av1" && av1_coded_at_another_size(info, ffprobe, cancel);
     return info;
 }

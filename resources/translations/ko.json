@@ -600,6 +600,7 @@
   "ffprobe failed for {path}:": "{path}에서 ffprobe 실패:",
   "Could not parse ffprobe output for {path}": "{path}에 대한 ffprobe 출력을 해석할 수 없음",
   "No video stream found in {path}": "{path}에서 영상 스트림을 찾을 수 없음",
+  "{path} has its timestamps in decoding order, not in the order its pictures are shown (a raw stream copied into a container with no timestamps of its own), so its pictures cannot be placed. Add the raw stream instead, or mux it with a tool that writes the pictures' display times.": "{path}의 타임스탬프가 화면 표시 순서가 아니라 디코딩 순서로 되어 있습니다(자체 타임스탬프 없이 컨테이너에 복사된 원시 스트림). 따라서 프레임의 위치를 정할 수 없습니다. 대신 원시 스트림을 추가하거나, 프레임의 표시 시간을 기록하는 도구로 먹싱하세요.",
   "Video file is missing: {path}": "영상 파일이 없음: {path}",
   "Could not start ffprobe: {error}": "ffprobe를 시작할 수 없음: {error}",
   "ffprobe returned no packets for the first video stream.": "ffprobe가 첫 번째 영상 스트림의 패킷을 반환하지 않았습니다.",
