@@ -76,7 +76,9 @@ std::pair<CropBox, CropBox> detect_pair(const std::string& ffmpeg, const VideoIn
 // The two videos' boxes, made to cover the same picture where the two show
 // the same picture at one size or two (an encode's soft bar edge can put its
 // box a row from the source's): the boxes' overlap, in each video's own
-// pixels (as scaled_to, where set), on even samples. Boxes that agree, or that are not the same
+// pixels (as scaled_to, where set), on even samples. Where the sizes are one exact fraction apart
+// (3840x2160 and 2560x1440), the source's box is the test video's scaled by it, so that the scaled
+// test picture lines up with the source's row for row. Boxes that agree, or that are not the same
 // picture, are kept.
 std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const VideoInfo& source,
                                                                          const VideoInfo& distorted,

@@ -398,7 +398,9 @@ TEST(Decisions, ShapesAndComparedSizesAreThePythonAppsOwn) {
     }
 }
 
-TEST(Decisions, BlackBarBoxesCoverTheSamePictureAsThePythonAppMakesThem) {
+// The Python app's cases, but for the 853x480 source against its 1706x960 test video, whose test box is now the
+// source's scaled exactly (AScaledTestVideosBoxLinesUpWithTheSourcesRowForRow).
+TEST(Decisions, BlackBarBoxesCoverTheSamePicture) {
     ASSERT_FALSE(decisions()["common_picture"].empty());
     const auto box = [](const Json& values) {
         return values.is_null() ? std::nullopt
@@ -417,6 +419,30 @@ TEST(Decisions, BlackBarBoxesCoverTheSamePictureAsThePythonAppMakesThem) {
         EXPECT_EQ(shared_source, box(item["shared"][0])) << item.dump();
         EXPECT_EQ(shared_test, box(item["shared"][1])) << item.dump();
     }
+}
+
+TEST(Decisions, AScaledTestVideosBoxLinesUpWithTheSourcesRowForRow) {
+    const auto frame = [](int width, int height) {
+        VideoInfo info;
+        info.width = width;
+        info.height = height;
+        return info;
+    };
+    // 2/3 of the size: each box rounded on its own put the test picture's top at row 46, the source's row 69, not
+    // 68; on one grid both are cut to rows the scaling maps onto each other.
+    const auto [source, test] = common_picture(frame(3840, 2160), frame(2560, 1440), CropBox{3840, 2024, 0, 68},
+                                               CropBox{2560, 1352, 0, 44});
+    const CropBox source_rows{3840, 2016, 0, 72};
+    const CropBox test_rows{2560, 1344, 0, 48};
+    EXPECT_EQ(source, source_rows);
+    EXPECT_EQ(test, test_rows);
+    // Sizes only nearly one ratio apart: each box rounded on its own, as before.
+    const CropBox bars{1920, 800, 0, 140};
+    const auto [near_source, near_test] =
+        common_picture(frame(1920, 1080), frame(1366, 768), bars, CropBox{1366, 570, 0, 99});
+    const CropBox near_rows{1366, 568, 0, 100};
+    EXPECT_EQ(near_source, bars);
+    EXPECT_EQ(near_test, near_rows);
 }
 
 // Black bars Source only takes Auto's saved scores where Auto kept the test

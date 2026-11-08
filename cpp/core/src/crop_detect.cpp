@@ -14,6 +14,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <semaphore>
 #include <set>
 #include <sstream>
@@ -1033,6 +1034,46 @@ CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double
     return handbrake_box(counted, decoded, width, height);
 }
 
+// The largest q of the sizes' ratio p/q for which common_picture lines the
+// boxes up on one grid: the test video's edges then every 2 x 16 samples at
+// most. A coarser grid could cut too much picture from each edge.
+constexpr int largest_grid_denominator = 16;
+
+// The shared picture (edges as fractions of the frame) as one box in each
+// video, the source's exactly the test video's scaled by the sizes' ratio,
+// when that ratio is one fraction p/q across and down (source/test, in lowest
+// terms, q at most largest_grid_denominator): the edges rounded inward to the test
+// video's multiples of 2q, so that both boxes' edges fall on even samples
+// (4:2:0) and the test box scaled to the source's size covers its picture
+// row for row. Each box rounded on its own may be a row apart once scaled
+// (3840x2160 against 2560x1440: rows 68 and 46, which is 69). Nothing for other
+// ratios.
+std::optional<std::pair<CropBox, CropBox>> shared_on_one_grid(int source_width, int source_height, int test_width,
+                                                              int test_height, double left, double top, double right,
+                                                              double bottom) {
+    if (static_cast<long long>(source_width) * test_height != static_cast<long long>(source_height) * test_width) {
+        return std::nullopt;
+    }
+    const int common = std::gcd(source_width, test_width);
+    const int p = source_width / common;
+    const int q = test_width / common;
+    if (q > largest_grid_denominator) {
+        return std::nullopt;
+    }
+    const int step = 2 * q;
+    const auto inward_up = [step](double fraction, int size) {
+        return static_cast<int>(std::ceil(fraction * size / step - 1e-6)) * step;
+    };
+    const auto inward_down = [step](double fraction, int size) {
+        return static_cast<int>(std::floor(fraction * size / step + 1e-6)) * step;
+    };
+    const int x = inward_up(left, test_width);
+    const int y = inward_up(top, test_height);
+    const CropBox test{inward_down(right, test_width) - x, inward_down(bottom, test_height) - y, x, y};
+    const auto scaled = [p, q](int samples) { return samples / q * p; };  // exact: samples are multiples of 2q
+    return std::pair(CropBox{scaled(test.w), scaled(test.h), scaled(test.x), scaled(test.y)}, test);
+}
+
 }  // namespace
 
 bool samples_through_the_app(const VideoInfo& info) { return windows_from_the_app(info); }
@@ -1178,9 +1219,15 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const V
         const int h = static_cast<int>(std::floor(bottom * height + 1e-6)) - y;
         return CropBox{w - (w & 1), h - (h & 1), x, y};
     };
-    const CropBox shared_source = shared(source);
-    const CropBox shared_distorted = shared(distorted);
-    if (shared_source.w <= 0 || shared_source.h <= 0 || shared_distorted.w <= 0 || shared_distorted.h <= 0) {
+    const auto positive = [](const CropBox& box) { return box.w > 0 && box.h > 0; };
+    auto [shared_source, shared_distorted] =
+        shared_on_one_grid(source_width, source_height, distorted_width, distorted_height, left, top, right, bottom)
+            .value_or(std::pair(CropBox{}, CropBox{}));
+    if (!positive(shared_source) || !positive(shared_distorted)) {
+        shared_source = shared(source);
+        shared_distorted = shared(distorted);
+    }
+    if (!positive(shared_source) || !positive(shared_distorted)) {
         return kept;
     }
     if (shared_source != *source_crop || shared_distorted != *distorted_crop) {
