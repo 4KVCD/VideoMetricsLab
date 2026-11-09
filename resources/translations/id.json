@@ -200,7 +200,9 @@
   "Reading reference video...": "Membaca video referensi...",
   "Could not read video": "Tidak dapat membaca video",
   "Resolution tests removed": "Uji resolusi dihapus",
+  "Videos of a different length": "Video dengan durasi berbeda",
   "\n\nAdd them again to test the new source.": "\n\nTambahkan lagi untuk menguji sumber baru.",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nMenghitung metrik memerlukan rentang di dalam kedua video (Rentang, di bawah Persiapan video). Bandingkan video menampilkan bagian yang sama-sama dimiliki keduanya.",
   "Ready.": "Siap.",
   "Probing...": "Memeriksa...",
   "Failed": "Gagal",
@@ -888,6 +890,9 @@
   ],
   "{count} resolution test belonged to the previous source and has been removed:\n\n": [
    "{count} uji resolusi milik sumber sebelumnya dan telah dihapus:\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "{count} video uji tidak sama panjang dengan referensi ({length}):\n\n"
   ],
   "Reading {count} video...": [
    "Membaca {count} video..."

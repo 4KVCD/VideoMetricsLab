@@ -212,6 +212,7 @@ void MainWindow::apply_source_info(const std::filesystem::path& path, const Vide
         if (row_data->options.resample_test && row_data->video_info) {
             take_film_grain(*row_data->video_info, *source_info_);  // its copy of the reference
         }
+        row_data->length_checked = false;  // compared with this reference's length next
     }
     source_edit_->setText(text_of(path));
     show_source_label();

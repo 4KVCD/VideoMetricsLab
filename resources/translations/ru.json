@@ -200,7 +200,9 @@
   "Reading reference video...": "Чтение эталонного видео...",
   "Could not read video": "Не удалось прочитать видео",
   "Resolution tests removed": "Тесты разрешения удалены",
+  "Videos of a different length": "Видео другой длины",
   "\n\nAdd them again to test the new source.": "\n\nДобавьте их снова, чтобы проверить новый исходник.",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nДля расчёта метрик нужен диапазон внутри обоих видео (Диапазон, в разделе «Подготовка видео»). Сравнение видео показывает их общую часть.",
   "Ready.": "Готово.",
   "Probing...": "Анализ...",
   "Failed": "Ошибка",
@@ -902,6 +904,11 @@
    "{count} тест разрешения относился к прежнему исходнику и удалён:\n\n",
    "{count} теста разрешения относились к прежнему исходнику и удалены:\n\n",
    "{count} тестов разрешения относились к прежнему исходнику и удалены:\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "{count} тестовое видео отличается по длине от эталона ({length}):\n\n",
+   "{count} тестовых видео отличаются по длине от эталона ({length}):\n\n",
+   "{count} тестовых видео отличаются по длине от эталона ({length}):\n\n"
   ],
   "Reading {count} video...": [
    "Чтение {count} видео...",

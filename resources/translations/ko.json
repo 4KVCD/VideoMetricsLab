@@ -200,7 +200,9 @@
   "Reading reference video...": "참조 영상 읽는 중...",
   "Could not read video": "영상을 읽을 수 없음",
   "Resolution tests removed": "해상도 테스트 제거됨",
+  "Videos of a different length": "길이가 다른 동영상",
   "\n\nAdd them again to test the new source.": "\n\n새 원본을 테스트하려면 다시 추가하세요.",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\n메트릭을 계산하려면 두 동영상 모두에 들어가는 범위가 필요합니다(영상 준비의 범위). 영상 비교에서는 두 동영상이 공유하는 부분을 보여줍니다.",
   "Ready.": "준비됨.",
   "Probing...": "검사하는 중...",
   "Failed": "실패",
@@ -888,6 +890,9 @@
   ],
   "{count} resolution test belonged to the previous source and has been removed:\n\n": [
    "해상도 테스트 {count}개가 이전 원본에 속해 있어 제거했습니다.\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "테스트 동영상 {count}개의 길이가 참조 동영상({length})과 다릅니다:\n\n"
   ],
   "Reading {count} video...": [
    "영상 {count}개 읽는 중..."

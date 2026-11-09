@@ -200,7 +200,9 @@
   "Reading reference video...": "Referenzvideo wird gelesen...",
   "Could not read video": "Video konnte nicht gelesen werden",
   "Resolution tests removed": "Auflösungstests entfernt",
+  "Videos of a different length": "Videos mit anderer Länge",
   "\n\nAdd them again to test the new source.": "\n\nFügen Sie sie erneut hinzu, um die neue Quelle zu testen.",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nDie Berechnung der Metriken braucht einen Bereich innerhalb beider Videos (Bereich, unter Videovorbereitung). Videovergleich zeigt den Teil, den beide gemeinsam haben.",
   "Ready.": "Bereit.",
   "Probing...": "Wird untersucht...",
   "Failed": "Fehlgeschlagen",
@@ -895,6 +897,10 @@
   "{count} resolution test belonged to the previous source and has been removed:\n\n": [
    "{count} Auflösungstest gehörte zur vorherigen Quelle und wurde entfernt:\n\n",
    "{count} Auflösungstests gehörten zur vorherigen Quelle und wurden entfernt:\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "{count} Testvideo ist nicht so lang wie die Referenz ({length}):\n\n",
+   "{count} Testvideos sind nicht so lang wie die Referenz ({length}):\n\n"
   ],
   "Reading {count} video...": [
    "{count} Video wird gelesen...",

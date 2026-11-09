@@ -155,6 +155,9 @@ struct RowData {
     // Whether its frame rate was asked for as it was added (a raw stream that
     // stores none): after a Cancel, only Calculate metrics asks again.
     bool frame_rate_asked = false;
+    // Whether its length was compared with the reference's (warned about
+    // once, as it was added or the reference chosen).
+    bool length_checked = false;
     VmafOptions options;
     // The metrics not run by FFmpeg that the row has ticked.
     std::set<std::string> extra_metric_keys;
@@ -332,6 +335,9 @@ private:
     // Asks the frame rate of the videos just added that have none (raw streams
     // that store none), and of the reference.
     void ask_new_frame_rates();
+    // Warns, once for each, of the test videos just added (or all of them,
+    // after a new reference) that do not last as long as the reference.
+    void warn_about_lengths();
     // The same for the reference (`reference`) and `videos`, and enters the
     // answers. False once one is cancelled.
     bool ask_frame_rates(bool reference, const std::vector<std::filesystem::path>& videos);

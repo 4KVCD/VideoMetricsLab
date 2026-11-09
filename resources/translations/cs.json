@@ -200,7 +200,9 @@
   "Reading reference video...": "Čte se referenční video...",
   "Could not read video": "Video nelze přečíst",
   "Resolution tests removed": "Testy rozlišení odebrány",
+  "Videos of a different length": "Videa jiné délky",
   "\n\nAdd them again to test the new source.": "\n\nPřidejte je znovu pro otestování nového zdroje.",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nVýpočet metrik potřebuje rozsah uvnitř obou videí (Rozsah, v části Příprava videa). Porovnání videa ukazuje část, kterou mají společnou.",
   "Ready.": "Připraveno.",
   "Probing...": "Kontrola...",
   "Failed": "Selhalo",
@@ -902,6 +904,11 @@
    "{count} test rozlišení patřil k předchozímu zdroji a byl odebrán:\n\n",
    "{count} testy rozlišení patřily k předchozímu zdroji a byly odebrány:\n\n",
    "{count} testů rozlišení patřilo k předchozímu zdroji a bylo odebráno:\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "{count} testovací video netrvá stejně dlouho jako reference ({length}):\n\n",
+   "{count} testovací videa netrvají stejně dlouho jako reference ({length}):\n\n",
+   "{count} testovacích videí netrvá stejně dlouho jako reference ({length}):\n\n"
   ],
   "Reading {count} video...": [
    "Čte se {count} video...",

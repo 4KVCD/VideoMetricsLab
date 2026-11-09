@@ -200,7 +200,9 @@
   "Reading reference video...": "A referenciavideó olvasása...",
   "Could not read video": "A videó nem olvasható",
   "Resolution tests removed": "Felbontástesztek eltávolítva",
+  "Videos of a different length": "Eltérő hosszúságú videók",
   "\n\nAdd them again to test the new source.": "\n\nAdja hozzá őket újra az új forrás teszteléséhez.",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nA metrikák számításához mindkét videón belüli tartomány kell (Tartomány, a(z) Videó előkészítése alatt). A(z) Videó-összehasonlítás a közös részüket mutatja.",
   "Ready.": "Kész.",
   "Probing...": "Ellenőrzés...",
   "Failed": "Sikertelen",
@@ -895,6 +897,10 @@
   "{count} resolution test belonged to the previous source and has been removed:\n\n": [
    "{count} felbontásteszt az előző forráshoz tartozott, ezért eltávolítva:\n\n",
    "{count} felbontásteszt az előző forráshoz tartozott, ezért eltávolítva:\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "{count} tesztvideó nem olyan hosszú, mint a referencia ({length}):\n\n",
+   "{count} tesztvideó nem olyan hosszú, mint a referencia ({length}):\n\n"
   ],
   "Reading {count} video...": [
    "{count} videó olvasása...",

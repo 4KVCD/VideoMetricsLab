@@ -200,7 +200,9 @@
   "Reading reference video...": "Читання еталонного відео...",
   "Could not read video": "Не вдалося прочитати відео",
   "Resolution tests removed": "Тести роздільності прибрано",
+  "Videos of a different length": "Відео іншої тривалості",
   "\n\nAdd them again to test the new source.": "\n\nДодайте їх знову, щоб перевірити нове вихідне відео.",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nДля розрахунку метрик потрібен діапазон усередині обох відео (Діапазон, у розділі «Підготовка відео»). Порівняння відео показує їхню спільну частину.",
   "Ready.": "Готово.",
   "Probing...": "Перевірка...",
   "Failed": "Помилка",
@@ -902,6 +904,11 @@
    "{count} тест роздільності належав попередньому вихідному відео й був прибраний:\n\n",
    "{count} тести роздільності належали попередньому вихідному відео й були прибрані:\n\n",
    "{count} тестів роздільності належали попередньому вихідному відео й були прибрані:\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "{count} тестове відео відрізняється за тривалістю від еталона ({length}):\n\n",
+   "{count} тестові відео відрізняються за тривалістю від еталона ({length}):\n\n",
+   "{count} тестових відео відрізняються за тривалістю від еталона ({length}):\n\n"
   ],
   "Reading {count} video...": [
    "Читання {count} відео...",

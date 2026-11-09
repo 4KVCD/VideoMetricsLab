@@ -200,7 +200,9 @@
   "Reading reference video...": "正在讀取參考影片...",
   "Could not read video": "無法讀取影片",
   "Resolution tests removed": "已移除解析度測試",
+  "Videos of a different length": "長度不同的影片",
   "\n\nAdd them again to test the new source.": "\n\n若要測試新的來源影片，請重新新增。",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\n計算指標需要一個兩段影片都包含的範圍（影片準備 中的 範圍）。影片比較 會顯示兩者共有的部分。",
   "Ready.": "就緒。",
   "Probing...": "正在探測...",
   "Failed": "失敗",
@@ -888,6 +890,9 @@
   ],
   "{count} resolution test belonged to the previous source and has been removed:\n\n": [
    "{count} 個解析度測試屬於先前的來源影片，已被移除：\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "{count} 個測試影片的長度與參考影片（{length}）不同：\n\n"
   ],
   "Reading {count} video...": [
    "正在讀取 {count} 部影片..."

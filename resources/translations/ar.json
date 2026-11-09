@@ -200,7 +200,9 @@
   "Reading reference video...": "جارٍ قراءة الفيديو المرجعي...",
   "Could not read video": "تعذّرت قراءة الفيديو",
   "Resolution tests removed": "أزيلت اختبارات الدقة",
+  "Videos of a different length": "مقاطع فيديو بطول مختلف",
   "\n\nAdd them again to test the new source.": "\n\nأضفها من جديد لاختبار المصدر الجديد.",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nيتطلب حساب المقاييس نطاقًا داخل كلا الفيديوهين (النطاق، ضمن تحضير الفيديو). يعرض مقارنة الفيديو الجزء المشترك بينهما.",
   "Ready.": "جاهز.",
   "Probing...": "جارٍ الفحص...",
   "Failed": "فشل",
@@ -923,6 +925,14 @@
    "{count} اختبارات دقة كانت تخص المصدر السابق وأُزيلت:\n\n",
    "{count} اختبارًا للدقة كانت تخص المصدر السابق وأُزيلت:\n\n",
    "{count} اختبار دقة كانت تخص المصدر السابق وأُزيلت:\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "{count} فيديو اختبار لا يدوم بطول المرجع ({length}):\n\n",
+   "فيديو اختبار واحد ({count}) لا يدوم بطول المرجع ({length}):\n\n",
+   "فيديوها اختبار ({count}) لا يدومان بطول المرجع ({length}):\n\n",
+   "{count} فيديوهات اختبار لا تدوم بطول المرجع ({length}):\n\n",
+   "{count} فيديو اختبار لا تدوم بطول المرجع ({length}):\n\n",
+   "{count} فيديو اختبار لا تدوم بطول المرجع ({length}):\n\n"
   ],
   "Reading {count} video...": [
    "جارٍ قراءة {count} فيديو...",

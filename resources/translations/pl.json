@@ -200,7 +200,9 @@
   "Reading reference video...": "Wczytywanie wideo referencyjnego...",
   "Could not read video": "Nie można odczytać wideo",
   "Resolution tests removed": "Usunięto testy rozdzielczości",
+  "Videos of a different length": "Wideo o innej długości",
   "\n\nAdd them again to test the new source.": "\n\nDodaj je ponownie, aby przetestować nowe źródło.",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nObliczenie metryk wymaga zakresu mieszczącego się w obu wideo (Zakres, w sekcji Przygotowanie wideo). Porównanie wideo pokazuje część wspólną.",
   "Ready.": "Gotowe.",
   "Probing...": "Badanie...",
   "Failed": "Błąd",
@@ -902,6 +904,11 @@
    "{count} test rozdzielczości należał do poprzedniego źródła i został usunięty:\n\n",
    "{count} testy rozdzielczości należały do poprzedniego źródła i zostały usunięte:\n\n",
    "{count} testów rozdzielczości należało do poprzedniego źródła i zostało usuniętych:\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "{count} wideo testowe nie trwa tyle co wideo referencyjne ({length}):\n\n",
+   "{count} wideo testowe nie trwają tyle co wideo referencyjne ({length}):\n\n",
+   "{count} wideo testowych nie trwa tyle co wideo referencyjne ({length}):\n\n"
   ],
   "Reading {count} video...": [
    "Wczytywanie {count} wideo...",

@@ -94,13 +94,19 @@ std::optional<std::string> shape_problem(const VideoInfo& source, const VideoInf
 std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, long long range_start,
                                         long long range_end);
 
+// Whether two videos last as long, to within a tenth of a second or two
+// frames: compared to their end, neither has frames the other lacks. A run
+// over the whole videos (no range end) needs it.
+bool durations_match(const VideoInfo& source, const VideoInfo& distorted);
+
 // What is wrong with a video whose frame rate is not known
 // (VideoInfo::frame_rate_unknown).
 std::string frame_rate_unknown_problem(const VideoInfo& video);
 
 // Video Compare's check: a raw stream whose frame rate is not known, or
-// disagrees with the other video's, is refused, as pair_problem refuses it.
-// Video Compare shows other mismatched pairs anyway, but it places a raw
+// disagrees with the other video's (or either rate varies), is refused, as
+// pair_problem refuses it. Video Compare shows other mismatched pairs anyway
+// (different lengths too, raw streams' included), but it places a raw
 // stream's frames by that rate, so it would show the wrong frame.
 std::optional<std::string> untimed_pair_problem(const VideoInfo& source, const VideoInfo& distorted);
 

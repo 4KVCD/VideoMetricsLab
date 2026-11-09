@@ -794,10 +794,45 @@ void MainWindow::ask_new_frame_rates() {
             }
         }
         if (!reference && videos.empty()) {
+            warn_about_lengths();  // with the rates just entered
             return;
         }
         ask_frame_rates(reference, videos);
     }
+}
+
+void MainWindow::warn_about_lengths() {
+    // Told as the videos are added, not only when Calculate metrics refuses
+    // them (pair_problem). Rows with scores were compared already; a row
+    // with a range end compares only that part; a stand-in row (a resolution
+    // test, a "Test both directions" companion) is its video's again.
+    if (!source_info_ || source_info_->frame_rate_unknown() || source_info_->duration <= 0) {
+        return;
+    }
+    QStringList names;
+    for (const std::shared_ptr<RowData>& row_data : rows_) {
+        if (row_data->length_checked || row_data->media_path || !row_data->video_info ||
+            row_data->video_info->frame_rate_unknown()) {
+            continue;
+        }
+        row_data->length_checked = true;  // before the dialog, whose event loop may bring this back
+        const VideoInfo& info = *row_data->video_info;
+        if (!row_data->completed_run && row_data->options.range_end <= 0 && info.duration > 0 &&
+            !durations_match(*source_info_, info)) {
+            names.append("  " + name_of(row_data->path) + " (" + length_string(info) + ")");
+        }
+    }
+    if (names.isEmpty()) {
+        return;
+    }
+    dialogs_.inform(
+        app::tr("Videos of a different length"),
+        ntr("{count} test video does not last as long as the reference ({length}):\n\n",
+            "{count} test videos do not last as long as the reference ({length}):\n\n",
+            static_cast<long long>(names.size()), {{"length", length_string(*source_info_)}}) +
+            names.join("\n") +
+            app::tr("\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). "
+                    "Video Compare shows the part they share."));
 }
 
 bool MainWindow::settle_frame_rates(const std::vector<int>& checked) {

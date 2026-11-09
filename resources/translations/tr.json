@@ -200,7 +200,9 @@
   "Reading reference video...": "Referans video okunuyor...",
   "Could not read video": "Video okunamadı",
   "Resolution tests removed": "Çözünürlük testleri kaldırıldı",
+  "Videos of a different length": "Farklı uzunlukta videolar",
   "\n\nAdd them again to test the new source.": "\n\nYeni kaynağı test etmek için bunları yeniden ekleyin.",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nMetrikleri hesaplamak için her iki videonun içinde kalan bir aralık gerekir (Video hazırlama altında Aralık). Video karşılaştırma ikisinin ortak kısmını gösterir.",
   "Ready.": "Hazır.",
   "Probing...": "İnceleniyor...",
   "Failed": "Başarısız",
@@ -895,6 +897,10 @@
   "{count} resolution test belonged to the previous source and has been removed:\n\n": [
    "{count} çözünürlük testi önceki kaynağa aitti ve kaldırıldı:\n\n",
    "{count} çözünürlük testi önceki kaynağa aitti ve kaldırıldı:\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "{count} test videosu referansla aynı uzunlukta değil ({length}):\n\n",
+   "{count} test videosu referansla aynı uzunlukta değil ({length}):\n\n"
   ],
   "Reading {count} video...": [
    "{count} video okunuyor...",

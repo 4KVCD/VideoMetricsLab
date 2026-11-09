@@ -200,7 +200,9 @@
   "Reading reference video...": "กำลังอ่านวิดีโออ้างอิง...",
   "Could not read video": "อ่านวิดีโอไม่ได้",
   "Resolution tests removed": "นำการทดสอบความละเอียดออกแล้ว",
+  "Videos of a different length": "วิดีโอที่ความยาวต่างกัน",
   "\n\nAdd them again to test the new source.": "\n\nเพิ่มอีกครั้งเพื่อทดสอบต้นฉบับใหม่",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nการคำนวณเมตริกต้องใช้ช่วงที่อยู่ภายในวิดีโอทั้งสอง (ช่วง ใต้ การเตรียมวิดีโอ) เปรียบเทียบวิดีโอ จะแสดงส่วนที่ทั้งสองมีร่วมกัน",
   "Ready.": "พร้อม",
   "Probing...": "กำลังตรวจสอบ...",
   "Failed": "ล้มเหลว",
@@ -888,6 +890,9 @@
   ],
   "{count} resolution test belonged to the previous source and has been removed:\n\n": [
    "การทดสอบความละเอียด {count} รายการเป็นของต้นฉบับก่อนหน้า และถูกนำออก:\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "วิดีโอทดสอบ {count} รายการมีความยาวไม่เท่ากับต้นฉบับ ({length}):\n\n"
   ],
   "Reading {count} video...": [
    "กำลังอ่านวิดีโอ {count} รายการ..."

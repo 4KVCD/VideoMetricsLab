@@ -200,7 +200,9 @@
   "Reading reference video...": "Đang đọc video tham chiếu...",
   "Could not read video": "Không đọc được video",
   "Resolution tests removed": "Đã xóa các phép thử độ phân giải",
+  "Videos of a different length": "Video có độ dài khác",
   "\n\nAdd them again to test the new source.": "\n\nThêm lại để thử nguồn mới.",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nTính chỉ số cần một khoảng nằm trong cả hai video (Khoảng, trong Chuẩn bị video). So sánh video hiển thị phần chung của hai video.",
   "Ready.": "Sẵn sàng.",
   "Probing...": "Đang kiểm tra...",
   "Failed": "Lỗi",
@@ -888,6 +890,9 @@
   ],
   "{count} resolution test belonged to the previous source and has been removed:\n\n": [
    "{count} phép thử độ phân giải thuộc về nguồn trước đã bị xóa:\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "{count} video thử không dài bằng video tham chiếu ({length}):\n\n"
   ],
   "Reading {count} video...": [
    "Đang đọc {count} video..."

@@ -346,6 +346,23 @@ TEST(Decisions, ARangeIsRefusedWhereItCannotBeCompared) {
     EXPECT_EQ(pair_problem(no_rate, no_rate, 10, 20), "A range needs the videos' frame rates, which are not known.");
 }
 
+// Video Compare places a raw stream's frames by its rate: it refuses one
+// whose rate is not known or differs from the reference's, but a raw stream
+// shorter than the reference is shown, as any shorter pair is.
+TEST(Decisions, VideoCompareRefusesARawStreamOnlyForItsFrameRate) {
+    VideoInfo reference;
+    reference.fps = reference.nominal_fps = 60.0;
+    reference.duration = 10.0;
+    VideoInfo raw;
+    raw.format_name = "vvc";
+    raw.nb_frames = 80;
+    EXPECT_EQ(untimed_pair_problem(reference, raw), frame_rate_unknown_problem(raw));
+    raw.set_frame_rate(60.0);
+    EXPECT_EQ(untimed_pair_problem(reference, raw), std::nullopt);
+    raw.set_frame_rate(50.0);
+    EXPECT_TRUE(untimed_pair_problem(reference, raw)->starts_with("Frame rates do not match"));
+}
+
 // A range is counted in frames: one ending within the shorter video's last,
 // partial second compares to its end (a 300-frame encode, 12.5 s at
 // 24000/1001, to 13 s), whichever of the two is shorter, and one whose

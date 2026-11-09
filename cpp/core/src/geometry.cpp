@@ -11,16 +11,33 @@
 
 namespace vml {
 
+bool durations_match(const VideoInfo& source, const VideoInfo& distorted) {
+    const double frame_duration = 1.0 / std::max({source.fps, distorted.fps, 1.0});
+    return std::abs(source.duration - distorted.duration) <= std::max(0.1, 2 * frame_duration);
+}
+
 namespace {
 
 // The even number nearest, a half to even, as Python's round() rounds a half.
 int nearest_even(double value) { return static_cast<int>(std::nearbyint(value / 2)) * 2; }
 
-// Whether two videos last as long, to within a tenth of a second or two
-// frames: compared to their end, neither has frames the other lacks.
-bool durations_match(const VideoInfo& source, const VideoInfo& distorted) {
-    const double frame_duration = 1.0 / std::max({source.fps, distorted.fps, 1.0});
-    return std::abs(source.duration - distorted.duration) <= std::max(0.1, 2 * frame_duration);
+// Why the two videos' frames cannot be paired by number at one frame rate:
+// either rate varies, or the two differ.
+std::optional<std::string> frame_rate_problem(const VideoInfo& source, const VideoInfo& distorted) {
+    if (source.is_variable_frame_rate() || distorted.is_variable_frame_rate()) {
+        return "Variable-frame-rate video is not supported safely yet. Convert both videos "
+               "to the same constant frame rate before comparing them.";
+    }
+    // Half the gap between a whole frame rate and its NTSC counterpart (24
+    // and 23.976 are a thousandth apart), so those two are told apart, while
+    // the rates two containers give one video (24000/1001 against 2997/125)
+    // still match.
+    const double fps_tolerance = std::max(0.005, std::max(source.fps, distorted.fps) * 0.0005);
+    if (std::abs(source.fps - distorted.fps) > fps_tolerance) {
+        return "Frame rates do not match (" + format_fixed(source.fps, 3) + " vs " + format_fixed(distorted.fps, 3) +
+               " fps).";
+    }
+    return std::nullopt;
 }
 
 // Why the two videos' frame rates or durations do not allow a comparison of
@@ -37,18 +54,8 @@ std::optional<std::string> timeline_problem(const VideoInfo& source, const Video
         first_frame_of_second(range_start, source.fps) >= first_frame_of_second(range_end, source.fps)) {
         return "The range contains no frame of the videos.";  // below 1 fps, a second may have none
     }
-    if (source.is_variable_frame_rate() || distorted.is_variable_frame_rate()) {
-        return "Variable-frame-rate video is not supported safely yet. Convert both videos "
-               "to the same constant frame rate before comparing them.";
-    }
-    // Half the gap between a whole frame rate and its NTSC counterpart (24
-    // and 23.976 are a thousandth apart), so those two are told apart, while
-    // the rates two containers give one video (24000/1001 against 2997/125)
-    // still match.
-    const double fps_tolerance = std::max(0.005, std::max(source.fps, distorted.fps) * 0.0005);
-    if (std::abs(source.fps - distorted.fps) > fps_tolerance) {
-        return "Frame rates do not match (" + format_fixed(source.fps, 3) + " vs " + format_fixed(distorted.fps, 3) +
-               " fps).";
+    if (std::optional<std::string> problem = frame_rate_problem(source, distorted)) {
+        return problem;
     }
     if (source.duration > 0 && distorted.duration > 0) {
         // Counted in frames, as the run counts them (frame_range.h): a
@@ -224,7 +231,14 @@ std::optional<std::string> untimed_pair_problem(const VideoInfo& source, const V
     if (!source.is_raw_stream() && !distorted.is_raw_stream()) {
         return std::nullopt;
     }
-    return pair_problem(source, distorted, 0, 0);
+    // Only what misplaces a raw stream's frames: a pair of different lengths
+    // is shown until the shorter ends, as any other pair is.
+    for (const VideoInfo* video : {&source, &distorted}) {
+        if (video->frame_rate_unknown()) {
+            return frame_rate_unknown_problem(*video);
+        }
+    }
+    return frame_rate_problem(source, distorted);
 }
 
 std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, long long range_start,

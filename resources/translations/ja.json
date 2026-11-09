@@ -200,7 +200,9 @@
   "Reading reference video...": "参照動画を読み込み中...",
   "Could not read video": "動画を読み込めませんでした",
   "Resolution tests removed": "解像度テストを削除しました",
+  "Videos of a different length": "長さの異なる動画",
   "\n\nAdd them again to test the new source.": "\n\n新しいソースをテストするには、もう一度追加してください。",
+  "\n\nCalculating metrics needs a range within both videos (Range, under Video preparation). Video Compare shows the part they share.": "\n\nメトリクスの計算には、両方の動画に収まる範囲が必要です（動画の準備 の 範囲）。動画比較 では両方に共通する部分が表示されます。",
   "Ready.": "準備完了。",
   "Probing...": "調査中...",
   "Failed": "失敗",
@@ -888,6 +890,9 @@
   ],
   "{count} resolution test belonged to the previous source and has been removed:\n\n": [
    "{count} 件の解像度テストは以前のソースのものだったため、削除しました：\n\n"
+  ],
+  "{count} test video does not last as long as the reference ({length}):\n\n": [
+   "{count} 本のテスト動画の長さがリファレンス（{length}）と異なります：\n\n"
   ],
   "Reading {count} video...": [
    "{count} 本の動画を読み込み中..."
