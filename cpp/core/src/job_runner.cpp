@@ -406,10 +406,16 @@ std::string JobRun::describe() const {
         kept = metric_labels(keys);
     }
     const VmafOptions& options = job_.options;
-    const std::string range = options.range_end > 0
-                                  ? std::to_string(options.range_start) + "-" + std::to_string(options.range_end) + " s"
-                                  : options.range_start > 0 ? "from " + std::to_string(options.range_start) + " s"
-                                                            : "whole videos";
+    // Frames as the window shows them: the first and the last compared.
+    const std::string range =
+        options.range_in_frames
+            ? (options.range_end > 0 ? "frames " + std::to_string(options.range_start) + "-" +
+                                           std::to_string(options.range_end - 1)
+               : options.range_start > 0 ? "from frame " + std::to_string(options.range_start)
+                                         : "whole videos")
+        : options.range_end > 0 ? std::to_string(options.range_start) + "-" + std::to_string(options.range_end) + " s"
+        : options.range_start > 0 ? "from " + std::to_string(options.range_start) + " s"
+                                  : "whole videos";
     std::string settings = std::string("black bars ") + crop_mode_text(options.crop_mode) + ", range " + range +
                            ", resolution mismatch " +
                            scale_direction_value(options.scale_direction) + " (" + options.scale_algorithm +

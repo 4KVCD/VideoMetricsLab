@@ -1086,10 +1086,18 @@ public:
         // (frame_sync.h) and both are kept to the same range's, so they keep
         // the same frames. CVVDP looks at the frames before the one it scores.
         numbering_rate_ = frame_rate(request.distorted);
-        range_ = frame_range(request.options.range_start, request.options.range_end, request.source.fps, step_,
-                             cvvdp_.has_value());
         const long long frames =
             std::min(request.source.estimated_frame_count(), request.distorted.estimated_frame_count());
+        const ComparedRange compared = request.options.compared_range();
+        range_ = frame_range(compared, request.source.fps, step_, cvvdp_.has_value());
+        cvvdp_range_ = range_;
+        if (cvvdp_ && compared.in_frames) {
+            // CVVDP scores whole seconds: those nearest a range of frames,
+            // decoded with the frames the others compare.
+            cvvdp_range_ = frame_range(cvvdp_seconds(compared, request.source.fps, frames), request.source.fps, step_,
+                                       true);
+            range_ = union_of(range_, cvvdp_range_);
+        }
         expected_frames_ = std::max(1LL, std::min(frames, range_.decode_end.value_or(frames)) - range_.decode_start);
         total_units_ = std::max(1LL, (expected_frames_ + step_ - 1) / step_) * step_;
         for (const std::string& key : frame_keys_) {
@@ -1758,11 +1766,11 @@ private:
         const VshipDevice& device = plan_.device;
         std::vector<CvvdpWindow> windows;
         for (const CvvdpWindow& window : cvvdp_lane_->windows()) {
-            if (window.first >= range_.start && (!range_.end || window.first < *range_.end)) {
+            if (window.first >= cvvdp_range_.start && (!cvvdp_range_.end || window.first < *cvvdp_range_.end)) {
                 windows.push_back(window);
             }
         }
-        if (!range_.whole()) {
+        if (!cvvdp_range_.whole()) {
             for (CvvdpWindow& window : windows) {
                 window.jod = static_cast<float>(window.jod);
             }
@@ -1786,10 +1794,10 @@ private:
             // needs: a ranged run's in its range_frames, a whole run's on its
             // own, for a range to be cut from it (metric_cache.cpp).
             const long long reached = windows.back().first + windows.back().frames;
-            if (range_.whole()) {
+            if (cvvdp_range_.whole()) {
                 result.provenance.parameters["cvvdp_frames_reached"] = nlohmann::json(reached).dump();
             }
-            mark_range(result.provenance, range_, reached);
+            mark_range(result.provenance, cvvdp_range_, reached);
         }
         for (const CvvdpWindow& window : windows) {
             result.frame.push_back(static_cast<int>(window.first));
@@ -1812,7 +1820,10 @@ private:
     std::vector<std::string> frame_keys_;  // the metrics scored per frame: all but CVVDP
     std::optional<CvvdpSettings> cvvdp_;   // with CVVDP, the display it models
     Rational numbering_rate_;
-    FrameRange range_;  // the frames compared and decoded
+    // The frames compared and decoded; and CVVDP's, its whole seconds (of a
+    // range of frames, the nearest: range_ then decodes both).
+    FrameRange range_;
+    FrameRange cvvdp_range_;
     long long expected_frames_ = 0;
     bool read_near_range_ = false;  // a video of the pass starts near the range, not at its start
     long long total_units_ = 1;

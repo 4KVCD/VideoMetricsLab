@@ -93,6 +93,9 @@ std::optional<std::string> shape_problem(const VideoInfo& source, const VideoInf
 // (range_end 0: to the end; their timelines do not match there), or nothing.
 std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, long long range_start,
                                         long long range_end);
+// The same for a range of seconds or of frames.
+std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted,
+                                        const ComparedRange& range);
 
 // Whether two videos last as long, to within a tenth of a second or two
 // frames: compared to their end, neither has frames the other lacks. A run

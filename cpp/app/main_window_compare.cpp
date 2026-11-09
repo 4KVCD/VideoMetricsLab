@@ -25,6 +25,7 @@ namespace {
 long long whole_video_frames(const FrameComparison& comparison, VmafOptions options) {
     options.range_start = 0;
     options.range_end = 0;
+    options.range_in_frames = false;
     const bool resample = comparison.resample_target.has_value();
     return estimate_total_frames(resample ? comparison.source_info : comparison.distorted_info, options,
                                  resample ? nullptr : &comparison.source_info);

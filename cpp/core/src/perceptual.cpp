@@ -39,7 +39,7 @@ const std::string* failure_of(const PerceptualFailures& failures, const std::str
 
 void validate_pair(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options) {
     if (const std::optional<std::string> problem =
-            pair_problem(source, distorted, options.range_start, options.range_end)) {
+            pair_problem(source, distorted, options.compared_range())) {
         throw PerceptualRunError(*problem);
     }
 }

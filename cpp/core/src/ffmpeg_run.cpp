@@ -1437,7 +1437,7 @@ RunStatus status_from_json(const nlohmann::json& json) {
 
 void validate_video_pair(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options) {
     if (const std::optional<std::string> problem =
-            pair_problem(source, distorted, options.range_start, options.range_end)) {
+            pair_problem(source, distorted, options.compared_range())) {
         throw VmafRunError(*problem);
     }
 }
@@ -1453,7 +1453,7 @@ FrameRange run_range(const VmafOptions& options, const VideoInfo& source) {
     // VMAF's motion and XPSNR look at the frames around the one they score.
     const bool looks_around =
         options.compute_vmaf || options.compute_vmaf_neg || options.compute_vmaf_v1 || options.compute_xpsnr;
-    return frame_range(options.range_start, options.range_end, source.fps, options.n_subsample, looks_around);
+    return frame_range(options.compared_range(), source.fps, options.n_subsample, looks_around);
 }
 
 namespace {
@@ -2308,9 +2308,8 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
     if (!options.resample_test) {
         throw std::invalid_argument("not a resolution test");
     }
-    if (options.range_start > 0 || options.range_end > 0) {
-        if (const std::optional<std::string> problem =
-                pair_problem(source, source, options.range_start, options.range_end)) {
+    if (!options.compared_range().whole()) {
+        if (const std::optional<std::string> problem = pair_problem(source, source, options.compared_range())) {
             throw VmafRunError(*problem);
         }
     }

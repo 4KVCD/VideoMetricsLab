@@ -22,7 +22,7 @@ struct ComparisonRecipe {
     CropMode crop_mode = CropMode::automatic;
     std::string scale_algorithm = "bicubic";
     ScaleDirection scale_direction = ScaleDirection::source_to_distorted;
-    long long range_start = 0;  // VmafOptions' range, in whole seconds
+    long long range_start = 0;  // VmafOptions' range, in whole seconds or frames
     long long range_end = 0;
     std::optional<ResampleTarget> resample_test;
     // The two videos' film grain as they are scored: {"source": ..,
@@ -33,6 +33,9 @@ struct ComparisonRecipe {
     // (VideoInfo::coded_at_another_size), whose scores before 2.4 read it at
     // the wrong size on some routes.
     bool coded_at_another_size = false;
+    bool range_in_frames = false;  // range_start and range_end are frames
+
+    ComparedRange compared_range() const { return {range_start, range_end, range_in_frames}; }
 
     // The settings that decide what the comparison is (identity_dict). The
     // scaling algorithm is one, as whether a comparison scales can depend on

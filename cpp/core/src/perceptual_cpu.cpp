@@ -743,7 +743,7 @@ double butteraugli_norm3(const std::filesystem::path& distortion_map) {
 }
 
 FrameRange cpu_range(const VmafOptions& options, const VideoInfo& source, int step) {
-    return frame_range(options.range_start, options.range_end, source.fps, step, false);
+    return frame_range(options.compared_range(), source.fps, step, false);
 }
 
 std::string image_filtergraph(const VideoInfo& source_info, const VideoInfo& distorted_info,

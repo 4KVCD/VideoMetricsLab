@@ -108,19 +108,25 @@ void take_run_options(VmafOptions& options, const ComparisonResult& result) {
     // share their scores: the one chosen may be the one that works here.
     std::vector<std::string> ids;
     // The range its scores are of: under another, a later run would keep them
-    // and save them as that range's.
-    options.range_start = 0;
-    options.range_end = 0;
+    // and save them as that range's. A frame score's says whether it was a
+    // range of frames; CVVDP's are whole seconds either way.
+    std::optional<ComparedRange> range;
+    std::optional<ComparedRange> cvvdp_range;
     for (const std::string& key : result.metric_results.keys()) {
         const FrameMetricResult* frame = result.metric_results.frame(key);
         const SequenceMetricResult* sequence = result.metric_results.sequence(key);
         const MetricProvenance& provenance = frame != nullptr ? frame->provenance : sequence->provenance;
         ids.push_back(provenance.implementation_compatibility_id);
-        if (const auto seconds = scored_seconds(provenance, result.source_info.fps)) {
-            options.range_start = seconds->first;
-            options.range_end = seconds->second;
+        if (frame != nullptr) {
+            range = range ? range : scored_frames(provenance, result.source_info.fps);
+        } else if (const auto seconds = scored_seconds(provenance, result.source_info.fps)) {
+            cvvdp_range = ComparedRange{seconds->first, seconds->second, false};
         }
     }
+    const ComparedRange scored = range.value_or(cvvdp_range.value_or(ComparedRange{}));
+    options.range_start = scored.start;
+    options.range_end = scored.end;
+    options.range_in_frames = scored.in_frames;
     const auto any = [&ids](bool (*made_by)(std::string_view)) { return std::any_of(ids.begin(), ids.end(), made_by); };
     if (any(score_identity::is_vship_fast_id)) {
         options.vship_build = VshipBuild::fast;

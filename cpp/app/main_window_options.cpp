@@ -190,10 +190,22 @@ void MainWindow::on_panel_field_edited(const QString& field) {
             target.model_choice_v1 = panel.model_choice_v1;
         } else if (field == "crop_mode") {
             target.crop_mode = panel.crop_mode;
-        } else if (field == "range_start") {
+        } else if (field == "range_in_frames") {
+            // Another unit: the range the fields show in it, whole by default.
+            target.range_in_frames = panel.range_in_frames;
             target.range_start = panel.range_start;
-        } else if (field == "range_end") {
             target.range_end = panel.range_end;
+        } else if (field == "range_start" || field == "range_end") {
+            if (target.range_in_frames != panel.range_in_frames) {
+                // A row of the selection in the other unit: the whole range shown.
+                target.range_in_frames = panel.range_in_frames;
+                target.range_start = panel.range_start;
+                target.range_end = panel.range_end;
+            } else if (field == "range_start") {
+                target.range_start = panel.range_start;
+            } else {
+                target.range_end = panel.range_end;
+            }
         } else if (field == "scale_algorithm") {
             target.scale_algorithm = panel.scale_algorithm;
         } else if (field == "scale_direction") {

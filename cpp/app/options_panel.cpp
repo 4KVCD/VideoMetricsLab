@@ -15,6 +15,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -190,21 +191,52 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
     connect(crop_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("crop_mode"); });
     form->addRow(app::tr("Black-bar handling:"), crop_combo);
 
-    // The range compared, from its start to its end in whole seconds (an end
-    // of 0: to the videos' end).
+    // The range compared: from its start to its end in whole seconds (an end
+    // of 0: to the videos' end), or from a frame to a frame.
+    range_unit_combo = new QComboBox;
+    range_unit_combo->addItem(app::tr("Time"));
+    range_unit_combo->addItem(app::tr("Frames"));
+    connect(range_unit_combo, &QComboBox::currentIndexChanged, this, [this] {
+        show_range_unit();
+        emit field_edited("range_in_frames");
+    });
     range_start_edit = new_seconds_edit();
     range_end_edit = new_seconds_edit();
     connect(range_start_edit, &QTimeEdit::timeChanged, this, [this] { emit field_edited("range_start"); });
     connect(range_end_edit, &QTimeEdit::timeChanged, this, [this] { emit field_edited("range_end"); });
+    range_first_spin = new QSpinBox;
+    range_first_spin->setRange(0, std::numeric_limits<int>::max());
+    range_first_spin->setKeyboardTracking(false);
+    range_last_spin = new QSpinBox;
+    // Below the first frame: to the videos' end.
+    range_last_spin->setRange(-1, std::numeric_limits<int>::max());
+    range_last_spin->setSpecialValueText(app::tr("End"));
+    range_last_spin->setKeyboardTracking(false);
+    connect(range_first_spin, &QSpinBox::valueChanged, this, [this] { emit field_edited("range_start"); });
+    connect(range_last_spin, &QSpinBox::valueChanged, this, [this] { emit field_edited("range_end"); });
     auto* range_row = new QHBoxLayout;
+    range_row->addWidget(range_unit_combo);
     range_row->addWidget(range_start_edit);
+    range_row->addWidget(range_first_spin);
     range_row->addWidget(new QLabel(app::tr("to")));
     range_row->addWidget(range_end_edit);
+    range_row->addWidget(range_last_spin);
     range_row->addStretch();
     auto* range_label = new QLabel(app::tr("Range:"));
-    range_label->setToolTip(app::tr("The part of the videos compared, in whole seconds, from the first time to the "
-                                    "second. An end of 00:00:00 compares to the end of the videos."));
+    range_label->setToolTip(app::tr("The part of the videos compared: in whole seconds, from the first time to the "
+                                    "second, where an end of 00:00:00 compares to the end of the videos; or in "
+                                    "frames, from the first frame to the last, both compared, counted from 0 as "
+                                    "Video Compare counts them."));
     form->addRow(range_label, range_row);
+    range_frames_note = new QLabel(app::tr("CVVDP scores whole seconds: its range is rounded to the nearest second."));
+    range_frames_note->setWordWrap(true);
+    theme::style(range_frames_note, "color: {muted}; font-style: italic;");
+    form->addRow(QString(), range_frames_note);
+    // Seconds until a row in frames is shown. Hidden, not show_range_unit():
+    // shown before the form has a parent, a field would be a window.
+    for (QWidget* field : std::initializer_list<QWidget*>{range_first_spin, range_last_spin, range_frames_note}) {
+        field->hide();
+    }
 
     scale_algo_combo = new QComboBox;
     scale_algo_combo->addItems(scale_algorithms);
@@ -447,6 +479,16 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
                 "core, or half of them for each video when two are calculated in parallel."));
 }
 
+void OptionsPanel::show_range_unit() {
+    // Seconds' fields or frames', and the note on CVVDP's whole seconds.
+    const bool frames = range_unit_combo->currentIndex() == 1;
+    range_start_edit->setVisible(!frames);
+    range_end_edit->setVisible(!frames);
+    range_first_spin->setVisible(frames);
+    range_last_spin->setVisible(frames);
+    range_frames_note->setVisible(frames);
+}
+
 void OptionsPanel::commit_typed_values() {
     for (QAbstractSpinBox* box : findChildren<QAbstractSpinBox*>()) {
         box->interpretText();
@@ -479,11 +521,20 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::vector<Vm
         std::max(0, static_cast<int>(scale_algorithms.indexOf(QString::fromStdString(options.scale_algorithm)))));
     scale_direction_combo->setCurrentIndex(options.scale_direction == ScaleDirection::distorted_to_source ? 1 : 0);
 
+    range_unit_combo->setCurrentIndex(options.range_in_frames ? 1 : 0);
+    const long long seconds_start = options.range_in_frames ? 0 : options.range_start;
+    const long long seconds_end = options.range_in_frames ? 0 : options.range_end;
     if (can_show(range_start_edit)) {
-        range_start_edit->setTime(QTime(0, 0).addSecs(static_cast<int>(options.range_start)));
+        range_start_edit->setTime(QTime(0, 0).addSecs(static_cast<int>(seconds_start)));
     }
     if (can_show(range_end_edit)) {
-        range_end_edit->setTime(QTime(0, 0).addSecs(static_cast<int>(options.range_end)));
+        range_end_edit->setTime(QTime(0, 0).addSecs(static_cast<int>(seconds_end)));
+    }
+    if (can_show(range_first_spin)) {
+        range_first_spin->setValue(options.range_in_frames ? static_cast<int>(options.range_start) : 0);
+    }
+    if (can_show(range_last_spin)) {
+        range_last_spin->setValue(options.range_in_frames ? static_cast<int>(options.range_end) - 1 : -1);
     }
 
     const auto any = [&selected](auto&& predicate) { return std::any_of(selected.begin(), selected.end(), predicate); };
@@ -577,8 +628,14 @@ VmafOptions OptionsPanel::read_options(const std::vector<std::string>& extra_fea
     options.compute_xpsnr = compute_xpsnr;
     options.compute_vmaf = compute_vmaf;
     options.compute_vmaf_neg = compute_vmaf_neg;
-    options.range_start = QTime(0, 0).secsTo(range_start_edit->time());
-    options.range_end = QTime(0, 0).secsTo(range_end_edit->time());
+    options.range_in_frames = range_unit_combo->currentIndex() == 1;
+    if (options.range_in_frames) {
+        options.range_start = range_first_spin->value();
+        options.range_end = range_last_spin->value() + 1;  // the frame past the last; End (-1): 0, to the end
+    } else {
+        options.range_start = QTime(0, 0).secsTo(range_start_edit->time());
+        options.range_end = QTime(0, 0).secsTo(range_end_edit->time());
+    }
     options.gpu_decode = gpu_checkbox->isChecked();
     options.gpu_vendor = gpu_checkbox->isChecked()
                              ? gpu_vendor_entries[static_cast<std::size_t>(gpu_vendor_combo->currentIndex())]

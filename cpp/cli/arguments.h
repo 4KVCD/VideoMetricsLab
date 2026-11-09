@@ -29,6 +29,8 @@ struct CompareArguments {
     std::string scaler = "bicubic";
     std::optional<long long> duration;  // whole seconds from the start of the videos
     std::optional<std::pair<long long, long long>> range;  // whole seconds; an end of 0: to the end
+    // The first frame and the one past the last (--frames); an end of 0: to the end.
+    std::optional<std::pair<long long, long long>> frames;
     std::optional<std::string> colour;
     std::optional<std::string> film_grain;  // "with" or "without" (VideoInfo::with_film_grain)
     std::optional<double> fps;            // a raw YUV file's frame rate, a raw stream's in place of what it stores

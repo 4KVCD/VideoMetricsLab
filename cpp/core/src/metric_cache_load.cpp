@@ -81,6 +81,9 @@ bool fit_to_range(LoadedMetric& metric, const ComparisonRecipe& recipe, const nl
     if (recipe.range_start <= 0 && recipe.range_end <= 0) {
         return !marked;
     }
+    if (recipe.range_in_frames) {
+        return marked;  // no score saved before ranges is of a range of frames
+    }
     if (recipe.range_end <= 0 || marked) {
         return true;  // the range's own
     }
@@ -210,13 +213,18 @@ bool cut_to_range(LoadedMetric& metric, const ComparisonRecipe& recipe, const nl
         return false;
     }
     try {
-        const double fps = video_info_from_dict(whole_context.at("source_info")).fps;
+        const VideoInfo source = video_info_from_dict(whole_context.at("source_info"));
+        const double fps = source.fps;
         if (!std::isfinite(fps) || fps <= 0.0) {
             return false;
         }
-        const long long start = first_frame_of_second(recipe.range_start, fps);
-        const std::optional<long long> end =
-            recipe.range_end > 0 ? std::optional(first_frame_of_second(recipe.range_end, fps)) : std::nullopt;
+        // CVVDP's whole seconds of a range of frames, as a run scores them.
+        const long long video_frames = std::min(
+            source.estimated_frame_count(), video_info_from_dict(whole_context.at("distorted_info")).estimated_frame_count());
+        const ComparedRange compared = std::holds_alternative<SequenceMetricResult>(metric)
+                                           ? cvvdp_seconds(recipe.compared_range(), fps, video_frames)
+                                           : recipe.compared_range();
+        const auto [start, end] = compared_frames(compared, fps);
         const FrameRange range{start, end, start, end};
         if (auto* frames = std::get_if<FrameMetricResult>(&metric)) {
             if (!cut_frames(*frames, start, end)) {
@@ -325,6 +333,7 @@ std::optional<OtherRecipeFolder> whole_video_folder(const std::filesystem::path&
     ComparisonRecipe whole = recipe;
     whole.range_start = 0;
     whole.range_end = 0;
+    whole.range_in_frames = false;
     std::filesystem::path directory = base / format_folder / recipe_hash(source, distorted, whole);
     std::optional<nlohmann::json> context = current_context(directory);
     if (!context || (own_context && !same_crops(*own_context, *context))) {
@@ -337,6 +346,7 @@ std::optional<OtherRecipeFolder> whole_video_folder(const std::filesystem::path&
 ComparisonRecipe whole_video_recipe(ComparisonRecipe recipe) {
     recipe.range_start = 0;
     recipe.range_end = 0;
+    recipe.range_in_frames = false;
     return recipe;
 }
 
@@ -433,10 +443,8 @@ long long range_frame_count(const ComparisonResult& result, const ComparisonReci
     const double fps = result.source_info.fps;
     const long long video_frames =
         std::min(result.source_info.estimated_frame_count(), result.distorted_info.estimated_frame_count());
-    const long long start = first_frame_of_second(recipe.range_start, fps);
-    const long long end =
-        recipe.range_end > 0 ? std::min(first_frame_of_second(recipe.range_end, fps), video_frames) : video_frames;
-    return std::max(0LL, end - start);
+    const auto [start, end] = compared_frames(recipe.compared_range(), fps);
+    return std::max(0LL, std::min(end.value_or(video_frames), video_frames) - start);
 }
 
 }  // namespace

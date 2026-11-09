@@ -41,16 +41,18 @@ std::optional<std::string> frame_rate_problem(const VideoInfo& source, const Vid
 }
 
 // Why the two videos' frame rates or durations do not allow a comparison of
-// seconds [range_start, range_end) (range_end 0: to the end).
+// `range` (seconds or frames; an end of 0: to the end).
 std::optional<std::string> timeline_problem(const VideoInfo& source, const VideoInfo& distorted,
-                                            long long range_start, long long range_end) {
+                                            const ComparedRange& range) {
+    const long long range_start = range.start;
+    const long long range_end = range.end;
     if (range_end > 0 && range_end <= range_start) {
         return "The range ends before it starts.";
     }
-    if ((range_start > 0 || range_end > 0) && (source.fps <= 0 || distorted.fps <= 0)) {
+    if (!range.whole() && (source.fps <= 0 || distorted.fps <= 0)) {
         return "A range needs the videos' frame rates, which are not known.";  // its seconds count frames
     }
-    if (range_end > 0 &&
+    if (!range.in_frames && range_end > 0 &&
         first_frame_of_second(range_start, source.fps) >= first_frame_of_second(range_end, source.fps)) {
         return "The range contains no frame of the videos.";  // below 1 fps, a second may have none
     }
@@ -66,7 +68,8 @@ std::optional<std::string> timeline_problem(const VideoInfo& source, const Video
         // stops: the two videos' frames are paired until either ends.
         const long long shorter_frames =
             std::min(source.estimated_frame_count(), distorted.estimated_frame_count());
-        const long long last_end = end_second_of(shorter_frames, source.fps);
+        // Where a range may end: a frame, or a second, past the last.
+        const long long last_end = range.in_frames ? shorter_frames : end_second_of(shorter_frames, source.fps);
         if (range_start > 0 && range_start >= last_end) {
             return "The range starts after the end of one of the videos.";
         }
@@ -243,6 +246,11 @@ std::optional<std::string> untimed_pair_problem(const VideoInfo& source, const V
 
 std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, long long range_start,
                                         long long range_end) {
+    return pair_problem(source, distorted, ComparedRange{range_start, range_end, false});
+}
+
+std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted,
+                                        const ComparedRange& range) {
     if (source.rotation != distorted.rotation) {
         return "The two videos are stored at different rotations: source " + std::to_string(source.rotation) +
                " degrees versus distorted " + std::to_string(distorted.rotation) +
@@ -254,7 +262,7 @@ std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo
             return frame_rate_unknown_problem(*video);
         }
     }
-    return timeline_problem(source, distorted, range_start, range_end);
+    return timeline_problem(source, distorted, range);
 }
 
 std::string frame_rate_unknown_problem(const VideoInfo& video) {

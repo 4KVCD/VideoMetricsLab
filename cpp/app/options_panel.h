@@ -103,8 +103,14 @@ public:
     // and the tests use them as a user would.
     QLabel* target_label = nullptr;
     QComboBox* crop_combo = nullptr;
-    QTimeEdit* range_start_edit = nullptr;  // the range compared, in whole seconds
+    // The range compared: whole seconds or frames (range_unit_combo: Time,
+    // Frames), and the note on CVVDP's whole seconds shown with frames.
+    QComboBox* range_unit_combo = nullptr;
+    QTimeEdit* range_start_edit = nullptr;
     QTimeEdit* range_end_edit = nullptr;
+    QSpinBox* range_first_spin = nullptr;
+    QSpinBox* range_last_spin = nullptr;  // -1 ("End"): to the videos' end
+    QLabel* range_frames_note = nullptr;
     QComboBox* scale_algo_combo = nullptr;
     QComboBox* scale_direction_combo = nullptr;
     QComboBox* film_grain_combo = nullptr;
@@ -143,6 +149,7 @@ signals:
 
 private:
     void build_preparation(QFormLayout* form);
+    void show_range_unit();
     void build_metric_settings(QFormLayout* form);
     void build_cvvdp(QFormLayout* form);
     void build_performance(QFormLayout* form, const std::vector<GpuVendor>& gpu_vendors);

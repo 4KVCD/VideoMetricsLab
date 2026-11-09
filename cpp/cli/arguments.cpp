@@ -31,7 +31,8 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--black-bars {auto,source,none}]
                                    [--scale-to {test,reference}]
                                    [--scaler {bicubic,bilinear,lanczos,spline}]
-                                   [--duration SECONDS | --range START-END]
+                                   [--duration SECONDS | --range START-END |
+                                   --frames FIRST-LAST]
                                    [--colour {pq-bt2020,hlg-bt2020,bt709}]
                                    [--film-grain {with,without}] [--fps RATE]
                                    [--size WIDTHxHEIGHT] [--pix-fmt FORMAT]
@@ -150,6 +151,10 @@ options:
   --range START-END     compare only that part of each video, from START to
                         END, each whole seconds or H:MM:SS (1:00-1:30);
                         without END, to the videos' end
+  --frames FIRST-LAST   compare only frames FIRST to LAST of each video, both
+                        included, counted from 0; without LAST, to the
+                        videos' end. CVVDP scores whole seconds: its part is
+                        rounded to the nearest seconds
   --colour, --color {pq-bt2020,hlg-bt2020,bt709}
                         the colours of a video with no colour tags (y4m, say):
                         pq-bt2020 (HDR10), hlg-bt2020 or bt709 (SDR). A tagged
@@ -819,6 +824,27 @@ std::pair<long long, long long> time_range(const std::string& text) {
     return {*start, *end};
 }
 
+// --frames: FIRST-LAST, whole frame numbers counted from 0, LAST included;
+// no LAST: to the videos' end. As a range: the first frame and the one past
+// the last (0: to the end).
+std::pair<long long, long long> frame_span(const std::string& text) {
+    static const std::regex form(R"(\s*(\d{1,15})\s*-\s*(\d{1,15})?\s*)");
+    std::smatch parts;
+    if (!std::regex_match(text, parts, form)) {
+        throw ArgumentError{"invalid frame range: " + python_string_repr(text) +
+                            " (FIRST-LAST, frame numbers from 0; no LAST: to the end)"};
+    }
+    const long long first = std::stoll(parts[1].str());
+    if (!parts[2].matched) {
+        return {first, 0};
+    }
+    const long long last = std::stoll(parts[2].str());
+    if (last < first) {
+        throw ArgumentError{"its last frame must not be before its first"};
+    }
+    return {first, last + 1};
+}
+
 // A frame rate (--fps): a fraction of whole numbers below 2^53, as many as a
 // double holds exactly ("24000/1001"), or a number ("23.976"), above 0.
 double frame_rate(const std::string& text) {
@@ -930,6 +956,7 @@ Parser compare_parser(CompareArguments& parsed) {
                }),
         option({"--duration"}, [&parsed](const std::string& value) { parsed.duration = duration_seconds(value); }),
         option({"--range"}, [&parsed](const std::string& value) { parsed.range = time_range(value); }),
+        option({"--frames"}, [&parsed](const std::string& value) { parsed.frames = frame_span(value); }),
         option({"--colour", "--color"},
                [&parsed](const std::string& value) {
                    parsed.colour = choice(value, {"pq-bt2020", "hlg-bt2020", "bt709"});
@@ -976,7 +1003,10 @@ Parser compare_parser(CompareArguments& parsed) {
         flag({"-q", "--quiet"}, parsed.quiet),
         flag({"-v", "--verbose"}, parsed.verbose),
     };
-    parser.exclusive = {{"--duration", "--range"}, {"--no-gpu-decode", "--gpu-decode"}};
+    parser.exclusive = {{"--duration", "--range"},
+                        {"--duration", "--frames"},
+                        {"--range", "--frames"},
+                        {"--no-gpu-decode", "--gpu-decode"}};
     return parser;
 }
 

@@ -346,6 +346,24 @@ TEST(Decisions, ARangeIsRefusedWhereItCannotBeCompared) {
     EXPECT_EQ(pair_problem(no_rate, no_rate, 10, 20), "A range needs the videos' frame rates, which are not known.");
 }
 
+// A range of frames: it must end after it starts, start within both videos
+// and end no later than the shorter one's last frame.
+TEST(Decisions, ARangeOfFramesIsRefusedWhereItCannotBeCompared) {
+    VideoInfo source;
+    source.fps = 50.0;
+    source.duration = 10.0;  // 500 frames
+    VideoInfo shorter = source;
+    shorter.duration = 4.0;  // 200 frames
+    EXPECT_EQ(pair_problem(source, shorter, ComparedRange{100, 50, true}), "The range ends before it starts.");
+    EXPECT_EQ(pair_problem(source, shorter, ComparedRange{200, 0, true}),
+              "The range starts after the end of one of the videos.");
+    EXPECT_EQ(pair_problem(source, shorter, ComparedRange{100, 201, true}),
+              "The range extends beyond the end of one of the videos.");
+    EXPECT_EQ(pair_problem(source, shorter, ComparedRange{100, 200, true}), std::nullopt);
+    EXPECT_EQ(pair_problem(source, shorter, ComparedRange{0, 1, true}), std::nullopt);
+    EXPECT_TRUE(pair_problem(source, shorter, ComparedRange{100, 0, true})->starts_with("Durations do not match"));
+}
+
 // Video Compare places a raw stream's frames by its rate: it refuses one
 // whose rate is not known or differs from the reference's, but a raw stream
 // shorter than the reference is shown, as any shorter pair is.

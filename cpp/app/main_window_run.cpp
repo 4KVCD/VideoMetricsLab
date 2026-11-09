@@ -32,6 +32,7 @@
 #include "vml/crop_detect.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/film_grain_scoring.h"
+#include "vml/frame_range.h"
 #include "vml/geometry.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/isolated.h"
@@ -518,10 +519,13 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
             continue;  // on the GPU
         }
         double seconds = std::min(info.duration, source_info_->duration);
-        if (row_data->options.range_end > 0) {
-            seconds = std::min(seconds, static_cast<double>(row_data->options.range_end));
+        if (const double fps = source_info_->fps; fps > 0) {  // the range's part of them
+            const auto [first, end] = compared_frames(row_data->options.compared_range(), fps);
+            if (end) {
+                seconds = std::min(seconds, static_cast<double>(*end) / fps);
+            }
+            seconds -= static_cast<double>(first) / fps;
         }
-        seconds -= static_cast<double>(row_data->options.range_start);
         if (seconds <= long_cpu_run_seconds) {
             continue;
         }

@@ -22,6 +22,7 @@
 #include <string>
 #include <utility>
 
+#include "vml/compared_range.h"
 #include "vml/range_seek.h"
 #include "vml/results.h"
 
@@ -55,6 +56,13 @@ struct FrameRange {
 // `looks_around`: the run has a metric that looks at the frames around the
 // one it scores (VMAF, XPSNR, CVVDP).
 FrameRange frame_range(long long first_second, long long end_second, double fps, int step, bool looks_around);
+// The same for a range of seconds or of frames (compared_frames); a range
+// of frames that looks around decodes a second before it too.
+FrameRange frame_range(const ComparedRange& range, double fps, int step, bool looks_around);
+
+// `one`'s compared frames, decoding what both decode: a pass whose metrics
+// compare different frames (CVVDP's whole seconds of a range of frames).
+FrameRange union_of(const FrameRange& one, const FrameRange& other);
 
 // FFmpeg's filter at the head of a video's chain that keeps the frames a run
 // decodes, counting them as the numbering after it does (frame_sync.h), or
@@ -77,5 +85,11 @@ void mark_range(MetricProvenance& provenance, const FrameRange& range,
 // The whole seconds a score's range_frames came from, [first, second) (0: to
 // the end); nothing for a score of the whole videos.
 std::optional<std::pair<long long, long long>> scored_seconds(const MetricProvenance& provenance, double fps);
+
+// The range a frame score's range_frames came from: whole seconds where it
+// starts and ends on their edges (as a range of seconds' frame scores do),
+// else frames. Nothing for a score of the whole videos. (CVVDP's always
+// cover whole seconds: scored_seconds.)
+std::optional<ComparedRange> scored_frames(const MetricProvenance& provenance, double fps);
 
 }  // namespace vml

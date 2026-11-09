@@ -53,6 +53,10 @@ nlohmann::json ComparisonRecipe::identity() const {
     if (range_start > 0) {
         identity["range_start"] = static_cast<double>(range_start);
     }
+    if (range_in_frames) {
+        // Only here: every range of seconds keeps the identity it had.
+        identity["range_unit"] = "frames";
+    }
     if (!resample_test && scale_algorithm != VmafOptions{}.scale_algorithm) {
         identity["scale_algorithm"] = scale_algorithm;
     }
@@ -88,6 +92,8 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
     AnalysisRequest request;
     request.recipe = {options.crop_mode,  options.scale_algorithm, options.scale_direction,
                       options.range_start, options.range_end,      options.resample_test};
+    // The whole videos are one comparison however a range would be counted.
+    request.recipe.range_in_frames = options.range_in_frames && !options.compared_range().whole();
     const std::optional<std::string> source_grain = film_grain_identity(source);
     const std::optional<std::string> distorted_grain = film_grain_identity(distorted);
     if (source_grain || distorted_grain) {

@@ -75,5 +75,43 @@ TEST(FrameRange, DecodesTheFramesItsMetricsLookAt) {
     EXPECT_EQ(frame_range(10, 30, 24.0, 7, false), (FrameRange{240, 720, 238, 720}));
 }
 
+// A range of frames compares exactly its frames, decoding a second before
+// for the metrics that look back; CVVDP, which scores whole seconds, takes
+// the nearest ones: at least one, and none past the shorter video's end.
+TEST(FrameRange, ARangeOfFramesIsExactAndCvvdpsTheNearestSeconds) {
+    const ComparedRange frames{100, 220, true};  // frames 100 to 219
+    EXPECT_EQ(compared_frames(frames, 50.0), std::pair(100LL, std::optional(220LL)));
+    EXPECT_EQ(compared_frames(ComparedRange{100, 0, true}, 50.0), std::pair(100LL, std::optional<long long>()));
+    EXPECT_EQ(compared_frames(ComparedRange{2, 4, false}, 50.0), std::pair(100LL, std::optional(200LL)));
+    EXPECT_EQ(frame_range(frames, 50.0, 1, true), (FrameRange{100, 220, 50, 221}));
+    EXPECT_EQ(frame_range(frames, 50.0, 1, false), (FrameRange{100, 220, 100, 220}));
+
+    EXPECT_EQ(cvvdp_seconds(frames, 50.0, 500), (ComparedRange{2, 4, false}));  // 2.0 to 4.4 s
+    EXPECT_EQ(cvvdp_seconds(ComparedRange{100, 110, true}, 50.0, 500), (ComparedRange{2, 3, false}));
+    EXPECT_EQ(cvvdp_seconds(ComparedRange{0, 10, true}, 50.0, 500), (ComparedRange{0, 1, false}));
+    EXPECT_EQ(cvvdp_seconds(ComparedRange{400, 0, true}, 50.0, 500), (ComparedRange{8, 0, false}));
+    EXPECT_EQ(cvvdp_seconds(ComparedRange{400, 500, true}, 50.0, 450), (ComparedRange{8, 9, false}));
+    EXPECT_EQ(cvvdp_seconds(ComparedRange{490, 500, true}, 50.0, 450), (ComparedRange{8, 9, false}));
+    EXPECT_EQ(cvvdp_seconds(ComparedRange{0, 0, true}, 50.0, 500), ComparedRange{});
+    EXPECT_EQ(cvvdp_seconds(ComparedRange{3, 7, false}, 50.0, 500), (ComparedRange{3, 7, false}));
+    // At 30000/1001, frame 45 is 1.5015 s in and frame 44 1.468 s.
+    const double ntsc = 30000.0 / 1001.0;
+    EXPECT_EQ(cvvdp_seconds(ComparedRange{45, 300, true}, ntsc, 900), (ComparedRange{2, 10, false}));
+    EXPECT_EQ(cvvdp_seconds(ComparedRange{44, 300, true}, ntsc, 900), (ComparedRange{1, 10, false}));
+}
+
+// Scores loaded from a file tell their range by their frames: on whole
+// seconds' edges a range of seconds, else of frames.
+TEST(FrameRange, AScoresFramesSayWhetherItWasARangeOfFrames) {
+    MetricProvenance provenance;
+    EXPECT_EQ(scored_frames(provenance, 50.0), std::nullopt);
+    mark_range(provenance, frame_range(ComparedRange{100, 220, true}, 50.0, 1, true));
+    EXPECT_EQ(scored_frames(provenance, 50.0), (ComparedRange{100, 220, true}));
+    mark_range(provenance, frame_range(ComparedRange{101, 0, true}, 50.0, 1, true));
+    EXPECT_EQ(scored_frames(provenance, 50.0), (ComparedRange{101, 0, true}));
+    mark_range(provenance, frame_range(2, 4, 50.0, 1, true));
+    EXPECT_EQ(scored_frames(provenance, 50.0), (ComparedRange{2, 4, false}));
+}
+
 }  // namespace
 }  // namespace vml

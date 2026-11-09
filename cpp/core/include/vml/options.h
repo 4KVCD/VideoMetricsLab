@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+#include "vml/compared_range.h"
 #include "vml/range_seek.h"
 #include "vml/video.h"
 
@@ -102,10 +103,12 @@ struct VmafOptions {
     std::string model_choice_v1 = std::string(auto_model_choice);
     std::string model_v1;
     // The range compared, in whole seconds of the reference counted as CVVDP
-    // counts them (frame_range.h): from range_start to range_end; range_end
+    // counts them (frame_range.h), or in frames (range_in_frames): from
+    // range_start to range_end, the first second or frame past it; range_end
     // 0 compares to the videos' end. Both 0: the whole videos.
     long long range_start = 0;
     long long range_end = 0;
+    bool range_in_frames = false;
     // Both videos are decoded on the GPU where they can be (each falls back
     // to software on its own).
     bool gpu_decode = true;
@@ -123,6 +126,7 @@ struct VmafOptions {
     // Not a choice of the user's: set where a run hands its two videos to FFmpeg.
     RangeSeeks range_seeks;
 
+    ComparedRange compared_range() const { return {range_start, range_end, range_in_frames}; }
     // The keys of FFmpeg's metrics these options ask for, in the registry's
     // order.
     std::vector<std::string> requested_metrics() const;

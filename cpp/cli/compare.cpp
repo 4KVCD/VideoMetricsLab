@@ -326,13 +326,16 @@ std::optional<std::string> vmaf_where(const CompareArguments& arguments) {
     return arguments.cpu ? std::optional<std::string>("cpu") : std::nullopt;
 }
 
-// The range compared, in whole seconds (an end of 0: to the end): --range's,
-// or --duration's first seconds; both 0: the whole videos.
-std::pair<long long, long long> range_of(const CompareArguments& arguments) {
-    if (arguments.range) {
-        return *arguments.range;
+// The range compared (an end of 0: to the end): --frames', --range's, or
+// --duration's first seconds; both 0: the whole videos.
+ComparedRange range_of(const CompareArguments& arguments) {
+    if (arguments.frames) {
+        return {arguments.frames->first, arguments.frames->second, true};
     }
-    return {0, arguments.duration.value_or(0)};
+    if (arguments.range) {
+        return {arguments.range->first, arguments.range->second, false};
+    }
+    return {0, arguments.duration.value_or(0), false};
 }
 
 // The Vship build SSIMULACRA2, Butteraugli and CVVDP run on: --vship's, or
@@ -398,7 +401,10 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
     options.scale_algorithm = arguments.scaler;
     options.scale_direction = arguments.scale_to == "reference" ? ScaleDirection::distorted_to_source
                                                                 : ScaleDirection::source_to_distorted;
-    std::tie(options.range_start, options.range_end) = range_of(arguments);
+    const ComparedRange range = range_of(arguments);
+    options.range_start = range.start;
+    options.range_end = range.end;
+    options.range_in_frames = range.in_frames;
     options.crop_mode = arguments.black_bars == "auto"     ? CropMode::automatic
                         : arguments.black_bars == "source" ? CropMode::source_only
                                                            : CropMode::none;
@@ -1011,13 +1017,19 @@ private:
 // What the command could ask for when the two videos last differently: the
 // end that compares to the shorter video's end, its last second partial
 // (end_second_of), from the range's start where it has one (a range with
-// no end is all it can have here), or any part of both.
-std::string different_durations_hint(const VideoInfo& source, const VideoInfo& test, long long range_start) {
+// no end is all it can have here), or any part of both. A range of frames
+// ends at the shorter video's last frame.
+std::string different_durations_hint(const VideoInfo& source, const VideoInfo& test, const ComparedRange& range) {
     if (source.fps <= 0 || source.duration <= 0 || test.duration <= 0) {
-        return " Here: --duration SECONDS or --range START-END.";
+        return " Here: --duration SECONDS, --range START-END or --frames FIRST-LAST.";
     }
-    const long long end =
-        end_second_of(std::min(source.estimated_frame_count(), test.estimated_frame_count()), source.fps);
+    const long long shorter_frames = std::min(source.estimated_frame_count(), test.estimated_frame_count());
+    if (range.in_frames) {
+        return " Here: --frames " + std::to_string(range.start) + "-" + std::to_string(shorter_frames - 1) +
+               " compares to the shorter video's last frame.";
+    }
+    const long long range_start = range.start;
+    const long long end = end_second_of(shorter_frames, source.fps);
     const std::string to_the_end = range_start > 0
                                        ? "--range " + std::to_string(range_start) + "-" + std::to_string(end)
                                        : "--duration " + std::to_string(end);
@@ -1070,8 +1082,7 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
     } catch (const std::exception& error) {
         video.error = error.what();
         if (video.error.starts_with("Durations do not match")) {
-            video.error += different_durations_hint(video.source, *video.info,
-                                                    arguments_.range ? arguments_.range->first : 0);
+            video.error += different_durations_hint(video.source, *video.info, range_of(arguments_));
         }
         return std::nullopt;
     }
