@@ -49,6 +49,7 @@ add_library(vml_core
     src/python_json.cpp
     src/python_text.cpp
     src/range_seek.cpp
+    src/raw_keyframes.cpp
     src/result_json.cpp
     src/results.cpp
     src/results_summary.cpp

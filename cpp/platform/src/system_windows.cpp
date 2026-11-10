@@ -537,6 +537,18 @@ std::string name_as_compared(std::string_view name) {
 
 std::filesystem::path path_from_text(std::string_view utf8) { return std::filesystem::path(widen(utf8)); }
 
+std::FILE* open_for_reading(const std::filesystem::path& path, std::int64_t offset) {
+    std::FILE* file = nullptr;
+    if (_wfopen_s(&file, path.c_str(), L"rb") != 0) {
+        return nullptr;
+    }
+    if (offset != 0 && _fseeki64(file, offset, SEEK_SET) != 0) {
+        std::fclose(file);
+        return nullptr;
+    }
+    return file;
+}
+
 std::optional<std::string> fopen_path(const std::filesystem::path& path) {
     // The ANSI code page's bytes for the name, when it has every letter.
     const auto in_code_page = [](const std::wstring& name) -> std::optional<std::string> {

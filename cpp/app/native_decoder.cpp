@@ -14,6 +14,7 @@
 #include <cstring>
 #include <limits>
 #include <map>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -28,6 +29,7 @@
 #include "vml/film_grain_scoring.h"
 #include "vml/hardware_decoding.h"
 #include "vml/platform/system.h"
+#include "vml/raw_keyframes.h"
 #include "vml/video_playback.h"
 
 #ifdef _WIN32
@@ -43,6 +45,12 @@ namespace {
 // being drawn, which after a seek are no longer among the pool's. While a
 // video plays, the pool's and the ready frame are all that is held.
 constexpr int held_frames = static_cast<int>(decoder_ready_frames + pool_kept_frames + presenter_waiting_frames + 1);
+
+// A seek in a raw stream to a frame up to this far ahead decodes on to it:
+// sooner than starting again at a keyframe (VVdeC decodes a 4K VVC stream at
+// about 13 s of video a second here), and it reads no headers past where
+// decoding is.
+constexpr std::int64_t counted_decode_on_ns = 5'000'000'000;
 
 QString error_text(int code) {
     std::array<char, AV_ERROR_MAX_STRING_SIZE> text{};
@@ -839,6 +847,9 @@ private:
     bool seek_from(std::int64_t time_ns);
     bool seek_further_back();
     std::int64_t counted_time_ns(std::int64_t number) const;
+    std::int64_t counted_number(std::int64_t time_ns) const;
+    RawKeyframes* raw_map();
+    bool start_at(const RawKeyframe& start);
     bool take_frames(QString& failure);
     std::optional<std::int64_t> frame_time();
     bool decode_on_in_software();
@@ -882,6 +893,9 @@ private:
     // stream is, so a seek decodes on to the frame, or from the stream's
     // start again to one already passed.
     std::optional<std::int64_t> counted_;
+    // Its keyframes, where it is a raw VVC or HEVC stream (raw_map).
+    std::shared_ptr<RawKeyframes> raw_map_;
+    bool raw_map_checked_ = false;
 
     // What the status line says about the film grain (note_film_grain).
     std::optional<QString> grain_note_;
@@ -1004,14 +1018,36 @@ void FfmpegNativeVideo::Session::make_seek() {
         decoding_->flush();
         decoding_->draining = false;
         at_end_ = false;
-    } else if (target_ns - counted_time_ns(1) / 2 < counted_time_ns(*counted_)) {
-        std::unique_ptr<Decoding> again =
-            open_video(path_, *video_.device_, decoding_->hardware, interrupt_, why_, grain_, vvdec_missing_, info_.fps);
-        sought = again != nullptr;
-        if (again) {
-            decoding_ = std::move(again);
-            counted_ = 0;
-            at_end_ = false;
+    } else {
+        const bool behind = target_ns - counted_time_ns(1) / 2 < counted_time_ns(*counted_);
+        // A raw VVC or HEVC stream starts again from the last keyframe before
+        // the frame (raw_keyframes.h), not from its start, nor decodes on to
+        // a frame far ahead; a frame a few seconds ahead is reached sooner
+        // by decoding on.
+        const bool far_ahead = target_ns - counted_time_ns(*counted_) > counted_decode_on_ns;
+        std::optional<RawKeyframe> start;
+        if ((behind || far_ahead) && raw_map()) {
+            bool stopped = false;
+            start = raw_map_->start_for(counted_number(target_ns), [this, &stopped] {
+                const std::lock_guard lock(video_.mutex_);
+                stopped = video_.cancelled_ || video_.wanted_ms_.has_value();
+                return stopped;
+            });
+            if (stopped) {
+                return;  // cancelled, or another seek asked for: made next
+            }
+        }
+        if (start && (behind || start->first_output > *counted_)) {
+            sought = start_at(*start);
+        } else if (behind) {
+            std::unique_ptr<Decoding> again = open_video(path_, *video_.device_, decoding_->hardware, interrupt_, why_,
+                                                         grain_, vvdec_missing_, info_.fps);
+            sought = again != nullptr;
+            if (again) {
+                decoding_ = std::move(again);
+                counted_ = 0;
+                at_end_ = false;
+            }
         }
     }
     // Accurate: the frames before it are decoded, not given, but the one on
@@ -1030,6 +1066,41 @@ void FfmpegNativeVideo::Session::make_seek() {
     if (at_end_) {
         video_.ended_ = true;  // sought past the end of a counted stream already decoded to it
     }
+}
+
+// The keyframe map of a raw VVC or HEVC stream, read by FFmpeg's raw
+// demuxers; nothing for any other video.
+RawKeyframes* FfmpegNativeVideo::Session::raw_map() {
+    if (!raw_map_checked_) {
+        raw_map_checked_ = true;
+        const AVFormatContext* format = decoding_->format;
+        const std::string_view demuxer = format != nullptr ? format->iformat->name : "";
+        if (demuxer == "vvc") {
+            raw_map_ = raw_keyframes(path_, RawCodec::vvc);
+        } else if (demuxer == "hevc") {
+            raw_map_ = raw_keyframes(path_, RawCodec::hevc);
+        }
+    }
+    return raw_map_.get();
+}
+
+// The number of a counted stream's frame shown at `time_ns`.
+std::int64_t FfmpegNativeVideo::Session::counted_number(std::int64_t time_ns) const {
+    const double frame_ns = static_cast<double>(counted_time_ns(1'000'000)) / 1e6;
+    return std::max<std::int64_t>(0, std::llround(static_cast<double>(time_ns) / frame_ns));
+}
+
+// Goes on decoding a raw stream from keyframe `start`: the next frame given
+// is its first. False when FFmpeg cannot seek to it.
+bool FfmpegNativeVideo::Session::start_at(const RawKeyframe& start) {
+    if (av_seek_frame(decoding_->format, decoding_->stream, start.offset, AVSEEK_FLAG_BYTE) < 0) {
+        return false;
+    }
+    decoding_->flush();
+    decoding_->draining = false;
+    at_end_ = false;
+    counted_ = start.first_output;
+    return true;
 }
 
 // Seeks to the keyframe before `time_ns` (from the first frame). False when

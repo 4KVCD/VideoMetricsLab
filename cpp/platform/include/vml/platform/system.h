@@ -2,6 +2,8 @@
 // environment, the CPU and the GPUs.
 #pragma once
 
+#include <cstdint>
+#include <cstdio>
 #include <ctime>
 #include <filesystem>
 #include <optional>
@@ -190,5 +192,10 @@ std::filesystem::path path_from_text(std::string_view utf8);
 // letters the code page lacks, as its short 8.3 path, where the drive keeps
 // those; nothing when neither names it. Elsewhere, the path itself.
 std::optional<std::string> fopen_path(const std::filesystem::path& path);
+
+// Opens a file to read its bytes with the C library (fread), any name it
+// has, from byte `offset` on (past 2 GB too); nothing when it cannot be
+// opened or has no such byte.
+std::FILE* open_for_reading(const std::filesystem::path& path, std::int64_t offset = 0);
 
 }  // namespace vml::platform

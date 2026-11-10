@@ -321,4 +321,13 @@ std::filesystem::path path_from_text(std::string_view utf8) { return std::filesy
 
 std::optional<std::string> fopen_path(const std::filesystem::path& path) { return path.string(); }
 
+std::FILE* open_for_reading(const std::filesystem::path& path, std::int64_t offset) {
+    std::FILE* file = std::fopen(path.c_str(), "rb");
+    if (file != nullptr && offset != 0 && fseeko(file, static_cast<off_t>(offset), SEEK_SET) != 0) {
+        std::fclose(file);
+        return nullptr;
+    }
+    return file;
+}
+
 }  // namespace vml::platform
