@@ -217,6 +217,9 @@ void MainWindow::apply_source_info(const std::filesystem::path& path, const Vide
     source_edit_->setText(text_of(path));
     show_source_label();
     check_rows_against_new_source(path);
+    // Video Compare lists unscored rows only once there is a reference: with
+    // the tab open while the reference was read, they stayed missing.
+    sync_frame_compare();
 }
 
 void MainWindow::show_source_label() {

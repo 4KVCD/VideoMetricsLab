@@ -753,6 +753,13 @@ void MainWindow::on_probed(const Probed& probed) {
         info->with_film_grain = *with;  // Settings' default, until the video is chosen for
     }
     set_row_info(*row, info, info ? QString() : probed.error);
+    // Video Compare lists a test video only once it has been read, and is
+    // brought up to date as it is opened: opened while videos were still
+    // being read, it missed the rest. Only while it is open, as each update
+    // rebuilds its whole list.
+    if (tabs_->currentIndex() == tab_frame_compare) {
+        sync_frame_compare();
+    }
     if (asked && token() != *asked) {
         invalidate_completed_results({*row});
         probed_lookups_.push_back(row_data.path);
