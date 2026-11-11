@@ -559,6 +559,100 @@ static void libvvdec_read_sei(AVCodecContext *avctx, const uint8_t *nal, int siz
     }
 }
 
+// The next NAL unit of an access unit in Annex B form, from `data` on: it runs from after its
+// start code (00 00 01) in *start to the next start code (its zero byte, if four bytes long) in
+// *next. 0 where none with a whole header follows.
+static int libvvdec_next_nal(const uint8_t *data, const uint8_t *end, const uint8_t **start,
+                             const uint8_t **next)
+{
+    *start = NULL;
+    for (const uint8_t *p = data; p + 3 <= end; p++) {
+        if (p[0] == 0 && p[1] == 0 && p[2] == 1) {
+            *start = p + 3;
+            break;
+        }
+    }
+    if (!*start || *start + 2 > end)
+        return 0;
+    *next = end;
+    for (const uint8_t *p = *start; p + 3 <= end; p++) {
+        if (p[0] == 0 && p[1] == 0 && (p[2] == 1 || (p[2] == 0 && p + 4 <= end && p[3] == 1))) {
+            *next = p;
+            break;
+        }
+    }
+    return 1;
+}
+
+// A VPS's, SPS's or PPS's NAL type, layer and id in one number; -1 for any other NAL unit. The
+// id is the payload's first bits (VPS's and SPS's 4, PPS's 6), before any emulation prevention
+// byte can come.
+static int libvvdec_parameter_set_key(const uint8_t *nal, const uint8_t *end)
+{
+    const int type = nal[1] >> 3, layer = nal[0] & 0x3f;
+
+    if ((type != VVC_NAL_UNIT_VPS && type != VVC_NAL_UNIT_SPS && type != VVC_NAL_UNIT_PPS) || nal + 3 > end)
+        return -1;
+    return type << 12 | layer << 6 | (type == VVC_NAL_UNIT_PPS ? nal[2] >> 2 : nal[2] >> 4);
+}
+
+// The parameter sets the most an access unit's start is searched for.
+#define LIBVVDEC_LEADING_NALS 64
+
+// Drops from the packet, an access unit, each VPS, SPS or PPS before its first slice that
+// another of the same type, layer and id follows there: a decoder uses the last.
+//
+// FFmpeg's vvc_mp4toannexb puts the stream's configuration (the parameter sets it starts with)
+// before every random access picture, ahead of the picture's own. Where a stream changes them
+// at a new coded video sequence (encodes of another picture size, joined), a CRA inside such a
+// sequence got the stream's first SPS, then its own: to VVdeC the SPS changed within a sequence,
+// which it refuses ("the SPS content changed within a CLVS"; FFmpeg's vvc takes the last).
+static int libvvdec_drop_replaced_parameter_sets(AVPacket *packet)
+{
+    // Each NAL unit before the first slice: from where the one before it ends (its start code
+    // included) to where it ends, and its parameter set key.
+    const uint8_t *begins[LIBVVDEC_LEADING_NALS], *ends[LIBVVDEC_LEADING_NALS];
+    int keys[LIBVVDEC_LEADING_NALS], dropped[LIBVVDEC_LEADING_NALS], count, any, ret;
+    const uint8_t *data, *end, *start, *next;
+    uint8_t *write;
+
+    // Found again once made writable, which may move the packet's bytes.
+    for (int pass = 0; pass < 2; pass++) {
+        data = packet->data;
+        end = packet->data + packet->size;
+        count = any = 0;
+        memset(dropped, 0, sizeof(dropped));
+        while (count < LIBVVDEC_LEADING_NALS && libvvdec_next_nal(data, end, &start, &next) &&
+               (start[1] >> 3) > VVC_NAL_UNIT_CODED_SLICE_GDR) {
+            begins[count] = data;
+            ends[count] = next;
+            keys[count++] = libvvdec_parameter_set_key(start, next);
+            data = next;
+        }
+        for (int i = 0; i < count; i++) {
+            for (int later = i + 1; keys[i] >= 0 && later < count && !dropped[i]; later++)
+                dropped[i] = keys[later] == keys[i];
+            any |= dropped[i];
+        }
+        if (!any)
+            return 0;  // as most units are: left as they are
+        if (pass == 0 && (ret = av_packet_make_writable(packet)) < 0)
+            return ret;
+    }
+
+    // The units kept moved together, then the rest of the access unit after them.
+    write = (uint8_t *)begins[0];
+    for (int i = 0; i < count; i++) {
+        if (!dropped[i]) {
+            memmove(write, begins[i], ends[i] - begins[i]);
+            write += ends[i] - begins[i];
+        }
+    }
+    memmove(write, data, end - data);
+    av_shrink_packet(packet, (int)(write + (end - data) - packet->data));
+    return 0;
+}
+
 // The NAL units of the packet, an access unit in Annex B form: its SEIs read as FFmpeg's vvc
 // reads them, the prefix SEIs (of an access unit with a picture: at frame_start) before the
 // unit's AFGS1 sets are kept with it, the suffix SEIs after (they count for later pictures),
@@ -569,26 +663,10 @@ static int libvvdec_remember_unit(AVCodecContext *avctx, const AVPacket *packet)
     const uint8_t *nals[2][64];  // the prefix and the suffix SEI NAL units
     int sizes[2][64], counts[2] = { 0, 0 }, has_picture = 0;
     const uint8_t *data = packet->data, *end = packet->data + packet->size;
+    const uint8_t *start, *next;
     LibvvdecUnit *unit;
 
-    // Each NAL unit runs from after its start code (00 00 01) to the next one.
-    while (data + 3 <= end) {
-        const uint8_t *start = NULL, *next;
-        for (const uint8_t *p = data; p + 3 <= end; p++) {
-            if (p[0] == 0 && p[1] == 0 && p[2] == 1) {
-                start = p + 3;
-                break;
-            }
-        }
-        if (!start || start + 2 > end)
-            break;
-        next = end;
-        for (const uint8_t *p = start; p + 3 <= end; p++) {
-            if (p[0] == 0 && p[1] == 0 && (p[2] == 1 || (p[2] == 0 && p + 4 <= end && p[3] == 1))) {
-                next = p;
-                break;
-            }
-        }
+    while (libvvdec_next_nal(data, end, &start, &next)) {
         {
             const int type = start[1] >> 3;  // after the forbidden, reserved and layer bits
             const int suffix = type == VVC_NAL_UNIT_SUFFIX_SEI;
@@ -693,7 +771,9 @@ static int libvvdec_decode_picture(AVCodecContext *avctx, AVFrame *frame)
             }
             // The packet's bytes, which VVdeC copies; as its time stamp, the unit's decoding
             // index, which finds its own time stamp and AFGS1 sets again (units).
-            ret = libvvdec_remember_unit(avctx, s->packet);
+            ret = libvvdec_drop_replaced_parameter_sets(s->packet);
+            if (ret >= 0)
+                ret = libvvdec_remember_unit(avctx, s->packet);
             if (ret < 0) {
                 av_packet_unref(s->packet);
                 return ret;
