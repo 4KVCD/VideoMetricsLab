@@ -640,6 +640,22 @@ int CUDAAPI on_sequence(void *user, CUVIDEOFORMAT *format) {
         // shown counts too: a new crop with the same coded size changes the
         // pictures FFmpeg gives, though not the decoder's; and what the first
         // sequence was checked for below (progressive, chroma as deep as luma).
+        //
+        // A new size shown is said as such: the video is then decoded in
+        // software and each frame scaled (size_changes.h). FFmpeg's own GPU
+        // decoding of AV1 keeps the first size's pictures after it, and gives
+        // the new size's laid out wrong in them, without a word.
+        const int shown_width = format->display_area.right - format->display_area.left;
+        const int shown_height = format->display_area.bottom - format->display_area.top;
+        const int first_width = d->info.display_right - d->info.display_left;
+        const int first_height = d->info.display_bottom - d->info.display_top;
+        if (shown_width != first_width || shown_height != first_height) {
+            char text[160];
+            snprintf(text, sizeof text, "the video's picture size changes partway through (%dx%d -> %dx%d)",
+                     first_width, first_height, shown_width, shown_height);
+            d->fail(text);
+            return 0;
+        }
         if (static_cast<int>(format->coded_width) != d->info.coded_width
             || static_cast<int>(format->coded_height) != d->info.coded_height
             || depth != d->info.bit_depth || format->chroma_format != d->info.chroma_format

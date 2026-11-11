@@ -860,7 +860,10 @@ bool collect(Decoder *d, bool draining) {
             continue;
         }
         if (result == AMF_RESOLUTION_CHANGED || result == AMF_RESOLUTION_UPDATED) {
-            d->fail("the video's format changes partway through");
+            // Said as a size change, as it is (here and below): the video is then decoded in software and
+            // each frame scaled (size_changes.h), not by FFmpeg's GPU decoding, which follows no new size of
+            // AV1's.
+            d->fail("the video's picture size changes partway through");
             return false;
         }
         d->fail("AMD's GPU decoder failed (" + result_text(result) + ")");
@@ -905,7 +908,7 @@ void collect_thread(Decoder *d) {
             continue;
         }
         if (result == AMF_RESOLUTION_CHANGED || result == AMF_RESOLUTION_UPDATED)
-            d->fail("the video's format changes partway through");
+            d->fail("the video's picture size changes partway through");
         else
             d->fail("AMD's GPU decoder failed (" + result_text(result) + ")");
         break;
@@ -1050,7 +1053,7 @@ NVF_API int nvf_push(void *handle, const unsigned char *data, int size, long lon
             continue;
         }
         if (result == AMF_RESOLUTION_CHANGED) {
-            d->fail("the video's format changes partway through");
+            d->fail("the video's picture size changes partway through");
         } else if (result != AMF_OK && result != AMF_NEED_MORE_INPUT) {
             d->fail("AMD's GPU decoder failed (" + result_text(result) + ")");
         } else {
