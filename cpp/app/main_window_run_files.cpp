@@ -205,6 +205,10 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
     }
     if (result.resample_target) {
         row_data.media_path = result.source_info.path;  // what the test decodes
+    } else if (film_grain_variant_choice(result.distorted, result.distorted_info.path)) {
+        // A film grain twin's run: a twin again, of the video's own row.
+        row_data.media_path = result.distorted_info.path;
+        row_data.film_grain_twin_of = result.distorted_info.path;
     }
     distorted_table_->item(row, col_check)->setCheckState(Qt::Unchecked);
     if (result.resample_target) {

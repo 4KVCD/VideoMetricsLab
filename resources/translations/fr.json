@@ -870,7 +870,11 @@
   "Enter the frame rate": "Saisir la fréquence d'images",
   "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} est un flux vidéo brut qui n'enregistre pas sa fréquence d'images. Saisissez-la sous forme de nombre ou de fraction, par exemple 24 ou 24000/1001 :",
   "The reference is {fps:.3f} fps.": "La référence est à {fps:.3f} i/s.",
-  "The frame rate of {video} is not known.": "La fréquence d'images de {video} n'est pas connue."
+  "The frame rate of {video} is not known.": "La fréquence d'images de {video} n'est pas connue.",
+  "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} est déjà dans la liste. L'ajouter à nouveau, évalué sans son grain de film, pour comparer les deux ?",
+  "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} est déjà dans la liste. L'ajouter à nouveau, évalué avec son grain de film, pour comparer les deux ?",
+  "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} ajouté à nouveau, évalué avec l'autre choix de grain de film : cochez-le et cliquez sur Calculer les métriques.",
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Cette vidéo a été ajoutée une seconde fois pour être évaluée avec son grain de film et sans, côte à côte : chacune de ses lignes garde son choix."
  },
  "plurals": {
   "about {count} day": [

@@ -212,6 +212,21 @@ TEST(MetricCache, AResolutionTestsScalingAlgorithmMakesAnotherTest) {
     EXPECT_THROW(resample_target_from_dict(unknown), std::invalid_argument);
 }
 
+// A test video added again with the other film grain choice is a row of its
+// own, under a made-up path its saved run is known by again.
+TEST(MetricCache, AFilmGrainTwinsPathSaysItsChoice) {
+    const std::filesystem::path film("encodes/film.mkv");
+    const std::filesystem::path without = synthetic_film_grain_variant_path(film, false);
+    EXPECT_EQ(without, std::filesystem::path("encodes/film [without film grain].mkv"));
+    EXPECT_EQ(film_grain_variant_choice(without, film), false);
+    EXPECT_EQ(film_grain_variant_choice(synthetic_film_grain_variant_path(film, true), film), true);
+    EXPECT_EQ(film_grain_variant_choice(film, film), std::nullopt);
+    EXPECT_EQ(film_grain_variant_choice(without, "encodes/other.mkv"), std::nullopt);
+    EXPECT_EQ(film_grain_variant_choice(synthetic_scale_direction_variant_path(film, ScaleDirection::distorted_to_source),
+                                        film),
+              std::nullopt);
+}
+
 // A duration limit's scores, saved before ranges under the name of the range
 // from 0, answer that range when they reach its end (VMAF with the frame
 // after it, which its last frame's motion looked at), cut to it, CVVDP's

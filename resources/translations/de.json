@@ -870,7 +870,11 @@
   "Enter the frame rate": "Bildrate eingeben",
   "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} ist ein Rohdatenstrom, der seine Bildrate nicht speichert. Geben Sie sie als Zahl oder Bruch ein, etwa 24 oder 24000/1001:",
   "The reference is {fps:.3f} fps.": "Die Referenz hat {fps:.3f} fps.",
-  "The frame rate of {video} is not known.": "Die Bildrate von {video} ist nicht bekannt."
+  "The frame rate of {video} is not known.": "Die Bildrate von {video} ist nicht bekannt.",
+  "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} ist bereits in der Liste. Erneut hinzufügen, ohne Filmkorn bewertet, um beide zu vergleichen?",
+  "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} ist bereits in der Liste. Erneut hinzufügen, mit Filmkorn bewertet, um beide zu vergleichen?",
+  "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} erneut hinzugefügt, mit der anderen Filmkorn-Wahl bewertet – haken Sie die Zeile an und klicken Sie auf „Metriken berechnen“.",
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Dieses Video wurde ein zweites Mal hinzugefügt, um es mit und ohne Filmkorn nebeneinander zu bewerten: Jede seiner Zeilen behält ihre Wahl."
  },
  "plurals": {
   "about {count} day": [

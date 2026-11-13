@@ -870,7 +870,11 @@
   "Enter the frame rate": "Adja meg a képkockasebességet",
   "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "A(z) {video} nyers videófolyam, amely nem tárolja a képkockasebességét. Adja meg számként vagy törtként, például 24 vagy 24000/1001:",
   "The reference is {fps:.3f} fps.": "A referencia {fps:.3f} fps.",
-  "The frame rate of {video} is not known.": "A(z) {video} képkockasebessége nem ismert."
+  "The frame rate of {video} is not known.": "A(z) {video} képkockasebessége nem ismert.",
+  "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} már szerepel a listában. Hozzáadja újra, filmszemcse nélkül értékelve, hogy összehasonlítsa a kettőt?",
+  "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} már szerepel a listában. Hozzáadja újra, filmszemcsével értékelve, hogy összehasonlítsa a kettőt?",
+  "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} újra hozzáadva, a másik filmszemcse-beállítással értékelve — jelölje be, majd kattintson a Metrikák számítása gombra.",
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Ezt a videót másodszor is hozzáadták, hogy filmszemcsével és anélkül, egymás mellett legyen értékelve: minden sora megtartja a saját beállítását."
  },
  "plurals": {
   "about {count} day": [

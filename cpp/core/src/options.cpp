@@ -73,6 +73,23 @@ std::filesystem::path synthetic_scale_direction_variant_path(const std::filesyst
     return distorted.parent_path() / name;
 }
 
+std::filesystem::path synthetic_film_grain_variant_path(const std::filesystem::path& distorted, bool with_film_grain) {
+    std::filesystem::path name = distorted.stem();
+    name += with_film_grain ? " [with film grain]" : " [without film grain]";
+    name += distorted.extension();
+    return distorted.parent_path() / name;
+}
+
+std::optional<bool> film_grain_variant_choice(const std::filesystem::path& path,
+                                              const std::filesystem::path& distorted) {
+    for (const bool with : {true, false}) {
+        if (path == synthetic_film_grain_variant_path(distorted, with)) {
+            return with;
+        }
+    }
+    return std::nullopt;
+}
+
 const std::vector<ResampleTarget>& resample_target_choices() {
     static const std::vector<ResampleTarget> choices{
         {2560, "1440p"},

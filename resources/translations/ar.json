@@ -870,7 +870,11 @@
   "Enter the frame rate": "أدخل معدل الإطارات",
   "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} هو تدفق فيديو خام لا يخزّن معدل إطاراته. أدخله كرقم أو كسر، مثل 24 أو 24000/1001:",
   "The reference is {fps:.3f} fps.": "معدل إطارات المرجع {fps:.3f} إطارًا في الثانية.",
-  "The frame rate of {video} is not known.": "معدل إطارات {video} غير معروف."
+  "The frame rate of {video} is not known.": "معدل إطارات {video} غير معروف.",
+  "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} موجود في القائمة بالفعل. هل تُضيفه مرة أخرى ليُقيَّم دون حبيبات الفيلم، للمقارنة بين الاثنين؟",
+  "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} موجود في القائمة بالفعل. هل تُضيفه مرة أخرى ليُقيَّم مع حبيبات الفيلم، للمقارنة بين الاثنين؟",
+  "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "أُضيف {name} مرة أخرى ليُقيَّم بالخيار الآخر لحبيبات الفيلم — حدّده وانقر «حساب المقاييس».",
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "أُضيف هذا الفيديو مرة ثانية ليُقيَّم مع حبيبات الفيلم ودونها جنبًا إلى جنب: يحتفظ كل صف من صفوفه بخياره."
  },
  "plurals": {
   "about {count} day": [

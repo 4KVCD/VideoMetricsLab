@@ -40,6 +40,7 @@ const std::vector<ModelChoice>& model_choices();
 struct FilmGrainVideo {
     const VideoInfo* info = nullptr;  // nothing: not read yet
     bool resolution_test = false;     // its video is the reference, chosen with it at Calculate metrics
+    bool twinned = false;             // a film grain twin row, or the row one was made from: its choice is held
 };
 
 // What the Film grain dropdown shows for the selected videos: whether it can

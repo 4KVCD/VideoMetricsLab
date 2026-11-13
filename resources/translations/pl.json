@@ -870,7 +870,11 @@
   "Enter the frame rate": "Wprowadź liczbę klatek na sekundę",
   "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} to surowy strumień wideo, który nie zapisuje liczby klatek na sekundę. Wprowadź ją jako liczbę lub ułamek, na przykład 24 lub 24000/1001:",
   "The reference is {fps:.3f} fps.": "Materiał odniesienia ma {fps:.3f} kl./s.",
-  "The frame rate of {video} is not known.": "Liczba klatek na sekundę {video} nie jest znana."
+  "The frame rate of {video} is not known.": "Liczba klatek na sekundę {video} nie jest znana.",
+  "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} jest już na liście. Dodać go ponownie, ocenianego bez ziarna filmowego, aby porównać oba?",
+  "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} jest już na liście. Dodać go ponownie, ocenianego z ziarnem filmowym, aby porównać oba?",
+  "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "Dodano ponownie {name}, oceniany z drugim wyborem ziarna filmowego — zaznacz go i kliknij Oblicz metryki.",
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "To wideo dodano drugi raz, aby ocenić je z ziarnem filmowym i bez niego, obok siebie: każdy z jego wierszy zachowuje swój wybór."
  },
  "plurals": {
   "about {count} day": [

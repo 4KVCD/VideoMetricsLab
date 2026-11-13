@@ -60,6 +60,16 @@ ResampleTarget resample_target_of_width(int width);
 std::filesystem::path synthetic_scale_direction_variant_path(const std::filesystem::path& distorted,
                                                              ScaleDirection direction);
 
+// A made-up path that stands for a second row of the same test video scored
+// with the other film grain choice ("film [without film grain].mkv"), so that
+// the video can be scored with its film grain and without it side by side.
+std::filesystem::path synthetic_film_grain_variant_path(const std::filesystem::path& distorted, bool with_film_grain);
+
+// The film grain choice `path` stands for when it is `distorted`'s
+// synthetic_film_grain_variant_path; nothing otherwise.
+std::optional<bool> film_grain_variant_choice(const std::filesystem::path& path,
+                                              const std::filesystem::path& distorted);
+
 // Which bundled Vship build calculates SSIMULACRA2, Butteraugli and CVVDP on
 // the GPU: Vship-fast, which computes as libjxl and pycvvdp do, or stock Vship:
 // its Vulkan build (5.1.2), or for a GPU whose Vulkan driver has problems its HIP

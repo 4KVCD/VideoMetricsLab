@@ -870,7 +870,11 @@
   "Enter the frame rate": "Voer de framesnelheid in",
   "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} is een onbewerkte videostream die zijn framesnelheid niet opslaat. Voer deze in als getal of breuk, bijvoorbeeld 24 of 24000/1001:",
   "The reference is {fps:.3f} fps.": "De referentie heeft {fps:.3f} fps.",
-  "The frame rate of {video} is not known.": "De framesnelheid van {video} is niet bekend."
+  "The frame rate of {video} is not known.": "De framesnelheid van {video} is niet bekend.",
+  "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} staat al in de lijst. Opnieuw toevoegen, beoordeeld zonder filmkorrel, om de twee te vergelijken?",
+  "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} staat al in de lijst. Opnieuw toevoegen, beoordeeld met filmkorrel, om de twee te vergelijken?",
+  "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} opnieuw toegevoegd, beoordeeld met de andere filmkorrelkeuze — vink hem aan en klik op Metrieken berekenen.",
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Deze video is een tweede keer toegevoegd om hem met en zonder filmkorrel naast elkaar te beoordelen: elk van zijn rijen houdt zijn keuze."
  },
  "plurals": {
   "about {count} day": [

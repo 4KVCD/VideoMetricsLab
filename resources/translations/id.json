@@ -870,7 +870,11 @@
   "Enter the frame rate": "Masukkan kecepatan bingkai",
   "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} adalah aliran video mentah yang tidak menyimpan kecepatan bingkainya. Masukkan sebagai angka atau pecahan, misalnya 24 atau 24000/1001:",
   "The reference is {fps:.3f} fps.": "Referensi {fps:.3f} fps.",
-  "The frame rate of {video} is not known.": "Kecepatan bingkai {video} tidak diketahui."
+  "The frame rate of {video} is not known.": "Kecepatan bingkai {video} tidak diketahui.",
+  "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} sudah ada di daftar. Tambahkan lagi, dinilai tanpa grain film-nya, untuk membandingkan keduanya?",
+  "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} sudah ada di daftar. Tambahkan lagi, dinilai dengan grain film-nya, untuk membandingkan keduanya?",
+  "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} ditambahkan lagi, dinilai dengan pilihan grain film yang lain — centang lalu klik Hitung metrik.",
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Video ini ditambahkan untuk kedua kalinya agar dinilai dengan grain film-nya dan tanpanya, berdampingan: setiap barisnya mempertahankan pilihannya."
  },
  "plurals": {
   "about {count} day": [

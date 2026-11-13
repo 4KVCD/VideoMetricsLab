@@ -42,7 +42,8 @@ TEST(FilmGrainControl, OnlyGrainThatCanBeChosenIsAndTheReasonOtherwise) {
     EXPECT_EQ(control.with, std::nullopt);  // mixed
 
     for (const std::vector<FilmGrainVideo>& cannot :
-         {std::vector<FilmGrainVideo>{{&forced}}, {{&none}}, {{&unread}}, {{nullptr}}, {{&with, true}}}) {
+         {std::vector<FilmGrainVideo>{{&forced}}, {{&none}}, {{&unread}}, {{nullptr}}, {{&with, true}},
+          {{&with, false, true}, {&without, false, true}}}) {
         control = film_grain_control(cannot);
         EXPECT_FALSE(control.enabled);
         EXPECT_EQ(control.with, std::nullopt);
@@ -50,6 +51,15 @@ TEST(FilmGrainControl, OnlyGrainThatCanBeChosenIsAndTheReasonOtherwise) {
     }
     EXPECT_TRUE(film_grain_control({{&forced}}).tooltip.contains("HEVC"));  // why: H.274 is VVC's only
     EXPECT_NE(film_grain_control({{&none}}).tooltip, film_grain_control({{&unread}}).tooltip);
+    // A twinned row (added again with the other choice) keeps its choice,
+    // shown greyed out; the other selected rows can still be given one.
+    control = film_grain_control({{&without, false, true}});
+    EXPECT_FALSE(control.enabled);
+    EXPECT_EQ(control.with, false);
+    EXPECT_TRUE(control.tooltip.contains("second time"));
+    control = film_grain_control({{&with, false, true}, {&without}});
+    EXPECT_TRUE(control.enabled);
+    EXPECT_EQ(control.with, false);
 }
 
 // The dropdown shows the choice without reporting it, reports a choice the

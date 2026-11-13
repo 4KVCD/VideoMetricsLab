@@ -187,6 +187,12 @@ struct RowData {
     // True only for a "Test both" companion row, whose scale direction was
     // set on purpose to the direction the row stands for.
     bool scale_direction_pinned = false;
+    // For a row added to score a test video with the other film grain choice
+    // (synthetic_film_grain_variant_path): the path of the video's own row.
+    // Its choice is held, as its name says it, and so is the video's own
+    // row's while the twin is in the table (film_grain_twinned): the two
+    // always compare with and without.
+    std::optional<std::filesystem::path> film_grain_twin_of;
     // The metrics (keys) a Recalculate forgot, by the recipe they were
     // forgotten for (its identity's JSON), where another recipe's saved
     // scores would answer them (load_result): Auto's for Source only, the
@@ -393,6 +399,7 @@ private:
     void on_panel_field_edited(const QString& field);
     void on_model_changed(int index);
     void on_scale_direction_combo_changed(int index);
+    int add_companion_row(int row, const std::filesystem::path& path, const std::function<void(RowData&)>& differ);
     void add_opposite_scale_direction_rows(const std::vector<int>& rows);
     void apply_cvvdp(const std::function<CvvdpSettings(const CvvdpSettings&)>& change,
                      const std::optional<std::vector<int>>& rows = std::nullopt,
@@ -409,6 +416,13 @@ private:
     // The film grain choice (VideoInfo::with_film_grain), main_window_options.cpp.
     std::vector<std::filesystem::path> choose_film_grain(const std::vector<int>& rows, bool reference, bool with);
     std::vector<std::filesystem::path> apply_film_grain_default();
+    // Offers, for each of `paths` already in the table whose video has film
+    // grain to choose, to add it again with the other choice.
+    void offer_film_grain_twins(const std::vector<std::filesystem::path>& paths);
+    void add_film_grain_twin(int row);
+    // Whether `row_data`'s film grain choice is held: a twin row, or the row a
+    // twin in the table was made from.
+    bool film_grain_twinned(const RowData& row_data) const;
     void on_film_grain_chosen(bool with);
     void show_panel_film_grain();
     // The reference's line under its path: its media info, bitrate, length,

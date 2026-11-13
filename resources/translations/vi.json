@@ -870,7 +870,11 @@
   "Enter the frame rate": "Nhập tốc độ khung hình",
   "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} là luồng video thô không lưu tốc độ khung hình. Hãy nhập dưới dạng số hoặc phân số, ví dụ 24 hoặc 24000/1001:",
   "The reference is {fps:.3f} fps.": "Video tham chiếu có {fps:.3f} fps.",
-  "The frame rate of {video} is not known.": "Không rõ tốc độ khung hình của {video}."
+  "The frame rate of {video} is not known.": "Không rõ tốc độ khung hình của {video}.",
+  "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} đã có trong danh sách. Thêm lại, chấm điểm không có hạt phim, để so sánh hai bản?",
+  "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} đã có trong danh sách. Thêm lại, chấm điểm có hạt phim, để so sánh hai bản?",
+  "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "Đã thêm lại {name}, chấm điểm với lựa chọn hạt phim còn lại — đánh dấu rồi bấm Tính chỉ số.",
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Video này được thêm lần thứ hai để chấm điểm có hạt phim và không có hạt phim, cạnh nhau: mỗi hàng của nó giữ lựa chọn của mình."
  },
  "plurals": {
   "about {count} day": [

@@ -37,11 +37,21 @@ FilmGrainControl film_grain_control(const std::vector<FilmGrainVideo>& videos) {
     FilmGrainControl control;
     QString why;  // why none can be chosen, as the first video that cannot says it
     bool first = true;
+    // The choice twinned rows hold, shown greyed out where every selected
+    // video is one of them and they share it.
+    std::optional<bool> held;
+    bool all_held = !videos.empty();
     for (const FilmGrainVideo& video : videos) {
-        if (video.resolution_test || video.info == nullptr || !film_grain_choosable(*video.info)) {
+        const bool holds = video.twinned && video.info != nullptr && film_grain_choosable(*video.info);
+        const bool held_with = holds && effective_film_grain(*video.info).scoring == GrainScoring::with;
+        all_held = all_held && holds && (!held || *held == held_with);
+        held = held_with;
+        if (video.resolution_test || video.twinned || video.info == nullptr || !film_grain_choosable(*video.info)) {
             if (why.isEmpty()) {
                 why = video.resolution_test ? tr("A resolution test's film grain is the reference's, chosen when "
                                                  "metrics are calculated.")
+                      : video.twinned ? tr("This video was added a second time to be scored with its film grain and "
+                                           "without it, side by side: each of its rows keeps its choice.")
                       : video.info == nullptr || !video.info->film_grain ? tr("Its film grain was not read.")
                       : !film_grain_note(*video.info).isEmpty()          ? film_grain_note(*video.info)
                                                                          : tr("It has no film grain.");
@@ -54,7 +64,7 @@ FilmGrainControl film_grain_control(const std::vector<FilmGrainVideo>& videos) {
         control.enabled = true;
     }
     if (!control.enabled) {
-        control.with.reset();
+        control.with = all_held ? held : std::nullopt;
     }
     control.tooltip = control.enabled ? tr("Whether the scores are made with the film grain the video's stream asks "
                                            "the player to add, as viewers see the video, or without it, from the "

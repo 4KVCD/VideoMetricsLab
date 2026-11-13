@@ -870,7 +870,11 @@
   "Enter the frame rate": "Digite a taxa de quadros",
   "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} é um fluxo de vídeo bruto que não armazena sua taxa de quadros. Digite-a como número ou fração, por exemplo 24 ou 24000/1001:",
   "The reference is {fps:.3f} fps.": "A referência tem {fps:.3f} fps.",
-  "The frame rate of {video} is not known.": "A taxa de quadros de {video} não é conhecida."
+  "The frame rate of {video} is not known.": "A taxa de quadros de {video} não é conhecida.",
+  "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} já está na lista. Adicioná-lo de novo, avaliado sem a granulação de filme, para comparar os dois?",
+  "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} já está na lista. Adicioná-lo de novo, avaliado com a granulação de filme, para comparar os dois?",
+  "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} adicionado de novo, avaliado com a outra opção de granulação de filme — marque-o e clique em Calcular métricas.",
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Este vídeo foi adicionado uma segunda vez para ser avaliado com a granulação de filme e sem ela, lado a lado: cada uma de suas linhas mantém sua opção."
  },
  "plurals": {
   "about {count} day": [

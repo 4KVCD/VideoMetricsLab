@@ -870,7 +870,11 @@
   "Enter the frame rate": "输入帧率",
   "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} 是未存储帧率的原始视频流。请以数字或分数形式输入，例如 24 或 24000/1001：",
   "The reference is {fps:.3f} fps.": "参考视频为 {fps:.3f} fps。",
-  "The frame rate of {video} is not known.": "{video} 的帧率未知。"
+  "The frame rate of {video} is not known.": "{video} 的帧率未知。",
+  "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} 已在列表中。要再次添加它并在不含胶片颗粒的情况下评分，以便比较两者吗？",
+  "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} 已在列表中。要再次添加它并在包含胶片颗粒的情况下评分，以便比较两者吗？",
+  "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "已再次添加 {name}，按另一种胶片颗粒选择评分——勾选它并点击“计算指标”。",
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "此视频被第二次添加，以便并排比较含胶片颗粒和不含胶片颗粒的评分：它的每一行都保留各自的选择。"
  },
  "plurals": {
   "about {count} day": [

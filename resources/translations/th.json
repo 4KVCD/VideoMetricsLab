@@ -870,7 +870,11 @@
   "Enter the frame rate": "ป้อนอัตราเฟรม",
   "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} เป็นสตรีมวิดีโอดิบที่ไม่ได้เก็บอัตราเฟรมไว้ ป้อนเป็นตัวเลขหรือเศษส่วน เช่น 24 หรือ 24000/1001:",
   "The reference is {fps:.3f} fps.": "วิดีโออ้างอิงมีอัตรา {fps:.3f} fps",
-  "The frame rate of {video} is not known.": "ไม่ทราบอัตราเฟรมของ {video}"
+  "The frame rate of {video} is not known.": "ไม่ทราบอัตราเฟรมของ {video}",
+  "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} อยู่ในรายการแล้ว เพิ่มอีกครั้งโดยให้คะแนนแบบไม่มีเกรนฟิล์ม เพื่อเปรียบเทียบทั้งสองหรือไม่",
+  "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} อยู่ในรายการแล้ว เพิ่มอีกครั้งโดยให้คะแนนแบบมีเกรนฟิล์ม เพื่อเปรียบเทียบทั้งสองหรือไม่",
+  "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "เพิ่ม {name} อีกครั้งแล้ว โดยให้คะแนนด้วยตัวเลือกเกรนฟิล์มอีกแบบ — ทำเครื่องหมายแล้วคลิก คำนวณเมตริก",
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "วิดีโอนี้ถูกเพิ่มเป็นครั้งที่สองเพื่อให้คะแนนแบบมีเกรนฟิล์มและไม่มีเคียงกัน: แต่ละแถวของวิดีโอนี้คงตัวเลือกของตนไว้"
  },
  "plurals": {
   "about {count} day": [

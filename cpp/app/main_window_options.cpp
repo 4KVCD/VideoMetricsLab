@@ -139,7 +139,7 @@ void MainWindow::show_panel_film_grain() {
     for (const int row : panel_target_rows_) {
         const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
         videos.push_back({row_data.video_info ? &*row_data.video_info : nullptr,
-                          row_data.options.resample_test.has_value()});
+                          row_data.options.resample_test.has_value(), film_grain_twinned(row_data)});
     }
     options_panel_->show_film_grain(videos);
     syncing_panel_ = syncing;
@@ -314,6 +314,41 @@ void MainWindow::on_scale_direction_combo_changed(int index) {
     on_panel_field_edited("scale_direction");
 }
 
+int MainWindow::add_companion_row(int row, const std::filesystem::path& path,
+                                  const std::function<void(RowData&)>& differ) {
+    // A row for `path`, a made-up stand-in that compares the same file as
+    // `row` with the same choices, but for what `differ` changes.
+    const std::shared_ptr<RowData> original = rows_[static_cast<std::size_t>(row)];
+    const int new_row = add_table_row(path);
+    RowData& companion = *rows_[static_cast<std::size_t>(new_row)];
+    companion.options = original->options;
+    // The same metric ticks and CVVDP display. Don't take the defaults: where
+    // they leave CVVDP out, a video with CVVDP ticked would get a companion
+    // without it.
+    companion.extra_metric_keys = original->extra_metric_keys;
+    companion.cvvdp = original->cvvdp;
+    companion.cvvdp_preset = original->cvvdp_preset;
+    companion.cvvdp_automatic = original->cvvdp_automatic;
+    companion.scale_direction_pinned = original->scale_direction_pinned;
+    // A film grain twin's companion is scored with the twin's choice, which
+    // its name says too.
+    companion.film_grain_twin_of = original->film_grain_twin_of;
+    // A frame rate entered for its file reaches it too (enter_frame_rate):
+    // not asked for it on its own as it is added.
+    companion.frame_rate_asked = true;
+    // It decodes the same file as the row it came from; what differs, the
+    // saved scores tell apart through the options or the film grain.
+    companion.media_path = original->identity_path();
+    companion.video_info = original->video_info;
+    differ(companion);
+    set_row_info(new_row, std::optional<VideoInfo>(companion.video_info));
+    // Drawn again with the copied choices: the row was drawn with the
+    // defaults when added.
+    set_row_metrics(new_row);
+    start_cache_lookup({path});
+    return new_row;
+}
+
 void MainWindow::add_opposite_scale_direction_rows(const std::vector<int>& rows) {
     // For each of `rows` whose resolution differs from the reference's, adds
     // a second row for the same test video with the other scale direction, so
@@ -349,29 +384,10 @@ void MainWindow::add_opposite_scale_direction_rows(const std::vector<int>& rows)
         if (row_index_of_path(path)) {
             continue;  // already added
         }
-        const std::shared_ptr<RowData> original = rows_[static_cast<std::size_t>(row)];
-        const int new_row = add_table_row(path);
-        RowData& companion = *rows_[static_cast<std::size_t>(new_row)];
-        companion.options = original->options;
-        companion.options.scale_direction = opposite;
-        // The same comparison in the other direction: the same metric ticks
-        // and CVVDP display. Don't take the defaults: where they leave CVVDP
-        // out, a video with CVVDP ticked would get a companion without it.
-        companion.extra_metric_keys = original->extra_metric_keys;
-        companion.cvvdp = original->cvvdp;
-        companion.cvvdp_preset = original->cvvdp_preset;
-        companion.cvvdp_automatic = original->cvvdp_automatic;
-        companion.scale_direction_pinned = true;
-        // The companion decodes the same file as the row it came from; only
-        // the scale direction differs, which the saved scores tell apart
-        // through the options.
-        companion.media_path = original->identity_path();
-        companion.video_info = original->video_info;
-        set_row_info(new_row, *companion.video_info);
-        // Drawn again with the copied choices: the row was drawn with the
-        // defaults when added.
-        set_row_metrics(new_row);
-        start_cache_lookup({path});
+        add_companion_row(row, path, [opposite](RowData& companion) {
+            companion.options.scale_direction = opposite;
+            companion.scale_direction_pinned = true;
+        });
         ++added;
     }
     if (added == 0) {
@@ -669,7 +685,8 @@ std::vector<std::filesystem::path> MainWindow::choose_film_grain(const std::vect
     }
     for (const int row : rows) {
         RowData& row_data = *rows_[static_cast<std::size_t>(row)];
-        if (!row_data.options.resample_test && row_data.video_info && film_grain_choosable(*row_data.video_info)) {
+        if (!row_data.options.resample_test && row_data.video_info && film_grain_choosable(*row_data.video_info) &&
+            !film_grain_twinned(row_data)) {
             row_data.video_info->with_film_grain = with;
             set_row_info(row, row_data.video_info);  // its Media info tag
         }
@@ -708,6 +725,75 @@ std::vector<std::filesystem::path> MainWindow::apply_film_grain_default() {
         return {};
     }
     return choose_film_grain(rows, reference, *with);
+}
+
+void MainWindow::offer_film_grain_twins(const std::vector<std::filesystem::path>& paths) {
+    // A video added again: rather than nothing, a second row scored with the
+    // other film grain choice, to compare the video with its grain and without.
+    // Each answer is waited for in the dialog's own event loop, where a video
+    // being read can come in: the row is found again after it, by path.
+    if (run_active_) {
+        return;
+    }
+    const auto twinnable = [this](const std::optional<int>& row) -> const RowData* {
+        if (!row) {
+            return nullptr;
+        }
+        // Not a twin itself, nor a row that has one (film_grain_twinned).
+        const RowData& row_data = *rows_[static_cast<std::size_t>(*row)];
+        const bool can = !row_data.options.resample_test && row_data.video_info &&
+                         film_grain_choosable(*row_data.video_info) && !film_grain_twinned(row_data);
+        return can ? &row_data : nullptr;
+    };
+    for (const std::filesystem::path& path : paths) {
+        const RowData* row_data = twinnable(row_index_of_path(path));
+        if (row_data == nullptr) {
+            continue;  // as before: a video already listed is not added again
+        }
+        const bool with = effective_film_grain(*row_data->video_info).scoring == GrainScoring::with;
+        const QString question =
+            with ? app::tr("{name} is already in the list. Add it again, scored without its film grain, to compare "
+                           "the two?",
+                           {{"name", name_of(path)}})
+                 : app::tr("{name} is already in the list. Add it again, scored with its film grain, to compare the "
+                           "two?",
+                           {{"name", name_of(path)}});
+        if (!dialogs_.ask(app::tr("Already added"), question) || run_active_) {
+            continue;
+        }
+        if (const std::optional<int> row = row_index_of_path(path); twinnable(row)) {
+            add_film_grain_twin(*row);
+        }
+    }
+}
+
+void MainWindow::add_film_grain_twin(int row) {
+    // A row scoring `row`'s video with the other film grain choice. The
+    // video's own row is given its choice as it is scored now ("with" and no
+    // choice are the same scores), so that being asked at Calculate metrics
+    // cannot make the two alike.
+    const RowData& original = *rows_[static_cast<std::size_t>(row)];
+    const bool with = effective_film_grain(*original.video_info).scoring == GrainScoring::with;
+    const std::filesystem::path original_path = original.path;
+    start_cache_lookup(choose_film_grain({row}, false, with));
+    add_companion_row(row, synthetic_film_grain_variant_path(original_path, !with),
+                      [&original_path, with](RowData& twin) {
+                          twin.film_grain_twin_of = original_path;
+                          twin.video_info->with_film_grain = !with;
+                      });
+    show_panel_film_grain();  // a selected original row's choice is now held
+    show_status(app::tr("Added {name} again, scored with the other film grain choice -- check it and click "
+                        "Calculate metrics.",
+                        {{"name", name_of(original_path)}}));
+}
+
+bool MainWindow::film_grain_twinned(const RowData& row_data) const {
+    if (row_data.film_grain_twin_of) {
+        return true;
+    }
+    return std::any_of(rows_.begin(), rows_.end(), [&row_data](const auto& row) {
+        return row->film_grain_twin_of && same_path(*row->film_grain_twin_of, row_data.path);
+    });
 }
 
 void MainWindow::on_film_grain_chosen(bool with) {

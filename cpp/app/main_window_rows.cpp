@@ -627,25 +627,30 @@ void MainWindow::add_test_videos(const std::vector<std::filesystem::path>& paths
     // A row for each video not already in the table, in order. The rows
     // appear at once; reading each file and looking up its saved scores
     // happen on workers, as for a handful of long videos they take a couple
-    // of seconds.
+    // of seconds. A video already listed can be added again with the other
+    // film grain choice, asked once the new rows are in.
     std::vector<std::filesystem::path> added;
+    std::vector<std::filesystem::path> listed;
     for (const std::filesystem::path& path : paths) {
         const auto same = [&path](const std::filesystem::path& other) { return same_path(path, other); };
-        if (std::any_of(rows_.begin(), rows_.end(), [&same](const auto& row) { return same(row->path); }) ||
-            std::any_of(added.begin(), added.end(), same)) {
+        if (std::any_of(rows_.begin(), rows_.end(), [&same](const auto& row) { return same(row->path); })) {
+            listed.push_back(path);
+            continue;
+        }
+        if (std::any_of(added.begin(), added.end(), same)) {
             continue;
         }
         added.push_back(path);
-    }
-    if (added.empty()) {
-        return;
     }
     for (const std::filesystem::path& path : added) {
         const int row = add_table_row(path);
         set_row_status(row, RowState::reading);
     }
-    start_media_probe(added);
-    start_cache_lookup(added);
+    if (!added.empty()) {
+        start_media_probe(added);
+        start_cache_lookup(added);
+    }
+    offer_film_grain_twins(listed);
 }
 
 void MainWindow::on_add_resample_test() {
@@ -884,23 +889,29 @@ bool MainWindow::ask_frame_rates(bool reference, const std::vector<std::filesyst
 }
 
 void MainWindow::enter_frame_rate(const std::filesystem::path& path, double fps) {
-    const std::optional<int> row = row_index_of_path(path);
-    if (!row) {
+    // The rate is the file's: it goes to every row that decodes it (the
+    // video's own, its "Test both directions" companions and film grain twin).
+    const std::optional<int> asked = row_index_of_path(path);
+    if (!asked) {
         return;  // removed while it was asked about
     }
-    RowData& row_data = *rows_[static_cast<std::size_t>(*row)];
-    if (!row_data.video_info || !row_data.video_info->frame_rate_unknown()) {
-        return;
+    const std::filesystem::path file = rows_[static_cast<std::size_t>(*asked)]->identity_path();
+    for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
+        RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        if (row_data.options.resample_test || !same_path(row_data.identity_path(), file) || !row_data.video_info ||
+            !row_data.video_info->frame_rate_unknown()) {
+            continue;
+        }
+        VideoInfo info = *row_data.video_info;
+        info.set_frame_rate(fps);
+        set_row_info(row, info, QString());
+        if (row_data.analysis_status == RowState::failed) {  // refused for having no rate
+            row_data.analysis_status.reset();
+            row_data.status_detail.clear();
+            refresh_row_state(row);
+        }
+        set_row_metrics(row);
     }
-    VideoInfo info = *row_data.video_info;
-    info.set_frame_rate(fps);
-    set_row_info(*row, info, QString());
-    if (row_data.analysis_status == RowState::failed) {  // refused for having no rate
-        row_data.analysis_status.reset();
-        row_data.status_detail.clear();
-        refresh_row_state(*row);
-    }
-    set_row_metrics(*row);
     sync_frame_compare();  // Video Compare's copy of its details
 }
 

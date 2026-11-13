@@ -870,7 +870,11 @@
   "Enter the frame rate": "Zadejte snímkovou frekvenci",
   "{video} is a raw video stream that does not store its frame rate. Enter it as a number or a fraction, such as 24 or 24000/1001:": "{video} je nezpracovaný video proud, který neukládá svou snímkovou frekvenci. Zadejte ji jako číslo nebo zlomek, například 24 nebo 24000/1001:",
   "The reference is {fps:.3f} fps.": "Reference má {fps:.3f} snímků za sekundu.",
-  "The frame rate of {video} is not known.": "Snímková frekvence {video} není známa."
+  "The frame rate of {video} is not known.": "Snímková frekvence {video} není známa.",
+  "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} už je v seznamu. Přidat ho znovu, hodnocený bez filmového zrna, a porovnat obě varianty?",
+  "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} už je v seznamu. Přidat ho znovu, hodnocený s filmovým zrnem, a porovnat obě varianty?",
+  "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} přidáno znovu, hodnocené s opačnou volbou filmového zrna — zaškrtněte jej a klikněte na Spočítat metriky.",
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Toto video bylo přidáno podruhé, aby se hodnotilo s filmovým zrnem i bez něj vedle sebe: každý jeho řádek si ponechává svou volbu."
  },
  "plurals": {
   "about {count} day": [
