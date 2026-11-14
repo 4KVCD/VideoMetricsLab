@@ -18,7 +18,7 @@
 # and Python for Meson, which is installed, pinned, in a folder of its own
 # outside the repository.
 param(
-    [string]$Commit = '3dde00d02827fada3bb70c8fad9b2e06f598ea33',
+    [string]$Commit = '5bf33c8f7587f5b50086f79261c44c069a5acedb',
     [string]$MesonVersion = '1.12.1',
     # The Python that Meson's own folder is made with.
     [string]$Python = ''

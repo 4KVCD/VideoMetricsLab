@@ -19,7 +19,7 @@
 # Needs meson and ninja (brew install meson) and git.
 set -euo pipefail
 
-commit="3dde00d02827fada3bb70c8fad9b2e06f598ea33"
+commit="5bf33c8f7587f5b50086f79261c44c069a5acedb"
 deployment_target="14.4"
 
 project="$(cd "$(dirname "$0")/.." && pwd)"

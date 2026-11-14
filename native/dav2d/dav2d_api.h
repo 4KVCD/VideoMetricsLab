@@ -12,7 +12,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// dav2d's API 1.0.0 (commit 3dde00d0, 2026-10-30).
+// dav2d's API 1.0.0 (commit 5bf33c8f, 2026-11-14).
 struct Dav2dUserData {
     const uint8_t *data;
     void *ref;
@@ -105,9 +105,9 @@ constexpr int kDav2dI422 = 2;
 constexpr int kDav2dI444 = 3;
 // Dav2dColorDescription's values: explicit codes, or these sets (H.273's
 // primaries, transfer and matrix codes), as AOM's AVM decoder, the reference,
-// sets them. dav2d (3dde00d, and its main branch on 2026-10-31) fills its
-// picture's codes otherwise for two: matrix 5 for BT.709 SDR and transfer 14
-// (BT.2020 10-bit, an SDR curve) for HLG; the app reads the set, not those.
+// sets them. dav2d before 5bf33c8f filled its picture's codes otherwise for
+// two (matrix 5 for BT.709 SDR, transfer 14 for HLG); 5bf33c8f fills them as
+// AVM does. The app reads the set, not the codes dav2d fills.
 constexpr int kDav2dColorExplicit = 0;
 constexpr int kDav2dColorBt709Sdr = 1;    // 1, 1, 1
 constexpr int kDav2dColorBt2100Pq = 2;    // 9, 16, 9
