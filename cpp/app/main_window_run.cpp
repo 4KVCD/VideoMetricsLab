@@ -12,6 +12,7 @@
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <set>
 #include <utility>
@@ -378,6 +379,10 @@ void MainWindow::begin_run(const std::vector<int>& checked, std::vector<std::sha
     run_started_at_ = clock_();
     paused_total_ = 0;
     paused_since_.reset();
+    run_record_ = std::make_shared<RunRecord>();
+    run_record_->user_interface = "gui";
+    run_record_->started_utc = utc_text(std::chrono::system_clock::now());
+    job_facts_.assign(job_rows_.size(), nullptr);
     run_hold_ = RunHold::none;
     run_tick_timer_->start();
     set_run_ui_active(true);
@@ -407,6 +412,9 @@ void MainWindow::start_run_worker(std::vector<VmafJob> jobs) {
             [this](int index, const QString& message, const QString& stderr_tail) {
                 on_job_failed(index, message, stderr_tail);
             });
+    connect(worker, &RunWorker::job_facts, this, [this](int index, const RunFacts& facts) {
+        job_facts_[static_cast<std::size_t>(index)] = std::make_shared<const RunFacts>(facts);
+    });
     connect(worker, &RunWorker::cancelled, this, [this] { run_was_cancelled_ = true; });
     connect(worker, &RunWorker::all_finished, this, [this] { on_all_finished(); });
     connect(worker, &QThread::finished, this, [this, worker] { on_run_thread_finished(worker); });
@@ -1031,6 +1039,10 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
     // The video's own result so far, before this piece: its line is updated.
     const bool continuing = previous && previous->partial;
     const std::shared_ptr<CompletedRun> run = make_completed_run(row_data, result, label, final);
+    if (final) {
+        run->facts = job_facts_[job];  // sent just before the result
+        run->record = run_record_;
+    }
     row_data.completed_run = run;
     if (final) {
         row_data.analysis_status.reset();  // a result so far leaves the video in progress
@@ -1169,6 +1181,7 @@ void MainWindow::on_all_finished() {
         }
         set_row_metrics(*row);
     }
+    complete_run_record();
     run_tick_timer_->stop();
     run_hold_ = RunHold::none;
     set_run_ui_active(false);
@@ -1197,6 +1210,27 @@ void MainWindow::on_all_finished() {
         // the same.
         open_or_update_graph(finished, !run_was_cancelled_);
     }
+}
+
+void MainWindow::complete_run_record() {
+    // The run's end, its length and pauses on the window's clock (a pause
+    // still open as it ended too), and the machine with the FFmpeg it used.
+    if (!run_record_ || !run_started_at_) {
+        return;
+    }
+    const double now = clock_();
+    run_record_->finished_utc = utc_text(std::chrono::system_clock::now());
+    run_record_->wall_seconds = now - *run_started_at_;
+    run_record_->paused_seconds = paused_total_ + (paused_since_ ? now - *paused_since_ : 0.0);
+    const RunEnvironment* used = worker_ != nullptr ? &worker_->environment() : nullptr;
+    run_record_->machine = used != nullptr && !used->ffmpeg.empty()
+                               ? this_machine(used->ffmpeg, used->ffmpeg_version)
+                               : current_machine();
+}
+
+MachineFacts MainWindow::current_machine() const {
+    return this_machine(tools_status_.ffmpeg.path,
+                        tools_status_.ffmpeg.path.empty() ? "unknown" : format_version(tools_status_.ffmpeg.version));
 }
 
 void MainWindow::on_run_thread_finished(RunWorker* worker) {

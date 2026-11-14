@@ -144,6 +144,20 @@ std::string system_description() {
 
 std::string processor_description() { return environment_variable("PROCESSOR_IDENTIFIER").value_or(""); }
 
+std::string cpu_model_name() {
+    wchar_t name[256] = {};
+    DWORD size = sizeof name;
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, L"HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+                     L"ProcessorNameString", RRF_RT_REG_SZ, nullptr, name, &size) != ERROR_SUCCESS) {
+        return processor_description();
+    }
+    std::string text = narrow(name);
+    // Some makers pad the name with spaces
+    text.erase(0, text.find_first_not_of(' '));
+    text.erase(text.find_last_not_of(' ') + 1);
+    return text.empty() ? processor_description() : text;
+}
+
 namespace {
 
 // The display configuration's requests and answers, laid out as Windows

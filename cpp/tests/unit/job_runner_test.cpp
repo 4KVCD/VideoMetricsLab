@@ -287,6 +287,8 @@ TEST(JobRunner, ACancelledRunKeepsWhatHadFinished) {
     RunEvents events = reported.events();
     // Cancelled once the GPU's VMAF is in, while the CPU's PSNR still runs.
     events.result_updated = [&cancel](std::size_t, const ComparisonResult&) { cancel.cancel(); };
+    std::vector<RunFacts> facts;  // sent from the last lane, after the other's ended
+    events.job_facts = [&facts](std::size_t, const RunFacts& sent) { facts.push_back(sent); };
     run_jobs(
         jobs, 1, events,
         [](const VmafJob&, const VmafOptions& options, const ProgressCallback&, const StatusCallback&,
@@ -307,6 +309,88 @@ TEST(JobRunner, ACancelledRunKeepsWhatHadFinished) {
     EXPECT_TRUE(reported.failed.empty());
     EXPECT_TRUE(reported.partial.empty());
     EXPECT_EQ(reported.cancelled, 1);
+    ASSERT_EQ(facts.size(), 1u);
+    const auto outcomes = facts[0].metrics;
+    EXPECT_EQ(outcomes, (std::vector<std::pair<std::string, MetricOutcome>>{
+                            {"psnr", {metric_cancelled, ""}},
+                            {"xpsnr", {metric_cancelled, ""}},
+                            {"vmaf", {metric_calculated, ""}}}));
+}
+
+// A run's time, the clock of its CancelToken, which its tasks move on.
+class FakeClock {
+public:
+    double now() {
+        const std::lock_guard lock(mutex_);
+        return now_;
+    }
+    void advance(double seconds) {
+        const std::lock_guard lock(mutex_);
+        now_ += seconds;
+    }
+
+private:
+    std::mutex mutex_;
+    double now_ = 100.0;
+};
+
+// Each video's facts say how each metric came out (calculated, saved,
+// failed with why) and how long each pass took, its paused time apart, with
+// its frames and decoders.
+TEST(JobRunner, AVideosFactsSayHowItsMetricsCameOutAndHowLongItsPassesTook) {
+    VmafJob job = cpu_and_gpu();
+    job.metric_keys.emplace_back("ssim");
+    job.cached_result = result_with({{"ssim", {0, 1}}});
+    job.cached_metrics = job.cached_result->metric_results;
+    FakeClock clock;
+    CancelToken cancel([&clock] { return clock.now(); });
+    Reported reported;
+    RunEvents events = reported.events();
+    std::vector<RunFacts> facts;
+    events.job_facts = [&facts](std::size_t, const RunFacts& sent) { facts.push_back(sent); };
+    const HardwareDecoding decode{"cuda", std::nullopt};
+    run_jobs(
+        {job}, 1, events,
+        [&](const VmafJob&, const VmafOptions& options, const ProgressCallback& progress, const StatusCallback& status,
+            const CancelToken&) {
+            if (options.compute_vmaf) {
+                throw VmafRunError("Vulkan ran out of memory.");
+            }
+            status({"Calculating", StatusKind::step, "Calculating", decode});
+            clock.advance(1.0);
+            progress(24, 48, 24.0);
+            cancel.pause();
+            clock.advance(2.0);
+            cancel.resume();
+            clock.advance(1.0);
+            progress(40, 48, 24.0);  // the last report comes before the end
+            ComparisonResult result = result_with({{"psnr", {0, 1}}, {"xpsnr", {0, 1}}});
+            result.compared_frame_count = 48;
+            return result;
+        },
+        24, cancel);
+
+    ASSERT_EQ(facts.size(), 1u);
+    const RunFacts& video = facts[0];
+    EXPECT_EQ(video.seconds, 4.0);
+    EXPECT_EQ(video.paused_seconds, 2.0);
+    EXPECT_FALSE(video.started_utc.empty());
+    EXPECT_EQ(video.settings.metrics, (std::vector<std::string>{"psnr", "xpsnr", "vmaf", "ssim"}));
+    EXPECT_EQ(video.metrics, (std::vector<std::pair<std::string, MetricOutcome>>{
+                                 {"psnr", {metric_calculated, ""}},
+                                 {"xpsnr", {metric_calculated, ""}},
+                                 {"vmaf", {metric_failed, "Vulkan ran out of memory."}},
+                                 {"ssim", {metric_saved, ""}}}));
+    ASSERT_EQ(video.passes.size(), 2u);
+    const auto cpu = std::find_if(video.passes.begin(), video.passes.end(),
+                                  [](const PassTiming& pass) { return pass.task == "ffmpeg"; });
+    ASSERT_NE(cpu, video.passes.end());
+    // A second to its first frame, then 48 frames in three seconds less the pause's two
+    EXPECT_EQ(*cpu, (PassTiming{"ffmpeg", {"psnr", "xpsnr"}, "cpu", 4.0, 2.0, 1.0, 48, 48.0, "done", decode}));
+    const auto gpu = std::find_if(video.passes.begin(), video.passes.end(),
+                                  [](const PassTiming& pass) { return pass.task != "ffmpeg"; });
+    EXPECT_EQ(gpu->on, "gpu");
+    EXPECT_EQ(gpu->end, "failed");
 }
 
 TEST(JobRunner, VideosShareTheCpusTwoLanesAndTheGpusOne) {

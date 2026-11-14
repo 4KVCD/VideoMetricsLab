@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
@@ -153,10 +154,62 @@ struct VkInstanceCreateInfo {
     const char* const* ppEnabledExtensionNames = nullptr;
 };
 
-// The Vulkan loader, with an instance started, or why not.
+// Vulkan's versions as VK_MAKE_API_VERSION packs them.
+constexpr std::uint32_t vulkan_1_0 = 1u << 22;
+constexpr std::uint32_t vulkan_1_2 = (1u << 22) | (2u << 12);
+
+// The offsets of what the GPU description reads, as vulkan_core.h lays the
+// structures out. VkPhysicalDeviceProperties: apiVersion, driverVersion,
+// vendorID, deviceID, deviceType (4 bytes each), then deviceName[256].
+// VkPhysicalDeviceProperties2: sType, the pNext pointer (8-aligned), then
+// VkPhysicalDeviceProperties. VkPhysicalDeviceDriverProperties: sType, pNext,
+// driverID, then driverName[256] and driverInfo[256].
+constexpr std::size_t driver_version_at = 4;
+constexpr std::size_t vendor_id_at = 8;
+constexpr std::size_t device_name_at = 20;
+constexpr std::size_t driver_name_at = 20;
+constexpr std::size_t driver_info_at = driver_name_at + 256;
+constexpr int physical_device_properties_2 = 1000059001;      // VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2
+constexpr int physical_device_driver_properties = 1000196000;  // VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES
+
+std::uint32_t read_u32(const unsigned char* bytes) {
+    std::uint32_t value = 0;
+    std::memcpy(&value, bytes, sizeof value);
+    return value;
+}
+
+// A NUL-terminated text of at most 256 bytes, as Vulkan's names are.
+std::string read_name(const unsigned char* bytes) {
+    const char* text = reinterpret_cast<const char*>(bytes);
+    return replace_invalid_utf8(std::string(text, strnlen(text, 256)));
+}
+
+// The maker of a GPU with this PCI vendor ID, or the ID in hex.
+std::string gpu_maker_name(std::uint32_t vendor) {
+    switch (vendor) {
+    case 0x10DE:
+        return "NVIDIA";
+    case 0x1002:
+    case 0x1022:
+        return "AMD";
+    case 0x8086:
+        return "Intel";
+    case 0x106B:
+        return "Apple";
+    default: {
+        char hex[16];
+        std::snprintf(hex, sizeof hex, "0x%04X", vendor);
+        return hex;
+    }
+    }
+}
+
+// The Vulkan loader, with an instance started, or why not. `api_version` is
+// the Vulkan the instance asks for: 1.0 for whether a GPU is usable, which
+// every driver answers.
 class VulkanLoader {
 public:
-    VulkanLoader() {
+    explicit VulkanLoader(std::uint32_t api_version = vulkan_1_0) {
 #ifdef __APPLE__
         // macOS has no Vulkan of its own: the app bundles Khronos' loader with
         // MoltenVK, Vulkan on Metal, as its driver, which Vship is linked to,
@@ -187,7 +240,12 @@ public:
             library_->function<int (*)(void*, std::uint32_t*, void**)>("vkEnumeratePhysicalDevices");
         properties_ = library_->function<void (*)(void*, void*)>("vkGetPhysicalDeviceProperties");
         destroy_ = library_->function<void (*)(void*, const void*)>("vkDestroyInstance");
-        const VkApplicationInfo application;
+        if (api_version >= vulkan_1_2) {
+            // Core since Vulkan 1.1; a loader without it gives no driver names.
+            properties2_ = reinterpret_cast<void (*)(void*, void*)>(library_->find("vkGetPhysicalDeviceProperties2"));
+        }
+        VkApplicationInfo application;
+        application.apiVersion = api_version;
         VkInstanceCreateInfo info;
         info.pApplicationInfo = &application;
 #ifdef __APPLE__
@@ -233,23 +291,62 @@ public:
             return std::nullopt;
         }
         for (void* device : devices()) {
-            // VkPhysicalDeviceProperties: apiVersion, driverVersion, vendorID,
-            // deviceID, deviceType (4 bytes each), then deviceName[256].
-            std::array<unsigned char, 1024> properties{};
+            std::array<unsigned char, 1024> properties{};  // VkPhysicalDeviceProperties, 824 bytes
             properties_(device, properties.data());
-            const char* device_name = reinterpret_cast<const char*>(properties.data() + 20);
-            if (replace_invalid_utf8(std::string(device_name, strnlen(device_name, 256))) == name) {
-                const std::uint32_t vendor = static_cast<std::uint32_t>(properties[8]) |
-                                             (static_cast<std::uint32_t>(properties[9]) << 8) |
-                                             (static_cast<std::uint32_t>(properties[10]) << 16) |
-                                             (static_cast<std::uint32_t>(properties[11]) << 24);
-                return vendor_of_pci_id(vendor);
+            if (read_name(properties.data() + device_name_at) == name) {
+                return vendor_of_pci_id(read_u32(properties.data() + vendor_id_at));
             }
         }
         return std::nullopt;
     }
 
+    // Each GPU the loader lists, with its driver.
+    std::vector<VulkanGpu> gpus() {
+        std::vector<VulkanGpu> found;
+        if (problem_) {
+            return found;
+        }
+        for (void* device : devices()) {
+            std::array<unsigned char, 1024> properties{};
+            properties_(device, properties.data());
+            VulkanGpu& gpu = found.emplace_back();
+            gpu.name = read_name(properties.data() + device_name_at);
+            const std::uint32_t vendor = read_u32(properties.data() + vendor_id_at);
+            gpu.vendor = gpu_maker_name(vendor);
+            gpu.driver_version_number = read_u32(properties.data() + driver_version_at);
+#ifdef _WIN32
+            constexpr bool windows = true;
+#else
+            constexpr bool windows = false;
+#endif
+            gpu.driver_version = driver_version_text(vendor, gpu.driver_version_number, windows);
+            if (read_u32(properties.data()) >= vulkan_1_2) {  // the GPU's own Vulkan (apiVersion)
+                add_driver_names(device, gpu);
+            }
+        }
+        return found;
+    }
+
+
 private:
+    // The driver's own name and version text (VkPhysicalDeviceDriverProperties,
+    // core in Vulkan 1.2), where the instance has the call. Asked through
+    // VkPhysicalDeviceProperties2 with the driver's structure chained to it.
+    void add_driver_names(void* device, VulkanGpu& gpu) {
+        if (properties2_ == nullptr) {
+            return;
+        }
+        alignas(8) std::array<unsigned char, 1024> properties2{};  // 16 + 824 bytes
+        alignas(8) std::array<unsigned char, 600> driver{};        // 536 bytes
+        void* chained = driver.data();
+        std::memcpy(properties2.data(), &physical_device_properties_2, sizeof(int));
+        std::memcpy(properties2.data() + 8, &chained, sizeof chained);  // pNext
+        std::memcpy(driver.data(), &physical_device_driver_properties, sizeof(int));
+        properties2_(device, properties2.data());
+        gpu.driver_name = read_name(driver.data() + driver_name_at);
+        gpu.driver_info = read_name(driver.data() + driver_info_at);
+    }
+
     std::vector<void*> devices() {
         std::uint32_t count = 0;
         if (enumerate_(instance_, &count, nullptr) != 0 || count == 0) {
@@ -266,6 +363,7 @@ private:
     int (*create_)(const VkInstanceCreateInfo*, const void*, void**) = nullptr;
     int (*enumerate_)(void*, std::uint32_t*, void**) = nullptr;
     void (*properties_)(void*, void*) = nullptr;
+    void (*properties2_)(void*, void*) = nullptr;  // only on an instance of Vulkan 1.2
     void (*destroy_)(void*, const void*) = nullptr;
     void* instance_ = nullptr;
 };
@@ -612,17 +710,58 @@ std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(VshipBuild
     const std::optional<GpuVendor> vendor = build == VshipBuild::hip    ? std::optional(GpuVendor::amd)
                                             : build == VshipBuild::cuda ? std::optional(GpuVendor::nvidia)
                                                                         : VulkanLoader().vendor_of(name);
-    return {VshipDevice{vship_backend(build), name, gpu_id,
-                        std::to_string(version.major) + "." + std::to_string(version.minor) + "." +
-                            std::to_string(version.minorMinor),
-                        vendor, build},
-            ""};
+    VshipDevice device{vship_backend(build), name, gpu_id,
+                       std::to_string(version.major) + "." + std::to_string(version.minor) + "." +
+                           std::to_string(version.minorMinor),
+                       vendor, build};
+    device.gpus = VulkanLoader(vulkan_1_2).gpus();
+    if (device.gpus.empty()) {
+        device.gpus = VulkanLoader().gpus();  // a driver that refuses an instance of Vulkan 1.2
+    }
+    return {device, ""};
 }
 
+std::string driver_version_text(std::uint32_t vendor_id, std::uint32_t version, bool windows) {
+    char text[32];
+    if (vendor_id == 0x10DE) {
+        std::snprintf(text, sizeof text, "%u.%02u", (version >> 22) & 0x3FFu, (version >> 14) & 0xFFu);
+    } else if (vendor_id == 0x8086 && windows) {
+        std::snprintf(text, sizeof text, "%u.%u", version >> 14, version & 0x3FFFu);
+    } else {
+        std::snprintf(text, sizeof text, "%u.%u.%u", (version >> 22) & 0x7Fu, (version >> 12) & 0x3FFu,
+                      version & 0xFFFu);
+    }
+    return text;
+}
+
+namespace {
+
+nlohmann::json gpu_json(const VulkanGpu& gpu) {
+    return {{"name", gpu.name},
+            {"vendor", gpu.vendor},
+            {"driver_version", gpu.driver_version},
+            {"driver_version_number", gpu.driver_version_number},
+            {"driver_name", gpu.driver_name},
+            {"driver_info", gpu.driver_info}};
+}
+
+VulkanGpu gpu_from(const nlohmann::json& text) {
+    return {text.at("name").get<std::string>(),         text.at("vendor").get<std::string>(),
+            text.at("driver_version_number").get<std::uint32_t>(), text.at("driver_version").get<std::string>(),
+            text.at("driver_name").get<std::string>(),  text.at("driver_info").get<std::string>()};
+}
+
+}  // namespace
+
 nlohmann::json vship_device_json(const VshipDevice& device) {
+    nlohmann::json gpus = nlohmann::json::array();
+    for (const VulkanGpu& gpu : device.gpus) {
+        gpus.push_back(gpu_json(gpu));
+    }
     return {{"backend", device.backend}, {"name", device.name},
             {"gpu_id", device.gpu_id},   {"version", device.version},
-            {"vendor", vendor_text(device.vendor)}, {"build", std::string(vship_build_value(device.build))}};
+            {"vendor", vendor_text(device.vendor)}, {"build", std::string(vship_build_value(device.build))},
+            {"gpus", gpus}};
 }
 
 std::optional<VshipDevice> vship_device_from(const nlohmann::json& text) {
@@ -636,6 +775,9 @@ std::optional<VshipDevice> vship_device_from(const nlohmann::json& text) {
     text.at("version").get_to(device.version);
     device.vendor = vendor_from(text.at("vendor").get<std::string>());
     device.build = vship_build_from(text.value("build", std::string()));
+    for (const nlohmann::json& gpu : text.value("gpus", nlohmann::json::array())) {
+        device.gpus.push_back(gpu_from(gpu));
+    }
     return device;
 }
 

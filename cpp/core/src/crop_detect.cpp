@@ -42,6 +42,7 @@
 #include "vml/python_json.h"
 #include "vml/python_text.h"
 #include "vml/size_changes.h"
+#include "vml/time_format.h"
 
 namespace vml {
 
@@ -127,6 +128,42 @@ std::optional<AnswerKey> answer_key(const VideoInfo& info, double sampled_durati
                      python_round(sampled_duration, 3), python_round(dark_limit, 6)};
 }
 
+// Bars as the store writes them: [top, bottom, left, right].
+nlohmann::ordered_json edges_json(const BarEdges& edges) {
+    return nlohmann::ordered_json::array({edges.top, edges.bottom, edges.left, edges.right});
+}
+
+BarEdges edges_from(const nlohmann::json& text) {
+    return {text.at(0).get<int>(), text.at(1).get<int>(), text.at(2).get<int>(), text.at(3).get<int>()};
+}
+
+// What an answer was decided from, as the store keeps it beside the box.
+nlohmann::ordered_json findings_json(const CropAnswer& answer) {
+    const BarFindings& found = *answer.findings;
+    return {{"decoded", found.decoded},       {"judged", found.judged},
+            {"median", edges_json(found.median)}, {"taken", edges_json(found.taken)},
+            {"shape_changes", found.shape_changes}, {"too_few", found.too_few},
+            {"found_utc", answer.found_utc}, {"seconds", answer.seconds}};
+}
+
+// The findings beside a stored box; left out where they are of another shape.
+void read_findings(const nlohmann::json& text, CropAnswer& answer) {
+    try {
+        BarFindings found;
+        found.decoded = text.at("decoded").get<std::size_t>();
+        found.judged = text.at("judged").get<std::size_t>();
+        found.median = edges_from(text.at("median"));
+        found.taken = edges_from(text.at("taken"));
+        found.shape_changes = text.at("shape_changes").get<bool>();
+        found.too_few = text.at("too_few").get<bool>();
+        answer.found_utc = text.at("found_utc").get<std::string>();
+        answer.seconds = text.at("seconds").get<double>();
+        answer.findings = found;
+    } catch (const nlohmann::json::exception&) {
+        answer.found_utc.clear();
+    }
+}
+
 // The answers, newest last, and the files being detected now (a second
 // caller for the same file waits for that answer instead of decoding it
 // again).
@@ -165,7 +202,7 @@ public:
             read_store();
             if (const auto found = find(key); found != boxes_.end()) {
                 boxes_.splice(boxes_.end(), boxes_, found);
-                return found->second;
+                return found->second.box;
             }
             if (!in_flight_.contains(key)) {
                 in_flight_.insert(key);
@@ -179,15 +216,25 @@ public:
         }
     }
 
-    // Keeps a detected box (if any), and wakes the callers waiting for it.
-    void settle(const AnswerKey& key, const std::optional<CropBox>& box) {
+    // The answer the store keeps for `key` now: read again, for answers a
+    // process of its own wrote since.
+    std::optional<CropAnswer> kept(const AnswerKey& key) {
+        const std::lock_guard lock(mutex_);
+        store_read_.reset();
+        read_store();
+        const auto found = find(key);
+        return found != boxes_.end() ? std::optional(found->second) : std::nullopt;
+    }
+
+    // Keeps a detected answer (if any), and wakes the callers waiting for it.
+    void settle(const AnswerKey& key, const std::optional<CropAnswer>& answer) {
         {
             const std::lock_guard lock(mutex_);
-            if (box) {
+            if (answer) {
                 if (const auto found = find(key); found != boxes_.end()) {
                     boxes_.erase(found);
                 }
-                boxes_.emplace_back(key, *box);
+                boxes_.emplace_back(key, *answer);
                 while (boxes_.size() > remembered_answers) {
                     boxes_.pop_front();
                 }
@@ -199,7 +246,7 @@ public:
     }
 
 private:
-    std::list<std::pair<AnswerKey, CropBox>>::iterator find(const AnswerKey& key) {
+    std::list<std::pair<AnswerKey, CropAnswer>>::iterator find(const AnswerKey& key) {
         return std::find_if(boxes_.begin(), boxes_.end(), [&key](const auto& item) { return item.first == key; });
     }
 
@@ -244,8 +291,12 @@ private:
                 const AnswerKey answer{key.at(0).get<std::string>(), key.at(1).get<long long>(),
                                        key.at(2).get<long long>(), key.at(3).get<double>(), key.at(4).get<double>()};
                 if (find(answer) == boxes_.end()) {
-                    boxes_.emplace_back(answer, CropBox{box.at(0).get<int>(), box.at(1).get<int>(),
-                                                        box.at(2).get<int>(), box.at(3).get<int>()});
+                    CropAnswer kept{CropBox{box.at(0).get<int>(), box.at(1).get<int>(), box.at(2).get<int>(),
+                                            box.at(3).get<int>()}};
+                    if (item.size() > 2) {  // what it was decided from: not kept by builds before these records
+                        read_findings(item.at(2), kept);
+                    }
+                    boxes_.emplace_back(answer, std::move(kept));
                 }
             } catch (const nlohmann::json::exception&) {
                 continue;
@@ -264,9 +315,14 @@ private:
             return;
         }
         nlohmann::ordered_json boxes = nlohmann::ordered_json::array();
-        for (const auto& [key, box] : boxes_) {
-            boxes.push_back({{key.path, key.size, key.modified_ns, key.sampled_duration, key.limit},
-                             {box.w, box.h, box.x, box.y}});
+        for (const auto& [key, answer] : boxes_) {
+            const CropBox& box = answer.box;
+            nlohmann::ordered_json item{{key.path, key.size, key.modified_ns, key.sampled_duration, key.limit},
+                                        {box.w, box.h, box.x, box.y}};
+            if (answer.findings) {
+                item.push_back(findings_json(answer));
+            }
+            boxes.push_back(std::move(item));
         }
         // The keys in the Python app's order (crop_detect._write_store).
         const nlohmann::ordered_json data{{"version", store_version}, {"boxes", boxes}};
@@ -291,7 +347,7 @@ private:
 
     std::mutex mutex_;
     std::condition_variable settled_;
-    std::list<std::pair<AnswerKey, CropBox>> boxes_;
+    std::list<std::pair<AnswerKey, CropAnswer>> boxes_;
     std::set<AnswerKey> in_flight_;
     std::function<std::filesystem::path()> store_;
     std::optional<std::filesystem::path> store_read_;
@@ -955,7 +1011,8 @@ std::optional<std::string> preview_decoder(const std::optional<std::string>& gpu
 
 // detect_crop's work, without the kept answers: HandBrake's previews
 // (black_bars_rule.h), each a decoder's run of its own, one after another.
-CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double sampled_duration,
+CropBox detect_uncached(BarFindings& findings, const std::string& ffmpeg, const VideoInfo& info,
+                        double sampled_duration,
                         const CancelToken& cancel, const std::optional<std::string>& gpu_decoder,
                         const std::string& scale_algorithm) {
     const std::string path = platform::path_text(info.path);
@@ -1032,7 +1089,7 @@ CropBox detect_uncached(const std::string& ffmpeg, const VideoInfo& info, double
     logger.info("Black bars in " + platform::path_text(info.path.filename()) + ": " + std::to_string(counted.size()) +
                 " of " + std::to_string(decoded) + " previews judged" +
                 (counted.size() < std::min(fewest_judged, decoded) ? " (too few: the whole frame)" : ""));
-    return handbrake_box(counted, decoded, width, height);
+    return handbrake_box(counted, decoded, width, height, &findings);
 }
 
 // The largest q of the sizes' ratio p/q for which common_picture lines the
@@ -1083,6 +1140,12 @@ void set_crop_store(std::function<std::filesystem::path()> store) { answers().se
 
 void forget_crop_answers() { answers().forget(); }
 
+std::optional<CropAnswer> kept_crop_answer(const VideoInfo& info) {
+    // (detect_crop's key: a video whose size changes keeps none)
+    const std::optional<AnswerKey> key = info.scaled_to ? std::nullopt : answer_key(info, info.duration);
+    return key ? answers().kept(*key) : std::nullopt;
+}
+
 void forget_crop_answer(const VideoInfo& info) {
     // (a video whose size changes keeps no answer, but one found before it was seen to change may be kept)
     if (const std::optional<AnswerKey> key = answer_key(info, info.duration)) {
@@ -1103,8 +1166,10 @@ CropBox detect_crop(const std::string& ffmpeg, const VideoInfo& info, const Canc
         }
     }
     std::optional<CropBox> box;
+    BarFindings findings;
+    const auto began = std::chrono::steady_clock::now();
     try {
-        box = detect_uncached(ffmpeg, info, sampled_duration, cancel, hwaccel, scale_algorithm);
+        box = detect_uncached(findings, ffmpeg, info, sampled_duration, cancel, hwaccel, scale_algorithm);
         logger.info("Black bars in " + platform::path_text(info.path.filename()) + ": picture " + box_text(*box) +
                     " of " + std::to_string(info.frame_size().first) + "x" + std::to_string(info.frame_size().second));
     } catch (const CropDetectError& error) {
@@ -1124,7 +1189,9 @@ CropBox detect_crop(const std::string& ffmpeg, const VideoInfo& info, const Canc
         // Not kept when it was found from the GPU's pictures while its decoding was being found wrong: the run is
         // made again on the CPU, and finds it again there
         const bool spoiled = hwaccel.has_value() && gpu_decoding_distrusted().has_value();
-        answers().settle(*key, spoiled ? std::nullopt : box);
+        const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count();
+        const CropAnswer answer{*box, findings, utc_text(std::chrono::system_clock::now()), seconds};
+        answers().settle(*key, spoiled ? std::nullopt : std::optional(answer));
     }
     return *box;
 }

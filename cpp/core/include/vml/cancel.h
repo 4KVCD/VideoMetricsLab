@@ -2,10 +2,16 @@
 // pausing it (the window's Pause).
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <stdexcept>
 
 namespace vml {
+
+// A run's clock: seconds on a steady clock, from any start. Tests give a
+// fake one.
+using RunClock = std::function<double()>;
+double steady_seconds();
 
 namespace platform {
 class ChildProcess;
@@ -29,6 +35,8 @@ class CancelToken {
 
 public:
     CancelToken();
+    // A run timed by `clock` (the times a results file records).
+    explicit CancelToken(RunClock clock);
 
     // Stops the run: sets the flag, and ends every program attached.
     void cancel();
@@ -40,6 +48,12 @@ public:
     void pause();
     void resume();
     bool paused() const;
+
+    // The run's clock now, and how long it has been paused in all, a pause
+    // still on counted to now: a stage's paused time is the difference
+    // between its end's and its start's (pauses hold the whole run).
+    double now() const;
+    double paused_seconds() const;
 
     // A program attached to the run, while this lives.
     class Attached {

@@ -86,9 +86,15 @@ std::optional<BarEdges> picture_edges(const LumaPicture& picture) {
     return edges;
 }
 
-CropBox handbrake_box(const std::vector<BarEdges>& counted, std::size_t decoded, int width, int height) {
+CropBox handbrake_box(const std::vector<BarEdges>& counted, std::size_t decoded, int width, int height,
+                      BarFindings* findings) {
+    BarFindings found{decoded, counted.size()};
     const CropBox whole{width, height, 0, 0};
     if (counted.empty() || counted.size() < std::min(fewest_judged, decoded)) {
+        if (findings != nullptr) {
+            found.too_few = true;
+            *findings = found;
+        }
         return whole;
     }
     std::vector<int> top, bottom, left, right;
@@ -115,8 +121,14 @@ CropBox handbrake_box(const std::vector<BarEdges>& counted, std::size_t decoded,
             ++thinner;
         }
     }
+    found.median = {top[index], bottom[index], left[index], right[index]};
     if (thinner >= 4) {
         index = 0;
+        found.shape_changes = true;
+    }
+    found.taken = {top[index], bottom[index], left[index], right[index]};
+    if (findings != nullptr) {
+        *findings = found;
     }
     // Each edge rounded up to even, as HandBrake's EVEN() does (an odd bar's
     // last line is cut with it); the box's size rounded down, so that an

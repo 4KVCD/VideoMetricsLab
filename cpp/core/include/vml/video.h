@@ -97,12 +97,24 @@ struct VideoInfo {
     // The codec's profile as ffprobe names it ("High", "High 4:4:4
     // Predictive"); empty where it gives none.
     std::string profile;
+    int level = 0;  // the codec's level as ffprobe gives it (HEVC's 153 is 5.1); 0 or less: not given
     std::string sar = "1:1";
     std::string pix_fmt;
     long long bit_rate = 0;  // bits per second, 0 if unknown
     // The file's bitrate, soundtrack included, where the video's own is not
     // recorded (a Matroska file without statistics tags).
     bool bit_rate_whole_file = false;
+    // The video stream's own size in bytes, from Matroska's statistics tags
+    // where they are the file's (as bit_rate trusts them); 0 if unknown.
+    long long stream_bytes = 0;
+    // What wrote the file and encoded the video, as their tags say: the
+    // container's "encoder" (Lavf61.7.100), the stream's (Lavc61.19.100
+    // libx265), and an encoder settings tag (ENCODER_SETTINGS) where one is;
+    // empty where none is. Settings carried only inside the stream (x265's
+    // SEI) are not read.
+    std::string writing_library;
+    std::string encoder;
+    std::string encoder_settings;
     // ffprobe's r_frame_rate. A real difference from the average frame rate
     // warns that the frame rate varies.
     double nominal_fps = 0.0;

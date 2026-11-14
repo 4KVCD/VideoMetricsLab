@@ -133,6 +133,29 @@ std::string processor_description() {
     return uname(&name) == 0 ? std::string(name.machine) : std::string();
 }
 
+#ifdef __APPLE__
+std::string cpu_model_name() {
+    const std::string name = chip_name();
+    return name.empty() ? processor_description() : name;
+}
+#else
+std::string cpu_model_name() {
+    // The first core's "model name   : Intel(R) ..." line
+    std::ifstream file("/proc/cpuinfo");
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.rfind("model name", 0) == 0) {
+            const std::size_t colon = line.find(':');
+            const std::size_t start = colon == std::string::npos ? colon : line.find_first_not_of(' ', colon + 1);
+            if (start != std::string::npos) {
+                return line.substr(start);
+            }
+        }
+    }
+    return processor_description();
+}
+#endif
+
 DisplayHdrInfo query_display_hdr(void* /*window*/) { return {}; }  // not known here: SDR at 100 nits
 
 #ifdef __APPLE__

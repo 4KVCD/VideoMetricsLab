@@ -18,7 +18,10 @@ namespace vml {
 
 // The JSON's version of the shape; a later one only adds to it, and a reader
 // skips the keys it does not know. 2: every display CVVDP was scored on, each
-// with its parameters and full summary ("cvvdp_displays").
+// with its parameters and full summary ("cvvdp_displays"); and how the scores
+// were made (run_record.h): the run, the machine, the summaries' rules, and
+// each video's file, settings, black bars, metrics' outcomes, decoders and
+// times. docs/RESULTS_JSON.md describes every key.
 inline constexpr int results_format = 2;
 
 // A number as the JSON has it: "inf" or "-inf" (JSON has no infinity), and
@@ -30,7 +33,8 @@ std::optional<double> summary_number(const nlohmann::ordered_json& number);
 // One metric of `result`: its score, how many frames it covers and where it
 // was calculated, with the statistics Metric Graphs shows. For a per-frame
 // metric those are of its frames: median, standard deviation, minimum,
-// maximum, the mean of the worst 10, 5, 1 and 0.1 %, the frames identical to
+// maximum, the score below which the worst 10, 5, 1 and 0.1 % fall (a
+// percentile, stats.h's worst tail), the frames identical to
 // the reference (XPSNR's, where any), and the share of frames in each of the
 // metric's bands ("percent_of_frames", "> 95": 1.3). For a whole-video score
 // with a timeline (CVVDP's seconds), the same of its seconds, under
@@ -51,7 +55,12 @@ nlohmann::ordered_json cvvdp_display_entry(const std::string& name, const Compar
 // A crop as the summary's JSON has it (x, y, width, height), or null for none.
 nlohmann::ordered_json summary_crop_json(const std::optional<CropBox>& box);
 
-// A video's media information, added to its entry.
+// A video's media information, added to its entry: its size, frame rate,
+// codec, pixel format and duration, then what the file is (its size in
+// bytes, container, bitrate and whether it is the video's or the whole
+// file's, the stream's own size, profile, level, bit depth, chroma
+// subsampling, colour as the app reads it, and what wrote and encoded it),
+// and its film grain.
 void add_media(nlohmann::ordered_json& entry, const VideoInfo& info);
 
 // The document's videos as CSV: a row for each, and a column for each value

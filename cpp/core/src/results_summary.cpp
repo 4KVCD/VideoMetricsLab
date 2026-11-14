@@ -2,14 +2,18 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <filesystem>
 #include <map>
 #include <span>
 #include <stdexcept>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
+#include "vml/hardware_decoding.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
 #include "vml/python_text.h"
@@ -168,6 +172,58 @@ Json summary_crop_json(const std::optional<CropBox>& box) {
     return Json{{"x", box->x}, {"y", box->y}, {"width", box->w}, {"height", box->h}};
 }
 
+namespace {
+
+// Text, or null where there is none.
+Json text_or_null(const std::string& text) { return text.empty() ? Json(nullptr) : Json(text); }
+
+// The chroma subsampling an FFmpeg pixel format's name says: "4:2:0" for
+// yuv420p10le, nv12 and p010le; null where it does not say.
+Json chroma_subsampling(const std::string& pix_fmt) {
+    if (pix_fmt.find("420") != std::string::npos || pix_fmt.starts_with("nv12") || pix_fmt.starts_with("p01")) {
+        return "4:2:0";
+    }
+    if (pix_fmt.find("422") != std::string::npos) {
+        return "4:2:2";
+    }
+    if (pix_fmt.find("444") != std::string::npos || pix_fmt.starts_with("gbr")) {
+        return "4:4:4";
+    }
+    if (pix_fmt.starts_with("gray")) {
+        return "4:0:0";
+    }
+    return nullptr;
+}
+
+// What the file is, as the probe found it: its size and bitrate, the
+// stream's format and colour, and what wrote and encoded it (issue #14), so
+// that a results file can be read against size on its own.
+void add_file_context(Json& entry, const VideoInfo& info) {
+    std::error_code error;
+    const std::uintmax_t size = std::filesystem::file_size(info.path, error);
+    entry["file_size"] = error ? Json(nullptr) : Json(size);
+    entry["container"] = text_or_null(info.format_name);
+    entry["bit_rate"] = info.bit_rate > 0 ? Json(info.bit_rate) : Json(nullptr);
+    entry["bit_rate_of"] = info.bit_rate <= 0 ? Json(nullptr) : Json(info.bit_rate_whole_file ? "file" : "video");
+    entry["stream_bytes"] = info.stream_bytes > 0 ? Json(info.stream_bytes) : Json(nullptr);
+    entry["profile"] = text_or_null(info.profile);
+    entry["level"] = info.level > 0 ? Json(info.level) : Json(nullptr);
+    entry["bit_depth"] = info.pix_fmt.empty() ? Json(nullptr) : Json(bit_depth(info.pix_fmt));
+    entry["chroma_subsampling"] = chroma_subsampling(info.pix_fmt);
+    // As the app reads the video: its tags, or those given (--colour) or
+    // taken from the other video where it has none
+    entry["colour"] = Json{{"range", text_or_null(info.color_range)},
+                           {"matrix", text_or_null(info.color_space)},
+                           {"transfer", text_or_null(info.color_transfer)},
+                           {"primaries", text_or_null(info.color_primaries)},
+                           {"chroma_location", text_or_null(info.chroma_location)}};
+    entry["writing_library"] = text_or_null(info.writing_library);
+    entry["encoder"] = text_or_null(info.encoder);
+    entry["encoder_settings"] = text_or_null(info.encoder_settings);
+}
+
+}  // namespace
+
 void add_media(Json& entry, const VideoInfo& info) {
     entry["width"] = info.width;
     entry["height"] = info.height;
@@ -175,6 +231,7 @@ void add_media(Json& entry, const VideoInfo& info) {
     entry["codec"] = info.codec_name;
     entry["pixel_format"] = info.pix_fmt;
     entry["duration"] = info.duration;
+    add_file_context(entry, info);
     // Its film grain where its stream has some: the kinds, and how it was
     // scored (and why without, where that was no choice).
     const FilmGrainScoring grain = effective_film_grain(info);

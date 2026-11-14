@@ -46,5 +46,26 @@ TEST(CancelToken, CancelEndsEveryProgramOfTheRunEvenPausedAndAnyAttachedAfter) {
     reader.join();
 }
 
+// The time a run spent paused, for the results file: every pause in all, the
+// one still on counted to now, a second Pause or Resume changing nothing.
+TEST(CancelToken, CountsTheTimeSpentPaused) {
+    double clock = 100.0;
+    CancelToken token([&clock] { return clock; });
+    EXPECT_EQ(token.now(), 100.0);
+    EXPECT_EQ(token.paused_seconds(), 0.0);
+    token.pause();
+    clock = 103.0;
+    token.pause();
+    EXPECT_EQ(token.paused_seconds(), 3.0);
+    clock = 104.0;
+    token.resume();
+    clock = 110.0;
+    token.resume();
+    EXPECT_EQ(token.paused_seconds(), 4.0);
+    token.pause();
+    clock = 112.5;
+    EXPECT_EQ(token.paused_seconds(), 6.5);
+}
+
 }  // namespace
 }  // namespace vml

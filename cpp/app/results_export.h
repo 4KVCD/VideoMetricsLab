@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "vml/results.h"
+#include "vml/run_record.h"
 #include "vml/video.h"
 
 class QAction;
@@ -29,27 +30,34 @@ struct Dialogs;
 enum class ResultsFormat { csv, json };
 
 // CVVDP on a further display of a run: the display's preset, and the result
-// of the row that scored CVVDP on it (a display companion's).
+// of the row that scored CVVDP on it (a display companion's), with how it
+// was made (its run's facts).
 struct ExportedDisplay {
     std::string name;
     std::shared_ptr<const ComparisonResult> result;
+    std::shared_ptr<const RunFacts> facts{};
 };
 
 // A run to export: its result, the name the window gives it, why each
 // metric that failed on its last run did, the preset of the display its
-// CVVDP score is for (none without one), and CVVDP on further displays.
+// CVVDP score is for (none without one), CVVDP on further displays, and how
+// it was made: its run's facts and the run's record (none where unknown).
 struct ExportedRun {
     std::shared_ptr<const ComparisonResult> result;
     QString label;
     std::map<std::string, QString> failures{};
     std::string cvvdp_display{};
     std::vector<ExportedDisplay> other_displays{};
+    std::shared_ptr<const RunFacts> facts{};
+    std::shared_ptr<const RunRecord> record{};
 };
 
 // The runs as one document: the reference the Videos tab compares with
-// (none without one), and an entry for each run, which names its own.
+// (none without one), the window's runs they came from with the machine
+// (the latest run's, or `machine` without one), and an entry for each run,
+// which names its own and records how it was made (run_record.h).
 nlohmann::ordered_json export_document(const std::optional<VideoInfo>& reference,
-                                       const std::vector<ExportedRun>& runs);
+                                       const std::vector<ExportedRun>& runs, const MachineFacts& machine);
 
 // The menus' two entries, CSV and JSON, added to `menu`.
 struct ExportActions {

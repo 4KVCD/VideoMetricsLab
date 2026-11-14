@@ -239,6 +239,24 @@ VshipBuild default_vship_build(std::string_view setting);
 // linked to. The first call points the loader at MoltenVK (VK_DRIVER_FILES).
 std::filesystem::path vulkan_library_path();
 
+// A GPU as the Vulkan loader lists it, with its driver: for a results file's
+// record of the machine that scored.
+struct VulkanGpu {
+    std::string name;
+    std::string vendor;                       // "NVIDIA", "AMD", "Intel", "Apple", or the PCI vendor ID in hex
+    std::uint32_t driver_version_number = 0;  // Vulkan's driverVersion, as the driver reports it
+    std::string driver_version;               // the same as its maker numbers drivers (driver_version_text)
+    // The driver's own name and version text (Vulkan 1.2's driver
+    // properties: "NVIDIA", "616.92"); empty where the driver gives none.
+    std::string driver_name{};
+    std::string driver_info{};
+};
+
+// Vulkan's driverVersion as the GPU's maker numbers its drivers: NVIDIA's in
+// 10.8.8.6 bits ("616.92"), Intel's in 18.14 bits on Windows ("101.6130"),
+// and elsewhere Vulkan's own major.minor.patch ("2.0.302").
+std::string driver_version_text(std::uint32_t vendor_id, std::uint32_t version, bool windows);
+
 // The GPU Vship runs on.
 struct VshipDevice {
     std::string backend;  // the API it runs on, "vulkan", "hip" or "cuda", as scores record it
@@ -255,6 +273,9 @@ struct VshipDevice {
     // note that its metrics fell back to 5.1.2. Kept in the process that probed,
     // not in vship_device_json.
     std::string fast_failure{};
+    // Every GPU the Vulkan loader lists, as the probe found them (in its own
+    // process, where the drivers are loaded anyway).
+    std::vector<VulkanGpu> gpus{};
 };
 
 // The build `device` was found by, as the app shows it: "Vship-fast 5.1.2",

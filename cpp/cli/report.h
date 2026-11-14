@@ -46,11 +46,13 @@ std::string results_table(const VideoInfo& source, const std::vector<TestVideo>&
                           const std::optional<nlohmann::ordered_json>& difference = std::nullopt);
 
 // The run as --json writes it, in the shape of results_summary.h, which the
-// window's Export results saves too; with --difference, a "difference"
+// window's Export results saves too, with the run's record (`record`,
+// run_record.h) and each video's; with --difference, a "difference"
 // section: the two videos' paths and difference_metrics.
 nlohmann::ordered_json results_document(const VideoInfo& source, const std::vector<TestVideo>& videos,
                                         const std::vector<Summaries>& summaries, bool cancelled,
-                                        const std::optional<nlohmann::ordered_json>& difference = std::nullopt);
+                                        const std::optional<nlohmann::ordered_json>& difference = std::nullopt,
+                                        const RunRecord* record = nullptr);
 
 // Each result's per-frame scores as the window's Export CSV writes them, in
 // `folder`; `message` says what was written and `failed` what could not be

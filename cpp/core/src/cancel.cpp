@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <utility>
 #include <vector>
@@ -14,13 +15,24 @@ namespace vml {
 // under it before they go, so none is gone while it is acted on, and a Pause
 // cannot come between a program's attaching and its being held.
 struct CancelToken::State {
+    explicit State(RunClock run_clock) : clock(std::move(run_clock)) {}
+
     std::atomic<bool> cancelled{false};
     std::mutex mutex;
     bool paused = false;
     std::vector<platform::ChildProcess*> processes;
+    const RunClock clock;
+    double paused_since = 0.0;   // the clock when the pause on began
+    double paused_before = 0.0;  // the pauses that ended, in all
 };
 
-CancelToken::CancelToken() : state_(std::make_shared<State>()) {}
+double steady_seconds() {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+CancelToken::CancelToken() : CancelToken(steady_seconds) {}
+
+CancelToken::CancelToken(RunClock clock) : state_(std::make_shared<State>(std::move(clock))) {}
 
 void CancelToken::cancel() {
     const std::lock_guard lock(state_->mutex);
@@ -44,6 +56,7 @@ void CancelToken::pause() {
         return;
     }
     state_->paused = true;
+    state_->paused_since = state_->clock();
     for (platform::ChildProcess* process : state_->processes) {
         process->suspend();
     }
@@ -55,6 +68,7 @@ void CancelToken::resume() {
         return;
     }
     state_->paused = false;
+    state_->paused_before += state_->clock() - state_->paused_since;
     for (platform::ChildProcess* process : state_->processes) {
         process->resume();
     }
@@ -63,6 +77,13 @@ void CancelToken::resume() {
 bool CancelToken::paused() const {
     const std::lock_guard lock(state_->mutex);
     return state_->paused;
+}
+
+double CancelToken::now() const { return state_->clock(); }
+
+double CancelToken::paused_seconds() const {
+    const std::lock_guard lock(state_->mutex);
+    return state_->paused_before + (state_->paused ? state_->clock() - state_->paused_since : 0.0);
 }
 
 CancelToken::Attached CancelToken::attach(platform::ChildProcess& process) const {

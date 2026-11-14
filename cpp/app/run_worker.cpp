@@ -23,6 +23,7 @@ RunWorker::RunWorker(std::vector<VmafJob> jobs, int parallel_jobs, bool gpu_metr
     qRegisterMetaType<std::vector<vml::TaskSnapshot>>();
     qRegisterMetaType<vml::ComparisonResult>();
     qRegisterMetaType<vml::MetricFailures>();
+    qRegisterMetaType<vml::RunFacts>();
     RunEvents events;
     events.job_started = [this](std::size_t index) { emit job_started(static_cast<int>(index)); };
     events.task_progress = [this](std::size_t index, const std::vector<TaskSnapshot>& tasks) {
@@ -44,6 +45,9 @@ RunWorker::RunWorker(std::vector<VmafJob> jobs, int parallel_jobs, bool gpu_metr
     events.job_failed = [this](std::size_t index, const std::string& message, const std::string& stderr_tail) {
         ended(index);
         emit job_failed(static_cast<int>(index), QString::fromStdString(message), QString::fromStdString(stderr_tail));
+    };
+    events.job_facts = [this](std::size_t index, const RunFacts& facts) {
+        emit job_facts(static_cast<int>(index), facts);
     };
     events.cancelled = [this] { emit cancelled(); };
     scheduler_ = std::make_unique<JobScheduler>(

@@ -719,6 +719,7 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
                                        [&result](const std::string& key) { return result.has_metric(key); });
         progress.finished(index, video(index).label() + (whole || !cancel.cancelled() ? ": done" : ": cancelled"));
     };
+    events.job_facts = [&](std::size_t index, const RunFacts& facts) { video(index).facts = facts; };
     events.job_failed = [&](std::size_t index, const std::string& message, const std::string& /*stderr_tail*/) {
         video(index).error = message;
         progress.finished(index, video(index).label() + ": FAILED: " + message);
@@ -798,6 +799,11 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         // nothing for a row that has its scores.
         video.result = std::move(saved);
         video.from_cache = true;
+        RunFacts facts{VideoSettings{source, *video.info, options, video.metrics, backends, cvvdp}};
+        for (const std::string& key : video.metrics) {
+            facts.metrics.emplace_back(key, MetricOutcome{metric_saved, ""});
+        }
+        video.facts = std::move(facts);
         return std::nullopt;
     }
     std::vector<MetricTask> tasks =
@@ -1342,7 +1348,7 @@ std::optional<std::string> model_file_wrong(const CompareArguments& arguments, c
 // file asked for (the tables are printed as well then). False when a file
 // could not be written.
 bool write_results(const CompareArguments& arguments, const VideoInfo& source, std::vector<TestVideo>& videos,
-                   bool cancelled, Progress& progress) {
+                   bool cancelled, const RunRecord& record, Progress& progress) {
     const std::vector<Summaries> summaries = summarize(videos);
     const std::optional<nlohmann::ordered_json> difference =
         arguments.difference ? difference_metrics(videos, summaries) : std::nullopt;
@@ -1362,7 +1368,8 @@ bool write_results(const CompareArguments& arguments, const VideoInfo& source, s
         }
     }
     // After the CSV files: it says where each one went.
-    const nlohmann::ordered_json document = results_document(source, videos, summaries, cancelled, difference);
+    const nlohmann::ordered_json document =
+        results_document(source, videos, summaries, cancelled, difference, &record);
     const std::optional<std::filesystem::path> json_file =
         arguments.json_path ? std::optional(python_path(*arguments.json_path)) : std::nullopt;
     if (json_file && platform::path_text(*json_file) == "-") {
@@ -1382,6 +1389,9 @@ bool write_results(const CompareArguments& arguments, const VideoInfo& source, s
 }  // namespace
 
 int compare(const CompareArguments& arguments) {
+    // The command's start, for the results' record
+    const std::string started_utc = utc_text(std::chrono::system_clock::now());
+    const Clock::time_point began = Clock::now();
     CancelToken cancel;
     const auto progress = std::make_shared<Progress>(arguments.quiet);
     const auto running = std::make_shared<std::atomic<bool>>(false);
@@ -1516,7 +1526,16 @@ int compare(const CompareArguments& arguments) {
             video.notes.push_back(*note);
         }
     }
-    const bool written = write_results(arguments, source, planner.videos, cancelled, *progress);
+    // The command line cannot pause: no paused time
+    RunRecord record{"cli",
+                     arguments.command_line,
+                     started_utc,
+                     utc_text(std::chrono::system_clock::now()),
+                     std::chrono::duration<double>(Clock::now() - began).count(),
+                     0.0,
+                     1,
+                     this_machine(tools.ffmpeg.path, format_version(tools.ffmpeg.version))};
+    const bool written = write_results(arguments, source, planner.videos, cancelled, record, *progress);
     if (cancelled) {
         return exit_cancelled;
     }

@@ -21,6 +21,7 @@ inline constexpr int exit_cancelled = 130;
 
 // The compare command's arguments.
 struct CompareArguments {
+    std::vector<std::string> command_line;  // every word given, for the results' record
     std::string reference;
     std::vector<std::string> tests;  // files, or patterns such as encodes\*.mkv
     std::optional<std::vector<std::string>> metrics;  // keys, in the registry's order

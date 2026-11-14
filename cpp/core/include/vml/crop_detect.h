@@ -18,6 +18,7 @@
 #include <string_view>
 #include <utility>
 
+#include "vml/black_bars_rule.h"
 #include "vml/cancel.h"
 #include "vml/video.h"
 
@@ -46,6 +47,21 @@ void forget_crop_answers();
 // it from the GPU's pictures while the GPU's video decoding was found wrong
 // (gpu_decoding_distrusted) finds it again on the CPU.
 void forget_crop_answer(const VideoInfo& info);
+
+// A video's black-bar answer as the store keeps it.
+struct CropAnswer {
+    CropBox box;
+    // What it was decided from (handbrake_box); none for an answer an older
+    // version kept.
+    std::optional<BarFindings> findings;
+    std::string found_utc;  // when it was found (utc_text); "" for an older answer
+    double seconds = 0.0;   // how long finding it took
+};
+
+// The answer kept for `info` now, read from the store again (a run's
+// process of its own may have found it), or nothing: the results file
+// says what a run's black bars were decided from.
+std::optional<CropAnswer> kept_crop_answer(const VideoInfo& info);
 
 // The box that cuts the video's black bars. `hwaccel` is the decoder the
 // run will use for this video (only how fast the answer comes depends on

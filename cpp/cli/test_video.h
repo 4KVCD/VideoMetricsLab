@@ -10,6 +10,7 @@
 #include "vml/analysis_request.h"
 #include "vml/options.h"
 #include "vml/results.h"
+#include "vml/run_record.h"
 #include "vml/video.h"
 
 namespace vml::cli {
@@ -45,6 +46,9 @@ struct TestVideo {
     // with CVVDP alone, run as a comparison of its own.
     std::vector<TestVideo> other_displays;
     bool for_display_only = false;  // one of another TestVideo's other_displays
+    // How its run went (RunEvents::job_facts), or how its saved scores answered
+    // it all: none for a video that was not compared.
+    std::optional<RunFacts> facts;
 
     // Its name as the reports give it.
     std::string name() const;

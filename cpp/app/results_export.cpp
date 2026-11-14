@@ -3,7 +3,9 @@
 #include <QAction>
 #include <QMenu>
 
+#include <algorithm>
 #include <fstream>
+#include <set>
 
 #include "dialogs.h"
 #include "i18n.h"
@@ -59,16 +61,63 @@ Json run_entry(const ExportedRun& run) {
             displays.push_back(cvvdp_display_entry(run.cvvdp_display, &result));
         }
         for (const ExportedDisplay& other : run.other_displays) {
-            displays.push_back(cvvdp_display_entry(other.name, other.result.get()));
+            Json display = cvvdp_display_entry(other.name, other.result.get());
+            // Its own run's times: the first display's are the video's
+            Json record;
+            add_video_record(record, other.facts.get(), nullptr, other.name);
+            display["timings"] = record["timings"];
+            displays.push_back(std::move(display));
         }
         entry["cvvdp_displays"] = displays;
     }
+    add_video_record(entry, run.facts.get(), run.result.get(), run.cvvdp_display);
     return entry;
+}
+
+// The window's runs the exported videos came from, as one: the first's
+// start, the last's end (none while one is still running), their times
+// added up, and the latest finished one's machine (`machine` without one).
+RunRecord runs_record(const std::vector<ExportedRun>& runs, const MachineFacts& machine) {
+    std::set<const RunRecord*> records;
+    for (const ExportedRun& run : runs) {
+        if (run.record) {
+            records.insert(run.record.get());
+        }
+    }
+    RunRecord all{"gui", std::nullopt, "", "", std::nullopt, std::nullopt, static_cast<int>(records.size()),
+                  machine};
+    if (records.empty()) {
+        return all;
+    }
+    const bool running = std::any_of(records.begin(), records.end(),
+                                     [](const RunRecord* record) { return record->finished_utc.empty(); });
+    double wall = 0.0;
+    double paused = 0.0;
+    std::string latest;  // the latest finished run's end
+    for (const RunRecord* record : records) {
+        // utc_text's times sort as text
+        if (all.started_utc.empty() || record->started_utc < all.started_utc) {
+            all.started_utc = record->started_utc;
+        }
+        if (!record->finished_utc.empty() && record->finished_utc > latest) {
+            latest = record->finished_utc;
+            all.machine = record->machine;
+        }
+        wall += record->wall_seconds.value_or(0.0);
+        paused += record->paused_seconds.value_or(0.0);
+    }
+    if (!running) {
+        all.finished_utc = latest;
+        all.wall_seconds = wall;
+        all.paused_seconds = paused;
+    }
+    return all;
 }
 
 }  // namespace
 
-Json export_document(const std::optional<VideoInfo>& reference, const std::vector<ExportedRun>& runs) {
+Json export_document(const std::optional<VideoInfo>& reference, const std::vector<ExportedRun>& runs,
+                     const MachineFacts& machine) {
     Json source = nullptr;
     if (reference) {
         source = Json{{"path", platform::path_text(reference->path)}};
@@ -76,6 +125,7 @@ Json export_document(const std::optional<VideoInfo>& reference, const std::vecto
     }
     Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"commit", build_commit()}, {"format", results_format},
                   {"reference", source}, {"videos", Json::array()}};
+    add_run_record(document, runs_record(runs, machine));
     for (const ExportedRun& run : runs) {
         document["videos"].push_back(run_entry(run));
     }

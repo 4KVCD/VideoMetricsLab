@@ -56,6 +56,7 @@ add_library(vml_core
     src/run_file.cpp
     src/run_json.cpp
     src/run_line.cpp
+    src/run_record.cpp
     src/score_logs.cpp
     src/settings.cpp
     src/sha256.cpp

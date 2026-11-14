@@ -46,6 +46,7 @@
 #include "vml/options.h"
 #include "vml/results.h"
 #include "vml/run_line.h"
+#include "vml/run_record.h"
 #include "vml/settings.h"
 #include "vml/update_check.h"
 #include "vml/video.h"
@@ -142,6 +143,12 @@ struct CompletedRun {
     // a long video's take a while and its row is drawn again and again.
     std::map<int, std::optional<double>> scores;
     std::map<int, std::pair<long long, long long>> identical;
+    // How it was made, for Export results (run_record.h): its run's facts
+    // and the run's record; none for saved scores (whose facts are the
+    // row's request as it is exported: saved_facts) or a saved run loaded.
+    std::shared_ptr<const RunFacts> facts;
+    std::shared_ptr<const RunRecord> record;
+    bool from_saved_scores = false;
 };
 
 // One row of the test-video table: the video, its options and its results.
@@ -371,6 +378,8 @@ private:
     static void set_metric_option(VmafOptions& options, int column, bool checked);
     static std::vector<std::string> selected_metrics(const RowData& row_data);
     std::vector<std::string> requested_metrics(const RowData& row_data) const;
+    // The facts of `row_data`'s saved scores, shown as `shown`.
+    std::shared_ptr<const RunFacts> saved_facts(const RowData& row_data, const ComparisonResult& shown) const;
     static std::optional<QString> metric_unavailable_reason(const RowData& row_data, const std::string& key);
     static bool row_metric_enabled(const RowData& row_data, int column);
     void apply_metric_visibility();
@@ -536,6 +545,10 @@ private:
     std::optional<int> row_index_of(const RowData* row_data) const;
     void on_result_updated(int index, const ComparisonResult& result);
     std::optional<int> on_job_finished(int index, const ComparisonResult& result, bool final = true);
+    // The run's record, completed as the run ends (run_record_).
+    void complete_run_record();
+    // This machine, with the FFmpeg the window found.
+    MachineFacts current_machine() const;
     // on_job_finished's parts.
     void save_job_result(std::size_t job, const RowData& row_data, const ComparisonResult& result,
                          const QString& label);
@@ -628,6 +641,10 @@ private:
     std::optional<double> run_started_at_;
     double paused_total_ = 0;
     std::optional<double> paused_since_;
+    // The run's record, completed as it ends, and each job's facts
+    // (RunWorker::job_facts), for the CompletedRuns it makes.
+    std::shared_ptr<RunRecord> run_record_;
+    std::vector<std::shared_ptr<const RunFacts>> job_facts_;
     RunHold run_hold_ = RunHold::none;
     QString run_hold_message_;
     // Each video's line: the latest state of its tasks, the line's text and

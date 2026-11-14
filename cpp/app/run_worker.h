@@ -18,6 +18,7 @@
 #include "vml/cancel.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/job_runner.h"
+#include "vml/run_record.h"
 #include "vml/settings.h"
 
 namespace vml::app {
@@ -40,6 +41,11 @@ public:
     void resume();
     void set_parallel_jobs(int count);
 
+    // The FFmpeg the run used and its version ("" before the run has
+    // found it, or where it could not be used): from the window's thread
+    // once all_finished has arrived.
+    const RunEnvironment& environment() const { return environment_; }
+
 signals:
     // The run's events (job_runner.h's RunEvents), each with its job's index;
     // then all_finished, the last.
@@ -50,6 +56,9 @@ signals:
     void job_partially_failed(int index, const vml::ComparisonResult& result, const QString& message,
                               const QString& stderr_tail, const vml::MetricFailures& failures);
     void job_failed(int index, const QString& message, const QString& stderr_tail);
+    // How a video's run went, just before its job_finished, job_partially_failed
+    // or job_failed (or, for one a Cancel kept from starting, at the end).
+    void job_facts(int index, const vml::RunFacts& facts);
     void cancelled();
     void all_finished();
 
@@ -79,3 +88,4 @@ private:
 Q_DECLARE_METATYPE(std::vector<vml::TaskSnapshot>)
 Q_DECLARE_METATYPE(vml::ComparisonResult)
 Q_DECLARE_METATYPE(vml::MetricFailures)
+Q_DECLARE_METATYPE(vml::RunFacts)

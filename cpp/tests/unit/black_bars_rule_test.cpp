@@ -74,8 +74,11 @@ TEST(BlackBarsRule, TakesTheMedianOfThePicturesBars) {
     // pictures at the full frame, five letterboxed: no picture cut
     const BarEdges scope{233, 234, 0, 0};
     const BarEdges full{0, 0, 0, 0};
-    EXPECT_EQ(handbrake_box({full, full, full, full, scope, scope, scope, scope, scope}, 10, 3840, 2076),
+    BarFindings findings;
+    EXPECT_EQ(handbrake_box({full, full, full, full, scope, scope, scope, scope, scope}, 10, 3840, 2076, &findings),
               (CropBox{3840, 2076, 0, 0}));
+    // What it was decided from, for the results file
+    EXPECT_EQ(findings, (BarFindings{10, 9, scope, full, true, false}));
     // Three of nine at the full frame: the median's bars
     EXPECT_EQ(handbrake_box({full, full, full, scope, scope, scope, scope, scope, scope}, 10, 3840, 2076),
               (CropBox{3840, 2076 - 234 - 234, 0, 234}));
@@ -88,7 +91,8 @@ TEST(BlackBarsRule, TakesTheMedianOfThePicturesBars) {
     EXPECT_EQ(handbrake_box({taller, taller, taller, wider, wider, wider, framed, framed, framed}, 10, 1920, 1080),
               (CropBox{1720, 804, 100, 138}));
     // Fewer than three pictures said something: the whole frame
-    EXPECT_EQ(handbrake_box({letterbox, letterbox}, 10, 1920, 1080), (CropBox{1920, 1080, 0, 0}));
+    EXPECT_EQ(handbrake_box({letterbox, letterbox}, 10, 1920, 1080, &findings), (CropBox{1920, 1080, 0, 0}));
+    EXPECT_EQ(findings, (BarFindings{10, 2, {}, {}, false, true}));
     // ... but a video too short for three judged on the ones it has
     EXPECT_EQ(handbrake_box({letterbox}, 1, 1920, 1080), (CropBox{1920, 804, 0, 138}));
     EXPECT_EQ(handbrake_box({}, 0, 1920, 1080), (CropBox{1920, 1080, 0, 0}));

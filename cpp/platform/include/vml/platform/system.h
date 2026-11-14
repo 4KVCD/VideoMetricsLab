@@ -93,6 +93,11 @@ std::string system_description();
 // Stepping 2, GenuineIntel"; elsewhere the machine, such as "x86_64".
 std::string processor_description();
 
+// The CPU's model as its maker names it, such as "Intel(R) Core(TM) Ultra 9
+// 285K" (Windows' ProcessorNameString, macOS's machdep.cpu.brand_string,
+// Linux's "model name"); processor_description where the system does not say.
+std::string cpu_model_name();
+
 // The HDR state of a monitor, with nothing for what Windows does not say.
 struct DisplayHdrInfo {
     std::string device_name;

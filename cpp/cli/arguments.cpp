@@ -1113,6 +1113,7 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
              const std::vector<std::string> rest(values.begin() + 1, values.end());
              if (command == "compare") {
                  parsed.command = Command::compare;
+                 parsed.compare.command_line = arguments;
                  const Parser parser = compare_parser(parsed.compare);
                  command_extras = parse_command(parser, compare_usage, std::string(program) + " compare", rest);
              } else if (command == "bitrate") {

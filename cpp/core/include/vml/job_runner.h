@@ -33,6 +33,7 @@
 #include "vml/ffmpeg_run.h"
 #include "vml/options.h"
 #include "vml/results.h"
+#include "vml/run_record.h"
 #include "vml/video.h"
 #include "vml/vship_run.h"
 
@@ -179,6 +180,11 @@ struct RunEvents {
     std::function<void(std::size_t index, const ComparisonResult& result)> result_updated;
     // The run was cancelled. Sent once, however many videos it stopped.
     std::function<void()> cancelled;
+    // How the video's run went (run_record.h): its settings, how each metric
+    // came out, and each pass's decoders and times. Sent once for every
+    // video, just before its result or failure, and for a video a cancel
+    // stopped before it had any result, which gets no other event.
+    std::function<void(std::size_t index, const RunFacts& facts)> job_facts;
 };
 
 // Calculates one task: `options` are the job's, with only the task's

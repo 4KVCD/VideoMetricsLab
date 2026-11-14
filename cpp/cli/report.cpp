@@ -58,6 +58,12 @@ Json display_entry(const TestVideo& target) {
     if (target.result) {
         entry["from_saved_scores"] = target.from_cache;
     }
+    if (target.for_display_only) {
+        // Its own run's times: the first display's are the video's
+        Json record;
+        add_video_record(record, target.facts ? &*target.facts : nullptr, nullptr, target.display);
+        entry["timings"] = record["timings"];
+    }
     // A further display's run is CVVDP's alone, so its CSV and notes are this
     // display's; the first display's are the video's own, on its entry.
     if (target.for_display_only && target.csv_file) {
@@ -320,11 +326,15 @@ std::string results_table(const VideoInfo& source, const std::vector<TestVideo>&
 }
 
 Json results_document(const VideoInfo& source, const std::vector<TestVideo>& videos,
-                      const std::vector<Summaries>& summaries, bool cancelled, const std::optional<Json>& difference) {
+                      const std::vector<Summaries>& summaries, bool cancelled, const std::optional<Json>& difference,
+                      const RunRecord* record) {
     Json reference{{"path", platform::path_text(source.path)}};
     add_media(reference, source);
     Json document{{"app", "VideoMetricsLab"}, {"version", VML_VERSION}, {"commit", build_commit()}, {"format", results_format},
                   {"cancelled", cancelled}, {"reference", reference}, {"videos", Json::array()}};
+    if (record != nullptr) {
+        add_run_record(document, *record);
+    }
     for (std::size_t v = 0; v < videos.size(); ++v) {
         const TestVideo& video = videos[v];
         // Each video names its reference too, as the window's export does,
@@ -377,6 +387,8 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
             }
             entry["cvvdp_displays"] = displays;
         }
+        add_video_record(entry, video.facts ? &*video.facts : nullptr, video.result ? &*video.result : nullptr,
+                         video.display);
         document["videos"].push_back(entry);
     }
     if (difference) {

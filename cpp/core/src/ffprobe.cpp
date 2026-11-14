@@ -151,6 +151,12 @@ const Json* tag(const Json& stream, std::string_view name) {
     return nullptr;
 }
 
+// A tag's text, by its name in any case; empty where it is none or not text.
+std::string tag_text(const Json& tagged, std::string_view name) {
+    const Json* value = tag(tagged, name);
+    return value != nullptr && value->is_string() ? value->get<std::string>() : std::string();
+}
+
 // "01:45:36.289000000" in seconds, or nothing.
 std::optional<double> clock_seconds(const Json* value) {
     if (value == nullptr || !value->is_string()) {
@@ -348,6 +354,19 @@ VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_v
     info.height = integer_member(*video, "height");
     info.codec_name = string_member(*video, "codec_name", "unknown");
     info.profile = string_member(*video, "profile");
+    info.level = integer_member(*video, "level");
+    if (statistics_are_the_files(format)) {
+        info.stream_bytes = std::max(0LL, whole(tag(*video, "NUMBER_OF_BYTES")));
+    }
+    info.writing_library = tag_text(format, "ENCODER");
+    info.encoder = tag_text(*video, "ENCODER");
+    for (const Json* tagged : {&*video, &format}) {
+        for (const char* name : {"ENCODER_SETTINGS", "ENCODING_SETTINGS"}) {
+            if (info.encoder_settings.empty()) {
+                info.encoder_settings = tag_text(*tagged, name);
+            }
+        }
+    }
     info.sar = first_truthy(*video, {"sample_aspect_ratio"}, "1:1");
     info.pix_fmt = string_member(*video, "pix_fmt");
     info.color_range = string_member(*video, "color_range");

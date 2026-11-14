@@ -238,5 +238,28 @@ TEST(Vship, PlansFfmpegAndSizesAsThePythonApp) {
     }
 }
 
+// A driver's version as its maker numbers it, for the results file's record
+// of the machine: each maker packs Vulkan's driverVersion its own way.
+TEST(Vship, DriverVersionsAreReadAsTheirMakersNumberThem) {
+    EXPECT_EQ(driver_version_text(0x10DE, (616u << 22) | (92u << 14), true), "616.92");
+    EXPECT_EQ(driver_version_text(0x10DE, (581u << 22) | (5u << 14), false), "581.05");
+    EXPECT_EQ(driver_version_text(0x8086, (101u << 14) | 6130u, true), "101.6130");
+    EXPECT_EQ(driver_version_text(0x8086, (24u << 22) | (1u << 12) | 3u, false), "24.1.3");  // Mesa's
+    EXPECT_EQ(driver_version_text(0x1002, (2u << 22) | 302u, true), "2.0.302");
+}
+
+// The GPUs the probe lists (in a process of its own) reach the app whole.
+TEST(Vship, TheProbesGpusComeBackWithItsAnswer) {
+    VshipDevice device{"vulkan", "a GPU", 0, "5.1.2", GpuVendor::nvidia};
+    device.gpus = {{"a GPU", "NVIDIA", (616u << 22) | (92u << 14), "616.92", "NVIDIA", "616.92"},
+                   {"another", "Intel", (101u << 14) | 6130u, "101.6130"}};
+    const std::optional<VshipDevice> back = vship_device_from(vship_device_json(device));
+    ASSERT_TRUE(back.has_value());
+    ASSERT_EQ(back->gpus.size(), 2U);
+    EXPECT_EQ(back->gpus[0].driver_info, "616.92");
+    EXPECT_EQ(back->gpus[1].driver_version_number, (101u << 14) | 6130u);
+    EXPECT_EQ(back->gpus[1].driver_name, "");
+}
+
 }  // namespace
 }  // namespace vml

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 
 namespace vml {
 
@@ -35,6 +36,19 @@ std::string format_hms(double seconds, int decimals) {
     if (decimals > 0) {
         text += "." + padded(fraction, decimals);
     }
+    return text;
+}
+
+std::string utc_text(std::chrono::system_clock::time_point time) {
+    const std::time_t seconds = std::chrono::system_clock::to_time_t(time);
+    std::tm parts{};
+#ifdef _WIN32
+    gmtime_s(&parts, &seconds);
+#else
+    gmtime_r(&seconds, &parts);
+#endif
+    char text[32] = {};
+    std::strftime(text, sizeof text, "%Y-%m-%dT%H:%M:%SZ", &parts);
     return text;
 }
 

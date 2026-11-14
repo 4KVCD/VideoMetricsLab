@@ -454,7 +454,11 @@ right-click the Videos table or the statistics table on Metric Graphs and
 choose **Export results as CSV** or **as JSON**: either gives the same file,
 every video's score and statistics for each metric (those of every metric,
 not only the one Metric Graphs shows), in the shape the command line's
-`--json` writes.
+`--json` writes. Both also record how the scores were made: the run, the
+machine (system, CPU, GPUs and their drivers, FFmpeg), and for each video
+its file, every setting (defaults too), its black bars and how they were
+found, how each metric came out, the decoders used and how long each pass
+took. [The results file](RESULTS_JSON.md) describes every key.
 
 Cached results are reused when files and relevant settings match. A
 compatible subset can load as partially calculated; request calculation to
@@ -466,5 +470,6 @@ File moves or replacements can cause cache misses. Use explicit saved-result
 loading when you need to inspect a portable result. Right-click recalculation
 forgets matching cached results, so do not use it just to refresh the display.
 
-Result files may contain absolute media paths. Review them before sharing.
+Result files may contain absolute media paths, and exported results the
+machine's CPU and GPUs. Review them before sharing.
 See [troubleshooting](TROUBLESHOOTING.md) for missing results or playback errors.

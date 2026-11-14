@@ -40,6 +40,26 @@ AnalysisRequest MainWindow::analysis_request_of(const RowData& row_data) const {
                             row_data.cvvdp, source, distorted);
 }
 
+std::shared_ptr<const RunFacts> MainWindow::saved_facts(const RowData& row_data, const ComparisonResult& shown) const {
+    // The row's request as it is now (its saved scores answered it when
+    // they were shown, and its ticks may have changed since), with the
+    // videos as the run that saved them read them: their black bars were
+    // kept under those (kept_crop_answer). A score the row shows was saved,
+    // by the run that made it if not before.
+    auto facts = std::make_shared<RunFacts>();
+    facts->settings = VideoSettings{shown.source_info,
+                                    shown.distorted_info,
+                                    row_data.options,
+                                    requested_metrics(row_data),
+                                    {automatic_perceptual_backends.begin(), automatic_perceptual_backends.end()},
+                                    row_data.cvvdp};
+    for (const std::string& key : facts->settings.metrics) {
+        facts->metrics.emplace_back(key, shown.has_metric(key) ? MetricOutcome{metric_saved, ""}
+                                                               : MetricOutcome{metric_not_run, "no saved score"});
+    }
+    return facts;
+}
+
 bool MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& paths) {
     // Looks for the saved scores of the rows `paths`. A newer lookup replaces
     // one under way, and the window refuses the older one's answers (by its
@@ -190,6 +210,7 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     for (const std::string& key : run->result.metric_results.keys()) {
         row_data.metric_failures.erase(key);  // a score now answers it
     }
+    run->from_saved_scores = true;
     row_data.completed_run = std::move(run);
     row_data.analysis_status = has_requested_results(row_data) ? std::optional(RowState::cached) : std::nullopt;
     row_data.status_detail =
@@ -371,6 +392,9 @@ void MainWindow::drop_metric_results(int row, const std::vector<std::string>& ke
         // The same line, updated: under a new identity it took a new colour
         // and came back even if hidden or removed from the graph.
         rest->graph_identity = run->graph_identity;
+        rest->facts = run->facts;
+        rest->record = run->record;
+        rest->from_saved_scores = run->from_saved_scores;
         graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(rest, &rest->result), rest->label,
                                rest->graph_identity, false});
         row_data.completed_run = std::move(rest);

@@ -46,6 +46,17 @@ std::optional<BarEdges> picture_edges(const LumaPicture& picture);
 // the fewest.
 inline constexpr std::size_t fewest_judged = 3;
 
+// What a video's box was decided from (handbrake_box), for the results file.
+struct BarFindings {
+    std::size_t decoded = 0;  // pictures sampled
+    std::size_t judged = 0;   // of those, the ones that said something of the bars
+    BarEdges median;          // each edge's median bars, before rounding
+    BarEdges taken;           // the bars cut, before rounding: the median, or the smallest where the shape changes
+    bool shape_changes = false;  // four or more bars ten or more lines thinner: the smallest taken
+    bool too_few = false;        // too few pictures said something: the whole frame
+    bool operator==(const BarFindings&) const = default;
+};
+
 // The box that cuts the bars `counted` found (picture_edges of the pictures
 // that said something), of `decoded` pictures sampled from a video
 // `width` x `height`: each edge's median, or its smallest where one edge has
@@ -54,7 +65,9 @@ inline constexpr std::size_t fewest_judged = 3;
 // HandBrake's EVEN() rounds it, the box's size down to even.
 // The whole frame where fewer than fewest_judged pictures (or than
 // `decoded`, for a video too short to give them) said something.
-CropBox handbrake_box(const std::vector<BarEdges>& counted, std::size_t decoded, int width, int height);
+// `findings`, where given, gets what the box was decided from.
+CropBox handbrake_box(const std::vector<BarEdges>& counted, std::size_t decoded, int width, int height,
+                      BarFindings* findings = nullptr);
 
 // Pictures read from FFmpeg's yuv4mpegpipe of 16-bit luma (Cmono16, as
 // extractplanes=y,format=gray16le gives it), each as 8 bits (the high byte:

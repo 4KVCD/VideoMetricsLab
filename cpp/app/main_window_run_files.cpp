@@ -399,6 +399,9 @@ std::vector<ExportedRun> MainWindow::exported_runs() const {
             settings ? matching_cvvdp_preset(*settings, settings_.cvvdp_presets_json, preferred) : std::nullopt;
         return preset ? preset->name : std::string();
     };
+    const auto facts_of = [this](const RowData& row_data, const CompletedRun& run) {
+        return run.from_saved_scores ? saved_facts(row_data, run.result) : run.facts;
+    };
     std::vector<ExportedRun> runs;
     std::set<std::string> listed;  // the rows' lines on the graph
     std::map<std::filesystem::path, std::size_t> run_of_row;  // a row's path: its run's place in `runs`
@@ -418,7 +421,8 @@ std::vector<ExportedRun> MainWindow::exported_runs() const {
         }
         run_of_row[row_data->path] = runs.size();
         runs.push_back({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label,
-                        row_data->metric_failures, display_of(run->result, row_data->cvvdp_preset)});
+                        row_data->metric_failures, display_of(run->result, row_data->cvvdp_preset), {},
+                        facts_of(*row_data, *run), run->record});
     }
     // Another display's CVVDP is listed with the video it was scored for: in
     // its row's entry, or as an entry of its own where that row has no
@@ -428,9 +432,10 @@ std::vector<ExportedRun> MainWindow::exported_runs() const {
         std::shared_ptr<const ComparisonResult> result(run, &run->result);
         const std::string display = display_of(run->result, row_data->cvvdp_preset);
         if (const auto parent = run_of_row.find(*row_data->cvvdp_display_of); parent != run_of_row.end()) {
-            runs[parent->second].other_displays.push_back({display, std::move(result)});
+            runs[parent->second].other_displays.push_back({display, std::move(result), facts_of(*row_data, *run)});
         } else {
-            runs.push_back({std::move(result), run->label, row_data->metric_failures, display});
+            runs.push_back({std::move(result), run->label, row_data->metric_failures, display, {},
+                            facts_of(*row_data, *run), run->record});
         }
     }
     for (const GraphPanel::Run& graphed : graph_panel_->runs()) {
@@ -444,7 +449,7 @@ std::vector<ExportedRun> MainWindow::exported_runs() const {
 void MainWindow::export_results(ResultsFormat format) {
     // Named after the reference, whose test videos the Videos tab scores.
     const QString name = source_info_ ? text_of(source_info_->path.stem()) + "_results" : QStringLiteral("results");
-    save_results(dialogs_, export_document(source_info_, exported_runs()), name, format);
+    save_results(dialogs_, export_document(source_info_, exported_runs(), current_machine()), name, format);
 }
 
 }  // namespace vml::app

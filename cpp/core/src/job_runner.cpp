@@ -14,6 +14,7 @@
 #include <thread>
 
 #include "vml/app_log.h"
+#include "vml/append.h"
 #include "vml/crop_detect.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/film_grain_scoring.h"
@@ -216,6 +217,18 @@ private:
         RunStatus step;           // its latest status
         std::optional<HardwareDecoding> decode;  // the last decode plan a status named
         bool on_vvdec_vulkan = false;            // its VVC videos are decoded on the GPU (a vvdec_used status)
+        // Its passes' times: those that ended, and the one under way (while
+        // `open`): its metrics, and the run's clock, paused time and the
+        // task's progress count at its start.
+        std::vector<PassTiming> timings;
+        bool open = false;
+        std::vector<std::string> pass_keys;
+        double pass_began = 0.0;
+        double pass_paused_before = 0.0;
+        long long pass_frames_before = 0;
+        // The run's clock and paused time at its first progress report
+        std::optional<double> pass_first_frame;
+        double pass_paused_at_first_frame = 0.0;
 
         bool finished() const { return result.has_value() || perceptual.has_value(); }
     };
@@ -246,6 +259,13 @@ private:
     bool saved_scores_fit() const;
     bool task_calculates(const std::string& key) const;
     void send_result_so_far() const;
+    // A pass of `task` begins with `keys`; the one under way ends as `end`.
+    void open_pass(std::size_t task, const std::vector<std::string>& keys);
+    // `frames`, where given, is how many it compared (a finished task's result's).
+    void close_pass(std::size_t task, const std::string& end, std::optional<long long> frames = std::nullopt);
+    // Sends the video's facts, once: each metric's outcome from `result`
+    // and the metrics that failed (`failed`, each with why).
+    void send_facts(const std::optional<ComparisonResult>& result, const PerceptualFailures& failed);
 
     Scheduler& scheduler_;
     const std::size_t index_;
@@ -265,6 +285,17 @@ private:
     bool begun_ = false;
     bool claimed_ = false;    // begin's answer
     bool finalized_ = false;  // whether its result or failure has been sent
+    bool facts_sent_ = false;
+    // When it started (begin): the run's clock, its paused time then, and in UTC.
+    double began_ = 0.0;
+    double paused_before_ = 0.0;
+    std::string started_utc_;
+
+public:
+    // Sends the facts of a video a cancel stopped before it had a result,
+    // its metrics cancelled, unless they were sent (Scheduler::run, once the
+    // lanes have ended).
+    void report_stopped();
 };
 
 // Runs a list of videos' tasks in the CPU's and the GPU's queues (the
@@ -463,6 +494,9 @@ bool JobRun::begin() {
         return false;
     }
     options_ = scheduler_.share_cores(job_.options);
+    began_ = scheduler_.cancel.now();
+    paused_before_ = scheduler_.cancel.paused_seconds();
+    started_utc_ = utc_text(std::chrono::system_clock::now());
     logger.info(name() + ": started");
     if (scheduler_.events.job_started) {
         scheduler_.events.job_started(index_);
@@ -546,6 +580,12 @@ void JobRun::report_pass_start(std::size_t task, int number, int count, const st
     }
     passes[static_cast<std::size_t>(number) - 1] = keys;
     passes.resize(std::min(passes.size(), static_cast<std::size_t>(std::max(count, number))));
+    if (state.open && state.timings.empty() && number == 1) {
+        state.pass_keys = keys;  // the time since the task began is its first pass's
+    } else {
+        close_pass(task, "done");
+        open_pass(task, keys);
+    }
     state.phase = std::array<long long, 3>{number, count, state.progress ? state.progress->current : 0};
     if (state.progress) {
         // The new pass has no speed yet: the last pass's would be shown as
@@ -569,6 +609,10 @@ void JobRun::report_cpu(std::size_t task, const std::vector<std::string>& keys) 
 void JobRun::report_progress(std::size_t task, long long current, long long total, double fps) {
     const std::lock_guard lock(mutex_);
     tasks_[task].waiting_for.clear();
+    if (tasks_[task].open && !tasks_[task].pass_first_frame) {
+        tasks_[task].pass_first_frame = scheduler_.cancel.now();
+        tasks_[task].pass_paused_at_first_frame = scheduler_.cancel.paused_seconds();
+    }
     tasks_[task].progress = Counts{current, total, fps};
     send_snapshots();
 }
@@ -605,6 +649,7 @@ bool JobRun::run_task(std::size_t task) {
     {
         const std::lock_guard lock(mutex_);
         tasks_[task].waiting_for.clear();
+        open_pass(task, job_.tasks[task].metric_keys);
     }
     const std::string half = task_name(task);
     logger.info(name() + ": " + half + " started");
@@ -641,6 +686,9 @@ bool JobRun::run_task(std::size_t task) {
     }
     const std::lock_guard lock(mutex_);
     TaskState& state = tasks_[task];
+    // An FFmpeg or VMAF task's frames are its result's: its last progress report comes before its end
+    close_pass(task, !error ? "done" : is_cancel(error) ? "cancelled" : "failed",
+               output ? std::optional(output->compared_frame_count) : std::nullopt);
     if (error) {
         state.error = error;
         failed_.push_back(task);
@@ -704,6 +752,17 @@ void JobRun::finish() {
     if (!cancelled || calculated) {
         result = merged();
     }
+    PerceptualFailures why_failed = metric_failures;  // each metric once, as the events say it
+    for (const std::size_t task : failed) {
+        const std::string why = failure_of(tasks_[task].error).first;
+        for (const std::string& key : job_.tasks[task].metric_keys) {
+            if (std::none_of(metric_failures.begin(), metric_failures.end(),
+                             [&key](const auto& failure) { return failure.first == key; })) {
+                set_failure(why_failed, key, why);
+            }
+        }
+    }
+    send_facts(result, why_failed);
     // The tasks' own results are not needed once the video's is made: a
     // long list would otherwise hold every video's scores twice.
     for (TaskState& state : tasks_) {
@@ -835,6 +894,97 @@ std::optional<HardwareDecoding> JobRun::shown_decoding(const TaskState& state) c
         shown->distorted = std::string(vvdec_decoder);
     }
     return shown;
+}
+
+void JobRun::open_pass(std::size_t task, const std::vector<std::string>& keys) {
+    TaskState& state = tasks_[task];
+    state.open = true;
+    state.pass_keys = keys;
+    state.pass_began = scheduler_.cancel.now();
+    state.pass_paused_before = scheduler_.cancel.paused_seconds();
+    state.pass_frames_before = state.progress ? state.progress->current : 0;
+    state.pass_first_frame.reset();
+}
+
+void JobRun::close_pass(std::size_t task, const std::string& end, std::optional<long long> frames) {
+    TaskState& state = tasks_[task];
+    if (!state.open) {
+        return;
+    }
+    state.open = false;
+    PassTiming pass;
+    pass.task = job_.tasks[task].backend;
+    pass.metric_keys = state.pass_keys;
+    // Where its scores came from: the CPU once the GPU's VMAF fell back
+    pass.on = pool_of(task) == gpu_pool && state.cpu_keys.empty() ? "gpu" : "cpu";
+    pass.seconds = scheduler_.cancel.now() - state.pass_began;
+    pass.paused_seconds = scheduler_.cancel.paused_seconds() - state.pass_paused_before;
+    pass.frames = frames.value_or(
+        std::max(0LL, (state.progress ? state.progress->current : 0) - state.pass_frames_before));
+    if (state.pass_first_frame) {
+        pass.setup_seconds = *state.pass_first_frame - state.pass_began;
+    } else if (pass.frames == 0) {
+        pass.setup_seconds = pass.seconds;  // it scored nothing
+    }
+    if (state.pass_first_frame) {
+        const double scoring = scheduler_.cancel.now() - *state.pass_first_frame -
+                               (scheduler_.cancel.paused_seconds() - state.pass_paused_at_first_frame);
+        pass.fps = scoring > 0 ? static_cast<double>(pass.frames) / scoring : 0.0;
+    }
+    pass.end = end;
+    pass.decode = shown_decoding(state);
+    state.timings.push_back(std::move(pass));
+}
+
+void JobRun::send_facts(const std::optional<ComparisonResult>& result, const PerceptualFailures& failed) {
+    if (facts_sent_) {
+        return;
+    }
+    facts_sent_ = true;
+    if (!scheduler_.events.job_facts) {
+        return;
+    }
+    const CancelToken& cancel = scheduler_.cancel;
+    RunFacts facts;
+    facts.settings = VideoSettings{job_.source_info,
+                                   job_.distorted_info,
+                                   begun_ ? options_ : job_.options,
+                                   job_.metric_keys,
+                                   {job_.perceptual_backends.begin(), job_.perceptual_backends.end()},
+                                   job_.cvvdp};
+    if (claimed_) {
+        facts.started_utc = started_utc_;
+        facts.seconds = cancel.now() - began_;
+        facts.paused_seconds = cancel.paused_seconds() - paused_before_;
+    }
+    for (std::size_t task = 0; task < tasks_.size(); ++task) {
+        close_pass(task, "cancelled");  // (none is open once its task has ended)
+        append(facts.passes, tasks_[task].timings);
+    }
+    const bool cancelled = cancel.cancelled();
+    for (const std::string& key : job_.metric_keys) {
+        MetricOutcome outcome;
+        const auto failure = std::find_if(failed.begin(), failed.end(),
+                                          [&key](const auto& item) { return item.first == key; });
+        if (result && result->has_metric(key)) {
+            // A saved score the run kept, or one it calculated
+            outcome.status = job_.cached_metrics.has(key) && !task_calculates(key) ? metric_saved
+                                                                                  : metric_calculated;
+        } else if (failure != failed.end()) {
+            outcome = {metric_failed, failure->second};
+        } else if (cancelled) {
+            outcome.status = metric_cancelled;
+        } else {
+            outcome = {metric_not_run, "no task was planned to calculate it"};
+        }
+        facts.metrics.emplace_back(key, std::move(outcome));
+    }
+    scheduler_.events.job_facts(index_, facts);
+}
+
+void JobRun::report_stopped() {
+    const std::lock_guard lock(mutex_);
+    send_facts(std::nullopt, {});
 }
 
 void JobRun::send_snapshots() const {
@@ -1069,6 +1219,7 @@ void Scheduler::run() {
             if (run->started && !run->finalized() && run->has_results()) {
                 run->finish();
             }
+            run->report_stopped();  // its facts, where nothing sent them: a video with no result
         }
         report_cancelled_once();
     }
