@@ -9,6 +9,7 @@
 #include <set>
 
 #include "vml/append.h"
+#include "vml/crop_detect.h"
 #include "vml/ffprobe.h"
 #include "vml/gpu_decoders.h"
 #include "vml/metrics.h"
@@ -29,6 +30,7 @@ const char* const top_usage = "usage: VideoMetricsLab-cli [-h] [--version] COMMA
 const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m LIST] [--model MODEL]
                                    [--model-v1 MODEL]
                                    [--black-bars {auto,source,none}]
+                                   [--source-crop T:B:L:R] [--test-crop T:B:L:R]
                                    [--scale-to {test,reference}]
                                    [--scaler {bicubic,bilinear,lanczos,spline}]
                                    [--duration SECONDS | --range START-END |
@@ -141,6 +143,13 @@ options:
                         compared at its full frame (an encode cropped when it
                         was made); none: compare the whole pictures (default:
                         auto)
+  --source-crop T:B:L:R
+                        cut these numbers of lines from the reference's top,
+                        bottom, left and right (even numbers, HandBrake's
+                        order) in place of finding its black bars; with it
+                        or --test-crop, no bars are detected and a video
+                        given no crop is compared at its full frame
+  --test-crop T:B:L:R   the same for the test videos
   --scale-to {test,reference}
                         which video's size the other is scaled to when they
                         differ (default: test)
@@ -845,6 +854,23 @@ std::pair<long long, long long> frame_span(const std::string& text) {
     return {first, last + 1};
 }
 
+// A crop entered by hand (--source-crop, --test-crop): top:bottom:left:right,
+// even numbers of lines (box_from_edges says why an odd one is refused).
+CropEdges crop_edges(const std::string& text) {
+    const std::optional<CropEdges> edges = parse_crop_edges(text);
+    if (!edges) {
+        throw ArgumentError{"invalid crop: " + python_string_repr(text) +
+                            " (TOP:BOTTOM:LEFT:RIGHT, lines cut from each edge, as 22:22:0:0)"};
+    }
+    for (const int lines : {edges->top, edges->bottom, edges->left, edges->right}) {
+        if (lines % 2 != 0) {
+            throw ArgumentError{"invalid crop: " + python_string_repr(text) +
+                                " (each edge an even number of lines: 4:2:0 video keeps its colour in pairs)"};
+        }
+    }
+    return *edges;
+}
+
 // A frame rate (--fps): a fraction of whole numbers below 2^53, as many as a
 // double holds exactly ("24000/1001"), or a number ("23.976"), above 0.
 double frame_rate(const std::string& text) {
@@ -947,7 +973,10 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--black-bars"},
                [&parsed](const std::string& value) {
                    parsed.black_bars = choice(value, {"auto", "source", "none"});
+                   parsed.black_bars_given = true;
                }),
+        option({"--source-crop"}, [&parsed](const std::string& value) { parsed.source_crop = crop_edges(value); }),
+        option({"--test-crop"}, [&parsed](const std::string& value) { parsed.test_crop = crop_edges(value); }),
         option({"--scale-to"},
                [&parsed](const std::string& value) { parsed.scale_to = choice(value, {"test", "reference"}); }),
         option({"--scaler"},

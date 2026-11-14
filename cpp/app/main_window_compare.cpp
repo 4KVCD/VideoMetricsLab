@@ -82,8 +82,8 @@ std::optional<FrameComparisonEntry> MainWindow::frame_comparison_entry(const Row
         return std::nullopt;  // the test file has not been read yet
     }
     // The crops a run applies are known only once it has run: auto
-    // detection measures the video. None is known now, so it is exact; auto
-    // is previewed uncropped, and says so.
+    // detection measures the video. None and Manual are known now, so they
+    // are exact; auto is previewed uncropped, and says so.
     FrameComparison comparison;
     comparison.source_info = *source_info_;
     comparison.distorted_info = resample ? *source_info_ : *row_data.video_info;
@@ -92,8 +92,21 @@ std::optional<FrameComparisonEntry> MainWindow::frame_comparison_entry(const Row
     comparison.resample_target = resample;
     comparison.fps = comparison.distorted_info.fps;
     comparison.frame_count = whole_video_frames(comparison, options);
-    comparison.auto_crop_pending = options.crop_mode != CropMode::none;
+    comparison.auto_crop_pending = detects_black_bars(options.crop_mode);
     comparison.test_full_frame = options.crop_mode == CropMode::source_only;
+    if (options.crop_mode == CropMode::manual) {
+        try {
+            comparison.source_crop = box_from_edges(options.manual_source_crop, comparison.source_info, "the source");
+            // A resolution test's test video is the source's own picture.
+            comparison.distorted_crop =
+                resample ? comparison.source_crop
+                         : box_from_edges(options.manual_test_crop, comparison.distorted_info, "the test video");
+        } catch (const CropEntryError&) {
+            // Shown uncropped: the row's run says why the crop cannot be cut.
+            comparison.source_crop.reset();
+            comparison.distorted_crop.reset();
+        }
+    }
     return FrameComparisonEntry{row_data.frame_identity, text_of(row_data.path.stem()), std::move(comparison),
                                 nullptr, row_data.frame_identity};
 }

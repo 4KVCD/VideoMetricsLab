@@ -4,6 +4,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -194,12 +195,22 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
     crop_combo->addItem(app::tr("Auto-detect (recommended)"), static_cast<int>(CropMode::automatic));
     crop_combo->addItem(app::tr("Source only (test video already cropped)"), static_cast<int>(CropMode::source_only));
     crop_combo->addItem(app::tr("None (use full frame)"), static_cast<int>(CropMode::none));
+    crop_combo->addItem(app::tr("Manual (enter the crops)"), static_cast<int>(CropMode::manual));
     crop_combo->setItemData(1,
                             app::tr("The source's black bars are detected and cut; the test video is compared at its "
                                     "full frame, for an encode cropped when it was made."),
                             Qt::ToolTipRole);
-    connect(crop_combo, &QComboBox::currentIndexChanged, this, [this] { emit field_edited("crop_mode"); });
+    crop_combo->setItemData(3,
+                            app::tr("Nothing is detected: the lines entered are cut from each video, as an encoder's "
+                                    "crop settings cut them. A video with nothing entered is compared at its full "
+                                    "frame."),
+                            Qt::ToolTipRole);
+    connect(crop_combo, &QComboBox::currentIndexChanged, this, [this] {
+        show_manual_crop();
+        emit field_edited("crop_mode");
+    });
     form->addRow(app::tr("Black-bar handling:"), crop_combo);
+    build_manual_crop(form);
 
     // The range compared: from its start to its end in whole seconds (an end
     // of 0: to the videos' end), or from a frame to a frame.
@@ -489,6 +500,46 @@ void OptionsPanel::build_performance(QFormLayout* form, const std::vector<GpuVen
                 "core, or half of them for each video when two are calculated in parallel."));
 }
 
+void OptionsPanel::build_manual_crop(QFormLayout* form) {
+    // The crops entered for Manual: the lines cut from each edge of the
+    // source and of the test video, as HandBrake's crop fields take them.
+    manual_crop_box = new QWidget;
+    auto* grid = new QGridLayout(manual_crop_box);
+    grid->setContentsMargins(0, 0, 0, 0);
+    const QStringList edges{app::tr("Top"), app::tr("Bottom"), app::tr("Left"), app::tr("Right")};
+    for (int column = 0; column < edges.size(); ++column) {
+        grid->addWidget(new QLabel(edges[column]), 0, column + 1);
+    }
+    const auto add_row = [&](int row, const QString& label, std::array<QSpinBox*, 4>& spins) {
+        grid->addWidget(new QLabel(label), row, 0);
+        for (int column = 0; column < 4; ++column) {
+            QSpinBox* spin = new QSpinBox;
+            // Even lines: 4:2:0 keeps its colour in pairs of lines (an odd
+            // one typed is taken up to even, as HandBrake takes it).
+            spin->setRange(0, 8192);
+            spin->setSingleStep(2);
+            spin->setKeyboardTracking(false);
+            connect(spin, &QSpinBox::valueChanged, this, [this] { emit field_edited("manual_crop"); });
+            grid->addWidget(spin, row, column + 1);
+            spins[static_cast<std::size_t>(column)] = spin;
+        }
+    };
+    add_row(1, app::tr("Reference"), source_crop_spins);
+    add_row(2, app::tr("Test video"), test_crop_spins);
+    manual_crop_box->setToolTip(app::tr("The lines cut from each edge, as the encoder's crop settings cut them (an "
+                                        "encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom "
+                                        "22 for the reference, nothing for the test video, already cropped). Even "
+                                        "numbers."));
+    form->addRow(QString(), manual_crop_box);
+    // Hidden, not show_manual_crop(): shown before the form has a parent, the
+    // box would be a window.
+    manual_crop_box->hide();
+}
+
+void OptionsPanel::show_manual_crop() {
+    manual_crop_box->setVisible(crop_combo->currentData().toInt() == static_cast<int>(CropMode::manual));
+}
+
 void OptionsPanel::show_range_unit() {
     // Seconds' fields or frames', and the note on CVVDP's whole seconds.
     const bool frames = range_unit_combo->currentIndex() == 1;
@@ -520,6 +571,17 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::vector<Vm
     show_vship_choice(*vship_build_combo, options.vship_build);
 
     crop_combo->setCurrentIndex(std::max(0, crop_combo->findData(static_cast<int>(options.crop_mode))));
+    const auto show_edges = [](const std::array<QSpinBox*, 4>& spins, const CropEdges& edges) {
+        const std::array<int, 4> lines{edges.top, edges.bottom, edges.left, edges.right};
+        for (std::size_t i = 0; i < spins.size(); ++i) {
+            if (!spins[i]->hasFocus()) {
+                spins[i]->setValue(lines[i]);
+            }
+        }
+    };
+    show_edges(source_crop_spins, options.manual_source_crop);
+    show_edges(test_crop_spins, options.manual_test_crop);
+    show_manual_crop();
     const auto can_show = [this](const QAbstractSpinBox* box) { return !keep_typing || !box->hasFocus(); };
     if (can_show(threads_spin)) {
         threads_spin->setValue(options.n_threads);
@@ -653,6 +715,12 @@ VmafOptions OptionsPanel::read_options(const std::vector<std::string>& extra_fea
     options.vmaf_on_gpu = vmaf_backend_combo->currentIndex() == 0;
     options.vship_build = shown_vship_choice(*vship_build_combo);
     options.crop_mode = static_cast<CropMode>(crop_combo->currentData().toInt());
+    const auto edges = [](const std::array<QSpinBox*, 4>& spins) {
+        const auto even_up = [](const QSpinBox* spin) { return spin->value() + (spin->value() & 1); };
+        return CropEdges{even_up(spins[0]), even_up(spins[1]), even_up(spins[2]), even_up(spins[3])};
+    };
+    options.manual_source_crop = edges(source_crop_spins);
+    options.manual_test_crop = edges(test_crop_spins);
     return options;
 }
 

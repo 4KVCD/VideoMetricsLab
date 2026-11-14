@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} est déjà dans la liste. L'ajouter à nouveau, évalué sans son grain de film, pour comparer les deux ?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} est déjà dans la liste. L'ajouter à nouveau, évalué avec son grain de film, pour comparer les deux ?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} ajouté à nouveau, évalué avec l'autre choix de grain de film : cochez-le et cliquez sur Calculer les métriques.",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Cette vidéo a été ajoutée une seconde fois pour être évaluée avec son grain de film et sans, côte à côte : chacune de ses lignes garde son choix."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Cette vidéo a été ajoutée une seconde fois pour être évaluée avec son grain de film et sans, côte à côte : chacune de ses lignes garde son choix.",
+  "Manual (enter the crops)": "Manuel (saisir les recadrages)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "Rien n'est détecté : les lignes saisies sont retirées de chaque vidéo, comme les retirent les réglages de recadrage d'un encodeur. Une vidéo sans saisie est comparée en image entière.",
+  "Top": "Haut",
+  "Bottom": "Bas",
+  "Left": "Gauche",
+  "Right": "Droite",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Les lignes retirées de chaque bord, comme les retirent les réglages de recadrage de l'encodeur (un encodage fait avec un recadrage de 22 lignes en haut et en bas : Haut 22, Bas 22 pour la référence, rien pour la vidéo de test, déjà recadrée). Nombres pairs.",
+  "Manual": "Manuel",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Les recadrages saisis sont appliqués quand cette ligne s'exécute (haut:bas:gauche:droite) : référence {source}, vidéo de test {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Les deux images ne diffèrent que de quelques lignes : la même image recadrée un peu autrement, et la mise à l'échelle abaisse chaque score. Si la vidéo de test a été recadrée autrement que ses bandes noires n'ont été trouvées, saisissez les deux recadrages (Bandes noires : Manuel)."
  },
  "plurals": {
   "about {count} day": [

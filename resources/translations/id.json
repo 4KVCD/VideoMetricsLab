@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} sudah ada di daftar. Tambahkan lagi, dinilai tanpa grain film-nya, untuk membandingkan keduanya?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} sudah ada di daftar. Tambahkan lagi, dinilai dengan grain film-nya, untuk membandingkan keduanya?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} ditambahkan lagi, dinilai dengan pilihan grain film yang lain — centang lalu klik Hitung metrik.",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Video ini ditambahkan untuk kedua kalinya agar dinilai dengan grain film-nya dan tanpanya, berdampingan: setiap barisnya mempertahankan pilihannya."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Video ini ditambahkan untuk kedua kalinya agar dinilai dengan grain film-nya dan tanpanya, berdampingan: setiap barisnya mempertahankan pilihannya.",
+  "Manual (enter the crops)": "Manual (masukkan pemotongan)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "Tidak ada yang dideteksi: baris yang dimasukkan dipotong dari tiap video, seperti pengaturan pemotongan encoder memotongnya. Video tanpa masukan dibandingkan dengan bingkai penuh.",
+  "Top": "Atas",
+  "Bottom": "Bawah",
+  "Left": "Kiri",
+  "Right": "Kanan",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Baris yang dipotong dari tiap tepi, seperti pengaturan pemotongan encoder memotongnya (encode yang dibuat dengan pemotongan 22 baris di atas dan bawah: Atas 22, Bawah 22 untuk referensi, kosong untuk video uji yang sudah dipotong). Bilangan genap.",
+  "Manual": "Manual",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Pemotongan yang dimasukkan diterapkan saat baris ini dijalankan (atas:bawah:kiri:kanan): referensi {source}, video uji {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Kedua gambar hanya berbeda beberapa baris: gambar yang sama dipotong sedikit berbeda, dan penskalaan menurunkan setiap skor. Jika video uji dipotong berbeda dari bilah hitam yang ditemukan, masukkan kedua pemotongan (Bilah hitam: Manual)."
  },
  "plurals": {
   "about {count} day": [

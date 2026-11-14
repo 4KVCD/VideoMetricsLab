@@ -1602,12 +1602,16 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> run_crops(const RunEnv
     }
     // Said, or the run line would keep the step before: a long video's
     // detection takes a while.
-    if (on_status) {
+    if (on_status && detects_black_bars(options.crop_mode)) {
         on_status({options.crop_mode == CropMode::source_only ? "Detecting black bars in source..."
                                                                : "Detecting black bars in source and distorted..."});
     }
-    return crops_for(options.crop_mode, environment.ffmpeg, source, distorted, cancel, decoding.source,
-                     decoding.distorted, options.scale_algorithm);
+    try {
+        return crops_for(options.crop_choice(), environment.ffmpeg, source, distorted, cancel, decoding.source,
+                         decoding.distorted, options.scale_algorithm);
+    } catch (const CropEntryError& error) {
+        throw VmafRunError(error.what());
+    }
 }
 
 // The VMAF models the GPU scores (`model` VMAF's, at `depth` bits and
@@ -2322,12 +2326,15 @@ ComparisonResult resample_test_run(const RunEnvironment& environment, const Vide
     if (options.gpu_decode) {
         decoding.source = pick_decode(environment.decoding, options.gpu_vendor, source);
     }
+    if (on_status && detects_black_bars(options.crop_mode)) {
+        on_status({"Detecting black bars in source..."});
+    }
     std::optional<CropBox> source_crop;
-    if (options.crop_mode != CropMode::none) {  // the source's own bars, whether Auto or Source only
-        if (on_status) {
-            on_status({"Detecting black bars in source..."});
-        }
-        source_crop = detect_crop(environment.ffmpeg, source, cancel, decoding.source, options.scale_algorithm);
+    try {
+        source_crop = source_own_crop(options.crop_choice(), environment.ffmpeg, source, cancel, decoding.source,
+                                      options.scale_algorithm);
+    } catch (const CropEntryError& error) {
+        throw VmafRunError(error.what());
     }
     // A size chosen against the whole frame: with its bars cut, the picture
     // may be no larger, and the test would scale it up or not at all.

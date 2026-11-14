@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} už je v seznamu. Přidat ho znovu, hodnocený bez filmového zrna, a porovnat obě varianty?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} už je v seznamu. Přidat ho znovu, hodnocený s filmovým zrnem, a porovnat obě varianty?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} přidáno znovu, hodnocené s opačnou volbou filmového zrna — zaškrtněte jej a klikněte na Spočítat metriky.",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Toto video bylo přidáno podruhé, aby se hodnotilo s filmovým zrnem i bez něj vedle sebe: každý jeho řádek si ponechává svou volbu."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Toto video bylo přidáno podruhé, aby se hodnotilo s filmovým zrnem i bez něj vedle sebe: každý jeho řádek si ponechává svou volbu.",
+  "Manual (enter the crops)": "Ručně (zadat ořez)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "Nic se nezjišťuje: z každého videa se odřízne zadaný počet řádků, jak je odřízne nastavení ořezu enkodéru. Video bez zadání se porovná v celém snímku.",
+  "Top": "Nahoře",
+  "Bottom": "Dole",
+  "Left": "Vlevo",
+  "Right": "Vpravo",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Řádky odříznuté z každého okraje, jak je odřízne nastavení ořezu enkodéru (enkód vytvořený s ořezem 22 řádků nahoře a dole: Nahoře 22, Dole 22 u reference, nic u testovacího videa, už oříznutého). Sudá čísla.",
+  "Manual": "Ručně",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Zadané ořezy se odříznou při spuštění tohoto řádku (nahoře:dole:vlevo:vpravo): reference {source}, testovací video {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Oba obrazy se liší jen o pár řádků: stejný obraz oříznutý trochu jinak, a změna velikosti snižuje všechna skóre. Pokud bylo testovací video oříznuto jinak, než byly nalezeny jeho černé pruhy, zadejte oba ořezy (Černé pruhy: Ručně)."
  },
  "plurals": {
   "about {count} day": [

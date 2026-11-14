@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} è già nell'elenco. Aggiungerlo di nuovo, valutato senza la sua grana della pellicola, per confrontare i due?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} è già nell'elenco. Aggiungerlo di nuovo, valutato con la sua grana della pellicola, per confrontare i due?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} aggiunto di nuovo, valutato con l'altra scelta di grana della pellicola: spuntalo e fai clic su Calcola metriche.",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Questo video è stato aggiunto una seconda volta per valutarlo con la sua grana della pellicola e senza, fianco a fianco: ognuna delle sue righe mantiene la propria scelta."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Questo video è stato aggiunto una seconda volta per valutarlo con la sua grana della pellicola e senza, fianco a fianco: ognuna delle sue righe mantiene la propria scelta.",
+  "Manual (enter the crops)": "Manuale (inserisci i ritagli)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "Non viene rilevato nulla: da ogni video vengono tagliate le righe inserite, come le tagliano le impostazioni di ritaglio di un encoder. Un video senza valori inseriti viene confrontato a fotogramma intero.",
+  "Top": "Alto",
+  "Bottom": "Basso",
+  "Left": "Sinistra",
+  "Right": "Destra",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Le righe tagliate da ogni bordo, come le tagliano le impostazioni di ritaglio dell'encoder (una codifica fatta con un ritaglio di 22 righe in alto e in basso: Alto 22, Basso 22 per il riferimento, niente per il video di prova, già ritagliato). Numeri pari.",
+  "Manual": "Manuale",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "I ritagli inseriti vengono applicati quando questa riga viene eseguita (alto:basso:sinistra:destra): riferimento {source}, video di prova {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Le due immagini differiscono di poche righe: la stessa immagine ritagliata in modo un po' diverso, e il ridimensionamento abbassa ogni punteggio. Se il video di prova è stato ritagliato diversamente da come sono state trovate le sue bande nere, inserisci entrambi i ritagli (Bande nere: Manuale)."
  },
  "plurals": {
   "about {count} day": [

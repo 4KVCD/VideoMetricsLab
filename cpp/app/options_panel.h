@@ -12,6 +12,7 @@
 #include <QGroupBox>
 #include <QString>
 
+#include <array>
 #include <map>
 #include <optional>
 #include <string>
@@ -104,6 +105,11 @@ public:
     // and the tests use them as a user would.
     QLabel* target_label = nullptr;
     QComboBox* crop_combo = nullptr;
+    // Manual's crops, shown with it: the lines cut from the top, bottom, left
+    // and right of the source and of the test video.
+    QWidget* manual_crop_box = nullptr;
+    std::array<QSpinBox*, 4> source_crop_spins{};
+    std::array<QSpinBox*, 4> test_crop_spins{};
     // The range compared: whole seconds or frames (range_unit_combo: Time,
     // Frames), and the note on CVVDP's whole seconds shown with frames.
     QComboBox* range_unit_combo = nullptr;
@@ -150,6 +156,9 @@ signals:
 
 private:
     void build_preparation(QFormLayout* form);
+    void build_manual_crop(QFormLayout* form);
+    // Manual's crop fields, shown while Manual is chosen.
+    void show_manual_crop();
     void show_range_unit();
     void build_metric_settings(QFormLayout* form);
     void build_cvvdp(QFormLayout* form);

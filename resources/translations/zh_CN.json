@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} 已在列表中。要再次添加它并在不含胶片颗粒的情况下评分，以便比较两者吗？",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} 已在列表中。要再次添加它并在包含胶片颗粒的情况下评分，以便比较两者吗？",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "已再次添加 {name}，按另一种胶片颗粒选择评分——勾选它并点击“计算指标”。",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "此视频被第二次添加，以便并排比较含胶片颗粒和不含胶片颗粒的评分：它的每一行都保留各自的选择。"
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "此视频被第二次添加，以便并排比较含胶片颗粒和不含胶片颗粒的评分：它的每一行都保留各自的选择。",
+  "Manual (enter the crops)": "手动（输入裁切）",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "不做检测：按输入的行数从每个视频裁掉，与编码器的裁切设置一样。未输入的视频按完整画面比较。",
+  "Top": "上",
+  "Bottom": "下",
+  "Left": "左",
+  "Right": "右",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "从每条边裁掉的行数，与编码器的裁切设置一样（上下各裁 22 行的编码：参考视频填上 22、下 22，已裁切的测试视频不填）。须为偶数。",
+  "Manual": "手动",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "运行此行时裁掉输入的裁切（上:下:左:右）：参考视频 {source}，测试视频 {test}。",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "两个画面只差几行：同一画面的裁切略有不同，缩放会降低每项分数。如果测试视频的裁切与检测到的黑边不同，请输入两者的裁切（黑边处理：手动）。"
  },
  "plurals": {
   "about {count} day": [

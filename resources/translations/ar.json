@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} موجود في القائمة بالفعل. هل تُضيفه مرة أخرى ليُقيَّم دون حبيبات الفيلم، للمقارنة بين الاثنين؟",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} موجود في القائمة بالفعل. هل تُضيفه مرة أخرى ليُقيَّم مع حبيبات الفيلم، للمقارنة بين الاثنين؟",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "أُضيف {name} مرة أخرى ليُقيَّم بالخيار الآخر لحبيبات الفيلم — حدّده وانقر «حساب المقاييس».",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "أُضيف هذا الفيديو مرة ثانية ليُقيَّم مع حبيبات الفيلم ودونها جنبًا إلى جنب: يحتفظ كل صف من صفوفه بخياره."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "أُضيف هذا الفيديو مرة ثانية ليُقيَّم مع حبيبات الفيلم ودونها جنبًا إلى جنب: يحتفظ كل صف من صفوفه بخياره.",
+  "Manual (enter the crops)": "يدوي (أدخِل القص)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "لا يُكتشف شيء: تُقص الأسطر المُدخلة من كل فيديو، كما تقصها إعدادات القص في المُرمِّز. والفيديو الذي لم يُدخَل له شيء يُقارَن بإطاره الكامل.",
+  "Top": "أعلى",
+  "Bottom": "أسفل",
+  "Left": "يسار",
+  "Right": "يمين",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "الأسطر المقصوصة من كل حافة، كما تقصها إعدادات القص في المُرمِّز (ترميز صُنع بقص 22 سطرًا من الأعلى والأسفل: أعلى 22، أسفل 22 للمرجع، ولا شيء لفيديو الاختبار المقصوص أصلًا). أعداد زوجية.",
+  "Manual": "يدوي",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "يُقص ما أُدخِل عند تشغيل هذا الصف (أعلى:أسفل:يسار:يمين): المرجع {source}، فيديو الاختبار {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "تختلف الصورتان ببضعة أسطر فقط: الصورة نفسها مقصوصة بشكل مختلف قليلًا، والتحجيم يخفض كل الدرجات. إن كان فيديو الاختبار قد قُص بغير ما وُجدت عليه أشرطته السوداء، فأدخِل القص لكليهما (الأشرطة السوداء: يدوي)."
  },
  "plurals": {
   "about {count} day": [

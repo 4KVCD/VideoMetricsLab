@@ -14,6 +14,7 @@
 #include <thread>
 
 #include "vml/app_log.h"
+#include "vml/crop_detect.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
@@ -416,7 +417,11 @@ std::string JobRun::describe() const {
         : options.range_end > 0 ? std::to_string(options.range_start) + "-" + std::to_string(options.range_end) + " s"
         : options.range_start > 0 ? "from " + std::to_string(options.range_start) + " s"
                                   : "whole videos";
-    std::string settings = std::string("black bars ") + crop_mode_text(options.crop_mode) + ", range " + range +
+    const std::string black_bars = options.crop_mode == CropMode::manual
+                                       ? "manual (source " + crop_edges_text(options.manual_source_crop) + ", test " +
+                                             crop_edges_text(options.manual_test_crop) + ")"
+                                       : crop_mode_text(options.crop_mode);
+    std::string settings = "black bars " + black_bars + ", range " + range +
                            ", resolution mismatch " +
                            scale_direction_value(options.scale_direction) + " (" + options.scale_algorithm +
                            "), VMAF v0.6.1 model " + options.model_choice + ", VMAF v1 model " +
@@ -1195,11 +1200,19 @@ std::vector<MetricTask> plan_tasks(const VideoInfo& source, const VideoInfo& tes
     std::vector<std::pair<std::string, std::string>> check_failures;  // (key, why) of scores_on_gpu
     if (vmaf_family_left) {
         // The size frames are compared at, where it is known before the run:
-        // with black bars kept. Pictures with their black bars cut are
-        // always even-sized.
+        // with black bars kept, or cut as entered by hand. Pictures with their
+        // black bars cut are always even-sized.
         std::optional<std::pair<int, int>> size;
         if (options.crop_mode == CropMode::none) {
             size = analysis_dimensions(source, test, options);
+        } else if (options.crop_mode == CropMode::manual && !options.resample_test) {
+            try {
+                size = analysis_dimensions(source, test, options,
+                                           box_from_edges(options.manual_source_crop, source, "the source"),
+                                           box_from_edges(options.manual_test_crop, test, "the test video"));
+            } catch (const CropEntryError&) {
+                // Not known: the run says why it cannot cut the crop.
+            }
         }
         // Planned before the run, whose checks of the GPU have answered (the
         // window waits for them, the command line asks as it starts): none

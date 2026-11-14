@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} ist bereits in der Liste. Erneut hinzufügen, ohne Filmkorn bewertet, um beide zu vergleichen?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} ist bereits in der Liste. Erneut hinzufügen, mit Filmkorn bewertet, um beide zu vergleichen?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} erneut hinzugefügt, mit der anderen Filmkorn-Wahl bewertet – haken Sie die Zeile an und klicken Sie auf „Metriken berechnen“.",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Dieses Video wurde ein zweites Mal hinzugefügt, um es mit und ohne Filmkorn nebeneinander zu bewerten: Jede seiner Zeilen behält ihre Wahl."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Dieses Video wurde ein zweites Mal hinzugefügt, um es mit und ohne Filmkorn nebeneinander zu bewerten: Jede seiner Zeilen behält ihre Wahl.",
+  "Manual (enter the crops)": "Manuell (Zuschnitt eingeben)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "Nichts wird erkannt: Die eingegebenen Zeilen werden von jedem Video abgeschnitten, wie es die Zuschnitteinstellungen eines Encoders tun. Ein Video ohne Eingabe wird im vollen Bild verglichen.",
+  "Top": "Oben",
+  "Bottom": "Unten",
+  "Left": "Links",
+  "Right": "Rechts",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Die an jedem Rand abgeschnittenen Zeilen, wie die Zuschnitteinstellungen des Encoders sie abschneiden (ein Encode mit 22 Zeilen Zuschnitt oben und unten: Oben 22, Unten 22 für die Referenz, nichts für das bereits zugeschnittene Testvideo). Gerade Zahlen.",
+  "Manual": "Manuell",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Die eingegebenen Zuschnitte werden abgeschnitten, wenn diese Zeile läuft (oben:unten:links:rechts): Referenz {source}, Testvideo {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Die beiden Bilder unterscheiden sich nur um wenige Zeilen: dasselbe Bild, etwas anders zugeschnitten, und die Skalierung senkt jede Bewertung. Wurde das Testvideo anders zugeschnitten, als seine schwarzen Balken erkannt wurden, geben Sie beide Zuschnitte ein (Schwarze Balken: Manuell)."
  },
  "plurals": {
   "about {count} day": [

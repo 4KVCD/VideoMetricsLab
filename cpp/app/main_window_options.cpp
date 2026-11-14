@@ -23,6 +23,7 @@
 #include "widgets.h"
 #include "window_helpers.h"
 #include "vml/cvvdp.h"
+#include "vml/crop_detect.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/isolated.h"
 #include "vml/metric_cache.h"
@@ -190,6 +191,9 @@ void MainWindow::on_panel_field_edited(const QString& field) {
             target.model_choice_v1 = panel.model_choice_v1;
         } else if (field == "crop_mode") {
             target.crop_mode = panel.crop_mode;
+        } else if (field == "manual_crop") {
+            target.manual_source_crop = panel.manual_source_crop;
+            target.manual_test_crop = panel.manual_test_crop;
         } else if (field == "range_in_frames") {
             // Another unit: the range the fields show in it, whole by default.
             target.range_in_frames = panel.range_in_frames;
@@ -236,11 +240,18 @@ void MainWindow::on_panel_field_edited(const QString& field) {
     // it is (the recipe's identity): its scores stay.
     const bool execution_only = field == "gpu" || field == "n_threads" || field == "vmaf_on_gpu";
     std::vector<int> applied;
+    bool filled = false;
     for (const int row : panel_target_rows_) {
         RowData& row_data = *rows_[static_cast<std::size_t>(row)];
         if (!field_is_fixed_for(row_data, field) && apply(row_data.options)) {
             applied.push_back(row);
+            if (field == "crop_mode") {
+                filled = fill_manual_crops(row_data) || filled;
+            }
         }
+    }
+    if (filled) {
+        write_panel_options(rows_[static_cast<std::size_t>(panel_target_rows_.front())]->options);
     }
     const std::vector<int> changed = execution_only ? std::vector<int>() : applied;
     if (field == "model" || field == "model_v1" || field == "vship_build") {
@@ -794,6 +805,25 @@ bool MainWindow::film_grain_twinned(const RowData& row_data) const {
     return std::any_of(rows_.begin(), rows_.end(), [&row_data](const auto& row) {
         return row->film_grain_twin_of && same_path(*row->film_grain_twin_of, row_data.path);
     });
+}
+
+bool MainWindow::fill_manual_crops(RowData& row_data) {
+    VmafOptions& options = row_data.options;
+    const CompletedRun* run = row_data.completed_run.get();
+    if (options.crop_mode != CropMode::manual || !options.manual_source_crop.none() ||
+        !options.manual_test_crop.none() || run == nullptr) {
+        return false;
+    }
+    // The boxes its last run cut, as the crops to start from: a correction is
+    // then a change of a line or two.
+    const ComparisonResult& result = run->result;
+    if (result.source_crop) {
+        options.manual_source_crop = edges_of_box(*result.source_crop, result.source_info);
+    }
+    if (result.distorted_crop && !result.resample_target) {
+        options.manual_test_crop = edges_of_box(*result.distorted_crop, result.distorted_info);
+    }
+    return !options.manual_source_crop.none() || !options.manual_test_crop.none();
 }
 
 void MainWindow::on_film_grain_chosen(bool with) {

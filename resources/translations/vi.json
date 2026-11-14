@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} đã có trong danh sách. Thêm lại, chấm điểm không có hạt phim, để so sánh hai bản?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} đã có trong danh sách. Thêm lại, chấm điểm có hạt phim, để so sánh hai bản?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "Đã thêm lại {name}, chấm điểm với lựa chọn hạt phim còn lại — đánh dấu rồi bấm Tính chỉ số.",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Video này được thêm lần thứ hai để chấm điểm có hạt phim và không có hạt phim, cạnh nhau: mỗi hàng của nó giữ lựa chọn của mình."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Video này được thêm lần thứ hai để chấm điểm có hạt phim và không có hạt phim, cạnh nhau: mỗi hàng của nó giữ lựa chọn của mình.",
+  "Manual (enter the crops)": "Thủ công (nhập vùng cắt)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "Không phát hiện gì: số dòng đã nhập được cắt khỏi mỗi video, như cài đặt cắt của bộ mã hóa cắt chúng. Video không nhập gì được so sánh ở toàn khung hình.",
+  "Top": "Trên",
+  "Bottom": "Dưới",
+  "Left": "Trái",
+  "Right": "Phải",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Số dòng cắt khỏi mỗi cạnh, như cài đặt cắt của bộ mã hóa cắt chúng (bản mã hóa làm với vùng cắt 22 dòng ở trên và dưới: Trên 22, Dưới 22 cho video tham chiếu, không nhập gì cho video thử đã được cắt). Số chẵn.",
+  "Manual": "Thủ công",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Vùng cắt đã nhập được áp dụng khi hàng này chạy (trên:dưới:trái:phải): tham chiếu {source}, video thử {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Hai hình chỉ khác nhau vài dòng: cùng một hình được cắt hơi khác, và việc thay đổi kích thước làm giảm mọi điểm số. Nếu video thử được cắt khác với viền đen đã tìm thấy, hãy nhập cả hai vùng cắt (Viền đen: Thủ công)."
  },
  "plurals": {
   "about {count} day": [

@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name}은(는) 이미 목록에 있습니다. 필름 그레인 없이 평가하도록 다시 추가해 둘을 비교할까요?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name}은(는) 이미 목록에 있습니다. 필름 그레인을 넣어 평가하도록 다시 추가해 둘을 비교할까요?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name}을(를) 다른 필름 그레인 선택으로 평가하도록 다시 추가했습니다. 체크하고 [지표 계산]을 클릭하세요.",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "이 동영상은 필름 그레인이 있을 때와 없을 때를 나란히 평가하려고 두 번 추가되었습니다. 각 행은 자신의 선택을 유지합니다."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "이 동영상은 필름 그레인이 있을 때와 없을 때를 나란히 평가하려고 두 번 추가되었습니다. 각 행은 자신의 선택을 유지합니다.",
+  "Manual (enter the crops)": "수동 (자르기 입력)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "감지하지 않습니다. 인코더의 자르기 설정처럼 입력한 줄 수를 각 영상에서 잘라냅니다. 아무것도 입력하지 않은 영상은 전체 프레임으로 비교합니다.",
+  "Top": "위",
+  "Bottom": "아래",
+  "Left": "왼쪽",
+  "Right": "오른쪽",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "각 가장자리에서 잘라낼 줄 수로, 인코더의 자르기 설정처럼 잘라냅니다(위아래 22줄을 잘라 만든 인코드라면 참조 영상은 위 22, 아래 22, 이미 잘린 테스트 영상은 입력 없음). 짝수로 입력합니다.",
+  "Manual": "수동",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "입력한 자르기는 이 행을 실행할 때 적용됩니다(위:아래:왼쪽:오른쪽): 참조 영상 {source}, 테스트 영상 {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "두 화면은 몇 줄만 다릅니다. 같은 화면을 조금 다르게 자른 것으로, 크기 조정 때문에 모든 점수가 낮아집니다. 테스트 영상이 감지된 검은 띠와 다르게 잘렸다면 두 자르기를 모두 입력하세요(검은 띠 처리: 수동)."
  },
  "plurals": {
   "about {count} day": [

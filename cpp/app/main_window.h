@@ -423,6 +423,9 @@ private:
     // Whether `row_data`'s film grain choice is held: a twin row, or the row a
     // twin in the table was made from.
     bool film_grain_twinned(const RowData& row_data) const;
+    // Fills a Manual row's crops, where none is entered yet, from the boxes
+    // its last run cut; whether it filled any.
+    bool fill_manual_crops(RowData& row_data);
     void on_film_grain_chosen(bool with);
     void show_panel_film_grain();
     // The reference's line under its path: its media info, bitrate, length,

@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} zaten listede. İkisini karşılaştırmak için film greni olmadan puanlanacak şekilde yeniden eklensin mi?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} zaten listede. İkisini karşılaştırmak için film greniyle puanlanacak şekilde yeniden eklensin mi?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name}, diğer film greni seçimiyle puanlanmak üzere yeniden eklendi; işaretleyip Metrikleri hesapla'ya tıklayın.",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Bu video, film greniyle ve grensiz olarak yan yana puanlanmak üzere ikinci kez eklendi: satırlarının her biri kendi seçimini korur."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Bu video, film greniyle ve grensiz olarak yan yana puanlanmak üzere ikinci kez eklendi: satırlarının her biri kendi seçimini korur.",
+  "Manual (enter the crops)": "Elle (kırpmayı girin)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "Hiçbir şey algılanmaz: girilen satırlar, bir kodlayıcının kırpma ayarlarının kestiği gibi her videodan kesilir. Değer girilmeyen video tam karesiyle karşılaştırılır.",
+  "Top": "Üst",
+  "Bottom": "Alt",
+  "Left": "Sol",
+  "Right": "Sağ",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Her kenardan kesilen satırlar, kodlayıcının kırpma ayarlarının kestiği gibi (üstten ve alttan 22 satır kırpılarak yapılmış bir kodlama: referans için Üst 22, Alt 22; zaten kırpılmış test videosu için hiçbir şey). Çift sayılar.",
+  "Manual": "Elle",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Girilen kırpmalar bu satır çalıştığında uygulanır (üst:alt:sol:sağ): referans {source}, test videosu {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "İki görüntü yalnızca birkaç satır farklı: aynı görüntü biraz farklı kırpılmış ve ölçekleme her puanı düşürüyor. Test videosu, siyah bantlarının bulunduğundan farklı kırpıldıysa iki kırpmayı da girin (Siyah bantlar: Elle)."
  },
  "plurals": {
   "about {count} day": [

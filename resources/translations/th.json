@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} อยู่ในรายการแล้ว เพิ่มอีกครั้งโดยให้คะแนนแบบไม่มีเกรนฟิล์ม เพื่อเปรียบเทียบทั้งสองหรือไม่",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} อยู่ในรายการแล้ว เพิ่มอีกครั้งโดยให้คะแนนแบบมีเกรนฟิล์ม เพื่อเปรียบเทียบทั้งสองหรือไม่",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "เพิ่ม {name} อีกครั้งแล้ว โดยให้คะแนนด้วยตัวเลือกเกรนฟิล์มอีกแบบ — ทำเครื่องหมายแล้วคลิก คำนวณเมตริก",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "วิดีโอนี้ถูกเพิ่มเป็นครั้งที่สองเพื่อให้คะแนนแบบมีเกรนฟิล์มและไม่มีเคียงกัน: แต่ละแถวของวิดีโอนี้คงตัวเลือกของตนไว้"
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "วิดีโอนี้ถูกเพิ่มเป็นครั้งที่สองเพื่อให้คะแนนแบบมีเกรนฟิล์มและไม่มีเคียงกัน: แต่ละแถวของวิดีโอนี้คงตัวเลือกของตนไว้",
+  "Manual (enter the crops)": "กำหนดเอง (ป้อนการครอป)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "ไม่มีการตรวจหา: ตัดจำนวนบรรทัดที่ป้อนออกจากแต่ละวิดีโอ เหมือนที่การตั้งค่าครอปของตัวเข้ารหัสตัด วิดีโอที่ไม่ได้ป้อนค่าจะเปรียบเทียบด้วยเฟรมเต็ม",
+  "Top": "บน",
+  "Bottom": "ล่าง",
+  "Left": "ซ้าย",
+  "Right": "ขวา",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "จำนวนบรรทัดที่ตัดออกจากแต่ละขอบ เหมือนที่การตั้งค่าครอปของตัวเข้ารหัสตัด (งานเข้ารหัสที่ครอปบนและล่าง 22 บรรทัด: บน 22 ล่าง 22 สำหรับวิดีโออ้างอิง และไม่ต้องป้อนสำหรับวิดีโอทดสอบที่ครอปแล้ว) ใช้เลขคู่",
+  "Manual": "กำหนดเอง",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "การครอปที่ป้อนจะถูกตัดเมื่อแถวนี้ทำงาน (บน:ล่าง:ซ้าย:ขวา): วิดีโออ้างอิง {source} วิดีโอทดสอบ {test}",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "ภาพทั้งสองต่างกันเพียงไม่กี่บรรทัด คือภาพเดียวกันที่ครอปต่างกันเล็กน้อย และการปรับขนาดทำให้ทุกคะแนนลดลง หากวิดีโอทดสอบถูกครอปต่างจากแถบดำที่ตรวจพบ ให้ป้อนการครอปของทั้งสอง (แถบดำ: กำหนดเอง)"
  },
  "plurals": {
   "about {count} day": [

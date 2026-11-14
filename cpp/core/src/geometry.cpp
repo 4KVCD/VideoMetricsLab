@@ -230,6 +230,22 @@ std::optional<std::string> shape_problem(const VideoInfo& source, const VideoInf
            "letterboxed, set black-bar handling to 'Auto-detect' so the bars are removed before comparison.";
 }
 
+std::optional<NearMissCrop> near_miss_crop(const VideoInfo& source, const VideoInfo& distorted,
+                                           const std::optional<CropBox>& source_crop,
+                                           const std::optional<CropBox>& distorted_crop, ScaleDirection direction) {
+    if (!source_crop && !distorted_crop) {
+        return std::nullopt;  // nothing cut: a real difference in size
+    }
+    const Size reference = content_size(source, source_crop);
+    const Size test = content_size(distorted, distorted_crop);
+    const auto within = [](int a, int b) { return std::abs(a - b) <= 0.02 * std::max(a, b); };
+    if (reference == test || !within(reference.first, test.first) || !within(reference.second, test.second)) {
+        return std::nullopt;
+    }
+    const bool source_scaled = direction == ScaleDirection::source_to_distorted;
+    return NearMissCrop{source_scaled, source_scaled ? reference : test, source_scaled ? test : reference};
+}
+
 std::optional<std::string> untimed_pair_problem(const VideoInfo& source, const VideoInfo& distorted) {
     if (!source.is_raw_stream() && !distorted.is_raw_stream()) {
         return std::nullopt;

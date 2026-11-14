@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} staat al in de lijst. Opnieuw toevoegen, beoordeeld zonder filmkorrel, om de twee te vergelijken?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} staat al in de lijst. Opnieuw toevoegen, beoordeeld met filmkorrel, om de twee te vergelijken?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} opnieuw toegevoegd, beoordeeld met de andere filmkorrelkeuze — vink hem aan en klik op Metrieken berekenen.",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Deze video is een tweede keer toegevoegd om hem met en zonder filmkorrel naast elkaar te beoordelen: elk van zijn rijen houdt zijn keuze."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Deze video is een tweede keer toegevoegd om hem met en zonder filmkorrel naast elkaar te beoordelen: elk van zijn rijen houdt zijn keuze.",
+  "Manual (enter the crops)": "Handmatig (bijsnijding invoeren)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "Er wordt niets gedetecteerd: de ingevoerde regels worden van elke video afgesneden, zoals de bijsnij-instellingen van een encoder dat doen. Een video zonder invoer wordt met het volledige beeld vergeleken.",
+  "Top": "Boven",
+  "Bottom": "Onder",
+  "Left": "Links",
+  "Right": "Rechts",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "De regels die van elke rand worden afgesneden, zoals de bijsnij-instellingen van de encoder ze afsnijden (een encode gemaakt met 22 regels bijsnijding boven en onder: Boven 22, Onder 22 voor de referentie, niets voor de al bijgesneden testvideo). Even getallen.",
+  "Manual": "Handmatig",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "De ingevoerde bijsnijdingen worden toegepast wanneer deze rij draait (boven:onder:links:rechts): referentie {source}, testvideo {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "De twee beelden verschillen maar een paar regels: hetzelfde beeld, iets anders bijgesneden, en het schalen verlaagt elke score. Is de testvideo anders bijgesneden dan zijn zwarte balken werden gevonden, voer dan beide bijsnijdingen in (Zwarte balken: Handmatig)."
  },
  "plurals": {
   "about {count} day": [

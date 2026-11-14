@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} は既に一覧にあります。フィルムグレインなしで評価する行としてもう一度追加し、両者を比較しますか？",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} は既に一覧にあります。フィルムグレインありで評価する行としてもう一度追加し、両者を比較しますか？",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} を、フィルムグレインのもう一方の選択で評価する行としてもう一度追加しました。チェックを入れて［指標を計算］をクリックしてください。",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "この動画は、フィルムグレインありとなしを並べて評価するために 2 回追加されています。それぞれの行は選択を保ちます。"
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "この動画は、フィルムグレインありとなしを並べて評価するために 2 回追加されています。それぞれの行は選択を保ちます。",
+  "Manual (enter the crops)": "手動（クロップを入力）",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "検出は行いません。エンコーダーのクロップ設定と同じように、入力した行数を各動画から切り取ります。何も入力しない動画はフレーム全体で比較します。",
+  "Top": "上",
+  "Bottom": "下",
+  "Left": "左",
+  "Right": "右",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "各辺から切り取る行数です。エンコーダーのクロップ設定と同じように切り取ります（上下 22 行をクロップしたエンコードなら、参照動画は上 22・下 22、すでにクロップ済みのテスト動画は何も入力しません）。偶数で入力します。",
+  "Manual": "手動",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "入力したクロップは、この行の実行時に切り取られます（上:下:左:右）：参照動画 {source}、テスト動画 {test}。",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "2 つの映像は数行しか違いません。同じ映像を少し違うクロップで切り出したもので、拡大縮小によってすべてのスコアが下がります。テスト動画が、検出された黒帯とは違う形でクロップされている場合は、両方のクロップを入力してください（黒帯の扱い：手動）。"
  },
  "plurals": {
   "about {count} day": [

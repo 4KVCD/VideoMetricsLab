@@ -89,6 +89,23 @@ std::optional<std::string> shape_problem(const VideoInfo& source, const VideoInf
                                          const std::optional<CropBox>& source_crop,
                                          const std::optional<CropBox>& distorted_crop);
 
+// One video's picture scaled to the other's by a few lines: the same picture
+// cropped a few lines apart, as when an encode was cropped otherwise than its
+// source's bars were found. The scaling moves every line and lowers every
+// score.
+struct NearMissCrop {
+    bool source_scaled = true;  // the source's picture scaled to the test video's, or the other way
+    Size scaled;                // the scaled picture's size, cropped
+    Size target;                // the size it is scaled to
+};
+
+// A NearMissCrop where a comparison cut black bars (a crop on either side)
+// and still scales, by under 2 % in each dimension (the shapes then match
+// within shape_problem's 1 %); none otherwise.
+std::optional<NearMissCrop> near_miss_crop(const VideoInfo& source, const VideoInfo& distorted,
+                                           const std::optional<CropBox>& source_crop,
+                                           const std::optional<CropBox>& distorted_crop, ScaleDirection direction);
+
 // Why two videos cannot be compared over seconds [range_start, range_end)
 // (range_end 0: to the end; their timelines do not match there), or nothing.
 std::optional<std::string> pair_problem(const VideoInfo& source, const VideoInfo& distorted, long long range_start,

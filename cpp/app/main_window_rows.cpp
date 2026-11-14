@@ -30,6 +30,7 @@
 #include "theme.h"
 #include "vml/app_log.h"
 #include "vml/append.h"
+#include "vml/crop_detect.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_scoring.h"
@@ -421,10 +422,18 @@ void MainWindow::set_row_black_bars(int row, bool probe_failed) {
         return;
     }
     const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+    const bool manual = row_data.options.crop_mode == CropMode::manual;
     if (!row_data.completed_run) {
         if (row_data.options.crop_mode == CropMode::none) {
             show(app::tr("Off"),
                  app::tr("Black-bar detection is disabled for this row; the full frames will be compared."), true);
+        } else if (manual) {
+            show(app::tr("Manual"),
+                 app::tr("The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, "
+                         "test video {test}.",
+                         {{"source", QString::fromStdString(crop_edges_text(row_data.options.manual_source_crop))},
+                          {"test", QString::fromStdString(crop_edges_text(row_data.options.manual_test_crop))}}),
+                 true);
         } else {
             show(app::tr("Pending"), app::tr("Black bars will be detected when this row is run."), true);
         }
@@ -438,6 +447,14 @@ void MainWindow::set_row_black_bars(int row, bool probe_failed) {
     const VideoInfo& subject_info = resample ? result.source_info : result.distorted_info;
     if (!subject_crop && !result.source_crop) {
         show(app::tr("Off"), app::tr("Black-bar detection was disabled for this run; no crop was applied."), true);
+        return;
+    }
+    if (manual) {
+        QString tooltip = crop_detail(app::tr("Reference"), result.source_info, result.source_crop);
+        if (!resample && result.distorted_crop) {
+            tooltip = crop_detail(app::tr("Test video"), result.distorted_info, result.distorted_crop) + "\n\n" + tooltip;
+        }
+        show(app::tr("Manual"), tooltip, false);
         return;
     }
     if (!subject_crop) {
@@ -471,15 +488,29 @@ std::pair<QString, QString> MainWindow::resize_mismatch(int row) const {
     }
     const VideoInfo& source = run != nullptr ? run->result.source_info : *source_info_;
     const VideoInfo& distorted = run != nullptr ? run->result.distorted_info : *row_data.video_info;
-    const Size reference = run != nullptr ? content_size(source, run->result.source_crop)
-                                          : Size{source.width, source.height};
-    const Size test = run != nullptr ? content_size(distorted, run->result.distorted_crop)
-                                     : Size{distorted.width, distorted.height};
+    // The crops: the run's, or before one the crops entered (Manual), known
+    // now; detected ones are known only when it runs.
+    std::optional<CropBox> source_crop = run != nullptr ? run->result.source_crop : std::nullopt;
+    std::optional<CropBox> test_crop = run != nullptr ? run->result.distorted_crop : std::nullopt;
+    const bool manual_unrun = run == nullptr && row_data.options.crop_mode == CropMode::manual;
+    if (manual_unrun && !row_data.options.resample_test) {
+        try {
+            source_crop = box_from_edges(row_data.options.manual_source_crop, source, "the source");
+            test_crop = box_from_edges(row_data.options.manual_test_crop, distorted, "the test video");
+        } catch (const CropEntryError&) {
+            source_crop.reset();  // the run says why the crop cannot be cut
+            test_crop.reset();
+        }
+    }
+    const Size reference = run != nullptr || source_crop ? content_size(source, source_crop)
+                                                         : Size{source.width, source.height};
+    const Size test = run != nullptr || test_crop ? content_size(distorted, test_crop)
+                                                  : Size{distorted.width, distorted.height};
     if (reference == test) {
         return {QString(), app::tr("Reference and test video are compared at the same {size} -- no scaling needed.",
                               {{"size", size_text(reference.first, reference.second)}})};
     }
-    if (run == nullptr && row_data.options.crop_mode != CropMode::none &&
+    if (run == nullptr && detects_black_bars(row_data.options.crop_mode) &&
         (reference.first == test.first || reference.second == test.second)) {
         // One dimension already matches and only the other differs: the shape
         // of black bars. Whether any scaling is needed is known once they are
@@ -500,18 +531,28 @@ std::pair<QString, QString> MainWindow::resize_mismatch(int row) const {
     const bool cropped_either =
         reference != Size{source.width, source.height} || test != Size{distorted.width, distorted.height};
     const QString cropped = cropped_either ? app::tr(" (after black bars)") : QString();
-    if (direction == ScaleDirection::distorted_to_source) {
-        return {app::tr("Test upscaled to source"),
-                app::tr("Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.",
-                        {{"from_size", size_text(test.first, test.second)},
-                         {"to_size", size_text(reference.first, reference.second)},
-                         {"cropped", cropped}})};
+    std::pair<QString, QString> scaling =
+        direction == ScaleDirection::distorted_to_source
+            ? std::pair(app::tr("Test upscaled to source"),
+                        app::tr("Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.",
+                                {{"from_size", size_text(test.first, test.second)},
+                                 {"to_size", size_text(reference.first, reference.second)},
+                                 {"cropped", cropped}}))
+            : std::pair(app::tr("\u2193 source"),
+                        app::tr("Reference downscaled {from_size} -> {to_size}{cropped} to match the test video.",
+                                {{"from_size", size_text(reference.first, reference.second)},
+                                 {"to_size", size_text(test.first, test.second)},
+                                 {"cropped", cropped}}));
+    if (near_miss_crop(source, distorted, source_crop, test_crop, direction)) {
+        // The same picture cropped a few lines apart (geometry.h): said, as
+        // the scaling lowers every score and crops entered by hand end it.
+        scaling.first = QString::fromUtf8("\xE2\x9A\xA0 ") + scaling.first;
+        scaling.second += "\n\n" + app::tr("The two pictures differ by only a few lines: the same picture cropped a "
+                                           "little differently, and the scaling lowers every score. If the test "
+                                           "video was cropped otherwise than its black bars were found, enter both "
+                                           "crops (Black-bar handling: Manual).");
     }
-    return {app::tr("\u2193 source"),
-            app::tr("Reference downscaled {from_size} -> {to_size}{cropped} to match the test video.",
-                    {{"from_size", size_text(reference.first, reference.second)},
-                     {"to_size", size_text(test.first, test.second)},
-                     {"cropped", cropped}})};
+    return scaling;
 }
 
 void MainWindow::fit_columns(std::initializer_list<int> columns) {

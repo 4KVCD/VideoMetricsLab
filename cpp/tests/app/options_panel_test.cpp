@@ -82,5 +82,26 @@ TEST(OptionsPanel, ARangeOfFramesIsShownAndReadInFrames) {
     EXPECT_EQ(panel.read_options({}, true, true, true, true).compared_range(), seconds.compared_range());
 }
 
+// Manual shows its crop fields with the crops entered and reads them back, an
+// odd number of lines taken up to even; the other modes hide them.
+TEST(OptionsPanel, ManualCropsAreShownAndReadBack) {
+    OptionsPanel panel({});
+    VmafOptions manual;
+    manual.crop_mode = CropMode::manual;
+    manual.manual_source_crop = {22, 22, 0, 0};
+    panel.show_options(manual, {manual});
+    EXPECT_TRUE(panel.manual_crop_box->isVisibleTo(&panel));
+    EXPECT_EQ(panel.source_crop_spins[0]->value(), 22);
+    VmafOptions read = panel.read_options({}, true, true, true, true);
+    EXPECT_EQ(read.crop_mode, CropMode::manual);
+    EXPECT_EQ(read.manual_source_crop, (CropEdges{22, 22, 0, 0}));
+    EXPECT_EQ(read.manual_test_crop, CropEdges{});
+    panel.test_crop_spins[2]->setValue(3);  // left
+    EXPECT_EQ(panel.read_options({}, true, true, true, true).manual_test_crop, (CropEdges{0, 0, 4, 0}));
+
+    panel.show_options(VmafOptions{}, {VmafOptions{}});
+    EXPECT_FALSE(panel.manual_crop_box->isVisibleTo(&panel));
+}
+
 }  // namespace
 }  // namespace vml::app

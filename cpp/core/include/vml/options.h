@@ -130,6 +130,10 @@ struct VmafOptions {
     bool vmaf_on_gpu = true;
     VshipBuild vship_build = VshipBuild::fast;
     CropMode crop_mode = CropMode::automatic;
+    // The crops entered by hand, used with CropMode::manual only: what is cut
+    // from each video (none: its full frame).
+    CropEdges manual_source_crop;
+    CropEdges manual_test_crop;
     // When set, a resolution test (ResampleTarget) instead of a comparison
     // of two files.
     std::optional<ResampleTarget> resample_test;
@@ -137,6 +141,7 @@ struct VmafOptions {
     RangeSeeks range_seeks;
 
     ComparedRange compared_range() const { return {range_start, range_end, range_in_frames}; }
+    CropChoice crop_choice() const { return CropChoice(crop_mode, manual_source_crop, manual_test_crop); }
     // The keys of FFmpeg's metrics these options ask for, in the registry's
     // order.
     std::vector<std::string> requested_metrics() const;

@@ -456,6 +456,61 @@ TEST(Decisions, BlackBarBoxesCoverTheSamePicture) {
     }
 }
 
+// A crop entered by hand (Manual, --source-crop): read as top:bottom:left:right, cut as entered with nothing
+// detected, refused where it cannot be cut, and given back from a detected box to start from.
+TEST(Decisions, ACropEnteredByHandIsCutAsEntered) {
+    EXPECT_EQ(parse_crop_edges("22:22:0:0"), (CropEdges{22, 22, 0, 0}));
+    for (const char* wrong : {"22:22:0", "22:22:0:0:0", "a:b:c:d", "-2:0:0:0", ""}) {
+        EXPECT_EQ(parse_crop_edges(wrong), std::nullopt) << wrong;
+    }
+    VideoInfo hd;
+    hd.width = 1920;
+    hd.height = 1080;
+    EXPECT_EQ(box_from_edges({22, 22, 0, 0}, hd, "the source"), (CropBox{1920, 1036, 0, 22}));
+    EXPECT_EQ(box_from_edges({}, hd, "the source"), std::nullopt);
+    EXPECT_THROW(box_from_edges({21, 21, 0, 0}, hd, "the source"), CropEntryError);   // odd lines
+    EXPECT_THROW(box_from_edges({540, 530, 0, 0}, hd, "the source"), CropEntryError);  // under 16 rows left
+    // An odd-sized frame's box is even-sized, and its edges give it back
+    VideoInfo odd;
+    odd.width = 853;
+    odd.height = 481;
+    const std::optional<CropBox> box = box_from_edges({2, 2, 0, 0}, odd, "the source");
+    EXPECT_EQ(box, (CropBox{852, 476, 0, 2}));
+    EXPECT_EQ(box_from_edges(edges_of_box(*box, odd), odd, "the source"), box);
+    // Nothing is detected (no FFmpeg is run): the test video, given no crop, is compared whole
+    const auto [source_crop, test_crop] = crops_for(CropChoice(CropMode::manual, {22, 22, 0, 0}), "no ffmpeg", hd, hd,
+                                                    CancelToken(), std::nullopt, std::nullopt, "bicubic");
+    EXPECT_EQ(source_crop, (CropBox{1920, 1036, 0, 22}));
+    EXPECT_EQ(test_crop, std::nullopt);
+}
+
+// A crop a few lines off from the encode's (issue #12: 1920x1040 against a 1920x1036 encode) is said; a real
+// difference in size, or two pictures that were not cropped, is not.
+TEST(Decisions, ACropAFewLinesOffIsSaid) {
+    VideoInfo source;
+    source.width = 1920;
+    source.height = 1080;
+    VideoInfo encode;
+    encode.width = 1920;
+    encode.height = 1036;
+    const std::optional<NearMissCrop> near = near_miss_crop(source, encode, CropBox{1920, 1040, 0, 20}, std::nullopt,
+                                                            ScaleDirection::source_to_distorted);
+    ASSERT_TRUE(near);
+    EXPECT_TRUE(near->source_scaled);
+    EXPECT_EQ(near->scaled, (Size{1920, 1040}));
+    EXPECT_EQ(near->target, (Size{1920, 1036}));
+    EXPECT_FALSE(near_miss_crop(source, encode, CropBox{1920, 1036, 0, 22}, std::nullopt,
+                                ScaleDirection::source_to_distorted));  // the same picture
+    VideoInfo smaller = encode;
+    smaller.width = 1280;
+    smaller.height = 690;
+    EXPECT_FALSE(near_miss_crop(source, smaller, CropBox{1920, 1036, 0, 22}, std::nullopt,
+                                ScaleDirection::source_to_distorted));  // a real downscale
+    VideoInfo uncropped = encode;
+    uncropped.height = 1072;
+    EXPECT_FALSE(near_miss_crop(source, uncropped, std::nullopt, std::nullopt, ScaleDirection::source_to_distorted));
+}
+
 TEST(Decisions, AScaledTestVideosBoxLinesUpWithTheSourcesRowForRow) {
     const auto frame = [](int width, int height) {
         VideoInfo info;

@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} уже є у списку. Додати його ще раз, з оцінкою без плівкового зерна, щоб порівняти обидва варіанти?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} уже є у списку. Додати його ще раз, з оцінкою з плівковим зерном, щоб порівняти обидва варіанти?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} додано ще раз, з іншим вибором плівкового зерна — позначте його й натисніть «Обчислити метрики».",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Це відео додано вдруге, щоб оцінити його з плівковим зерном і без нього поруч: кожен його рядок зберігає свій вибір."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Це відео додано вдруге, щоб оцінити його з плівковим зерном і без нього поруч: кожен його рядок зберігає свій вибір.",
+  "Manual (enter the crops)": "Вручну (ввести обрізання)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "Нічого не визначається: з кожного відео вирізаються введені рядки, як їх вирізають налаштування обрізання кодувальника. Відео без введених значень порівнюється за повним кадром.",
+  "Top": "Згори",
+  "Bottom": "Знизу",
+  "Left": "Ліворуч",
+  "Right": "Праворуч",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Рядки, що вирізаються з кожного краю, як їх вирізають налаштування обрізання кодувальника (для кодування з обрізанням 22 рядків згори й знизу: Згори 22, Знизу 22 для еталона, нічого для вже обрізаного тестового відео). Парні числа.",
+  "Manual": "Вручну",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Введене обрізання застосовується під час запуску цього рядка (згори:знизу:ліворуч:праворуч): еталон {source}, тестове відео {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Два зображення відрізняються лише на кілька рядків: те саме зображення, обрізане трохи інакше, а масштабування знижує всі оцінки. Якщо тестове відео обрізано не так, як знайдено його чорні смуги, введіть обидва обрізання (Чорні смуги: Вручну)."
  },
  "plurals": {
   "about {count} day": [

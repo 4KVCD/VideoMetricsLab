@@ -45,22 +45,24 @@ void validate_pair(const VideoInfo& source, const VideoInfo& distorted, const Vm
 }
 
 CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& distorted,
-                       CropMode crop_mode, const std::string& scale_algorithm, const CancelToken& cancel,
+                       const CropChoice& crop, const std::string& scale_algorithm, const CancelToken& cancel,
                        const StatusCallback& on_status) {
+    if (on_status && detects_black_bars(crop.mode)) {
+        // Worded as for FFmpeg's metrics, because a video's tasks share
+        // one detection (crop_detect waits for the other task's answer),
+        // and their parts of the run line sit side by side.
+        on_status({crop.mode == CropMode::source_only ? "Detecting black bars in source\xE2\x80\xA6"
+                                                      : "Detecting black bars in source and distorted\xE2\x80\xA6"});
+    }
+    // Black bars are detected from samples across the whole file, not
+    // only the part compared: a short range may fall entirely in
+    // a dark intro, which must not decide the crop. Decoded in software,
+    // as the Python app's perceptual metrics detect them.
     CropPair crops{std::nullopt, std::nullopt};
-    if (crop_mode != CropMode::none) {
-        if (on_status) {
-            // Worded as for FFmpeg's metrics, because a video's tasks share
-            // one detection (crop_detect waits for the other task's answer),
-            // and their parts of the run line sit side by side.
-            on_status({crop_mode == CropMode::source_only ? "Detecting black bars in source\xE2\x80\xA6"
-                                                          : "Detecting black bars in source and distorted\xE2\x80\xA6"});
-        }
-        // Black bars are detected from samples across the whole file, not
-        // only the part compared: a short range may fall entirely in
-        // a dark intro, which must not decide the crop. Decoded in software,
-        // as the Python app's perceptual metrics detect them.
-        crops = crops_for(crop_mode, ffmpeg, source, distorted, cancel, std::nullopt, std::nullopt, scale_algorithm);
+    try {
+        crops = crops_for(crop, ffmpeg, source, distorted, cancel, std::nullopt, std::nullopt, scale_algorithm);
+    } catch (const CropEntryError& error) {
+        throw PerceptualRunError(error.what());
     }
     // As FFmpeg's metrics refuse them (validate_display_geometry).
     if (const std::optional<std::string> problem = shape_problem(source, distorted, crops.first, crops.second)) {
@@ -73,18 +75,19 @@ CropPair perceptual_crops(const PerceptualRequest& request, const StatusCallback
                           const CancelToken& cancel) {
     const VmafOptions& options = request.options;
     if (!options.resample_test) {
-        return resolve_crops(request.environment.ffmpeg, request.source, request.distorted, options.crop_mode,
+        return resolve_crops(request.environment.ffmpeg, request.source, request.distorted, options.crop_choice(),
                              options.scale_algorithm, cancel, on_status);
     }
-    // The source's own bars, whether Auto or Source only, as VMAF's part of the test (resample_test_run)
+    // The source's own crop, as VMAF's part of the test (resample_test_run)
+    if (on_status && detects_black_bars(options.crop_mode)) {
+        on_status({"Detecting black bars in source..."});
+    }
     std::optional<CropBox> crop;
-    if (options.crop_mode != CropMode::none) {
-        if (on_status) {
-            on_status({"Detecting black bars in source..."});
-        }
-        crop = crops_for(CropMode::source_only, request.environment.ffmpeg, request.source, request.source, cancel,
-                         std::nullopt, std::nullopt, options.scale_algorithm)
-                   .first;
+    try {
+        crop = source_own_crop(options.crop_choice(), request.environment.ffmpeg, request.source, cancel,
+                               std::nullopt, options.scale_algorithm);
+    } catch (const CropEntryError& error) {
+        throw PerceptualRunError(error.what());
     }
     if (options.resample_test->width >= resample_analysis_dimensions(request.source, crop).first) {
         throw PerceptualRunError(resample_not_smaller);

@@ -1250,16 +1250,85 @@ std::optional<CropBox> test_crop_beside_source_box(const CropBox& source_box, co
     return CropBox{source_box.w, source_box.h, 0, 0};
 }
 
-std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_for(CropMode mode, const std::string& ffmpeg,
+std::optional<CropBox> box_from_edges(const CropEdges& edges, const VideoInfo& video, std::string_view which) {
+    if (edges.none()) {
+        return std::nullopt;
+    }
+    const std::string entered = crop_edges_text(edges);
+    for (const int lines : {edges.top, edges.bottom, edges.left, edges.right}) {
+        if (lines < 0 || lines % 2 != 0) {
+            throw CropEntryError("The crop entered for " + std::string(which) + " (top:bottom:left:right " + entered +
+                                 ") must be even numbers of lines: 4:2:0 video keeps its colour in pairs of lines.");
+        }
+    }
+    const auto [width, height] = video.frame_size();
+    const int w = (width - edges.left - edges.right) & ~1;
+    const int h = (height - edges.top - edges.bottom) & ~1;
+    constexpr int smallest_side = 16;
+    if (w < smallest_side || h < smallest_side) {
+        throw CropEntryError("The crop entered for " + std::string(which) + " (top:bottom:left:right " + entered +
+                             ") leaves less than 16x16 of its " + std::to_string(width) + "x" +
+                             std::to_string(height) + " picture.");
+    }
+    return CropBox{w, h, edges.left, edges.top};
+}
+
+CropEdges edges_of_box(const CropBox& box, const VideoInfo& video) {
+    const auto [width, height] = video.frame_size();
+    const auto even_down = [](int lines) { return std::max(0, lines) & ~1; };
+    return {even_down(box.y), even_down(height - box.y - box.h), even_down(box.x), even_down(width - box.x - box.w)};
+}
+
+std::string crop_edges_text(const CropEdges& edges) {
+    return std::to_string(edges.top) + ":" + std::to_string(edges.bottom) + ":" + std::to_string(edges.left) + ":" +
+           std::to_string(edges.right);
+}
+
+std::optional<CropEdges> parse_crop_edges(std::string_view text) {
+    std::vector<int> lines;
+    while (true) {
+        const std::size_t colon = text.find(':');
+        const std::optional<long long> number = python_int(text.substr(0, colon));
+        if (!number || *number < 0 || *number > 1'000'000) {
+            return std::nullopt;
+        }
+        lines.push_back(static_cast<int>(*number));
+        if (colon == std::string_view::npos) {
+            break;
+        }
+        text.remove_prefix(colon + 1);
+    }
+    if (lines.size() != 4) {
+        return std::nullopt;
+    }
+    return CropEdges{lines[0], lines[1], lines[2], lines[3]};
+}
+
+std::optional<CropBox> source_own_crop(const CropChoice& choice, const std::string& ffmpeg, const VideoInfo& source,
+                                       const CancelToken& cancel, const std::optional<std::string>& hwaccel,
+                                       const std::string& scale_algorithm) {
+    if (choice.mode == CropMode::manual) {
+        return box_from_edges(choice.source, source, "the source");
+    }
+    if (!detects_black_bars(choice.mode)) {
+        return std::nullopt;
+    }
+    return detect_crop(ffmpeg, source, cancel, hwaccel, scale_algorithm);
+}
+
+std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_for(const CropChoice& choice, const std::string& ffmpeg,
                                                                     const VideoInfo& source,
                                                                     const VideoInfo& distorted,
                                                                     const CancelToken& cancel,
                                                                     const std::optional<std::string>& source_hwaccel,
                                                                     const std::optional<std::string>& distorted_hwaccel,
                                                                     const std::string& scale_algorithm) {
-    switch (mode) {
+    switch (choice.mode) {
     case CropMode::none:
         return {};
+    case CropMode::manual:
+        return {box_from_edges(choice.source, source, "the source"),
+                box_from_edges(choice.test, distorted, "the test video")};
     case CropMode::source_only: {  // (the run's settings line says so: "black bars source")
         const CropBox source_box = detect_crop(ffmpeg, source, cancel, source_hwaccel, scale_algorithm);
         return {source_box, test_crop_beside_source_box(source_box, distorted)};

@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} já está na lista. Adicioná-lo de novo, avaliado sem a granulação de filme, para comparar os dois?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} já está na lista. Adicioná-lo de novo, avaliado com a granulação de filme, para comparar os dois?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} adicionado de novo, avaliado com a outra opção de granulação de filme — marque-o e clique em Calcular métricas.",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Este vídeo foi adicionado uma segunda vez para ser avaliado com a granulação de filme e sem ela, lado a lado: cada uma de suas linhas mantém sua opção."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Este vídeo foi adicionado uma segunda vez para ser avaliado com a granulação de filme e sem ela, lado a lado: cada uma de suas linhas mantém sua opção.",
+  "Manual (enter the crops)": "Manual (informar os recortes)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "Nada é detectado: as linhas informadas são cortadas de cada vídeo, como as configurações de recorte de um codificador as cortam. Um vídeo sem nada informado é comparado com o quadro inteiro.",
+  "Top": "Topo",
+  "Bottom": "Base",
+  "Left": "Esquerda",
+  "Right": "Direita",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "As linhas cortadas de cada borda, como as configurações de recorte do codificador as cortam (uma codificação feita com recorte de 22 linhas no topo e na base: Topo 22, Base 22 para a referência, nada para o vídeo de teste, já recortado). Números pares.",
+  "Manual": "Manual",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Os recortes informados são aplicados quando esta linha é executada (topo:base:esquerda:direita): referência {source}, vídeo de teste {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "As duas imagens diferem em poucas linhas: a mesma imagem recortada de um jeito um pouco diferente, e o redimensionamento reduz todas as pontuações. Se o vídeo de teste foi recortado de outra forma que as barras pretas encontradas, informe os dois recortes (Barras pretas: Manual)."
  },
  "plurals": {
   "about {count} day": [

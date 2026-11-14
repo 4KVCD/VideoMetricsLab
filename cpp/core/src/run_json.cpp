@@ -93,6 +93,22 @@ VideoInfo video_from(const nlohmann::json& text) {
     return info;
 }
 
+namespace {
+
+// A crop entered by hand as [top, bottom, left, right].
+nlohmann::json edges_json(const CropEdges& edges) {
+    return nlohmann::json::array({edges.top, edges.bottom, edges.left, edges.right});
+}
+
+CropEdges edges_from(const nlohmann::json& text) {
+    if (!text.is_array() || text.size() != 4) {
+        return {};
+    }
+    return {text[0].get<int>(), text[1].get<int>(), text[2].get<int>(), text[3].get<int>()};
+}
+
+}  // namespace
+
 nlohmann::json options_json(const VmafOptions& options) {
     return {{"model", options.model},
             {"model_choice", options.model_choice},
@@ -116,7 +132,9 @@ nlohmann::json options_json(const VmafOptions& options) {
             {"gpu_vendor", static_cast<int>(options.gpu_vendor)},
             {"vmaf_on_gpu", options.vmaf_on_gpu},
             {"vship_build", static_cast<int>(options.vship_build)},
-            {"crop_mode", static_cast<int>(options.crop_mode)}};
+            {"crop_mode", static_cast<int>(options.crop_mode)},
+            {"manual_source_crop", edges_json(options.manual_source_crop)},
+            {"manual_test_crop", edges_json(options.manual_test_crop)}};
 }
 
 VmafOptions options_from(const nlohmann::json& text) {
@@ -144,6 +162,9 @@ VmafOptions options_from(const nlohmann::json& text) {
     text.at("vmaf_on_gpu").get_to(options.vmaf_on_gpu);
     options.vship_build = static_cast<VshipBuild>(text.at("vship_build").get<int>());
     options.crop_mode = static_cast<CropMode>(text.at("crop_mode").get<int>());
+    // Absent from runs saved before manual crops
+    options.manual_source_crop = edges_from(text.value("manual_source_crop", nlohmann::json()));
+    options.manual_test_crop = edges_from(text.value("manual_test_crop", nlohmann::json()));
     return options;
 }
 

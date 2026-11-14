@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} уже есть в списке. Добавить его ещё раз, с оценкой без плёночного зерна, чтобы сравнить оба варианта?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} уже есть в списке. Добавить его ещё раз, с оценкой с плёночным зерном, чтобы сравнить оба варианта?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} добавлен ещё раз, с другим выбором плёночного зерна — отметьте его и нажмите «Вычислить метрики».",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Это видео добавлено второй раз, чтобы оценить его с плёночным зерном и без него рядом друг с другом: каждая его строка сохраняет свой выбор."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Это видео добавлено второй раз, чтобы оценить его с плёночным зерном и без него рядом друг с другом: каждая его строка сохраняет свой выбор.",
+  "Manual (enter the crops)": "Вручную (ввести обрезку)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "Ничего не определяется: из каждого видео вырезаются введённые строки, как их вырезают настройки обрезки кодировщика. Видео без введённых значений сравнивается по полному кадру.",
+  "Top": "Сверху",
+  "Bottom": "Снизу",
+  "Left": "Слева",
+  "Right": "Справа",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Строки, вырезаемые с каждого края, как их вырезают настройки обрезки кодировщика (для кодирования с обрезкой 22 строк сверху и снизу: Сверху 22, Снизу 22 для эталона, ничего для уже обрезанного тестового видео). Чётные числа.",
+  "Manual": "Вручную",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Введённая обрезка применяется при запуске этой строки (сверху:снизу:слева:справа): эталон {source}, тестовое видео {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Два изображения отличаются лишь на несколько строк: то же изображение, обрезанное немного иначе, а масштабирование снижает все оценки. Если тестовое видео обрезано не так, как найдены его чёрные полосы, введите обе обрезки (Чёрные полосы: Вручную)."
  },
  "plurals": {
   "about {count} day": [

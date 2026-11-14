@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} már szerepel a listában. Hozzáadja újra, filmszemcse nélkül értékelve, hogy összehasonlítsa a kettőt?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} már szerepel a listában. Hozzáadja újra, filmszemcsével értékelve, hogy összehasonlítsa a kettőt?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "{name} újra hozzáadva, a másik filmszemcse-beállítással értékelve — jelölje be, majd kattintson a Metrikák számítása gombra.",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Ezt a videót másodszor is hozzáadták, hogy filmszemcsével és anélkül, egymás mellett legyen értékelve: minden sora megtartja a saját beállítását."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "Ezt a videót másodszor is hozzáadták, hogy filmszemcsével és anélkül, egymás mellett legyen értékelve: minden sora megtartja a saját beállítását.",
+  "Manual (enter the crops)": "Kézi (vágás megadása)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "Semmi sem kerül felismerésre: minden videóból a megadott sorok vágódnak le, ahogy egy kódoló vágási beállításai vágják. A megadás nélküli videó teljes képpel kerül összehasonlításra.",
+  "Top": "Fent",
+  "Bottom": "Lent",
+  "Left": "Balra",
+  "Right": "Jobbra",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Az egyes szélekről levágott sorok, ahogy a kódoló vágási beállításai vágják (fent és lent 22 sor vágással készült kódolás: Fent 22, Lent 22 a referenciánál, semmi a már levágott tesztvideónál). Páros számok.",
+  "Manual": "Kézi",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "A megadott vágások a sor futásakor vágódnak le (fent:lent:balra:jobbra): referencia {source}, tesztvideó {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "A két kép csak néhány sorban tér el: ugyanaz a kép kissé eltérően vágva, és az átméretezés minden pontszámot ront. Ha a tesztvideót másként vágták, mint ahogy fekete sávjait felismertük, adja meg mindkét vágást (Fekete sávok: Kézi)."
  },
  "plurals": {
   "about {count} day": [

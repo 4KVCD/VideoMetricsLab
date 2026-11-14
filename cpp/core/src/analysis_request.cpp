@@ -50,6 +50,14 @@ nlohmann::json ComparisonRecipe::identity() const {
                                         : nlohmann::json(nullptr)},
         {"manual_source_crop", nullptr},
         {"manual_distorted_crop", nullptr}};
+    if (crop_mode == CropMode::manual) {
+        const auto edges = [](const CropEdges& crop) {
+            return nlohmann::json{
+                {"top", crop.top}, {"bottom", crop.bottom}, {"left", crop.left}, {"right", crop.right}};
+        };
+        identity["manual_source_crop"] = edges(manual_source_crop);
+        identity["manual_distorted_crop"] = edges(manual_test_crop);
+    }
     if (range_start > 0) {
         identity["range_start"] = static_cast<double>(range_start);
     }
@@ -94,6 +102,10 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
                       options.range_start, options.range_end,      options.resample_test};
     // The whole videos are one comparison however a range would be counted.
     request.recipe.range_in_frames = options.range_in_frames && !options.compared_range().whole();
+    if (options.crop_mode == CropMode::manual) {
+        request.recipe.manual_source_crop = options.manual_source_crop;
+        request.recipe.manual_test_crop = options.manual_test_crop;
+    }
     const std::optional<std::string> source_grain = film_grain_identity(source);
     const std::optional<std::string> distorted_grain = film_grain_identity(distorted);
     if (source_grain || distorted_grain) {

@@ -9,6 +9,8 @@
 #include <utility>
 #include <vector>
 
+#include "vml/video.h"
+
 namespace vml::cli {
 
 inline constexpr const char* program = "VideoMetricsLab-cli";
@@ -25,6 +27,11 @@ struct CompareArguments {
     std::string model = "auto";
     std::string model_v1 = "auto";  // a word of v1_model_choices (model_select.h)
     std::string black_bars = "auto";  // "auto", "source" (the source's only) or "none"
+    bool black_bars_given = false;    // --black-bars was given (refused beside a crop entered)
+    // Crops entered by hand (--source-crop, --test-crop): either one makes the run's black bars
+    // CropMode::manual.
+    std::optional<CropEdges> source_crop;
+    std::optional<CropEdges> test_crop;
     std::string scale_to = "test";
     std::string scaler = "bicubic";
     std::optional<long long> duration;  // whole seconds from the start of the videos

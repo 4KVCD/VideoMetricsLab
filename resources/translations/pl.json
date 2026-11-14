@@ -874,7 +874,17 @@
   "{name} is already in the list. Add it again, scored without its film grain, to compare the two?": "{name} jest już na liście. Dodać go ponownie, ocenianego bez ziarna filmowego, aby porównać oba?",
   "{name} is already in the list. Add it again, scored with its film grain, to compare the two?": "{name} jest już na liście. Dodać go ponownie, ocenianego z ziarnem filmowym, aby porównać oba?",
   "Added {name} again, scored with the other film grain choice -- check it and click Calculate metrics.": "Dodano ponownie {name}, oceniany z drugim wyborem ziarna filmowego — zaznacz go i kliknij Oblicz metryki.",
-  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "To wideo dodano drugi raz, aby ocenić je z ziarnem filmowym i bez niego, obok siebie: każdy z jego wierszy zachowuje swój wybór."
+  "This video was added a second time to be scored with its film grain and without it, side by side: each of its rows keeps its choice.": "To wideo dodano drugi raz, aby ocenić je z ziarnem filmowym i bez niego, obok siebie: każdy z jego wierszy zachowuje swój wybór.",
+  "Manual (enter the crops)": "Ręcznie (wpisz kadrowanie)",
+  "Nothing is detected: the lines entered are cut from each video, as an encoder's crop settings cut them. A video with nothing entered is compared at its full frame.": "Nic nie jest wykrywane: z każdego wideo odcinane są wpisane wiersze, tak jak odcinają je ustawienia kadrowania enkodera. Wideo bez wpisu jest porównywane w pełnej klatce.",
+  "Top": "Góra",
+  "Bottom": "Dół",
+  "Left": "Lewo",
+  "Right": "Prawo",
+  "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Wiersze odcinane z każdej krawędzi, tak jak odcinają je ustawienia kadrowania enkodera (enkod zrobiony z kadrowaniem 22 wierszy u góry i u dołu: Góra 22, Dół 22 dla referencji, nic dla już przyciętego wideo testowego). Liczby parzyste.",
+  "Manual": "Ręcznie",
+  "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Wpisane kadrowania są stosowane po uruchomieniu tego wiersza (góra:dół:lewo:prawo): referencja {source}, wideo testowe {test}.",
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Oba obrazy różnią się tylko o kilka wierszy: ten sam obraz przycięty trochę inaczej, a skalowanie obniża każdy wynik. Jeśli wideo testowe przycięto inaczej, niż wykryto jego czarne pasy, wpisz oba kadrowania (Czarne pasy: Ręcznie)."
  },
  "plurals": {
   "about {count} day": [

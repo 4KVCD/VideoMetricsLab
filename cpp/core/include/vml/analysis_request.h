@@ -34,6 +34,9 @@ struct ComparisonRecipe {
     // the wrong size on some routes.
     bool coded_at_another_size = false;
     bool range_in_frames = false;  // range_start and range_end are frames
+    // The crops entered by hand (CropMode::manual only; VmafOptions').
+    CropEdges manual_source_crop;
+    CropEdges manual_test_crop;
 
     ComparedRange compared_range() const { return {range_start, range_end, range_in_frames}; }
 
@@ -41,8 +44,8 @@ struct ComparisonRecipe {
     // scaling algorithm is one, as whether a comparison scales can depend on
     // black bars found only when it runs; a resolution test has its own. It
     // is in it only where it is not the default, so that every other
-    // comparison keeps the identity it had. The manual crops, which the app
-    // no longer has, are null. The film grain is in it only where it is not
+    // comparison keeps the identity it had. The manual crops are null but for
+    // CropMode::manual, for the same reason. The film grain is in it only where it is not
     // null, and coded_at_another_size only where true, for the same reason.
     // Which decoder made a video's pictures is not in it: a VVC video's scores
     // are the same ones whether VVdeC or FFmpeg decoded it.

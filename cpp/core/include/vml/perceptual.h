@@ -107,15 +107,15 @@ inline constexpr double long_cpu_run_seconds = 10 * 60;
 // match, over `options`' range.
 void validate_pair(const VideoInfo& source, const VideoInfo& distorted, const VmafOptions& options);
 
-// The black-bar crops of the source and the test video, or none when black
-// bars are kept (`crop_mode`), a video whose size changes sampled scaled
-// with `scale_algorithm` (detect_crop). Sends a status first, worded as for
-// FFmpeg's metrics, because a video's tasks share one detection. Throws
-// PerceptualRunError when the two pictures are different shapes after
-// cropping (geometry.h's shape_problem), CropDetectError, VideoSizeChanged
-// and Cancelled.
+// The crops of the source and the test video as `crop` asks (crops_for):
+// none when black bars are kept, a video whose size changes sampled scaled
+// with `scale_algorithm` (detect_crop). Sends a status first where bars are
+// detected, worded as for FFmpeg's metrics, because a video's tasks share one
+// detection. Throws PerceptualRunError when the two pictures are different
+// shapes after cropping (geometry.h's shape_problem) or a crop entered cannot
+// be cut, CropDetectError, VideoSizeChanged and Cancelled.
 CropPair resolve_crops(const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& distorted,
-                       CropMode crop_mode, const std::string& scale_algorithm, const CancelToken& cancel,
+                       const CropChoice& crop, const std::string& scale_algorithm, const CancelToken& cancel,
                        const StatusCallback& on_status);
 
 // A request's crops. As resolve_crops, but for a resolution test: the source's

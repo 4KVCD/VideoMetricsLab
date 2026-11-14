@@ -12,13 +12,19 @@
 
 namespace vml {
 
-// Whether black bars are detected and cut (automatic), kept (none), or detected and cut in the source alone, the
-// test video's full frame compared (source_only: an encode cropped when it was made). New ones go last: a mode goes
-// between processes as its number.
-enum class CropMode { automatic, none, source_only };
+// Whether black bars are detected and cut (automatic), kept (none), detected and cut in the source alone, the
+// test video's full frame compared (source_only: an encode cropped when it was made), or cut as entered by hand,
+// nothing detected (manual: VmafOptions' manual crops). New ones go last: a mode goes between processes as its
+// number.
+enum class CropMode { automatic, none, source_only, manual };
 
-// The mode as the saved scores' identity and the log name it: "auto", "none" or "source".
+// The mode as the saved scores' identity and the log name it: "auto", "none", "source" or "manual".
 const char* crop_mode_text(CropMode mode);
+
+// Whether the mode finds black bars by looking at the pictures (Auto and Source only).
+inline bool detects_black_bars(CropMode mode) {
+    return mode == CropMode::automatic || mode == CropMode::source_only;
+}
 
 // The GPU maker whose decoder to use: automatic picks one found on this PC,
 // and none decodes in software.
@@ -53,6 +59,30 @@ struct CropBox {
     // Whether it keeps the whole of a frame this size.
     bool is_noop(int frame_width, int frame_height) const;
     bool operator==(const CropBox&) const = default;
+};
+
+// A crop entered by hand (CropMode::manual): the lines cut from each edge of the frame, as HandBrake's crop fields
+// take them. Edges rather than a box, so that one crop fits videos of any size.
+struct CropEdges {
+    int top = 0;
+    int bottom = 0;
+    int left = 0;
+    int right = 0;
+
+    bool none() const { return top == 0 && bottom == 0 && left == 0 && right == 0; }
+    bool operator==(const CropEdges&) const = default;
+};
+
+// How a run crops its two videos: the mode and, for CropMode::manual, the crops entered for each (nothing cut
+// where they are none).
+struct CropChoice {
+    CropMode mode = CropMode::automatic;
+    CropEdges source;
+    CropEdges test;
+
+    CropChoice() = default;
+    explicit CropChoice(CropMode crop_mode, CropEdges source_crop = {}, CropEdges test_crop = {})
+        : mode(crop_mode), source(source_crop), test(test_crop) {}
 };
 
 // A video file's details, as ffprobe reports them (ffprobe.h).

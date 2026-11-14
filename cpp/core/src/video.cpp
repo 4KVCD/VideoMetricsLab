@@ -26,6 +26,8 @@ const char* crop_mode_text(CropMode mode) {
         return "auto";
     case CropMode::source_only:
         return "source";
+    case CropMode::manual:
+        return "manual";
     case CropMode::none:
         break;
     }

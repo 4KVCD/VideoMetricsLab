@@ -90,10 +90,41 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const V
 // frame. Kept, it would stretch the source by a pixel to fit, moving every line.
 std::optional<CropBox> test_crop_beside_source_box(const CropBox& source_box, const VideoInfo& test);
 
-// The two videos' crops as `mode` asks: none for CropMode::none; for automatic, both videos' boxes (detect_pair)
+// The box a crop entered by hand (`edges`) leaves of `video`'s frame (as scaled_to, where set): none where nothing
+// is cut. Its size is rounded down to even, as a detected box's is. Throws CropEntryError, naming the video as
+// `which` ("the source"), where an edge is negative or odd (4:2:0's colour comes in pairs of lines, and FFmpeg's
+// crop would move an odd one silently) or less than 16x16 of the picture is left.
+std::optional<CropBox> box_from_edges(const CropEdges& edges, const VideoInfo& video, std::string_view which);
+
+// What `box` cuts from each edge of `video`'s frame, each rounded down to even: the crop box_from_edges gives
+// `box` back from (an odd-sized frame's box leaves an odd line at its right or bottom).
+CropEdges edges_of_box(const CropBox& box, const VideoInfo& video);
+
+// A crop as the command line takes it, "top:bottom:left:right" in lines (HandBrake's order): none where it is not
+// four whole numbers of 0 or more.
+std::optional<CropEdges> parse_crop_edges(std::string_view text);
+
+// A crop written as parse_crop_edges reads it ("22:22:0:0").
+std::string crop_edges_text(const CropEdges& edges);
+
+// The source's own crop, for a resolution test (both of whose videos come
+// from the source): the crop entered for it (manual), its detected box (Auto
+// and Source only: detect_crop), or none.
+std::optional<CropBox> source_own_crop(const CropChoice& choice, const std::string& ffmpeg, const VideoInfo& source,
+                                       const CancelToken& cancel, const std::optional<std::string>& hwaccel,
+                                       const std::string& scale_algorithm);
+
+// The crop entered for a video cannot be cut from it (box_from_edges).
+struct CropEntryError : std::invalid_argument {
+    using std::invalid_argument::invalid_argument;
+};
+
+// The two videos' crops as `choice` asks: none for CropMode::none; for automatic, both videos' boxes (detect_pair)
 // made to cover the same picture (common_picture); for source_only, the source's box (detect_crop) and the test
-// video's full frame, as an encode cropped when it was made shows the source's picture without its bars.
-std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_for(CropMode mode, const std::string& ffmpeg,
+// video's full frame, as an encode cropped when it was made shows the source's picture without its bars; for
+// manual, each video's box from the crop entered for it (box_from_edges), nothing detected and the two boxes kept
+// as asked.
+std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_for(const CropChoice& choice, const std::string& ffmpeg,
                                                                     const VideoInfo& source,
                                                                     const VideoInfo& distorted,
                                                                     const CancelToken& cancel,

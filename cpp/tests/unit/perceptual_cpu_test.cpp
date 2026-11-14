@@ -743,11 +743,11 @@ TEST(PerceptualRouting, PicturesOfDifferentShapesAreRefused) {
     const VideoInfo source = plain_video("source.mkv");
     VideoInfo squeezed = plain_video("test.mkv");
     squeezed.width = 1440;
-    EXPECT_THROW(resolve_crops("ffmpeg", source, squeezed, CropMode::none, "bicubic", CancelToken(), nullptr),
+    EXPECT_THROW(resolve_crops("ffmpeg", source, squeezed, CropChoice(CropMode::none), "bicubic", CancelToken(), nullptr),
                  PerceptualRunError);
     VideoInfo rounded = plain_video("test.mkv");
     rounded.width = 1918;
-    EXPECT_NO_THROW(resolve_crops("ffmpeg", source, rounded, CropMode::none, "bicubic", CancelToken(), nullptr));
+    EXPECT_NO_THROW(resolve_crops("ffmpeg", source, rounded, CropChoice(CropMode::none), "bicubic", CancelToken(), nullptr));
 }
 
 // The bundled tool is the one built for this system: the repository's

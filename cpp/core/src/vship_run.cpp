@@ -2807,7 +2807,7 @@ PerceptualTaskOutput run_perceptual_task(const PerceptualRequest& request, const
     // The task's scores may come from the GPU's pictures: its Vship passes decode where run_pass plans it, and its
     // black bars may be a box found from them (another task's)
     const auto from_gpu = [&scored] {
-        return scored.options.crop_mode != CropMode::none ||
+        return detects_black_bars(scored.options.crop_mode) ||
                (scored.options.gpu_decode && plan_hardware_decoding(scored.environment.decoding,
                                                                     scored.options.gpu_vendor, scored.source,
                                                                     scored.distorted, MacGpuDecoding::on)

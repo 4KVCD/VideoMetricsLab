@@ -177,6 +177,22 @@ TEST(MetricCache, SourceOnlyBlackBarsAreARecipeOfTheirOwn) {
     EXPECT_EQ(recipe.identity().at("crop_mode"), "source");
 }
 
+// Crops entered by hand file a comparison by their lines, apart from every other crop; the crops a row keeps while
+// it is not Manual leave its identity as it was.
+TEST(MetricCache, ManualCropsAreARecipeOfTheirOwnByTheirLines) {
+    const auto identity_of = [](CropMode mode, CropEdges source_crop) {
+        VmafOptions options;
+        options.crop_mode = mode;
+        options.manual_source_crop = source_crop;
+        return analysis_request(options, {"psnr"}, {}, CvvdpSettings{}, VideoInfo{}, VideoInfo{}).recipe.identity();
+    };
+    const nlohmann::json manual = identity_of(CropMode::manual, {22, 22, 0, 0});
+    EXPECT_EQ(manual.at("crop_mode"), "manual");
+    EXPECT_EQ(manual.at("manual_source_crop"), (nlohmann::json{{"top", 22}, {"bottom", 22}, {"left", 0}, {"right", 0}}));
+    EXPECT_NE(manual, identity_of(CropMode::manual, {20, 20, 0, 0}));
+    EXPECT_EQ(identity_of(CropMode::automatic, {22, 22, 0, 0}), identity_of(CropMode::automatic, {}));
+}
+
 // A range's end is in its identity under the duration limit's name and its
 // start only when it has one, so that a duration limit's comparison (the
 // range from 0) keeps its saved scores' name.

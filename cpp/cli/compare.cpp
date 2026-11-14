@@ -270,6 +270,26 @@ VideoInfo with_assumed_colour(VideoInfo info, const std::optional<std::string>& 
     return info;
 }
 
+// The note for a video whose result scaled one picture to the other's by a
+// few lines (near_miss_crop): crops a few lines apart. None otherwise.
+std::optional<std::string> near_miss_note(const TestVideo& video) {
+    if (!video.result) {
+        return std::nullopt;
+    }
+    const ComparisonResult& result = *video.result;
+    const std::optional<NearMissCrop> near = near_miss_crop(result.source_info, result.distorted_info,
+                                                            result.source_crop, result.distorted_crop,
+                                                            result.scale_direction);
+    if (!near) {
+        return std::nullopt;
+    }
+    const auto size = [](Size of) { return std::to_string(of.first) + "x" + std::to_string(of.second); };
+    return std::string(near->source_scaled ? "the reference's picture (" : "the test video's picture (") +
+           size(near->scaled) + ") was scaled to the " + (near->source_scaled ? "test video's" : "reference's") +
+           " (" + size(near->target) + "): the same picture cropped a few lines apart, which lowers every score. "
+           "If the test video was cropped otherwise, give both crops: --source-crop and --test-crop T:B:L:R";
+}
+
 // The note for a video that took the other's colour tags (take_colour_tags).
 std::string taken_colour_note(const VideoInfo& info, const std::string& which, const std::string& other) {
     return which + " has no colour tags, so it was taken to have " + other + "'s (transfer " + info.color_transfer +
@@ -408,6 +428,11 @@ VmafOptions row_options(const CompareArguments& arguments, const Settings& setti
     options.crop_mode = arguments.black_bars == "auto"     ? CropMode::automatic
                         : arguments.black_bars == "source" ? CropMode::source_only
                                                            : CropMode::none;
+    if (arguments.source_crop || arguments.test_crop) {
+        options.crop_mode = CropMode::manual;
+        options.manual_source_crop = arguments.source_crop.value_or(CropEdges{});
+        options.manual_test_crop = arguments.test_crop.value_or(CropEdges{});
+    }
     options.compute_vmaf = false;
     if (arguments.model == "auto") {
         options.model_choice = std::string(auto_model_choice);
@@ -1054,6 +1079,14 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
         video.error = std::string("it could not be read: ") + error.what();
         return std::nullopt;
     }
+    try {  // the crops given, refused before anything runs where they cannot be cut
+        box_from_edges(arguments_.source_crop.value_or(CropEdges{}), source_, "the reference");
+        box_from_edges(arguments_.test_crop.value_or(CropEdges{}), *video.info, platform::path_text(path.filename()));
+    } catch (const CropEntryError& error) {
+        video.error = error.what();
+        command_wrong = error.what();
+        return std::nullopt;
+    }
     video.source = source_;
     if (!arguments_.colour) {
         if (take_colour_tags(*video.info, source_)) {
@@ -1371,6 +1404,11 @@ int compare(const CompareArguments& arguments) {
             return exit_usage;
         }
     }
+    if (arguments.black_bars_given && (arguments.source_crop || arguments.test_crop)) {
+        print_error("--black-bars cannot be given with --source-crop or --test-crop: the crops given are cut, and no "
+                    "black bars are detected.");
+        return exit_usage;
+    }
     const Settings settings = Settings::load();
     const std::filesystem::path cache_folder = apply_settings(settings);
     const ToolsStatus tools = check_tools(settings);
@@ -1473,6 +1511,11 @@ int compare(const CompareArguments& arguments) {
         progress->message(std::string(cancelled ? "Cancelled" : "Finished") + " after " + format_hms(seconds));
     }
 
+    for (TestVideo& video : planner.videos) {
+        if (const std::optional<std::string> note = near_miss_note(video)) {
+            video.notes.push_back(*note);
+        }
+    }
     const bool written = write_results(arguments, source, planner.videos, cancelled, *progress);
     if (cancelled) {
         return exit_cancelled;
