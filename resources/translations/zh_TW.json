@@ -884,7 +884,10 @@
   "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "從每個邊緣裁掉的行數，與編碼器的裁切設定相同（上下各裁 22 行的編碼：參考影片填上 22、下 22，已裁切的測試影片不填）。須為偶數。",
   "Manual": "手動",
   "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "執行此列時裁掉輸入的裁切（上:下:左:右）：參考影片 {source}，測試影片 {test}。",
-  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "兩個畫面只差幾行：同一畫面的裁切略有不同，縮放會降低每項分數。如果測試影片的裁切與偵測到的黑邊不同，請輸入兩者的裁切（黑邊處理：手動）。"
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "兩個畫面只差幾行：同一畫面的裁切略有不同，縮放會降低每項分數。如果測試影片的裁切與偵測到的黑邊不同，請輸入兩者的裁切（黑邊處理：手動）。",
+  "Also score CVVDP on...": "另在其他顯示器上評分 CVVDP...",
+  "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "為每部選取的影片新增一列，只在另一台顯示器上評分 CVVDP，與該影片本列的顯示器並列。其他指標不會重新計算。匯出結果會在影片的項目中列出所有顯示器。",
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "選取的列已在 {display} 上評分 CVVDP，或是只評分一台顯示器的解析度測試。"
  },
  "plurals": {
   "about {count} day": [
@@ -958,6 +961,9 @@
   ],
   "Use it for {count} other video without a frame rate": [
    "同時用於其他 {count} 部沒有影格率的影片"
+  ],
+  "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
+   "已新增 {count} 列在 {display} 上評分 CVVDP——按一下「計算指標」。"
   ]
  }
 }

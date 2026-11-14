@@ -193,6 +193,10 @@ struct RowData {
     // row's while the twin is in the table (film_grain_twinned): the two
     // always compare with and without.
     std::optional<std::filesystem::path> film_grain_twin_of;
+    // For a row added to score CVVDP alone on another display
+    // (synthetic_cvvdp_display_variant_path): the path of the row it scores
+    // the display for, whose entry lists it in Export results.
+    std::optional<std::filesystem::path> cvvdp_display_of;
     // The metrics (keys) a Recalculate forgot, by the recipe they were
     // forgotten for (its identity's JSON), where another recipe's saved
     // scores would answer them (load_result): Auto's for Source only, the
@@ -413,6 +417,10 @@ private:
     void save_cvvdp_preset(const CvvdpDisplayDialog& dialog, const CvvdpSettings& settings,
                            const std::optional<std::string>& replacing, bool apply_to_rows = true);
     void on_cvvdp_delete_preset();
+    // "Also score CVVDP on...": offers the presets, and for the one chosen
+    // adds a row to each of `rows` scoring CVVDP alone on it.
+    void on_cvvdp_other_display_requested();
+    void add_cvvdp_display_rows(const std::vector<int>& rows, const CvvdpPreset& preset);
     // The film grain choice (VideoInfo::with_film_grain), main_window_options.cpp.
     std::vector<std::filesystem::path> choose_film_grain(const std::vector<int>& rows, bool reference, bool with);
     std::vector<std::filesystem::path> apply_film_grain_default();

@@ -476,6 +476,8 @@ void MainWindow::build_ui() {
     connect(options_panel_, &OptionsPanel::cvvdp_add_requested, this, [this] { on_cvvdp_add_preset(); });
     connect(options_panel_, &OptionsPanel::cvvdp_edit_requested, this, [this] { on_cvvdp_edit_display(); });
     connect(options_panel_, &OptionsPanel::cvvdp_delete_requested, this, [this] { on_cvvdp_delete_preset(); });
+    connect(options_panel_, &OptionsPanel::cvvdp_other_display_requested, this,
+            [this] { on_cvvdp_other_display_requested(); });
     connect(options_panel_, &OptionsPanel::scale_direction_chosen, this,
             [this](int index) { on_scale_direction_combo_changed(index); });
     connect(options_panel_, &OptionsPanel::film_grain_chosen, this, [this](bool with) { on_film_grain_chosen(with); });

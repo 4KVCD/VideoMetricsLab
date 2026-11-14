@@ -884,7 +884,10 @@
   "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Baris yang dipotong dari tiap tepi, seperti pengaturan pemotongan encoder memotongnya (encode yang dibuat dengan pemotongan 22 baris di atas dan bawah: Atas 22, Bawah 22 untuk referensi, kosong untuk video uji yang sudah dipotong). Bilangan genap.",
   "Manual": "Manual",
   "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Pemotongan yang dimasukkan diterapkan saat baris ini dijalankan (atas:bawah:kiri:kanan): referensi {source}, video uji {test}.",
-  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Kedua gambar hanya berbeda beberapa baris: gambar yang sama dipotong sedikit berbeda, dan penskalaan menurunkan setiap skor. Jika video uji dipotong berbeda dari bilah hitam yang ditemukan, masukkan kedua pemotongan (Bilah hitam: Manual)."
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Kedua gambar hanya berbeda beberapa baris: gambar yang sama dipotong sedikit berbeda, dan penskalaan menurunkan setiap skor. Jika video uji dipotong berbeda dari bilah hitam yang ditemukan, masukkan kedua pemotongan (Bilah hitam: Manual).",
+  "Also score CVVDP on...": "Nilai CVVDP juga pada...",
+  "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Menambahkan untuk setiap video terpilih satu baris yang hanya menilai CVVDP pada layar lain, di samping layar barisnya sendiri. Metrik lain tidak dihitung ulang. Ekspor hasil mencantumkan semua layar di entri video.",
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Baris terpilih sudah menilai CVVDP pada {display}, atau merupakan uji resolusi, yang hanya menilai satu layar."
  },
  "plurals": {
   "about {count} day": [
@@ -958,6 +961,9 @@
   ],
   "Use it for {count} other video without a frame rate": [
    "Gunakan juga untuk {count} video lain tanpa kecepatan bingkai"
+  ],
+  "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
+   "{count} baris ditambahkan untuk menilai CVVDP pada {display} — klik Hitung metrik."
   ]
  }
 }

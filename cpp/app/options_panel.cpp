@@ -378,6 +378,18 @@ void OptionsPanel::build_cvvdp(QFormLayout* form) {
     buttons->addStretch(1);
     form->addRow(QString(), buttons);
 
+    // Another display beside the videos' own, each scored in a row of its own.
+    cvvdp_other_button = new QPushButton(app::tr("Also score CVVDP on..."));
+    cvvdp_other_button->setToolTip(
+        app::tr("Adds a row for each selected video that scores CVVDP alone on another display, beside the display "
+                "of its own row. The other metrics are not calculated again. Export results lists every display in "
+                "the video's entry."));
+    connect(cvvdp_other_button, &QPushButton::clicked, this, &OptionsPanel::cvvdp_other_display_requested);
+    auto* other = new QHBoxLayout;
+    other->addWidget(cvvdp_other_button);
+    other->addStretch(1);
+    form->addRow(QString(), other);
+
     cvvdp_resize_check = new QCheckBox(app::tr("Scale the video to fill the display"));
     cvvdp_resize_check->setToolTip(
         app::tr("Off (the official default): the video is shown pixel for pixel, so a 1080p video covers a quarter "

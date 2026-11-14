@@ -21,6 +21,7 @@
 #include "vml/film_grain_scoring.h"
 #include "vml/hardware_decoding.h"
 #include "vml/model_select.h"
+#include "vml/results_summary.h"
 #include "vml/run_file.h"
 #include "vml/score_identity.h"
 #include "vml/time_format.h"
@@ -38,22 +39,6 @@ namespace {
 QString run_file_filter() {
     return app::tr("Analysis results (*{suffix})",
                    {{"suffix", QString::fromUtf8(result_suffix.data(), static_cast<int>(result_suffix.size()))}});
-}
-
-// A CVVDP score's display, as its provenance records it; nothing for a
-// record CVVDP cannot read.
-std::optional<CvvdpSettings> cvvdp_display_of(const SequenceMetricResult& cvvdp) {
-    try {
-        nlohmann::json parameters = nlohmann::json::object();
-        for (const auto& [name, text] : cvvdp.provenance.parameters) {
-            parameters[name] = nlohmann::json::parse(text);
-        }
-        return CvvdpSettings::from_parameters(parameters);
-    } catch (const std::invalid_argument&) {
-        return std::nullopt;
-    } catch (const nlohmann::json::exception&) {
-        return std::nullopt;
-    }
 }
 
 // A saved run's options, taken by its row (`options`) from its `result`.
@@ -205,6 +190,14 @@ void MainWindow::load_saved_run(const std::filesystem::path& path) {
     }
     if (result.resample_target) {
         row_data.media_path = result.source_info.path;  // what the test decodes
+    } else if (const std::optional<std::filesystem::path> parent = cvvdp_display_variant_parent(result.distorted)) {
+        // Another display's run: again of the row it scored the display for,
+        // a film grain twin's with the twin's choice held.
+        row_data.media_path = result.distorted_info.path;
+        row_data.cvvdp_display_of = *parent;
+        if (film_grain_variant_choice(*parent, result.distorted_info.path)) {
+            row_data.film_grain_twin_of = result.distorted_info.path;
+        }
     } else if (film_grain_variant_choice(result.distorted, result.distorted_info.path)) {
         // A film grain twin's run: a twin again, of the video's own row.
         row_data.media_path = result.distorted_info.path;
@@ -408,15 +401,36 @@ std::vector<ExportedRun> MainWindow::exported_runs() const {
     };
     std::vector<ExportedRun> runs;
     std::set<std::string> listed;  // the rows' lines on the graph
+    std::map<std::filesystem::path, std::size_t> run_of_row;  // a row's path: its run's place in `runs`
+    std::vector<const RowData*> display_rows;                 // rows scoring another display (cvvdp_display_of)
     for (const std::shared_ptr<RowData>& row_data : rows_) {
         const std::shared_ptr<CompletedRun>& run = row_data->completed_run;
         if (!run) {
             continue;
         }
         listed.insert(run->graph_identity);
-        if (!run->partial) {
-            runs.push_back({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label,
-                            row_data->metric_failures, display_of(run->result, row_data->cvvdp_preset)});
+        if (run->partial) {
+            continue;
+        }
+        if (row_data->cvvdp_display_of) {
+            display_rows.push_back(row_data.get());
+            continue;
+        }
+        run_of_row[row_data->path] = runs.size();
+        runs.push_back({std::shared_ptr<const ComparisonResult>(run, &run->result), run->label,
+                        row_data->metric_failures, display_of(run->result, row_data->cvvdp_preset)});
+    }
+    // Another display's CVVDP is listed with the video it was scored for: in
+    // its row's entry, or as an entry of its own where that row has no
+    // scores to export.
+    for (const RowData* row_data : display_rows) {
+        const std::shared_ptr<CompletedRun>& run = row_data->completed_run;
+        std::shared_ptr<const ComparisonResult> result(run, &run->result);
+        const std::string display = display_of(run->result, row_data->cvvdp_preset);
+        if (const auto parent = run_of_row.find(*row_data->cvvdp_display_of); parent != run_of_row.end()) {
+            runs[parent->second].other_displays.push_back({display, std::move(result)});
+        } else {
+            runs.push_back({std::move(result), run->label, row_data->metric_failures, display});
         }
     }
     for (const GraphPanel::Run& graphed : graph_panel_->runs()) {

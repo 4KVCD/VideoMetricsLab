@@ -50,6 +50,19 @@ Json run_entry(const ExportedRun& run) {
     if (!run.cvvdp_display.empty()) {
         entry["cvvdp_display"] = run.cvvdp_display;
     }
+    const bool has_cvvdp = result.metric_results.sequence("cvvdp") != nullptr;
+    if (has_cvvdp || !run.other_displays.empty()) {
+        // Every display CVVDP was scored on, the first (metrics.cvvdp's) too:
+        // a display that is no preset by its parameters alone (name "").
+        Json displays = Json::array();
+        if (has_cvvdp) {
+            displays.push_back(cvvdp_display_entry(run.cvvdp_display, &result));
+        }
+        for (const ExportedDisplay& other : run.other_displays) {
+            displays.push_back(cvvdp_display_entry(other.name, other.result.get()));
+        }
+        entry["cvvdp_displays"] = displays;
+    }
     return entry;
 }
 

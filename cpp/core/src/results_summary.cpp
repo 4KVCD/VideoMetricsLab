@@ -1,8 +1,10 @@
 #include "vml/results_summary.h"
 
+#include <algorithm>
 #include <cmath>
 #include <map>
 #include <span>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -68,12 +70,21 @@ void add_provenance(Json& summary, const MetricProvenance& provenance) {
     summary["version"] = provenance.implementation_version;
 }
 
-// `value`'s cells for the CSV, each named by its place in the JSON; an
-// array is one cell, its JSON.
+// `value`'s cells for the CSV, each named by its place in the JSON. A list
+// of objects (each display's CVVDP: cvvdp_displays) gives each item's
+// values columns of their own, numbered as in the JSON
+// ("cvvdp_displays.1.score"); any other list is one cell, its JSON.
 void flatten(const Json& value, const std::string& name, std::vector<std::pair<std::string, std::string>>& cells) {
     if (value.is_object()) {
         for (const auto& [key, item] : value.items()) {
             flatten(item, name.empty() ? key : name + "." + key, cells);
+        }
+        return;
+    }
+    if (value.is_array() && !value.empty() &&
+        std::all_of(value.begin(), value.end(), [](const Json& item) { return item.is_object(); })) {
+        for (std::size_t i = 0; i < value.size(); ++i) {
+            flatten(value[i], name + "." + std::to_string(i), cells);
         }
         return;
     }
@@ -124,6 +135,30 @@ std::optional<Json> metric_summary(const ComparisonResult& result, const std::st
     add_statistics(summary, metric->values, definition, "frames");
     add_provenance(summary, metric->provenance);
     return summary;
+}
+
+std::optional<CvvdpSettings> cvvdp_display_of(const SequenceMetricResult& cvvdp) {
+    try {
+        nlohmann::json parameters = nlohmann::json::object();
+        for (const auto& [name, text] : cvvdp.provenance.parameters) {
+            parameters[name] = nlohmann::json::parse(text);
+        }
+        return CvvdpSettings::from_parameters(parameters);
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    } catch (const nlohmann::json::exception&) {
+        return std::nullopt;
+    }
+}
+
+Json cvvdp_display_entry(const std::string& name, const ComparisonResult* result) {
+    const SequenceMetricResult* cvvdp = result != nullptr ? result->metric_results.sequence("cvvdp") : nullptr;
+    const std::optional<CvvdpSettings> display = cvvdp != nullptr ? cvvdp_display_of(*cvvdp) : std::nullopt;
+    const std::optional<Json> summary = result != nullptr ? metric_summary(*result, "cvvdp") : std::nullopt;
+    return Json{{"display", name},
+                {"score", summary ? summary->at("score") : Json(nullptr)},
+                {"display_parameters", display ? Json(display->parameters()) : Json(nullptr)},
+                {"cvvdp", summary ? *summary : Json(nullptr)}};
 }
 
 Json summary_crop_json(const std::optional<CropBox>& box) {

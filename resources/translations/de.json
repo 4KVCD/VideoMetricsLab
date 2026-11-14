@@ -884,7 +884,10 @@
   "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Die an jedem Rand abgeschnittenen Zeilen, wie die Zuschnitteinstellungen des Encoders sie abschneiden (ein Encode mit 22 Zeilen Zuschnitt oben und unten: Oben 22, Unten 22 für die Referenz, nichts für das bereits zugeschnittene Testvideo). Gerade Zahlen.",
   "Manual": "Manuell",
   "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Die eingegebenen Zuschnitte werden abgeschnitten, wenn diese Zeile läuft (oben:unten:links:rechts): Referenz {source}, Testvideo {test}.",
-  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Die beiden Bilder unterscheiden sich nur um wenige Zeilen: dasselbe Bild, etwas anders zugeschnitten, und die Skalierung senkt jede Bewertung. Wurde das Testvideo anders zugeschnitten, als seine schwarzen Balken erkannt wurden, geben Sie beide Zuschnitte ein (Schwarze Balken: Manuell)."
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Die beiden Bilder unterscheiden sich nur um wenige Zeilen: dasselbe Bild, etwas anders zugeschnitten, und die Skalierung senkt jede Bewertung. Wurde das Testvideo anders zugeschnitten, als seine schwarzen Balken erkannt wurden, geben Sie beide Zuschnitte ein (Schwarze Balken: Manuell).",
+  "Also score CVVDP on...": "CVVDP auch bewerten auf...",
+  "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Fügt für jedes ausgewählte Video eine Zeile hinzu, die nur CVVDP auf einem anderen Display bewertet, neben dem Display seiner eigenen Zeile. Die übrigen Metriken werden nicht erneut berechnet. Der Ergebnisexport listet alle Displays im Eintrag des Videos.",
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Die ausgewählten Zeilen bewerten CVVDP bereits auf {display}, oder es sind Auflösungstests, die nur ein Display bewerten."
  },
  "plurals": {
   "about {count} day": [
@@ -982,6 +985,10 @@
   "Use it for {count} other video without a frame rate": [
    "Auch für {count} weiteres Video ohne Bildrate verwenden",
    "Auch für {count} weitere Videos ohne Bildrate verwenden"
+  ],
+  "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
+   "{count} Zeile hinzugefügt, die CVVDP auf {display} bewertet – klicken Sie auf „Metriken berechnen“.",
+   "{count} Zeilen hinzugefügt, die CVVDP auf {display} bewerten – klicken Sie auf „Metriken berechnen“."
   ]
  }
 }

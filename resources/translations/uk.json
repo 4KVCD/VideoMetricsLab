@@ -884,7 +884,10 @@
   "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Рядки, що вирізаються з кожного краю, як їх вирізають налаштування обрізання кодувальника (для кодування з обрізанням 22 рядків згори й знизу: Згори 22, Знизу 22 для еталона, нічого для вже обрізаного тестового відео). Парні числа.",
   "Manual": "Вручну",
   "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Введене обрізання застосовується під час запуску цього рядка (згори:знизу:ліворуч:праворуч): еталон {source}, тестове відео {test}.",
-  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Два зображення відрізняються лише на кілька рядків: те саме зображення, обрізане трохи інакше, а масштабування знижує всі оцінки. Якщо тестове відео обрізано не так, як знайдено його чорні смуги, введіть обидва обрізання (Чорні смуги: Вручну)."
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Два зображення відрізняються лише на кілька рядків: те саме зображення, обрізане трохи інакше, а масштабування знижує всі оцінки. Якщо тестове відео обрізано не так, як знайдено його чорні смуги, введіть обидва обрізання (Чорні смуги: Вручну).",
+  "Also score CVVDP on...": "Оцінити CVVDP також на...",
+  "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Додає для кожного вибраного відео рядок, який оцінює лише CVVDP на іншому дисплеї, поруч із дисплеєм його власного рядка. Інші метрики не обчислюються знову. Експорт результатів перелічує всі дисплеї в записі відео.",
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Вибрані рядки вже оцінюють CVVDP на {display} або є тестами роздільності, які оцінюють лише один дисплей."
  },
  "plurals": {
   "about {count} day": [
@@ -1006,6 +1009,11 @@
    "Використати і для {count} іншого відео без частоти кадрів",
    "Використати і для {count} інших відео без частоти кадрів",
    "Використати і для {count} інших відео без частоти кадрів"
+  ],
+  "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
+   "Додано {count} рядок з оцінкою CVVDP на {display} — натисніть «Обчислити метрики».",
+   "Додано {count} рядки з оцінкою CVVDP на {display} — натисніть «Обчислити метрики».",
+   "Додано {count} рядків з оцінкою CVVDP на {display} — натисніть «Обчислити метрики»."
   ]
  }
 }

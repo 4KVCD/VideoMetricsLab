@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <stdexcept>
+#include <string_view>
 
 #include "vml/metrics.h"
+#include "vml/platform/system.h"
 
 namespace vml {
 
@@ -88,6 +90,39 @@ std::optional<bool> film_grain_variant_choice(const std::filesystem::path& path,
         }
     }
     return std::nullopt;
+}
+
+namespace {
+
+// What a display companion's name holds between the test video's name and
+// its extension: " [CVVDP on " the display "]".
+constexpr std::string_view cvvdp_variant_opening = " [CVVDP on ";
+
+// Whether a file name cannot hold `c` on some system: a made-up path is
+// never opened, but it is split as a path.
+bool unfit_for_a_file_name(char c) { return std::string_view("/\\:*?\"<>|").find(c) != std::string_view::npos; }
+
+}  // namespace
+
+std::filesystem::path synthetic_cvvdp_display_variant_path(const std::filesystem::path& row_path,
+                                                           const std::string& display) {
+    std::string shown = display;
+    std::replace_if(shown.begin(), shown.end(), unfit_for_a_file_name, '-');
+    std::filesystem::path name = row_path.stem();
+    name += platform::path_from_text(std::string(cvvdp_variant_opening) + shown + "]");
+    name += row_path.extension();
+    return row_path.parent_path() / name;
+}
+
+std::optional<std::filesystem::path> cvvdp_display_variant_parent(const std::filesystem::path& path) {
+    const std::string stem = platform::path_text(path.stem());
+    const std::size_t opening = stem.rfind(cvvdp_variant_opening);
+    if (opening == std::string::npos || stem.back() != ']') {
+        return std::nullopt;
+    }
+    std::filesystem::path name = platform::path_from_text(stem.substr(0, opening));
+    name += path.extension();
+    return path.parent_path() / name;
 }
 
 const std::vector<ResampleTarget>& resample_target_choices() {

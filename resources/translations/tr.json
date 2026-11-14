@@ -884,7 +884,10 @@
   "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Her kenardan kesilen satırlar, kodlayıcının kırpma ayarlarının kestiği gibi (üstten ve alttan 22 satır kırpılarak yapılmış bir kodlama: referans için Üst 22, Alt 22; zaten kırpılmış test videosu için hiçbir şey). Çift sayılar.",
   "Manual": "Elle",
   "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Girilen kırpmalar bu satır çalıştığında uygulanır (üst:alt:sol:sağ): referans {source}, test videosu {test}.",
-  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "İki görüntü yalnızca birkaç satır farklı: aynı görüntü biraz farklı kırpılmış ve ölçekleme her puanı düşürüyor. Test videosu, siyah bantlarının bulunduğundan farklı kırpıldıysa iki kırpmayı da girin (Siyah bantlar: Elle)."
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "İki görüntü yalnızca birkaç satır farklı: aynı görüntü biraz farklı kırpılmış ve ölçekleme her puanı düşürüyor. Test videosu, siyah bantlarının bulunduğundan farklı kırpıldıysa iki kırpmayı da girin (Siyah bantlar: Elle).",
+  "Also score CVVDP on...": "CVVDP'yi şurada da puanla...",
+  "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Seçili her video için, CVVDP'yi yalnızca başka bir ekranda puanlayan bir satır ekler; videonun kendi satırının ekranının yanında. Diğer metrikler yeniden hesaplanmaz. Sonuçları dışa aktarma, tüm ekranları videonun girdisinde listeler.",
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Seçili satırlar CVVDP'yi zaten {display} üzerinde puanlıyor ya da yalnızca tek ekranı puanlayan çözünürlük testleri."
  },
  "plurals": {
   "about {count} day": [
@@ -982,6 +985,10 @@
   "Use it for {count} other video without a frame rate": [
    "Kare hızı olmayan {count} diğer video için de kullan",
    "Kare hızı olmayan {count} diğer video için de kullan"
+  ],
+  "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
+   "CVVDP'yi {display} üzerinde puanlayan {count} satır eklendi; Metrikleri hesapla'ya tıklayın.",
+   "CVVDP'yi {display} üzerinde puanlayan {count} satır eklendi; Metrikleri hesapla'ya tıklayın."
   ]
  }
 }

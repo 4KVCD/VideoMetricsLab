@@ -884,7 +884,10 @@
   "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "الأسطر المقصوصة من كل حافة، كما تقصها إعدادات القص في المُرمِّز (ترميز صُنع بقص 22 سطرًا من الأعلى والأسفل: أعلى 22، أسفل 22 للمرجع، ولا شيء لفيديو الاختبار المقصوص أصلًا). أعداد زوجية.",
   "Manual": "يدوي",
   "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "يُقص ما أُدخِل عند تشغيل هذا الصف (أعلى:أسفل:يسار:يمين): المرجع {source}، فيديو الاختبار {test}.",
-  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "تختلف الصورتان ببضعة أسطر فقط: الصورة نفسها مقصوصة بشكل مختلف قليلًا، والتحجيم يخفض كل الدرجات. إن كان فيديو الاختبار قد قُص بغير ما وُجدت عليه أشرطته السوداء، فأدخِل القص لكليهما (الأشرطة السوداء: يدوي)."
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "تختلف الصورتان ببضعة أسطر فقط: الصورة نفسها مقصوصة بشكل مختلف قليلًا، والتحجيم يخفض كل الدرجات. إن كان فيديو الاختبار قد قُص بغير ما وُجدت عليه أشرطته السوداء، فأدخِل القص لكليهما (الأشرطة السوداء: يدوي).",
+  "Also score CVVDP on...": "تقييم CVVDP أيضًا على...",
+  "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "يضيف صفًا لكل فيديو محدد يقيّم CVVDP وحده على شاشة أخرى، بجانب شاشة صفّه. لا تُحسب المقاييس الأخرى مرة ثانية. ويسرد تصدير النتائج كل الشاشات في مُدخل الفيديو.",
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "الصفوف المحددة تقيّم CVVDP على {display} بالفعل، أو هي اختبارات دقة لا تقيّم إلا شاشة واحدة."
  },
  "plurals": {
   "about {count} day": [
@@ -1078,6 +1081,14 @@
    "استخدمه لـ {count} فيديو آخر بلا معدل إطارات",
    "استخدمه لـ {count} فيديو آخر بلا معدل إطارات",
    "استخدمه لـ {count} فيديو آخر بلا معدل إطارات"
+  ],
+  "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
+   "أُضيف {count} صف يقيّم CVVDP على {display} — انقر «حساب المقاييس».",
+   "أُضيف {count} صف يقيّم CVVDP على {display} — انقر «حساب المقاييس».",
+   "أُضيف {count} صف يقيّمان CVVDP على {display} — انقر «حساب المقاييس».",
+   "أُضيفت {count} صفوف تقيّم CVVDP على {display} — انقر «حساب المقاييس».",
+   "أُضيف {count} صفًا تقيّم CVVDP على {display} — انقر «حساب المقاييس».",
+   "أُضيف {count} صف تقيّم CVVDP على {display} — انقر «حساب المقاييس»."
   ]
  }
 }

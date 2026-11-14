@@ -28,14 +28,22 @@ struct Dialogs;
 
 enum class ResultsFormat { csv, json };
 
+// CVVDP on a further display of a run: the display's preset, and the result
+// of the row that scored CVVDP on it (a display companion's).
+struct ExportedDisplay {
+    std::string name;
+    std::shared_ptr<const ComparisonResult> result;
+};
+
 // A run to export: its result, the name the window gives it, why each
-// metric that failed on its last run did, and the preset of the display its
-// CVVDP score is for (none without one).
+// metric that failed on its last run did, the preset of the display its
+// CVVDP score is for (none without one), and CVVDP on further displays.
 struct ExportedRun {
     std::shared_ptr<const ComparisonResult> result;
     QString label;
     std::map<std::string, QString> failures{};
     std::string cvvdp_display{};
+    std::vector<ExportedDisplay> other_displays{};
 };
 
 // The runs as one document: the reference the Videos tab compares with

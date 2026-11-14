@@ -3,7 +3,9 @@
 // panel, and each control the user edits applied to them.
 #include <QComboBox>
 #include <QLabel>
+#include <QMenu>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
@@ -16,6 +18,7 @@
 #include <vector>
 
 #include "cvvdp_display_dialog.h"
+#include "formatting.h"
 #include "i18n.h"
 #include "main_window.h"
 #include "options_panel.h"
@@ -377,6 +380,9 @@ void MainWindow::add_opposite_scale_direction_rows(const std::vector<int>& rows)
         if (row_data.options.resample_test) {
             continue;  // a resolution test scales the reference itself, in no direction
         }
+        if (row_data.cvvdp_display_of) {
+            continue;  // a row scoring another display: its own row is the one to test both ways
+        }
         if (row_data.scale_direction_pinned) {
             // Already a companion row: the row it was made from is the other
             // direction, so the pair is complete. Without this, "Test both" on
@@ -432,10 +438,17 @@ void MainWindow::apply_cvvdp(const std::function<CvvdpSettings(const CvvdpSettin
     std::vector<int> changed;
     for (const int row : rows ? *rows : panel_target_rows_) {
         RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        const CvvdpSettings settings = change(row_data.cvvdp);
+        if (row_data.cvvdp_display_of &&
+            (automatic.value_or(false) || settings.display.identity() != row_data.cvvdp.display.identity())) {
+            // A row scoring another display (add_cvvdp_display_rows) keeps the
+            // display its name says, when its own row, selected with it, is
+            // given another; whether the video fills the display follows.
+            continue;
+        }
         if (automatic) {
             row_data.cvvdp_automatic = *automatic;
         }
-        const CvvdpSettings settings = change(row_data.cvvdp);
         if (preset_name && *preset_name != row_data.cvvdp_preset) {
             row_data.cvvdp_preset = *preset_name;
             set_row_metrics(row);  // the score's tooltip names the preset
@@ -662,6 +675,74 @@ void MainWindow::on_cvvdp_delete_preset() {
                       : app::tr("Deleted the CVVDP preset \"{name}\".", {{"name", quoted}}));
 }
 
+void MainWindow::on_cvvdp_other_display_requested() {
+    // A menu of every preset under the button; the one chosen is scored for
+    // the selected rows beside their own displays.
+    if (panel_target_rows_.empty() || run_active_) {
+        return;
+    }
+    QMenu menu(this);
+    for (const CvvdpPreset& preset : cvvdp_presets(settings_.cvvdp_presets_json)) {
+        menu.addAction(preset_label(preset))->setData(QString::fromStdString(preset.name));
+    }
+    const QPushButton* button = options_panel_->cvvdp_other_button;
+    const QAction* chosen = menu.exec(button->mapToGlobal(QPoint(0, button->height())));
+    if (chosen == nullptr || run_active_) {
+        return;
+    }
+    if (const std::optional<CvvdpPreset> preset =
+            cvvdp_preset_named(chosen->data().toString().toStdString(), settings_.cvvdp_presets_json)) {
+        add_cvvdp_display_rows(panel_target_rows_, *preset);
+    }
+}
+
+void MainWindow::add_cvvdp_display_rows(const std::vector<int>& rows, const CvvdpPreset& preset) {
+    // For each of `rows`, a row that scores CVVDP alone on `preset`'s display:
+    // the other metrics stay the row's own, calculated once. Its saved scores
+    // are its display's, as every row's, so a display added to a finished run
+    // calculates only that display.
+    int added = 0;
+    // By value: adding rows does not change these, but the selection can.
+    for (const int row : std::vector<int>(rows)) {
+        const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        if (row_data.cvvdp_display_of || row_data.options.resample_test) {
+            continue;  // a display row already, or a resolution test (as "Test both" leaves them)
+        }
+        CvvdpSettings settings = row_data.cvvdp;
+        settings.display = preset.settings.display;  // whether the video fills the display stays its own
+        const std::filesystem::path path = synthetic_cvvdp_display_variant_path(row_data.path, preset.name);
+        if (settings.same_as(row_data.cvvdp) || row_index_of_path(path)) {
+            continue;  // the row's own display, or one added already
+        }
+        const std::filesystem::path parent = row_data.path;
+        add_companion_row(row, path, [&](RowData& display_row) {
+            display_row.cvvdp = settings;
+            display_row.cvvdp_preset = preset.name;
+            display_row.cvvdp_automatic = false;
+            display_row.cvvdp_display_of = parent;
+            VmafOptions& options = display_row.options;
+            options.compute_vmaf = false;
+            options.compute_vmaf_neg = false;
+            options.compute_vmaf_v1 = false;
+            options.compute_xpsnr = false;
+            options.extra_features.clear();
+            display_row.extra_metric_keys = {"cvvdp"};
+        });
+        ++added;
+    }
+    const QString display = preset_label(preset);
+    if (added == 0) {
+        dialogs_.inform(app::tr("Nothing to add"),
+                        app::tr("The selected rows already score CVVDP on {display}, or are resolution tests, which "
+                                "score one display only.",
+                                {{"display", display}}));
+        return;
+    }
+    show_status(ntr("Added {count} row scoring CVVDP on {display} -- click Calculate metrics.",
+                    "Added {count} rows scoring CVVDP on {display} -- click Calculate metrics.", added,
+                    {{"display", display}}));
+}
+
 // ------------------------------------------------------------- film grain
 
 std::vector<std::filesystem::path> MainWindow::choose_film_grain(const std::vector<int>& rows, bool reference,
@@ -752,7 +833,7 @@ void MainWindow::offer_film_grain_twins(const std::vector<std::filesystem::path>
         }
         // Not a twin itself, nor a row that has one (film_grain_twinned).
         const RowData& row_data = *rows_[static_cast<std::size_t>(*row)];
-        const bool can = !row_data.options.resample_test && row_data.video_info &&
+        const bool can = !row_data.options.resample_test && !row_data.cvvdp_display_of && row_data.video_info &&
                          film_grain_choosable(*row_data.video_info) && !film_grain_twinned(row_data);
         return can ? &row_data : nullptr;
     };

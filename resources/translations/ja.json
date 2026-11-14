@@ -884,7 +884,10 @@
   "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "各辺から切り取る行数です。エンコーダーのクロップ設定と同じように切り取ります（上下 22 行をクロップしたエンコードなら、参照動画は上 22・下 22、すでにクロップ済みのテスト動画は何も入力しません）。偶数で入力します。",
   "Manual": "手動",
   "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "入力したクロップは、この行の実行時に切り取られます（上:下:左:右）：参照動画 {source}、テスト動画 {test}。",
-  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "2 つの映像は数行しか違いません。同じ映像を少し違うクロップで切り出したもので、拡大縮小によってすべてのスコアが下がります。テスト動画が、検出された黒帯とは違う形でクロップされている場合は、両方のクロップを入力してください（黒帯の扱い：手動）。"
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "2 つの映像は数行しか違いません。同じ映像を少し違うクロップで切り出したもので、拡大縮小によってすべてのスコアが下がります。テスト動画が、検出された黒帯とは違う形でクロップされている場合は、両方のクロップを入力してください（黒帯の扱い：手動）。",
+  "Also score CVVDP on...": "CVVDP を別のディスプレイでも評価...",
+  "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "選択した各動画に、別のディスプレイで CVVDP だけを評価する行を、その動画の行のディスプレイと並べて追加します。ほかの指標は再計算しません。結果のエクスポートでは、すべてのディスプレイを動画の項目に記載します。",
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "選択した行はすでに {display} で CVVDP を評価しているか、1 つのディスプレイしか評価しない解像度テストです。"
  },
  "plurals": {
   "about {count} day": [
@@ -958,6 +961,9 @@
   ],
   "Use it for {count} other video without a frame rate": [
    "フレームレートのない他の {count} 本の動画にも使用する"
+  ],
+  "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
+   "{display} で CVVDP を評価する行を {count} 行追加しました。［指標を計算］をクリックしてください。"
   ]
  }
 }

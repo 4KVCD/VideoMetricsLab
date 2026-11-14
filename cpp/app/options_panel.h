@@ -129,6 +129,7 @@ public:
     QPushButton* cvvdp_add_button = nullptr;
     QPushButton* cvvdp_edit_button = nullptr;
     QPushButton* cvvdp_delete_button = nullptr;
+    QPushButton* cvvdp_other_button = nullptr;
     QCheckBox* cvvdp_resize_check = nullptr;
     QCheckBox* gpu_checkbox = nullptr;
     QComboBox* gpu_vendor_combo = nullptr;
@@ -149,6 +150,9 @@ signals:
     void cvvdp_add_requested();
     void cvvdp_edit_requested();
     void cvvdp_delete_requested();
+    // "Also score CVVDP on...": the selected videos are to be scored on
+    // another display too.
+    void cvvdp_other_display_requested();
     // The resolution mismatch dropdown changed to this index (2: "Test both").
     void scale_direction_chosen(int index);
     // The Film grain dropdown chose with the grain (true) or without.

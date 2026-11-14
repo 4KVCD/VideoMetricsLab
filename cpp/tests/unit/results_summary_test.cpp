@@ -29,10 +29,16 @@ TEST(ResultsSummary, HasTheBandsAndSecondsAndCsvColumnsOfEveryVideo) {
     const nlohmann::ordered_json document{
         {"videos",
          {{{"path", "a,b.mkv"}, {"metrics", {{"vmaf", {{"score", 82.0}}}}}},
-          {{"path", "c.mkv"}, {"label", "say \"hi\""}, {"reference_crop", nullptr}}}}};
-    EXPECT_EQ(results_csv(document), "\xEF\xBB\xBFpath,metrics.vmaf.score,label,reference_crop\r\n"
-                                     "\"a,b.mkv\",82.0,,\r\n"
-                                     "c.mkv,,\"say \"\"hi\"\"\",\r\n");
+          {{"path", "c.mkv"},
+           {"label", "say \"hi\""},
+           {"reference_crop", nullptr},
+           {"notes", {"x"}},
+           {"cvvdp_displays", {{{"score", 9.0}}, {{"score", 8.0}}}}}}}};
+    EXPECT_EQ(results_csv(document),
+              "\xEF\xBB\xBFpath,metrics.vmaf.score,label,reference_crop,notes,cvvdp_displays.0.score,"
+              "cvvdp_displays.1.score\r\n"
+              "\"a,b.mkv\",82.0,,,,,\r\n"
+              "c.mkv,,\"say \"\"hi\"\"\",,\"[\"\"x\"\"]\",9.0,8.0\r\n");
 }
 
 }  // namespace

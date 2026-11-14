@@ -50,28 +50,30 @@ void add_other_display_rows(const TestVideo& video, std::vector<std::vector<std:
     }
 }
 
-// CVVDP on one display, as --json lists each display's: the display, and
-// its score or why there is none.
+// CVVDP on one display, as --json lists each display's: the display, its
+// parameters and CVVDP's summary (as the window's export writes them), and
+// why there is no score.
 Json display_entry(const TestVideo& target) {
-    const std::optional<Json> summary = target.result ? metric_summary(*target.result, "cvvdp") : std::nullopt;
-    Json entry{{"display", target.display}, {"score", summary ? summary->at("score") : Json(nullptr)}};
+    Json entry = cvvdp_display_entry(target.display, target.result ? &*target.result : nullptr);
     if (target.result) {
         entry["from_saved_scores"] = target.from_cache;
     }
-    if (target.csv_file) {
+    // A further display's run is CVVDP's alone, so its CSV and notes are this
+    // display's; the first display's are the video's own, on its entry.
+    if (target.for_display_only && target.csv_file) {
         entry["csv"] = platform::path_text(*target.csv_file);
     }
-    if (!target.notes.empty()) {
+    if (target.for_display_only && !target.notes.empty()) {
         entry["notes"] = target.notes;
     }
-    std::string reason = target.error;
-    if (reason.empty()) {
-        const auto cvvdp = std::find_if(target.failures.begin(), target.failures.end(),
-                                        [](const auto& failure) { return failure.first == "cvvdp"; });
-        reason = cvvdp != target.failures.end() ? cvvdp->second : "";
-    }
-    if (reason.empty() && !target.failures.empty()) {
-        reason = target.failures.front().second;
+    const auto cvvdp = std::find_if(target.failures.begin(), target.failures.end(),
+                                    [](const auto& failure) { return failure.first == "cvvdp"; });
+    std::string reason = cvvdp != target.failures.end() ? cvvdp->second : "";
+    if (reason.empty() && entry.at("score").is_null()) {
+        // No score, and CVVDP's own failure does not say why: the run's does.
+        reason = !target.error.empty()        ? target.error
+                 : !target.failures.empty() ? target.failures.front().second
+                                            : "";
     }
     if (!reason.empty()) {
         entry["error"] = reason;
@@ -367,7 +369,8 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
         if (!video.display.empty()) {
             entry["cvvdp_display"] = video.display;
         }
-        if (!video.other_displays.empty()) {
+        if (!video.display.empty() || !video.other_displays.empty()) {
+            // Every display CVVDP was asked on, the first (metrics.cvvdp's) too.
             Json displays = Json::array({display_entry(video)});
             for (const TestVideo& other : video.other_displays) {
                 displays.push_back(display_entry(other));

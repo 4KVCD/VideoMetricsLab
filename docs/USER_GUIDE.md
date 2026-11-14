@@ -37,6 +37,14 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one.
 
+**Also score CVVDP on...**, under the Options panel's display presets, scores
+CVVDP on further displays in the same run: pick a display, and each selected
+video gets a row of its own that calculates CVVDP alone on that display (the
+other metrics are not calculated again). Repeat it for more displays.
+**Export results** lists every display's CVVDP score in the video's entry:
+`cvvdp_displays` in the JSON, columns `cvvdp_displays.0.score`,
+`cvvdp_displays.1.score`... in the CSV.
+
 **Settings > Window** chooses the theme (the system's, Light or Dark) and
 whether the app reopens the videos it had open when it was last closed (off by
 default).
@@ -283,7 +291,7 @@ $run.videos[0].metrics.vmaf.score
 | `--film-grain with\|without` | Score with the film grain a video's stream asks the player to add, as players show it, or without it, the coded pictures only. Left out: as Settings' **Film grain** default says; with, where it asks. |
 | `--fps RATE` | The frame rate of a raw video stream or raw YUV file (below), such as `24000/1001`, `23.976` or `60`, in place of a rate the stream stores. Required for a raw YUV file and for a raw stream that stores none, when the reference or a test video is one. These scores are not saved. |
 | `--size WIDTHxHEIGHT`, `--pix-fmt FORMAT` | The picture size and pixel format (as FFmpeg names it: `yuv420p`, `yuv420p10le`...) of a raw YUV file (below). Required with `--fps` for one. |
-| `--cvvdp-display PRESET` | The display CVVDP models, by preset name. Repeat it for a CVVDP score on each display. Left out: the app's default display, Automatic unless Settings name a preset: the HDR display (`30-inch 4K HDR monitor, dim room`, the official `standard_hdr_pq`) for an HDR reference (PQ or HLG), the SDR one (`30-inch 4K monitor, office`, `standard_4k`) otherwise. |
+| `--cvvdp-display PRESET` | The display CVVDP models, by preset name. Repeat it for a CVVDP score on each display; the JSON then lists each display's name, score, display parameters and full CVVDP statistics in the video's `cvvdp_displays`. Left out: the app's default display, Automatic unless Settings name a preset: the HDR display (`30-inch 4K HDR monitor, dim room`, the official `standard_hdr_pq`) for an HDR reference (PQ or HLG), the SDR one (`30-inch 4K monitor, office`, `standard_4k`) otherwise. |
 | `--cvvdp-fill` | Scale the compared frames up to fill CVVDP's display, aspect kept, as the Options panel's **Scale the video to fill the display**. Left out: off, as the official tool (a 1080p video covers a quarter of a 4K display). These scores are saved apart. |
 | `--subsample N` | Score every N-th frame. CVVDP needs every frame. |
 | `--cpu` | Calculate on the CPU every metric that can be (CVVDP is GPU only): VMAF as with `--vmaf-on cpu`, unless `--vmaf-on` says otherwise, and SSIMULACRA2 and Butteraugli with libjxl rather than on the GPU. |

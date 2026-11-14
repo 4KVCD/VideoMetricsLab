@@ -884,7 +884,10 @@
   "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "De regels die van elke rand worden afgesneden, zoals de bijsnij-instellingen van de encoder ze afsnijden (een encode gemaakt met 22 regels bijsnijding boven en onder: Boven 22, Onder 22 voor de referentie, niets voor de al bijgesneden testvideo). Even getallen.",
   "Manual": "Handmatig",
   "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "De ingevoerde bijsnijdingen worden toegepast wanneer deze rij draait (boven:onder:links:rechts): referentie {source}, testvideo {test}.",
-  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "De twee beelden verschillen maar een paar regels: hetzelfde beeld, iets anders bijgesneden, en het schalen verlaagt elke score. Is de testvideo anders bijgesneden dan zijn zwarte balken werden gevonden, voer dan beide bijsnijdingen in (Zwarte balken: Handmatig)."
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "De twee beelden verschillen maar een paar regels: hetzelfde beeld, iets anders bijgesneden, en het schalen verlaagt elke score. Is de testvideo anders bijgesneden dan zijn zwarte balken werden gevonden, voer dan beide bijsnijdingen in (Zwarte balken: Handmatig).",
+  "Also score CVVDP on...": "CVVDP ook scoren op...",
+  "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Voegt voor elke geselecteerde video een rij toe die alleen CVVDP scoort op een ander scherm, naast het scherm van zijn eigen rij. De andere metrieken worden niet opnieuw berekend. Het exporteren van resultaten vermeldt alle schermen bij de video.",
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "De geselecteerde rijen scoren CVVDP al op {display}, of zijn resolutietests, die maar één scherm scoren."
  },
  "plurals": {
   "about {count} day": [
@@ -982,6 +985,10 @@
   "Use it for {count} other video without a frame rate": [
    "Ook gebruiken voor {count} andere video zonder framesnelheid",
    "Ook gebruiken voor {count} andere video's zonder framesnelheid"
+  ],
+  "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
+   "{count} rij toegevoegd die CVVDP scoort op {display} — klik op Metrieken berekenen.",
+   "{count} rijen toegevoegd die CVVDP scoren op {display} — klik op Metrieken berekenen."
   ]
  }
 }

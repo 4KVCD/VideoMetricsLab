@@ -10,13 +10,16 @@
 #include <optional>
 #include <string>
 
+#include "vml/cvvdp.h"
 #include "vml/results.h"
 #include "vml/video.h"
 
 namespace vml {
 
-// The JSON's version of the shape; a later one only adds to it.
-inline constexpr int results_format = 1;
+// The JSON's version of the shape; a later one only adds to it, and a reader
+// skips the keys it does not know. 2: every display CVVDP was scored on, each
+// with its parameters and full summary ("cvvdp_displays").
+inline constexpr int results_format = 2;
 
 // A number as the JSON has it: "inf" or "-inf" (JSON has no infinity), and
 // null for none or NaN.
@@ -34,6 +37,16 @@ std::optional<double> summary_number(const nlohmann::ordered_json& number);
 // "per_second". Statistics of no frames (every score NaN) are null. Nothing
 // if the result has none of the metric.
 std::optional<nlohmann::ordered_json> metric_summary(const ComparisonResult& result, const std::string& key);
+
+// The display a CVVDP score was made for, as its provenance records it;
+// nothing for a record CVVDP cannot read (an old or hand-edited one).
+std::optional<CvvdpSettings> cvvdp_display_of(const SequenceMetricResult& cvvdp);
+
+// CVVDP on one display, as "cvvdp_displays" lists each: the display's name,
+// its score, its parameters as the score records them (null where it records
+// none) and CVVDP's full summary (metric_summary). The score and the summary
+// are null where `result` has no score.
+nlohmann::ordered_json cvvdp_display_entry(const std::string& name, const ComparisonResult* result);
 
 // A crop as the summary's JSON has it (x, y, width, height), or null for none.
 nlohmann::ordered_json summary_crop_json(const std::optional<CropBox>& box);

@@ -884,7 +884,10 @@
   "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Řádky odříznuté z každého okraje, jak je odřízne nastavení ořezu enkodéru (enkód vytvořený s ořezem 22 řádků nahoře a dole: Nahoře 22, Dole 22 u reference, nic u testovacího videa, už oříznutého). Sudá čísla.",
   "Manual": "Ručně",
   "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Zadané ořezy se odříznou při spuštění tohoto řádku (nahoře:dole:vlevo:vpravo): reference {source}, testovací video {test}.",
-  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Oba obrazy se liší jen o pár řádků: stejný obraz oříznutý trochu jinak, a změna velikosti snižuje všechna skóre. Pokud bylo testovací video oříznuto jinak, než byly nalezeny jeho černé pruhy, zadejte oba ořezy (Černé pruhy: Ručně)."
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Oba obrazy se liší jen o pár řádků: stejný obraz oříznutý trochu jinak, a změna velikosti snižuje všechna skóre. Pokud bylo testovací video oříznuto jinak, než byly nalezeny jeho černé pruhy, zadejte oba ořezy (Černé pruhy: Ručně).",
+  "Also score CVVDP on...": "Hodnotit CVVDP také na...",
+  "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Přidá ke každému vybranému videu řádek, který hodnotí jen CVVDP na jiném displeji, vedle displeje jeho vlastního řádku. Ostatní metriky se znovu nepočítají. Export výsledků uvede všechny displeje v záznamu videa.",
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Vybrané řádky už hodnotí CVVDP na {display}, nebo jsou to testy rozlišení, které hodnotí jen jeden displej."
  },
  "plurals": {
   "about {count} day": [
@@ -1006,6 +1009,11 @@
    "Použít i pro {count} další video bez snímkové frekvence",
    "Použít i pro {count} další videa bez snímkové frekvence",
    "Použít i pro {count} dalších videí bez snímkové frekvence"
+  ],
+  "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
+   "Přidán {count} řádek hodnotící CVVDP na {display} — klikněte na Spočítat metriky.",
+   "Přidány {count} řádky hodnotící CVVDP na {display} — klikněte na Spočítat metriky.",
+   "Přidáno {count} řádků hodnotících CVVDP na {display} — klikněte na Spočítat metriky."
   ]
  }
 }

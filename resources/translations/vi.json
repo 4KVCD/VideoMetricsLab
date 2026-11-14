@@ -884,7 +884,10 @@
   "The lines cut from each edge, as the encoder's crop settings cut them (an encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom 22 for the reference, nothing for the test video, already cropped). Even numbers.": "Số dòng cắt khỏi mỗi cạnh, như cài đặt cắt của bộ mã hóa cắt chúng (bản mã hóa làm với vùng cắt 22 dòng ở trên và dưới: Trên 22, Dưới 22 cho video tham chiếu, không nhập gì cho video thử đã được cắt). Số chẵn.",
   "Manual": "Thủ công",
   "The crops entered are cut when this row runs (top:bottom:left:right): reference {source}, test video {test}.": "Vùng cắt đã nhập được áp dụng khi hàng này chạy (trên:dưới:trái:phải): tham chiếu {source}, video thử {test}.",
-  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Hai hình chỉ khác nhau vài dòng: cùng một hình được cắt hơi khác, và việc thay đổi kích thước làm giảm mọi điểm số. Nếu video thử được cắt khác với viền đen đã tìm thấy, hãy nhập cả hai vùng cắt (Viền đen: Thủ công)."
+  "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Hai hình chỉ khác nhau vài dòng: cùng một hình được cắt hơi khác, và việc thay đổi kích thước làm giảm mọi điểm số. Nếu video thử được cắt khác với viền đen đã tìm thấy, hãy nhập cả hai vùng cắt (Viền đen: Thủ công).",
+  "Also score CVVDP on...": "Chấm CVVDP cả trên...",
+  "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Thêm cho mỗi video được chọn một hàng chỉ chấm CVVDP trên một màn hình khác, cạnh màn hình của hàng riêng của nó. Các chỉ số khác không được tính lại. Xuất kết quả liệt kê mọi màn hình trong mục của video.",
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Các hàng được chọn đã chấm CVVDP trên {display}, hoặc là bài thử độ phân giải, chỉ chấm một màn hình."
  },
  "plurals": {
   "about {count} day": [
@@ -958,6 +961,9 @@
   ],
   "Use it for {count} other video without a frame rate": [
    "Dùng cho cả {count} video khác không có tốc độ khung hình"
+  ],
+  "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
+   "Đã thêm {count} hàng chấm CVVDP trên {display} — bấm Tính chỉ số."
   ]
  }
 }

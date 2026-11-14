@@ -199,7 +199,13 @@ TEST(CommandLine, CsvFilesKeepWhatIsThereAndSayWhereTheyWent) {
     other.display = "standard_hdr_pq";
     other.for_display_only = true;
     other.notes = {"calculated on the CPU"};
-    other.result.emplace().metric_results.add(SequenceMetricResult{"cvvdp", 8.5, {}, {0}, {0.0}, {}});
+    const CvvdpSettings hdr = cvvdp_preset_named(std::string(hdr_cvvdp_preset), "")->settings;
+    MetricProvenance made_for_hdr;
+    const nlohmann::ordered_json hdr_parameters = hdr.parameters();
+    for (const auto& [name, value] : hdr_parameters.items()) {
+        made_for_hdr.parameters[name] = value.dump();
+    }
+    other.result.emplace().metric_results.add(SequenceMetricResult{"cvvdp", 8.5, made_for_hdr, {0}, {0.0}, {8.5F}});
     std::ofstream(folder / "a_b.csv") << "an earlier run's";
     std::vector<std::string> said;
     const auto ignore = [](const std::string&) {};
@@ -215,8 +221,17 @@ TEST(CommandLine, CsvFilesKeepWhatIsThereAndSayWhereTheyWent) {
     const nlohmann::ordered_json document = results_document(source, videos, summarize(videos), false);
     const nlohmann::ordered_json& entry = document["videos"][0];
     EXPECT_EQ(entry["csv"], platform::path_text(folder / "a_b_2.csv"));
-    EXPECT_EQ(entry["cvvdp_displays"][1]["csv"], platform::path_text(folder / "a_b_standard_hdr_pq.csv"));
-    EXPECT_EQ(entry["cvvdp_displays"][1]["notes"][0], "calculated on the CPU");
+    // Each display's entry: its own CSV and notes (the first's are the
+    // video's, on its entry), its parameters and CVVDP's whole summary.
+    const nlohmann::ordered_json& first = entry["cvvdp_displays"][0];
+    const nlohmann::ordered_json& further = entry["cvvdp_displays"][1];
+    EXPECT_FALSE(first.contains("csv"));
+    EXPECT_TRUE(first["display_parameters"].is_null());  // no CVVDP score
+    EXPECT_EQ(further["csv"], platform::path_text(folder / "a_b_standard_hdr_pq.csv"));
+    EXPECT_EQ(further["notes"][0], "calculated on the CPU");
+    EXPECT_EQ(further["display_parameters"], nlohmann::ordered_json(hdr.parameters()));
+    EXPECT_EQ(further["cvvdp"]["score"], 8.5);
+    EXPECT_EQ(further["cvvdp"]["per_second"]["seconds"], 1);
 }
 
 // The devices command says where each metric is calculated as the Python

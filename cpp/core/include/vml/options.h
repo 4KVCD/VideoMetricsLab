@@ -70,6 +70,17 @@ std::filesystem::path synthetic_film_grain_variant_path(const std::filesystem::p
 std::optional<bool> film_grain_variant_choice(const std::filesystem::path& path,
                                               const std::filesystem::path& distorted);
 
+// A made-up path that stands for a row scoring CVVDP alone, on another
+// display, for the row of `row_path` ("film [CVVDP on 65-inch TV].mkv"), so
+// that a video's CVVDP on several displays sits side by side. Characters a
+// file name cannot hold are replaced in the display's name: it only names.
+std::filesystem::path synthetic_cvvdp_display_variant_path(const std::filesystem::path& row_path,
+                                                           const std::string& display);
+
+// The path of the row `path` scores another display for, when it is a
+// synthetic_cvvdp_display_variant_path; nothing otherwise.
+std::optional<std::filesystem::path> cvvdp_display_variant_parent(const std::filesystem::path& path);
+
 // Which bundled Vship build calculates SSIMULACRA2, Butteraugli and CVVDP on
 // the GPU: Vship-fast, which computes as libjxl and pycvvdp do, or stock Vship:
 // its Vulkan build (5.1.2), or for a GPU whose Vulkan driver has problems its HIP

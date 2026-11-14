@@ -243,6 +243,21 @@ TEST(MetricCache, AFilmGrainTwinsPathSaysItsChoice) {
               std::nullopt);
 }
 
+// A row scoring CVVDP on a further display is known by a made-up path its
+// saved run leads back from to the row it belongs to, the film grain twin's
+// included; characters a file name cannot hold become '-'.
+TEST(MetricCache, ADisplayCompanionsPathLeadsBackToItsRow) {
+    const std::filesystem::path film("encodes/film.mkv");
+    const std::filesystem::path on_hdr = synthetic_cvvdp_display_variant_path(film, "HDR TV: 1000 nits / P3?");
+    EXPECT_EQ(on_hdr, std::filesystem::path("encodes/film [CVVDP on HDR TV- 1000 nits - P3-].mkv"));
+    EXPECT_EQ(cvvdp_display_variant_parent(on_hdr), film);
+    const std::filesystem::path twin = synthetic_film_grain_variant_path(film, false);
+    EXPECT_EQ(cvvdp_display_variant_parent(synthetic_cvvdp_display_variant_path(twin, "sdr")), twin);
+    EXPECT_EQ(cvvdp_display_variant_parent(film), std::nullopt);
+    EXPECT_EQ(cvvdp_display_variant_parent(twin), std::nullopt);
+    EXPECT_EQ(cvvdp_display_variant_parent("encodes/film [CVVDP on sdr] cut.mkv"), std::nullopt);
+}
+
 // A duration limit's scores, saved before ranges under the name of the range
 // from 0, answer that range when they reach its end (VMAF with the frame
 // after it, which its last frame's motion looked at), cut to it, CVVDP's
