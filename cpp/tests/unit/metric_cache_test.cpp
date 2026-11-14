@@ -574,10 +574,13 @@ TEST(MetricCache, StoresAResultAsThePythonApp) {
         const ComparisonResult result = test::result_from(stored.at("result"));
         const std::filesystem::path directory = store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4",
                                                              request.recipe, result, stored.at("label"), request.metrics);
-        // As the Python app's but for the build that saved it, which it did not say
+        // As the Python app's but for the build that saved it and the black-bar
+        // rule, which it did not say
         nlohmann::json context = nlohmann::json::parse(platform::read_file(directory / "context.json").value_or(""));
         EXPECT_EQ(context.value("saved_by", ""), build_stamp());
+        EXPECT_EQ(context.value("black_bars_rule", 0), black_bars_rule_version);
         context.erase("saved_by");
+        context.erase("black_bars_rule");
         EXPECT_EQ(python_json_compact(context), stored.at("context").get<std::string>());
         std::map<std::string, std::string> files;
         for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(directory)) {
@@ -659,6 +662,58 @@ TEST(MetricCache, AnMpegPairsScoresSavedBeforeSoftwareDecodingAreCalculatedAgain
     EXPECT_EQ(loaded_after("hevc", "mpeg2video"), 0U);
     EXPECT_EQ(loaded_after("mpeg2video", "mpeg2video"), all);
     EXPECT_EQ(loaded_after("hevc", "mpeg4"), 0U);
+}
+
+// Scores of pictures whose detected black bars were cut by the rule before odd
+// bars were rounded up to even (issue #12: a context without "black_bars_rule")
+// are calculated again, and their files go when new scores are saved there;
+// scores of pictures cut by the rule now, or not cut, are read.
+TEST(MetricCache, ScoresOfBarsCutByAnOlderRuleAreCalculatedAgain) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    AnalysisRequest request = request_from(stored);
+    request.recipe.crop_mode = CropMode::automatic;
+    ComparisonResult result = test::result_from(stored.at("result"));
+    const auto [width, height] = result.source_info.frame_size();
+    const CropBox letterbox{width, height - 40, 0, 20};
+    const auto store = [&](const std::optional<CropBox>& crop, bool older_rule,
+                           const std::vector<MetricRequestSpec>& metrics) {
+        result.source_crop = crop;
+        const std::filesystem::path directory =
+            store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe, result, "t", metrics);
+        if (older_rule) {
+            nlohmann::json context = nlohmann::json::parse(*platform::read_file(directory / "context.json"));
+            context.erase("black_bars_rule");
+            touch(directory / "context.json", context.dump());
+        }
+    };
+    const auto loaded = [&] {
+        const auto found = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                       request.metrics, request.perceptual_backends);
+        return found ? found->first.metric_results.keys().size() : 0;
+    };
+    CvvdpSettings other_display = cvvdp_from(stored);
+    other_display.resize_to_display = !other_display.resize_to_display;
+    const AnalysisRequest other_request = analysis_request(options_from(stored.at("options")), {"cvvdp"}, {},
+                                                           other_display, VideoInfo{}, VideoInfo{});
+    const auto other_displays = [&] {
+        const auto listed = other_cvvdp_scores(folder / "cache", folder / "s.mp4", folder / "t.mp4",
+                                               request.recipe, other_request.metrics);
+        return listed ? listed->scores.size() : 0U;
+    };
+    store(letterbox, false, request.metrics);
+    ASSERT_EQ(loaded(), request.metrics.size());
+    ASSERT_EQ(other_displays(), 1U);
+    store(letterbox, true, request.metrics);
+    EXPECT_EQ(loaded(), 0U);
+    EXPECT_EQ(other_displays(), 0U);
+    // One metric saved again by the rule now: the others' old files are gone
+    store(letterbox, false, {request.metrics.front()});
+    EXPECT_EQ(loaded(), 1U);
+    store(std::nullopt, true, {request.metrics.front()});  // nothing cut
+    EXPECT_EQ(loaded(), 1U);
 }
 
 // A score of a pair with a video scored with its AV1 film grain, or an AV1

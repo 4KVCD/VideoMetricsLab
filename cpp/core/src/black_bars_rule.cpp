@@ -102,24 +102,31 @@ CropBox handbrake_box(const std::vector<BarEdges>& counted, std::size_t decoded,
         std::sort(edge->begin(), edge->end());
     }
     std::size_t index = counted.size() / 2;  // the median
-    // Pictures with ten or more lines more on an edge than its median: four
-    // or more, and the video changes shape (HandBrake's 9-pixel threshold and
-    // switch count for fewer than 30 previews): the smallest bars, cutting
-    // no picture.
-    const int median[4] = {top[index], bottom[index], left[index], right[index]};
-    const auto shows_more = [&median](const BarEdges& edges) {
-        return edges.top < median[0] - 9 || edges.bottom < median[1] - 9 || edges.left < median[2] - 9 ||
-               edges.right < median[3] - 9;
-    };
-    if (std::count_if(counted.begin(), counted.end(), shows_more) >= 4) {
+    // Bars ten or more lines thinner than an edge's median: four or more,
+    // and the video changes shape (HandBrake's 9-pixel threshold and switch
+    // count for fewer than 30 previews): the smallest bars, cutting no
+    // picture. Counted as HandBrake counts them, at the same place in the
+    // four sorted edges, not picture by picture: the most such bars on any
+    // one edge.
+    std::size_t thinner = 0;
+    for (std::size_t x = 0; x < counted.size(); ++x) {
+        if (top[x] < top[index] - 9 || bottom[x] < bottom[index] - 9 || left[x] < left[index] - 9 ||
+            right[x] < right[index] - 9) {
+            ++thinner;
+        }
+    }
+    if (thinner >= 4) {
         index = 0;
     }
-    const auto even = [](int lines) { return lines & ~1; };
-    const int t = even(top[index]);
-    const int b = even(bottom[index]);
-    const int l = even(left[index]);
-    const int r = even(right[index]);
-    return CropBox{even(width - l - r), even(height - t - b), l, t};
+    // Each edge rounded up to even, as HandBrake's EVEN() does (an odd bar's
+    // last line is cut with it); the box's size rounded down, so that an
+    // odd-sized frame's box stays inside it.
+    const auto even_up = [](int lines) { return lines + (lines & 1); };
+    const int t = even_up(top[index]);
+    const int b = even_up(bottom[index]);
+    const int l = even_up(left[index]);
+    const int r = even_up(right[index]);
+    return CropBox{(width - l - r) & ~1, (height - t - b) & ~1, l, t};
 }
 
 Y4mLumaReader::Y4mLumaReader(std::function<std::size_t(void*, std::size_t)> read) : read_(std::move(read)) {}

@@ -27,6 +27,13 @@ namespace vml {
 // The format of the saved scores this app reads and writes.
 inline constexpr int metric_cache_format_version = 2;
 
+// The black-bar rule a comparison's detected bars were cut by, as its
+// context.json says it ("black_bars_rule"; 1 where it says none). 2: odd
+// bars rounded up to even, as HandBrake rounds them. A comparison saved with
+// bars Auto or Source only found by an older rule is not read: its pictures
+// were cut otherwise than the rule cuts them now, and it is calculated again.
+inline constexpr int black_bars_rule_version = 2;
+
 // The folder the scores are saved in unless Settings name another:
 // .videometricslab/results_cache in the user's home.
 std::filesystem::path default_cache_dir();

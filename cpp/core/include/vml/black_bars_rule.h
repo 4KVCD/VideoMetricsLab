@@ -48,9 +48,10 @@ inline constexpr std::size_t fewest_judged = 3;
 
 // The box that cuts the bars `counted` found (picture_edges of the pictures
 // that said something), of `decoded` pictures sampled from a video
-// `width` x `height`: each edge's median, or its smallest where four or more
-// pictures show ten or more lines more on an edge than its median (the
-// video changes shape: no picture is cut); each edge rounded down to even.
+// `width` x `height`: each edge's median, or its smallest where one edge has
+// four or more bars ten or more lines thinner than its median (the video
+// changes shape: no picture is cut); each edge rounded up to even, as
+// HandBrake's EVEN() rounds it, the box's size down to even.
 // The whole frame where fewer than fewest_judged pictures (or than
 // `decoded`, for a video too short to give them) said something.
 CropBox handbrake_box(const std::vector<BarEdges>& counted, std::size_t decoded, int width, int height);

@@ -59,11 +59,18 @@ void forget_scores_of_another_picture(const std::filesystem::path& directory, co
 // Whether a score file's metadata is of the format this app writes.
 bool current_format(const nlohmann::json& metadata);
 
+// Whether a saved comparison's context says it cut bars that Auto or Source
+// only found by an older black-bar rule (black_bars_rule_version): a box that
+// cuts something from either video. Its scores are of other pictures than a
+// run cuts now. No other black-bar mode detects bars.
+bool cut_by_an_older_rule(const nlohmann::json& context);
+
 // The whole-video scores saved for `spec`'s metric with other parameters but
 // otherwise the same request, each with those parameters
 // (load_other_parameters): CVVDP's for other displays, by the same Vship
-// build. In a range (`ranged`), only a ranged run's: a duration limit's,
-// saved before ranges, pooled more frames than the range has.
+// build; none from a comparison cut by an older black-bar rule. In a range
+// (`ranged`), only a ranged run's: a duration limit's, saved before ranges,
+// pooled more frames than the range has.
 std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::filesystem::path& directory,
                                                                 const MetricRequestSpec& spec, bool ranged);
 

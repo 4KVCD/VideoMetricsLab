@@ -250,7 +250,7 @@ bool cut_to_range(LoadedMetric& metric, const ComparisonRecipe& recipe, const nl
 // A folder's context.json, when it is one this app reads.
 std::optional<nlohmann::json> current_context(const std::filesystem::path& directory) {
     std::optional<nlohmann::json> context = read_json(directory / "context.json");
-    if (context && (!context->is_object() || !current_format(*context))) {
+    if (context && (!context->is_object() || !current_format(*context) || cut_by_an_older_rule(*context))) {
         return std::nullopt;
     }
     return context;
@@ -451,8 +451,13 @@ long long range_frame_count(const ComparisonResult& result, const ComparisonReci
 
 void cache_parts::forget_scores_of_another_picture(const std::filesystem::path& directory,
                                                    const nlohmann::json& context) {
-    const std::optional<nlohmann::json> saved = current_context(directory);
-    if (!saved || same_crops(*saved, context)) {
+    // Not current_context(): scores of pictures cut by an older black-bar rule
+    // go too, though the context they were saved with is no longer read.
+    const std::optional<nlohmann::json> saved = read_json(directory / "context.json");
+    if (!saved || !saved->is_object() || !current_format(*saved)) {
+        return;
+    }
+    if (!cut_by_an_older_rule(*saved) && same_crops(*saved, context)) {
         return;
     }
     std::error_code error;

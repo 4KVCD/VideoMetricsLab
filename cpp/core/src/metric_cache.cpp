@@ -428,6 +428,7 @@ nlohmann::json context_json(const ComparisonResult& result, const std::string& l
             {"model_v1", result.model_v1},
             {"model_choice_v1", optional_text(result.model_choice_v1)},
             {"recipe", recipe.identity()},
+            {"black_bars_rule", black_bars_rule_version},
             {"saved_by", build_stamp()}};
 }
 
@@ -939,6 +940,31 @@ bool current_format(const nlohmann::json& metadata) {
     return version.is_number() && version.get<double>() == metric_cache_format_version;
 }
 
+bool cut_by_an_older_rule(const nlohmann::json& context) {
+    try {
+        if (context.value("black_bars_rule", 1) >= black_bars_rule_version) {
+            return false;
+        }
+        const std::string mode = context.value("recipe", nlohmann::json::object()).value("crop_mode", std::string());
+        if (mode != crop_mode_text(CropMode::automatic) && mode != crop_mode_text(CropMode::source_only)) {
+            return false;
+        }
+        for (const auto& [crop_key, info_key] : {std::pair("source_crop", "source_info"),
+                                                 std::pair("distorted_crop", "distorted_info")}) {
+            const std::optional<CropBox> crop = crop_from_dict(context.value(crop_key, nlohmann::json()));
+            if (crop && context.contains(info_key)) {
+                const auto [width, height] = video_info_from_dict(context.at(info_key)).frame_size();
+                if (!crop->is_noop(width, height)) {
+                    return true;
+                }
+            }
+        }
+    } catch (const std::exception&) {
+        // A damaged context: read, or not, by the checks it has always had
+    }
+    return false;
+}
+
 std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::filesystem::path& directory,
                                                                 const MetricRequestSpec& spec, bool ranged) {
     const nlohmann::json wanted = spec.identity();
@@ -946,6 +972,9 @@ std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::files
     const std::vector<std::filesystem::path> paths = score_files(directory, spec.key);
     const nlohmann::json context =
         paths.empty() ? nlohmann::json() : read_json(directory / "context.json").value_or(nlohmann::json());
+    if (context.is_object() && cut_by_an_older_rule(context)) {
+        return {};
+    }
     const std::vector<ColourTags> infos = context_colour_tags(context);
     const DecodingMarks marks = decoding_marks(context);
     std::vector<std::pair<nlohmann::json, double>> found;

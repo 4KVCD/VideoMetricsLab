@@ -62,11 +62,14 @@ TEST(BlackBarsRule, FindsEachPicturesBars) {
 
 TEST(BlackBarsRule, TakesTheMedianOfThePicturesBars) {
     const BarEdges letterbox{138, 138, 0, 0};
-    // The median of each edge; odd lines rounded down to even
+    // The median of each edge; odd lines rounded up to even, as HandBrake's
+    // EVEN() rounds them (bars of 21 rows: HandBrake's crop of 22)
     EXPECT_EQ(handbrake_box({letterbox, letterbox, {131, 131, 0, 0}, letterbox, letterbox}, 10, 1920, 1080),
               (CropBox{1920, 804, 0, 138}));
     EXPECT_EQ(handbrake_box({{131, 131, 0, 0}, {131, 131, 0, 0}, {131, 131, 0, 0}}, 3, 1920, 1080),
-              (CropBox{1920, 820, 0, 130}));
+              (CropBox{1920, 816, 0, 132}));
+    EXPECT_EQ(handbrake_box({{21, 21, 0, 0}, {21, 21, 0, 0}, {21, 21, 0, 0}}, 3, 1920, 1080),
+              (CropBox{1920, 1036, 0, 22}));
     // A video that changes shape (Everything Everywhere All at Once): four
     // pictures at the full frame, five letterboxed: no picture cut
     const BarEdges scope{233, 234, 0, 0};
@@ -75,14 +78,22 @@ TEST(BlackBarsRule, TakesTheMedianOfThePicturesBars) {
               (CropBox{3840, 2076, 0, 0}));
     // Three of nine at the full frame: the median's bars
     EXPECT_EQ(handbrake_box({full, full, full, scope, scope, scope, scope, scope, scope}, 10, 3840, 2076),
-              (CropBox{3840, 2076 - 232 - 234, 0, 232}));
+              (CropBox{3840, 2076 - 234 - 234, 0, 234}));
+    // Thinner bars counted edge by edge, as HandBrake counts them: three
+    // pictures show more at the top and three others more at the left, three
+    // on either edge, so no switch (picture by picture it would be six)
+    const BarEdges framed{138, 138, 100, 100};
+    const BarEdges taller{100, 138, 100, 100};
+    const BarEdges wider{138, 138, 60, 100};
+    EXPECT_EQ(handbrake_box({taller, taller, taller, wider, wider, wider, framed, framed, framed}, 10, 1920, 1080),
+              (CropBox{1720, 804, 100, 138}));
     // Fewer than three pictures said something: the whole frame
     EXPECT_EQ(handbrake_box({letterbox, letterbox}, 10, 1920, 1080), (CropBox{1920, 1080, 0, 0}));
     // ... but a video too short for three judged on the ones it has
     EXPECT_EQ(handbrake_box({letterbox}, 1, 1920, 1080), (CropBox{1920, 804, 0, 138}));
     EXPECT_EQ(handbrake_box({}, 0, 1920, 1080), (CropBox{1920, 1080, 0, 0}));
-    // An odd-sized video's picture is even-sized too
-    EXPECT_EQ(handbrake_box({{40, 41, 0, 0}}, 1, 853, 481), (CropBox{852, 400, 0, 40}));
+    // An odd-sized video's picture is even-sized too, inside the frame
+    EXPECT_EQ(handbrake_box({{40, 41, 0, 0}}, 1, 853, 481), (CropBox{852, 398, 0, 40}));
 }
 
 // A Y4M stream of two 4x2 pictures of 16-bit luma, as FFmpeg's yuv4mpegpipe
