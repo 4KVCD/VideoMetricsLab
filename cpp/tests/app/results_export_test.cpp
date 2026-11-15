@@ -85,7 +85,10 @@ TEST(ResultsExport, RecordsTheRunsAsOneAndEachVideosFacts) {
     EXPECT_TRUE(document.at("videos").at(2).at("settings").is_null());
 
     // While a run is still going, the runs have no end yet.
-    const auto running = std::make_shared<const RunRecord>(RunRecord{"gui", std::nullopt, "2026-11-14T11:00:00Z"});
+    RunRecord unfinished;
+    unfinished.user_interface = "gui";
+    unfinished.started_utc = "2026-11-14T11:00:00Z";
+    const auto running = std::make_shared<const RunRecord>(unfinished);
     const nlohmann::ordered_json going =
         export_document(std::nullopt, {{result, QStringLiteral("d"), {}, {}, {}, facts, running}}, earlier_pc);
     EXPECT_TRUE(going.at("run").at("finished_utc").is_null());
