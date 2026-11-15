@@ -240,7 +240,7 @@ bool cut_to_range(LoadedMetric& metric, const ComparisonRecipe& recipe, const nl
         }
         // Marked even where the range's nearest seconds are the whole
         // videos' ("frame 5 to the end" at 24 fps), as a ranged run marks it.
-        mark_range(seconds.provenance, FrameRange{start, *reached}, reached);
+        mark_range(seconds.provenance, FrameRange{start, *reached, 0, std::nullopt}, reached);
         return true;
     } catch (const nlohmann::json::exception&) {
         return false;

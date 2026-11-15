@@ -1816,7 +1816,7 @@ private:
                 // A range's score, marked as one even where its nearest
                 // seconds are the whole videos' ("frame 5 to the end" at 24
                 // fps): a range's saved scores are only taken marked.
-                mark_range(result.provenance, FrameRange{cvvdp_range_.start, reached}, reached);
+                mark_range(result.provenance, FrameRange{cvvdp_range_.start, reached, 0, std::nullopt}, reached);
             }
         }
         for (const CvvdpWindow& window : windows) {
