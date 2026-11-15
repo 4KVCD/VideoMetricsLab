@@ -588,10 +588,10 @@ void ChartWidget::paintEvent(QPaintEvent* /*event*/) {
     // pixel columns, not the whole chart. Drawn at the logical origin, so
     // that a high-DPI pixmap's pixels are not taken for logical ones.
     painter.drawPixmap(0, 0, *cache_);
-    if (cursor_x_) {
+    if (const std::optional<int> x = cursor_pixel()) {
         painter.setPen(QPen(theme::chart_colours(cache_dark_).crosshair, 1));
         const QRect plot = plot_rect();
-        painter.drawLine(*cursor_x_, plot.top(), *cursor_x_, plot.bottom());
+        painter.drawLine(*x, plot.top(), *x, plot.bottom());
     }
 }
 
@@ -857,20 +857,23 @@ void ChartWidget::set_highlight(std::optional<std::pair<double, double>> seconds
     invalidate();
 }
 
-void ChartWidget::set_cursor_time(std::optional<double> t) {
-    std::optional<int> px;
-    const QRect plot = plot_rect();
-    if (t) {
-        px = pixel_for_time(*t);
-        if (*px < plot.left() || *px > plot.right()) {
-            px.reset();
-        }
+std::optional<int> ChartWidget::cursor_pixel() const {
+    if (!cursor_time_) {
+        return std::nullopt;
     }
-    if (px == cursor_x_) {
+    const int px = pixel_for_time(*cursor_time_);
+    const QRect plot = plot_rect();
+    return px < plot.left() || px > plot.right() ? std::nullopt : std::optional<int>(px);
+}
+
+void ChartWidget::set_cursor_time(std::optional<double> t) {
+    const std::optional<int> old = cursor_pixel();
+    cursor_time_ = t;
+    const std::optional<int> px = cursor_pixel();
+    if (px == old) {
         return;
     }
-    const std::optional<int> old = cursor_x_;
-    cursor_x_ = px;
+    const QRect plot = plot_rect();
     QRegion strips;
     for (const std::optional<int>& x : {old, px}) {
         if (x) {

@@ -96,7 +96,7 @@ protected:
     }
     static QString readout(const MetricPage& page) { return page.hover_label_->text(); }
     // The crosshair's pixel column on a page's chart, if shown.
-    static std::optional<int> cursor_x(MetricPage& page) { return page.chart_->cursor_x_; }
+    static std::optional<int> cursor_x(MetricPage& page) { return page.chart_->cursor_pixel(); }
     // A page's chart zoomed to `span` seconds from `start`, and the seconds in view.
     static void zoom(MetricPage& page, double start, double span) { page.chart_->view_ = ChartWidget::View{start, span}; }
     static std::pair<double, double> in_view(MetricPage& page) { return page.chart_->x_range(); }

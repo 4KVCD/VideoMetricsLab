@@ -36,6 +36,7 @@ protected:
     // The window's size has settled: the wait for it is over.
     static void settle(ChartWidget& chart) { chart.resize_settle_->stop(); }
     static void zoom_to(ChartWidget& chart, double start, double span) { chart.view_ = ChartWidget::View{start, span}; }
+    static std::optional<int> cursor(const ChartWidget& chart) { return chart.cursor_pixel(); }
     // The chart's lines alone, on white, where the chart draws them, as a
     // screen at `ratio` gets them.
     static QImage lines(const ChartWidget& chart, double ratio) {
@@ -322,6 +323,25 @@ TEST_F(ChartTest, AZoomedViewMovesToATimeOutOfView) {
     chart.reset_view();
     chart.bring_into_view(60.0);
     EXPECT_EQ(chart.x_range(), std::pair(0.0, 100.0));
+}
+
+// The crosshair (the pointer's, or Go to frame's) stays on its time when the
+// chart is resized or zoomed afterwards, and is not drawn out of view.
+TEST_F(ChartTest, TheCrosshairStaysOnItsTime) {
+    ChartWidget chart(QStringLiteral("VMAF"), 100.0);
+    chart.resize(640, 400);
+    chart.set_series(0, line_of({0.0, 50.0, 100.0}, {90.0F, 80.0F, 95.0F}));
+    chart.set_cursor_time(40.0);
+    const std::optional<int> narrow = cursor(chart);
+    ASSERT_TRUE(narrow);
+    chart.resize(1280, 400);
+    EXPECT_EQ(cursor(chart), chart.pixel_for_time(40.0));
+    EXPECT_GT(*cursor(chart), *narrow);
+    zoom_to(chart, 60.0, 10.0);
+    EXPECT_FALSE(cursor(chart));
+    chart.set_cursor_time(std::nullopt);
+    chart.reset_view();
+    EXPECT_FALSE(cursor(chart));
 }
 
 TEST_F(ChartTest, DrawsABandUnderTheLinesOnItsOwnScale) {

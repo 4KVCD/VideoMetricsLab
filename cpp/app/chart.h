@@ -209,6 +209,8 @@ private:
     void end_drag(QPoint pos);
     void request_paint();
     int frame_ms() const;
+    // The crosshair's pixel column now; nothing without one or outside the plot.
+    std::optional<int> cursor_pixel() const;
 
     QString y_axis_label_;
     std::optional<double> fixed_y_max_;
@@ -220,7 +222,10 @@ private:
     bool cache_stale_ = true;  // to be drawn again before it is shown
     bool cache_dark_ = false;  // the theme the cache was drawn in
     int renders_ = 0;          // how many times the cache has been drawn (for the tests)
-    std::optional<int> cursor_x_;
+    // The crosshair's time, not its pixel column: worked out at each paint
+    // (cursor_pixel), it stays on its frame when the chart is resized,
+    // zoomed or panned.
+    std::optional<double> cursor_time_;
     std::optional<View> view_;  // nothing: all of the data
     std::pair<double, double> y_range_{0.0, 1.0};
     std::optional<QPoint> pan_origin_;
