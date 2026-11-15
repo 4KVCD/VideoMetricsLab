@@ -569,6 +569,90 @@ TEST(Decisions, AScaledTestVideosBoxLinesUpWithTheSourcesRowForRow) {
     EXPECT_EQ(near_test, near_rows);
 }
 
+// Issue #18: an encode cropped when it was made (HandBrake's crop, FFmpeg's crop filter) is the source's picture at
+// the same size, though its frame is a fraction of a percent from the source's in shape: compared as it is, never
+// read as the source scaled.
+TEST(Decisions, AnEncodeCroppedWhenItWasMadeIsComparedAtItsOwnSize) {
+    const auto frame = [](int width, int height) {
+        VideoInfo info;
+        info.width = width;
+        info.height = height;
+        return info;
+    };
+    const VideoInfo hd = frame(1920, 1080);
+    // A 1-row line at the bottom, cut to HandBrake's 0/2/0/0: the test's whole frame, not 1920x1076.
+    const CropBox picture{1920, 1078, 0, 0};
+    const VideoInfo cut = frame(1920, 1078);
+    EXPECT_EQ(common_picture(hd, cut, picture, picture), std::pair(std::optional(picture), std::optional(picture)));
+    // As black bars Source only cuts it, so the two share their saved scores (auto_folder_for_source_only).
+    EXPECT_EQ(test_crop_beside_source_box(picture, cut), std::nullopt);
+    // Bars of its own left after 2 rows were cut at the bottom, or at the top: each box as detected.
+    const CropBox bars{1920, 800, 0, 140};
+    EXPECT_EQ(common_picture(hd, cut, bars, bars), std::pair(std::optional(bars), std::optional(bars)));
+    const CropBox raised{1920, 800, 0, 138};
+    EXPECT_EQ(common_picture(hd, cut, bars, raised), std::pair(std::optional(bars), std::optional(raised)));
+    // A box further off than the rows cut cannot be this encode's: the picture both show, as before.
+    const CropBox too_high{1920, 800, 0, 137};
+    EXPECT_NE(common_picture(hd, cut, bars, too_high).second, std::optional(too_high));
+}
+
+// An encode cut to the source's bars when it was made and then scaled shows the source's box: both compared as
+// detected, never the source's bars cut from it again. A whole-frame scale still has them cut, and one that cannot
+// be told from a cut (its frame within a sample of the source's) is read so.
+TEST(Decisions, AnEncodeCutToTheSourcesBarsAndScaledShowsTheSourcesBox) {
+    const auto frame = [](int width, int height) {
+        VideoInfo info;
+        info.width = width;
+        info.height = height;
+        return info;
+    };
+    const auto kept = [](const CropBox& source, const CropBox& test) {
+        return std::pair(std::optional(source), std::optional(test));
+    };
+    const CropBox thin{1920, 1078, 0, 0};
+    const CropBox scaled{1280, 718, 0, 0};
+    EXPECT_EQ(common_picture(frame(1920, 1080), frame(1280, 718), thin, scaled), kept(thin, scaled));
+    const CropBox uhd{3840, 2156, 0, 2};
+    const CropBox hd{1920, 1078, 0, 0};
+    EXPECT_EQ(common_picture(frame(3840, 2160), frame(1920, 1078), uhd, hd), kept(uhd, hd));
+    const CropBox pillars{1912, 1080, 4, 0};
+    const CropBox narrow{1276, 720, 0, 0};
+    EXPECT_EQ(common_picture(frame(1920, 1080), frame(1276, 720), pillars, narrow), kept(pillars, narrow));
+    // Cut to the bars at the same size, its own dark row found too: that row cut from the source as well.
+    const auto [source_rows, test_rows] = common_picture(frame(1920, 1080), frame(1920, 800), CropBox{1920, 800, 0, 140},
+                                                         CropBox{1920, 798, 0, 2});
+    EXPECT_EQ(source_rows, (CropBox{1920, 798, 0, 142}));
+    EXPECT_EQ(test_rows, (CropBox{1920, 798, 0, 2}));
+    // The whole frame scaled: the source's thin bars cut from the test video too.
+    const CropBox thin_bars{1920, 1076, 0, 2};
+    EXPECT_NE(common_picture(frame(1920, 1080), frame(1280, 720), thin_bars, CropBox{1280, 720, 0, 0}).second,
+              std::optional(CropBox{1280, 720, 0, 0}));
+    EXPECT_NE(common_picture(frame(1920, 1080), frame(720, 404), thin_bars, CropBox{720, 404, 0, 0}).second,
+              std::optional(CropBox{720, 404, 0, 0}));
+}
+
+// Sizes not one fraction apart (854x480 against 1920x1080): the test video's picture rounded to even rows, and
+// the source's box those rows scaled to its size, so the two show the same rows. Each rounded on its own, the
+// source's box was 8 rows taller than the test's showed, and the pair was refused for its shapes.
+TEST(Decisions, SizesNotOneFractionApartStillShowTheSameRows) {
+    const auto frame = [](int width, int height) {
+        VideoInfo info;
+        info.width = width;
+        info.height = height;
+        return info;
+    };
+    const auto [source, test] =
+        common_picture(frame(1920, 1080), frame(854, 480), CropBox{1920, 800, 0, 140}, CropBox{854, 356, 0, 62});
+    EXPECT_EQ(source, (CropBox{1920, 792, 0, 144}));  // the test's rows 64 to 416 at the source's size
+    EXPECT_EQ(test, (CropBox{854, 352, 0, 64}));
+    EXPECT_FALSE(shape_problem(frame(1920, 1080), frame(854, 480), source, test));
+    const auto [uhd_source, uhd_test] =
+        common_picture(frame(3840, 2160), frame(854, 480), CropBox{3840, 1600, 0, 280}, CropBox{854, 356, 0, 62});
+    EXPECT_EQ(uhd_source, (CropBox{3840, 1584, 0, 288}));
+    EXPECT_EQ(uhd_test, (CropBox{854, 352, 0, 64}));
+    EXPECT_FALSE(shape_problem(frame(3840, 2160), frame(854, 480), uhd_source, uhd_test));
+}
+
 // Black bars Source only takes Auto's saved scores where Auto kept the test
 // video's whole frame (metric_cache.cpp, auto_folder_for_source_only): so a
 // box of the whole frame must be no box to every route that crops, and Auto

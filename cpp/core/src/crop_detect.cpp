@@ -1133,6 +1133,105 @@ std::optional<std::pair<CropBox, CropBox>> shared_on_one_grid(int source_width, 
     return std::pair(CropBox{scaled(test.w), scaled(test.h), scaled(test.x), scaled(test.y)}, test);
 }
 
+// Whether the test video is the source cut when it was encoded (HandBrake's
+// crop, FFmpeg's crop filter), not scaled: a smaller frame whose box is the
+// source's box at the same size, at the place the lines cut put it. Only
+// lines outside the source's picture were cut, so each box is the same
+// picture as detected. Its frame can be a fraction of a percent from the
+// source's in shape (1920x1080 cut to 1920x1078), which common_picture would
+// otherwise read as the source scaled, cutting rows off the test (issue #18).
+// Frames of one size are not: there the boxes' small differences are
+// detection's, and the picture both show is cut from both.
+bool cropped_when_encoded(int source_width, int source_height, int test_width, int test_height,
+                          const CropBox& source_box, const CropBox& test_box) {
+    const bool smaller = test_width <= source_width && test_height <= source_height &&
+                         (test_width < source_width || test_height < source_height);
+    if (!smaller || source_box.w != test_box.w || source_box.h != test_box.h) {
+        return false;
+    }
+    // The lines cut from the source's left and top: at most what was cut in all
+    const int cut_left = source_box.x - test_box.x;
+    const int cut_top = source_box.y - test_box.y;
+    return cut_left >= 0 && cut_left <= source_width - test_width && cut_top >= 0 &&
+           cut_top <= source_height - test_height;
+}
+
+// How far, in the test video's samples, its frame is from a picture of
+// `width` x `height` scaled to it: the least, over every scale factor k, of
+// the larger of |test_width - width k| and |test_height - height k| (which
+// is where the two are equal). A picture scaled with its size rounded to even
+// samples, each side off by at most one, is at most 1.
+double shape_error(double width, double height, int test_width, int test_height) {
+    return std::abs(test_width * height - test_height * width) / (width + height);
+}
+
+// The source's box, when the test video's frame shows it whole: an encode
+// cut to the source's bars when it was made, then scaled or not (3840x2160
+// with 2-row bars to 1920x1078; 1920x800 out of a letterboxed 1920x1080).
+// Its frame is then within even rounding of the box's shape (with a sample
+// to spare) and nearer it than the source frame's. Nothing where the
+// source's frame explains the test's to within a sample, as every
+// whole-frame scale rounded to even does: bars so thin that cutting them
+// moves the frame by less than a sample cannot be told from no cut (720x404
+// is 1920x1080 or 1920x1076 at 720 wide), and are read as the whole frame
+// scaled, as before.
+std::optional<CropBox> source_box_the_test_shows(int source_width, int source_height, int test_width,
+                                                 int test_height, const CropBox& source_box) {
+    if (source_box.is_noop(source_width, source_height) || source_box.w <= 0 || source_box.h <= 0) {
+        return std::nullopt;
+    }
+    constexpr double whole_frame_rounding = 1.0;  // a whole frame scaled, its size rounded to even samples
+    constexpr double box_rounding = 2.0;          // the box scaled and rounded so, with a sample to spare
+    const double frame_error = shape_error(source_width, source_height, test_width, test_height);
+    const double box_error = shape_error(source_box.w, source_box.h, test_width, test_height);
+    if (frame_error <= whole_frame_rounding || box_error > box_rounding || box_error >= frame_error) {
+        return std::nullopt;
+    }
+    return source_box;
+}
+
+// The shared picture (edges as fractions of each frame) as one box in each
+// video, when the sizes are not one fraction apart (shared_on_one_grid): on
+// each axis, the video with fewer samples has it rounded inward to even
+// samples, and the other's edges are those scaled to its size, to the
+// nearest even sample, kept inside the picture. Both boxes then show the
+// same rows, to within a sample of the larger video. Each box rounded inward
+// on its own could leave the smaller video's picture several of the larger's
+// rows short (1920x1080 against 854x480: the test's rows 64-416 are the
+// source's 144-936, against its box's 140-940, a shape 1 % off).
+std::pair<CropBox, CropBox> shared_by_rounding(int source_width, int source_height, int test_width,
+                                               int test_height, double left, double top, double right,
+                                               double bottom) {
+    struct Span {
+        int start, end;
+    };
+    // The picture's samples from `from` to `to` (fractions) of `size`, rounded inward to even samples (4:2:0).
+    const auto inward = [](double from, double to, int size) {
+        int start = static_cast<int>(std::ceil(from * size - 1e-6));
+        int end = static_cast<int>(std::floor(to * size + 1e-6));
+        start += start & 1;
+        end -= end & 1;
+        return Span{start, end};
+    };
+    // One axis: the source's span and the test video's.
+    const auto axis = [&inward](int source_size, int test_size, double from, double to) {
+        const bool test_smaller = test_size <= source_size;
+        const int smaller = test_smaller ? test_size : source_size;
+        const int larger = test_smaller ? source_size : test_size;
+        const Span rounded = inward(from, to, smaller);
+        const Span bounds = inward(from, to, larger);
+        const auto scaled = [smaller, larger](int edge) {
+            return 2 * static_cast<int>(std::lround(static_cast<double>(edge) * larger / smaller / 2));
+        };
+        const Span derived{std::max(scaled(rounded.start), bounds.start), std::min(scaled(rounded.end), bounds.end)};
+        return test_smaller ? std::pair(derived, rounded) : std::pair(rounded, derived);
+    };
+    const auto [source_x, test_x] = axis(source_width, test_width, left, right);
+    const auto [source_y, test_y] = axis(source_height, test_height, top, bottom);
+    return {CropBox{source_x.end - source_x.start, source_y.end - source_y.start, source_x.start, source_y.start},
+            CropBox{test_x.end - test_x.start, test_y.end - test_y.start, test_x.start, test_y.start}};
+}
+
 }  // namespace
 
 bool samples_through_the_app(const VideoInfo& info) { return windows_from_the_app(info); }
@@ -1251,24 +1350,36 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const V
     if (std::min({source_width, source_height, distorted_width, distorted_height}) <= 0) {
         return kept;
     }
-    // The same picture at one size or two: the sizes one factor apart,
-    // across and down, to within half a percent.
-    const double across = static_cast<double>(source_width) / distorted_width;
-    const double down = static_cast<double>(source_height) / distorted_height;
-    if (std::abs(across - down) > 0.005 * std::max(across, down)) {
+    if (cropped_when_encoded(source_width, source_height, distorted_width, distorted_height, *source_crop,
+                             *distorted_crop)) {
         return kept;
     }
-    // Each box's edges as fractions of its frame.
+    // The part of the source the test video's frame shows: the source's box
+    // where the test was cut to it when it was made, else its whole frame,
+    // when the sizes are one factor apart, across and down, to within half a
+    // percent (the same picture at one size or two).
+    const std::optional<CropBox> box_shown = source_box_the_test_shows(source_width, source_height, distorted_width,
+                                                                       distorted_height, *source_crop);
+    if (!box_shown) {
+        const double across = static_cast<double>(source_width) / distorted_width;
+        const double down = static_cast<double>(source_height) / distorted_height;
+        if (std::abs(across - down) > 0.005 * std::max(across, down)) {
+            return kept;
+        }
+    }
+    const CropBox shown = box_shown.value_or(CropBox{source_width, source_height, 0, 0});
+    // Each box's edges as fractions of what its video shows: the source's
+    // within the part the test's frame shows, the test's within its frame.
     struct Edges {
         double left, top, right, bottom;
     };
-    const auto edges = [](const CropBox& box, const VideoInfo& info) {
-        const auto [width, height] = info.frame_size();
-        return Edges{static_cast<double>(box.x) / width, static_cast<double>(box.y) / height,
-                     static_cast<double>(box.x + box.w) / width, static_cast<double>(box.y + box.h) / height};
+    const auto edges = [](const CropBox& box, const CropBox& within) {
+        return Edges{static_cast<double>(box.x - within.x) / within.w, static_cast<double>(box.y - within.y) / within.h,
+                     static_cast<double>(box.x - within.x + box.w) / within.w,
+                     static_cast<double>(box.y - within.y + box.h) / within.h};
     };
-    const Edges s = edges(*source_crop, source);
-    const Edges d = edges(*distorted_crop, distorted);
+    const Edges s = edges(*source_crop, shown);
+    const Edges d = edges(*distorted_crop, CropBox{distorted_width, distorted_height, 0, 0});
     const double left = std::max(s.left, d.left);
     const double top = std::max(s.top, d.top);
     const double right = std::min(s.right, d.right);
@@ -1276,29 +1387,21 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const V
     if (right <= left || bottom <= top) {
         return kept;
     }
-    // The shared picture in one video's pixels, rounded inward (never a row
-    // of the other's bars), its edges on even samples (4:2:0).
-    const auto shared = [&](const VideoInfo& info) {
-        const auto [width, height] = info.frame_size();
-        int x = static_cast<int>(std::ceil(left * width - 1e-6));
-        int y = static_cast<int>(std::ceil(top * height - 1e-6));
-        x += x & 1;
-        y += y & 1;
-        const int w = static_cast<int>(std::floor(right * width + 1e-6)) - x;
-        const int h = static_cast<int>(std::floor(bottom * height + 1e-6)) - y;
-        return CropBox{w - (w & 1), h - (h & 1), x, y};
-    };
+    // The shared picture in each video's samples, never a row of the other's
+    // bars, its edges on even samples (4:2:0); the source's within the part
+    // shown, then moved to its place in the source's frame.
     const auto positive = [](const CropBox& box) { return box.w > 0 && box.h > 0; };
+    const std::optional<std::pair<CropBox, CropBox>> on_grid =
+        shared_on_one_grid(shown.w, shown.h, distorted_width, distorted_height, left, top, right, bottom);
     auto [shared_source, shared_distorted] =
-        shared_on_one_grid(source_width, source_height, distorted_width, distorted_height, left, top, right, bottom)
-            .value_or(std::pair(CropBox{}, CropBox{}));
-    if (!positive(shared_source) || !positive(shared_distorted)) {
-        shared_source = shared(source);
-        shared_distorted = shared(distorted);
-    }
+        on_grid && positive(on_grid->first) && positive(on_grid->second)
+            ? *on_grid
+            : shared_by_rounding(shown.w, shown.h, distorted_width, distorted_height, left, top, right, bottom);
     if (!positive(shared_source) || !positive(shared_distorted)) {
         return kept;
     }
+    shared_source.x += shown.x;
+    shared_source.y += shown.y;
     if (shared_source != *source_crop || shared_distorted != *distorted_crop) {
         logger.info("Black bars: the picture both videos show is " + box_text(shared_source) + " of the source and " +
                     box_text(shared_distorted) + " of the test video (detected: " + box_text(*source_crop) +

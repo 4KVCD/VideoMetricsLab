@@ -29,12 +29,14 @@ inline constexpr int metric_cache_format_version = 2;
 
 // The black-bar rule a comparison's detected bars were cut by, as its
 // context.json says it ("black_bars_rule"; 1 where it says none). 2: odd
-// bars rounded up to even, as HandBrake rounds them. A comparison saved with
+// bars rounded up to even, as HandBrake rounds them. 3: an encode cropped
+// when it was made is compared at its own size, not read as the source
+// scaled (common_picture, issue #18). A comparison saved with
 // bars Auto or Source only found by an older rule is read only where the
 // answers the rule keeps now give the same boxes (find_black_bars_of_older_scores
 // finds them); otherwise its pictures were cut otherwise than the rule cuts
 // them now, and it is calculated again.
-inline constexpr int black_bars_rule_version = 2;
+inline constexpr int black_bars_rule_version = 3;
 
 // The folder the scores are saved in unless Settings name another:
 // .videometricslab/results_cache in the user's home.
