@@ -216,6 +216,70 @@ double start_time(const MetricCurve& curve, std::size_t index) {
     return curve.starts.empty() ? curve.times[index] : curve.starts[index];
 }
 
+// The points of a line among frames `range` (first, last) as [begin, end)
+// indices into `frames` (ascending): those numbered within it, or for a
+// per-second line, whose points are numbered by their second's first frame,
+// the seconds that overlap it.
+std::pair<std::size_t, std::size_t> points_in_range(std::span<const int> frames, std::pair<int, int> range,
+                                                     bool per_second) {
+    const auto index = [frames](auto at) { return static_cast<std::size_t>(at - frames.begin()); };
+    std::size_t begin = index(std::lower_bound(frames.begin(), frames.end(), range.first));
+    const std::size_t end = index(std::upper_bound(frames.begin(), frames.end(), range.second));
+    if (per_second && begin > 0 && (begin == frames.size() || frames[begin] != range.first)) {
+        --begin;  // the second the range's first frame is in began before it
+    }
+    return {begin, std::max(begin, end)};
+}
+
+// When points `begin` to `end` - 1 of a line begin and end in time: from half
+// a frame before the first frame to half a frame after the last, or for a
+// per-second line, from the first second's start to the last's end.
+std::pair<double, double> time_span(const MetricCurve& curve, std::size_t begin, std::size_t end) {
+    if (!curve.starts.empty()) {
+        // Each second's point is drawn at its middle, so it ends as far after.
+        return {curve.starts[begin], 2 * curve.times[end - 1] - curve.starts[end - 1]};
+    }
+    // The time of a frame number, from the line's whole span: a subsampled
+    // line's points are several frames apart.
+    const int numbers = curve.frames.back() - curve.frames.front();
+    const double half_frame = numbers > 0 ? (curve.times.back() - curve.times.front()) / numbers / 2 : 0.0;
+    return {curve.times[begin] - half_frame, curve.times[end - 1] + half_frame};
+}
+
+// A line's scores among frames `range` (points_in_range).
+std::span<const float> scores_in_range(const MetricCurve& curve, std::pair<int, int> range) {
+    const auto [begin, end] = points_in_range(curve.frames, range, !curve.starts.empty());
+    return curve.values.subspan(begin, end - begin);
+}
+
+// A metric's figure for frames `range` of a run, as metric_means gives the
+// whole run's: their mean by the metric's own way of averaging. Nothing for
+// a whole-video score (CVVDP), which has none for part of a video, and where
+// no frame in range has a score.
+std::optional<double> range_mean(const ComparisonResult& result, const MetricDefinition& metric,
+                                 std::pair<int, int> range) {
+    const FrameMetricResult* frame = result.metric_results.frame(std::string(metric.key));
+    if (frame == nullptr) {
+        return std::nullopt;
+    }
+    const auto [begin, end] = points_in_range(frame->frame, range, false);
+    const std::span<const float> values = std::span(frame->values).subspan(begin, end - begin);
+    const std::vector<double> scores(values.begin(), values.end());
+    return aggregate_scores(scores, metric.aggregation);
+}
+
+// How many of frames `range` of a run score +inf for a metric (identical
+// to the reference), as identical_frame_counts counts the whole run's.
+long long identical_in_range(const ComparisonResult& result, const std::string& key, std::pair<int, int> range) {
+    const FrameMetricResult* frame = result.metric_results.frame(key);
+    if (frame == nullptr) {
+        return 0;
+    }
+    const auto [begin, end] = points_in_range(frame->frame, range, false);
+    const std::span<const float> values = std::span(frame->values).subspan(begin, end - begin);
+    return std::count_if(values.begin(), values.end(), [](float value) { return std::isinf(value) && value > 0; });
+}
+
 // The median of `values`, as numpy's: the middle one, or the mean of the two.
 double median(std::vector<double> values) {
     std::sort(values.begin(), values.end());
@@ -296,10 +360,11 @@ MetricPage::MetricPage(const MetricDefinition& metric, QWidget* parent)
     : QWidget(parent), metric_(&metric), sign_(worst_is_high(metric) ? -1.0F : 1.0F) {
     placeholder_ = worst_is_high(metric)
                        ? app::tr("Hover to inspect a point (locks onto the worst nearby score at or below your cursor, "
-                                 "so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.")
+                                 "so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select "
+                                 "frames, double-click to reset.")
                        : app::tr("Hover to inspect a point (locks onto the lowest nearby score at or below your "
-                                 "cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to "
-                                 "reset.");
+                                 "cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to "
+                                 "select frames, double-click to reset.");
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
 
@@ -310,6 +375,7 @@ MetricPage::MetricPage(const MetricDefinition& metric, QWidget* parent)
     chart_ = new ChartWidget(worst_is_high(metric) ? app::tr("{axis_label} (lower is better)", {{"axis_label", axis}})
                                                    : axis,
                              metric.fixed_y_max, worst_is_high(metric));
+    chart_->set_range_selection(true);  // Shift+drag selects frames (GraphPanel::on_range_dragged)
     layout->addWidget(chart_, 1);
 
     no_data_label_ = new QLabel(app::tr("No {label} data among the currently visible series -- tick the {label} column "
@@ -350,6 +416,7 @@ void MetricPage::set_curve(int series_id, const SeriesEntry& entry) {
         set_frame_curve(series_id, entry);
     }
     refresh_difference();
+    refresh_highlight();
 }
 
 void MetricPage::set_frame_curve(int series_id, const SeriesEntry& entry) {
@@ -443,6 +510,7 @@ void MetricPage::remove_curves(const std::vector<int>& series_ids) {
     if (erase_curves(series_ids)) {
         hover_label_->set_text(placeholder_);  // it may be saying a gone line's numbers
         refresh_difference();
+        refresh_highlight();
     }
 }
 
@@ -472,6 +540,7 @@ void MetricPage::renumber(const std::map<int, int>& renumbered) {
     curves_ = std::move(curves);
     chart_->renumber(renumbered);
     refresh_difference();  // the order may have swapped which is first
+    refresh_highlight();
 }
 
 void MetricPage::set_visible(int series_id, bool visible) {
@@ -483,6 +552,7 @@ void MetricPage::set_visible(int series_id, bool visible) {
     chart_->set_series_visible(series_id, visible);
     fit_hover_label();
     refresh_difference();
+    refresh_highlight();
 }
 
 void MetricPage::set_difference(bool on) {
@@ -521,6 +591,55 @@ void MetricPage::refresh_difference() {
     ChartSeries series{first->times, drawn->second, drawn, QColor(), true};
     const QString label = QStringLiteral("%1 − %2").arg(first->label, second->label);
     chart_->set_band(ChartBand{std::move(series), label, std::pow(10.0, -metric_->decimals)});
+}
+
+void MetricPage::set_selected_frames(std::optional<std::pair<int, int>> frames) {
+    selected_frames_ = frames;
+    refresh_highlight();
+}
+
+void MetricPage::refresh_highlight() {
+    // Placed by the first shown line with a point among the frames: the runs
+    // of one video share its times, and a shorter or subsampled line without
+    // a point there is passed over.
+    std::optional<std::pair<double, double>> seconds;
+    if (selected_frames_) {
+        for (const auto& [id, curve] : curves_) {
+            if (!curve.visible) {
+                continue;
+            }
+            const auto [begin, end] = points_in_range(curve.frames, *selected_frames_, !curve.starts.empty());
+            if (begin < end) {
+                seconds = time_span(curve, begin, end);
+                break;
+            }
+        }
+    }
+    chart_->set_highlight(seconds);
+}
+
+std::optional<int> MetricPage::frame_at(double time) const {
+    for (const auto& [id, curve] : curves_) {
+        if (!curve.visible || curve.frames.empty()) {
+            continue;
+        }
+        if (curve.starts.empty()) {
+            return curve.frames[nearest_index_by_time(curve.times, time)];
+        }
+        // A per-second line: the frame as far into its second as `time` is,
+        // counted up to the next second's first frame. The last second's
+        // frames are not known: its first.
+        const std::size_t second = second_at(curve, time);
+        if (second + 1 >= curve.frames.size()) {
+            return curve.frames[second];
+        }
+        const double start = curve.starts[second];
+        const double length = curve.starts[second + 1] - start;
+        const int count = curve.frames[second + 1] - curve.frames[second];
+        const double into = length > 0 ? std::clamp((time - start) / length, 0.0, 1.0) : 0.0;
+        return curve.frames[second] + std::clamp(static_cast<int>(into * count), 0, std::max(0, count - 1));
+    }
+    return std::nullopt;
 }
 
 const MetricCurve* MetricPage::curve(int series_id) const {
@@ -979,6 +1098,7 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     // Without it, nothing said the metric columns could be clicked, or that
     // the detail to their right was of the one clicked.
     stats_hint_ = new QLabel;
+    stats_hint_->setWordWrap(true);  // with a frame range it says more: wrapped, not widening the window
     theme::style(stats_hint_, "color: {muted};");
     top_layout->addWidget(stats_hint_);
     stats_table_ = new QTableWidget;
@@ -1038,8 +1158,11 @@ GraphPanel::~GraphPanel() = default;
 MetricPage* GraphPanel::build_page(const MetricDefinition& metric) {
     auto* page = new MetricPage(metric);
     page->set_difference(difference_on_);
+    page->set_selected_frames(selected_frames());
     connect(&page->chart(), &ChartWidget::hovered, this,
             [this, page](double x, double y) { page->on_hover(x, y, entries_); });
+    connect(&page->chart(), &ChartWidget::range_dragged, this,
+            [this, page](double start, double now, bool finished) { on_range_dragged(page, start, now, finished); });
     pages_[std::string(metric.key)] = page;
     return page;
 }
@@ -1148,11 +1271,42 @@ QWidget* GraphPanel::build_action_bar() {
     frame_spin_->setKeyboardTracking(false);  // on Enter, not at each digit typed
     frame_spin_->setToolTip(app::tr("Reports every visible series at this exact frame, so two encodes can be compared "
                                     "at one moment."));
-    connect(frame_spin_, &QSpinBox::valueChanged, this, [this](int frame) { on_frame_requested(frame); });
+    connect(frame_spin_, &QSpinBox::valueChanged, this, [this](int frame) {
+        if (range_) {
+            range_->first = frame;  // this box's end of the range moves with it
+            apply_range();
+        }
+        on_frame_requested(frame);
+    });
     layout->addWidget(frame_spin_);
     auto* go_button = new QPushButton(app::tr("Go"));
     connect(go_button, &QPushButton::clicked, this, [this] { on_frame_requested(frame_spin_->value()); });
     layout->addWidget(go_button);
+    // A frame range (issue #17): from the Go to frame box's frame to this
+    // one; "—", its lowest value, as the table says no value, is none.
+    layout->addWidget(new QLabel(app::tr("to frame:")));
+    range_end_spin_ = new QSpinBox;
+    range_end_spin_->setRange(-1, 0);
+    range_end_spin_->setValue(-1);
+    range_end_spin_->setSpecialValueText(QStringLiteral("—"));
+    range_end_spin_->setKeyboardTracking(false);
+    range_end_spin_->setToolTip(app::tr("The other end of a frame range: the graph shades the frames from Go to frame "
+                                        "to this one, and the table gives their statistics. Shift+drag across the "
+                                        "graph to select a range."));
+    connect(range_end_spin_, &QSpinBox::valueChanged, this, [this](int frame) {
+        if (frame == range_end_spin_->minimum()) {
+            clear_range();
+            return;
+        }
+        range_ = std::pair(frame_spin_->value(), frame);
+        apply_range();
+    });
+    layout->addWidget(range_end_spin_);
+    clear_range_button_ = new QPushButton(app::tr("Clear range"));
+    clear_range_button_->setEnabled(false);
+    clear_range_button_->setToolTip(app::tr("Shows the statistics of the whole video again."));
+    connect(clear_range_button_, &QPushButton::clicked, this, [this] { clear_range(); });
+    layout->addWidget(clear_range_button_);
     layout->addSpacing(16);
     // Usable once a page shows two lines (refresh_page_controls).
     difference_box_ = new QCheckBox(app::tr("Difference"));
@@ -1172,6 +1326,52 @@ void GraphPanel::on_frame_requested(int frame) {
     pages_.at(std::string(current_metric().key))->show_frame(frame, entries_);
 }
 
+std::optional<std::pair<int, int>> GraphPanel::selected_frames() const {
+    if (!range_) {
+        return std::nullopt;
+    }
+    return std::pair(std::min(range_->first, range_->second), std::max(range_->first, range_->second));
+}
+
+void GraphPanel::apply_range() {
+    // Every page built shades the range (a page built later takes it in
+    // build_page), the table gives its statistics, the boxes show it.
+    const std::optional<std::pair<int, int>> frames = selected_frames();
+    for (const auto& [key, page] : pages_) {
+        page->set_selected_frames(frames);
+    }
+    refresh_stats_table();
+    refresh_page_controls();
+}
+
+void GraphPanel::clear_range() {
+    range_.reset();
+    apply_range();
+}
+
+void GraphPanel::on_range_dragged(MetricPage* page, double start, double now, bool finished) {
+    // While the drag lasts, the boxes and the shading follow the pointer;
+    // the statistics, which take far longer, come once it ends.
+    const std::optional<int> first = page->frame_at(start);
+    const std::optional<int> last = page->frame_at(now);
+    if (!first || !last) {
+        return;
+    }
+    range_ = std::pair(*first, *last);
+    if (finished) {
+        apply_range();
+        // The Go to frame box now holds the drag's first frame: the cursor
+        // goes there too, as it does when that box is typed in.
+        on_frame_requested(*first);
+        return;
+    }
+    const std::optional<std::pair<int, int>> frames = selected_frames();
+    for (const auto& [key, each] : pages_) {
+        each->set_selected_frames(frames);
+    }
+    refresh_page_controls();
+}
+
 void GraphPanel::refresh_page_controls() {
     // The controls under the graph brought up to date for the page shown:
     // the Go to frame box bounded by what is drawn, so that it cannot ask
@@ -1181,10 +1381,25 @@ void GraphPanel::refresh_page_controls() {
     if (page == pages_.end()) {
         return;
     }
-    const auto [lo, hi] = page->second->frame_range();
+    auto [lo, hi] = page->second->frame_range();
+    hi = std::max(lo, hi);
+    if (range_) {
+        // The range's ends shown as chosen, even where this page's lines
+        // stop short of them.
+        lo = std::min({lo, range_->first, range_->second});
+        hi = std::max({hi, range_->first, range_->second});
+    }
     const bool blocked = frame_spin_->blockSignals(true);
-    frame_spin_->setRange(lo, std::max(lo, hi));
+    frame_spin_->setRange(lo, hi);
+    if (range_) {
+        frame_spin_->setValue(range_->first);
+    }
     frame_spin_->blockSignals(blocked);
+    const bool end_blocked = range_end_spin_->blockSignals(true);
+    range_end_spin_->setRange(lo - 1, hi);  // its lowest value, "—", is no range
+    range_end_spin_->setValue(range_ ? range_->second : lo - 1);
+    range_end_spin_->blockSignals(end_blocked);
+    clear_range_button_->setEnabled(range_.has_value());
     const bool possible = page->second->difference_possible();
     difference_box_->setEnabled(possible);
     difference_box_->setToolTip(possible ? app::tr("Draws the first visible series minus the second, frame by frame, "
@@ -1258,8 +1473,17 @@ void GraphPanel::setup_stats_table() {
         font.setBold(selected);
         head->setFont(font);
     }
-    stats_hint_->setText(app::tr("Click a metric column for its full statistics — showing {label}.",
-                                 {{"label", qt_text(metric.label)}}));
+    QString hint = app::tr("Click a metric column for its full statistics — showing {label}.",
+                           {{"label", qt_text(metric.label)}});
+    if (const std::optional<std::pair<int, int>> frames = selected_frames()) {
+        hint = app::tr("Statistics of frames {first} to {last}.", {{"first", frames->first}, {"last", frames->second}}) +
+               " " + hint;
+        if (metric.kind == MetricKind::sequence) {
+            hint += " " + app::tr("{label}'s statistics are of the whole seconds these frames are in.",
+                                  {{"label", qt_text(metric.label)}});
+        }
+    }
+    stats_hint_->setText(hint);
 }
 
 QTableWidgetItem* GraphPanel::series_name_item(const SeriesEntry& entry) const {
@@ -1542,8 +1766,15 @@ void GraphPanel::remove_runs(const std::vector<int>& series_ids, bool suppress) 
     if (removed.empty()) {
         return;
     }
+    const bool none_left = entries_.empty();
+    if (none_left) {
+        range_.reset();  // a range of frames of no video
+    }
     for (const auto& [key, page] : pages_) {
         page->remove_curves(removed);
+        if (none_left) {
+            page->set_selected_frames(std::nullopt);
+        }
     }
     select_available_metric();
     refresh_stats_table();
@@ -1590,6 +1821,8 @@ void GraphPanel::refresh_stats_table() {
         item->setFont(QFont(QString::fromLatin1(number_font_family), QFont().pointSize()));
         return item;
     };
+    // A frame range's statistics (issue #17), or the whole video's.
+    const std::optional<std::pair<int, int>> range = selected_frames();
     stats_table_->setRowCount(static_cast<int>(entries_.size()));
     int row = 0;
     for (const auto& [id, entry] : entries_) {
@@ -1602,12 +1835,20 @@ void GraphPanel::refresh_stats_table() {
             const MetricDefinition& spec = all[static_cast<std::size_t>(column - first_mean_column())];
             const std::string key(spec.key);
             const auto mean = entry.means.find(key);
-            QTableWidgetItem* item = number_item(
-                qt_text(spec.format_value(mean == entry.means.end() ? std::nullopt : mean->second)));
-            if (const auto identical = entry.identical.find(key); identical != entry.identical.end()) {
+            const std::optional<double> value = range ? range_mean(*entry.result, spec, *range)
+                                                : (mean == entry.means.end() ? std::nullopt : mean->second);
+            QTableWidgetItem* item = number_item(qt_text(spec.format_value(value)));
+            const auto whole_identical = entry.identical.find(key);
+            const long long identical = range ? identical_in_range(*entry.result, key, *range)
+                                              : (whole_identical == entry.identical.end() ? 0 : whole_identical->second);
+            if (identical > 0) {
                 item->setToolTip(app::tr("{identical} frames identical to the reference are included in the XPSNR "
                                          "sequence average: zero distortion, with their frames included in the count.",
-                                         {{"identical", identical->second}}));
+                                         {{"identical", identical}}));
+            }
+            if (range && spec.kind == MetricKind::sequence && entry.result->has_metric(key)) {
+                item->setToolTip(app::tr("{label} scores whole videos only: it has no score for part of one.",
+                                         {{"label", qt_text(spec.label)}}));
             }
             const bool selected = spec.key == metric.key;
             item->setBackground(theme::color(selected ? "mean_selected" : "mean_tint"));
@@ -1616,8 +1857,10 @@ void GraphPanel::refresh_stats_table() {
                 font.setBold(true);
                 item->setFont(font);
             } else {
-                item->setToolTip(app::tr("Click this column to show detailed {label} statistics.",
-                                         {{"label", qt_text(spec.label)}}));
+                // After what the cell's own tooltip says, if anything.
+                const QString click = app::tr("Click this column to show detailed {label} statistics.",
+                                              {{"label", qt_text(spec.label)}});
+                item->setToolTip(item->toolTip().isEmpty() ? click : item->toolTip() + "\n" + click);
             }
             stats_table_->setItem(row, column, item);
         }
@@ -1626,7 +1869,8 @@ void GraphPanel::refresh_stats_table() {
         if (const MetricCurve* curve = page->curve(id)) {
             // At the metric's own precision (SSIM's whole range is 0-1); the
             // mean has its own column.
-            const std::vector<QString> stats = statistics_cells(curve->stats, metric);
+            const std::vector<QString> stats =
+                statistics_cells(range ? stats_of(scores_in_range(*curve, *range), metric) : curve->stats, metric);
             cells.assign(stats.begin() + 1, stats.end());
         } else {
             cells.assign(static_cast<std::size_t>(stats_table_->columnCount() - detail_start - 1), QString());
@@ -1681,12 +1925,17 @@ GraphPanel::export_table() {
         // CVVDP's score: the whole video's JOD takes its place.
         headers[1] = app::tr("Whole video");
     }
+    // The table's statistics: of a frame range when one is chosen (issue #17).
+    const std::optional<std::pair<int, int>> range = selected_frames();
     std::vector<std::tuple<QString, QColor, std::vector<QString>>> rows;
     for (const auto& [entry, curve] : shown) {
-        std::vector<QString> cells = statistics_cells(curve->stats, metric);
+        std::vector<QString> cells =
+            statistics_cells(range ? stats_of(scores_in_range(*curve, *range), metric) : curve->stats, metric);
         if (per_video) {
+            // No whole-video score for part of a video.
             const auto overall = entry->means.find(std::string(metric.key));
-            cells[0] = qt_text(metric.format_value(overall == entry->means.end() ? std::nullopt : overall->second));
+            cells[0] = qt_text(metric.format_value(range || overall == entry->means.end() ? std::nullopt
+                                                                                          : overall->second));
         }
         rows.emplace_back(entry->label, entry->color, std::move(cells));
     }
@@ -1716,6 +1965,9 @@ QPixmap GraphPanel::render_export_image() {
     QString title = app::tr("{label} vs time", {{"label", qt_text(metric.label)}});
     if (metric.key == "xpsnr") {
         title += app::tr(" — ∞ plotted at {db:g} dB (display only)", {{"db", xpsnr_infinity_plot_db}});
+    }
+    if (const std::optional<std::pair<int, int>> frames = selected_frames()) {
+        title += app::tr(" — frames {first} to {last}", {{"first", frames->first}, {"last", frames->second}});
     }
     QFont cell_font(QString::fromLatin1(number_font_family));
     cell_font.setStyleHint(QFont::Monospace);

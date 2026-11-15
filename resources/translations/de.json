@@ -360,8 +360,8 @@
   "no {metric}": "kein {metric}",
   "No results yet": "Noch keine Ergebnisse",
   "Calculate metrics or load analysis results to view metric graphs.": "Berechnen Sie Metriken oder laden Sie Analyseergebnisse, um Metrik-Diagramme zu sehen.",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Zeigen Sie auf einen Punkt, um ihn zu untersuchen (rastet am niedrigsten Wert in der Nähe auf oder unter dem Mauszeiger ein, damit Einbrüche leicht zu treffen sind).\nMausrad zum Zoomen, Ziehen zum Verschieben, Doppelklick zum Zurücksetzen.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Zeigen Sie auf einen Punkt, um ihn zu untersuchen (rastet am schlechtesten Wert in der Nähe auf oder unter dem Mauszeiger ein, damit Einbrüche leicht zu treffen sind).\nMausrad zum Zoomen, Ziehen zum Verschieben, Doppelklick zum Zurücksetzen.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Zeigen Sie auf einen Punkt, um ihn zu untersuchen (rastet am niedrigsten Wert in der Nähe auf oder unter dem Mauszeiger ein, damit Einbrüche leicht zu treffen sind).\nMausrad zum Zoomen, Ziehen zum Verschieben, Umschalt+Ziehen zum Auswählen von Bildern, Doppelklick zum Zurücksetzen.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Zeigen Sie auf einen Punkt, um ihn zu untersuchen (rastet am schlechtesten Wert in der Nähe auf oder unter dem Mauszeiger ein, damit Einbrüche leicht zu treffen sind).\nMausrad zum Zoomen, Ziehen zum Verschieben, Umschalt+Ziehen zum Auswählen von Bildern, Doppelklick zum Zurücksetzen.",
   "{axis_label} (lower is better)": "{axis_label} (niedriger ist besser)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "Keine {label}-Daten in den sichtbaren Reihen – haken Sie vor dem Berechnen den Spaltenkopf {label} an, um sie hier zu sehen.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  Sekunde ab Bild {frame:>6}   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Die beiden Bilder unterscheiden sich nur um wenige Zeilen: dasselbe Bild, etwas anders zugeschnitten, und die Skalierung senkt jede Bewertung. Wurde das Testvideo anders zugeschnitten, als seine schwarzen Balken erkannt wurden, geben Sie beide Zuschnitte ein (Schwarze Balken: Manuell).",
   "Also score CVVDP on...": "CVVDP auch bewerten auf...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Fügt für jedes ausgewählte Video eine Zeile hinzu, die nur CVVDP auf einem anderen Display bewertet, neben dem Display seiner eigenen Zeile. Die übrigen Metriken werden nicht erneut berechnet. Der Ergebnisexport listet alle Displays im Eintrag des Videos.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Die ausgewählten Zeilen bewerten CVVDP bereits auf {display}, oder es sind Auflösungstests, die nur ein Display bewerten."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Die ausgewählten Zeilen bewerten CVVDP bereits auf {display}, oder es sind Auflösungstests, die nur ein Display bewerten.",
+  "to frame:": "bis Bild:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "Das andere Ende eines Bildbereichs: Das Diagramm hebt die Bilder von „Gehe zu Bild“ bis zu diesem hervor, und die Tabelle zeigt ihre Statistiken. Umschalt+Ziehen über das Diagramm wählt einen Bereich.",
+  "Clear range": "Bereich aufheben",
+  "Shows the statistics of the whole video again.": "Zeigt wieder die Statistiken des gesamten Videos.",
+  "Statistics of frames {first} to {last}.": "Statistiken der Bilder {first} bis {last}.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "Die Statistiken von {label} gelten für die ganzen Sekunden, in denen diese Bilder liegen.",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} bewertet nur ganze Videos: Für einen Teil davon gibt es keinen Wert.",
+  " — frames {first} to {last}": " — Bilder {first} bis {last}"
  },
  "plurals": {
   "about {count} day": [

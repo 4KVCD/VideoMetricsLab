@@ -360,8 +360,8 @@
   "no {metric}": "{metric} なし",
   "No results yet": "まだ結果がありません",
   "Calculate metrics or load analysis results to view metric graphs.": "指標グラフを表示するには、指標を計算するか解析結果を読み込んでください。",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "カーソルを合わせると点を調べられます（カーソル位置以下の近くで最も低いスコアに吸着するので、落ち込みを捉えやすくなります）。\nスクロールでズーム、ドラッグで移動、ダブルクリックでリセット。",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "カーソルを合わせると点を調べられます（カーソル位置以下の近くで最も悪いスコアに吸着するので、落ち込みを捉えやすくなります）。\nスクロールでズーム、ドラッグで移動、ダブルクリックでリセット。",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "カーソルを合わせると点を調べられます（カーソル位置以下の近くで最も低いスコアに吸着するので、落ち込みを捉えやすくなります）。\nスクロールでズーム、ドラッグで移動、Shift+ドラッグでフレームを選択、ダブルクリックでリセット。",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "カーソルを合わせると点を調べられます（カーソル位置以下の近くで最も悪いスコアに吸着するので、落ち込みを捉えやすくなります）。\nスクロールでズーム、ドラッグで移動、Shift+ドラッグでフレームを選択、ダブルクリックでリセット。",
   "{axis_label} (lower is better)": "{axis_label}（低いほど良い）",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "表示中の系列に {label} のデータがありません。ここに表示するには、実行前に {label} の列見出しにチェックを入れてください。",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  フレーム {frame:>6} からの 1 秒   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "2 つの映像は数行しか違いません。同じ映像を少し違うクロップで切り出したもので、拡大縮小によってすべてのスコアが下がります。テスト動画が、検出された黒帯とは違う形でクロップされている場合は、両方のクロップを入力してください（黒帯の扱い：手動）。",
   "Also score CVVDP on...": "CVVDP を別のディスプレイでも評価...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "選択した各動画に、別のディスプレイで CVVDP だけを評価する行を、その動画の行のディスプレイと並べて追加します。ほかの指標は再計算しません。結果のエクスポートでは、すべてのディスプレイを動画の項目に記載します。",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "選択した行はすでに {display} で CVVDP を評価しているか、1 つのディスプレイしか評価しない解像度テストです。"
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "選択した行はすでに {display} で CVVDP を評価しているか、1 つのディスプレイしか評価しない解像度テストです。",
+  "to frame:": "終了フレーム：",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "フレーム範囲のもう一方の端です。グラフは「フレームへ移動」からこのフレームまでを強調表示し、表にはその統計が表示されます。グラフ上を Shift+ドラッグすると範囲を選択できます。",
+  "Clear range": "範囲を解除",
+  "Shows the statistics of the whole video again.": "動画全体の統計に戻します。",
+  "Statistics of frames {first} to {last}.": "フレーム {first}～{last} の統計。",
+  "{label}'s statistics are of the whole seconds these frames are in.": "{label} の統計は、これらのフレームを含む秒全体のものです。",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} は動画全体のみを評価します。動画の一部のスコアはありません。",
+  " — frames {first} to {last}": " — フレーム {first}～{last}"
  },
  "plurals": {
   "about {count} day": [

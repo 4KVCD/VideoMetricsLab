@@ -133,6 +133,15 @@ public:
     // leaves and the ones it takes.
     void set_cursor_time(std::optional<double> t);
 
+    // Shades the times from `seconds.first` to `seconds.second` across the
+    // lines and the band, under the lines (Metric Graphs' frame range);
+    // nothing shades none.
+    void set_highlight(std::optional<std::pair<double, double>> seconds);
+    const std::optional<std::pair<double, double>>& highlight() const { return highlight_; }
+    // Whether Shift+drag selects a time range (range_dragged) rather than
+    // panning, as a plain drag still does.
+    void set_range_selection(bool on) { range_selection_ = on; }
+
     // The chart for a PNG export: in the light theme's colours whatever the
     // window shows, as an exported file is read elsewhere.
     QPixmap render_to_pixmap() const;
@@ -144,6 +153,10 @@ signals:
     void left();
     // Zoomed or panned.
     void view_changed();
+    // A Shift+drag with range selection on: the time it started at and the
+    // time under the pointer now, both within the data; `finished` once the
+    // button is let go.
+    void range_dragged(double start, double now, bool finished);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -180,6 +193,8 @@ private:
     bool cache_matches_display() const;
     void draw_axes(QPainter& painter, bool dark) const;
     void draw_band(QPainter& painter, const QRect& rect, bool dark) const;
+    void draw_highlight(QPainter& painter, const QRect& rect, const QColor& colour) const;
+    double time_within_data(int px) const;
     // Ticks for `range` drawn in `rect`, about `count` of them.
     std::vector<std::pair<int, QString>> ticks_for(const QRect& rect, std::pair<double, double> range,
                                                    double count) const;
@@ -208,6 +223,9 @@ private:
     std::pair<double, double> y_range_{0.0, 1.0};
     std::optional<QPoint> pan_origin_;
     std::optional<View> pan_view_;
+    std::optional<std::pair<double, double>> highlight_;
+    bool range_selection_ = false;
+    std::optional<double> selection_start_;  // a Shift+drag's first time, while it lasts
     // While the size keeps changing (the window dragged by an edge), the last
     // drawing is shown stretched, and drawn again once the size settles.
     // Drawn at every size, a dozen two-hour lines took 54 ms a step.

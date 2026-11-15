@@ -360,8 +360,8 @@
   "no {metric}": "sin {metric}",
   "No results yet": "Aún no hay resultados",
   "Calculate metrics or load analysis results to view metric graphs.": "Calcula métricas o carga resultados de análisis para ver los gráficos de métricas.",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Pasa el cursor para inspeccionar un punto (se ajusta a la puntuación más baja cercana, en o debajo del cursor, para acertar fácilmente en las caídas).\nRueda para acercar, arrastra para desplazar, doble clic para restablecer.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Pasa el cursor para inspeccionar un punto (se ajusta a la peor puntuación cercana, en o debajo del cursor, para acertar fácilmente en las caídas).\nRueda para acercar, arrastra para desplazar, doble clic para restablecer.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Pasa el cursor para inspeccionar un punto (se ajusta a la puntuación más baja cercana, en o debajo del cursor, para acertar fácilmente en las caídas).\nRueda para acercar, arrastra para desplazar, Mayús+arrastrar para seleccionar fotogramas, doble clic para restablecer.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Pasa el cursor para inspeccionar un punto (se ajusta a la peor puntuación cercana, en o debajo del cursor, para acertar fácilmente en las caídas).\nRueda para acercar, arrastra para desplazar, Mayús+arrastrar para seleccionar fotogramas, doble clic para restablecer.",
   "{axis_label} (lower is better)": "{axis_label} (menor es mejor)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "No hay datos de {label} entre las series visibles; marca el encabezado de la columna {label} antes de ejecutar para verlos aquí.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  segundo desde el fotograma {frame:>6}   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Las dos imágenes difieren solo en unas pocas líneas: la misma imagen recortada de forma un poco distinta, y el escalado baja todas las puntuaciones. Si el video de prueba se recortó de otra forma que como se encontraron sus barras negras, introduce ambos recortes (Barras negras: Manual).",
   "Also score CVVDP on...": "Puntuar CVVDP también en...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Agrega para cada video seleccionado una fila que puntúa solo CVVDP en otra pantalla, junto a la pantalla de su propia fila. Las demás métricas no se vuelven a calcular. La exportación de resultados lista todas las pantallas en la entrada del video.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Las filas seleccionadas ya puntúan CVVDP en {display}, o son pruebas de resolución, que puntúan una sola pantalla."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Las filas seleccionadas ya puntúan CVVDP en {display}, o son pruebas de resolución, que puntúan una sola pantalla.",
+  "to frame:": "hasta el fotograma:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "El otro extremo de un intervalo de fotogramas: el gráfico resalta los fotogramas desde «Ir al fotograma» hasta este, y la tabla da sus estadísticas. Mayús+arrastrar sobre el gráfico selecciona un intervalo.",
+  "Clear range": "Borrar intervalo",
+  "Shows the statistics of the whole video again.": "Vuelve a mostrar las estadísticas del video completo.",
+  "Statistics of frames {first} to {last}.": "Estadísticas de los fotogramas {first} a {last}.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "Las estadísticas de {label} son de los segundos completos en los que caen estos fotogramas.",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} puntúa solo videos completos: no tiene puntuación para una parte.",
+  " — frames {first} to {last}": " — fotogramas {first} a {last}"
  },
  "plurals": {
   "about {count} day": [

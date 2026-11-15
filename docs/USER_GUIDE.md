@@ -33,6 +33,14 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
    **Export CSV** also writes that difference, every metric's, as
    `<first>_minus_<second>.csv` (the videos' labels), in the per-video files'
    columns: a cell is blank where either video lacks the frame or the metric.
+   To look at one part of the videos (a scene you re-encoded, say), enter a
+   frame in **Go to frame** and another in **to frame**, or hold Shift and
+   drag across the graph: the frames between them are shaded on every metric's
+   graph, and the table and the exported PNG give the statistics of those
+   frames only. CVVDP has a score for whole videos only, so its column shows
+   — then; its graph's statistics are of the whole seconds the frames fall in.
+   **Clear range** goes back to the whole videos. The CSV export always holds
+   every frame.
 
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one.

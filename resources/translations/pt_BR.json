@@ -360,8 +360,8 @@
   "no {metric}": "sem {metric}",
   "No results yet": "Ainda sem resultados",
   "Calculate metrics or load analysis results to view metric graphs.": "Calcule métricas ou carregue resultados de análise para ver os gráficos de métricas.",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Passe o mouse para inspecionar um ponto (prende na menor pontuação próxima, no cursor ou abaixo dele, para acertar as quedas com facilidade).\nRole para ampliar, arraste para mover, clique duas vezes para redefinir.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Passe o mouse para inspecionar um ponto (prende na pior pontuação próxima, no cursor ou abaixo dele, para acertar as quedas com facilidade).\nRole para ampliar, arraste para mover, clique duas vezes para redefinir.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Passe o mouse para inspecionar um ponto (prende na menor pontuação próxima, no cursor ou abaixo dele, para acertar as quedas com facilidade).\nRole para ampliar, arraste para mover, Shift+arraste para selecionar quadros, clique duas vezes para redefinir.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Passe o mouse para inspecionar um ponto (prende na pior pontuação próxima, no cursor ou abaixo dele, para acertar as quedas com facilidade).\nRole para ampliar, arraste para mover, Shift+arraste para selecionar quadros, clique duas vezes para redefinir.",
   "{axis_label} (lower is better)": "{axis_label} (menor é melhor)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "Não há dados de {label} nas séries visíveis — marque o cabeçalho da coluna {label} antes de executar para vê-los aqui.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  segundo a partir do quadro {frame:>6}   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "As duas imagens diferem em poucas linhas: a mesma imagem recortada de um jeito um pouco diferente, e o redimensionamento reduz todas as pontuações. Se o vídeo de teste foi recortado de outra forma que as barras pretas encontradas, informe os dois recortes (Barras pretas: Manual).",
   "Also score CVVDP on...": "Avaliar CVVDP também em...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Adiciona, para cada vídeo selecionado, uma linha que avalia só o CVVDP em outra tela, ao lado da tela da própria linha. As outras métricas não são calculadas de novo. A exportação de resultados lista todas as telas na entrada do vídeo.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "As linhas selecionadas já avaliam o CVVDP em {display}, ou são testes de resolução, que avaliam uma tela só."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "As linhas selecionadas já avaliam o CVVDP em {display}, ou são testes de resolução, que avaliam uma tela só.",
+  "to frame:": "até o quadro:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "A outra ponta de um intervalo de quadros: o gráfico destaca os quadros de \"Ir para o quadro\" até este, e a tabela mostra suas estatísticas. Shift+arrastar no gráfico seleciona um intervalo.",
+  "Clear range": "Limpar intervalo",
+  "Shows the statistics of the whole video again.": "Mostra de novo as estatísticas do vídeo inteiro.",
+  "Statistics of frames {first} to {last}.": "Estatísticas dos quadros {first} a {last}.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "As estatísticas de {label} são dos segundos inteiros em que esses quadros estão.",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} avalia apenas vídeos inteiros: não tem pontuação para uma parte.",
+  " — frames {first} to {last}": " — quadros {first} a {last}"
  },
  "plurals": {
   "about {count} day": [

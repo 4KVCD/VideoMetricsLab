@@ -360,8 +360,8 @@
   "no {metric}": "немає {metric}",
   "No results yet": "Ще немає результатів",
   "Calculate metrics or load analysis results to view metric graphs.": "Обчисліть метрики або завантажте результати аналізу, щоб побачити «Графіки метрик».",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Наведіть, щоб переглянути точку (прилипає до найнижчої оцінки поруч із курсором або під ним, щоб легко влучати в провали).\nПрокручуйте для масштабу, перетягуйте для зсуву, двічі клацніть для скидання.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Наведіть, щоб переглянути точку (прилипає до найгіршої оцінки поруч із курсором або під ним, щоб легко влучати в провали).\nПрокручуйте для масштабу, перетягуйте для зсуву, двічі клацніть для скидання.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Наведіть, щоб переглянути точку (прилипає до найнижчої оцінки поруч із курсором або під ним, щоб легко влучати в провали).\nПрокручуйте для масштабу, перетягуйте для зсуву, Shift+перетягування для вибору кадрів, двічі клацніть для скидання.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Наведіть, щоб переглянути точку (прилипає до найгіршої оцінки поруч із курсором або під ним, щоб легко влучати в провали).\nПрокручуйте для масштабу, перетягуйте для зсуву, Shift+перетягування для вибору кадрів, двічі клацніть для скидання.",
   "{axis_label} (lower is better)": "{axis_label} (менше — краще)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "Серед видимих рядів немає даних {label} — позначте заголовок стовпця {label} перед запуском, щоб побачити їх тут.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  секунда від кадру {frame:>6}   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Два зображення відрізняються лише на кілька рядків: те саме зображення, обрізане трохи інакше, а масштабування знижує всі оцінки. Якщо тестове відео обрізано не так, як знайдено його чорні смуги, введіть обидва обрізання (Чорні смуги: Вручну).",
   "Also score CVVDP on...": "Оцінити CVVDP також на...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Додає для кожного вибраного відео рядок, який оцінює лише CVVDP на іншому дисплеї, поруч із дисплеєм його власного рядка. Інші метрики не обчислюються знову. Експорт результатів перелічує всі дисплеї в записі відео.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Вибрані рядки вже оцінюють CVVDP на {display} або є тестами роздільності, які оцінюють лише один дисплей."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Вибрані рядки вже оцінюють CVVDP на {display} або є тестами роздільності, які оцінюють лише один дисплей.",
+  "to frame:": "до кадру:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "Другий кінець діапазону кадрів: графік виділяє кадри від «До кадру» до цього, а таблиця показує їхню статистику. Shift+перетягування по графіку вибирає діапазон.",
+  "Clear range": "Скинути діапазон",
+  "Shows the statistics of the whole video again.": "Знову показує статистику всього відео.",
+  "Statistics of frames {first} to {last}.": "Статистика кадрів {first}–{last}.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "Статистика {label} — за цілі секунди, у які потрапляють ці кадри.",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} оцінює лише цілі відео: для частини відео оцінки немає.",
+  " — frames {first} to {last}": " — кадри {first}–{last}"
  },
  "plurals": {
   "about {count} day": [

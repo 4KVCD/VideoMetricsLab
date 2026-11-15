@@ -360,8 +360,8 @@
   "no {metric}": "geen {metric}",
   "No results yet": "Nog geen resultaten",
   "Calculate metrics or load analysis results to view metric graphs.": "Bereken metrieken of laad analyseresultaten om Metriekgrafieken te zien.",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Wijs een punt aan om het te bekijken (springt naar de laagste score bij of onder de cursor, zodat dips makkelijk te raken zijn).\nScroll om te zoomen, sleep om te verschuiven, dubbelklik om te herstellen.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Wijs een punt aan om het te bekijken (springt naar de slechtste score bij of onder de cursor, zodat dips makkelijk te raken zijn).\nScroll om te zoomen, sleep om te verschuiven, dubbelklik om te herstellen.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Wijs een punt aan om het te bekijken (springt naar de laagste score bij of onder de cursor, zodat dips makkelijk te raken zijn).\nScroll om te zoomen, sleep om te verschuiven, Shift+slepen om frames te selecteren, dubbelklik om te herstellen.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Wijs een punt aan om het te bekijken (springt naar de slechtste score bij of onder de cursor, zodat dips makkelijk te raken zijn).\nScroll om te zoomen, sleep om te verschuiven, Shift+slepen om frames te selecteren, dubbelklik om te herstellen.",
   "{axis_label} (lower is better)": "{axis_label} (lager is beter)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "Geen {label}-gegevens bij de zichtbare reeksen — vink de kolomkop {label} aan vóór de run om ze hier te zien.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  seconde vanaf frame {frame:>6}   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "De twee beelden verschillen maar een paar regels: hetzelfde beeld, iets anders bijgesneden, en het schalen verlaagt elke score. Is de testvideo anders bijgesneden dan zijn zwarte balken werden gevonden, voer dan beide bijsnijdingen in (Zwarte balken: Handmatig).",
   "Also score CVVDP on...": "CVVDP ook scoren op...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Voegt voor elke geselecteerde video een rij toe die alleen CVVDP scoort op een ander scherm, naast het scherm van zijn eigen rij. De andere metrieken worden niet opnieuw berekend. Het exporteren van resultaten vermeldt alle schermen bij de video.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "De geselecteerde rijen scoren CVVDP al op {display}, of zijn resolutietests, die maar één scherm scoren."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "De geselecteerde rijen scoren CVVDP al op {display}, of zijn resolutietests, die maar één scherm scoren.",
+  "to frame:": "tot frame:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "Het andere einde van een framebereik: de grafiek markeert de frames van 'Naar frame' tot en met dit frame, en de tabel geeft hun statistieken. Shift+slepen over de grafiek selecteert een bereik.",
+  "Clear range": "Bereik wissen",
+  "Shows the statistics of the whole video again.": "Toont weer de statistieken van de hele video.",
+  "Statistics of frames {first} to {last}.": "Statistieken van frames {first} tot en met {last}.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "De statistieken van {label} gaan over de hele seconden waarin deze frames vallen.",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} beoordeelt alleen hele video's: het heeft geen score voor een deel ervan.",
+  " — frames {first} to {last}": " — frames {first} t/m {last}"
  },
  "plurals": {
   "about {count} day": [

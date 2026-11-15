@@ -360,8 +360,8 @@
   "no {metric}": "{metric} yok",
   "No results yet": "Henüz sonuç yok",
   "Calculate metrics or load analysis results to view metric graphs.": "Metrik grafiklerini görmek için metrikleri hesaplayın veya analiz sonuçlarını yükleyin.",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Bir noktayı incelemek için üzerine gelin (düşüşleri kolayca yakalamak için imlecin hizasındaki veya altındaki en düşük yakın puana tutunur).\nYakınlaştırmak için kaydırın, kaydırmak için sürükleyin, sıfırlamak için çift tıklayın.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Bir noktayı incelemek için üzerine gelin (düşüşleri kolayca yakalamak için imlecin hizasındaki veya altındaki en kötü yakın puana tutunur).\nYakınlaştırmak için kaydırın, kaydırmak için sürükleyin, sıfırlamak için çift tıklayın.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Bir noktayı incelemek için üzerine gelin (düşüşleri kolayca yakalamak için imlecin hizasındaki veya altındaki en düşük yakın puana tutunur).\nYakınlaştırmak için kaydırın, kaydırmak için sürükleyin, kare seçmek için Shift+sürükleyin, sıfırlamak için çift tıklayın.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Bir noktayı incelemek için üzerine gelin (düşüşleri kolayca yakalamak için imlecin hizasındaki veya altındaki en kötü yakın puana tutunur).\nYakınlaştırmak için kaydırın, kaydırmak için sürükleyin, kare seçmek için Shift+sürükleyin, sıfırlamak için çift tıklayın.",
   "{axis_label} (lower is better)": "{axis_label} (düşük daha iyi)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "Görünür seriler arasında {label} verisi yok; burada görmek için çalıştırmadan önce {label} sütun başlığını işaretleyin.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  {frame:>6}. kareden itibaren saniye   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "İki görüntü yalnızca birkaç satır farklı: aynı görüntü biraz farklı kırpılmış ve ölçekleme her puanı düşürüyor. Test videosu, siyah bantlarının bulunduğundan farklı kırpıldıysa iki kırpmayı da girin (Siyah bantlar: Elle).",
   "Also score CVVDP on...": "CVVDP'yi şurada da puanla...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Seçili her video için, CVVDP'yi yalnızca başka bir ekranda puanlayan bir satır ekler; videonun kendi satırının ekranının yanında. Diğer metrikler yeniden hesaplanmaz. Sonuçları dışa aktarma, tüm ekranları videonun girdisinde listeler.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Seçili satırlar CVVDP'yi zaten {display} üzerinde puanlıyor ya da yalnızca tek ekranı puanlayan çözünürlük testleri."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Seçili satırlar CVVDP'yi zaten {display} üzerinde puanlıyor ya da yalnızca tek ekranı puanlayan çözünürlük testleri.",
+  "to frame:": "bitiş karesi:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "Bir kare aralığının diğer ucu: grafik \"Kareye git\" ile bu kare arasındaki kareleri vurgular, tablo da bunların istatistiklerini verir. Aralık seçmek için grafikte Shift+sürükleyin.",
+  "Clear range": "Aralığı temizle",
+  "Shows the statistics of the whole video again.": "Videonun tamamının istatistiklerini yeniden gösterir.",
+  "Statistics of frames {first} to {last}.": "{first}–{last}. karelerin istatistikleri.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "{label} istatistikleri, bu karelerin düştüğü tam saniyelere aittir.",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} yalnızca videonun tamamını puanlar: bir bölümü için puanı yoktur.",
+  " — frames {first} to {last}": " — {first}–{last}. kareler"
  },
  "plurals": {
   "about {count} day": [

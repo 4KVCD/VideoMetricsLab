@@ -360,8 +360,8 @@
   "no {metric}": "tanpa {metric}",
   "No results yet": "Belum ada hasil",
   "Calculate metrics or load analysis results to view metric graphs.": "Hitung metrik atau muat hasil analisis untuk melihat Grafik metrik.",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Arahkan kursor untuk memeriksa titik (menempel ke skor terendah di dekat atau di bawah kursor, agar penurunan mudah dikenai).\nGulir untuk memperbesar, seret untuk menggeser, klik ganda untuk mengatur ulang.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Arahkan kursor untuk memeriksa titik (menempel ke skor terburuk di dekat atau di bawah kursor, agar penurunan mudah dikenai).\nGulir untuk memperbesar, seret untuk menggeser, klik ganda untuk mengatur ulang.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Arahkan kursor untuk memeriksa titik (menempel ke skor terendah di dekat atau di bawah kursor, agar penurunan mudah dikenai).\nGulir untuk memperbesar, seret untuk menggeser, Shift+seret untuk memilih bingkai, klik ganda untuk mengatur ulang.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Arahkan kursor untuk memeriksa titik (menempel ke skor terburuk di dekat atau di bawah kursor, agar penurunan mudah dikenai).\nGulir untuk memperbesar, seret untuk menggeser, Shift+seret untuk memilih bingkai, klik ganda untuk mengatur ulang.",
   "{axis_label} (lower is better)": "{axis_label} (makin rendah makin baik)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "Tidak ada data {label} di antara seri yang terlihat — centang header kolom {label} sebelum memproses untuk melihatnya di sini.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  detik dari bingkai {frame:>6}   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Kedua gambar hanya berbeda beberapa baris: gambar yang sama dipotong sedikit berbeda, dan penskalaan menurunkan setiap skor. Jika video uji dipotong berbeda dari bilah hitam yang ditemukan, masukkan kedua pemotongan (Bilah hitam: Manual).",
   "Also score CVVDP on...": "Nilai CVVDP juga pada...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Menambahkan untuk setiap video terpilih satu baris yang hanya menilai CVVDP pada layar lain, di samping layar barisnya sendiri. Metrik lain tidak dihitung ulang. Ekspor hasil mencantumkan semua layar di entri video.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Baris terpilih sudah menilai CVVDP pada {display}, atau merupakan uji resolusi, yang hanya menilai satu layar."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Baris terpilih sudah menilai CVVDP pada {display}, atau merupakan uji resolusi, yang hanya menilai satu layar.",
+  "to frame:": "sampai bingkai:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "Ujung lain rentang bingkai: grafik menyorot bingkai dari \"Ke bingkai\" sampai bingkai ini, dan tabel memberi statistiknya. Shift+seret pada grafik untuk memilih rentang.",
+  "Clear range": "Hapus rentang",
+  "Shows the statistics of the whole video again.": "Menampilkan lagi statistik seluruh video.",
+  "Statistics of frames {first} to {last}.": "Statistik bingkai {first} sampai {last}.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "Statistik {label} berasal dari detik utuh tempat bingkai-bingkai ini berada.",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} hanya menilai video utuh: tidak ada skor untuk sebagian video.",
+  " — frames {first} to {last}": " — bingkai {first} sampai {last}"
  },
  "plurals": {
   "about {count} day": [

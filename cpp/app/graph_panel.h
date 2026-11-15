@@ -133,6 +133,15 @@ public:
     // exactly two are shown: the pair the band draws.
     std::optional<std::pair<int, int>> difference_pair() const;
 
+    // Shades frames `frames.first` to `frames.second` (nothing: none), as
+    // the first shown line (in the table's order) with a point among them
+    // places them in time.
+    void set_selected_frames(std::optional<std::pair<int, int>> frames);
+    // The frame at time `time` on the first shown line, for a range dragged
+    // across the chart: its nearest point's, or within a per-second line's
+    // second, the frame that far into it. Nothing when no line is shown.
+    std::optional<int> frame_at(double time) const;
+
 private:
     friend class GraphPanelTest;  // the graph's tests (tests/app)
 
@@ -140,6 +149,7 @@ private:
     void set_frame_curve(int series_id, const SeriesEntry& entry);
     void set_timeline_curve(int series_id, const SeriesEntry& entry);
     void refresh_difference();
+    void refresh_highlight();
     void update_no_data_label();
     void fit_hover_label();
     void fit_readout_margins();
@@ -172,6 +182,7 @@ private:
     QString placeholder_;
     std::map<int, MetricCurve> curves_;  // by series, only lines with data
     bool difference_on_ = false;
+    std::optional<std::pair<int, int>> selected_frames_;
     QString hover_text_;
     // The readout's monospaced font, which the label takes from the first
     // hover on; the placeholder before it is in the window's.
@@ -262,6 +273,12 @@ private:
     void select_available_metric();
     QWidget* build_action_bar();
     void on_frame_requested(int frame);
+    void on_range_dragged(MetricPage* page, double start, double now, bool finished);
+    // The frames whose statistics the table gives and the pages shade: the
+    // range's two ends in order, or nothing for the whole video.
+    std::optional<std::pair<int, int>> selected_frames() const;
+    void apply_range();
+    void clear_range();
     void refresh_page_controls();
     void cap_panel_heights();
     const MetricDefinition& current_metric() const;
@@ -309,6 +326,12 @@ private:
     std::map<std::string, MetricPage*> pages_;
     QPushButton* export_csv_button_ = nullptr;
     QSpinBox* frame_spin_ = nullptr;
+    // A frame range (issue #17): the Go to frame box's frame and the "to
+    // frame" box's, as typed or dragged (the boxes show them within the
+    // page's frames). Nothing: no range, the whole video's statistics.
+    std::optional<std::pair<int, int>> range_;
+    QSpinBox* range_end_spin_ = nullptr;
+    QPushButton* clear_range_button_ = nullptr;
     // The Difference box: on for every page (not saved), drawn where a page
     // shows exactly two lines.
     bool difference_on_ = false;

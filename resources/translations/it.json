@@ -360,8 +360,8 @@
   "no {metric}": "nessun {metric}",
   "No results yet": "Ancora nessun risultato",
   "Calculate metrics or load analysis results to view metric graphs.": "Calcola le metriche o carica risultati di analisi per vedere i grafici delle metriche.",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Passa sopra per esaminare un punto (si aggancia al punteggio più basso vicino, al livello del cursore o sotto, per centrare facilmente i cali).\nRotellina per lo zoom, trascina per spostare, doppio clic per reimpostare.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Passa sopra per esaminare un punto (si aggancia al punteggio peggiore vicino, al livello del cursore o sotto, per centrare facilmente i cali).\nRotellina per lo zoom, trascina per spostare, doppio clic per reimpostare.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Passa sopra per esaminare un punto (si aggancia al punteggio più basso vicino, al livello del cursore o sotto, per centrare facilmente i cali).\nRotellina per lo zoom, trascina per spostare, Maiusc+trascina per selezionare fotogrammi, doppio clic per reimpostare.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Passa sopra per esaminare un punto (si aggancia al punteggio peggiore vicino, al livello del cursore o sotto, per centrare facilmente i cali).\nRotellina per lo zoom, trascina per spostare, Maiusc+trascina per selezionare fotogrammi, doppio clic per reimpostare.",
   "{axis_label} (lower is better)": "{axis_label} (più basso è meglio)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "Nessun dato {label} tra le serie visibili: spunta l'intestazione della colonna {label} prima dell'esecuzione per vederlo qui.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  secondo dal fotogramma {frame:>6}   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Le due immagini differiscono di poche righe: la stessa immagine ritagliata in modo un po' diverso, e il ridimensionamento abbassa ogni punteggio. Se il video di prova è stato ritagliato diversamente da come sono state trovate le sue bande nere, inserisci entrambi i ritagli (Bande nere: Manuale).",
   "Also score CVVDP on...": "Valuta CVVDP anche su...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Aggiunge per ogni video selezionato una riga che valuta solo CVVDP su un altro schermo, accanto allo schermo della sua riga. Le altre metriche non vengono ricalcolate. L'esportazione dei risultati elenca tutti gli schermi nella voce del video.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Le righe selezionate valutano già CVVDP su {display}, oppure sono test di risoluzione, che valutano un solo schermo."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Le righe selezionate valutano già CVVDP su {display}, oppure sono test di risoluzione, che valutano un solo schermo.",
+  "to frame:": "al fotogramma:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "L'altro estremo di un intervallo di fotogrammi: il grafico evidenzia i fotogrammi da «Vai al fotogramma» fino a questo, e la tabella ne dà le statistiche. Maiusc+trascina sul grafico per selezionare un intervallo.",
+  "Clear range": "Cancella intervallo",
+  "Shows the statistics of the whole video again.": "Mostra di nuovo le statistiche dell'intero video.",
+  "Statistics of frames {first} to {last}.": "Statistiche dei fotogrammi da {first} a {last}.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "Le statistiche di {label} riguardano i secondi interi in cui cadono questi fotogrammi.",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} valuta solo video interi: non ha un punteggio per una parte.",
+  " — frames {first} to {last}": " — fotogrammi da {first} a {last}"
  },
  "plurals": {
   "about {count} day": [

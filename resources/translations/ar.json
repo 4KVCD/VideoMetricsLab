@@ -360,8 +360,8 @@
   "no {metric}": "بلا {metric}",
   "No results yet": "لا نتائج بعد",
   "Calculate metrics or load analysis results to view metric graphs.": "احسب المقاييس أو حمّل نتائج تحليل لعرض رسوم المقاييس.",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "مرّر المؤشر لفحص نقطة (يلتصق بأدنى درجة قريبة عند المؤشر أو تحته، لتسهيل الوقوع على الانخفاضات).\nمرّر العجلة للتكبير، واسحب للتحريك، وانقر مرتين لإعادة الضبط.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "مرّر المؤشر لفحص نقطة (يلتصق بأسوأ درجة قريبة عند المؤشر أو تحته، لتسهيل الوقوع على الانخفاضات).\nمرّر العجلة للتكبير، واسحب للتحريك، وانقر مرتين لإعادة الضبط.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "مرّر المؤشر لفحص نقطة (يلتصق بأدنى درجة قريبة عند المؤشر أو تحته، لتسهيل الوقوع على الانخفاضات).\nمرّر العجلة للتكبير، واسحب للتحريك، واسحب مع Shift لتحديد إطارات، وانقر مرتين لإعادة الضبط.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "مرّر المؤشر لفحص نقطة (يلتصق بأسوأ درجة قريبة عند المؤشر أو تحته، لتسهيل الوقوع على الانخفاضات).\nمرّر العجلة للتكبير، واسحب للتحريك، واسحب مع Shift لتحديد إطارات، وانقر مرتين لإعادة الضبط.",
   "{axis_label} (lower is better)": "{axis_label} (الأقل أفضل)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "لا بيانات {label} بين السلاسل الظاهرة — حدّد رأس عمود {label} قبل التشغيل لرؤيتها هنا.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  ثانية من الإطار {frame:>6}   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "تختلف الصورتان ببضعة أسطر فقط: الصورة نفسها مقصوصة بشكل مختلف قليلًا، والتحجيم يخفض كل الدرجات. إن كان فيديو الاختبار قد قُص بغير ما وُجدت عليه أشرطته السوداء، فأدخِل القص لكليهما (الأشرطة السوداء: يدوي).",
   "Also score CVVDP on...": "تقييم CVVDP أيضًا على...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "يضيف صفًا لكل فيديو محدد يقيّم CVVDP وحده على شاشة أخرى، بجانب شاشة صفّه. لا تُحسب المقاييس الأخرى مرة ثانية. ويسرد تصدير النتائج كل الشاشات في مُدخل الفيديو.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "الصفوف المحددة تقيّم CVVDP على {display} بالفعل، أو هي اختبارات دقة لا تقيّم إلا شاشة واحدة."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "الصفوف المحددة تقيّم CVVDP على {display} بالفعل، أو هي اختبارات دقة لا تقيّم إلا شاشة واحدة.",
+  "to frame:": "حتى الإطار:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "الطرف الآخر لنطاق الإطارات: يظلّل الرسم البياني الإطارات من «الانتقال إلى الإطار» حتى هذا الإطار، ويعرض الجدول إحصاءاتها. اسحب مع Shift على الرسم البياني لتحديد نطاق.",
+  "Clear range": "مسح النطاق",
+  "Shows the statistics of the whole video again.": "يعرض إحصاءات الفيديو كاملًا مرة أخرى.",
+  "Statistics of frames {first} to {last}.": "إحصاءات الإطارات من {first} إلى {last}.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "إحصاءات {label} مأخوذة من الثواني الكاملة التي تقع فيها هذه الإطارات.",
+  "{label} scores whole videos only: it has no score for part of one.": "يقيّم {label} الفيديو كاملًا فقط: لا توجد له درجة لجزء من الفيديو.",
+  " — frames {first} to {last}": " — الإطارات من {first} إلى {last}"
  },
  "plurals": {
   "about {count} day": [

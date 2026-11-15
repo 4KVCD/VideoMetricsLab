@@ -360,8 +360,8 @@
   "no {metric}": "无 {metric}",
   "No results yet": "还没有结果",
   "Calculate metrics or load analysis results to view metric graphs.": "计算指标或加载分析结果以查看指标图表。",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "悬停以查看数据点（会吸附到光标处或下方附近的最低分，便于找到低谷）。\n滚动缩放，拖动平移，双击复位。",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "悬停以查看数据点（会吸附到光标处或下方附近的最差分数，便于找到低谷）。\n滚动缩放，拖动平移，双击复位。",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "悬停以查看数据点（会吸附到光标处或下方附近的最低分，便于找到低谷）。\n滚动缩放，拖动平移，Shift+拖动选择帧，双击复位。",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "悬停以查看数据点（会吸附到光标处或下方附近的最差分数，便于找到低谷）。\n滚动缩放，拖动平移，Shift+拖动选择帧，双击复位。",
   "{axis_label} (lower is better)": "{axis_label}（越低越好）",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "当前可见的系列中没有 {label} 数据——运行前勾选 {label} 列标题即可在此看到。",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  从第 {frame:>6} 帧起的一秒   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "两个画面只差几行：同一画面的裁切略有不同，缩放会降低每项分数。如果测试视频的裁切与检测到的黑边不同，请输入两者的裁切（黑边处理：手动）。",
   "Also score CVVDP on...": "另在其他显示器上评分 CVVDP...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "为每个选中的视频添加一行，只在另一台显示器上评分 CVVDP，与该视频本行的显示器并列。其他指标不会重新计算。导出结果会在视频的条目中列出所有显示器。",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "选中的行已在 {display} 上评分 CVVDP，或是只评分一台显示器的分辨率测试。"
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "选中的行已在 {display} 上评分 CVVDP，或是只评分一台显示器的分辨率测试。",
+  "to frame:": "至帧：",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "帧范围的另一端：图表会突出显示从“转到帧”到此帧的各帧，表格给出它们的统计。在图表上按住 Shift 拖动可选择范围。",
+  "Clear range": "清除范围",
+  "Shows the statistics of the whole video again.": "重新显示整个视频的统计。",
+  "Statistics of frames {first} to {last}.": "第 {first} 至 {last} 帧的统计。",
+  "{label}'s statistics are of the whole seconds these frames are in.": "{label} 的统计取自这些帧所在的完整秒。",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} 只对整个视频评分：视频的一部分没有分数。",
+  " — frames {first} to {last}": " — 第 {first} 至 {last} 帧"
  },
  "plurals": {
   "about {count} day": [

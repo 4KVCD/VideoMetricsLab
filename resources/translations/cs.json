@@ -360,8 +360,8 @@
   "no {metric}": "bez {metric}",
   "No results yet": "Zatím žádné výsledky",
   "Calculate metrics or load analysis results to view metric graphs.": "Spočítejte metriky nebo načtěte výsledky analýzy, abyste viděli Grafy metrik.",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Najetím prozkoumáte bod (přichytí se k nejnižšímu skóre poblíž nebo pod kurzorem, aby se snadno trefily propady).\nKolečkem přibližujte, tažením posouvejte, dvojklikem obnovte.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Najetím prozkoumáte bod (přichytí se k nejhoršímu skóre poblíž nebo pod kurzorem, aby se snadno trefily propady).\nKolečkem přibližujte, tažením posouvejte, dvojklikem obnovte.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Najetím prozkoumáte bod (přichytí se k nejnižšímu skóre poblíž nebo pod kurzorem, aby se snadno trefily propady).\nKolečkem přibližujte, tažením posouvejte, tažením se Shiftem vyberte snímky, dvojklikem obnovte.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Najetím prozkoumáte bod (přichytí se k nejhoršímu skóre poblíž nebo pod kurzorem, aby se snadno trefily propady).\nKolečkem přibližujte, tažením posouvejte, tažením se Shiftem vyberte snímky, dvojklikem obnovte.",
   "{axis_label} (lower is better)": "{axis_label} (nižší je lepší)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "Mezi viditelnými řadami nejsou data {label} — před během zaškrtněte záhlaví sloupce {label}, abyste je zde viděli.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  sekunda od snímku {frame:>6}   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Oba obrazy se liší jen o pár řádků: stejný obraz oříznutý trochu jinak, a změna velikosti snižuje všechna skóre. Pokud bylo testovací video oříznuto jinak, než byly nalezeny jeho černé pruhy, zadejte oba ořezy (Černé pruhy: Ručně).",
   "Also score CVVDP on...": "Hodnotit CVVDP také na...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Přidá ke každému vybranému videu řádek, který hodnotí jen CVVDP na jiném displeji, vedle displeje jeho vlastního řádku. Ostatní metriky se znovu nepočítají. Export výsledků uvede všechny displeje v záznamu videa.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Vybrané řádky už hodnotí CVVDP na {display}, nebo jsou to testy rozlišení, které hodnotí jen jeden displej."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Vybrané řádky už hodnotí CVVDP na {display}, nebo jsou to testy rozlišení, které hodnotí jen jeden displej.",
+  "to frame:": "po snímek:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "Druhý konec rozsahu snímků: graf zvýrazní snímky od „Na snímek“ po tento a tabulka ukáže jejich statistiky. Rozsah vyberete tažením se Shiftem přes graf.",
+  "Clear range": "Zrušit rozsah",
+  "Shows the statistics of the whole video again.": "Znovu zobrazí statistiky celého videa.",
+  "Statistics of frames {first} to {last}.": "Statistiky snímků {first} až {last}.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "Statistiky {label} jsou z celých sekund, do kterých tyto snímky spadají.",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} hodnotí jen celá videa: pro jejich část skóre nemá.",
+  " — frames {first} to {last}": " — snímky {first} až {last}"
  },
  "plurals": {
   "about {count} day": [

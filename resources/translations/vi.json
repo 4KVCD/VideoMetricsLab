@@ -360,8 +360,8 @@
   "no {metric}": "không có {metric}",
   "No results yet": "Chưa có kết quả",
   "Calculate metrics or load analysis results to view metric graphs.": "Tính chỉ số hoặc tải kết quả phân tích để xem Biểu đồ chỉ số.",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Rê chuột để xem một điểm (bám vào điểm thấp nhất gần hoặc dưới con trỏ, để dễ trúng các chỗ tụt).\nCuộn để phóng to, kéo để di chuyển, nhấp đúp để đặt lại.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Rê chuột để xem một điểm (bám vào điểm tệ nhất gần hoặc dưới con trỏ, để dễ trúng các chỗ tụt).\nCuộn để phóng to, kéo để di chuyển, nhấp đúp để đặt lại.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Rê chuột để xem một điểm (bám vào điểm thấp nhất gần hoặc dưới con trỏ, để dễ trúng các chỗ tụt).\nCuộn để phóng to, kéo để di chuyển, Shift+kéo để chọn khung, nhấp đúp để đặt lại.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Rê chuột để xem một điểm (bám vào điểm tệ nhất gần hoặc dưới con trỏ, để dễ trúng các chỗ tụt).\nCuộn để phóng to, kéo để di chuyển, Shift+kéo để chọn khung, nhấp đúp để đặt lại.",
   "{axis_label} (lower is better)": "{axis_label} (càng thấp càng tốt)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "Không có dữ liệu {label} trong các chuỗi đang hiển thị — đánh dấu tiêu đề cột {label} trước khi chạy để thấy nó ở đây.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  giây từ khung {frame:>6}   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Hai hình chỉ khác nhau vài dòng: cùng một hình được cắt hơi khác, và việc thay đổi kích thước làm giảm mọi điểm số. Nếu video thử được cắt khác với viền đen đã tìm thấy, hãy nhập cả hai vùng cắt (Viền đen: Thủ công).",
   "Also score CVVDP on...": "Chấm CVVDP cả trên...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Thêm cho mỗi video được chọn một hàng chỉ chấm CVVDP trên một màn hình khác, cạnh màn hình của hàng riêng của nó. Các chỉ số khác không được tính lại. Xuất kết quả liệt kê mọi màn hình trong mục của video.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Các hàng được chọn đã chấm CVVDP trên {display}, hoặc là bài thử độ phân giải, chỉ chấm một màn hình."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Các hàng được chọn đã chấm CVVDP trên {display}, hoặc là bài thử độ phân giải, chỉ chấm một màn hình.",
+  "to frame:": "đến khung:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "Đầu còn lại của một khoảng khung: biểu đồ tô sáng các khung từ \"Đến khung\" tới khung này, và bảng cho thống kê của chúng. Shift+kéo trên biểu đồ để chọn một khoảng.",
+  "Clear range": "Xóa khoảng",
+  "Shows the statistics of the whole video again.": "Hiện lại thống kê của toàn bộ video.",
+  "Statistics of frames {first} to {last}.": "Thống kê của khung {first} đến {last}.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "Thống kê của {label} là của các giây trọn vẹn chứa các khung này.",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} chỉ chấm điểm toàn bộ video: không có điểm cho một phần video.",
+  " — frames {first} to {last}": " — khung {first} đến {last}"
  },
  "plurals": {
   "about {count} day": [

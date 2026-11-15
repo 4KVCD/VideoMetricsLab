@@ -450,6 +450,12 @@ double ChartWidget::time_at(int px) const {
     return x0 + fraction * (x1 - x0);
 }
 
+double ChartWidget::time_within_data(int px) const {
+    // A drag may run past the plotting area: held to the lines' ends.
+    const auto [data_lo, data_hi] = data_x_range();
+    return std::clamp(time_at(px), data_lo, std::max(data_lo, data_hi));
+}
+
 double ChartWidget::value_at(int py) const {
     // height_fraction maps a height back to a value too: the same flip.
     const QRect rect = lines_rect();
@@ -623,15 +629,34 @@ void ChartWidget::draw(QPixmap& pixmap, bool dark) const {
     painter.setFont(font());
     draw_axes(painter, dark);
     const QRect lines = lines_rect();
+    const std::optional<QRect> band = band_rect();
+    draw_highlight(painter, lines, colours.highlight);
+    if (band) {
+        draw_highlight(painter, *band, colours.highlight);
+    }
     for (const ChartSeries* series : visible_series()) {
         draw_series(painter, lines, *series, y_range_);
     }
     painter.setPen(QPen(colours.axis, 1));
     painter.drawRect(lines.adjusted(0, 0, -1, -1));
-    if (const std::optional<QRect> band = band_rect()) {
+    if (band) {
         draw_band(painter, *band, dark);
     }
     painter.end();
+}
+
+void ChartWidget::draw_highlight(QPainter& painter, const QRect& rect, const QColor& colour) const {
+    // The highlighted times' columns of `rect`, at least one pixel wide, so
+    // that a single frame of a long run still shows; nothing out of view.
+    if (!highlight_) {
+        return;
+    }
+    const int left = std::max(rect.left(), pixel_for_time(highlight_->first));
+    const int right = std::min(rect.right(), pixel_for_time(highlight_->second));
+    if (right < rect.left() || left > rect.right()) {
+        return;
+    }
+    painter.fillRect(QRect(QPoint(left, rect.top()), QPoint(std::max(left, right), rect.bottom())), colour);
 }
 
 void ChartWidget::draw_band(QPainter& painter, const QRect& rect, bool dark) const {
@@ -824,6 +849,14 @@ void ChartWidget::draw_series(QPainter& painter, const QRect& rect, const ChartS
 
 // ------------------------------------------------------------------- cursor
 
+void ChartWidget::set_highlight(std::optional<std::pair<double, double>> seconds) {
+    if (seconds == highlight_) {
+        return;
+    }
+    highlight_ = seconds;
+    invalidate();
+}
+
 void ChartWidget::set_cursor_time(std::optional<double> t) {
     std::optional<int> px;
     const QRect plot = plot_rect();
@@ -864,6 +897,10 @@ void ChartWidget::mouseMoveEvent(QMouseEvent* event) {
     // Pans while dragging; otherwise says the time and value under the
     // pointer.
     const QPoint pos = event->position().toPoint();
+    if (selection_start_) {
+        emit range_dragged(*selection_start_, time_within_data(pos.x()), false);
+        return;
+    }
     if (pan_origin_ && pan_view_) {
         const double span = pan_view_->span;
         const double shift =
@@ -946,6 +983,12 @@ void ChartWidget::leaveEvent(QEvent* event) {
 void ChartWidget::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         forget_hover();
+        if (range_selection_ && event->modifiers().testFlag(Qt::ShiftModifier) && has_data()) {
+            selection_start_ = time_within_data(event->position().toPoint().x());
+            setCursor(Qt::SizeHorCursor);
+            emit range_dragged(*selection_start_, *selection_start_, false);
+            return;
+        }
         pan_origin_ = event->position().toPoint();
         pan_view_ = current_view();
         setCursor(Qt::ClosedHandCursor);
@@ -957,6 +1000,9 @@ void ChartWidget::mouseReleaseEvent(QMouseEvent* event) {
         pan_origin_.reset();
         pan_view_.reset();
         unsetCursor();
+        if (const std::optional<double> start = std::exchange(selection_start_, std::nullopt)) {
+            emit range_dragged(*start, time_within_data(event->position().toPoint().x()), true);
+        }
     }
 }
 

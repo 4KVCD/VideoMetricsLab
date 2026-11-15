@@ -11,6 +11,8 @@
 #include <QCoreApplication>
 #include <QImage>
 #include <QLabel>
+#include <QMouseEvent>
+#include <QPushButton>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QTableWidget>
@@ -18,6 +20,7 @@
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -44,6 +47,22 @@ protected:
     static QTabWidget& tabs(GraphPanel& panel) { return *panel.tabs_; }
     static QSpinBox& frame_spin(GraphPanel& panel) { return *panel.frame_spin_; }
     static QCheckBox& difference_box(GraphPanel& panel) { return *panel.difference_box_; }
+    static QSpinBox& range_end_spin(GraphPanel& panel) { return *panel.range_end_spin_; }
+    static QPushButton& clear_range_button(GraphPanel& panel) { return *panel.clear_range_button_; }
+    static QString stats_hint(const GraphPanel& panel) { return panel.stats_hint_->text(); }
+    // Every cell's text, row by row.
+    static std::vector<QStringList> cell_texts(GraphPanel& panel) {
+        std::vector<QStringList> rows;
+        const QTableWidget& stats = *panel.stats_table_;
+        for (int row = 0; row < stats.rowCount(); ++row) {
+            QStringList cells;
+            for (int column = 0; column < stats.columnCount(); ++column) {
+                cells.append(stats.item(row, column) != nullptr ? stats.item(row, column)->text() : QString());
+            }
+            rows.push_back(cells);
+        }
+        return rows;
+    }
     // The difference a page's chart draws under its lines, if any.
     static std::optional<std::vector<float>> band_values(MetricPage& page) {
         const std::optional<ChartBand>& band = page.chart_->band_;
@@ -540,6 +559,134 @@ TEST_F(GraphPanelTest, ALineWithNoScoresForTheMetricShowsDashesAndExports) {
         ASSERT_EQ(cells.size() + 1, headers.size()) << label.toStdString();
     }
     EXPECT_FALSE(panel.render_export_image().isNull());
+}
+
+// A run with VMAF's `vmaf` (a frame each at 30 a second) and CVVDP's
+// seconds: frames 0, 3 and 6 begin them, scoring 8.5, 9 and 8.
+std::shared_ptr<const ComparisonResult> range_run(const std::string& name, const std::vector<float>& vmaf) {
+    ComparisonResult result;
+    result.source = "source.mkv";
+    result.distorted = name;
+    result.fps = 30.0;
+    FrameMetricResult scores{"vmaf", {}, {}, vmaf, current_ffmpeg_provenance("vmaf", "9.0.1")};
+    for (std::size_t i = 0; i < vmaf.size(); ++i) {
+        scores.frame.push_back(static_cast<int>(i));
+        scores.time.push_back(static_cast<double>(i) / 30.0);
+    }
+    result.metric_results.add(std::move(scores));
+    result.metric_results.add(SequenceMetricResult{"cvvdp", 8.75, current_ffmpeg_provenance("vmaf", "9.0.1"),
+                                                   {0, 3, 6}, {0.0, 0.1, 0.2}, {8.5F, 9.0F, 8.0F}});
+    return std::make_shared<const ComparisonResult>(std::move(result));
+}
+
+TEST_F(GraphPanelTest, AFrameRangesStatisticsAndShading) {
+    // Issue #17: frames 7 to 3 (either way round) typed into the boxes give
+    // their statistics in the table and are shaded on the graph; a run with
+    // none of them has none, and CVVDP no score for part of a video. Clear
+    // range brings back the whole videos' table exactly.
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    const std::vector<float> a_vmaf{80, 82, 84, 86, 88, 90, 70, 60, 95, 99};
+    panel.add_run({range_run("a.mkv", a_vmaf), "a", {}, true});
+    panel.add_run({range_run("b.mkv", {50, 51, 52}), "b", {}, true});
+    MetricPage& vmaf = page(panel, "vmaf");
+    const std::vector<QStringList> whole = cell_texts(panel);
+
+    frame_spin(panel).setValue(7);
+    range_end_spin(panel).setValue(3);
+    EXPECT_TRUE(clear_range_button(panel).isEnabled());
+    EXPECT_TRUE(stats_hint(panel).contains("frames 3 to 7")) << stats_hint(panel).toStdString();
+
+    const MetricDefinition& spec = *find_metric("vmaf");
+    const std::vector<double> in_range(a_vmaf.begin() + 3, a_vmaf.begin() + 8);
+    const ScoreStats stats = compute_stats(in_range, spec.thresholds, spec.aggregation, spec.direction);
+    const auto text = [&spec](std::optional<double> value) { return QString::fromStdString(spec.format_value(value)); };
+    const std::span<const MetricDefinition> all = metrics();
+    const auto column_of = [&all](std::string_view key) {
+        return 1 + static_cast<int>(std::find_if(all.begin(), all.end(), [key](const auto& m) { return m.key == key; }) -
+                                    all.begin());
+    };
+    const int details = 1 + static_cast<int>(all.size());
+    QTableWidget& cells = table(panel);
+    ASSERT_EQ(cells.item(0, 0)->text(), "a");
+    EXPECT_EQ(cells.item(0, column_of("vmaf"))->text(), text(aggregate_scores(in_range, spec.aggregation)));
+    EXPECT_EQ(cells.item(0, details)->text(), text(stats.median));
+    EXPECT_EQ(cells.item(0, details + 1)->text(), text(stats.stdev));
+    EXPECT_EQ(cells.item(0, details + 2)->text(), text(stats.minimum));
+    EXPECT_EQ(cells.item(0, details + 3)->text(), text(stats.maximum));
+    EXPECT_EQ(cells.item(0, column_of("cvvdp"))->text(), "—");
+    EXPECT_EQ(cells.item(1, column_of("vmaf"))->text(), "—");  // b's frames end at 2
+    EXPECT_EQ(cells.item(1, details)->text(), "—");
+    // Half a frame either side of frames 3 and 7.
+    ASSERT_TRUE(vmaf.chart().highlight());
+    EXPECT_NEAR(vmaf.chart().highlight()->first, 2.5 / 30, 1e-9);
+    EXPECT_NEAR(vmaf.chart().highlight()->second, 7.5 / 30, 1e-9);
+
+    clear_range_button(panel).click();
+    EXPECT_FALSE(vmaf.chart().highlight());
+    EXPECT_FALSE(clear_range_button(panel).isEnabled());
+    EXPECT_EQ(range_end_spin(panel).value(), range_end_spin(panel).minimum());
+    EXPECT_EQ(cell_texts(panel), whole);
+}
+
+TEST_F(GraphPanelTest, AFrameRangeOnCvvdpsPageIsTheSecondsItIsIn) {
+    // Frames 3 to 7 are in the seconds beginning at frames 3 and 6: their
+    // statistics and shading; no whole-video score, in the table or the
+    // exported image's.
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_run({range_run("a.mkv", {80, 82, 84, 86, 88, 90, 70, 60, 95, 99}), "a", {}, true});
+    MetricPage& cvvdp = page(panel, "cvvdp");
+    frame_spin(panel).setValue(3);
+    range_end_spin(panel).setValue(7);
+    const MetricDefinition& spec = *find_metric("cvvdp");
+    const ScoreStats seconds =
+        compute_stats(std::vector<double>{9.0, 8.0}, spec.thresholds, spec.aggregation, spec.direction);
+    const int details = 1 + static_cast<int>(metrics().size());
+    EXPECT_EQ(table(panel).item(0, details)->text(), QString::fromStdString(spec.format_value(seconds.median)));
+    EXPECT_TRUE(stats_hint(panel).contains("whole seconds")) << stats_hint(panel).toStdString();
+    ASSERT_TRUE(cvvdp.chart().highlight());
+    EXPECT_NEAR(cvvdp.chart().highlight()->first, 0.1, 1e-9);
+    EXPECT_NEAR(cvvdp.chart().highlight()->second, 0.3, 1e-9);
+    const auto [headers, rows] = export_table(panel);
+    ASSERT_EQ(rows.size(), 1u);
+    EXPECT_EQ(std::get<2>(rows.front())[0], "—");
+}
+
+TEST_F(GraphPanelTest, AShiftDragAcrossTheGraphSelectsFrames) {
+    // Shift+drag from frame 2 to frame 6 fills both boxes, shades them and
+    // puts the cursor on frame 2; a plain drag pans and leaves the range as
+    // it is.
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_run({range_run("a.mkv", {80, 82, 84, 86, 88, 90, 70, 60, 95, 99}), "a", {}, true});
+    MetricPage& vmaf = page(panel, "vmaf");
+    ChartWidget& chart = vmaf.chart();
+    chart.resize(800, 400);
+    const int y = chart.plot_rect().center().y();
+    const auto press_move_release = [&chart, y](double from, double to, Qt::KeyboardModifiers modifiers) {
+        const QPointF start(chart.pixel_for_time(from), y);
+        const QPointF end(chart.pixel_for_time(to), y);
+        QMouseEvent press(QEvent::MouseButtonPress, start, start, Qt::LeftButton, Qt::LeftButton, modifiers);
+        QMouseEvent move(QEvent::MouseMove, end, end, Qt::NoButton, Qt::LeftButton, modifiers);
+        QMouseEvent release(QEvent::MouseButtonRelease, end, end, Qt::LeftButton, Qt::NoButton, modifiers);
+        QCoreApplication::sendEvent(&chart, &press);
+        QCoreApplication::sendEvent(&chart, &move);
+        QCoreApplication::sendEvent(&chart, &release);
+    };
+    press_move_release(2 / 30.0, 6 / 30.0, Qt::ShiftModifier);
+    EXPECT_EQ(frame_spin(panel).value(), 2);
+    EXPECT_EQ(range_end_spin(panel).value(), 6);
+    EXPECT_TRUE(stats_hint(panel).contains("frames 2 to 6")) << stats_hint(panel).toStdString();
+    EXPECT_TRUE(readout(vmaf).startsWith("Frame 2\n")) << readout(vmaf).toStdString();  // the cursor follows the box
+    ASSERT_TRUE(chart.highlight());
+    EXPECT_NEAR(chart.highlight()->first, 1.5 / 30, 1e-9);
+
+    zoom(vmaf, 0.1, 0.1);
+    press_move_release(0.12, 0.15, Qt::NoModifier);
+    EXPECT_LT(in_view(vmaf).first, 0.1);  // panned
+    EXPECT_EQ(range_end_spin(panel).value(), 6);
+    EXPECT_TRUE(chart.highlight());
 }
 }  // namespace
 }  // namespace vml::app

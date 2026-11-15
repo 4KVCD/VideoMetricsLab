@@ -360,8 +360,8 @@
   "no {metric}": "brak {metric}",
   "No results yet": "Brak wyników",
   "Calculate metrics or load analysis results to view metric graphs.": "Policz metryki lub wczytaj wyniki analizy, aby zobaczyć wykresy metryk.",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Najedź, aby zbadać punkt (przyciąga do najniższego pobliskiego wyniku na wysokości kursora lub niżej, aby łatwo trafić w spadki).\nKółko — powiększenie, przeciąganie — przesuwanie, dwuklik — reset.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Najedź, aby zbadać punkt (przyciąga do najgorszego pobliskiego wyniku na wysokości kursora lub niżej, aby łatwo trafić w spadki).\nKółko — powiększenie, przeciąganie — przesuwanie, dwuklik — reset.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Najedź, aby zbadać punkt (przyciąga do najniższego pobliskiego wyniku na wysokości kursora lub niżej, aby łatwo trafić w spadki).\nKółko — powiększenie, przeciąganie — przesuwanie, Shift+przeciąganie — zaznaczanie klatek, dwuklik — reset.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Najedź, aby zbadać punkt (przyciąga do najgorszego pobliskiego wyniku na wysokości kursora lub niżej, aby łatwo trafić w spadki).\nKółko — powiększenie, przeciąganie — przesuwanie, Shift+przeciąganie — zaznaczanie klatek, dwuklik — reset.",
   "{axis_label} (lower is better)": "{axis_label} (mniej = lepiej)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "Brak danych {label} wśród widocznych serii — zaznacz nagłówek kolumny {label} przed obliczeniami, aby zobaczyć je tutaj.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  sekunda od klatki {frame:>6}   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Oba obrazy różnią się tylko o kilka wierszy: ten sam obraz przycięty trochę inaczej, a skalowanie obniża każdy wynik. Jeśli wideo testowe przycięto inaczej, niż wykryto jego czarne pasy, wpisz oba kadrowania (Czarne pasy: Ręcznie).",
   "Also score CVVDP on...": "Oceniaj CVVDP także na...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Dodaje dla każdego zaznaczonego wideo wiersz, który ocenia tylko CVVDP na innym ekranie, obok ekranu jego własnego wiersza. Pozostałe metryki nie są liczone ponownie. Eksport wyników wymienia wszystkie ekrany we wpisie wideo.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Zaznaczone wiersze już oceniają CVVDP na {display} albo są testami rozdzielczości, które oceniają tylko jeden ekran."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Zaznaczone wiersze już oceniają CVVDP na {display} albo są testami rozdzielczości, które oceniają tylko jeden ekran.",
+  "to frame:": "do klatki:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "Drugi koniec zakresu klatek: wykres podświetla klatki od „Przejdź do klatki” do tej, a tabela podaje ich statystyki. Shift+przeciąganie po wykresie zaznacza zakres.",
+  "Clear range": "Wyczyść zakres",
+  "Shows the statistics of the whole video again.": "Ponownie pokazuje statystyki całego wideo.",
+  "Statistics of frames {first} to {last}.": "Statystyki klatek {first}–{last}.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "Statystyki {label} dotyczą pełnych sekund, w których leżą te klatki.",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} ocenia tylko całe wideo: nie ma wyniku dla jego części.",
+  " — frames {first} to {last}": " — klatki {first}–{last}"
  },
  "plurals": {
   "about {count} day": [

@@ -19,6 +19,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -185,16 +186,20 @@ TEST_F(ChartTest, ANarrowDipSurvivesAndASettledSizeIsDrawnOnce) {
     EXPECT_EQ(drawn_width(chart), 900);
 }
 
+// Drags the mouse across a widget from `from` to `to`, holding `modifiers`.
+void drag(QWidget& widget, QPointF from, QPointF to, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+    QMouseEvent press(QEvent::MouseButtonPress, from, from, Qt::LeftButton, Qt::LeftButton, modifiers);
+    QMouseEvent move(QEvent::MouseMove, to, to, Qt::NoButton, Qt::LeftButton, modifiers);
+    QMouseEvent release(QEvent::MouseButtonRelease, to, to, Qt::LeftButton, Qt::NoButton, modifiers);
+    QCoreApplication::sendEvent(&widget, &press);
+    QCoreApplication::sendEvent(&widget, &move);
+    QCoreApplication::sendEvent(&widget, &release);
+}
+
 // Drags the chart `dx` pixels to the left, as the mouse does.
 void drag_left(ChartWidget& chart, int dx) {
     const QPointF from = chart.plot_rect().center();
-    const QPointF to = from - QPointF(dx, 0);
-    QMouseEvent press(QEvent::MouseButtonPress, from, from, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-    QMouseEvent move(QEvent::MouseMove, to, to, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
-    QMouseEvent release(QEvent::MouseButtonRelease, to, to, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
-    QCoreApplication::sendEvent(&chart, &press);
-    QCoreApplication::sendEvent(&chart, &move);
-    QCoreApplication::sendEvent(&chart, &release);
+    drag(chart, from, from - QPointF(dx, 0));
 }
 
 // The screen's pixel columns inside the plot, away from its edges (where
@@ -378,6 +383,78 @@ TEST_F(ChartTest, DrawsABandUnderTheLinesOnItsOwnScale) {
     EXPECT_EQ(chart.lines_rect(), chart.plot_rect());
     chart.clear();
     EXPECT_FALSE(chart.has_band());
+}
+
+TEST_F(ChartTest, ShadesAHighlightedTimeRangeUnderTheLines) {
+    // Metric Graphs' frame range (issue #17): the columns from its start to
+    // its end are shaded across the plot, the others left as they were.
+    ChartWidget chart(QStringLiteral("VMAF"), 100.0);
+    chart.resize(800, 400);
+    chart.set_series(0, line_of({0.0, 1.0, 2.0, 3.0, 4.0}, {90.0F, 80.0F, 95.0F, 85.0F, 90.0F}));
+    const QImage plain = chart.render_to_pixmap().toImage();
+    chart.set_highlight(std::pair(1.0, 2.5));
+    const QImage shaded = chart.render_to_pixmap().toImage();
+    ASSERT_EQ(plain.size(), shaded.size());
+    const int left = chart.pixel_for_time(1.0);
+    const int right = chart.pixel_for_time(2.5);
+    for (int x = 0; x < plain.width(); ++x) {
+        int changed = 0;
+        for (int y = 0; y < plain.height(); ++y) {
+            changed += plain.pixel(x, y) != shaded.pixel(x, y) ? 1 : 0;
+        }
+        if (x >= left && x <= right) {
+            // All of the plot's height but for where a line or the frame is.
+            EXPECT_GT(changed, chart.plot_rect().height() / 2) << "column " << x;
+        } else {
+            EXPECT_EQ(changed, 0) << "column " << x;
+        }
+    }
+}
+
+TEST_F(ChartTest, AShiftDragSelectsATimeRangeWhereItIsOnAndPansWhereNot) {
+    // Metric Graphs' pages select frames with Shift+drag; a plain drag
+    // pans there still, and other charts (the Bitrate tab's) pan either way.
+    ChartWidget chart(QStringLiteral("VMAF"), 100.0);
+    chart.resize(800, 400);
+    chart.set_series(0, line_of({0.0, 50.0, 100.0}, {90.0F, 80.0F, 95.0F}));
+    std::vector<std::tuple<double, double, bool>> dragged;
+    QObject::connect(&chart, &ChartWidget::range_dragged,
+                     [&dragged](double start, double now, bool finished) { dragged.emplace_back(start, now, finished); });
+    const QRect plot = chart.plot_rect();
+    const QPointF from(chart.pixel_for_time(20.0), plot.center().y());
+    const QPointF to(chart.pixel_for_time(60.0), plot.center().y());
+
+    // Off: Shift+drag pans.
+    zoom_to(chart, 10.0, 50.0);
+    drag(chart, from, to, Qt::ShiftModifier);
+    EXPECT_TRUE(dragged.empty());
+    EXPECT_LT(chart.x_range().first, 10.0);
+
+    // On: the times under the press and the pointer, the view as it was;
+    // past the plot's edge, held to the data's end.
+    chart.set_range_selection(true);
+    chart.reset_view();
+    const QPointF start(chart.pixel_for_time(20.0), plot.center().y());
+    const QPointF end(chart.pixel_for_time(60.0), plot.center().y());
+    drag(chart, start, end, Qt::ShiftModifier);
+    ASSERT_EQ(dragged.size(), 3u);  // press, move, release
+    EXPECT_NEAR(std::get<0>(dragged[0]), 20.0, chart.seconds_per_pixel());
+    EXPECT_EQ(std::get<1>(dragged[0]), std::get<0>(dragged[0]));
+    EXPECT_NEAR(std::get<1>(dragged[1]), 60.0, chart.seconds_per_pixel());
+    EXPECT_FALSE(std::get<2>(dragged[1]));
+    EXPECT_TRUE(std::get<2>(dragged[2]));
+    EXPECT_EQ(chart.x_range(), std::pair(0.0, 100.0));
+    dragged.clear();
+    drag(chart, start, QPointF(plot.right() + 50, plot.center().y()), Qt::ShiftModifier);
+    ASSERT_FALSE(dragged.empty());
+    EXPECT_EQ(std::get<1>(dragged.back()), 100.0);
+
+    // A plain drag still pans.
+    dragged.clear();
+    zoom_to(chart, 10.0, 50.0);
+    drag(chart, from, to);
+    EXPECT_TRUE(dragged.empty());
+    EXPECT_LT(chart.x_range().first, 10.0);
 }
 
 }  // namespace

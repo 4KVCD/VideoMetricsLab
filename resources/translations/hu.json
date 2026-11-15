@@ -360,8 +360,8 @@
   "no {metric}": "nincs {metric}",
   "No results yet": "Még nincsenek eredmények",
   "Calculate metrics or load analysis results to view metric graphs.": "Számoljon metrikákat, vagy töltsön be elemzési eredményeket a Metrikagrafikonok megtekintéséhez.",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Mutasson egy pontra a vizsgálathoz (a kurzor közelében vagy alatta lévő legalacsonyabb pontszámhoz tapad, hogy a visszaesések könnyen eltalálhatók legyenek).\nGörgetés: nagyítás, húzás: mozgatás, dupla kattintás: visszaállítás.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Mutasson egy pontra a vizsgálathoz (a kurzor közelében vagy alatta lévő legrosszabb pontszámhoz tapad, hogy a visszaesések könnyen eltalálhatók legyenek).\nGörgetés: nagyítás, húzás: mozgatás, dupla kattintás: visszaállítás.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Mutasson egy pontra a vizsgálathoz (a kurzor közelében vagy alatta lévő legalacsonyabb pontszámhoz tapad, hogy a visszaesések könnyen eltalálhatók legyenek).\nGörgetés: nagyítás, húzás: mozgatás, Shift+húzás: képkockák kijelölése, dupla kattintás: visszaállítás.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Mutasson egy pontra a vizsgálathoz (a kurzor közelében vagy alatta lévő legrosszabb pontszámhoz tapad, hogy a visszaesések könnyen eltalálhatók legyenek).\nGörgetés: nagyítás, húzás: mozgatás, Shift+húzás: képkockák kijelölése, dupla kattintás: visszaállítás.",
   "{axis_label} (lower is better)": "{axis_label} (a kisebb a jobb)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "A látható sorozatok között nincs {label}-adat — futtatás előtt jelölje be a(z) {label} oszlop fejlécét, hogy itt lássa.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  másodperc, képkockától: {frame:>6}   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "A két kép csak néhány sorban tér el: ugyanaz a kép kissé eltérően vágva, és az átméretezés minden pontszámot ront. Ha a tesztvideót másként vágták, mint ahogy fekete sávjait felismertük, adja meg mindkét vágást (Fekete sávok: Kézi).",
   "Also score CVVDP on...": "CVVDP értékelése ezen is...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Minden kijelölt videóhoz hozzáad egy sort, amely csak a CVVDP-t értékeli egy másik kijelzőn, a saját sora kijelzője mellett. A többi metrika nem számolódik újra. Az eredmények exportja a videó bejegyzésében minden kijelzőt felsorol.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "A kijelölt sorok már értékelik a CVVDP-t ezen: {display}, vagy felbontási tesztek, amelyek csak egy kijelzőt értékelnek."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "A kijelölt sorok már értékelik a CVVDP-t ezen: {display}, vagy felbontási tesztek, amelyek csak egy kijelzőt értékelnek.",
+  "to frame:": "eddig a képkockáig:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "Egy képkocka-tartomány másik vége: a grafikon kiemeli a képkockákat az „Ugrás képkockára” mezőtől eddig, a táblázat pedig ezek statisztikáit mutatja. Shift+húzással a grafikonon tartományt jelölhet ki.",
+  "Clear range": "Tartomány törlése",
+  "Shows the statistics of the whole video again.": "Újra a teljes videó statisztikáit mutatja.",
+  "Statistics of frames {first} to {last}.": "Statisztikák: {first}–{last}. képkocka.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "A(z) {label} statisztikái azokra a teljes másodpercekre vonatkoznak, amelyekbe ezek a képkockák esnek.",
+  "{label} scores whole videos only: it has no score for part of one.": "A(z) {label} csak teljes videókat értékel: egy részükre nincs pontszáma.",
+  " — frames {first} to {last}": " — {first}–{last}. képkocka"
  },
  "plurals": {
   "about {count} day": [

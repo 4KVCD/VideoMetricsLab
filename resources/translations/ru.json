@@ -360,8 +360,8 @@
   "no {metric}": "нет {metric}",
   "No results yet": "Пока нет результатов",
   "Calculate metrics or load analysis results to view metric graphs.": "Вычислите метрики или загрузите результаты анализа, чтобы увидеть графики метрик.",
-  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Наведите, чтобы изучить точку (привязывается к самой низкой оценке рядом с курсором или под ним, чтобы легко попадать в провалы).\nКолесо — масштаб, перетаскивание — сдвиг, двойной щелчок — сброс.",
-  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, double-click to reset.": "Наведите, чтобы изучить точку (привязывается к худшей оценке рядом с курсором или под ним, чтобы легко попадать в провалы).\nКолесо — масштаб, перетаскивание — сдвиг, двойной щелчок — сброс.",
+  "Hover to inspect a point (locks onto the lowest nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Наведите, чтобы изучить точку (привязывается к самой низкой оценке рядом с курсором или под ним, чтобы легко попадать в провалы).\nКолесо — масштаб, перетаскивание — сдвиг, Shift+перетаскивание — выбор кадров, двойной щелчок — сброс.",
+  "Hover to inspect a point (locks onto the worst nearby score at or below your cursor, so dips are easy to land on).\nScroll to zoom, drag to pan, Shift+drag to select frames, double-click to reset.": "Наведите, чтобы изучить точку (привязывается к худшей оценке рядом с курсором или под ним, чтобы легко попадать в провалы).\nКолесо — масштаб, перетаскивание — сдвиг, Shift+перетаскивание — выбор кадров, двойной щелчок — сброс.",
   "{axis_label} (lower is better)": "{axis_label} (меньше — лучше)",
   "No {label} data among the currently visible series -- tick the {label} column header before running to see it here.": "Среди видимых рядов нет данных {label} — отметьте заголовок столбца {label} перед расчётом, чтобы увидеть их здесь.",
   "{series}  second from frame {frame:>6}   t={time}   ": "{series}  секунда от кадра {frame:>6}   t={time}   ",
@@ -887,7 +887,15 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "Два изображения отличаются лишь на несколько строк: то же изображение, обрезанное немного иначе, а масштабирование снижает все оценки. Если тестовое видео обрезано не так, как найдены его чёрные полосы, введите обе обрезки (Чёрные полосы: Вручную).",
   "Also score CVVDP on...": "Оценить CVVDP также на...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "Добавляет для каждого выбранного видео строку, которая оценивает только CVVDP на другом дисплее, рядом с дисплеем его собственной строки. Остальные метрики заново не вычисляются. Экспорт результатов перечисляет все дисплеи в записи видео.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Выбранные строки уже оценивают CVVDP на {display} или являются тестами разрешения, которые оценивают только один дисплей."
+  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "Выбранные строки уже оценивают CVVDP на {display} или являются тестами разрешения, которые оценивают только один дисплей.",
+  "to frame:": "до кадра:",
+  "The other end of a frame range: the graph shades the frames from Go to frame to this one, and the table gives their statistics. Shift+drag across the graph to select a range.": "Второй конец диапазона кадров: график выделяет кадры от «Перейти к кадру» до этого, а таблица показывает их статистику. Shift+перетаскивание по графику выбирает диапазон.",
+  "Clear range": "Сбросить диапазон",
+  "Shows the statistics of the whole video again.": "Снова показывает статистику всего видео.",
+  "Statistics of frames {first} to {last}.": "Статистика кадров {first}–{last}.",
+  "{label}'s statistics are of the whole seconds these frames are in.": "Статистика {label} — по целым секундам, в которые попадают эти кадры.",
+  "{label} scores whole videos only: it has no score for part of one.": "{label} оценивает только видео целиком: для части видео оценки нет.",
+  " — frames {first} to {last}": " — кадры {first}–{last}"
  },
  "plurals": {
   "about {count} day": [
