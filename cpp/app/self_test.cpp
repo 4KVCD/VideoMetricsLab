@@ -257,7 +257,7 @@ int run_self_test(const QApplication& app, bool quiet) {
     std::error_code error;
     std::filesystem::create_directories(destination->parent_path(), error);
     std::ofstream file(*destination, std::ios::binary);
-    file << report.text();
+    file << report.text() << '\n';  // a text file's last line ends too (the macOS build prints it)
     // Closed before checking: what is still buffered is written at close.
     file.close();
     if (!file) {
