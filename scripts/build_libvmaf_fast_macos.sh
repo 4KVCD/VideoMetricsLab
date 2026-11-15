@@ -19,7 +19,12 @@ target="$project/resources/tools/libvmaf"
 work="$(mktemp -d "${TMPDIR:-/tmp}/libvmaf-fast-XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
-git -c advice.detachedHead=false clone --quiet --depth 1 --branch "libvmaf-fast-$version" https://github.com/4KVCD/libvmaf-fast.git "$work/src"
+# The tag fetched into an empty repository: a shallow clone of an annotated
+# tag (clone --depth 1 --branch) warns that the tag "is not a commit".
+tag="refs/tags/libvmaf-fast-$version"
+git init --quiet "$work/src"
+git -C "$work/src" fetch --quiet --depth 1 https://github.com/4KVCD/libvmaf-fast.git "$tag:$tag"
+git -C "$work/src" -c advice.detachedHead=false checkout --quiet "libvmaf-fast-$version"
 commit="$(git -C "$work/src" rev-parse HEAD)"
 if [[ "$version" == "v1.3" && "$commit" != "$commit_expected" ]]; then
     echo "libvmaf-fast-$version is commit $commit, expected $commit_expected" >&2
