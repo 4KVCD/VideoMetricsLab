@@ -194,9 +194,8 @@ void MainWindow::on_panel_field_edited(const QString& field) {
             target.model_choice_v1 = panel.model_choice_v1;
         } else if (field == "crop_mode") {
             target.crop_mode = panel.crop_mode;
-        } else if (field == "manual_crop") {
-            target.manual_source_crop = panel.manual_source_crop;
-            target.manual_test_crop = panel.manual_test_crop;
+        } else if (const std::optional<ManualCropBox> box = manual_crop_box_of(field)) {
+            box->in(target) = box->in(panel);
         } else if (field == "range_in_frames") {
             // Another unit: the range the fields show in it, whole by default.
             target.range_in_frames = panel.range_in_frames;

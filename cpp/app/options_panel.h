@@ -54,6 +54,20 @@ struct FilmGrainControl {
 };
 FilmGrainControl film_grain_control(const std::vector<FilmGrainVideo>& videos);
 
+// One of Manual's eight crop boxes: a video's crops and one edge of them.
+// Each box reports its own field ("manual_crop:test:left"), so that an edit
+// made with several rows selected changes that edge only, not the other
+// seven crops, which the rows may not share.
+struct ManualCropBox {
+    CropEdges VmafOptions::*video;
+    int CropEdges::*edge;
+
+    int& in(VmafOptions& options) const { return (options.*video).*edge; }
+    int in(const VmafOptions& options) const { return (options.*video).*edge; }
+};
+// The box a field_edited field names; nothing for another field.
+std::optional<ManualCropBox> manual_crop_box_of(const QString& field);
+
 class OptionsPanel : public QGroupBox {
     Q_OBJECT
 

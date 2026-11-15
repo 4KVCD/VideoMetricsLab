@@ -96,8 +96,20 @@ TEST(OptionsPanel, ManualCropsAreShownAndReadBack) {
     EXPECT_EQ(read.crop_mode, CropMode::manual);
     EXPECT_EQ(read.manual_source_crop, (CropEdges{22, 22, 0, 0}));
     EXPECT_EQ(read.manual_test_crop, CropEdges{});
+    QString edited;
+    QObject::connect(&panel, &OptionsPanel::field_edited, [&edited](const QString& field) { edited = field; });
     panel.test_crop_spins[2]->setValue(3);  // left
-    EXPECT_EQ(panel.read_options({}, true, true, true, true).manual_test_crop, (CropEdges{0, 0, 4, 0}));
+    read = panel.read_options({}, true, true, true, true);
+    EXPECT_EQ(read.manual_test_crop, (CropEdges{0, 0, 4, 0}));
+    // The box names itself: with several rows selected, only that edge is
+    // copied to each, whatever their other crops.
+    const std::optional<ManualCropBox> box = manual_crop_box_of(edited);
+    ASSERT_TRUE(box.has_value()) << edited.toStdString();
+    VmafOptions other;
+    other.manual_test_crop = {8, 8, 0, 0};
+    box->in(other) = box->in(read);
+    EXPECT_EQ(other.manual_test_crop, (CropEdges{8, 8, 4, 0}));
+    EXPECT_EQ(other.manual_source_crop, CropEdges{});
 
     panel.show_options(VmafOptions{}, {VmafOptions{}});
     EXPECT_FALSE(panel.manual_crop_box->isVisibleTo(&panel));

@@ -76,6 +76,32 @@ FilmGrainControl film_grain_control(const std::vector<FilmGrainVideo>& videos) {
 
 namespace {
 
+// Manual's crop boxes in their columns' order, as their fields name them.
+const std::array<std::pair<const char*, int CropEdges::*>, 4> crop_edges{
+    {{"top", &CropEdges::top}, {"bottom", &CropEdges::bottom}, {"left", &CropEdges::left}, {"right", &CropEdges::right}}};
+
+QString manual_crop_field(bool source, std::size_t column) {
+    return QStringLiteral("manual_crop:%1:%2").arg(source ? "source" : "test", crop_edges[column].first);
+}
+
+}  // namespace
+
+std::optional<ManualCropBox> manual_crop_box_of(const QString& field) {
+    const QStringList parts = field.split(':');
+    if (parts.size() != 3 || parts[0] != "manual_crop" || (parts[1] != "source" && parts[1] != "test")) {
+        return std::nullopt;
+    }
+    for (const auto& [name, edge] : crop_edges) {
+        if (parts[2] == name) {
+            return ManualCropBox{parts[1] == "source" ? &VmafOptions::manual_source_crop : &VmafOptions::manual_test_crop,
+                                 edge};
+        }
+    }
+    return std::nullopt;
+}
+
+namespace {
+
 // The scaling algorithms, as FFmpeg's scale filter names them.
 const QStringList scale_algorithms{"bicubic", "lanczos", "bilinear", "spline"};
 
@@ -522,22 +548,23 @@ void OptionsPanel::build_manual_crop(QFormLayout* form) {
     for (int column = 0; column < edges.size(); ++column) {
         grid->addWidget(new QLabel(edges[column]), 0, column + 1);
     }
-    const auto add_row = [&](int row, const QString& label, std::array<QSpinBox*, 4>& spins) {
+    const auto add_row = [&](int row, const QString& label, std::array<QSpinBox*, 4>& spins, bool source) {
         grid->addWidget(new QLabel(label), row, 0);
-        for (int column = 0; column < 4; ++column) {
+        for (std::size_t column = 0; column < spins.size(); ++column) {
             QSpinBox* spin = new QSpinBox;
             // Even lines: 4:2:0 keeps its colour in pairs of lines (an odd
             // one typed is taken up to even, as HandBrake takes it).
             spin->setRange(0, 8192);
             spin->setSingleStep(2);
             spin->setKeyboardTracking(false);
-            connect(spin, &QSpinBox::valueChanged, this, [this] { emit field_edited("manual_crop"); });
-            grid->addWidget(spin, row, column + 1);
-            spins[static_cast<std::size_t>(column)] = spin;
+            connect(spin, &QSpinBox::valueChanged, this,
+                    [this, field = manual_crop_field(source, column)] { emit field_edited(field); });
+            grid->addWidget(spin, row, static_cast<int>(column) + 1);
+            spins[column] = spin;
         }
     };
-    add_row(1, app::tr("Reference"), source_crop_spins);
-    add_row(2, app::tr("Test video"), test_crop_spins);
+    add_row(1, app::tr("Reference"), source_crop_spins, true);
+    add_row(2, app::tr("Test video"), test_crop_spins, false);
     manual_crop_box->setToolTip(app::tr("The lines cut from each edge, as the encoder's crop settings cut them (an "
                                         "encode made with a crop of 22 lines at the top and bottom: Top 22, Bottom "
                                         "22 for the reference, nothing for the test video, already cropped). Even "
