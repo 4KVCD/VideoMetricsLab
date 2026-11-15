@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QSpinBox>
 #include <QTableWidget>
 #include <QThread>
 
@@ -24,6 +25,7 @@
 #include <vector>
 
 #include "chart.h"
+#include "frame_controls.h"
 #include "series_colors.h"
 #include "test_videos.h"
 #include "frame_types.h"
@@ -175,6 +177,40 @@ TEST_F(BitratePanelTest, TheFramesUnderThePointerAreBesideTheTime) {
     hover(*panel, 10.6);
     EXPECT_EQ(panel->hover_label->text().toStdString(),
               "Time: 0:00:10.600   Frame 3, 2\nfirst.mkv: 20.00 kb/s\nlate.mkv: 16.00 kb/s");
+}
+
+// A frame range, in Metric Graphs' boxes: the table gives those frames'
+// figures (a shorter video's, of those it has) and the graph shades them,
+// until it is cleared. Go to frame shows each line at that frame, and says a
+// shorter video lacks it.
+TEST_F(BitratePanelTest, AFrameRangesFiguresAndGoToFrame) {
+    VideoColors colors;
+    const auto panel = make_panel(colors);
+    const test::Folder folder;
+    const std::filesystem::path first = folder / "first.mkv";
+    const std::filesystem::path shorter = folder / "short.mkv";  // its two frames 1,000 bytes each
+    panel->add_files({first, shorter});
+    analyzed(*panel, first, two_seconds(first));
+    analyzed(*panel, shorter,
+             std::make_shared<const BitrateData>(
+                 bitrate_data(shorter, {0.0, 0.5}, {0.5, 0.5}, {1000, 1000}, {true, false})));
+
+    panel->frame_controls->range_start_spin->setValue(1);
+    panel->frame_controls->range_end_spin->setValue(2);
+    EXPECT_EQ(cell(*panel, 0, col_average).toStdString(), "20 kb/s");  // 2,500 bytes from 0.5 to 1.5 s
+    EXPECT_EQ(cell(*panel, 0, col_minimum).toStdString(), "20 kb/s");
+    EXPECT_EQ(cell(*panel, 1, col_average).toStdString(), "16 kb/s");  // its frame 1 alone
+    EXPECT_EQ(panel->range_label->text().toStdString(), "Statistics of frames 1 to 2.");
+    EXPECT_EQ(panel->chart->highlight(), (std::optional<std::pair<double, double>>{{0.5, 1.5}}));
+    panel->frame_controls->clear_range_button->click();
+    EXPECT_EQ(cell(*panel, 0, col_average).toStdString(), "16 kb/s");
+    EXPECT_EQ(cell(*panel, 0, col_minimum).toStdString(), "12 kb/s");
+    EXPECT_TRUE(panel->range_label->text().isEmpty());
+    EXPECT_FALSE(panel->chart->highlight());
+
+    panel->frame_controls->frame_spin->setValue(3);
+    EXPECT_EQ(panel->hover_label->text().toStdString(),
+              "Time: 0:00:01.500   Frame 3\nfirst.mkv: 20.00 kb/s\nshort.mkv  frame      3   not in this run");
 }
 
 // A frame's type shows under the pointer in the frame graph; its colours only

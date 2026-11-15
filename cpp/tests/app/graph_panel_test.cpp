@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "chart.h"
+#include "frame_controls.h"
 #include "reference.h"
 #include "series_colors.h"
 #include "test_videos.h"
@@ -45,11 +46,11 @@ class GraphPanelTest : public ::testing::Test {
 protected:
     static QTableWidget& table(GraphPanel& panel) { return *panel.stats_table_; }
     static QTabWidget& tabs(GraphPanel& panel) { return *panel.tabs_; }
-    static QSpinBox& frame_spin(GraphPanel& panel) { return *panel.frame_spin_; }
+    static QSpinBox& frame_spin(GraphPanel& panel) { return *panel.frame_controls_->frame_spin; }
     static QCheckBox& difference_box(GraphPanel& panel) { return *panel.difference_box_; }
-    static QSpinBox& range_start_spin(GraphPanel& panel) { return *panel.range_start_spin_; }
-    static QSpinBox& range_end_spin(GraphPanel& panel) { return *panel.range_end_spin_; }
-    static QPushButton& clear_range_button(GraphPanel& panel) { return *panel.clear_range_button_; }
+    static QSpinBox& range_start_spin(GraphPanel& panel) { return *panel.frame_controls_->range_start_spin; }
+    static QSpinBox& range_end_spin(GraphPanel& panel) { return *panel.frame_controls_->range_end_spin; }
+    static QPushButton& clear_range_button(GraphPanel& panel) { return *panel.frame_controls_->clear_range_button; }
     static QString stats_hint(const GraphPanel& panel) { return panel.stats_hint_->text(); }
     // Every cell's text, row by row.
     static std::vector<QStringList> cell_texts(GraphPanel& panel) {

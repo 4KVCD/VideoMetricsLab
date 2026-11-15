@@ -63,6 +63,13 @@ struct BitrateData {
 BitrateData bitrate_data(std::filesystem::path path, std::vector<double> times, std::vector<double> durations,
                          std::vector<long long> sizes, std::vector<bool> keyframes);
 
+// The summary of frames `first` to `last` (in presentation order, counted
+// from 0, `last` cut at the stream's end) as if they were the whole stream:
+// their average, and their lowest and highest second, counted from the first
+// one's start (the Bitrate tab's frame range). Nothing when the stream has
+// none of them.
+std::optional<BitrateSummary> frames_summary(const BitrateData& data, long long first, long long last);
+
 // The one-second bins of a stream's bitrate: each one's start and end, and
 // its kb/s. With adjust_start, the stream starts at 0; without, the bins
 // fall on the file's whole seconds.

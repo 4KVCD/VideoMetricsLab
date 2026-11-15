@@ -87,6 +87,23 @@ double BitrateData::average_kbps() const {
     return length > 0 ? static_cast<double>(total_bytes() * 8) / length / 1000 : 0.0;
 }
 
+namespace {
+
+// The packets' average bitrate, and their lowest and highest second's
+// (seconds counted from their first packet's start).
+BitrateSummary summary_of(const BitrateData& data) {
+    BitrateSummary summary;
+    summary.average_kbps = data.average_kbps();
+    const std::vector<float> rates = second_bins(data, true).rates;
+    if (!rates.empty()) {
+        summary.minimum_kbps = *std::min_element(rates.begin(), rates.end());
+        summary.maximum_kbps = *std::max_element(rates.begin(), rates.end());
+    }
+    return summary;
+}
+
+}  // namespace
+
 BitrateData bitrate_data(std::filesystem::path path, std::vector<double> times, std::vector<double> durations,
                          std::vector<long long> sizes, std::vector<bool> keyframes) {
     if (durations.size() != times.size() || sizes.size() != times.size() || keyframes.size() != times.size()) {
@@ -94,13 +111,23 @@ BitrateData bitrate_data(std::filesystem::path path, std::vector<double> times, 
     }
     BitrateData data{std::move(path), std::move(times), std::move(durations), std::move(sizes), std::move(keyframes),
                      {}};
-    const std::vector<float> rates = second_bins(data, true).rates;
-    data.summary.average_kbps = data.average_kbps();
-    if (!rates.empty()) {
-        data.summary.minimum_kbps = *std::min_element(rates.begin(), rates.end());
-        data.summary.maximum_kbps = *std::max_element(rates.begin(), rates.end());
-    }
+    data.summary = summary_of(data);
     return data;
+}
+
+std::optional<BitrateSummary> frames_summary(const BitrateData& data, long long first, long long last) {
+    first = std::max(0LL, first);
+    last = std::min(last, data.frame_count() - 1);
+    if (first > last) {
+        return std::nullopt;
+    }
+    const auto begin = static_cast<std::ptrdiff_t>(first);
+    const auto end = static_cast<std::ptrdiff_t>(last) + 1;
+    BitrateData frames;
+    frames.times.assign(data.times.begin() + begin, data.times.begin() + end);
+    frames.durations.assign(data.durations.begin() + begin, data.durations.begin() + end);
+    frames.sizes.assign(data.sizes.begin() + begin, data.sizes.begin() + end);
+    return summary_of(frames);  // keyframes play no part in it
 }
 
 // ------------------------------------------------------------------ the graphs

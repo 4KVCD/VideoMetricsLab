@@ -20,6 +20,7 @@ add_library(vml_app STATIC
     file_writes.cpp
     formatting.cpp
     frame_compare_panel.cpp
+    frame_controls.cpp
     graph_panel.cpp
     i18n.cpp
     key_guide.cpp

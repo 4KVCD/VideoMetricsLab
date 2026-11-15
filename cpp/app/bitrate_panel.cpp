@@ -28,6 +28,7 @@
 
 #include "chart.h"
 #include "formatting.h"
+#include "frame_controls.h"
 #include "frame_types.h"
 #include "i18n.h"
 #include "series_colors.h"
@@ -119,6 +120,7 @@ void forget_what_was_read(BitrateEntry& entry) {
     entry.data.reset();
     entry.frame_types.reset();
     entry.plots.clear();
+    entry.range_summary.reset();
 }
 
 // The point of a line nearest `time`, the earlier one when they tie; none
@@ -140,6 +142,13 @@ std::optional<std::size_t> nearest_point(const std::vector<double>& times, doubl
 std::size_t frame_on_screen(const std::vector<double>& times, double time) {
     const auto after = std::upper_bound(times.begin(), times.end(), time);
     return after == times.begin() ? 0 : static_cast<std::size_t>(after - times.begin()) - 1;
+}
+
+// The frame a drawn line's point `index` shows at `time`: the frame graph's
+// points are its frames; on a stepped graph, the frame on screen then.
+std::size_t frame_shown(const std::vector<double>& packet_times, double start, bool frame_graph, std::size_t index,
+                        double time) {
+    return frame_graph ? index : frame_on_screen(packet_times, time + start);
 }
 
 // The readout's frame: one number while the lines agree, else each line's in
@@ -212,6 +221,7 @@ BitratePanel::BitratePanel(std::function<std::string()> ffprobe, VideoColors* co
     add_table(root);
     add_plot_controls(root);
     add_chart(root);
+    add_frame_controls(root);
     add_status_row(root);
     update_buttons();
 }
@@ -324,6 +334,9 @@ void BitratePanel::add_chart(QVBoxLayout* root) {
     connect(reset_zoom_button, &QPushButton::clicked, chart, &ChartWidget::reset_view);
     connect(chart, &ChartWidget::hovered, this, [this](double time, double /*value*/) { on_hovered(time); });
     connect(chart, &ChartWidget::left, this, [this] { on_hover_left(); });
+    chart->set_range_selection(true);  // Shift+drag selects frames (on_range_dragged)
+    connect(chart, &ChartWidget::range_dragged, this,
+            [this](double start, double now, bool finished) { on_range_dragged(start, now, finished); });
     root->addWidget(chart, 1);
 
     // The readout, rewritten at each move of the pointer (ReadoutLabel),
@@ -332,6 +345,21 @@ void BitratePanel::add_chart(QVBoxLayout* root) {
     // it left, drawn afresh each time.
     hover_label = new ReadoutLabel(app::tr(hover_hint));
     root->addWidget(hover_label);
+}
+
+// Go to frame and the frame range, as in Metric Graphs, and what the table's
+// figures are of.
+void BitratePanel::add_frame_controls(QVBoxLayout* root) {
+    auto* row = new QHBoxLayout;
+    frame_controls = new FrameControls;
+    connect(frame_controls, &FrameControls::frame_requested, this, [this](int frame) { on_frame_requested(frame); });
+    connect(frame_controls, &FrameControls::range_changed, this, [this](bool finished) { on_range_changed(finished); });
+    row->addWidget(frame_controls);
+    row->addSpacing(16);
+    range_label = new QLabel;
+    row->addWidget(range_label);
+    row->addStretch(1);
+    root->addLayout(row);
 }
 
 // What the views show, and the files' reading in progress.
@@ -484,6 +512,10 @@ void BitratePanel::on_remove_selected() {
             entries_.erase(entries_.begin() + *row);
             std::erase(pending_, key);
         }
+    }
+    if (entries_.empty()) {
+        frame_controls->forget_range();  // a range of frames of no video
+        refresh_range_label();
     }
     rebuild_table();
     refresh_plot();
@@ -645,6 +677,7 @@ void BitratePanel::on_analyzed(const BitrateAnalyzed& analyzed) {
     entry->frame_types = analyzed.frame_types;
     entry->read_as = analyzed.read_as;
     entry->plots.clear();
+    update_range_summary(*entry);
     entry->state = BitrateState::complete;
     progress->setValue(100);
     refresh_table_values();
@@ -795,10 +828,15 @@ void BitratePanel::set_table_row(int row, const BitrateEntry& entry) {
                        QString(),
                        QString(),
                        status_text(entry)};
-    if (entry.data) {
-        values[4] = rate_text(entry.data->summary.average_kbps);
-        values[5] = rate_text(entry.data->summary.minimum_kbps);
-        values[6] = rate_text(entry.data->summary.maximum_kbps);
+    // The frame range's figures while one is chosen (blank for a video with
+    // none of its frames), else the whole video's.
+    const std::optional<BitrateSummary> summary = !entry.data                          ? std::nullopt
+                                                  : frame_controls->selected_frames() ? entry.range_summary
+                                                                                       : entry.data->summary;
+    if (summary) {
+        values[4] = rate_text(summary->average_kbps);
+        values[5] = rate_text(summary->minimum_kbps);
+        values[6] = rate_text(summary->maximum_kbps);
     }
     for (int column = col_file; column <= col_status; ++column) {
         cell(row, column)->setText(values[column - col_file]);
@@ -945,6 +983,13 @@ void BitratePanel::refresh_plot() {
         const double start = adjust_start_checkbox->isChecked() ? entry->data->start_time() : 0;
         current_plots_.push_back({name_of(entry->path), plot, line->frame_types, entry->data, start});
     }
+    // Go to frame and the range boxes reach the longest video's last frame.
+    long long frames = 0;
+    for (const DrawnPlot& drawn : current_plots_) {
+        frames = std::max(frames, drawn.data->frame_count());
+    }
+    frame_controls->set_bounds(0, static_cast<int>(std::max(0LL, frames - 1)));
+    refresh_highlight();
     refresh_difference();
     on_hover_left();
     update_buttons();
@@ -986,26 +1031,30 @@ void BitratePanel::refresh_difference() {
     hover_label->reserve_lines(1 + static_cast<int>(current_plots_.size()) + (difference_ ? 1 : 0));
 }
 
-void BitratePanel::on_hovered(double time) {
-    // The time and frame under the pointer, each line's value, then their difference.
-    chart->set_cursor_time(time);
+void BitratePanel::write_readout(double time, const std::vector<std::optional<ReadoutPoint>>& points,
+                                 std::optional<int> asked_frame) {
+    // The time and frame, each line's value, then their difference.
     QStringList lines;
     QStringList frames;
-    const bool frame_graph = view_name() == "frame";
-    for (const auto& [name, plot, frame_types, packets, start] : current_plots_) {
-        if (const auto index = nearest_point(plot->times, time)) {
-            // The frame graph's points are its frames: the one whose value is shown.
-            const std::size_t frame = frame_graph ? *index : frame_on_screen(packets->times, time + start);
-            frames.append(python_format("{frame:,}", {{"frame", static_cast<long long>(frame)}}));
-            QString line = python_format("{name}: {value:,.2f} {unit}",
-                                         {{"name", name},
-                                          {"value", static_cast<double>(plot->values[*index]) / value_scale_},
-                                          {"unit", value_unit_}});
-            if (frame_types && static_cast<std::size_t>(*index) < frame_types->size()) {
-                line += frame_type_suffix((*frame_types)[*index]);
+    for (std::size_t i = 0; i < current_plots_.size(); ++i) {
+        const DrawnPlot& drawn = current_plots_[i];
+        if (!points[i]) {
+            if (asked_frame) {
+                lines.append(app::tr("{series}  frame {frame:>6}   not in this run",
+                                     {{"series", drawn.name}, {"frame", *asked_frame}}));
             }
-            lines.append(line);
+            continue;
         }
+        const auto [index, frame] = *points[i];
+        frames.append(python_format("{frame:,}", {{"frame", static_cast<long long>(frame)}}));
+        QString line = python_format("{name}: {value:,.2f} {unit}",
+                                     {{"name", drawn.name},
+                                      {"value", static_cast<double>(drawn.plot->values[index]) / value_scale_},
+                                      {"unit", value_unit_}});
+        if (drawn.frame_types && index < drawn.frame_types->size()) {
+            line += frame_type_suffix((*drawn.frame_types)[index]);
+        }
+        lines.append(line);
     }
     QString heading = app::tr("Time: {time}", {{"time", qt_text(format_hms(time, 3))}});
     if (!frames.isEmpty()) {
@@ -1024,6 +1073,116 @@ void BitratePanel::on_hovered(double time) {
         }
     }
     hover_label->set_text(lines.join('\n'));
+}
+
+void BitratePanel::on_hovered(double time) {
+    // Each line's point nearest the pointer.
+    chart->set_cursor_time(time);
+    const bool frame_graph = view_name() == "frame";
+    std::vector<std::optional<ReadoutPoint>> points;
+    for (const auto& [name, plot, frame_types, packets, start] : current_plots_) {
+        const std::optional<std::size_t> index = nearest_point(plot->times, time);
+        points.push_back(index ? std::optional(ReadoutPoint{*index, frame_shown(packets->times, start, frame_graph,
+                                                                                *index, time)})
+                               : std::nullopt);
+    }
+    write_readout(time, points, std::nullopt);
+}
+
+void BitratePanel::on_frame_requested(int frame) {
+    // Each line at its own frame `frame` (videos differ in frame rate and
+    // start), the readout's time the first's; a shorter video says it lacks
+    // it.
+    const bool frame_graph = view_name() == "frame";
+    std::vector<std::optional<ReadoutPoint>> points;
+    std::optional<double> time;
+    for (const auto& [name, plot, frame_types, packets, start] : current_plots_) {
+        if (frame < 0 || frame >= packets->frame_count() || plot->times.empty()) {
+            points.emplace_back();
+            continue;
+        }
+        const auto number = static_cast<std::size_t>(frame);
+        const double at = packets->times[number] - start;
+        // The frame graph's points are its frames; a stepped graph's step is
+        // the one the frame starts in.
+        points.push_back(ReadoutPoint{frame_graph ? number : frame_on_screen(plot->times, at), number});
+        if (!time) {
+            time = at;
+        }
+    }
+    if (!time) {
+        hover_label->set_text(app::tr("Frame {frame}: no visible series.", {{"frame", frame}}));
+        return;
+    }
+    chart->bring_into_view(*time);  // a zoomed graph moves to the frame
+    chart->set_cursor_time(*time);
+    write_readout(*time, points, frame);
+}
+
+std::optional<int> BitratePanel::frame_at(double time) const {
+    const bool frame_graph = view_name() == "frame";
+    for (const auto& [name, plot, frame_types, packets, start] : current_plots_) {
+        if (const std::optional<std::size_t> index = nearest_point(plot->times, time)) {
+            return static_cast<int>(frame_shown(packets->times, start, frame_graph, *index, time));
+        }
+    }
+    return std::nullopt;
+}
+
+void BitratePanel::on_range_dragged(double start, double now, bool finished) {
+    const std::optional<int> first = frame_at(start);
+    const std::optional<int> last = frame_at(now);
+    if (first && last) {
+        frame_controls->set_dragged_range(*first, *last, finished);
+    }
+}
+
+void BitratePanel::on_range_changed(bool finished) {
+    // Shaded while a drag lasts; the figures, read from every video's
+    // packets, once it ends.
+    refresh_highlight();
+    refresh_range_label();
+    if (finished) {
+        for (auto& [key, entry] : entries_) {
+            update_range_summary(entry);
+        }
+        refresh_table_values();
+    }
+}
+
+void BitratePanel::update_range_summary(BitrateEntry& entry) const {
+    const std::optional<std::pair<int, int>> frames = frame_controls->selected_frames();
+    entry.range_summary =
+        frames && entry.data ? frames_summary(*entry.data, frames->first, frames->second) : std::nullopt;
+}
+
+void BitratePanel::refresh_highlight() {
+    std::optional<std::pair<double, double>> seconds;
+    if (const std::optional<std::pair<int, int>> frames = frame_controls->selected_frames()) {
+        for (const DrawnPlot& drawn : current_plots_) {
+            const std::vector<double>& times = drawn.data->times;
+            const auto count = static_cast<long long>(times.size());
+            if (frames->second < 0 || frames->first >= count) {
+                continue;  // a shorter video, without the range's first frame
+            }
+            const auto first = static_cast<std::size_t>(std::max(0, frames->first));
+            const auto last = static_cast<std::size_t>(std::min<long long>(frames->second, count - 1));
+            double end = times[last] + drawn.data->durations[last];
+            if (end <= times[first] && last + 1 < times.size()) {
+                end = times[last + 1];  // frames without a duration: up to the next one
+            }
+            seconds = std::pair(times[first] - drawn.start, end - drawn.start);
+            break;
+        }
+    }
+    chart->set_highlight(seconds);
+}
+
+void BitratePanel::refresh_range_label() {
+    const std::optional<std::pair<int, int>> frames = frame_controls->selected_frames();
+    range_label->setText(frames ? app::tr("Statistics of frames {first} to {last}.",
+                                          {{"first", frames->first}, {"last", frames->second}})
+                                : QString());
 }
 
 void BitratePanel::on_hover_left() {

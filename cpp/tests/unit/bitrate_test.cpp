@@ -119,6 +119,28 @@ TEST(Bitrate, WritesEachGraphsFiguresAsCsv) {
     EXPECT_EQ(frames_csv(data, false).substr(34, 23), "0,10.000000,1000,1\r\n1,1");
 }
 
+// A frame range's figures are those frames' alone, by the whole stream's
+// rule: all of them give the stream's own; a range within one second, its
+// part of a second; a single frame without a duration, an average of 0 as a
+// stream of it would; frames the stream lacks, nothing.
+TEST(Bitrate, SummarizesAFrameRangeAsAStreamOfItsFrames) {
+    const BitrateData data = bitrate_data("clip.mkv", {10.0, 10.5, 11.0, 11.5}, {0.5, 0.5, 0.5, 0.5},
+                                          {1000, 500, 2000, 500}, {true, false, true, false});
+    const auto figures = [](const std::optional<BitrateSummary>& summary) {
+        return summary ? std::vector<double>{summary->average_kbps, summary->minimum_kbps, summary->maximum_kbps}
+                       : std::vector<double>{};
+    };
+    EXPECT_EQ(figures(frames_summary(data, 0, 3)), (std::vector<double>{16.0, 12.0, 20.0}));
+    EXPECT_EQ(figures(frames_summary(data, 0, 3)), figures(data.summary));
+    EXPECT_EQ(figures(frames_summary(data, 1, 2)), (std::vector<double>{20.0, 20.0, 20.0}));  // 10.5 to 11.5 s
+    EXPECT_EQ(figures(frames_summary(data, 2, 99)), (std::vector<double>{20.0, 20.0, 20.0}));  // to the end
+    EXPECT_EQ(figures(frames_summary(data, 1, 1)), (std::vector<double>{8.0, 8.0, 8.0}));  // half a second
+    EXPECT_FALSE(frames_summary(data, 4, 9));
+    EXPECT_FALSE(frames_summary(data, 2, 1));
+    const BitrateData instant = bitrate_data("still.mkv", {3.0}, {0.0}, {800}, {true});
+    EXPECT_EQ(figures(frames_summary(instant, 0, 0)), (std::vector<double>{0.0, 0.0, 0.0}));
+}
+
 // A raw stream timed by --fps is read at that rate: ffprobe would take a raw
 // 120 fps HEVC stream as 25 frames a second (its packets 0.04 s long, the
 // bitrate 4.8 times too low). A video scaled to one size reads as any other:

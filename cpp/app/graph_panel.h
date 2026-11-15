@@ -36,7 +36,6 @@
 class QCheckBox;
 class QLabel;
 class QPushButton;
-class QSpinBox;
 class QTableWidget;
 class QTableWidgetItem;
 class QTabWidget;
@@ -45,6 +44,7 @@ namespace vml::app {
 
 class ChartWidget;
 class FileWrites;
+class FrameControls;
 class VideoColors;
 
 // Where an XPSNR frame identical to its reference (infinity) is drawn: above
@@ -277,13 +277,9 @@ private:
     // The frames whose statistics the table gives and the pages shade: the
     // range's two ends in order, or nothing for the whole video.
     std::optional<std::pair<int, int>> selected_frames() const;
-    void apply_range();
-    void clear_range();
-    // A range box edited: the range is its two boxes' frames once both hold one.
-    void on_range_box_changed();
-    // Both range boxes back to "—" (no end), their signals held.
-    void reset_range_boxes();
-    void refresh_range_boxes(int lo, int hi);
+    // The range changed (FrameControls::range_changed): every page shades it;
+    // once `finished`, the table gives its statistics.
+    void on_range_changed(bool finished);
     void refresh_page_controls();
     void cap_panel_heights();
     const MetricDefinition& current_metric() const;
@@ -330,15 +326,8 @@ private:
     QTabWidget* tabs_ = nullptr;
     std::map<std::string, MetricPage*> pages_;
     QPushButton* export_csv_button_ = nullptr;
-    QSpinBox* frame_spin_ = nullptr;
-    // A frame range (issue #17): the two range boxes' frames, as typed or
-    // dragged, apart from Go to frame. Nothing (no range, the whole video's
-    // statistics) until both boxes hold a frame. Each box's lowest value,
-    // shown as "—", is no end.
-    std::optional<std::pair<int, int>> range_;
-    QSpinBox* range_start_spin_ = nullptr;
-    QSpinBox* range_end_spin_ = nullptr;
-    QPushButton* clear_range_button_ = nullptr;
+    // Go to frame and the frame range (issue #17), shared with the Bitrate tab.
+    FrameControls* frame_controls_ = nullptr;
     // The Difference box: on for every page (not saved), drawn where a page
     // shows exactly two lines.
     bool difference_on_ = false;

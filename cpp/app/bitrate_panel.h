@@ -42,6 +42,7 @@ class QVBoxLayout;
 namespace vml::app {
 
 class ChartWidget;
+class FrameControls;
 class VideoColors;
 
 // How far a file in the Bitrate tab has got.
@@ -63,6 +64,9 @@ struct BitrateEntry {
     QString error;               // why it could not be, once failed
     // By graph ("frame", "second", "gop") and whether the start is moved to 0.
     std::map<std::pair<std::string, bool>, std::shared_ptr<const BitratePlot>> plots;
+    // The frame range's figures (frames_summary), worked out when the range
+    // or the packets change; nothing without a range or any of its frames.
+    std::optional<BitrateSummary> range_summary;
 };
 
 // One file the worker has read: its details and its packets.
@@ -141,6 +145,10 @@ public:
     QPushButton* export_button = nullptr;
     ChartWidget* chart = nullptr;
     ReadoutLabel* hover_label = nullptr;
+    // Go to frame and the frame range, shared with Metric Graphs, and what
+    // the table's figures are of while a range is chosen.
+    FrameControls* frame_controls = nullptr;
+    QLabel* range_label = nullptr;
     QLabel* status_label = nullptr;
     QProgressBar* progress = nullptr;
 
@@ -155,6 +163,7 @@ private:
     void add_table(QVBoxLayout* root);
     void add_plot_controls(QVBoxLayout* root);
     void add_chart(QVBoxLayout* root);
+    void add_frame_controls(QVBoxLayout* root);
     void add_status_row(QVBoxLayout* root);
 
     friend class BitratePanelTest;  // the panel's tests (tests/app)
@@ -188,8 +197,33 @@ private:
     void refresh_plot();  // the lines drawn again, the zoom kept
     void refresh_difference();  // the Difference band and box, for the lines drawn
     void show_frame_types_box();  // usable in the frame graph; its legend while ticked
+    // One drawn line's point in the readout: its index on the line, and the
+    // frame it shows.
+    struct ReadoutPoint {
+        std::size_t index = 0;
+        std::size_t frame = 0;
+    };
+    // The readout at `time`: a line for each drawn line's point (in
+    // current_plots_' order), or for one without, that it lacks
+    // `asked_frame` (Go to frame), and the difference.
+    void write_readout(double time, const std::vector<std::optional<ReadoutPoint>>& points,
+                       std::optional<int> asked_frame);
     void on_hovered(double time);
     void on_hover_left();
+    // Go to frame: each drawn line at its own frame `frame`.
+    void on_frame_requested(int frame);
+    // The frame the first drawn line shows at `time`, as the readout counts
+    // it; nothing with no line drawn.
+    std::optional<int> frame_at(double time) const;
+    void on_range_dragged(double start, double now, bool finished);
+    // The range changed (FrameControls::range_changed): shaded at once; its
+    // figures in the table once `finished`.
+    void on_range_changed(bool finished);
+    void update_range_summary(BitrateEntry& entry) const;
+    // The range shaded on the graph, as the first drawn line with its first
+    // frame places it: from that frame's start to its last frame's end.
+    void refresh_highlight();
+    void refresh_range_label();
     void on_export_png();
 
     std::function<std::string()> ffprobe_;
