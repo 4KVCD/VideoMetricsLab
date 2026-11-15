@@ -110,7 +110,7 @@ Each metric's key (`vmaf`, `vmaf_neg`, `vmaf_v1`, `psnr`, `ssim`, `xpsnr`,
 | `custom_model_path` | A VMAF model file given by its path, or `null`. |
 | `cvvdp` | `display` (the preset's name, `""` for a display that is no preset) and its `parameters`; `null` without CVVDP. |
 | `frame_subsample` | `asked` (every n-th frame) and `every_nth_frame` per metric: libvmaf's metrics follow it, XPSNR and CVVDP score every frame. |
-| `range` | The range asked for: `whole`, or `start` and `end` in `unit` (`seconds` or `frames`). |
+| `range` | The range asked for: `whole`, or `start` and `end` in `unit` (`seconds` or `frames`). With CVVDP and a range of frames, `cvvdp_seconds` (`start`, `end`): the whole seconds CVVDP scored, those nearest the frames (an `end` of 0: to the videos' end). |
 | `compared_frames` | The frames compared, counted from the first frame: `first`, `last`, `count`. |
 | `frame_pairing` | `frame number`: frame N of one video is compared with frame N of the other, each counted from its own first frame; nothing is dropped or repeated to line them up. |
 | `scaling` | `direction` (`source_to_distorted` scales the reference to the test video's size, `distorted_to_source` the other way), `algorithm`, `compared_at` (the size compared), and for `source` and `test` the scaling each had (`from`, `to`) or `null` when left at its size. A resolution test gives `resolution_test` (`label`, `width`, `scaler`) instead. |

@@ -200,6 +200,14 @@ Json settings_json(const VideoSettings& settings, const ComparisonResult* result
                          {"start", range.start},
                          {"end", range.end},
                          {"unit", range.in_frames ? "frames" : "seconds"}};
+    if (asks_cvvdp && range.in_frames && !range.whole()) {
+        // CVVDP scores whole seconds: those nearest the frames, as the run
+        // scored them (an end of 0: to the videos' end)
+        const ComparedRange seconds =
+            cvvdp_seconds(range, settings.source.fps,
+                          std::min(settings.source.estimated_frame_count(), settings.test.estimated_frame_count()));
+        json["range"]["cvvdp_seconds"] = Json{{"start", seconds.start}, {"end", seconds.end}};
+    }
     if (result && result->compared_frame_count > 0) {
         const long long first = compared_frames(range, settings.source.fps).first;
         json["compared_frames"] = Json{

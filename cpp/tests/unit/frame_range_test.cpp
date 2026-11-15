@@ -89,6 +89,8 @@ TEST(FrameRange, ARangeOfFramesIsExactAndCvvdpsTheNearestSeconds) {
     EXPECT_EQ(cvvdp_seconds(frames, 50.0, 500), (ComparedRange{2, 4, false}));  // 2.0 to 4.4 s
     EXPECT_EQ(cvvdp_seconds(ComparedRange{100, 110, true}, 50.0, 500), (ComparedRange{2, 3, false}));
     EXPECT_EQ(cvvdp_seconds(ComparedRange{0, 10, true}, 50.0, 500), (ComparedRange{0, 1, false}));
+    // Under a second, rounded to no second: the second with its middle frame.
+    EXPECT_EQ(cvvdp_seconds(ComparedRange{12, 24, true}, 24.0, 480), (ComparedRange{0, 1, false}));
     EXPECT_EQ(cvvdp_seconds(ComparedRange{400, 0, true}, 50.0, 500), (ComparedRange{8, 0, false}));
     EXPECT_EQ(cvvdp_seconds(ComparedRange{400, 500, true}, 50.0, 450), (ComparedRange{8, 9, false}));
     EXPECT_EQ(cvvdp_seconds(ComparedRange{490, 500, true}, 50.0, 450), (ComparedRange{8, 9, false}));

@@ -25,9 +25,10 @@ struct ComparedRange {
 std::pair<long long, std::optional<long long>> compared_frames(const ComparedRange& range, double fps);
 
 // The whole seconds CVVDP scores of `range`, which scores a second at a time:
-// a range of frames rounded to the nearest seconds, at least one, ending no
-// later than the second after the last of `video_frames` (when known, above
-// 0). A range of seconds is its own.
+// a range of frames rounded to the nearest seconds (one rounded to none: the
+// second with its middle frame), ending no later than the second after the
+// last of `video_frames` (when known, above 0). A range of seconds is its
+// own.
 ComparedRange cvvdp_seconds(const ComparedRange& range, double fps, long long video_frames);
 
 }  // namespace vml

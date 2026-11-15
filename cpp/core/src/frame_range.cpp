@@ -60,7 +60,14 @@ ComparedRange cvvdp_seconds(const ComparedRange& range, double fps, long long vi
     long long start = nearest(std::max(0LL, range.start));
     long long end = 0;
     if (range.end > 0) {
-        end = std::max(nearest(range.end), start + 1);
+        end = nearest(range.end);
+        if (end <= start) {
+            // Under a second, rounded to no second: the one with its middle
+            // frame, which holds at least half of its frames (frames 12 to
+            // 23 at 24 fps: second 0, not second 1, which has none of them).
+            start = second_of_frame((std::max(0LL, range.start) + range.end - 1) / 2, fps);
+            end = start + 1;
+        }
     }
     const long long last_end = end_second_of(video_frames, fps);
     if (last_end > 0) {

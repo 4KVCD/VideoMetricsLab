@@ -1810,10 +1810,14 @@ private:
             // needs: a ranged run's in its range_frames, a whole run's on its
             // own, for a range to be cut from it (metric_cache.cpp).
             const long long reached = windows.back().first + windows.back().frames;
-            if (cvvdp_range_.whole()) {
+            if (request_.options.compared_range().whole()) {
                 result.provenance.parameters["cvvdp_frames_reached"] = nlohmann::json(reached).dump();
+            } else {
+                // A range's score, marked as one even where its nearest
+                // seconds are the whole videos' ("frame 5 to the end" at 24
+                // fps): a range's saved scores are only taken marked.
+                mark_range(result.provenance, FrameRange{cvvdp_range_.start, reached}, reached);
             }
-            mark_range(result.provenance, cvvdp_range_, reached);
         }
         for (const CvvdpWindow& window : windows) {
             result.frame.push_back(static_cast<int>(window.first));
