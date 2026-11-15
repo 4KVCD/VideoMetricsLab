@@ -75,12 +75,14 @@ public:
     // no `ffmpeg`, the film grain is left unread.
     ProbeWorker(QStringList paths, std::string ffprobe, std::string ffmpeg, QObject* parent = nullptr);
     // Looks up the saved scores of the rows `paths` (as `queries` asks for
-    // each) under `base`, compared with the reference `source`.
+    // each) under `base`, compared with the reference `source`. Black bars
+    // that saved scores of an older black-bar rule wait for are found with
+    // `ffmpeg` (find_black_bars_of_older_scores).
     ProbeWorker(QStringList paths, std::filesystem::path base, std::filesystem::path source,
-                std::map<QString, SavedScoresQuery> queries, QObject* parent = nullptr);
+                std::map<QString, SavedScoresQuery> queries, std::string ffmpeg, QObject* parent = nullptr);
 
-    // Stops, ending the ffprobe or FFmpeg reading a video; a lookup under way
-    // is let finish.
+    // Stops, ending the ffprobe or FFmpeg reading a video, or finding black
+    // bars; a lookup of saved files under way is let finish.
     void cancel() {
         cancelled_ = true;
         cancel_.cancel();

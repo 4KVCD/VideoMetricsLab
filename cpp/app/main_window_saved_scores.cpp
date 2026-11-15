@@ -98,7 +98,8 @@ bool MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& pa
     if (texts.isEmpty()) {
         return false;
     }
-    auto* worker = new ProbeWorker(texts, cache_folder(), source_info_->path, std::move(queries), this);
+    auto* worker = new ProbeWorker(texts, cache_folder(), source_info_->path, std::move(queries),
+                                   find_tool("ffmpeg", settings_), this);
     cache_worker_ = worker;
     probe_workers_.push_back(worker);
     connect(worker, &ProbeWorker::saved_found, this,

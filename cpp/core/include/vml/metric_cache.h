@@ -30,8 +30,10 @@ inline constexpr int metric_cache_format_version = 2;
 // The black-bar rule a comparison's detected bars were cut by, as its
 // context.json says it ("black_bars_rule"; 1 where it says none). 2: odd
 // bars rounded up to even, as HandBrake rounds them. A comparison saved with
-// bars Auto or Source only found by an older rule is not read: its pictures
-// were cut otherwise than the rule cuts them now, and it is calculated again.
+// bars Auto or Source only found by an older rule is read only where the
+// answers the rule keeps now give the same boxes (find_black_bars_of_older_scores
+// finds them); otherwise its pictures were cut otherwise than the rule cuts
+// them now, and it is calculated again.
 inline constexpr int black_bars_rule_version = 2;
 
 // The folder the scores are saved in unless Settings name another:
@@ -105,6 +107,18 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
                                    const std::filesystem::path& distorted, const ComparisonRecipe& recipe,
                                    const ComparisonResult& result, const std::string& label,
                                    const std::vector<MetricRequestSpec>& specs);
+
+// Finds, with `find_box` (detect_crop, which keeps its answer), the black
+// bars of each video of a saved comparison load_result reads for `recipe`
+// whose bars Auto or Source only found by an older rule and cut, where the
+// current rule keeps no answer for it: with them, its scores are read where
+// the boxes come out the same (most bars, of an even number of lines). Each
+// video is looked for once; one whose bars could not be found (a failure of
+// `find_box`, logged) is not looked for again in this process. Cancelled
+// from `find_box` is thrown on. Returns whether `find_box` was called.
+bool find_black_bars_of_older_scores(const std::filesystem::path& base, const std::filesystem::path& source,
+                                     const std::filesystem::path& distorted, const ComparisonRecipe& recipe,
+                                     const std::function<void(const VideoInfo&)>& find_box);
 
 // The saved scores of `specs` for a comparison, with the comparison's
 // details and its label; nothing when none are saved. `backends` says where

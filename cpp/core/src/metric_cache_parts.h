@@ -60,10 +60,24 @@ void forget_scores_of_another_picture(const std::filesystem::path& directory, co
 bool current_format(const nlohmann::json& metadata);
 
 // Whether a saved comparison's context says it cut bars that Auto or Source
-// only found by an older black-bar rule (black_bars_rule_version): a box that
-// cuts something from either video. Its scores are of other pictures than a
-// run cuts now. No other black-bar mode detects bars.
+// only found by an older black-bar rule (black_bars_rule_version), with a box
+// that cuts something from either video, other than the black-bar answers
+// kept under the current rule (kept_crop_answer) would cut them now, or with
+// no such answers kept. Its scores are then of other pictures than a run
+// cuts, or may be. No other black-bar mode detects bars.
 bool cut_by_an_older_rule(const nlohmann::json& context);
+
+// The black-bar mode of a saved comparison whose context says it cut bars that
+// Auto or Source only found by an older rule, with a box that cuts something
+// from either video; none for any other comparison. Throws on a damaged
+// context.
+std::optional<CropMode> mode_cut_by_an_older_rule(const nlohmann::json& context);
+
+// A saved comparison's two videos as its context describes them, where its
+// boxes were found on the videos' own pictures, as the answers kept now are:
+// not where a video's size changes (scaled_to: sampled scaled, never kept) or
+// in a resolution test. Throws on a damaged context.
+std::optional<std::pair<VideoInfo, VideoInfo>> videos_of_kept_answers(const nlohmann::json& context);
 
 // The whole-video scores saved for `spec`'s metric with other parameters but
 // otherwise the same request, each with those parameters

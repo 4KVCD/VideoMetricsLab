@@ -3,6 +3,7 @@
 #include <exception>
 #include <utility>
 
+#include "vml/crop_detect.h"
 #include "vml/ffprobe.h"
 #include "vml/film_grain_detect.h"
 #include "vml/metric_cache.h"
@@ -26,9 +27,10 @@ ProbeWorker::ProbeWorker(QStringList paths, std::string ffprobe, std::string ffm
 }
 
 ProbeWorker::ProbeWorker(QStringList paths, std::filesystem::path base, std::filesystem::path source,
-                         std::map<QString, SavedScoresQuery> queries, QObject* parent)
+                         std::map<QString, SavedScoresQuery> queries, std::string ffmpeg, QObject* parent)
     : QThread(parent),
       paths_(std::move(paths)),
+      ffmpeg_(std::move(ffmpeg)),
       base_(std::move(base)),
       source_(std::move(source)),
       queries_(std::move(queries)),
@@ -73,6 +75,13 @@ void ProbeWorker::look_up(const QString& path) {
         // The token first: a file replaced during a long read gives another,
         // and the window refuses the scores found under the old one.
         const std::string token = lookup_token(source_, query.identity, request);
+        // Black bars an older rule found, found again where the rule keeps no
+        // answer now, so that saved scores whose boxes come out the same are
+        // read: once per video, taking what a run takes to find them (which a
+        // run waiting for the lookup then has).
+        find_black_bars_of_older_scores(base_, source_, query.identity, request.recipe, [this](const VideoInfo& video) {
+            detect_crop(ffmpeg_, video, cancel_, std::nullopt, "");
+        });
         if (auto found = load_result(base_, source_, query.identity, request.recipe, request.metrics,
                                      request.perceptual_backends, query.supplemental, query.not_from_other_recipes)) {
             emit saved_found({path, std::move(found->first), QString::fromStdString(found->second), token});

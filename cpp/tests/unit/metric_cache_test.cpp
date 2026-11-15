@@ -6,6 +6,7 @@
 // files, and the VMAF model a loaded result has.
 #include "vml/metric_cache.h"
 #include "vml/colour.h"
+#include "vml/crop_detect.h"
 #include "vml/cvvdp.h"
 #include "vml/film_grain_detect.h"
 
@@ -745,6 +746,77 @@ TEST(MetricCache, ScoresOfBarsCutByAnOlderRuleAreCalculatedAgain) {
     EXPECT_EQ(loaded(), 1U);
     store(std::nullopt, true, {request.metrics.front()});  // nothing cut
     EXPECT_EQ(loaded(), 1U);
+}
+
+// Scores of bars an older rule found are read where the bars the rule keeps
+// now give the same boxes (bars of an even number of lines): the lookup finds
+// each video's bars once (find_black_bars_of_older_scores), and a save beside
+// them keeps them. Boxes that come out otherwise are still not read.
+TEST(MetricCache, ScoresOfAnOlderRuleAreReadWhereTheBarsFoundNowGiveTheirBoxes) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    const std::filesystem::path bars = folder / "black_bars.json";
+    forget_crop_answers();  // nothing of other tests' in this process's answers
+    set_crop_store([bars] { return bars; });
+    AnalysisRequest request = request_from(stored);
+    request.recipe.crop_mode = CropMode::automatic;
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source_info.path = folder / "s.mp4";
+    result.distorted_info = result.source_info;
+    result.distorted_info.path = folder / "t.mp4";
+    const auto [width, height] = result.source_info.frame_size();
+    const CropBox letterbox{width, height - 40, 0, 20};
+    result.source_crop = letterbox;
+    result.distorted_crop = letterbox;
+    const std::filesystem::path directory =
+        store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe, result, "t", request.metrics);
+    nlohmann::json context = nlohmann::json::parse(*platform::read_file(directory / "context.json"));
+    context.erase("black_bars_rule");
+    touch(directory / "context.json", context.dump());
+    // Each video's box as the rule keeps it now
+    nlohmann::json boxes = nlohmann::json::array();
+    const auto keep = [&](const VideoInfo& video, const CropBox& box) {
+        const std::filesystem::path resolved = std::filesystem::weakly_canonical(video.path);
+        boxes.push_back({{platform::path_text(resolved), std::filesystem::file_size(resolved),
+                          *platform::modified_ns(resolved), video.duration, 0.12549},
+                         {box.w, box.h, box.x, box.y}});
+        touch(bars, nlohmann::json{{"version", 6}, {"boxes", boxes}}.dump());
+        forget_crop_answers();
+    };
+    const auto loaded = [&] {
+        const auto found = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                       request.metrics, request.perceptual_backends);
+        return found ? found->first.metric_results.keys().size() : 0;
+    };
+    std::vector<std::string> looked_for;
+    const auto find = [&] {
+        return find_black_bars_of_older_scores(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                               [&](const VideoInfo& video) {
+                                                   looked_for.push_back(platform::path_text(video.path.filename()));
+                                                   keep(video, letterbox);
+                                               });
+    };
+    EXPECT_EQ(loaded(), 0U);  // no bars kept by the rule now
+    EXPECT_TRUE(find());
+    EXPECT_EQ(looked_for, (std::vector<std::string>{"s.mp4", "t.mp4"}));
+    EXPECT_EQ(loaded(), request.metrics.size());
+    EXPECT_FALSE(find());  // found once
+    EXPECT_EQ(looked_for.size(), 2U);
+    // One metric saved by the rule now: the others' files stay
+    store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe, result, "t",
+                 {request.metrics.front()});
+    EXPECT_EQ(loaded(), request.metrics.size());
+    // Bars of an odd number of lines, cut 2 lines more by the rule now
+    touch(directory / "context.json", context.dump());
+    boxes = nlohmann::json::array();
+    keep(result.source_info, CropBox{width, height - 44, 0, 22});
+    keep(result.distorted_info, CropBox{width, height - 44, 0, 22});
+    EXPECT_EQ(loaded(), 0U);
+    EXPECT_FALSE(find());  // kept, so not looked for again
+    set_crop_store({});
+    forget_crop_answers();
 }
 
 // A score of a pair with a video scored with its AV1 film grain, or an AV1

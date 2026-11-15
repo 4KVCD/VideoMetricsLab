@@ -5,7 +5,9 @@
 #include <cmath>
 #include <fstream>
 #include <functional>
+#include <mutex>
 #include <regex>
+#include <set>
 #include <stdexcept>
 #include <string_view>
 #include <system_error>
@@ -14,8 +16,11 @@
 
 #include "metric_cache_parts.h"
 #include "vml/app_log.h"
+#include "vml/append.h"
 #include "vml/build_info.h"
+#include "vml/cancel.h"
 #include "vml/colour.h"
+#include "vml/crop_detect.h"
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
@@ -941,25 +946,78 @@ bool current_format(const nlohmann::json& metadata) {
     return version.is_number() && version.get<double>() == metric_cache_format_version;
 }
 
-bool cut_by_an_older_rule(const nlohmann::json& context) {
-    try {
-        if (context.value("black_bars_rule", 1) >= black_bars_rule_version) {
-            return false;
-        }
-        const std::string mode = context.value("recipe", nlohmann::json::object()).value("crop_mode", std::string());
-        if (mode != crop_mode_text(CropMode::automatic) && mode != crop_mode_text(CropMode::source_only)) {
-            return false;
-        }
-        for (const auto& [crop_key, info_key] : {std::pair("source_crop", "source_info"),
-                                                 std::pair("distorted_crop", "distorted_info")}) {
-            const std::optional<CropBox> crop = crop_from_dict(context.value(crop_key, nlohmann::json()));
-            if (crop && context.contains(info_key)) {
-                const auto [width, height] = video_info_from_dict(context.at(info_key)).frame_size();
-                if (!crop->is_noop(width, height)) {
-                    return true;
-                }
+std::optional<CropMode> mode_cut_by_an_older_rule(const nlohmann::json& context) {
+    if (context.value("black_bars_rule", 1) >= black_bars_rule_version) {
+        return std::nullopt;
+    }
+    const std::string text = context.value("recipe", nlohmann::json::object()).value("crop_mode", std::string());
+    const CropMode mode = text == crop_mode_text(CropMode::automatic)     ? CropMode::automatic
+                          : text == crop_mode_text(CropMode::source_only) ? CropMode::source_only
+                                                                          : CropMode::none;
+    if (mode == CropMode::none) {
+        return std::nullopt;
+    }
+    for (const auto& [crop_key, info_key] : {std::pair("source_crop", "source_info"),
+                                             std::pair("distorted_crop", "distorted_info")}) {
+        const std::optional<CropBox> crop = crop_from_dict(context.value(crop_key, nlohmann::json()));
+        if (crop && context.contains(info_key)) {
+            const auto [width, height] = video_info_from_dict(context.at(info_key)).frame_size();
+            if (!crop->is_noop(width, height)) {
+                return mode;
             }
         }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::pair<VideoInfo, VideoInfo>> videos_of_kept_answers(const nlohmann::json& context) {
+    if (python_truthy(context.value("resample_target", nlohmann::json()))) {
+        return std::nullopt;
+    }
+    std::pair videos{video_info_from_dict(context.at("source_info")), video_info_from_dict(context.at("distorted_info"))};
+    if (videos.first.scaled_to || videos.second.scaled_to) {
+        return std::nullopt;
+    }
+    return videos;
+}
+
+namespace {
+
+// Whether the black-bar answers kept under the current rule (kept_crop_answer)
+// give a saved comparison of `mode` the boxes it cut: what crops_for would
+// cut from its videos now. Bars of an even number of lines, the most, are
+// cut alike by both rules.
+bool same_boxes_now(const nlohmann::json& context, CropMode mode) {
+    const std::optional<std::pair<VideoInfo, VideoInfo>> videos = videos_of_kept_answers(context);
+    if (!videos) {
+        return false;
+    }
+    const auto& [source, distorted] = *videos;
+    const std::optional<CropAnswer> source_answer = kept_crop_answer(source);
+    if (!source_answer) {
+        return false;
+    }
+    std::pair<std::optional<CropBox>, std::optional<CropBox>> now;
+    if (mode == CropMode::source_only) {
+        now = {source_answer->box, test_crop_beside_source_box(source_answer->box, distorted)};
+    } else {
+        const std::optional<CropAnswer> distorted_answer = kept_crop_answer(distorted);
+        if (!distorted_answer) {
+            return false;
+        }
+        now = common_picture(source, distorted, source_answer->box, distorted_answer->box);
+    }
+    // Exactly as saved: forget_scores_of_another_picture compares them so too
+    return now.first == crop_from_dict(context.value("source_crop", nlohmann::json())) &&
+           now.second == crop_from_dict(context.value("distorted_crop", nlohmann::json()));
+}
+
+}  // namespace
+
+bool cut_by_an_older_rule(const nlohmann::json& context) {
+    try {
+        const std::optional<CropMode> mode = mode_cut_by_an_older_rule(context);
+        return mode && !same_boxes_now(context, *mode);
     } catch (const std::exception&) {
         // A damaged context: read, or not, by the checks it has always had
     }
@@ -1064,6 +1122,98 @@ std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, 
 }
 
 }  // namespace cache_parts
+
+namespace {
+
+// The videos whose black bars find_black_bars_of_older_scores could not find
+// in this process (path and duration): not looked for again at each lookup.
+struct UnfoundBars {
+    std::mutex mutex;
+    std::set<std::pair<std::string, double>> videos;
+};
+
+UnfoundBars& unfound_bars() {
+    static UnfoundBars unfound;
+    return unfound;
+}
+
+// The recipes besides its own whose folders load_result reads for `recipe`:
+// the whole videos' for a range, and Auto's of each for Source only.
+std::vector<ComparisonRecipe> recipes_read_beside(const ComparisonRecipe& recipe) {
+    std::vector<ComparisonRecipe> others;
+    if (recipe.range_start > 0 || recipe.range_end > 0) {
+        ComparisonRecipe& whole = others.emplace_back(recipe);
+        whole.range_start = 0;
+        whole.range_end = 0;
+        whole.range_in_frames = false;
+    }
+    if (recipe.crop_mode == CropMode::source_only) {
+        std::vector<ComparisonRecipe> automatic{recipe};
+        append(automatic, others);
+        for (ComparisonRecipe& each : automatic) {
+            each.crop_mode = CropMode::automatic;
+        }
+        append(others, automatic);
+    }
+    return others;
+}
+
+}  // namespace
+
+bool find_black_bars_of_older_scores(const std::filesystem::path& base, const std::filesystem::path& source,
+                                     const std::filesystem::path& distorted, const ComparisonRecipe& recipe,
+                                     const std::function<void(const VideoInfo&)>& find_box) {
+    std::vector<std::filesystem::path> folders{recipe_directory(base, source, distorted, recipe)};
+    for (const ComparisonRecipe& other : recipes_read_beside(recipe)) {
+        folders.push_back(base / format_folder / recipe_hash(source, distorted, other));
+    }
+    bool looked = false;
+    std::set<std::string> asked;  // each video once, though several folders wait for it
+    for (const std::filesystem::path& folder : folders) {
+        const std::optional<nlohmann::json> context = read_json(folder / "context.json");
+        if (!context || !context->is_object() || !current_format(*context) || !cut_by_an_older_rule(*context)) {
+            continue;
+        }
+        std::optional<CropMode> mode;
+        std::optional<std::pair<VideoInfo, VideoInfo>> videos;
+        try {
+            mode = mode_cut_by_an_older_rule(*context);
+            videos = videos_of_kept_answers(*context);
+        } catch (const std::exception&) {
+            continue;  // damaged: cut_by_an_older_rule reads it as it always has
+        }
+        if (!mode || !videos) {
+            continue;
+        }
+        // A run finds the source's bars, and with Auto the test video's too
+        std::vector<const VideoInfo*> detected{&videos->first};
+        if (*mode == CropMode::automatic) {
+            detected.push_back(&videos->second);
+        }
+        for (const VideoInfo* video : detected) {
+            const std::pair key{platform::path_text(video->path), video->duration};
+            if (!asked.insert(key.first).second || kept_crop_answer(*video)) {
+                continue;
+            }
+            UnfoundBars& unfound = unfound_bars();
+            if (const std::lock_guard lock(unfound.mutex); unfound.videos.contains(key)) {
+                continue;
+            }
+            looked = true;
+            try {
+                find_box(*video);
+            } catch (const Cancelled&) {
+                throw;
+            } catch (const std::exception& error) {
+                app_log::write(app_log::Level::warning, "vml.metric_cache",
+                               std::string("Black bars of saved scores not found: ") + error.what());
+                const std::lock_guard lock(unfound.mutex);
+                unfound.videos.insert(key);
+            }
+        }
+    }
+    return looked;
+}
 
 std::filesystem::path default_cache_dir() {
     return platform::home_directory() / ".videometricslab" / "results_cache";
