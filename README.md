@@ -2,14 +2,14 @@
 
 Calculate VMAF, VMAF NEG, VMAF v1, SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD, Intel and Apple GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly to easily spot differences.
 
-VideoMetricsLab v2.4 adds an experimental GPU VVC decoder, BD-rate calculation, instant metric scores for any time range for a video that's already been scored, a difference graph for 2 videos' scores and bitrate and improves resolution test speed up to 27x, along with various bug fixes. See the [changelog](CHANGELOG.md).
+VideoMetricsLab v2.5 adds statistics for any range of frames in Metric Graphs, black-bar crops entered by hand, ColorVideo VDP on more than one display in the window, ranges in frames, and fuller results files, along with various bug fixes. See the [changelog](CHANGELOG.md).
 
 ## Features
 
 **Metrics**
 - VMAF v0.6.1, VMAF NEG, VMAF v1, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli and ColorVideo VDP, for many test videos at once.
 - VMAF models for standard, phone, 4K and HFR viewing.
-- ColorVideo VDP scored for the display you choose, or automatically HDR or SDR to match the video.
+- ColorVideo VDP scored for the displays you choose, or automatically HDR or SDR to match the video.
 - Film grain scored as viewers see it, or without it: VVC, AV1 and AFGS1 grain, at any bit depth.
 - Resolution tests: how a video scores scaled down and back up, at any size, with your choice of scaling algorithm.
 
@@ -24,15 +24,16 @@ VideoMetricsLab v2.4 adds an experimental GPU VVC decoder, BD-rate calculation, 
 **Compare and inspect**
 - Frame-exact playback that switches instantly between the source and each encode (hold **S**), with zoom, at up to 120 fps in 4K HDR, in HDR on an HDR display, with film grain shown as it is scored and the soundtrack, up to 7.1.
 - Metric curves, statistics and per-frame scores (per second for ColorVideo VDP), with each metric's best and worst results highlighted.
+- Statistics for any range of frames: Shift+drag across a graph.
 - Bitrate by frame, second or GOP, with each frame's type (I, P or B).
 - A difference graph for 2 videos' scores and bitrate.
 - BD-rate calculation: how much bitrate one encoder saves over another at the same quality.
 
 **Workflow**
-- Black bars found the way HandBrake finds them, and resolution mismatches handled automatically.
+- Black bars found the way HandBrake finds them, or entered by hand, and resolution mismatches handled automatically.
 - Results saved and reloaded automatically; a metric added later is the only one calculated.
-- Metric scores for any time range of a video, instantly if the video has already been scored.
-- Scores and statistics exported as CSV or JSON.
+- Metric scores for any range of a video, in seconds or frames, instantly if the video has already been scored.
+- Scores and statistics exported as CSV or JSON, with every setting, the computer and the timings of the run.
 - Drag and drop videos, sort and reorder the list, and a dark theme, in 20 languages.
 - Raw video files such as .266 open directly, with their frame rate read from the stream.
 - A command line, `VideoMetricsLab-cli`, for scripts: comparisons, bitrate and BD-rate. It also reads raw video streams and .yuv files.

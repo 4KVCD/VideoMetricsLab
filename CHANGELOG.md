@@ -1,5 +1,70 @@
 # Changelog
 
+## v2.5
+
+v2.5 adds statistics for any range of frames in Metric Graphs, black-bar crops entered by hand, ColorVideo VDP on more
+than one display in the window, ranges in frames, and fuller results files, and makes seeking in raw .266 and .265
+streams near instant, along with various bug fixes.
+
+### New features
+
+- Statistics for any range of frames in Metric Graphs: Shift+drag across a graph, or type the first and last frame,
+  and the table shows the mean, median, lows and thresholds of just those frames; the range is shaded on every graph
+  and included in Export graph as PNG (#17).
+- Black-bar crops entered by hand, for an encode cropped with HandBrake's or FFmpeg's own values: Black bars > Manual,
+  or `--source-crop` and `--test-crop` (#13).
+- ColorVideo VDP on further displays in the window: "Also score CVVDP on..." adds a row that scores ColorVideo VDP
+  alone on another display, without calculating the other metrics again (#15).
+- A range can be given in frames as well as in seconds (Range > Frames, `--frames`). ColorVideo VDP scores whole
+  seconds, so its range is rounded to the nearest second.
+- Results files (`--json`, Export results) now record how the run was made: every setting, the computer and its GPUs'
+  drivers, the decoders used, how the black bars were decided, and how long each step took (#14).
+- A test video with film grain can be added a second time to be scored without its grain (or with it), so the two
+  can be compared side by side.
+- Go to frame moves a zoomed graph to the frame (#16).
+- Bitrate Viewer: Go to frame and statistics for a range of frames, as in Metric Graphs.
+- Video Compare: Play on the last frame starts again from the first.
+
+### Performance
+
+- Seeking in a raw .266 or .265 stream in Video Compare: a jump to 1 hour in a 4K film takes **4.6 s** instead of
+  **4-5 minutes**, and seeks within what was already read take 0.1-1.1 s.
+
+### Bug fixes
+
+Wrong scores:
+
+- Fixed black bars with an odd number of lines being rounded down where HandBrake rounds them up, so an encode cropped
+  with HandBrake's values was 2-4 lines shorter than the source's crop and scored lower (#12).
+- Fixed a test video at another resolution being cropped 1 line off the source with Auto black bars, which lowered
+  every score.
+- Fixed wrong scores for an AV1 video whose resolution changes after its first 8 frames, on NVIDIA and AMD GPUs.
+- Fixed wrong scores for a monochrome (grayscale) H.264 video decoded on the GPU.
+
+Videos that could not be scored or played:
+
+- Fixed a VVC video whose resolution changes partway through failing with "the decoder failed: Generic error in an
+  external library".
+- Fixed a file whose timestamps are in decoding order (such as a raw stream copied into MP4 without timestamps) failing
+  in every decoder: it is now refused with the reason.
+- Fixed Video Compare playing nothing for a raw stream shorter than the source; videos of a different length are now
+  warned about as soon as they are added.
+
+Other:
+
+- Fixed Video Compare saying "detecting black bars..." forever when the tab was hidden and shown again during the
+  detection.
+- Fixed test videos that were still being read when Video Compare was opened not appearing in it.
+- Fixed ColorVideo VDP, SSIMULACRA2 and Butteraugli scores made with stock Vship of a full-range gray video being
+  calculated again on every run instead of loaded.
+- Fixed Cancel not responding while a run waited for another run's GPU check.
+- Fixed a missing FFmpeg being reported as "could not be run ([WinError 2] ...)" instead of "not found".
+- Fixed a possible crash on macOS when Video Compare's window was covered, minimised or restored as playback stopped.
+- Fixed the frame line in Metric Graphs moving off its frame when the window was resized.
+- Fixed a graph drag that went on after the mouse button was released, when the window missed the release.
+- Fixed the first run of the GPU VVC decoder after a driver update taking minutes on a busy CPU, a rare crash in
+  NVIDIA's driver during that run, and a slow close on Intel's GPUs.
+
 ## v2.4
 
 v2.4 adds an experimental GPU VVC decoder, BD-rate calculation, instant metric scores for any time range for a video
