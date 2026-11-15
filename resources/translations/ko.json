@@ -887,7 +887,7 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "두 화면은 몇 줄만 다릅니다. 같은 화면을 조금 다르게 자른 것으로, 크기 조정 때문에 모든 점수가 낮아집니다. 테스트 영상이 감지된 검은 띠와 다르게 잘렸다면 두 자르기를 모두 입력하세요(검은 띠 처리: 수동).",
   "Also score CVVDP on...": "다른 디스플레이에서도 CVVDP 평가...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "선택한 각 동영상에 다른 디스플레이에서 CVVDP만 평가하는 행을, 그 동영상 행의 디스플레이 옆에 추가합니다. 다른 지표는 다시 계산하지 않습니다. 결과 내보내기는 모든 디스플레이를 동영상 항목에 나열합니다.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "선택한 행은 이미 {display}에서 CVVDP를 평가하거나, 디스플레이 하나만 평가하는 해상도 테스트입니다.",
+  "The selected rows already score CVVDP on {display}, are resolution tests, which score one display only, or have not been read.": "선택한 행은 이미 {display}에서 CVVDP를 평가하고 있거나, 디스플레이 하나만 평가하는 해상도 테스트이거나, 아직 읽히지 않았습니다.",
   "to frame:": "끝 프레임:",
   "A frame range: the graph shades the frames from the first box's frame to the second's, and the table gives their statistics. Shift+drag across the graph to select one.": "프레임 범위입니다. 그래프는 첫 번째 상자의 프레임부터 두 번째 상자의 프레임까지 강조 표시하고 표에는 해당 통계가 표시됩니다. 그래프에서 Shift+드래그하면 범위를 선택할 수 있습니다.",
   "Highlight range from frame:": "강조 범위 시작 프레임:",

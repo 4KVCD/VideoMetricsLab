@@ -707,6 +707,11 @@ void MainWindow::add_cvvdp_display_rows(const std::vector<int>& rows, const Cvvd
         if (row_data.cvvdp_display_of || row_data.options.resample_test) {
             continue;  // a display row already, or a resolution test (as "Test both" leaves them)
         }
+        if (!row_data.video_info) {
+            // Not read (yet): its display row would copy no video, and stay
+            // "Probe failed" when it is read. As "Test both" leaves it.
+            continue;
+        }
         CvvdpSettings settings = row_data.cvvdp;
         settings.display = preset.settings.display;  // whether the video fills the display stays its own
         const std::filesystem::path path = synthetic_cvvdp_display_variant_path(row_data.path, preset.name);
@@ -732,8 +737,8 @@ void MainWindow::add_cvvdp_display_rows(const std::vector<int>& rows, const Cvvd
     const QString display = preset_label(preset);
     if (added == 0) {
         dialogs_.inform(app::tr("Nothing to add"),
-                        app::tr("The selected rows already score CVVDP on {display}, or are resolution tests, which "
-                                "score one display only.",
+                        app::tr("The selected rows already score CVVDP on {display}, are resolution tests, which "
+                                "score one display only, or have not been read.",
                                 {{"display", display}}));
         return;
     }

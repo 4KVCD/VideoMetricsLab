@@ -887,7 +887,7 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "兩個畫面只差幾行：同一畫面的裁切略有不同，縮放會降低每項分數。如果測試影片的裁切與偵測到的黑邊不同，請輸入兩者的裁切（黑邊處理：手動）。",
   "Also score CVVDP on...": "另在其他顯示器上評分 CVVDP...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "為每部選取的影片新增一列，只在另一台顯示器上評分 CVVDP，與該影片本列的顯示器並列。其他指標不會重新計算。匯出結果會在影片的項目中列出所有顯示器。",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "選取的列已在 {display} 上評分 CVVDP，或是只評分一台顯示器的解析度測試。",
+  "The selected rows already score CVVDP on {display}, are resolution tests, which score one display only, or have not been read.": "所選列已在 {display} 上評分 CVVDP，或是只評分一個顯示器的解析度測試，或尚未讀取。",
   "to frame:": "至影格：",
   "A frame range: the graph shades the frames from the first box's frame to the second's, and the table gives their statistics. Shift+drag across the graph to select one.": "影格範圍：圖表會醒目顯示從第一個方塊的影格到第二個方塊的影格，表格列出它們的統計。在圖表上按住 Shift 拖曳可選取範圍。",
   "Highlight range from frame:": "醒目顯示範圍起始影格：",

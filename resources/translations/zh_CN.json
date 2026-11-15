@@ -887,7 +887,7 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "两个画面只差几行：同一画面的裁切略有不同，缩放会降低每项分数。如果测试视频的裁切与检测到的黑边不同，请输入两者的裁切（黑边处理：手动）。",
   "Also score CVVDP on...": "另在其他显示器上评分 CVVDP...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "为每个选中的视频添加一行，只在另一台显示器上评分 CVVDP，与该视频本行的显示器并列。其他指标不会重新计算。导出结果会在视频的条目中列出所有显示器。",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "选中的行已在 {display} 上评分 CVVDP，或是只评分一台显示器的分辨率测试。",
+  "The selected rows already score CVVDP on {display}, are resolution tests, which score one display only, or have not been read.": "所选行已在 {display} 上评分 CVVDP，或是只评分一个显示器的分辨率测试，或尚未读取。",
   "to frame:": "至帧：",
   "A frame range: the graph shades the frames from the first box's frame to the second's, and the table gives their statistics. Shift+drag across the graph to select one.": "帧范围：图表会突出显示从第一个框的帧到第二个框的帧，表格给出它们的统计。在图表上按住 Shift 拖动可选择范围。",
   "Highlight range from frame:": "突出显示范围起始帧：",

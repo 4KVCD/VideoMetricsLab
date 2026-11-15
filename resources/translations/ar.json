@@ -887,7 +887,7 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "تختلف الصورتان ببضعة أسطر فقط: الصورة نفسها مقصوصة بشكل مختلف قليلًا، والتحجيم يخفض كل الدرجات. إن كان فيديو الاختبار قد قُص بغير ما وُجدت عليه أشرطته السوداء، فأدخِل القص لكليهما (الأشرطة السوداء: يدوي).",
   "Also score CVVDP on...": "تقييم CVVDP أيضًا على...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "يضيف صفًا لكل فيديو محدد يقيّم CVVDP وحده على شاشة أخرى، بجانب شاشة صفّه. لا تُحسب المقاييس الأخرى مرة ثانية. ويسرد تصدير النتائج كل الشاشات في مُدخل الفيديو.",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "الصفوف المحددة تقيّم CVVDP على {display} بالفعل، أو هي اختبارات دقة لا تقيّم إلا شاشة واحدة.",
+  "The selected rows already score CVVDP on {display}, are resolution tests, which score one display only, or have not been read.": "الصفوف المحددة تقيّم CVVDP على {display} بالفعل، أو هي اختبارات دقة تقيّم شاشة واحدة فقط، أو لم تُقرأ بعد.",
   "to frame:": "حتى الإطار:",
   "A frame range: the graph shades the frames from the first box's frame to the second's, and the table gives their statistics. Shift+drag across the graph to select one.": "نطاق إطارات: يظلّل الرسم البياني الإطارات من إطار المربع الأول حتى إطار الثاني، ويعرض الجدول إحصاءاتها. اسحب مع Shift عبر الرسم البياني لتحديد نطاق.",
   "Highlight range from frame:": "تمييز النطاق من الإطار:",

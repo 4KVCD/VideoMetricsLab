@@ -887,7 +887,7 @@
   "The two pictures differ by only a few lines: the same picture cropped a little differently, and the scaling lowers every score. If the test video was cropped otherwise than its black bars were found, enter both crops (Black-bar handling: Manual).": "2 つの映像は数行しか違いません。同じ映像を少し違うクロップで切り出したもので、拡大縮小によってすべてのスコアが下がります。テスト動画が、検出された黒帯とは違う形でクロップされている場合は、両方のクロップを入力してください（黒帯の扱い：手動）。",
   "Also score CVVDP on...": "CVVDP を別のディスプレイでも評価...",
   "Adds a row for each selected video that scores CVVDP alone on another display, beside the display of its own row. The other metrics are not calculated again. Export results lists every display in the video's entry.": "選択した各動画に、別のディスプレイで CVVDP だけを評価する行を、その動画の行のディスプレイと並べて追加します。ほかの指標は再計算しません。結果のエクスポートでは、すべてのディスプレイを動画の項目に記載します。",
-  "The selected rows already score CVVDP on {display}, or are resolution tests, which score one display only.": "選択した行はすでに {display} で CVVDP を評価しているか、1 つのディスプレイしか評価しない解像度テストです。",
+  "The selected rows already score CVVDP on {display}, are resolution tests, which score one display only, or have not been read.": "選択した行はすでに {display} で CVVDP を評価しているか、1 つのディスプレイしか評価しない解像度テストか、まだ読み込まれていません。",
   "to frame:": "終了フレーム：",
   "A frame range: the graph shades the frames from the first box's frame to the second's, and the table gives their statistics. Shift+drag across the graph to select one.": "フレーム範囲です。グラフは 1 つ目のボックスのフレームから 2 つ目のボックスのフレームまでを強調表示し、表にはその統計が表示されます。グラフ上を Shift+ドラッグして範囲を選択できます。",
   "Highlight range from frame:": "強調表示する範囲の開始フレーム：",
