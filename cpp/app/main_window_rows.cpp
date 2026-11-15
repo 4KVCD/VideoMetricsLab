@@ -170,6 +170,7 @@ int MainWindow::add_table_row(const std::filesystem::path& path) {
     row_data->cvvdp_automatic = cvvdp_default_automatic();
     rows_.push_back(row_data);
     set_row_metrics(row);
+    open_videos_changed();
     return row;
 }
 

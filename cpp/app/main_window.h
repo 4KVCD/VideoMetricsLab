@@ -261,6 +261,8 @@ private:
     void close_when_idle();
     std::vector<QThread*> live_workers() const;
     void store_open_videos();
+    void open_videos_changed();
+    void save_open_videos();
     void restore_open_videos();
     void reopen_videos(const QString& reference, const QStringList& tests);
     void show_status(const QString& text);
@@ -590,6 +592,12 @@ private:
         MainWindow* window = nullptr;
     };
     std::shared_ptr<OpenVideosLookup> open_videos_lookup_;
+    // From restore_open_videos until reopen_videos: the table does not hold
+    // the videos open last time yet, so they are not saved over.
+    bool open_videos_restoring_ = false;
+    // save_open_videos once the window is next idle: one write for every
+    // change to the videos that lands in one go.
+    QTimer* open_videos_timer_ = nullptr;
     bool syncing_panel_ = false;
     bool syncing_table_ = false;
     bool theme_refresh_due_ = true;  // until the window is built

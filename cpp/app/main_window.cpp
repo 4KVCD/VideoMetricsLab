@@ -170,6 +170,11 @@ MainWindow::MainWindow() {
         }
     });
 
+    // Before the window is built: building it may already change the videos.
+    open_videos_timer_ = new QTimer(this);
+    open_videos_timer_->setSingleShot(true);
+    open_videos_timer_->setInterval(0);
+    connect(open_videos_timer_, &QTimer::timeout, this, [this] { save_open_videos(); });
     build_ui();
     // At least 1050x650, and never smaller than the window's contents need.
     setMinimumSize(QSize(1050, 650).expandedTo(minimumSizeHint()));
@@ -352,6 +357,26 @@ void MainWindow::store_open_videos() {
     }
 }
 
+void MainWindow::open_videos_changed() { open_videos_timer_->start(); }
+
+void MainWindow::save_open_videos() {
+    // The videos are saved as they change, not only as the window closes,
+    // so that they are reopened after the app was ended another way (a
+    // crash, the task manager, Windows shutting down). Not while the videos
+    // open last time are being reopened, nor while a reference is read: the
+    // reference is shown, and stored, only once it is read, and the end of
+    // the reading asks again.
+    if (!settings_.remember_videos || open_videos_restoring_ || source_reading_ || closing_) {
+        return;
+    }
+    const std::string reference = settings_.remembered_reference;
+    const std::vector<std::string> tests = settings_.remembered_tests;
+    store_open_videos();
+    if (settings_.remembered_reference != reference || settings_.remembered_tests != tests) {
+        save_settings();
+    }
+}
+
 void MainWindow::restore_open_videos() {
     // Looked for on a thread of its own: a path on a network drive that is
     // not there can take many seconds to say so, and the window would not
@@ -371,6 +396,7 @@ void MainWindow::restore_open_videos() {
     }
     open_videos_lookup_ = std::make_shared<OpenVideosLookup>();
     open_videos_lookup_->window = this;
+    open_videos_restoring_ = true;
     std::thread([lookup = open_videos_lookup_, reference, tests] {
         const QString present_reference = !reference.isEmpty() && QFileInfo(reference).isFile() ? reference : QString();
         QStringList present;
@@ -391,6 +417,9 @@ void MainWindow::restore_open_videos() {
 }
 
 void MainWindow::reopen_videos(const QString& reference, const QStringList& tests) {
+    // Saved from now on, the videos added meanwhile too (save_open_videos).
+    open_videos_restoring_ = false;
+    open_videos_changed();
     // Added unless the window has gained videos of its own since, or is
     // closing: their reading would hold the close up.
     if (!rows_.empty() || source_info_ || source_reading_ || run_active_ || closing_) {

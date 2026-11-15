@@ -368,6 +368,7 @@ void MainWindow::on_source_probe_finished(int generation, ProbeWorker* worker) {
     if (generation == source_probe_generation_) {
         source_probe_worker_ = nullptr;
         source_reading_.reset();  // also when it stopped without a result
+        open_videos_changed();    // not saved while it was read (save_open_videos)
         if (!run_active_) {
             show_ready();
         }

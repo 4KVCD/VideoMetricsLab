@@ -58,6 +58,7 @@ void MainWindow::sync_frame_compare() {
     }
     frame_compare_panel_->set_runs(std::move(entries));
     graph_panel_->set_order(std::move(graph_order));
+    open_videos_changed();  // the rows removed, reordered or given a new reference
 }
 
 std::optional<FrameComparisonEntry> MainWindow::frame_comparison_entry(const RowData& row_data) const {
