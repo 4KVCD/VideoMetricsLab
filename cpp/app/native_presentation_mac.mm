@@ -20,6 +20,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
@@ -73,6 +74,9 @@ struct Presenter {
     // The window's notifications that it was covered, uncovered, minimised
     // or restored (removed with the presenter).
     std::vector<id> observers;
+    // False once the presenter is going: a notification already queued on
+    // the main queue then does nothing (DisplayWatch's guard).
+    std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>>(true);
 };
 
 // The shader's constants, as native/d3d11_tonemap.cpp's present_constants
@@ -256,6 +260,7 @@ NativePresentation::NativePresentation(std::shared_ptr<NativeDevice> device, Nat
     // Shown again (uncovered, restored) with no frame coming (paused): the
     // frame kept while it was not is drawn then (present_paced).
     Presenter* raw = presenter.get();
+    const std::shared_ptr<std::atomic<bool>> alive = raw->alive;
     for (NSNotificationName name : {NSWindowDidChangeOcclusionStateNotification, NSWindowDidDeminiaturizeNotification,
                                     NSWindowDidMiniaturizeNotification}) {
         raw->observers.push_back([[NSNotificationCenter defaultCenter]
@@ -263,7 +268,7 @@ NativePresentation::NativePresentation(std::shared_ptr<NativeDevice> device, Nat
                         object:nil
                          queue:[NSOperationQueue mainQueue]
                     usingBlock:^(NSNotification* note) {
-                      if (note.object == raw->view.window) {
+                      if (alive->load() && note.object == raw->view.window) {
                           raw->shown = on_screen(*raw);
                           {
                               const std::lock_guard lock(mutex_);
@@ -286,6 +291,7 @@ NativePresentation::~NativePresentation() {
         thread_.join();
     }
     auto* presenter = static_cast<Presenter*>(presenter_);
+    presenter->alive->store(false);
     for (id observer : presenter->observers) {
         [[NSNotificationCenter defaultCenter] removeObserver:observer];
     }
