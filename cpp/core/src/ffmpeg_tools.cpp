@@ -204,6 +204,8 @@ ToolStatus check_tool(std::string_view name, const Settings& settings) {
     platform::ProcessOutput output;
     try {
         output = platform::run_program({status.path, "-version"}, tool_check_timeout);
+    } catch (const platform::ProgramNotFound&) {
+        return status;  // said as "not found" (problems), not in the system's words for it
     } catch (const platform::ProcessError& error) {
         status.error = error.what();
         return status;

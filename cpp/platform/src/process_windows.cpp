@@ -283,7 +283,11 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
         while (!reason.empty() && (reason.back() == '.' || std::isspace(static_cast<unsigned char>(reason.back())))) {
             reason.pop_back();
         }
-        throw ProcessError("[WinError " + std::to_string(start_error) + "] " + reason);
+        const std::string what = "[WinError " + std::to_string(start_error) + "] " + reason;
+        if (start_error == ERROR_FILE_NOT_FOUND || start_error == ERROR_PATH_NOT_FOUND) {
+            throw ProgramNotFound(what);
+        }
+        throw ProcessError(what);
     }
     auto state = std::make_unique<State>();
     state->process = Handle(started.hProcess);

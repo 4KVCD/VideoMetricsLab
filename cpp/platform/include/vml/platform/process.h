@@ -28,6 +28,12 @@ public:
     using std::runtime_error::runtime_error;
 };
 
+// The program to start is not there: no such file where it was looked for.
+class ProgramNotFound : public ProcessError {
+public:
+    using ProcessError::ProcessError;
+};
+
 // How much of a program's standard error is kept: its end. FFmpeg can write
 // a warning for every frame of a long video, and what is used of it is its
 // last lines (an error's last 25), so keeping it all

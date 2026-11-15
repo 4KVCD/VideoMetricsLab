@@ -67,8 +67,11 @@ TEST(Process, KeepsTheEndOfALongErrorOutput) {
     EXPECT_TRUE(output.standard_error.ends_with("warning 49999 of 50000\nthe last line\n"));
 }
 
+// Said as not found (a missing FFmpeg is "not found", not "[WinError 2]
+// The system cannot find the file specified"), by name and by path.
 TEST(Process, AProgramThatIsNotThereCannotBeStarted) {
-    EXPECT_THROW(ChildProcess::start({"vml-no-such-program-anywhere"}), ProcessError);
+    EXPECT_THROW(ChildProcess::start({"vml-no-such-program-anywhere"}), ProgramNotFound);
+    EXPECT_THROW(run_program({"/vml-no-such-folder/vml-no-such-program", "-version"}, 10s), ProgramNotFound);
 }
 
 // A frame much bigger than the pipe it comes through is read whole, byte for

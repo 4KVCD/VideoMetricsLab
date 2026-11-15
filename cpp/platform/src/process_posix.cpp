@@ -432,6 +432,9 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     const int spawned = posix_spawnp(&id, argv.front(), &actions, &attributes, argv.data(), environ);
     posix_spawn_file_actions_destroy(&actions);
     posix_spawnattr_destroy(&attributes);
+    if (spawned == ENOENT) {
+        throw ProgramNotFound("could not start " + arguments.front() + " (" + std::strerror(spawned) + ")");
+    }
     if (spawned != 0) {
         fail("could not start " + arguments.front(), spawned);
     }
