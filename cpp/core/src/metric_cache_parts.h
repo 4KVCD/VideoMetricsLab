@@ -75,8 +75,8 @@ std::optional<CropMode> mode_cut_by_an_older_rule(const nlohmann::json& context)
 
 // A saved comparison's two videos as its context describes them, where its
 // boxes were found on the videos' own pictures, as the answers kept now are:
-// not where a video's size changes (scaled_to: sampled scaled, never kept) or
-// in a resolution test. Throws on a damaged context.
+// not where a video's size changes (scaled_to: sampled scaled, never kept). A
+// resolution test's are the source twice. Throws on a damaged context.
 std::optional<std::pair<VideoInfo, VideoInfo>> videos_of_kept_answers(const nlohmann::json& context);
 
 // The whole-video scores saved for `spec`'s metric with other parameters but

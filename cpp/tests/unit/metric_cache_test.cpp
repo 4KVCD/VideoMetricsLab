@@ -819,6 +819,68 @@ TEST(MetricCache, ScoresOfAnOlderRuleAreReadWhereTheBarsFoundNowGiveTheirBoxes) 
     forget_crop_answers();
 }
 
+// A resolution test's scores of bars an older rule found are read where the
+// source's bars found now give its box: both sides are the source's, cut by
+// that box. Its bars are looked for once, as the source's.
+TEST(MetricCache, AResolutionTestsScoresOfAnOlderRuleAreReadWhereTheSourcesBarsGiveItsBox) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    const std::filesystem::path bars = folder / "black_bars.json";
+    forget_crop_answers();
+    set_crop_store([bars] { return bars; });
+    AnalysisRequest request = request_from(stored);
+    request.recipe.crop_mode = CropMode::automatic;
+    ResampleTarget target;
+    target.width = 640;
+    target.label = "360p";
+    request.recipe.resample_test = target;
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source_info.path = folder / "s.mp4";
+    result.distorted_info = result.source_info;
+    result.resample_target = request.recipe.resample_test;
+    const auto [width, height] = result.source_info.frame_size();
+    const CropBox letterbox{width, height - 40, 0, 20};
+    result.source_crop = letterbox;
+    result.distorted_crop = letterbox;
+    const std::filesystem::path directory =
+        store_result(folder / "cache", folder / "s.mp4", folder / "s.mp4", request.recipe, result, "t", request.metrics);
+    nlohmann::json context = nlohmann::json::parse(*platform::read_file(directory / "context.json"));
+    context.erase("black_bars_rule");
+    touch(directory / "context.json", context.dump());
+    const auto loaded = [&] {
+        const auto found = load_result(folder / "cache", folder / "s.mp4", folder / "s.mp4", request.recipe,
+                                       request.metrics, request.perceptual_backends);
+        return found ? found->first.metric_results.keys().size() : 0;
+    };
+    const auto keep = [&](const VideoInfo& video, const CropBox& box) {
+        const std::filesystem::path resolved = std::filesystem::weakly_canonical(video.path);
+        touch(bars, nlohmann::json{{"version", 6},
+                                   {"boxes", {{{platform::path_text(resolved), std::filesystem::file_size(resolved),
+                                                *platform::modified_ns(resolved), video.duration, 0.12549},
+                                               {box.w, box.h, box.x, box.y}}}}}
+                        .dump());
+        forget_crop_answers();
+    };
+    std::vector<std::string> looked_for;
+    const auto find = [&](const CropBox& box) {
+        return find_black_bars_of_older_scores(folder / "cache", folder / "s.mp4", folder / "s.mp4", request.recipe,
+                                               [&](const VideoInfo& video) {
+                                                   looked_for.push_back(platform::path_text(video.path.filename()));
+                                                   keep(video, box);
+                                               });
+    };
+    EXPECT_EQ(loaded(), 0U);  // no bars kept by the rule now
+    EXPECT_TRUE(find(letterbox));
+    EXPECT_EQ(looked_for, std::vector<std::string>{"s.mp4"});
+    EXPECT_EQ(loaded(), request.metrics.size());
+    // Bars the rule now cuts 2 lines more: another box, calculated again
+    keep(result.source_info, CropBox{width, height - 44, 0, 22});
+    EXPECT_EQ(loaded(), 0U);
+    set_crop_store({});
+    forget_crop_answers();
+}
+
 // A score of a pair with a video scored with its AV1 film grain, or an AV1
 // video whose grain is not known, says in its saved file that it was decoded
 // as dav1d decodes it (av1_grain_dav1d): one this run made as its pair says,

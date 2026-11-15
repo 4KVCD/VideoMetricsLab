@@ -971,10 +971,10 @@ std::optional<CropMode> mode_cut_by_an_older_rule(const nlohmann::json& context)
 }
 
 std::optional<std::pair<VideoInfo, VideoInfo>> videos_of_kept_answers(const nlohmann::json& context) {
-    if (python_truthy(context.value("resample_target", nlohmann::json()))) {
-        return std::nullopt;
-    }
-    std::pair videos{video_info_from_dict(context.at("source_info")), video_info_from_dict(context.at("distorted_info"))};
+    // A resolution test's both sides are the source's, cut by its own box (source_own_crop)
+    const bool resolution_test = python_truthy(context.value("resample_target", nlohmann::json()));
+    std::pair videos{video_info_from_dict(context.at("source_info")),
+                     video_info_from_dict(context.at(resolution_test ? "source_info" : "distorted_info"))};
     if (videos.first.scaled_to || videos.second.scaled_to) {
         return std::nullopt;
     }
@@ -996,6 +996,10 @@ bool same_boxes_now(const nlohmann::json& context, CropMode mode) {
     const std::optional<CropAnswer> source_answer = kept_crop_answer(source);
     if (!source_answer) {
         return false;
+    }
+    if (python_truthy(context.value("resample_target", nlohmann::json()))) {
+        // A resolution test cuts the source's box from both sides (source_own_crop), with Auto and Source only
+        return source_answer->box == crop_from_dict(context.value("source_crop", nlohmann::json()));
     }
     std::pair<std::optional<CropBox>, std::optional<CropBox>> now;
     if (mode == CropMode::source_only) {
