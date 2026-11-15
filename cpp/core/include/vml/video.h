@@ -147,7 +147,8 @@ struct VideoInfo {
     bool coded_at_another_size = false;
     // Whether it is monochrome H.264 (film_grain_detect.h's
     // h264_monochrome_in_annex_b), which ffprobe reports as 4:2:0: decoded in
-    // software, whose grey chroma GPU decoders do not give (pick_decode).
+    // software on every GPU (pick_decode), as NVIDIA's decoder leaves its grey
+    // chroma unset (AMD's gives it; Intel's and Apple's are not checked).
     // False where its stream was not read, as film_grain is then unknown.
     bool monochrome_h264 = false;
     // Set for a video whose picture size changes partway through (FFmpeg

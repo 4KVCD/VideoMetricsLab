@@ -2097,6 +2097,19 @@ ComparisonResult score_pair(const RunEnvironment& environment, const VideoInfo& 
                            on_status, cancel, result_distorted_path);
 }
 
+// Logs why each video the plan leaves off the GPU is decoded in software, as
+// the run's status line says only that it is ("cpu"). Not VVC: the plan never
+// takes it, as VVdeC or vvdec-vulkan decodes it, and they log that themselves.
+void log_software_decoding(const HardwareDecoding& decoding, const VideoInfo& source, const VideoInfo& distorted) {
+    const auto log_video = [](const std::optional<std::string>& hwaccel, const VideoInfo& video, const char* label) {
+        if (!hwaccel && ascii_lower(video.codec_name) != "vvc") {
+            logger.info(std::string(label) + " is decoded in software: " + software_decoding_reason(video, true));
+        }
+    };
+    log_video(decoding.source, source, "The source");
+    log_video(decoding.distorted, distorted, "The test video");
+}
+
 // run_vmaf's run of the pair as it is marked (size_changes.h). Throws
 // VideoSizeChanged when FFmpeg rebuilt its filters for one of them.
 ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInfo& source, const VideoInfo& distorted,
@@ -2109,6 +2122,7 @@ ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInf
     HardwareDecoding decoding;
     if (options.gpu_decode) {
         decoding = plan_hardware_decoding(environment.decoding, options.gpu_vendor, source, distorted);
+        log_software_decoding(decoding, source, distorted);
     }
     const auto [source_crop, distorted_crop] = run_crops(environment, source, distorted, options, decoding, on_status, cancel);
     // After cropping: removing a letterbox is what makes a letterboxed source

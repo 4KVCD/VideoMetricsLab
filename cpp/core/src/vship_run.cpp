@@ -1306,8 +1306,24 @@ private:
         read_near_range_ = read_near_range_ || seeking.seek.has_value();
         auto decoder = std::make_unique<GpuFrameStream>(video.info, seeking, device, 4, backend,
                                                         request_.environment.ffmpeg, request_.environment.ffprobe);
-        logger.info("Vship: the " + video.label + " is decoded by the " + backend + " decoder in the scoring process");
+        logger.info("Vship: the " + video.label + " is decoded by the " + backend + " decoder in the scoring process" +
+                    (backend == software_decoder ? " (" + software_reason(video.info) + ")" : std::string()));
         return decoder;
+    }
+
+    // Why the software decoder decodes the video in the scoring process: for VVC, the app's VVdeC, as vvdec-vulkan
+    // decodes it only where it is wanted and takes it (native_decoder); for any other codec, FFmpeg's GPU rules.
+    std::string software_reason(const VideoInfo& info) const {
+        if (ascii_lower(info.codec_name) != "vvc") {
+            return software_decoding_reason(info, request_.options.gpu_decode);
+        }
+        if (!request_.options.gpu_decode) {
+            return "VVdeC: GPU decoding is off";
+        }
+        if (!request_.options.vvc_on_gpu) {
+            return "VVdeC: the VVC decoder chosen is the CPU's";
+        }
+        return "VVdeC: vvdec-vulkan does not decode it here";  // turned off, not bundled, or it does not take the video
     }
 
     // One video's frame stream: decoded in this process where it can be, by
