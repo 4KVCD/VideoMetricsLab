@@ -126,6 +126,7 @@ public:
     // Stops playback and shows nothing.
     void clear();
     void set_position(int position_ms);
+    // Playing from the last frame starts again from the first.
     void set_playing(bool playing);
     // Shows the source's frame (true) or the test video's.
     void show_source(bool showing);
@@ -239,6 +240,8 @@ private:
                    const std::string& distorted);
     void pool_status();
     void check_end();
+    // Whether the frame shown is the last of the shortest video (check_end's end).
+    bool at_end() const;
     void start_audio(long long frame);
     void fell_behind();
     void stop_audio();

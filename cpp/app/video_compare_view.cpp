@@ -634,6 +634,9 @@ void VideoCompareView::set_position(int position_ms) {
 }
 
 void VideoCompareView::set_playing(bool playing) {
+    if (playing && !wanted_playing_ && at_end()) {
+        set_position(0);  // played to the end: again from the start, not stuck on the last frame
+    }
 #ifdef VML_NATIVE_PLAYBACK
     if (native_pool_) {
         native_pool_->set_playing(playing);
@@ -1253,8 +1256,7 @@ void VideoCompareView::pool_status() {
                .arg(said));
 }
 
-void VideoCompareView::check_end() {
-    // Stops playing at the end of the shortest video.
+bool VideoCompareView::at_end() const {
     std::optional<double> shortest;
     for (const FrameComparison& item : series_) {
         if (item.frame_count > 0 && item.fps > 0) {
@@ -1263,8 +1265,14 @@ void VideoCompareView::check_end() {
         }
     }
     // position() is in whole milliseconds, up to half of one short of the last
-    // frame's time, and this runs only when a frame is shown.
-    if (shortest && wanted_playing_ && (position() + 0.5) / 1000.0 >= *shortest - 1 / series_.front().fps) {
+    // frame's time.
+    return shortest && (position() + 0.5) / 1000.0 >= *shortest - 1 / series_.front().fps;
+}
+
+void VideoCompareView::check_end() {
+    // Stops playing at the end of the shortest video (this runs only when a
+    // frame is shown).
+    if (wanted_playing_ && at_end()) {
         set_playing(false);
         status(QStringLiteral("Playback ended"));
     }

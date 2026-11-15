@@ -216,6 +216,26 @@ TEST_F(PlaybackTest, ASeekReplacesEveryDecoderAndAPauseDoesNot) {
     }
 }
 
+// Play on the last frame starts again from the first frame (Brian
+// 2026-11-15): it stayed on the last frame, ended again at once.
+TEST_F(PlaybackTest, PlayAtTheEndStartsAgainFromTheFirstFrame) {
+    const auto view = make_view(1);
+    view->set_position(9958);  // frame 239 of 240 at 24 fps: the last
+    ASSERT_EQ(view->position(), 9958);
+    view->set_playing(true);
+    EXPECT_EQ(view->position(), 0);
+    // Started once the decoders just stopped have gone (the limit counts them)
+    ASSERT_TRUE(wait_until([&view] { return !decoders(*view).empty(); }));
+    for (const FakeDecoder* worker : decoders(*view)) {
+        EXPECT_EQ(worker->start_frame, 0);
+    }
+    // Elsewhere, Play goes on from the frame shown
+    view->set_playing(false);
+    view->set_position(2000);
+    view->set_playing(true);
+    EXPECT_EQ(view->position(), 2000);
+}
+
 // A faster video's frames are not dropped while the other is still decoding
 // them: the pair goes on frame by frame.
 TEST_F(PlaybackTest, AFasterVideosFramesWaitForItsPartner) {
