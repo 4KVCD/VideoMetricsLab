@@ -796,9 +796,18 @@ void MainWindow::on_probed(const Probed& probed) {
     };
     const std::optional<std::string> asked = source_info_ ? std::optional(token()) : std::nullopt;
     std::optional<VideoInfo> info = probed.info;
-    const std::optional<bool> with = film_grain_default_choice(settings_.film_grain_default);
+    std::optional<bool> with = film_grain_default_choice(settings_.film_grain_default);
+    // Added again while the film grain twin made from it stayed: the twin's
+    // choice is held, so the video takes the other, as a twin's video always
+    // does. Settings' default could give both rows the same, locked.
+    const auto twin = std::find_if(rows_.begin(), rows_.end(), [&row_data](const auto& other) {
+        return other->film_grain_twin_of && other->video_info && same_path(*other->film_grain_twin_of, row_data.path);
+    });
+    if (twin != rows_.end()) {
+        with = effective_film_grain(*(*twin)->video_info).scoring != GrainScoring::with;
+    }
     if (info && with && film_grain_choosable(*info)) {
-        info->with_film_grain = *with;  // Settings' default, until the video is chosen for
+        info->with_film_grain = *with;  // Settings' default (or the twin's other), until the video is chosen for
     }
     set_row_info(*row, info, info ? QString() : probed.error);
     // Video Compare lists a test video only once it has been read, and is
