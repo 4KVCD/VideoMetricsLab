@@ -81,7 +81,10 @@ private:
     std::int64_t open_before_ = 0;
     std::int64_t open_rasl_ = 0;
     std::int64_t open_radl_ = 0;
-    bool open_is_first_ = false;
+    // Whether its RASL pictures are dropped, never shown: the first keyframe's,
+    // an HEVC BLA's, and a keyframe's right after an end of sequence.
+    bool open_drops_rasl_ = false;
+    bool after_end_of_sequence_ = false;  // an end of sequence NAL since the last keyframe
     bool seen_keyframe_ = false;
     // False where the stream starts with pictures a decoder drops (no
     // keyframe first): its frames cannot be numbered from the headers.

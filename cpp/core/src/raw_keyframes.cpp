@@ -112,6 +112,10 @@ void RawKeyframes::on_nal(std::int64_t offset, int type, std::uint8_t first_payl
             }
             return;
         }
+        if (type == 21 || type == 22) {  // end of sequence, end of bitstream
+            after_end_of_sequence_ = true;
+            return;
+        }
         // What comes before a picture in its access unit: OPI, DCI, VPS,
         // SPS, PPS, prefix APS, the delimiter and prefix SEI.
         if ((type >= 12 && type <= 17) || type == 20 || type == 23) {
@@ -123,6 +127,10 @@ void RawKeyframes::on_nal(std::int64_t offset, int type, std::uint8_t first_payl
         if ((first_payload_byte & 0x80) != 0) {
             on_picture(unit_.value_or(offset), type);
         }
+        return;
+    }
+    if (type == 36 || type == 37) {  // end of sequence, end of bitstream
+        after_end_of_sequence_ = true;
         return;
     }
     // VPS, SPS, PPS, the delimiter, prefix SEI and the types that may start
@@ -141,15 +149,20 @@ void RawKeyframes::on_picture(std::int64_t offset, int type) {
         if (!seen_keyframe_ && pictures_ > 0) {
             usable_ = false;  // pictures before the first keyframe, which decoders drop: not counted as they show
         }
-        open_is_first_ = !seen_keyframe_;
+        // Where a decoder drops the RASL pictures even from the start (the
+        // standards' NoRaslOutputFlag): the pictures they refer to before
+        // the keyframe are not there to decode them.
+        const bool hevc_bla = codec_ == RawCodec::hevc && type >= 16 && type <= 18;
+        open_drops_rasl_ = !seen_keyframe_ || after_end_of_sequence_ || hevc_bla;
+        after_end_of_sequence_ = false;
         seen_keyframe_ = true;
         open_offset_ = offset;
         open_before_ = pictures_;
         open_rasl_ = 0;
         open_radl_ = 0;
     } else if (open_offset_ && kind == Kind::rasl) {
-        if (open_is_first_) {
-            return;  // the first keyframe's RASL pictures are not shown, decoded from the start either
+        if (open_drops_rasl_) {
+            return;  // not shown, decoded from the start either
         }
         ++open_rasl_;
     } else if (open_offset_ && kind == Kind::radl) {

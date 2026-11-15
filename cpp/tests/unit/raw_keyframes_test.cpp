@@ -84,5 +84,17 @@ TEST(RawKeyframesTest, KeyframesAreNumberedAsADecoderStartingAtThemGivesFrames) 
     add_nal(hevc, RawCodec::hevc, 21);  // after 2 shown pictures, its RASL shown first: frame 3
     add_nal(hevc, RawCodec::hevc, 9);
     add_nal(hevc, RawCodec::hevc, 1);
-    EXPECT_EQ(keyframes_of(hevc, RawCodec::hevc, 3), (std::vector<std::pair<std::int64_t, std::int64_t>>{{0, 0}, {cra, 3}}));
+    // A CRA right after an end of sequence, and a BLA: their RASL pictures
+    // are dropped, from the start too, so they come after 5 and 7 pictures.
+    add_nal(hevc, RawCodec::hevc, 36);  // end of sequence
+    const auto after_end = static_cast<std::int64_t>(hevc.size());
+    add_nal(hevc, RawCodec::hevc, 21);
+    add_nal(hevc, RawCodec::hevc, 9);
+    add_nal(hevc, RawCodec::hevc, 1);
+    const auto bla = static_cast<std::int64_t>(hevc.size());
+    add_nal(hevc, RawCodec::hevc, 16);  // BLA_W_LP
+    add_nal(hevc, RawCodec::hevc, 8);
+    add_nal(hevc, RawCodec::hevc, 1);
+    EXPECT_EQ(keyframes_of(hevc, RawCodec::hevc, 3),
+              (std::vector<std::pair<std::int64_t, std::int64_t>>{{0, 0}, {cra, 3}, {after_end, 5}, {bla, 7}}));
 }
