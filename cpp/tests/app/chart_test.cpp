@@ -455,6 +455,21 @@ TEST_F(ChartTest, AShiftDragSelectsATimeRangeWhereItIsOnAndPansWhereNot) {
     drag(chart, from, to);
     EXPECT_TRUE(dragged.empty());
     EXPECT_LT(chart.x_range().first, 10.0);
+
+    // A Shift+drag whose release went elsewhere ends at the first move seen
+    // with the button up; the moves after it change nothing.
+    chart.reset_view();
+    dragged.clear();
+    QMouseEvent press(QEvent::MouseButtonPress, start, start, Qt::LeftButton, Qt::LeftButton, Qt::ShiftModifier);
+    QCoreApplication::sendEvent(&chart, &press);
+    for (const QPointF at : {end, from}) {
+        QMouseEvent move(QEvent::MouseMove, at, at, Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(&chart, &move);
+    }
+    ASSERT_EQ(dragged.size(), 2u);  // press, the drag's end
+    EXPECT_NEAR(std::get<1>(dragged[1]), 60.0, chart.seconds_per_pixel());
+    EXPECT_TRUE(std::get<2>(dragged[1]));
+    EXPECT_EQ(chart.x_range(), std::pair(0.0, 100.0));
 }
 
 }  // namespace

@@ -205,6 +205,8 @@ private:
     void ask_for_hover_frame();
     void on_hover_frame();
     void forget_hover();
+    // Ends a pan or a Shift+drag at `pos`, as the button's release does.
+    void end_drag(QPoint pos);
     void request_paint();
     int frame_ms() const;
 

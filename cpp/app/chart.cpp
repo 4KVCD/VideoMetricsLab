@@ -897,6 +897,12 @@ void ChartWidget::mouseMoveEvent(QMouseEvent* event) {
     // Pans while dragging; otherwise says the time and value under the
     // pointer.
     const QPoint pos = event->position().toPoint();
+    if ((selection_start_ || pan_origin_) && !event->buttons().testFlag(Qt::LeftButton)) {
+        // A drag whose release never came here (a dialog took the mouse
+        // mid-drag): it ends where the button is first seen up, as the
+        // release would have ended it, and the move is a plain move.
+        end_drag(pos);
+    }
     if (selection_start_) {
         emit range_dragged(*selection_start_, time_within_data(pos.x()), false);
         return;
@@ -997,12 +1003,16 @@ void ChartWidget::mousePressEvent(QMouseEvent* event) {
 
 void ChartWidget::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
-        pan_origin_.reset();
-        pan_view_.reset();
-        unsetCursor();
-        if (const std::optional<double> start = std::exchange(selection_start_, std::nullopt)) {
-            emit range_dragged(*start, time_within_data(event->position().toPoint().x()), true);
-        }
+        end_drag(event->position().toPoint());
+    }
+}
+
+void ChartWidget::end_drag(QPoint pos) {
+    pan_origin_.reset();
+    pan_view_.reset();
+    unsetCursor();
+    if (const std::optional<double> start = std::exchange(selection_start_, std::nullopt)) {
+        emit range_dragged(*start, time_within_data(pos.x()), true);
     }
 }
 
