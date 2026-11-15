@@ -799,7 +799,8 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         // nothing for a row that has its scores.
         video.result = std::move(saved);
         video.from_cache = true;
-        RunFacts facts{VideoSettings{source, *video.info, options, video.metrics, backends, cvvdp}};
+        RunFacts facts;
+        facts.settings = VideoSettings{source, *video.info, options, video.metrics, backends, cvvdp};
         for (const std::string& key : video.metrics) {
             facts.metrics.emplace_back(key, MetricOutcome{metric_saved, ""});
         }

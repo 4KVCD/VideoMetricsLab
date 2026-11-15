@@ -291,8 +291,9 @@ private:
                 const AnswerKey answer{key.at(0).get<std::string>(), key.at(1).get<long long>(),
                                        key.at(2).get<long long>(), key.at(3).get<double>(), key.at(4).get<double>()};
                 if (find(answer) == boxes_.end()) {
-                    CropAnswer kept{CropBox{box.at(0).get<int>(), box.at(1).get<int>(), box.at(2).get<int>(),
-                                            box.at(3).get<int>()}};
+                    CropAnswer kept;
+                    kept.box = CropBox{box.at(0).get<int>(), box.at(1).get<int>(), box.at(2).get<int>(),
+                                       box.at(3).get<int>()};
                     if (item.size() > 2) {  // what it was decided from: not kept by builds before these records
                         read_findings(item.at(2), kept);
                     }

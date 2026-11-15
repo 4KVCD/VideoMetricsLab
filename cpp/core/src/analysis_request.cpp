@@ -98,8 +98,12 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
                                  const std::map<std::string, std::string>& perceptual_backends,
                                  const CvvdpSettings& cvvdp, const VideoInfo& source, const VideoInfo& distorted) {
     AnalysisRequest request;
-    request.recipe = {options.crop_mode,  options.scale_algorithm, options.scale_direction,
-                      options.range_start, options.range_end,      options.resample_test};
+    request.recipe.crop_mode = options.crop_mode;
+    request.recipe.scale_algorithm = options.scale_algorithm;
+    request.recipe.scale_direction = options.scale_direction;
+    request.recipe.range_start = options.range_start;
+    request.recipe.range_end = options.range_end;
+    request.recipe.resample_test = options.resample_test;
     // The whole videos are one comparison however a range would be counted.
     request.recipe.range_in_frames = options.range_in_frames && !options.compared_range().whole();
     if (options.crop_mode == CropMode::manual) {

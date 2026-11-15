@@ -244,7 +244,9 @@ Json pass_json(const PassTiming& pass) {
 }  // namespace
 
 MachineFacts this_machine(const std::string& ffmpeg_path, const std::string& ffmpeg_version) {
-    MachineFacts machine{platform::system_description(), platform::cpu_model_name()};
+    MachineFacts machine;
+    machine.os = platform::system_description();
+    machine.cpu = platform::cpu_model_name();
     machine.ffmpeg_path = ffmpeg_path;
     machine.ffmpeg_version = ffmpeg_version;
     for (const VshipBuild build : {VshipBuild::fast, VshipBuild::stock}) {

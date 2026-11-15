@@ -88,7 +88,9 @@ std::optional<BarEdges> picture_edges(const LumaPicture& picture) {
 
 CropBox handbrake_box(const std::vector<BarEdges>& counted, std::size_t decoded, int width, int height,
                       BarFindings* findings) {
-    BarFindings found{decoded, counted.size()};
+    BarFindings found;
+    found.decoded = decoded;
+    found.judged = counted.size();
     const CropBox whole{width, height, 0, 0};
     if (counted.empty() || counted.size() < std::min(fewest_judged, decoded)) {
         if (findings != nullptr) {

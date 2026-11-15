@@ -68,7 +68,6 @@ struct VideoSettings {
     // Where SSIMULACRA2 and Butteraugli run ("gpu" or "cpu" per key).
     std::map<std::string, std::string, std::less<>> perceptual_backends;
     CvvdpSettings cvvdp;
-    bool operator==(const VideoSettings&) const = default;
 };
 
 // One video's run, as the job runner saw it (RunEvents::job_facts).
@@ -80,7 +79,6 @@ struct RunFacts {
     std::vector<PassTiming> passes;
     // Each metric asked for, in the order asked.
     std::vector<std::pair<std::string, MetricOutcome>> metrics;
-    bool operator==(const RunFacts&) const = default;
 };
 
 // The machine a run scored on.
