@@ -246,6 +246,30 @@ TEST(Decisions, H264In444ProfilesIsGpuDecodedOnlyWhereItIsExact) {
     EXPECT_EQ(pick_decode(mac, GpuVendor::automatic, video, MacGpuDecoding::on), "videotoolbox");
 }
 
+// Monochrome H.264, reported as 4:2:0, is decoded in software on every
+// maker's GPU: an RTX 5090 leaves its chroma unset.
+TEST(Decisions, MonochromeH264IsDecodedInSoftware) {
+    DecodingCapabilities pc;
+    pc.hwaccels = {"cuda", "qsv", "d3d11va"};
+    pc.nvidia_decodes_10bit_h264 = true;
+    DecodingCapabilities mac;
+    mac.hwaccels = {"videotoolbox"};
+    mac.videotoolbox_codecs = {"h264"};
+    VideoInfo video;
+    video.codec_name = "h264";
+    video.pix_fmt = "yuv420p";
+    video.width = 1920;
+    video.height = 1080;
+    video.profile = "High";
+    video.monochrome_h264 = true;
+    for (const GpuVendor vendor : {GpuVendor::nvidia, GpuVendor::intel, GpuVendor::amd}) {
+        EXPECT_EQ(pick_decode(pc, vendor, video), std::nullopt);
+    }
+    EXPECT_EQ(pick_decode(mac, GpuVendor::automatic, video, MacGpuDecoding::on), std::nullopt);
+    EXPECT_EQ(software_decoding_reason(video, true),
+              "it is monochrome H.264, whose grey chroma GPU decoders do not give (NVIDIA's leaves it unset)");
+}
+
 // A saved run's video without a profile takes the one its file is read with
 // again, and nothing else; one with a profile, or another file or codec,
 // keeps what it had.
@@ -274,6 +298,16 @@ TEST(Decisions, ASavedVideoTakesOnlyTheProfileReadFromItsFile) {
     other.codec_name = "hevc";
     EXPECT_FALSE(take_read_details(saved, other));
     EXPECT_EQ(saved.profile, "");
+
+    // Monochrome, which a run saved before 2.5 does not say, is taken; a
+    // reading that did not look (false) never clears it.
+    read.profile.clear();
+    read.monochrome_h264 = true;
+    EXPECT_TRUE(take_read_details(saved, read));
+    EXPECT_TRUE(saved.monochrome_h264);
+    read.monochrome_h264 = false;
+    EXPECT_FALSE(take_read_details(saved, read));
+    EXPECT_TRUE(saved.monochrome_h264);
 }
 
 TEST(Decisions, FrameRatesBecomeThePythonAppsFractions) {

@@ -33,6 +33,9 @@ struct ComparisonRecipe {
     // (VideoInfo::coded_at_another_size), whose scores before 2.4 read it at
     // the wrong size on some routes.
     bool coded_at_another_size = false;
+    // Whether a video is monochrome H.264 (VideoInfo::monochrome_h264), whose
+    // scores before 2.5 NVIDIA's decoder gave from unset chroma.
+    bool monochrome_h264 = false;
     bool range_in_frames = false;  // range_start and range_end are frames
     // The crops entered by hand (CropMode::manual only; VmafOptions').
     CropEdges manual_source_crop;
@@ -46,7 +49,8 @@ struct ComparisonRecipe {
     // is in it only where it is not the default, so that every other
     // comparison keeps the identity it had. The manual crops are null but for
     // CropMode::manual, for the same reason. The film grain is in it only where it is not
-    // null, and coded_at_another_size only where true, for the same reason.
+    // null, and coded_at_another_size and monochrome_h264 only where true, for
+    // the same reason.
     // Which decoder made a video's pictures is not in it: a VVC video's scores
     // are the same ones whether VVdeC or FFmpeg decoded it.
     nlohmann::json identity() const;

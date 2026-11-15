@@ -8,6 +8,7 @@
 #include "vml/film_grain_detect.h"
 #include "vml/metric_cache.h"
 #include "vml/platform/system.h"
+#include "vml/python_text.h"
 
 namespace vml::app {
 
@@ -21,8 +22,13 @@ void register_types() {
 
 }  // namespace
 
-ProbeWorker::ProbeWorker(QStringList paths, std::string ffprobe, std::string ffmpeg, QObject* parent)
-    : QThread(parent), paths_(std::move(paths)), ffprobe_(std::move(ffprobe)), ffmpeg_(std::move(ffmpeg)) {
+ProbeWorker::ProbeWorker(QStringList paths, std::string ffprobe, std::string ffmpeg, StreamScan scan,
+                         QObject* parent)
+    : QThread(parent),
+      paths_(std::move(paths)),
+      ffprobe_(std::move(ffprobe)),
+      ffmpeg_(std::move(ffmpeg)),
+      scan_(scan) {
     register_types();
 }
 
@@ -53,8 +59,11 @@ void ProbeWorker::run() {
             if (result.info->is_raw_stream()) {
                 result.info = raw_stream_as_found(*std::move(result.info), ffprobe_, cancel_);
             }
-            if (!ffmpeg_.empty()) {
-                result.info->film_grain = detect_film_grain(*result.info, ffmpeg_, cancel_);
+            if (!ffmpeg_.empty() &&
+                (scan_ == StreamScan::every_codec || ascii_lower(result.info->codec_name) == "h264")) {
+                const StreamStart start = scan_stream_start(*result.info, ffmpeg_, cancel_);
+                result.info->film_grain = start.film_grain;
+                result.info->monochrome_h264 = start.monochrome_h264;
             }
         } catch (const Cancelled&) {
             break;  // ended by cancel(): nothing to say about this video

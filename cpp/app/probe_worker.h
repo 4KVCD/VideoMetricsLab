@@ -70,10 +70,16 @@ class ProbeWorker : public QThread {
     Q_OBJECT
 
 public:
-    // Reads the videos with `ffprobe` (find_tool's answer), and the film
-    // grain their streams describe with `ffmpeg` (detect_film_grain); with
-    // no `ffmpeg`, the film grain is left unread.
-    ProbeWorker(QStringList paths, std::string ffprobe, std::string ffmpeg, QObject* parent = nullptr);
+    // Which videos' first frames are read (scan_stream_start): every one's,
+    // for a video added; only H.264's, for a saved run's details read again
+    // (take_read_details), which take only whether it is monochrome.
+    enum class StreamScan { every_codec, h264_only };
+
+    // Reads the videos with `ffprobe` (find_tool's answer), and their first
+    // frames (their film grain, whether H.264 is monochrome) with `ffmpeg`, as
+    // `scan` says; with no `ffmpeg`, those are left unread.
+    ProbeWorker(QStringList paths, std::string ffprobe, std::string ffmpeg, StreamScan scan,
+                QObject* parent = nullptr);
     // Looks up the saved scores of the rows `paths` (as `queries` asks for
     // each) under `base`, compared with the reference `source`. Black bars
     // that saved scores of an older black-bar rule wait for are found with
@@ -106,6 +112,7 @@ private:
     QStringList paths_;
     std::string ffprobe_;
     std::string ffmpeg_;
+    StreamScan scan_ = StreamScan::every_codec;
     // The lookup's, when it looks up saved scores.
     std::filesystem::path base_;
     std::filesystem::path source_;

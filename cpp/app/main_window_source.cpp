@@ -162,8 +162,8 @@ void MainWindow::start_source_probe(const std::filesystem::path& path) {
         source_probe_worker_->cancel();
     }
     const int generation = ++source_probe_generation_;
-    auto* worker =
-        new ProbeWorker({text_of(path)}, find_tool("ffprobe", settings_), find_tool("ffmpeg", settings_), this);
+    auto* worker = new ProbeWorker({text_of(path)}, find_tool("ffprobe", settings_), find_tool("ffmpeg", settings_),
+                                   ProbeWorker::StreamScan::every_codec, this);
     source_probe_worker_ = worker;
     probe_workers_.push_back(worker);
     connect(worker, &ProbeWorker::probed, this,

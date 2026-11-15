@@ -350,12 +350,15 @@ bool take_read_details(VideoInfo& saved, const VideoInfo& read) {
         return false;
     }
     const bool changed = (saved.profile.empty() && !read.profile.empty()) ||
-                         saved.start_offset != read.start_offset || saved.format_name != read.format_name;
+                         saved.start_offset != read.start_offset || saved.format_name != read.format_name ||
+                         (read.monochrome_h264 && !saved.monochrome_h264);
     if (saved.profile.empty()) {
         saved.profile = read.profile;
     }
     saved.start_offset = read.start_offset;
     saved.format_name = read.format_name;
+    // Never cleared: a reading that did not scan the stream says false.
+    saved.monochrome_h264 = saved.monochrome_h264 || read.monochrome_h264;
     return changed;
 }
 
@@ -412,6 +415,9 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
         !(hwaccel == "cuda" && capabilities.nvidia_decodes_10bit_h264 == true)) {
         return std::nullopt;
     }
+    if (video.monochrome_h264) {
+        return std::nullopt;
+    }
     return hwaccel;
 }
 
@@ -433,6 +439,9 @@ std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode) {
     // where there is no GPU decoder at all.
     if (ascii_lower(info.codec_name) == "h264" && bit_depth(info.pix_fmt) > 8) {
         return "only NVIDIA's GPUs (the RTX 50 series) decode H.264 deeper than 8 bits";
+    }
+    if (info.monochrome_h264) {
+        return "it is monochrome H.264, whose grey chroma GPU decoders do not give (NVIDIA's leaves it unset)";
     }
     if (h264_444_profile(info)) {
         return "only Apple's GPUs and NVIDIA's of the RTX 50 series decode H.264's " + info.profile +

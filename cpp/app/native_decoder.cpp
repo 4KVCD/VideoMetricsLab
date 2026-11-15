@@ -963,13 +963,14 @@ void FfmpegNativeVideo::Session::run() {
 // software. False when neither can (fail() then says why).
 bool FfmpegNativeVideo::Session::open() {
     // Not with the GPU's decoder where it would not add the grain or leave it
-    // out as the video is scored (as scoring plans it).
+    // out as the video is scored, or would not give monochrome H.264's grey
+    // chroma (as scoring plans it: pick_decode).
 #ifdef _WIN32
     const bool grain_on_gpu = !grain_needs_software_decoding(info_, "d3d11va");
 #else
     const bool grain_on_gpu = !grain_needs_software_decoding(info_, "videotoolbox");
 #endif
-    if (video_.gpu_decoding_ && grain_on_gpu) {
+    if (video_.gpu_decoding_ && grain_on_gpu && !info_.monochrome_h264) {
         decoding_ = open_video(path_, *video_.device_, true, interrupt_, why_, grain_, vvdec_missing_, info_.fps);
     }
     if (!decoding_) {

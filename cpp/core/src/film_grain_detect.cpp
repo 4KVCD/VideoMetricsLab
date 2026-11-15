@@ -1,5 +1,6 @@
 #include "vml/film_grain_detect.h"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -176,6 +177,19 @@ public:
             skip(zeros);
         }
     }
+    // H.264's ue(v), the same code: 2^zeros - 1 plus the bits after the one
+    // (32 zeros or more, which no valid stream has, read as an overrun).
+    std::uint32_t read_ue() {
+        unsigned zeros = 0;
+        while (!overrun && read(1) == 0) {
+            ++zeros;
+        }
+        if (zeros >= 32) {
+            overrun = true;
+            return 0;
+        }
+        return (std::uint32_t{1} << zeros) - 1 + read(zeros);
+    }
     bool overrun = false;
 
 private:
@@ -283,6 +297,28 @@ std::optional<bool> av1_film_grain_params_present(std::string_view header) {
     return film_grain_params_present;
 }
 
+// An H.264 sequence parameter set's chroma_format_idc (H.264 7.3.2.1.1),
+// from its payload without the NAL header byte or emulation prevention
+// bytes; nothing when it ends first.
+std::optional<unsigned> h264_chroma_format_idc(std::string_view sps) {
+    // The profiles whose SPS codes chroma_format_idc; all others are 4:2:0.
+    constexpr std::array<unsigned, 13> profiles_with_chroma_format{100, 110, 122, 244, 44,  83, 86,
+                                                                   118, 128, 138, 139, 134, 135};
+    BitReader bits(sps);
+    const unsigned profile_idc = bits.read(8);
+    bits.skip(8 + 8);  // the constraint flags and reserved bits, level_idc
+    bits.read_ue();    // seq_parameter_set_id
+    unsigned chroma_format_idc = 1;
+    if (std::find(profiles_with_chroma_format.begin(), profiles_with_chroma_format.end(), profile_idc) !=
+        profiles_with_chroma_format.end()) {
+        chroma_format_idc = bits.read_ue();
+    }
+    if (bits.overrun) {
+        return std::nullopt;
+    }
+    return chroma_format_idc;
+}
+
 }  // namespace
 
 std::vector<std::string> film_grain_names(unsigned kinds) {
@@ -315,6 +351,17 @@ unsigned film_grain_in_annex_b(std::string_view stream, std::string_view codec) 
         }
     });
     return kinds;
+}
+
+bool h264_monochrome_in_annex_b(std::string_view stream) {
+    constexpr unsigned nal_sps = 7;
+    std::optional<unsigned> chroma_format_idc;
+    for_each_nal_unit(stream, [&](std::string_view nal) {
+        if (!chroma_format_idc && !nal.empty() && (static_cast<unsigned char>(nal[0]) & 0x1F) == nal_sps) {
+            chroma_format_idc = h264_chroma_format_idc(without_emulation_prevention(nal.substr(1)));
+        }
+    });
+    return chroma_format_idc == 0u;
 }
 
 std::optional<unsigned> film_grain_in_av1(std::string_view obus) {
@@ -376,14 +423,13 @@ std::vector<std::string> film_grain_scan_command(const std::string& ffmpeg, cons
     return command;
 }
 
-std::optional<unsigned> detect_film_grain(const VideoInfo& info, const std::string& ffmpeg,
-                                          const CancelToken& cancel) {
+StreamStart scan_stream_start(const VideoInfo& info, const std::string& ffmpeg, const CancelToken& cancel) {
     const std::string codec = ascii_lower(info.codec_name);
     if (codec == "av2") {
-        return info.film_grain;  // found as the video was probed (av2_probe.h): FFmpeg cannot read AV2
+        return {info.film_grain, false};  // found as the video was probed (av2_probe.h): FFmpeg cannot read AV2
     }
     if (codec != "h264" && codec != "hevc" && codec != "vvc" && codec != "av1") {
-        return 0u;
+        return {0u, false};
     }
     platform::ProcessOutput output;
     try {
@@ -394,7 +440,7 @@ std::optional<unsigned> detect_film_grain(const VideoInfo& info, const std::stri
                                        [&cancel] { return cancel.cancelled(); });
     } catch (const platform::ProcessError& error) {
         logger.warning("Looking for film grain in " + platform::path_text(info.path.filename()) + ": " + error.what());
-        return std::nullopt;  // no FFmpeg to run: unknown, as for a failed reading
+        return {};  // no FFmpeg to run: unknown, as for a failed reading
     }
     if (output.stopped) {
         throw Cancelled();
@@ -404,12 +450,13 @@ std::optional<unsigned> detect_film_grain(const VideoInfo& info, const std::stri
     if (output.timed_out || output.exit_code != 0) {
         logger.warning("Looking for film grain in " + platform::path_text(info.path.filename()) +
                        (output.timed_out ? " took too long" : " failed"));
-        return std::nullopt;
+        return {};
     }
     if (codec == "av1") {
-        return film_grain_in_av1(output.standard_output);
+        return {film_grain_in_av1(output.standard_output), false};
     }
-    return film_grain_in_annex_b(output.standard_output, codec);
+    return {film_grain_in_annex_b(output.standard_output, codec),
+            codec == "h264" && h264_monochrome_in_annex_b(output.standard_output)};
 }
 
 }  // namespace vml

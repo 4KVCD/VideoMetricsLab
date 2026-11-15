@@ -130,7 +130,9 @@ bool h264_profile_unknown(const VideoInfo& video);
 // Gives `saved`, a saved run's details of a video, from `read`, the same file's
 // details read again, what a run file does not keep or may not have: where its
 // pictures start and its container (without them Video Compare seeks to other
-// frames), and its profile where it has none. True when it changed anything.
+// frames), its profile where it has none, and monochrome_h264 where the
+// reading found it (a run saved before 2.5 has not). True when it changed
+// anything.
 // Only those: the rest stays as the run measured it.
 bool take_read_details(VideoInfo& saved, const VideoInfo& read);
 
@@ -142,7 +144,9 @@ bool take_read_details(VideoInfo& saved, const VideoInfo& read);
 // lossless 4:2:0 H.264 into other pictures with no error (a 285K's: VMAF
 // 10.90 for 94.34; the 3070's: PSNR 26.23 for 36.49); FFmpeg's D3D11VA
 // refuses that profile. H.264 of no known profile (a video not probed) is
-// taken as 4:4:4.
+// taken as 4:4:4. Monochrome H.264 (VideoInfo::monochrome_h264) on none: an
+// RTX 5090's decoder leaves its chroma unset (PSNR 13.68 against its
+// software decoding's grey).
 std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities, GpuVendor vendor,
                                        const VideoInfo& video, MacGpuDecoding mac = MacGpuDecoding::deep);
 

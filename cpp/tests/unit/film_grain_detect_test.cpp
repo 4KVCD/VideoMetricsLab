@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "vml/analysis_request.h"
 #include "vml/result_json.h"
 #include "vml/run_json.h"
 
@@ -250,9 +251,47 @@ TEST(FilmGrainDetect, OtherCodecsHaveNoneAndAMissingFfmpegLeavesItUnknown) {
     VideoInfo info;
     info.path = "clip.webm";
     info.codec_name = "vp9";
-    EXPECT_EQ(detect_film_grain(info, "", CancelToken()), 0u);  // not run at all
+    EXPECT_EQ(scan_stream_start(info, "", CancelToken()).film_grain, 0u);  // not run at all
     info.codec_name = "h264";
-    EXPECT_EQ(detect_film_grain(info, "no-such-ffmpeg-for-the-test", CancelToken()), std::nullopt);
+    const StreamStart unread = scan_stream_start(info, "no-such-ffmpeg-for-the-test", CancelToken());
+    EXPECT_EQ(unread.film_grain, std::nullopt);
+    EXPECT_FALSE(unread.monochrome_h264);
+}
+
+// chroma_format_idc 0, read from the first SPS past its seq_parameter_set_id
+// and its emulation prevention byte; only the High profiles code it.
+TEST(FilmGrainDetect, MonochromeH264IsFoundInItsSequenceParameterSet) {
+    // x264's High profile, 4:0:0 and 4:2:0 (two encodes of one clip).
+    const std::string monochrome = "6764 0028 f365 01e0 19fe 2701 6e12 2004 8000 0003 0080 0000 1807 8c18 cb";
+    const std::string colour = "6764 0028 acd9 4078 067f 9701 6e12 2012 8000 0003 0080 0000 1807 8c18 cb";
+    const auto hex = [](std::string text) {
+        std::erase(text, ' ');
+        return text;
+    };
+    const std::string sei = "06 0501 ff80";  // another NAL unit before it: skipped
+    EXPECT_TRUE(h264_monochrome_in_annex_b(annex_b({hex(sei), hex(monochrome)})));
+    EXPECT_FALSE(h264_monochrome_in_annex_b(annex_b({hex(colour)})));
+    EXPECT_FALSE(h264_monochrome_in_annex_b(annex_b({hex(colour), hex(monochrome)})));  // the first SPS
+    // Main profile codes no chroma_format_idc: the bits after the id are not one.
+    EXPECT_FALSE(h264_monochrome_in_annex_b(annex_b({"674d4028f365"})));
+    // An SPS that ends before it says nothing.
+    EXPECT_FALSE(h264_monochrome_in_annex_b(annex_b({"67640028"})));
+}
+
+// A monochrome video files its scores apart from any made before it was
+// known (whose NVIDIA decoding gave unset chroma); others keep theirs.
+TEST(FilmGrainDetect, MonochromeH264IsKeptInRunFilesAndTheRecipe) {
+    VideoInfo info;
+    info.path = "clip.mkv";
+    info.codec_name = "h264";
+    EXPECT_FALSE(video_json(info).contains("monochrome_h264"));
+    ComparisonRecipe recipe;
+    const nlohmann::json others = recipe.identity();
+    EXPECT_FALSE(others.contains("monochrome_h264"));
+    info.monochrome_h264 = true;
+    EXPECT_EQ(video_from(video_json(info)), info);
+    recipe.monochrome_h264 = true;
+    EXPECT_NE(recipe.identity(), others);
 }
 
 // Run files and saved scores keep the kinds by name, only where known.

@@ -46,11 +46,24 @@ std::optional<unsigned> film_grain_in_av1(std::string_view obus);
 // its file as the stream itself, for the functions above.
 std::vector<std::string> film_grain_scan_command(const std::string& ffmpeg, const VideoInfo& info);
 
-// The film grain `info`'s video describes (FilmGrainKind bits, 0 for none),
-// read from its first 3 frames; 0 without reading for a codec with no film
-// grain. Nothing when it cannot be read (FFmpeg missing or failing, no
-// sequence header). Throws Cancelled once `cancel` says so.
-std::optional<unsigned> detect_film_grain(const VideoInfo& info, const std::string& ffmpeg,
-                                          const CancelToken& cancel);
+// Whether an H.264 Annex B stream is monochrome: its first sequence parameter
+// set's chroma_format_idc is 0 (only the High profiles code it; the others
+// are 4:2:0). FFmpeg reports such a video as 4:2:0, its software decoder
+// giving it grey chroma (128) and NVIDIA's leaving the chroma unset.
+bool h264_monochrome_in_annex_b(std::string_view stream);
+
+// What a video's first 3 frames say, read from its stream in one FFmpeg run.
+struct StreamStart {
+    // The film grain it describes (FilmGrainKind bits, 0 for none); 0
+    // without reading for a codec with no film grain. Nothing when it cannot
+    // be read (FFmpeg missing or failing, no sequence header).
+    std::optional<unsigned> film_grain;
+    // VideoInfo::monochrome_h264; false where it cannot be read.
+    bool monochrome_h264 = false;
+};
+
+// Reads `info`'s video's first frames (film_grain_scan_command). Throws
+// Cancelled once `cancel` says so.
+StreamStart scan_stream_start(const VideoInfo& info, const std::string& ffmpeg, const CancelToken& cancel);
 
 }  // namespace vml

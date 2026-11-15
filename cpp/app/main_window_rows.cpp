@@ -770,7 +770,8 @@ void MainWindow::start_media_probe(const std::vector<std::filesystem::path>& pat
     for (const std::filesystem::path& path : paths) {
         texts.append(text_of(path));
     }
-    auto* worker = new ProbeWorker(texts, find_tool("ffprobe", settings_), find_tool("ffmpeg", settings_), this);
+    auto* worker = new ProbeWorker(texts, find_tool("ffprobe", settings_), find_tool("ffmpeg", settings_),
+                                   ProbeWorker::StreamScan::every_codec, this);
     probe_workers_.push_back(worker);
     connect(worker, &ProbeWorker::probed, this, [this](const Probed& probed) { on_probed(probed); });
     connect(worker, &ProbeWorker::finished_all, this, [this, worker] { on_probe_finished(worker); });

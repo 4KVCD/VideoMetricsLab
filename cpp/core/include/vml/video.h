@@ -145,6 +145,11 @@ struct VideoInfo {
     // decoders give pictures of the header's size that are not the video
     // (SizeChangeMarks marks such a video from the start).
     bool coded_at_another_size = false;
+    // Whether it is monochrome H.264 (film_grain_detect.h's
+    // h264_monochrome_in_annex_b), which ffprobe reports as 4:2:0: decoded in
+    // software, whose grey chroma GPU decoders do not give (pick_decode).
+    // False where its stream was not read, as film_grain is then unknown.
+    bool monochrome_h264 = false;
     // Set for a video whose picture size changes partway through (FFmpeg
     // rebuilt its filters for it): the size every one of its frames is
     // scaled to first, so that the whole video is scored at one size

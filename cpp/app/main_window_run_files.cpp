@@ -247,8 +247,10 @@ void MainWindow::read_details_of_loaded_run(const ComparisonResult& result) {
     if (paths.isEmpty()) {
         return;
     }
-    // Only those details are taken: no film grain scan.
-    auto* worker = new ProbeWorker(paths, find_tool("ffprobe", settings_), std::string(), this);
+    // Only those details are taken: H.264's first frames are read only for
+    // whether it is monochrome, which runs saved before 2.5 do not say.
+    auto* worker = new ProbeWorker(paths, find_tool("ffprobe", settings_), find_tool("ffmpeg", settings_),
+                                   ProbeWorker::StreamScan::h264_only, this);
     probe_workers_.push_back(worker);
     connect(worker, &ProbeWorker::probed, this, [this](const Probed& probed) { take_read_details_of_file(probed); });
     // As the rows' readers end: a "Reading..." shown while this one read is

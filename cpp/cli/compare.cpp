@@ -301,8 +301,9 @@ std::string taken_colour_note(const VideoInfo& info, const std::string& which, c
 // The video at `path` as the command reads it: a raw YUV file with --size,
 // --pix-fmt and --fps (ffprobe.h's probe_raw_yuv), a raw stream timed at
 // --fps or else the rate it stores (timed_raw_stream), any other video as
-// ffprobe reads it, with the film grain its stream describes
-// (detect_film_grain), scored with it or without as `with_film_grain` says
+// ffprobe reads it, with the film grain its stream describes and whether it
+// is monochrome H.264 (scan_stream_start), scored with its grain or without
+// as `with_film_grain` says
 // (film_grain_choice). Nothing, with `wrong` saying why, when the command
 // does not give what it needs (`which` names the video). Throws ProbeError
 // when it cannot be read.
@@ -321,7 +322,9 @@ std::optional<VideoInfo> read_video(const std::filesystem::path& path, const Com
         return info;
     }
     VideoInfo info = probe_video(path, ffprobe);
-    info.film_grain = detect_film_grain(info, ffmpeg, CancelToken());
+    const StreamStart start = scan_stream_start(info, ffmpeg, CancelToken());
+    info.film_grain = start.film_grain;
+    info.monochrome_h264 = start.monochrome_h264;
     info.with_film_grain = with_film_grain;
     if (!info.is_raw_stream()) {
         return info;
@@ -972,7 +975,7 @@ std::filesystem::path apply_settings(const Settings& settings) {
     return cache_folder;
 }
 
-// Whether looking for `video`'s film grain failed (detect_film_grain).
+// Whether looking for `video`'s film grain failed (scan_stream_start).
 bool film_grain_not_known(const VideoInfo& video) {
     const std::string codec = ascii_lower(video.codec_name);
     return !video.film_grain && (codec == "h264" || codec == "hevc" || codec == "vvc" || codec == "av1");
