@@ -20,7 +20,7 @@
   "name": "VideoMetricsLab",
   "applicationCategory": "MultimediaApplication",
   "operatingSystem": "Windows 10, Windows 11, macOS 14.4",
-  "softwareVersion": "2.4",
+  "softwareVersion": "2.5",
   "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
   "license": "https://opensource.org/licenses/MIT",
   "url": "https://4kvcd.github.io/VideoMetricsLab/",
@@ -84,9 +84,9 @@ before it ships.</p>
 libvmaf, installed separately. Free and open source, under the MIT licence.</p>
 
 <section class="news">
-<h2>New in v2.4</h2>
-<p>v2.4 adds an experimental GPU VVC decoder, BD-rate calculation, instant metric scores for any time range for a video that's already been scored, a difference graph for 2 videos' scores and bitrate and improves resolution test speed up to <strong>27x</strong>, along with various bug fixes. See the
-<a href="https://github.com/4KVCD/VideoMetricsLab/releases/tag/v2.4">release notes</a>.</p>
+<h2>New in v2.5</h2>
+<p>v2.5 adds statistics for any range of frames in Metric Graphs, black-bar crops entered by hand, ColorVideo VDP on more than one display in the window, ranges in frames, and fuller results files, along with various bug fixes. See the
+<a href="https://github.com/4KVCD/VideoMetricsLab/releases/tag/v2.5">release notes</a>.</p>
 </section>
 
 <h2>Features</h2>
@@ -95,7 +95,7 @@ libvmaf, installed separately. Free and open source, under the MIT licence.</p>
 <ul>
 <li>VMAF v0.6.1, VMAF NEG, VMAF v1, PSNR, SSIM, XPSNR, SSIMULACRA2, Butteraugli and ColorVideo VDP, for many test videos at once.</li>
 <li>VMAF models for standard, phone, 4K and HFR viewing.</li>
-<li>ColorVideo VDP scored for the display you choose, or automatically HDR or SDR to match the video.</li>
+<li>ColorVideo VDP scored for the displays you choose, or automatically HDR or SDR to match the video.</li>
 <li>Film grain scored as viewers see it, or without it: VVC, AV1 and AFGS1 grain, at any bit depth.</li>
 <li>Resolution tests: how a video scores scaled down and back up, at any size, with your choice of scaling algorithm.</li>
 </ul>
@@ -114,6 +114,7 @@ libvmaf, installed separately. Free and open source, under the MIT licence.</p>
 <ul>
 <li>Frame-exact playback that switches instantly between the source and each encode (hold <strong>S</strong>), with zoom, at up to 120 fps in 4K HDR, in HDR on an HDR display, with film grain shown as it is scored and the soundtrack, up to 7.1.</li>
 <li>Metric curves, statistics and per-frame scores (per second for ColorVideo VDP), with each metric's best and worst results highlighted.</li>
+<li>Statistics for any range of frames: Shift+drag across a graph.</li>
 <li>Bitrate by frame, second or GOP, with each frame's type (I, P or B).</li>
 <li>A difference graph for 2 videos' scores and bitrate.</li>
 <li>BD-rate calculation: how much bitrate one encoder saves over another at the same quality.</li>
@@ -121,10 +122,10 @@ libvmaf, installed separately. Free and open source, under the MIT licence.</p>
 
 <h3>Workflow</h3>
 <ul>
-<li>Black bars found the way HandBrake finds them, and resolution mismatches handled automatically.</li>
+<li>Black bars found the way HandBrake finds them, or entered by hand, and resolution mismatches handled automatically.</li>
 <li>Results saved and reloaded automatically; a metric added later is the only one calculated.</li>
-<li>Metric scores for any time range of a video, instantly if the video has already been scored.</li>
-<li>Scores and statistics exported as CSV or JSON.</li>
+<li>Metric scores for any range of a video, in seconds or frames, instantly if the video has already been scored.</li>
+<li>Scores and statistics exported as CSV or JSON, with every setting, the computer and the timings of the run.</li>
 <li>Drag and drop videos, sort and reorder the list, and a dark theme, in 20 languages.</li>
 <li>Raw video files such as .266 open directly, with their frame rate read from the stream.</li>
 <li>A command line, <code>VideoMetricsLab-cli</code>, for scripts: comparisons, bitrate and BD-rate. It also reads raw video streams and .yuv files.</li>
