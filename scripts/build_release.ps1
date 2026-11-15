@@ -99,27 +99,30 @@ Write-Host '==> Building the GPU frame decoders' -ForegroundColor Cyan
 
 # 2. The programs, in their Release build.
 Write-Host '==> Building the C++ app' -ForegroundColor Cyan
+$buildFolder = Join-Path $cppDirectory 'build/windows'
 Push-Location $cppDirectory
 try {
     $configure = @('--preset', 'windows')
     if ($QtPath) { $configure += "-DCMAKE_PREFIX_PATH=$QtPath" }
     Invoke-Program 'Configuring' { cmake @configure }
+    # Asked before building: where CMake did not find Qt there is no window to
+    # build, and the build would stop at its missing target. Qt6_DIR is
+    # <Qt>/lib/cmake/Qt6: cached as a PATH by find_package (Qt6_DIR-NOTFOUND
+    # where it was not found), or with no type (UNINITIALIZED) when the folder
+    # was configured with -DQt6_DIR=.
+    $qtFolder = Select-String -Path (Join-Path $buildFolder 'CMakeCache.txt') -Pattern '^Qt6_DIR:[A-Z]+=(.+)$' |
+        ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1
+    if (-not $qtFolder -or $qtFolder -like '*-NOTFOUND') {
+        throw 'CMake did not find Qt 6 (6.5 or newer, with Concurrent, Network and Widgets), so the window cannot be built: name its folder with -QtPath'
+    }
     Invoke-Program 'Building' { cmake --build --preset windows-release --target VideoMetricsLab vml-cli }
 } finally {
     Pop-Location
 }
-$buildFolder = Join-Path $cppDirectory 'build/windows'
 $window = Join-Path $buildFolder 'app/Release/VideoMetricsLab.exe'
 $commandLine = Join-Path $buildFolder 'cli/Release/vml-cli.exe'
 if (-not (Test-Path $window)) {
     throw 'CMake built no window: it did not find Qt. Name its folder with -QtPath'
-}
-# Qt6_DIR is <Qt>/lib/cmake/Qt6: cached as a PATH by find_package, or with no
-# type (UNINITIALIZED) when the folder was configured with -DQt6_DIR=.
-$qtFolder = Select-String -Path (Join-Path $buildFolder 'CMakeCache.txt') -Pattern '^Qt6_DIR:[A-Z]+=(.+)$' |
-    ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1
-if (-not $qtFolder) {
-    throw "The build folder's CMakeCache.txt does not say where Qt is (Qt6_DIR): name its folder with -QtPath"
 }
 $windeployqt = Join-Path (Split-Path (Split-Path (Split-Path $qtFolder))) 'bin/windeployqt.exe'
 
