@@ -4,7 +4,7 @@
 # (not the default). The release needs it (scripts/build_release.ps1).
 #
 # The decoder is built with MinGW-w64 (as the other native decoders, which link it statically) from a checkout of
-# vvdec-vulkan at its release v1.1 (the hand-over, with film grain), its shaders compiled with Slang (slangc) and
+# vvdec-vulkan at its release v1.2.1 (the hand-over, with film grain), its shaders compiled with Slang (slangc) and
 # Khronos' Vulkan headers; vulkan-1.dll is loaded at run time.
 #
 #   scripts\build_vvdecvk_frames.ps1 -Source <vvdec-vulkan checkout> -Slangc <slangc.exe> -VulkanHeaders <include dir>
