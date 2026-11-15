@@ -105,6 +105,9 @@ public:
     std::pair<double, double> y_range() const { return y_range_; }
     // Shows all of the time range again.
     void reset_view();
+    // Moves a zoomed view to `t` where it is out of view: centred on it, as
+    // far as the data goes, at the same zoom. Nothing otherwise.
+    void bring_into_view(double t);
 
     // The plotting area, inside the axes, which the time axis, the pointer
     // and the crosshair span; with a band, its upper part, where the lines

@@ -934,6 +934,7 @@ bool MetricPage::show_frame(int frame, const std::map<int, SeriesEntry>& entries
         }
     }
     if (cursor_time) {
+        chart_->bring_into_view(*cursor_time);  // a zoomed graph moves to the frame (issue #16)
         chart_->set_cursor_time(*cursor_time);
     }
     set_hover_text(lines.join('\n'));

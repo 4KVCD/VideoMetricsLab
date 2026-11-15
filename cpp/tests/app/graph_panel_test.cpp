@@ -76,6 +76,9 @@ protected:
     static QString readout(const MetricPage& page) { return page.hover_label_->text(); }
     // The crosshair's pixel column on a page's chart, if shown.
     static std::optional<int> cursor_x(MetricPage& page) { return page.chart_->cursor_x_; }
+    // A page's chart zoomed to `span` seconds from `start`, and the seconds in view.
+    static void zoom(MetricPage& page, double start, double span) { page.chart_->view_ = ChartWidget::View{start, span}; }
+    static std::pair<double, double> in_view(MetricPage& page) { return page.chart_->x_range(); }
     // What a page's chart draws for a line.
     static const ChartSeries& drawn(MetricPage& page, int series_id) { return page.chart_->series_.at(series_id); }
     static void export_png(GraphPanel& panel) { panel.on_export_png(); }
@@ -438,6 +441,19 @@ TEST_F(GraphPanelTest, AnUpdatedLineKeepsItsPlace) {
         exported.append(label);
     }
     EXPECT_EQ(exported, (QStringList{"a", "b"}));
+}
+
+TEST_F(GraphPanelTest, GoToFrameMovesAZoomedGraphToTheFrame) {
+    // Issue #16: a frame out of a zoomed graph's view is brought into it.
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(3000, 90.0F))), "a", "row a", false});
+    MetricPage& vmaf = page(panel, "vmaf");
+    zoom(vmaf, 10.0, 10.0);
+    frame_spin(panel).setValue(2400);  // 80 s at 30 fps
+    const auto [start, end] = in_view(vmaf);
+    EXPECT_DOUBLE_EQ(start, 75.0);
+    EXPECT_DOUBLE_EQ(end, 85.0);
 }
 
 TEST_F(GraphPanelTest, TheExportedPngIsTheGraphWithItsKeyedTable) {

@@ -362,6 +362,18 @@ void ChartWidget::reset_view() {
     emit view_changed();
 }
 
+void ChartWidget::bring_into_view(double t) {
+    if (!view_ || (t >= view_->start && t <= view_->start + view_->span)) {
+        return;
+    }
+    // Over the data, not drifting off its ends, as a drag keeps it
+    const double span = view_->span;
+    const auto [data_lo, data_hi] = data_x_range();
+    view_ = View{std::clamp(t - span / 2.0, data_lo, std::max(data_lo, data_hi - span)), span};
+    invalidate();
+    emit view_changed();
+}
+
 void ChartWidget::recompute_y_range() {
     // Fits the value axis to the shown lines. A line can be all NaN (a
     // metric with no value for any frame): its range would be NaN and the

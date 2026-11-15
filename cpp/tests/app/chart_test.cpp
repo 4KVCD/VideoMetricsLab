@@ -298,6 +298,27 @@ TEST_F(ChartTest, DraggingMovesTheLinesWithoutChangingThem) {
 // A band (Metric Graphs' difference of two lines) takes the bottom of the
 // plotting area, under the lines, with a value axis of its own: from 0 or its
 // lowest value to 0 or its highest, so that its zero line is always in it.
+TEST_F(ChartTest, AZoomedViewMovesToATimeOutOfView) {
+    // Go to frame (issue #16): a time out of a zoomed view is brought to its
+    // middle, at the same zoom, no further than the data's ends; one in view,
+    // or with all of the data shown, moves nothing.
+    ChartWidget chart(QStringLiteral("VMAF"), 100.0);
+    chart.resize(800, 400);
+    chart.set_series(0, line_of({0.0, 50.0, 100.0}, {90.0F, 80.0F, 95.0F}));
+    zoom_to(chart, 10.0, 10.0);
+    chart.bring_into_view(80.0);
+    EXPECT_EQ(chart.x_range(), std::pair(75.0, 85.0));
+    chart.bring_into_view(85.0);  // on its edge: in view
+    EXPECT_EQ(chart.x_range(), std::pair(75.0, 85.0));
+    chart.bring_into_view(99.0);
+    EXPECT_EQ(chart.x_range(), std::pair(90.0, 100.0));
+    chart.bring_into_view(1.0);
+    EXPECT_EQ(chart.x_range(), std::pair(0.0, 10.0));
+    chart.reset_view();
+    chart.bring_into_view(60.0);
+    EXPECT_EQ(chart.x_range(), std::pair(0.0, 100.0));
+}
+
 TEST_F(ChartTest, DrawsABandUnderTheLinesOnItsOwnScale) {
     ChartWidget chart(QStringLiteral("VMAF"), 100.0);
     chart.resize(800, 400);
