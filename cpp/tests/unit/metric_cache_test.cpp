@@ -989,7 +989,8 @@ TEST(MetricCache, AnswersAsThePythonApp) {
 // A GPU score of Vship 5.1 (v2.1's) is kept for a video set to Vship 5.1.2,
 // but for a pair a later colour fix reads otherwise: with two guessed
 // matrices or its chroma apart, for a score made before those fixes, or with
-// a full-range gray video. Vship-fast's scores are kept for a video set to
+// a full-range gray video saved before "/4" (its mappings before cannot
+// tell scores made before the gray fix). Vship-fast's scores are kept for a video set to
 // Vship-fast; neither build's answers the other's. A CPU score saved before
 // 8-bit videos were converted to RGB precisely is calculated again for a
 // pair with an 8-bit video; one saved before an untagged pair was read with
@@ -1024,10 +1025,12 @@ TEST(MetricCache, OldScoresAreKeptButForAPairALaterColourFixReadsOtherwise) {
     for (const auto& pair : {guessed_apart, one_tagged, siting_apart, full_gray}) {
         EXPECT_FALSE(answers(spec, gpu, pair)) << pair[1].pix_fmt;
     }
+    gpu.parameters["color_tags"] = nlohmann::json(score_identity::vship_colour_tags_unlent).dump();
+    EXPECT_FALSE(answers(spec, gpu, full_gray));
     gpu.parameters["color_tags"] = nlohmann::json(score_identity::vship_colour_tags).dump();
     EXPECT_TRUE(answers(spec, gpu, guessed_apart));
     EXPECT_TRUE(answers(spec, gpu, siting_apart));
-    EXPECT_FALSE(answers(spec, gpu, full_gray));
+    EXPECT_TRUE(answers(spec, gpu, full_gray));  // as this version saves them: not calculated again each run
     const MetricProvenance fast{"Vship/ssimulacra2", "Vship-fast 5.1.2", "gpu",
                                 score_identity::vship_gpu("ssimulacra2"), gpu.parameters};
     EXPECT_TRUE(answers(fast_spec, fast, full_gray));

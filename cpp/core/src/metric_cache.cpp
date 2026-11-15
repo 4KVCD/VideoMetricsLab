@@ -250,9 +250,10 @@ bool unsure_ffmpeg_xpsnr(const MetricProvenance& provenance, const std::vector<C
 
 // Whether a saved score is known to be wrong and must be calculated again:
 // FFmpeg's XPSNR above 8 bits (unsure_ffmpeg_xpsnr), a stale CPU score, or a
-// Vship 5.1 GPU score of a pair a later fix reads
-// otherwise. That is a pair with a full-range gray video (full_range_gray);
-// and, for a score that predates the fix, one whose videos are read with
+// Vship 5.1 GPU score of a pair a later fix reads otherwise, for a score
+// that predates the fix. That is a pair with a full-range gray video
+// (full_range_gray) for a score of a mapping before "/4", which came after
+// that fix (the mappings before cannot tell); one whose videos are read with
 // one colour matrix where that changes what Vship reads
 // (matrix_read_otherwise), one with a video without chroma siting read with
 // the other's where that changes what it reads (chroma_location_shared), or,
@@ -272,12 +273,12 @@ bool stale_score(const MetricProvenance& provenance, const std::vector<ColourTag
         !score_identity::is_vship51_id(provenance.implementation_compatibility_id)) {
         return false;
     }
-    if (std::any_of(infos.begin(), infos.end(), full_range_gray)) {
-        return true;
-    }
     const nlohmann::json mapping = parameter(provenance, "color_tags");
     if (mapping == nlohmann::json(score_identity::vship_colour_tags)) {
         return false;
+    }
+    if (std::any_of(infos.begin(), infos.end(), full_range_gray)) {
+        return true;
     }
     if (colours_read_otherwise(infos)) {
         return true;
