@@ -1155,6 +1155,18 @@ void MainWindow::on_remove_distorted() {
     for (const QModelIndex& index : distorted_table_->selectionModel()->selectedIndexes()) {
         rows.insert(index.row());
     }
+    // A video's CVVDP display rows (add_cvvdp_display_rows) go with it: they
+    // only score its CVVDP on other displays, and Export results lists them
+    // under it. Its film grain twin, a comparison of its own, stays.
+    const std::set<int, std::greater<>> selected = rows;
+    for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
+        const std::optional<std::filesystem::path>& parent = rows_[static_cast<std::size_t>(row)]->cvvdp_display_of;
+        if (parent && std::any_of(selected.begin(), selected.end(), [&](int removed) {
+                return same_path(rows_[static_cast<std::size_t>(removed)]->path, *parent);
+            })) {
+            rows.insert(row);
+        }
+    }
     // Their lines leave the graph too: once its row is gone, nothing else
     // could remove a line.
     std::vector<std::string> lines;
