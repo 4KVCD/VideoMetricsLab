@@ -89,14 +89,15 @@ bool is_file(const std::filesystem::path& path) {
 // the picture both files show (common_picture), unless the pair is one file
 // against itself (a resolution test: both sides are the source's, cut alike);
 // with `test_full_frame` (black bars in the source only), the source's box
-// and the test video's full frame, as crops_for gives the run.
+// and the test video's full frame (but its odd line: test_crop_beside_source_box),
+// as crops_for gives the run.
 DetectedCrops compared_crops(const VideoInfo& source, const VideoInfo& distorted, const DetectedCrops& files,
                              bool test_full_frame) {
     if (distorted.path == source.path) {
         return files;
     }
     if (test_full_frame) {
-        return {files.source, std::nullopt};
+        return {files.source, files.source ? test_crop_beside_source_box(*files.source, distorted) : std::nullopt};
     }
     const auto [source_crop, distorted_crop] = common_picture(source, distorted, files.source, files.distorted);
     return {source_crop, distorted_crop};
