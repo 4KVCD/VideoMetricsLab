@@ -79,7 +79,7 @@ bool read_exactly(platform::InboundPipe& pipe, std::uint8_t* into, std::size_t s
 }
 
 struct Probe {
-    std::mutex mutex;
+    std::timed_mutex mutex;  // held for the whole of a probe
     std::optional<GpuVmafBackend> found;
     std::chrono::steady_clock::time_point found_at;
 };
@@ -206,7 +206,7 @@ GpuModels gpu_models(bool compute_vmaf, bool compute_vmaf_neg, const std::string
 
 GpuVmafBackend gpu_vmaf_backend(const CancelToken& cancel) {
     Probe& probe = probe_state();
-    const std::lock_guard lock(probe.mutex);
+    const std::unique_lock lock = lock_unless_cancelled(probe.mutex, cancel);
     if (!probe.found) {
         probe.found = probe_backends(cancel);
         probe.found_at = std::chrono::steady_clock::now();
@@ -300,17 +300,14 @@ std::timed_mutex& gpu_pass() {
 }
 
 std::unique_lock<std::timed_mutex> take_gpu_turn(const std::function<void()>& on_wait, const CancelToken& cancel) {
-    std::unique_lock pass(gpu_pass(), std::defer_lock);
-    if (pass.try_lock()) {
+    std::unique_lock pass(gpu_pass(), std::try_to_lock);
+    if (pass.owns_lock()) {
         return pass;
     }
     if (on_wait) {
         on_wait();
     }
-    while (!pass.try_lock_for(std::chrono::milliseconds(100))) {
-        cancel.throw_if_cancelled();
-    }
-    return pass;
+    return lock_unless_cancelled(gpu_pass(), cancel);
 }
 
 std::pair<std::vector<std::string>, std::vector<std::string>> gpu_output_args(const std::string& test_pipe,

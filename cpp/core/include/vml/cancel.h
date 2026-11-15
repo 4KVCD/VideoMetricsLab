@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 
 namespace vml {
@@ -81,5 +82,11 @@ public:
 private:
     std::shared_ptr<State> state_;
 };
+
+// Locks `mutex`, waiting while another holds it, unless the run is
+// cancelled before it is free: then throws Cancelled. For a lock held for
+// a long time, such as a GPU probe's, which a plain wait would not leave
+// for Cancel.
+std::unique_lock<std::timed_mutex> lock_unless_cancelled(std::timed_mutex& mutex, const CancelToken& cancel);
 
 }  // namespace vml

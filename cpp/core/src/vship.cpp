@@ -423,7 +423,7 @@ const VshipLibrary& kept_library(const std::function<platform::DynamicLibrary()>
 
 // One Vship build's probe (detect_vship_device).
 struct ProbeState {
-    std::mutex mutex;  // held for the whole of a probe
+    std::timed_mutex mutex;  // held for the whole of a probe
     std::optional<std::pair<std::optional<VshipDevice>, std::string>> probed;
     bool failed = false;  // no GPU, as a check crashed or failed (vship_check_failed)
     std::chrono::steady_clock::time_point probed_at;
@@ -789,7 +789,7 @@ std::pair<std::optional<VshipDevice>, std::string> detect_vship_device(VshipBuil
     // One probe of each build serves the whole process: callers that arrive
     // while it runs wait for it rather than starting their own.
     ProbeState& state = probe_state(build);
-    const std::lock_guard lock(state.mutex);
+    const std::unique_lock lock = lock_unless_cancelled(state.mutex, cancel);
     if (!state.probed) {
         bool failed = false;
         // Kept only once whole: a probe cancelled (Cancelled, 5.1.2's below

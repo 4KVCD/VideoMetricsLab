@@ -1383,7 +1383,7 @@ V1Probe probe_v1() {
 namespace {
 
 // The probe's result, kept for the process, and the lock held while it runs.
-std::mutex v1_probe_mutex;
+std::timed_mutex v1_probe_mutex;  // held for the whole of a probe
 std::optional<V1Probe> v1_probed;
 
 }  // namespace
@@ -1395,7 +1395,7 @@ bool v1_probe_ready() {
 
 V1Probe v1_available(const CancelToken& cancel) {
     std::optional<V1Probe>& probed = v1_probed;
-    const std::lock_guard lock(v1_probe_mutex);
+    const std::unique_lock lock = lock_unless_cancelled(v1_probe_mutex, cancel);
     if (!probed) {
         try {
             if (!isolation_program()) {

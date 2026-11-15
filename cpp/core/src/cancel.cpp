@@ -50,6 +50,18 @@ void CancelToken::throw_if_cancelled() const {
     }
 }
 
+std::unique_lock<std::timed_mutex> lock_unless_cancelled(std::timed_mutex& mutex, const CancelToken& cancel) {
+    std::unique_lock lock(mutex, std::defer_lock);
+    if (lock.try_lock()) {
+        return lock;
+    }
+    // Cancel is looked at between waits short enough to answer it at once.
+    do {
+        cancel.throw_if_cancelled();
+    } while (!lock.try_lock_for(std::chrono::milliseconds(100)));
+    return lock;
+}
+
 void CancelToken::pause() {
     const std::lock_guard lock(state_->mutex);
     if (state_->paused) {

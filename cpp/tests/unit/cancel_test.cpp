@@ -6,6 +6,8 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <future>
+#include <mutex>
 #include <thread>
 
 #include "vml/platform/process.h"
@@ -65,6 +67,27 @@ TEST(CancelToken, CountsTheTimeSpentPaused) {
     token.pause();
     clock = 112.5;
     EXPECT_EQ(token.paused_seconds(), 6.5);
+}
+
+// A wait for a lock another caller holds (a GPU probe, which can take many
+// seconds) answers Cancel: it throws, leaving the lock to its holder.
+TEST(CancelToken, AWaitForALockEndsWhenTheRunIsCancelled) {
+    std::timed_mutex mutex;
+    std::promise<void> locked;
+    std::promise<void> release;
+    std::thread holder([&] {
+        const std::lock_guard lock(mutex);
+        locked.set_value();
+        release.get_future().wait();
+    });
+    locked.get_future().wait();
+    CancelToken token;
+    token.cancel();
+    EXPECT_THROW(lock_unless_cancelled(mutex, token), Cancelled);
+    release.set_value();
+    holder.join();
+    // Free, it is taken whatever the run's state.
+    EXPECT_TRUE(lock_unless_cancelled(mutex, token).owns_lock());
 }
 
 }  // namespace
