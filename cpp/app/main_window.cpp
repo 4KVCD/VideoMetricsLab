@@ -340,8 +340,10 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::store_open_videos() {
-    // The files themselves, in the table's order. Resolution tests and
-    // opposite-direction rows are made from other rows and are not kept.
+    // The files themselves, in the table's order. The rows made from other
+    // rows are not kept: their paths are made up, no file's. Each decodes
+    // another row's file (media_path: resolution tests, film grain twins,
+    // other displays' rows), or is an opposite-direction row.
     if (!settings_.remember_videos) {
         return;
     }
@@ -349,7 +351,7 @@ void MainWindow::store_open_videos() {
     settings_.remembered_tests.clear();
     for (const std::shared_ptr<RowData>& row : rows_) {
         const std::string path = platform::path_text(row->path);
-        if (!row->scale_direction_pinned && !row->options.resample_test &&
+        if (!row->media_path && !row->scale_direction_pinned &&
             std::find(settings_.remembered_tests.begin(), settings_.remembered_tests.end(), path) ==
                 settings_.remembered_tests.end()) {
             settings_.remembered_tests.push_back(path);
