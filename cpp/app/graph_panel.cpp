@@ -1271,36 +1271,32 @@ QWidget* GraphPanel::build_action_bar() {
     frame_spin_->setKeyboardTracking(false);  // on Enter, not at each digit typed
     frame_spin_->setToolTip(app::tr("Reports every visible series at this exact frame, so two encodes can be compared "
                                     "at one moment."));
-    connect(frame_spin_, &QSpinBox::valueChanged, this, [this](int frame) {
-        if (range_) {
-            range_->first = frame;  // this box's end of the range moves with it
-            apply_range();
-        }
-        on_frame_requested(frame);
-    });
+    connect(frame_spin_, &QSpinBox::valueChanged, this, [this](int frame) { on_frame_requested(frame); });
     layout->addWidget(frame_spin_);
     auto* go_button = new QPushButton(app::tr("Go"));
     connect(go_button, &QPushButton::clicked, this, [this] { on_frame_requested(frame_spin_->value()); });
     layout->addWidget(go_button);
-    // A frame range (issue #17): from the Go to frame box's frame to this
-    // one; "—", its lowest value, as the table says no value, is none.
+    layout->addSpacing(16);
+    // A frame range (issue #17), in boxes of its own: "—", each box's lowest
+    // value, as the table says no value, is no end.
+    const QString range_tip = app::tr("A frame range: the graph shades the frames from the first box's frame to the "
+                                      "second's, and the table gives their statistics. Shift+drag across the graph "
+                                      "to select one.");
+    const auto new_range_box = [this, &range_tip] {
+        auto* box = new QSpinBox;
+        box->setRange(-1, 0);
+        box->setValue(-1);
+        box->setSpecialValueText(QStringLiteral("—"));
+        box->setKeyboardTracking(false);
+        box->setToolTip(range_tip);
+        connect(box, &QSpinBox::valueChanged, this, [this] { on_range_box_changed(); });
+        return box;
+    };
+    layout->addWidget(new QLabel(app::tr("Highlight range from frame:")));
+    range_start_spin_ = new_range_box();
+    layout->addWidget(range_start_spin_);
     layout->addWidget(new QLabel(app::tr("to frame:")));
-    range_end_spin_ = new QSpinBox;
-    range_end_spin_->setRange(-1, 0);
-    range_end_spin_->setValue(-1);
-    range_end_spin_->setSpecialValueText(QStringLiteral("—"));
-    range_end_spin_->setKeyboardTracking(false);
-    range_end_spin_->setToolTip(app::tr("The other end of a frame range: the graph shades the frames from Go to frame "
-                                        "to this one, and the table gives their statistics. Shift+drag across the "
-                                        "graph to select a range."));
-    connect(range_end_spin_, &QSpinBox::valueChanged, this, [this](int frame) {
-        if (frame == range_end_spin_->minimum()) {
-            clear_range();
-            return;
-        }
-        range_ = std::pair(frame_spin_->value(), frame);
-        apply_range();
-    });
+    range_end_spin_ = new_range_box();
     layout->addWidget(range_end_spin_);
     clear_range_button_ = new QPushButton(app::tr("Clear range"));
     clear_range_button_->setEnabled(false);
@@ -1346,7 +1342,64 @@ void GraphPanel::apply_range() {
 
 void GraphPanel::clear_range() {
     range_.reset();
+    reset_range_boxes();
     apply_range();
+}
+
+void GraphPanel::on_range_box_changed() {
+    // Read from both boxes each time, so that it rests on nothing kept: a
+    // box at its lowest value ("—") has no end.
+    const auto end_in = [](const QSpinBox* box) {
+        return box->value() == box->minimum() ? std::nullopt : std::optional<int>(box->value());
+    };
+    const std::optional<int> first = end_in(range_start_spin_);
+    const std::optional<int> last = end_in(range_end_spin_);
+    if (first && last) {
+        range_ = std::pair(*first, *last);
+    } else {
+        range_.reset();  // one end typed so far: the whole video until the other is
+    }
+    apply_range();
+}
+
+void GraphPanel::reset_range_boxes() {
+    for (QSpinBox* box : {range_start_spin_, range_end_spin_}) {
+        const bool blocked = box->blockSignals(true);
+        box->setValue(box->minimum());
+        box->blockSignals(blocked);
+    }
+}
+
+void GraphPanel::refresh_range_boxes(int lo, int hi) {
+    // The range boxes bounded by the page's frames, widened to their own
+    // ends, so that an end is shown as chosen even where this page's lines
+    // stop short of it. Each box's ends are read before setRange, which
+    // clamps the value, and each box's "—" is its own lowest value, which
+    // moves with the page's first frame.
+    std::array<QSpinBox*, 2> boxes{range_start_spin_, range_end_spin_};
+    std::array<std::optional<int>, 2> ends;
+    if (range_) {
+        ends = {range_->first, range_->second};
+    } else {
+        for (std::size_t i = 0; i < boxes.size(); ++i) {
+            if (boxes[i]->value() != boxes[i]->minimum()) {
+                ends[i] = boxes[i]->value();  // one end typed, the other not yet
+            }
+        }
+    }
+    for (const std::optional<int>& end : ends) {
+        if (end) {
+            lo = std::min(lo, *end);
+            hi = std::max(hi, *end);
+        }
+    }
+    for (std::size_t i = 0; i < boxes.size(); ++i) {
+        const bool blocked = boxes[i]->blockSignals(true);
+        boxes[i]->setRange(lo - 1, hi);
+        boxes[i]->setValue(ends[i].value_or(lo - 1));
+        boxes[i]->blockSignals(blocked);
+    }
+    clear_range_button_->setEnabled(ends[0] || ends[1]);
 }
 
 void GraphPanel::on_range_dragged(MetricPage* page, double start, double now, bool finished) {
@@ -1360,9 +1413,6 @@ void GraphPanel::on_range_dragged(MetricPage* page, double start, double now, bo
     range_ = std::pair(*first, *last);
     if (finished) {
         apply_range();
-        // The Go to frame box now holds the drag's first frame: the cursor
-        // goes there too, as it does when that box is typed in.
-        on_frame_requested(*first);
         return;
     }
     const std::optional<std::pair<int, int>> frames = selected_frames();
@@ -1375,31 +1425,18 @@ void GraphPanel::on_range_dragged(MetricPage* page, double start, double now, bo
 void GraphPanel::refresh_page_controls() {
     // The controls under the graph brought up to date for the page shown:
     // the Go to frame box bounded by what is drawn, so that it cannot ask
-    // for a frame no line has, and the Difference box usable where the page
-    // shows two lines.
+    // for a frame no line has, the range boxes likewise, and the Difference
+    // box usable where the page shows two lines.
     const auto page = pages_.find(std::string(current_metric().key));
     if (page == pages_.end()) {
         return;
     }
     auto [lo, hi] = page->second->frame_range();
     hi = std::max(lo, hi);
-    if (range_) {
-        // The range's ends shown as chosen, even where this page's lines
-        // stop short of them.
-        lo = std::min({lo, range_->first, range_->second});
-        hi = std::max({hi, range_->first, range_->second});
-    }
     const bool blocked = frame_spin_->blockSignals(true);
     frame_spin_->setRange(lo, hi);
-    if (range_) {
-        frame_spin_->setValue(range_->first);
-    }
     frame_spin_->blockSignals(blocked);
-    const bool end_blocked = range_end_spin_->blockSignals(true);
-    range_end_spin_->setRange(lo - 1, hi);  // its lowest value, "—", is no range
-    range_end_spin_->setValue(range_ ? range_->second : lo - 1);
-    range_end_spin_->blockSignals(end_blocked);
-    clear_range_button_->setEnabled(range_.has_value());
+    refresh_range_boxes(lo, hi);
     const bool possible = page->second->difference_possible();
     difference_box_->setEnabled(possible);
     difference_box_->setToolTip(possible ? app::tr("Draws the first visible series minus the second, frame by frame, "
@@ -1769,6 +1806,7 @@ void GraphPanel::remove_runs(const std::vector<int>& series_ids, bool suppress) 
     const bool none_left = entries_.empty();
     if (none_left) {
         range_.reset();  // a range of frames of no video
+        reset_range_boxes();
     }
     for (const auto& [key, page] : pages_) {
         page->remove_curves(removed);

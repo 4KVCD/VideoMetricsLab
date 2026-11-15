@@ -47,6 +47,7 @@ protected:
     static QTabWidget& tabs(GraphPanel& panel) { return *panel.tabs_; }
     static QSpinBox& frame_spin(GraphPanel& panel) { return *panel.frame_spin_; }
     static QCheckBox& difference_box(GraphPanel& panel) { return *panel.difference_box_; }
+    static QSpinBox& range_start_spin(GraphPanel& panel) { return *panel.range_start_spin_; }
     static QSpinBox& range_end_spin(GraphPanel& panel) { return *panel.range_end_spin_; }
     static QPushButton& clear_range_button(GraphPanel& panel) { return *panel.clear_range_button_; }
     static QString stats_hint(const GraphPanel& panel) { return panel.stats_hint_->text(); }
@@ -580,10 +581,11 @@ std::shared_ptr<const ComparisonResult> range_run(const std::string& name, const
 }
 
 TEST_F(GraphPanelTest, AFrameRangesStatisticsAndShading) {
-    // Issue #17: frames 7 to 3 (either way round) typed into the boxes give
-    // their statistics in the table and are shaded on the graph; a run with
-    // none of them has none, and CVVDP no score for part of a video. Clear
-    // range brings back the whole videos' table exactly.
+    // Issue #17: frames 7 to 3 (either way round) typed into the range's own
+    // boxes give their statistics in the table and are shaded on the graph;
+    // one end alone is no range yet, and Go to frame leaves the range alone.
+    // A run with none of the frames has none, and CVVDP no score for part of
+    // a video. Clear range brings back the whole videos' table exactly.
     VideoColors colors;
     GraphPanel panel(&colors);
     const std::vector<float> a_vmaf{80, 82, 84, 86, 88, 90, 70, 60, 95, 99};
@@ -592,9 +594,14 @@ TEST_F(GraphPanelTest, AFrameRangesStatisticsAndShading) {
     MetricPage& vmaf = page(panel, "vmaf");
     const std::vector<QStringList> whole = cell_texts(panel);
 
-    frame_spin(panel).setValue(7);
-    range_end_spin(panel).setValue(3);
+    range_start_spin(panel).setValue(7);
+    EXPECT_FALSE(vmaf.chart().highlight());
+    EXPECT_EQ(cell_texts(panel), whole);
     EXPECT_TRUE(clear_range_button(panel).isEnabled());
+    range_end_spin(panel).setValue(3);
+    EXPECT_TRUE(stats_hint(panel).contains("frames 3 to 7")) << stats_hint(panel).toStdString();
+    frame_spin(panel).setValue(1);
+    EXPECT_EQ(range_start_spin(panel).value(), 7);
     EXPECT_TRUE(stats_hint(panel).contains("frames 3 to 7")) << stats_hint(panel).toStdString();
 
     const MetricDefinition& spec = *find_metric("vmaf");
@@ -625,6 +632,7 @@ TEST_F(GraphPanelTest, AFrameRangesStatisticsAndShading) {
     clear_range_button(panel).click();
     EXPECT_FALSE(vmaf.chart().highlight());
     EXPECT_FALSE(clear_range_button(panel).isEnabled());
+    EXPECT_EQ(range_start_spin(panel).value(), range_start_spin(panel).minimum());
     EXPECT_EQ(range_end_spin(panel).value(), range_end_spin(panel).minimum());
     EXPECT_EQ(cell_texts(panel), whole);
 }
@@ -637,7 +645,7 @@ TEST_F(GraphPanelTest, AFrameRangeOnCvvdpsPageIsTheSecondsItIsIn) {
     GraphPanel panel(&colors);
     panel.add_run({range_run("a.mkv", {80, 82, 84, 86, 88, 90, 70, 60, 95, 99}), "a", {}, true});
     MetricPage& cvvdp = page(panel, "cvvdp");
-    frame_spin(panel).setValue(3);
+    range_start_spin(panel).setValue(3);
     range_end_spin(panel).setValue(7);
     const MetricDefinition& spec = *find_metric("cvvdp");
     const ScoreStats seconds =
@@ -654,9 +662,9 @@ TEST_F(GraphPanelTest, AFrameRangeOnCvvdpsPageIsTheSecondsItIsIn) {
 }
 
 TEST_F(GraphPanelTest, AShiftDragAcrossTheGraphSelectsFrames) {
-    // Shift+drag from frame 2 to frame 6 fills both boxes, shades them and
-    // puts the cursor on frame 2; a plain drag pans and leaves the range as
-    // it is.
+    // Shift+drag from frame 2 to frame 6 fills the range's two boxes and
+    // shades the frames, leaving Go to frame as it was; a plain drag pans and
+    // leaves the range as it is.
     VideoColors colors;
     GraphPanel panel(&colors);
     panel.add_run({range_run("a.mkv", {80, 82, 84, 86, 88, 90, 70, 60, 95, 99}), "a", {}, true});
@@ -675,10 +683,10 @@ TEST_F(GraphPanelTest, AShiftDragAcrossTheGraphSelectsFrames) {
         QCoreApplication::sendEvent(&chart, &release);
     };
     press_move_release(2 / 30.0, 6 / 30.0, Qt::ShiftModifier);
-    EXPECT_EQ(frame_spin(panel).value(), 2);
+    EXPECT_EQ(range_start_spin(panel).value(), 2);
     EXPECT_EQ(range_end_spin(panel).value(), 6);
+    EXPECT_EQ(frame_spin(panel).value(), 0);
     EXPECT_TRUE(stats_hint(panel).contains("frames 2 to 6")) << stats_hint(panel).toStdString();
-    EXPECT_TRUE(readout(vmaf).startsWith("Frame 2\n")) << readout(vmaf).toStdString();  // the cursor follows the box
     ASSERT_TRUE(chart.highlight());
     EXPECT_NEAR(chart.highlight()->first, 1.5 / 30, 1e-9);
 
