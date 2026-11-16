@@ -631,6 +631,37 @@ TEST(Decisions, AnEncodeCutToTheSourcesBarsAndScaledShowsTheSourcesBox) {
               std::optional(CropBox{720, 404, 0, 0}));
 }
 
+// Issue #20: a thin dark edge of the source, cut 2 columns wide, that an encode cut to the bars kept (1920x816
+// beside a 1918x816 box): both compared at the source's box column for column, never 1918 columns scaled to 1920.
+TEST(Decisions, AnEncodeThatKeptTheSourcesThinEdgeIsComparedColumnForColumn) {
+    const auto frame = [](int width, int height) {
+        VideoInfo info;
+        info.width = width;
+        info.height = height;
+        return info;
+    };
+    const CropBox whole_test{1920, 816, 0, 0};
+    const auto [source_box, test_box] =
+        common_picture(frame(1920, 1080), frame(1920, 816), CropBox{1918, 816, 0, 132}, whole_test);
+    EXPECT_EQ(source_box, (CropBox{1918, 816, 0, 132}));
+    EXPECT_EQ(test_box, (CropBox{1918, 816, 0, 0}));
+    // The edge at the left, and a thin edge on both sides of a frame as wide as the test.
+    EXPECT_EQ(common_picture(frame(1920, 1080), frame(1920, 816), CropBox{1918, 816, 2, 132}, whole_test).second,
+              std::optional(CropBox{1918, 816, 2, 0}));
+    EXPECT_EQ(common_picture(frame(1920, 1080), frame(1920, 816), CropBox{1916, 816, 2, 132}, whole_test).second,
+              std::optional(CropBox{1916, 816, 2, 0}));
+    // Pillars at the left and a thin edge at the right: the box at no edge of the frame on that axis is not
+    // grown, as it could grow either way.
+    const CropBox pillar_box{1638, 816, 140, 132};
+    const auto [pillar_source, pillar_test] =
+        common_picture(frame(1920, 1080), frame(1640, 816), pillar_box, CropBox{1640, 816, 0, 0});
+    EXPECT_EQ(pillar_source, std::optional(pillar_box));
+    EXPECT_EQ(pillar_test, std::optional(CropBox{1640, 816, 0, 0}));
+    // A thick edge (4 columns) is not one dark line rounded up: not grown.
+    EXPECT_EQ(common_picture(frame(1920, 1080), frame(1920, 816), CropBox{1916, 816, 0, 132}, whole_test).second,
+              std::optional(whole_test));
+}
+
 // Sizes not one fraction apart (854x480 against 1920x1080): the test video's picture rounded to even rows, and
 // the source's box those rows scaled to its size, so the two show the same rows. Each rounded on its own, the
 // source's box was 8 rows taller than the test's showed, and the pair was refused for its shapes.

@@ -94,7 +94,8 @@ std::pair<CropBox, CropBox> detect_pair(const std::string& ffmpeg, const VideoIn
 // box a row from the source's): the boxes' overlap, in each video's own
 // pixels (as scaled_to, where set), on even samples. The test video's frame
 // shows the source's whole frame, or the source's box where the test was cut
-// to its bars when it was made (then scaled or not). Where the sizes are one exact fraction apart
+// to its bars when it was made (then scaled or not; unscaled, with the thin
+// dark edges the box cut and the encode kept). Where the sizes are one exact fraction apart
 // (3840x2160 and 2560x1440), the source's box is the test video's scaled by it, so that the scaled
 // test picture lines up with the source's row for row; otherwise to within a sample of the larger
 // video. Boxes that agree, or that are not the same picture, are kept.

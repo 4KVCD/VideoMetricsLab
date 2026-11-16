@@ -1165,6 +1165,50 @@ double shape_error(double width, double height, int test_width, int test_height)
     return std::abs(test_width * height - test_height * width) / (width + height);
 }
 
+// The source's box grown by the thin edges an encode cut to the bars kept,
+// where the test's frame is that box at the same size (issue #20: a 1-column
+// dark edge at the source's right, found on most previews and so cut 2
+// columns wide, which the encoder did not cut: a 1920x816 encode beside a
+// 1918x816 box). On each axis the test's frame is the box's size, or larger
+// by at most 2 samples on each side the box grows by, placed one way only:
+// the test as wide as the source's frame, or the box at one edge of it so
+// that it grows to the other. Nothing where no axis grows, or one could grow
+// either way (a box between bars on both sides).
+std::optional<CropBox> box_grown_to_the_test(int source_width, int source_height, int test_width, int test_height,
+                                             const CropBox& source_box) {
+    constexpr int thin_edge = 2;  // a 1-sample dark edge, rounded up to even
+    struct Span {
+        int start, size;
+    };
+    // One axis: the box's span grown to `test_size`, or nothing.
+    const auto grown = [](int frame_size, int test_size, int start, int size) -> std::optional<Span> {
+        if (test_size == size) {
+            return Span{start, size};
+        }
+        if (test_size < size || test_size > frame_size) {
+            return std::nullopt;
+        }
+        const int end = start + size;
+        int new_start = -1;
+        if (test_size == frame_size || start == 0) {
+            new_start = 0;
+        } else if (end == frame_size) {
+            new_start = frame_size - test_size;
+        }
+        if (new_start < 0 || start - new_start > thin_edge || new_start + test_size - end > thin_edge) {
+            return std::nullopt;
+        }
+        return Span{new_start, test_size};
+    };
+    const std::optional<Span> across = grown(source_width, test_width, source_box.x, source_box.w);
+    const std::optional<Span> down = grown(source_height, test_height, source_box.y, source_box.h);
+    const bool grows = across && down && (across->size != source_box.w || down->size != source_box.h);
+    if (!grows || (test_width == source_width && test_height == source_height)) {
+        return std::nullopt;
+    }
+    return CropBox{across->size, down->size, across->start, down->start};
+}
+
 // The source's box, when the test video's frame shows it whole: an encode
 // cut to the source's bars when it was made, then scaled or not (3840x2160
 // with 2-row bars to 1920x1078; 1920x800 out of a letterboxed 1920x1080).
@@ -1179,6 +1223,10 @@ std::optional<CropBox> source_box_the_test_shows(int source_width, int source_he
                                                  int test_height, const CropBox& source_box) {
     if (source_box.is_noop(source_width, source_height) || source_box.w <= 0 || source_box.h <= 0) {
         return std::nullopt;
+    }
+    if (const std::optional<CropBox> grown =
+            box_grown_to_the_test(source_width, source_height, test_width, test_height, source_box)) {
+        return grown;
     }
     constexpr double whole_frame_rounding = 1.0;  // a whole frame scaled, its size rounded to even samples
     constexpr double box_rounding = 2.0;          // the box scaled and rounded so, with a sample to spare
