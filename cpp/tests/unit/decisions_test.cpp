@@ -512,6 +512,8 @@ TEST(Decisions, ACropEnteredByHandIsCutAsEntered) {
     const std::optional<CropBox> box = box_from_edges({2, 2, 0, 0}, odd, "the source");
     EXPECT_EQ(box, (CropBox{852, 476, 0, 2}));
     EXPECT_EQ(box_from_edges(edges_of_box(*box, odd), odd, "the source"), box);
+    // Nothing entered still leaves out its odd lines, as every other crop entered does
+    EXPECT_EQ(box_from_edges({}, odd, "the source"), (CropBox{852, 480, 0, 0}));
     // Nothing is detected (no FFmpeg is run): the test video, given no crop, is compared whole
     const auto [source_crop, test_crop] = crops_for(CropChoice(CropMode::manual, {22, 22, 0, 0}), "no ffmpeg", hd, hd,
                                                     CancelToken(), std::nullopt, std::nullopt, "bicubic");

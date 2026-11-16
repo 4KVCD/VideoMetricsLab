@@ -1512,8 +1512,14 @@ std::optional<CropBox> test_crop_beside_source_box(const CropBox& source_box, co
 }
 
 std::optional<CropBox> box_from_edges(const CropEdges& edges, const VideoInfo& video, std::string_view which) {
+    const auto [width, height] = video.frame_size();
+    constexpr int smallest_side = 16;
     if (edges.none()) {
-        return std::nullopt;
+        // Nothing entered is cut but an odd-sized frame's odd line, which every other crop entered, and every
+        // detected box, leaves out too (a frame too small to cut, or of an unknown size, is left whole)
+        const CropBox even{width & ~1, height & ~1, 0, 0};
+        const bool cuttable = even.w >= smallest_side && even.h >= smallest_side;
+        return cuttable && !even.is_noop(width, height) ? std::optional(even) : std::nullopt;
     }
     const std::string entered = crop_edges_text(edges);
     for (const int lines : {edges.top, edges.bottom, edges.left, edges.right}) {
@@ -1522,10 +1528,8 @@ std::optional<CropBox> box_from_edges(const CropEdges& edges, const VideoInfo& v
                                  ") must be even numbers of lines: 4:2:0 video keeps its colour in pairs of lines.");
         }
     }
-    const auto [width, height] = video.frame_size();
     const int w = (width - edges.left - edges.right) & ~1;
     const int h = (height - edges.top - edges.bottom) & ~1;
-    constexpr int smallest_side = 16;
     if (w < smallest_side || h < smallest_side) {
         throw CropEntryError("The crop entered for " + std::string(which) + " (top:bottom:left:right " + entered +
                              ") leaves less than 16x16 of its " + std::to_string(width) + "x" +

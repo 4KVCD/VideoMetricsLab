@@ -64,7 +64,10 @@ bool current_format(const nlohmann::json& metadata);
 // that cuts something from either video, other than the black-bar answers
 // kept under the current rule (kept_crop_answer) would cut them now, or with
 // no such answers kept. Its scores are then of other pictures than a run
-// cuts, or may be. No other black-bar mode detects bars.
+// cuts, or may be. No other black-bar mode detects bars. Also whether a
+// Manual comparison cut other crops than those entered give now (before
+// v2.5.1, 0:0:0:0 kept an odd-sized frame's odd line); none of its bars are
+// to be found (bars_to_find), so its scores are calculated again.
 bool cut_by_an_older_rule(const nlohmann::json& context);
 
 // For a context cut_by_an_older_rule, the videos whose black bars must be found

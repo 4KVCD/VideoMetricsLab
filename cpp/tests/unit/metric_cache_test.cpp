@@ -748,6 +748,39 @@ TEST(MetricCache, ScoresOfBarsCutByAnOlderRuleAreCalculatedAgain) {
     EXPECT_EQ(loaded(), 1U);
 }
 
+// Manual scores saved before a video given no crop (0:0:0:0) had an odd-sized
+// frame's odd line cut (v2.5.1) are calculated again, whatever black-bar rule
+// they were saved under; those of even-sized frames, and those cut as now, are read.
+TEST(MetricCache, ManualScoresThatKeptAnOddLineAreCalculatedAgain) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    AnalysisRequest request = request_from(stored);
+    request.recipe.crop_mode = CropMode::manual;  // 0:0:0:0 for both videos
+    ComparisonResult result = test::result_from(stored.at("result"));
+    ASSERT_FALSE(result.source_info.scaled_to || result.distorted_info.scaled_to);
+    const auto store_and_load = [&](const std::optional<CropBox>& source_crop,
+                                    const std::optional<CropBox>& test_crop) {
+        result.source_crop = source_crop;
+        result.distorted_crop = test_crop;
+        store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe, result, "t",
+                     request.metrics);
+        const auto found = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                       request.metrics, request.perceptual_backends);
+        return found ? found->first.metric_results.keys().size() : 0;
+    };
+    const std::size_t all = request.metrics.size();
+    ASSERT_EQ(store_and_load(std::nullopt, std::nullopt), all);  // even-sized: nothing to cut
+    result.source_info.height |= 1;                               // an odd number of rows
+    result.distorted_info.width |= 1;                             // and of columns
+    const CropBox source_box{result.source_info.width, result.source_info.height - 1, 0, 0};
+    const CropBox test_box{result.distorted_info.width - 1, result.distorted_info.height, 0, 0};
+    EXPECT_EQ(store_and_load(std::nullopt, test_box), 0U);
+    EXPECT_EQ(store_and_load(source_box, std::nullopt), 0U);
+    EXPECT_EQ(store_and_load(source_box, test_box), all);
+}
+
 // Scores of bars an older rule found are read where the bars the rule keeps
 // now give the same boxes (bars of an even number of lines): the lookup finds
 // each video's bars once (find_black_bars_of_older_scores), and a save beside

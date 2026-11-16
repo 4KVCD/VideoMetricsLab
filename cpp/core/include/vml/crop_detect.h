@@ -119,9 +119,10 @@ SavedBoxesNow rule_2_boxes_now(const VideoInfo& source, const VideoInfo& test, c
 std::optional<CropBox> test_crop_beside_source_box(const CropBox& source_box, const VideoInfo& test);
 
 // The box a crop entered by hand (`edges`) leaves of `video`'s frame (as scaled_to, where set): none where nothing
-// is cut. Its size is rounded down to even, as a detected box's is. Throws CropEntryError, naming the video as
-// `which` ("the source"), where an edge is negative or odd (4:2:0's colour comes in pairs of lines, and FFmpeg's
-// crop would move an odd one silently) or less than 16x16 of the picture is left.
+// is cut. Its size is rounded down to even, as a detected box's is, so 0:0:0:0 still cuts an odd-sized frame's odd
+// line. Throws CropEntryError, naming the video as `which` ("the source"), where an edge is negative or odd (4:2:0's
+// colour comes in pairs of lines, and FFmpeg's crop would move an odd one silently) or less than 16x16 of the
+// picture is left.
 std::optional<CropBox> box_from_edges(const CropEdges& edges, const VideoInfo& video, std::string_view which);
 
 // What `box` cuts from each edge of `video`'s frame, each rounded down to even: the crop box_from_edges gives

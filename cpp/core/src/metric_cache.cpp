@@ -1106,10 +1106,46 @@ bool same_boxes_now(const nlohmann::json& context, CropMode mode) {
                         context, resolution_test);
 }
 
+// A saved crop, none where it cuts nothing from `video`'s frame: a run cuts a box of the whole frame as none.
+std::optional<CropBox> crop_that_cuts(const std::optional<CropBox>& crop, const VideoInfo& video) {
+    const auto [width, height] = video.frame_size();
+    return crop && crop->is_noop(width, height) ? std::nullopt : crop;
+}
+
+// Whether a Manual comparison's saved crops are other than the crops entered (its recipe's) give now
+// (box_from_edges): before v2.5.1, a video given 0:0:0:0 kept an odd-sized frame's odd line, which a run now cuts
+// as every other crop entered does. Throws on a damaged context.
+bool manual_crops_cut_otherwise_now(const nlohmann::json& context) {
+    const nlohmann::json recipe = context.value("recipe", nlohmann::json::object());
+    if (recipe.value("crop_mode", std::string()) != crop_mode_text(CropMode::manual)) {
+        return false;
+    }
+    const auto entered = [&recipe](const char* key) {
+        const nlohmann::json& lines = recipe.at(key);
+        return CropEdges{lines.at("top").get<int>(), lines.at("bottom").get<int>(), lines.at("left").get<int>(),
+                         lines.at("right").get<int>()};
+    };
+    const auto [saved_source, saved_test] = saved_crops(context);
+    const VideoInfo source = video_info_from_dict(context.at("source_info"));
+    const std::optional<CropBox> source_now = box_from_edges(entered("manual_source_crop"), source, "the source");
+    if (source_now != crop_that_cuts(saved_source, source)) {
+        return true;
+    }
+    if (python_truthy(context.value("resample_target", nlohmann::json()))) {
+        return false;  // a resolution test cuts both its sides by the source's crop
+    }
+    const VideoInfo test = video_info_from_dict(context.at("distorted_info"));
+    return box_from_edges(entered("manual_distorted_crop"), test, "the test video") !=
+           crop_that_cuts(saved_test, test);
+}
+
 }  // namespace
 
 bool cut_by_an_older_rule(const nlohmann::json& context) {
     try {
+        if (manual_crops_cut_otherwise_now(context)) {
+            return true;  // whatever its black_bars_rule: Manual's crops are not part of it
+        }
         const std::optional<CropMode> mode = mode_cut_by_an_older_rule(context);
         if (!mode) {
             return false;

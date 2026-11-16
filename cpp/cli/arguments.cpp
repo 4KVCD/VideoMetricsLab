@@ -148,7 +148,8 @@ options:
                         bottom, left and right (even numbers, HandBrake's
                         order) in place of finding its black bars; with it
                         or --test-crop, no bars are detected and a video
-                        given no crop is compared at its full frame
+                        given no crop is compared at its full frame (less
+                        an odd-sized frame's odd line)
   --test-crop T:B:L:R   the same for the test videos
   --scale-to {test,reference}
                         which video's size the other is scaled to when they
