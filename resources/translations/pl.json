@@ -896,7 +896,8 @@
   "Statistics of frames {first} to {last}.": "Statystyki klatek {first}–{last}.",
   "{label}'s statistics are of the whole seconds these frames are in.": "Statystyki {label} dotyczą pełnych sekund, w których leżą te klatki.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} ocenia tylko całe wideo: nie ma wyniku dla jego części.",
-  " — frames {first} to {last}": " — klatki {first}–{last}"
+  " — frames {first} to {last}": " — klatki {first}–{last}",
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Gdy VMAF działa na GPU, PSNR, SSIM i XPSNR są zwykle obliczane w tym samym przebiegu, a GPU przetwarza jedno wideo naraz: to pole ich wtedy nie dotyczy."
  },
  "plurals": {
   "about {count} day": [

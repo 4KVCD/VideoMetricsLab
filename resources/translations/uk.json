@@ -896,7 +896,8 @@
   "Statistics of frames {first} to {last}.": "Статистика кадрів {first}–{last}.",
   "{label}'s statistics are of the whole seconds these frames are in.": "Статистика {label} — за цілі секунди, у які потрапляють ці кадри.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} оцінює лише цілі відео: для частини відео оцінки немає.",
-  " — frames {first} to {last}": " — кадри {first}–{last}"
+  " — frames {first} to {last}": " — кадри {first}–{last}",
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Коли VMAF обчислюється на GPU, PSNR, SSIM і XPSNR зазвичай рахуються в тому ж проході, а GPU обробляє відео по одному: тоді цей прапорець до них не застосовується."
  },
  "plurals": {
   "about {count} day": [

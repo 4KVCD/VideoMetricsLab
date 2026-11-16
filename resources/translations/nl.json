@@ -896,7 +896,8 @@
   "Statistics of frames {first} to {last}.": "Statistieken van frames {first} tot en met {last}.",
   "{label}'s statistics are of the whole seconds these frames are in.": "De statistieken van {label} gaan over de hele seconden waarin deze frames vallen.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} beoordeelt alleen hele video's: het heeft geen score voor een deel ervan.",
-  " — frames {first} to {last}": " — frames {first} t/m {last}"
+  " — frames {first} to {last}": " — frames {first} t/m {last}",
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Met VMAF op de GPU worden PSNR, SSIM en XPSNR meestal in dezelfde doorgang berekend en verwerkt de GPU één video tegelijk: dit vakje geldt daar dan niet voor."
  },
  "plurals": {
   "about {count} day": [

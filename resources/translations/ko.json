@@ -896,7 +896,8 @@
   "Statistics of frames {first} to {last}.": "프레임 {first}~{last}의 통계입니다.",
   "{label}'s statistics are of the whole seconds these frames are in.": "{label} 통계는 이 프레임들이 속한 초 전체의 통계입니다.",
   "{label} scores whole videos only: it has no score for part of one.": "{label}은(는) 영상 전체만 평가합니다. 영상 일부에 대한 점수는 없습니다.",
-  " — frames {first} to {last}": " — 프레임 {first}~{last}"
+  " — frames {first} to {last}": " — 프레임 {first}~{last}",
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "VMAF를 GPU에서 계산하면 PSNR, SSIM, XPSNR은 보통 같은 패스에서 계산되고 GPU는 한 번에 동영상 하나씩 처리합니다. 이때 이 확인란은 이들에게 적용되지 않습니다."
  },
  "plurals": {
   "about {count} day": [

@@ -896,7 +896,8 @@
   "Statistics of frames {first} to {last}.": "フレーム {first}～{last} の統計。",
   "{label}'s statistics are of the whole seconds these frames are in.": "{label} の統計は、これらのフレームを含む秒全体のものです。",
   "{label} scores whole videos only: it has no score for part of one.": "{label} は動画全体のみを評価します。動画の一部のスコアはありません。",
-  " — frames {first} to {last}": " — フレーム {first}～{last}"
+  " — frames {first} to {last}": " — フレーム {first}～{last}",
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "VMAF を GPU で計算する場合、PSNR、SSIM、XPSNR は通常その同じ処理で計算され、GPU は動画を 1 本ずつ処理します。その場合、このチェックボックスはそれらには適用されません。"
  },
  "plurals": {
   "about {count} day": [

@@ -1190,6 +1190,11 @@ void Scheduler::run() {
             queues_[run->pool_of(task)].emplace_back(run.get(), task);
         }
     }
+    if (parallel_jobs_.load() > 1 && queues_[cpu_pool].empty() && !queues_[gpu_pool].empty() && runs_.size() > 1) {
+        // Issue #21: PSNR, SSIM and XPSNR in VMAF's GPU pass, say (plan_tasks).
+        logger.info("Every task of this run is on the GPU, one video at a time: CPU metrics for several videos at "
+                    "once do not apply");
+    }
     // The GPU has one lane. The last lane runs on this thread.
     const int cpu_lanes = std::min(max_parallel_jobs, static_cast<int>(queues_[cpu_pool].size()));
     lane_count_ = std::max(1, cpu_lanes);

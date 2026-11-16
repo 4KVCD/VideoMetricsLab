@@ -896,7 +896,8 @@
   "Statistics of frames {first} to {last}.": "Statistik bingkai {first} sampai {last}.",
   "{label}'s statistics are of the whole seconds these frames are in.": "Statistik {label} berasal dari detik utuh tempat bingkai-bingkai ini berada.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} hanya menilai video utuh: tidak ada skor untuk sebagian video.",
-  " — frames {first} to {last}": " — bingkai {first} sampai {last}"
+  " — frames {first} to {last}": " — bingkai {first} sampai {last}",
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Jika VMAF berjalan di GPU, PSNR, SSIM, dan XPSNR biasanya dihitung dalam proses yang sama, dan GPU mengerjakan satu video dalam satu waktu: kotak ini lalu tidak berlaku untuk metrik tersebut."
  },
  "plurals": {
   "about {count} day": [

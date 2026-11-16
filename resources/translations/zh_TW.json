@@ -896,7 +896,8 @@
   "Statistics of frames {first} to {last}.": "第 {first} 至 {last} 影格的統計。",
   "{label}'s statistics are of the whole seconds these frames are in.": "{label} 的統計取自這些影格所在的完整秒數。",
   "{label} scores whole videos only: it has no score for part of one.": "{label} 只為整部影片評分：影片的一部分沒有分數。",
-  " — frames {first} to {last}": " — 第 {first} 至 {last} 影格"
+  " — frames {first} to {last}": " — 第 {first} 至 {last} 影格",
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "VMAF 在 GPU 上計算時，PSNR、SSIM 和 XPSNR 通常會在同一輪中計算，且 GPU 一次只處理一部影片：此時此選項對它們不起作用。"
  },
  "plurals": {
   "about {count} day": [

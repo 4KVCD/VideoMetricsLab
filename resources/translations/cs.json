@@ -896,7 +896,8 @@
   "Statistics of frames {first} to {last}.": "Statistiky snímků {first} až {last}.",
   "{label}'s statistics are of the whole seconds these frames are in.": "Statistiky {label} jsou z celých sekund, do kterých tyto snímky spadají.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} hodnotí jen celá videa: pro jejich část skóre nemá.",
-  " — frames {first} to {last}": " — snímky {first} až {last}"
+  " — frames {first} to {last}": " — snímky {first} až {last}",
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Když VMAF běží na GPU, PSNR, SSIM a XPSNR se obvykle počítají v jeho průchodu a GPU zpracovává jedno video po druhém: na ně se pak tato volba nevztahuje."
  },
  "plurals": {
   "about {count} day": [

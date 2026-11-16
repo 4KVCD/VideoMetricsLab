@@ -896,7 +896,8 @@
   "Statistics of frames {first} to {last}.": "{first}–{last}. karelerin istatistikleri.",
   "{label}'s statistics are of the whole seconds these frames are in.": "{label} istatistikleri, bu karelerin düştüğü tam saniyelere aittir.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} yalnızca videonun tamamını puanlar: bir bölümü için puanı yoktur.",
-  " — frames {first} to {last}": " — {first}–{last}. kareler"
+  " — frames {first} to {last}": " — {first}–{last}. kareler",
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "VMAF GPU'da çalışırken PSNR, SSIM ve XPSNR genellikle aynı geçişte hesaplanır ve GPU videoları birer birer işler: bu durumda bu kutu onlar için geçerli değildir."
  },
  "plurals": {
   "about {count} day": [

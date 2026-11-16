@@ -896,7 +896,8 @@
   "Statistics of frames {first} to {last}.": "Statisztikák: {first}–{last}. képkocka.",
   "{label}'s statistics are of the whole seconds these frames are in.": "A(z) {label} statisztikái azokra a teljes másodpercekre vonatkoznak, amelyekbe ezek a képkockák esnek.",
   "{label} scores whole videos only: it has no score for part of one.": "A(z) {label} csak teljes videókat értékel: egy részükre nincs pontszáma.",
-  " — frames {first} to {last}": " — {first}–{last}. képkocka"
+  " — frames {first} to {last}": " — {first}–{last}. képkocka",
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Ha a VMAF a GPU-n fut, a PSNR, az SSIM és az XPSNR általában az ő menetében számolódik, a GPU pedig egyszerre egy videót dolgoz fel: ilyenkor ez a jelölőnégyzet rájuk nem vonatkozik."
  },
  "plurals": {
   "about {count} day": [

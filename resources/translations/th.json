@@ -896,7 +896,8 @@
   "Statistics of frames {first} to {last}.": "สถิติของเฟรม {first} ถึง {last}",
   "{label}'s statistics are of the whole seconds these frames are in.": "สถิติของ {label} มาจากวินาทีเต็มที่เฟรมเหล่านี้อยู่",
   "{label} scores whole videos only: it has no score for part of one.": "{label} ให้คะแนนเฉพาะทั้งวิดีโอ: ไม่มีคะแนนสำหรับบางส่วนของวิดีโอ",
-  " — frames {first} to {last}": " — เฟรม {first} ถึง {last}"
+  " — frames {first} to {last}": " — เฟรม {first} ถึง {last}",
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "เมื่อคำนวณ VMAF บน GPU ค่า PSNR, SSIM และ XPSNR มักคำนวณในรอบเดียวกัน และ GPU จะประมวลผลทีละวิดีโอ: ในกรณีนั้นช่องนี้จึงไม่มีผลกับค่าเหล่านี้"
  },
  "plurals": {
   "about {count} day": [

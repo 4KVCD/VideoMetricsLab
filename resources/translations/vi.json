@@ -896,7 +896,8 @@
   "Statistics of frames {first} to {last}.": "Thống kê của khung {first} đến {last}.",
   "{label}'s statistics are of the whole seconds these frames are in.": "Thống kê của {label} là của các giây trọn vẹn chứa các khung này.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} chỉ chấm điểm toàn bộ video: không có điểm cho một phần video.",
-  " — frames {first} to {last}": " — khung {first} đến {last}"
+  " — frames {first} to {last}": " — khung {first} đến {last}",
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Khi VMAF chạy trên GPU, PSNR, SSIM và XPSNR thường được tính trong cùng lượt đó, và GPU xử lý từng video một: khi đó ô này không áp dụng cho chúng."
  },
  "plurals": {
   "about {count} day": [

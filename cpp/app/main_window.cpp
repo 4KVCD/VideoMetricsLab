@@ -781,7 +781,10 @@ QWidget* MainWindow::build_run_panel() {
         "it. libvmaf threads left on Auto are shared: each video gets half the cores.\n\nCan be changed while a run "
         "is in progress: ticking it starts another video straight away, unticking it lets the running ones finish "
         "first.\n\nOnly affects how fast results arrive, never what they are.",
-        {{"cores", cores}}));
+        {{"cores", cores}}) + "\n\n" +
+        // Issue #21: with VMAF on the GPU, PSNR, SSIM and XPSNR share its pass, in the GPU's one lane (plan_tasks).
+        app::tr("With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one "
+                "video at a time: this box then does not apply to them."));
     connect(parallel_jobs_check_, &QCheckBox::toggled, this, [this](bool on) { on_parallel_jobs_changed(on); });
     run_row->addWidget(parallel_jobs_check_);
     run_row->addStretch(1);

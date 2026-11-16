@@ -896,7 +896,8 @@
   "Statistics of frames {first} to {last}.": "إحصاءات الإطارات من {first} إلى {last}.",
   "{label}'s statistics are of the whole seconds these frames are in.": "إحصاءات {label} مأخوذة من الثواني الكاملة التي تقع فيها هذه الإطارات.",
   "{label} scores whole videos only: it has no score for part of one.": "يقيّم {label} الفيديو كاملًا فقط: لا توجد له درجة لجزء من الفيديو.",
-  " — frames {first} to {last}": " — الإطارات من {first} إلى {last}"
+  " — frames {first} to {last}": " — الإطارات من {first} إلى {last}",
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "عند حساب VMAF على GPU، تُحسب PSNR وSSIM وXPSNR عادةً في مروره نفسه، ويعالج GPU فيديو واحدًا في كل مرة: عندها لا ينطبق هذا الخيار عليها."
  },
  "plurals": {
   "about {count} day": [
