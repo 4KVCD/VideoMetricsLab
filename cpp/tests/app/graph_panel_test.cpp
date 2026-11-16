@@ -512,8 +512,14 @@ TEST_F(GraphPanelTest, TheExportedPngIsTheGraphWithItsKeyedTable) {
     panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(10, 95.0F))), "encode-a", {}, true});
     const std::filesystem::path out = folder / "graph.png";
     const QString out_text = QString::fromStdString(platform::path_text(out));
-    panel.dialogs.save_file = [&out_text](const QString&, const QString&, const QString&) { return out_text; };
+    QString suggested;
+    panel.dialogs.save_file = [&out_text, &suggested](const QString&, const QString& name, const QString&) {
+        suggested = name;
+        return out_text;
+    };
     export_png(panel);
+    // Named after the one line's test video, and its metric.
+    EXPECT_EQ(suggested.toStdString(), "encode-a_vmaf.png");
     const QImage image(out_text);
     ASSERT_FALSE(image.isNull());
     // The square: a block of the line's colour, which no line is thick
@@ -537,6 +543,11 @@ TEST_F(GraphPanelTest, TheExportedPngIsTheGraphWithItsKeyedTable) {
         }
     }
     EXPECT_TRUE(keyed) << "no square of the line's colour in the image";
+
+    // With the lines of two test videos: after their reference.
+    panel.add_run({shared(vmaf_result("b.mkv", std::vector<float>(10, 90.0F))), "encode-b", {}, true});
+    export_png(panel);
+    EXPECT_EQ(suggested.toStdString(), "source_vmaf.png");
 
     // A file that cannot be written says so.
     const QString unwritable = QString::fromStdString(platform::path_text(folder / "no such folder" / "graph.png"));

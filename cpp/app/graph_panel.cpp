@@ -1988,7 +1988,21 @@ void GraphPanel::on_add_saved_run() {
 }
 
 void GraphPanel::on_export_png() {
-    const QString suggested = QString::fromStdString(std::string(current_metric().key)) + "_comparison.png";
+    // Named after the test video whose line it shows (its label, as the line
+    // is named), or after the reference when the lines are of several.
+    const std::string key(current_metric().key);
+    const SeriesEntry* first = nullptr;
+    int lines = 0;
+    for (const auto& [id, entry] : entries_) {  // in the order shown
+        if (entry.visible && entry.result->has_metric(key)) {
+            first = first ? first : &entry;
+            ++lines;
+        }
+    }
+    const QString stem = !first      ? QStringLiteral("comparison")
+                         : lines == 1 ? first->label
+                                      : text_of(first->result->source.stem());
+    const QString suggested = suggested_file_name(stem + "_" + QString::fromStdString(key), ".png");
     const QString path = dialogs.save_file(app::tr("Export graph"), suggested, app::tr("PNG image (*.png)"));
     if (!path.isEmpty() && !render_export_image().save(path)) {
         dialogs.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));

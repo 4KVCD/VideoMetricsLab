@@ -442,6 +442,11 @@ void BitratePanel::add_and_analyze(const std::vector<VideoInfo>& infos) {
         by_path.insert_or_assign(info.path, info);
     }
     add_files(paths, by_path, true);
+    if (!infos.empty()) {
+        if (BitrateEntry* reference = entry_of_key(path_key(infos.front().path))) {
+            reference->reference = true;
+        }
+    }
 }
 
 std::vector<QThread*> BitratePanel::live_workers() const {
@@ -1195,8 +1200,28 @@ void BitratePanel::on_export_png() {
         dialogs.inform(app::tr("No bitrate data"), app::tr("Analyze at least one video first."));
         return;
     }
-    const QString path =
-        dialogs.save_file(app::tr("Export bitrate plot"), QStringLiteral("bitrate_plot.png"), app::tr("PNG image (*.png)"));
+    // Named as Metric Graphs' export: after the one test video shown, or
+    // else after the reference (the first file shown when none is one).
+    const BitrateEntry* first = nullptr;
+    const BitrateEntry* reference = nullptr;
+    const BitrateEntry* test = nullptr;
+    int tests = 0;
+    for (const auto& [key, entry] : entries_) {
+        if (!entry.enabled || !entry.data) {
+            continue;
+        }
+        first = first ? first : &entry;
+        if (entry.reference) {
+            reference = reference ? reference : &entry;
+        } else {
+            test = test ? test : &entry;
+            ++tests;
+        }
+    }
+    const BitrateEntry* named = tests == 1 ? test : reference ? reference : first;
+    const QString suggested =
+        named ? suggested_file_name(text_of(named->path.stem()) + "_bitrate", ".png") : QStringLiteral("bitrate_plot.png");
+    const QString path = dialogs.save_file(app::tr("Export bitrate plot"), suggested, app::tr("PNG image (*.png)"));
     if (!path.isEmpty() && !chart->render_to_pixmap().save(path)) {
         dialogs.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
     }

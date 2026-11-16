@@ -28,6 +28,22 @@ inline QString text_of(const std::filesystem::path& path) { return QString::from
 
 inline QString name_of(const std::filesystem::path& path) { return text_of(path.filename()); }
 
+// A file name for a Save dialog to suggest: `stem` and `suffix`, with what
+// Windows refuses in a name (<>:"/\|?*, control characters, a trailing dot
+// or space in the stem) made "_" or dropped. A label a saved run was given
+// may hold any of them; a video's own name keeps its spaces and brackets.
+inline QString suggested_file_name(QString stem, const QString& suffix) {
+    for (QChar& c : stem) {
+        if (c.unicode() < 0x20 || QStringView(u"<>:\"/\\|?*").contains(c)) {
+            c = u'_';
+        }
+    }
+    while (stem.endsWith(u'.') || stem.endsWith(u' ')) {
+        stem.chop(1);
+    }
+    return stem + suffix;
+}
+
 // A path as the window takes it from a dialog, a drop or the reference box:
 // with the system's separators, as Python's Path gives it.
 inline std::filesystem::path path_of(const QString& text) {

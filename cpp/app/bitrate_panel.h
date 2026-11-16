@@ -59,6 +59,7 @@ struct BitrateEntry {
     std::shared_ptr<const std::vector<std::uint8_t>> frame_types;  // read_frame_types: a type per frame, or none
     std::string read_as;  // the file's identity (file_identity) when `data` was read: its name may be used again
     bool enabled = true;
+    bool reference = false;  // a run's reference (add_and_analyze): its exported plot is named after its test video
     BitrateState state = BitrateState::ready;
     long long packets_read = 0;  // while it is read
     QString error;               // why it could not be, once failed
@@ -120,7 +121,8 @@ public:
     // those without results are read; `infos` are details already read.
     void add_files(const std::vector<std::filesystem::path>& paths,
                    const std::map<std::filesystem::path, VideoInfo>& infos = {}, bool analyze = false);
-    // Adds videos read already, and reads their packets (a finished run's).
+    // Adds videos read already, and reads their packets (a finished run's:
+    // the first is its reference).
     void add_and_analyze(const std::vector<VideoInfo>& infos);
     // The scan running now, if any.
     std::vector<QThread*> live_workers() const;

@@ -135,11 +135,14 @@ TEST_F(BitratePanelTest, AFileReadFillsItsRowAndEachGraph) {
     EXPECT_EQ(panel->hover_label->text().toStdString(), "Time: 0:00:01.200   Frame 2\nencode.mkv: 20.00 kb/s");
 
     const std::filesystem::path png = folder / "plot.png";
-    panel->dialogs.save_file = [&png](const QString&, const QString&, const QString&) {
+    QString suggested;
+    panel->dialogs.save_file = [&png, &suggested](const QString&, const QString& name, const QString&) {
+        suggested = name;
         return QString::fromStdString(platform::path_text(png));
     };
     panel->export_button->click();
     EXPECT_FALSE(QImage(QString::fromStdString(platform::path_text(png))).isNull());
+    EXPECT_EQ(suggested.toStdString(), "encode_bitrate.png");  // named after the one video shown
 
     panel->table->item(0, col_use)->setCheckState(Qt::Unchecked);
     EXPECT_FALSE(panel->chart->has_data());
