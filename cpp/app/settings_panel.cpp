@@ -411,7 +411,7 @@ QGroupBox* SettingsPanel::build_window_box() {
     theme_row->addWidget(theme);
     theme_row->addStretch(1);
     window_layout->addLayout(theme_row);
-    remember_size = new QCheckBox(app::tr("Reopen at the size the window was last closed at"));
+    remember_size = new QCheckBox(app::tr("Reopen where and at the size the window was last closed"));
     remember_size->setChecked(settings_.remember_window_size);
     connect(remember_size, &QCheckBox::toggled, this, [this] { on_edited(); });
     window_layout->addWidget(remember_size);

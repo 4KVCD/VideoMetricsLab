@@ -92,7 +92,7 @@
   "Same as macOS ({language})": "Comme macOS ({language})",
   "The language of the window. Takes effect when the app is next started. The log, saved results and exported files stay in English.": "La langue de la fenêtre. S'applique au prochain démarrage de l'application. Le journal, les résultats enregistrés et les fichiers exportés restent en anglais.",
   "Language:": "Langue :",
-  "Reopen at the size the window was last closed at": "Rouvrir à la taille de la fenêtre lors de sa dernière fermeture",
+  "Reopen where and at the size the window was last closed": "Rouvrir à l'emplacement et à la taille de la fenêtre lors de sa dernière fermeture",
   "Check GitHub for a newer version when the app starts": "Rechercher une version plus récente sur GitHub au démarrage de l'application",
   "Once, at startup, asks GitHub's public list of releases whether there is a newer one, and says so only if there is. Nothing is sent but the request; GitHub sees your address, as it would for any page.": "Une fois, au démarrage, interroge la liste publique des versions sur GitHub pour savoir s'il en existe une plus récente, et ne le signale que dans ce cas. Rien n'est envoyé à part la requête ; GitHub voit votre adresse, comme pour n'importe quelle page.",
   "ffmpeg {version} and ffprobe found.": "ffmpeg {version} et ffprobe trouvés.",

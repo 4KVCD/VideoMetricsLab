@@ -92,7 +92,7 @@
   "Same as macOS ({language})": "macOS ile aynı ({language})",
   "The language of the window. Takes effect when the app is next started. The log, saved results and exported files stay in English.": "Pencerenin dili. Uygulama bir sonraki başlatılışında geçerli olur. Günlük, kaydedilen sonuçlar ve dışa aktarılan dosyalar İngilizce kalır.",
   "Language:": "Dil:",
-  "Reopen at the size the window was last closed at": "Pencereyi son kapatıldığı boyutta aç",
+  "Reopen where and at the size the window was last closed": "Pencereyi son kapatıldığı yerde ve boyutta aç",
   "Check GitHub for a newer version when the app starts": "Uygulama başlarken GitHub'da daha yeni bir sürüm ara",
   "Once, at startup, asks GitHub's public list of releases whether there is a newer one, and says so only if there is. Nothing is sent but the request; GitHub sees your address, as it would for any page.": "Başlangıçta bir kez GitHub'ın herkese açık sürüm listesine daha yeni bir sürüm olup olmadığını sorar ve yalnızca varsa bildirir. İstek dışında hiçbir şey gönderilmez; GitHub, her sayfada olduğu gibi adresinizi görür.",
   "ffmpeg {version} and ffprobe found.": "ffmpeg {version} ve ffprobe bulundu.",

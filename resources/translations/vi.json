@@ -92,7 +92,7 @@
   "Same as macOS ({language})": "Giống macOS ({language})",
   "The language of the window. Takes effect when the app is next started. The log, saved results and exported files stay in English.": "Ngôn ngữ của cửa sổ. Áp dụng khi ứng dụng khởi động lần sau. Nhật ký, kết quả đã lưu và tệp xuất vẫn bằng tiếng Anh.",
   "Language:": "Ngôn ngữ:",
-  "Reopen at the size the window was last closed at": "Mở với kích thước lúc cửa sổ đóng lần trước",
+  "Reopen where and at the size the window was last closed": "Mở ở vị trí và kích thước lúc cửa sổ đóng lần trước",
   "Check GitHub for a newer version when the app starts": "Kiểm tra phiên bản mới hơn trên GitHub khi khởi động",
   "Once, at startup, asks GitHub's public list of releases whether there is a newer one, and says so only if there is. Nothing is sent but the request; GitHub sees your address, as it would for any page.": "Một lần khi khởi động, hỏi danh sách phát hành công khai trên GitHub xem có phiên bản mới hơn không, và chỉ báo cho bạn nếu có. Không gửi gì ngoài chính yêu cầu đó; GitHub thấy địa chỉ của bạn như với bất kỳ trang web nào.",
   "ffmpeg {version} and ffprobe found.": "Đã tìm thấy ffmpeg {version} và ffprobe.",

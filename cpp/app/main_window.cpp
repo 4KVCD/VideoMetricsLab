@@ -132,7 +132,13 @@ MainWindow::MainWindow() {
                 ", saved results " + (settings_.use_cache ? "reused" : "not reused") + " (" +
                 (settings_.cache_dir.empty() ? std::string("default folder") : settings_.cache_dir) + ")");
     if (settings_.remember_window_size) {
-        resize(settings_.window_width, settings_.window_height);
+        // Where it was closed, maximized if it was (shown so by main's
+        // show()); Qt moves it onto a screen still there. Before a place was
+        // first saved, or if it cannot be read, at the size it was closed at.
+        if (settings_.window_geometry.empty() ||
+            !restoreGeometry(QByteArray::fromBase64(QByteArray::fromStdString(settings_.window_geometry)))) {
+            resize(settings_.window_width, settings_.window_height);
+        }
     } else {
         resize(1280, 800);
     }
@@ -327,10 +333,14 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         event->ignore();
         return;
     }
-    // Remember the window size and the videos, if asked to.
+    // Remember the window's place and size and the videos, if asked to. The
+    // size kept beside the place is the window's when not maximized, which an
+    // older version reopens at.
     if (settings_.remember_window_size) {
-        settings_.window_width = width();
-        settings_.window_height = height();
+        settings_.window_geometry = saveGeometry().toBase64().toStdString();
+        const QRect normal = normalGeometry().isValid() ? normalGeometry() : geometry();
+        settings_.window_width = normal.width();
+        settings_.window_height = normal.height();
     }
     if (settings_.remember_window_size || settings_.remember_videos) {
         store_open_videos();

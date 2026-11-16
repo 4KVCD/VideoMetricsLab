@@ -66,6 +66,10 @@ struct Settings {
     bool remember_window_size = true;
     int window_width = 1280;
     int window_height = 800;
+    // Where and how the window was last closed (Qt's saveGeometry, as
+    // base64): its screen, place, size and whether maximized. Empty until
+    // first saved; the size above is then used, as it was before 2.6.
+    std::string window_geometry;
     std::string last_reference_dir;
     std::string last_test_dir;
     bool remember_videos = false;

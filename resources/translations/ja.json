@@ -92,7 +92,7 @@
   "Same as macOS ({language})": "macOS と同じ（{language}）",
   "The language of the window. Takes effect when the app is next started. The log, saved results and exported files stay in English.": "ウィンドウの言語。次回アプリを起動したときに反映されます。ログ、保存済みの結果、エクスポートしたファイルは英語のままです。",
   "Language:": "言語：",
-  "Reopen at the size the window was last closed at": "前回閉じたときのウィンドウサイズで開く",
+  "Reopen where and at the size the window was last closed": "前回閉じたときのウィンドウの位置とサイズで開く",
   "Check GitHub for a newer version when the app starts": "アプリの起動時に GitHub で新しいバージョンを確認する",
   "Once, at startup, asks GitHub's public list of releases whether there is a newer one, and says so only if there is. Nothing is sent but the request; GitHub sees your address, as it would for any page.": "起動時に 1 回だけ GitHub の公開リリース一覧に新しいバージョンがあるかを問い合わせ、ある場合だけ知らせます。問い合わせ以外は何も送信しません。GitHub にはほかのページと同様にあなたのアドレスが見えます。",
   "ffmpeg {version} and ffprobe found.": "ffmpeg {version} と ffprobe が見つかりました。",

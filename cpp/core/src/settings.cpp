@@ -55,6 +55,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"remember_window_size", &Settings::remember_window_size},
         {"window_width", &Settings::window_width},
         {"window_height", &Settings::window_height},
+        {"window_geometry", &Settings::window_geometry},
         {"last_reference_dir", &Settings::last_reference_dir},
         {"last_test_dir", &Settings::last_test_dir},
         {"remember_videos", &Settings::remember_videos},
@@ -237,6 +238,7 @@ std::string Settings::text() const {
     data["remember_window_size"] = remember_window_size;
     data["window_width"] = window_width;
     data["window_height"] = window_height;
+    data["window_geometry"] = window_geometry;
     data["last_reference_dir"] = last_reference_dir;
     data["last_test_dir"] = last_test_dir;
     data["remember_videos"] = remember_videos;

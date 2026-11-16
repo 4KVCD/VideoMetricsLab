@@ -92,7 +92,7 @@
   "Same as macOS ({language})": "與 macOS 相同（{language}）",
   "The language of the window. Takes effect when the app is next started. The log, saved results and exported files stay in English.": "視窗的語言。下次啟動應用程式時生效。記錄檔、已儲存的結果和匯出的檔案維持英文。",
   "Language:": "語言：",
-  "Reopen at the size the window was last closed at": "以上次關閉時的視窗大小開啟",
+  "Reopen where and at the size the window was last closed": "以上次關閉時的視窗位置和大小開啟",
   "Check GitHub for a newer version when the app starts": "應用程式啟動時在 GitHub 上檢查新版本",
   "Once, at startup, asks GitHub's public list of releases whether there is a newer one, and says so only if there is. Nothing is sent but the request; GitHub sees your address, as it would for any page.": "只在啟動時查詢一次 GitHub 的公開發行列表，只有在有新版本時才提示。除了請求本身不會傳送任何內容；GitHub 會看到你的位址，與瀏覽任何網頁相同。",
   "ffmpeg {version} and ffprobe found.": "已找到 ffmpeg {version} 和 ffprobe。",

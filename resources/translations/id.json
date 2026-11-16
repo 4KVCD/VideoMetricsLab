@@ -92,7 +92,7 @@
   "Same as macOS ({language})": "Sama seperti macOS ({language})",
   "The language of the window. Takes effect when the app is next started. The log, saved results and exported files stay in English.": "Bahasa jendela. Berlaku saat aplikasi dijalankan berikutnya. Log, hasil tersimpan, dan file ekspor tetap berbahasa Inggris.",
   "Language:": "Bahasa:",
-  "Reopen at the size the window was last closed at": "Buka dengan ukuran saat jendela terakhir ditutup",
+  "Reopen where and at the size the window was last closed": "Buka di posisi dan dengan ukuran saat jendela terakhir ditutup",
   "Check GitHub for a newer version when the app starts": "Periksa versi yang lebih baru di GitHub saat memulai",
   "Once, at startup, asks GitHub's public list of releases whether there is a newer one, and says so only if there is. Nothing is sent but the request; GitHub sees your address, as it would for any page.": "Sekali saat memulai, menanyakan daftar rilis publik GitHub apakah ada versi yang lebih baru, dan hanya memberi tahu Anda jika ada. Tidak ada yang dikirim selain permintaan itu sendiri; GitHub melihat alamat Anda seperti pada halaman web mana pun.",
   "ffmpeg {version} and ffprobe found.": "ffmpeg {version} dan ffprobe ditemukan.",

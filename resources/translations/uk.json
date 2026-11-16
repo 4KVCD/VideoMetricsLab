@@ -92,7 +92,7 @@
   "Same as macOS ({language})": "Як у macOS ({language})",
   "The language of the window. Takes effect when the app is next started. The log, saved results and exported files stay in English.": "Мова вікна. Діє з наступного запуску застосунку. Журнал, збережені результати й експортовані файли залишаються англійською.",
   "Language:": "Мова:",
-  "Reopen at the size the window was last closed at": "Відкривати з розміром, з яким вікно востаннє закрили",
+  "Reopen where and at the size the window was last closed": "Відкривати на тому місці й з тим розміром, з якими вікно востаннє закрили",
   "Check GitHub for a newer version when the app starts": "Перевіряти новішу версію на GitHub під час запуску",
   "Once, at startup, asks GitHub's public list of releases whether there is a newer one, and says so only if there is. Nothing is sent but the request; GitHub sees your address, as it would for any page.": "Один раз під час запуску запитує в списку публічних випусків GitHub, чи є новіша версія, і повідомляє лише тоді, коли вона є. Нічого не надсилається, крім самого запиту; GitHub бачить вашу адресу, як і для будь-якої вебсторінки.",
   "ffmpeg {version} and ffprobe found.": "Знайдено ffmpeg {version} і ffprobe.",

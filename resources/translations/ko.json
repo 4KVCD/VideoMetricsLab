@@ -92,7 +92,7 @@
   "Same as macOS ({language})": "macOS와 같게({language})",
   "The language of the window. Takes effect when the app is next started. The log, saved results and exported files stay in English.": "창의 언어입니다. 다음에 앱을 시작할 때 적용됩니다. 로그, 저장된 결과, 내보낸 파일은 영어로 유지됩니다.",
   "Language:": "언어:",
-  "Reopen at the size the window was last closed at": "마지막으로 닫을 때의 창 크기로 열기",
+  "Reopen where and at the size the window was last closed": "마지막으로 닫을 때의 창 위치와 크기로 열기",
   "Check GitHub for a newer version when the app starts": "앱 시작 시 GitHub에서 새 버전 확인",
   "Once, at startup, asks GitHub's public list of releases whether there is a newer one, and says so only if there is. Nothing is sent but the request; GitHub sees your address, as it would for any page.": "시작할 때 한 번 GitHub의 공개 릴리스 목록에 새 버전이 있는지 묻고, 있을 때만 알려 줍니다. 요청 외에는 아무것도 보내지 않으며, GitHub에는 다른 웹 페이지와 마찬가지로 사용자의 주소가 보입니다.",
   "ffmpeg {version} and ffprobe found.": "ffmpeg {version} 및 ffprobe를 찾았습니다.",

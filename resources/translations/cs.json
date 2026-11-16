@@ -92,7 +92,7 @@
   "Same as macOS ({language})": "Stejně jako macOS ({language})",
   "The language of the window. Takes effect when the app is next started. The log, saved results and exported files stay in English.": "Jazyk okna. Projeví se při příštím spuštění aplikace. Protokol, uložené výsledky a exporty zůstávají v angličtině.",
   "Language:": "Jazyk:",
-  "Reopen at the size the window was last closed at": "Otevřít ve velikosti, ve které bylo okno naposledy zavřeno",
+  "Reopen where and at the size the window was last closed": "Otevřít na místě a ve velikosti, ve kterých bylo okno naposledy zavřeno",
   "Check GitHub for a newer version when the app starts": "Při spuštění zkontrolovat novější verzi na GitHubu",
   "Once, at startup, asks GitHub's public list of releases whether there is a newer one, and says so only if there is. Nothing is sent but the request; GitHub sees your address, as it would for any page.": "Jednou při spuštění se zeptá seznamu veřejných vydání na GitHubu, zda existuje novější verze, a upozorní vás, jen pokud ano. Neodesílá se nic kromě samotného požadavku; GitHub vidí vaši adresu jako u každé webové stránky.",
   "ffmpeg {version} and ffprobe found.": "Nalezeny ffmpeg {version} a ffprobe.",
