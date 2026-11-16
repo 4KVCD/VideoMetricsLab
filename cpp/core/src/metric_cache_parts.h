@@ -59,46 +59,13 @@ void forget_scores_of_another_picture(const std::filesystem::path& directory, co
 // Whether a score file's metadata is of the format this app writes.
 bool current_format(const nlohmann::json& metadata);
 
-// Whether a saved comparison's context says it cut bars that Auto or Source
-// only found by an older black-bar rule (black_bars_rule_version), with a box
-// that cuts something from either video, other than the black-bar answers
-// kept under the current rule (kept_crop_answer) would cut them now, or with
-// no such answers kept. Its scores are then of other pictures than a run
-// cuts, or may be. No other black-bar mode detects bars. Also whether a
-// Manual comparison cut other crops than those entered give now (before
-// v2.5.1, 0:0:0:0 kept an odd-sized frame's odd line); none of its bars are
-// to be found (bars_to_find), so its scores are calculated again.
-bool cut_by_an_older_rule(const nlohmann::json& context);
-
-// For a context cut_by_an_older_rule, the videos whose black bars must be found
-// (find_black_bars_of_older_scores) before it tells whether its boxes hold: none
-// where the saved data tells it without them, where the answers are kept, where
-// they cannot be kept (a video whose size changes) or where finding them failed
-// in this process (bars_not_found); its scores are then calculated again.
-std::vector<VideoInfo> bars_to_find(const nlohmann::json& context);
-
-// Finding `video`'s bars failed: bars_to_find leaves it out from now on in this process.
-void bars_not_found(const VideoInfo& video);
-
-// The black-bar mode of a saved comparison whose context says it cut bars that
-// Auto or Source only found by an older rule, with a box that cuts something
-// from either video; none for any other comparison. Throws on a damaged
-// context.
-std::optional<CropMode> mode_cut_by_an_older_rule(const nlohmann::json& context);
-
-// A saved comparison's two videos as its context describes them, where its
-// boxes were found on the videos' own pictures, as the answers kept now are:
-// not where a video's size changes (scaled_to: sampled scaled, never kept). A
-// resolution test's are the source twice. Throws on a damaged context.
-std::optional<std::pair<VideoInfo, VideoInfo>> videos_of_kept_answers(const nlohmann::json& context);
-
 // The whole-video scores saved for `spec`'s metric with other parameters but
 // otherwise the same request, each with those parameters
 // (load_other_parameters): CVVDP's for other displays, by the same Vship
-// build; none from a comparison cut by an older black-bar rule. In a range
-// (`ranged`), only a ranged run's: a duration limit's, saved before ranges,
-// pooled more frames than the range has. `recipe` gives the videos'
-// profiles where the context has none (with_profiles_read_now).
+// build. In a range (`ranged`), only a ranged run's: a duration limit's,
+// saved before ranges, pooled more frames than the range has. `recipe`
+// gives the videos' profiles where the context has none
+// (with_profiles_read_now).
 std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::filesystem::path& directory,
                                                                 const MetricRequestSpec& spec, bool ranged,
                                                                 const ComparisonRecipe& recipe);

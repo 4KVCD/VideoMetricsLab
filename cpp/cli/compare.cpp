@@ -755,13 +755,12 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
 // under `cache_folder` (when `use_saved`); with everything saved, takes the
 // saved result and adds none (the Python app's cli._queue). `options` are
 // the run's, with VMAF's model resolved; `share_decode` is plan_tasks's.
-// `ffmpeg` finds the black bars that saved scores of an older black-bar rule
-// wait for (find_black_bars_of_older_scores). Returns what this version
-// cannot do yet of the job's VMAF on the GPU (gpu_not_yet), or nothing.
+// Returns what this version cannot do yet of the job's VMAF on the GPU
+// (gpu_not_yet), or nothing.
 std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, VmafOptions options,
                                  const PerceptualBackends& backends, const CvvdpSettings& cvvdp, bool use_saved,
-                                 const std::filesystem::path& cache_folder, const std::string& ffmpeg,
-                                 std::vector<VmafJob>& jobs, bool share_decode = false) {
+                                 const std::filesystem::path& cache_folder, std::vector<VmafJob>& jobs,
+                                 bool share_decode = false) {
     // The request the window makes for a row: what the saved scores are
     // looked up and saved under, so that the two apps find each other's.
     const std::map<std::string, std::string> chosen(backends.begin(), backends.end());
@@ -782,11 +781,6 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
     video.request = analysis_request(video.options, video.metrics, chosen, cvvdp, source, *video.info);
     std::optional<ComparisonResult> saved;
     if (use_saved) {
-        // (the run would find the same bars, and takes them as kept)
-        find_black_bars_of_older_scores(cache_folder, source.path, video.path, video.request.recipe,
-                                        [&ffmpeg](const VideoInfo& found_for) {
-                                            detect_crop(ffmpeg, found_for, CancelToken(), std::nullopt, "");
-                                        });
         if (auto found = load_result(cache_folder, source.path, video.path, video.request.recipe,
                                      video.request.metrics, video.request.perceptual_backends)) {
             saved = std::move(found->first);
@@ -823,7 +817,8 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         saved.reset();
     }
     jobs.push_back(VmafJob{source, *video.info, std::move(options), video.path, video.metrics, std::move(tasks), backends,
-                           cvvdp, std::move(saved), std::move(kept), platform::path_text(video.path.stem())});
+                           cvvdp, std::move(saved), std::move(kept), platform::path_text(video.path.stem()),
+                           share_decode});
     return missing;
 }
 
@@ -1028,7 +1023,7 @@ private:
     void add_colour_notes(TestVideo& video) const;
     void add_film_grain_notes(TestVideo& video) const;
     std::optional<std::string> queue_jobs(TestVideo& video, const std::string& ffmpeg);
-    void queue_other_displays(TestVideo& video, const std::string& ffmpeg);
+    void queue_other_displays(TestVideo& video);
     // Whether `video`'s scores may be read from the saved scores: those it
     // would save (TestVideo::save_scores).
     bool reads_saved(const TestVideo& video) const { return use_saved_ && video.save_scores; }
@@ -1277,21 +1272,21 @@ std::optional<std::string> ComparisonPlanner::queue_jobs(TestVideo& video, const
     }
     const std::size_t queued = jobs.size();
     if (std::optional<std::string> missing = queue(video, video.source, std::move(options), backends_,
-                                                   display.second, reads_saved(video), cache_folder_, ffmpeg,
-                                                   jobs, share_decode)) {
+                                                   display.second, reads_saved(video), cache_folder_, jobs,
+                                                   share_decode)) {
         return missing;
     }
     if (jobs.size() > queued) {
         job_videos_.emplace_back(videos.size() - 1, std::nullopt);
     }
     if (cvvdp) {
-        queue_other_displays(video, ffmpeg);
+        queue_other_displays(video);
     }
     return std::nullopt;
 }
 
 // CVVDP on each further display: a comparison of its own, of CVVDP alone.
-void ComparisonPlanner::queue_other_displays(TestVideo& video, const std::string& ffmpeg) {
+void ComparisonPlanner::queue_other_displays(TestVideo& video) {
     for (std::size_t display = 1; display < displays_.size(); ++display) {
         TestVideo& other = video.other_displays.emplace_back();
         other.path = video.path;
@@ -1305,7 +1300,7 @@ void ComparisonPlanner::queue_other_displays(TestVideo& video, const std::string
         other.options = row_options(arguments_, settings_, other.metrics);
         const std::size_t before = jobs.size();
         queue(other, other.source, other.options, backends_, displays_[display].second, reads_saved(other),
-              cache_folder_, ffmpeg, jobs);
+              cache_folder_, jobs);
         if (jobs.size() > before) {
             job_videos_.emplace_back(videos.size() - 1, video.other_displays.size() - 1);
         }
@@ -1521,6 +1516,7 @@ int compare(const CompareArguments& arguments) {
             }
         });
         trust_gpu_decoding();  // a run of its own (distrust_gpu_decoding)
+        calculate_saved_scores_of_other_bars(planner.jobs, tools.ffmpeg.path, cancel);
         run(run_environment(tools, planner.jobs), planner.job_targets(), planner.jobs,
             arguments.parallel.value_or(settings.parallel_jobs),
             arguments.vship_pass ? *arguments.vship_pass == "one" : settings.gpu_metrics_together, cache_folder,

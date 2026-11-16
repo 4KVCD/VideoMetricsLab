@@ -18,7 +18,6 @@
 #include "main_window.h"
 #include "widgets.h"
 #include "window_helpers.h"
-#include "vml/app_log.h"
 #include "vml/append.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/metric_cache.h"
@@ -99,8 +98,7 @@ bool MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& pa
     if (texts.isEmpty()) {
         return false;
     }
-    auto* worker = new ProbeWorker(texts, cache_folder(), source_info_->path, std::move(queries),
-                                   find_tool("ffmpeg", settings_), this);
+    auto* worker = new ProbeWorker(texts, cache_folder(), source_info_->path, std::move(queries), this);
     cache_worker_ = worker;
     probe_workers_.push_back(worker);
     connect(worker, &ProbeWorker::saved_found, this,
@@ -129,19 +127,12 @@ std::vector<std::filesystem::path> MainWindow::cancel_cache_lookup() {
     // about, whose answers will now be refused. A lookup is under way until
     // its last signal has been handled, not until its thread ends: answers it
     // sent may still wait in the queue.
-    // Its rows' scores still unchecked go: they are asked about again.
     if (cache_worker_ == nullptr) {
         return {};
     }
     cache_worker_->cancel();  // retired as it ends, like every reader
     cache_worker_ = nullptr;
-    std::vector<std::filesystem::path> asked = std::exchange(cache_lookup_paths_, {});
-    for (const std::filesystem::path& path : asked) {
-        if (const std::optional<int> row = row_index_of_path(path)) {
-            drop_unchecked_saved_scores(*row);
-        }
-    }
-    return asked;
+    return std::exchange(cache_lookup_paths_, {});
 }
 
 void MainWindow::on_cache_lookup_finished(ProbeWorker* worker) {
@@ -152,11 +143,6 @@ void MainWindow::on_cache_lookup_finished(ProbeWorker* worker) {
     if (worker == cache_worker_) {
         cache_worker_ = nullptr;
         cache_lookup_paths_.clear();
-        // Scores it read before their black bars were found and never
-        // checked (a failure after its first answer): not for a run to use
-        for (std::size_t row = 0; row < rows_.size(); ++row) {
-            drop_unchecked_saved_scores(static_cast<int>(row));
-        }
     }
     on_probe_finished(worker);
     if (run_waits_for_saved_scores_ && cache_worker_ == nullptr) {
@@ -183,16 +169,6 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     if (lookup_token(source_info_->path, row_data.identity_path(), analysis_request_of(row_data)) != found.token) {
         return;
     }
-    if (!found.replaces.empty()) {
-        drop_scores_cut_otherwise(*row, found);
-        row_data.unchecked_saved_scores.clear();  // checked now
-    }
-    if (found.unchecked) {
-        row_data.unchecked_saved_scores = found.result.metric_results.keys();
-    }
-    if (found.result.metric_results.empty()) {
-        return;  // a row looked up again that has none now
-    }
     const std::shared_ptr<CompletedRun> previous = row_data.completed_run;
     auto run = std::make_shared<CompletedRun>();
     run->result = found.result;
@@ -218,13 +194,10 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
         // whatever is ticked. Those the row shows and they lack stay beside
         // them: a row showing a GPU SSIMULACRA2, then set to the CPU, never
         // gets it back from the saved scores, and every later answer, such
-        // as a display switched to with a saved CVVDP, would be refused. A
-        // row looked up again takes them whatever it shows: they may be
-        // another saved comparison's than those it was first sent.
+        // as a display switched to with a saved CVVDP, would be refused.
         const MetricResultSet& shown = row_data.completed_run->result.metric_results;
         const std::vector<std::string>& saved = found.result.metric_results.keys();
-        if (found.replaces.empty() &&
-            std::all_of(saved.begin(), saved.end(), [&shown](const std::string& key) { return shown.has(key); })) {
+        if (std::all_of(saved.begin(), saved.end(), [&shown](const std::string& key) { return shown.has(key); })) {
             return;
         }
         for (const std::string& key : shown.keys()) {
@@ -258,49 +231,6 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     graph_panel_->add_run({std::shared_ptr<const ComparisonResult>(shown, &shown->result), shown->label,
                            shown->graph_identity, previous == nullptr});
     sync_frame_compare();
-}
-
-void MainWindow::drop_scores_cut_otherwise(int row, const SavedScoresFound& found) {
-    // A row looked up again once the black bars its saved scores waited for
-    // were looked for: those it was sent first and is not sent now were cut
-    // otherwise than the black-bar rule cuts them now (or their bars could
-    // not be found), and go, to be calculated on the next run. Not where a
-    // run's scores replaced them.
-    RowData& row_data = *rows_[static_cast<std::size_t>(row)];
-    if (!row_data.completed_run || !row_data.completed_run->from_saved_scores) {
-        return;
-    }
-    std::vector<std::string> dropped;
-    for (const std::string& key : found.replaces) {
-        if (!found.result.has_metric(key)) {
-            dropped.push_back(key);
-        }
-    }
-    if (dropped.empty()) {
-        return;
-    }
-    std::string names;
-    for (const std::string& key : dropped) {
-        names += (names.empty() ? "" : ", ") + key;
-    }
-    app_log::write(app_log::Level::info, "vml.main_window",
-                   "Saved scores of " + name_of(row_data.path).toStdString() +
-                       " are not of the picture the black-bar rule cuts now, or its bars could not be found; "
-                       "calculated again on the next run: " +
-                       names);
-    drop_metric_results(row, dropped);
-}
-
-void MainWindow::drop_unchecked_saved_scores(int row) {
-    // The row's saved scores read before the black bars they wait for were
-    // found, whose check will not come (its lookup cancelled or failed): they
-    // go, as scores of a picture the rule may cut otherwise now, and the row's
-    // next lookup or run answers them. Not where a run's scores replaced them.
-    RowData& row_data = *rows_[static_cast<std::size_t>(row)];
-    const std::vector<std::string> unchecked = std::exchange(row_data.unchecked_saved_scores, {});
-    if (!unchecked.empty() && row_data.completed_run && row_data.completed_run->from_saved_scores) {
-        drop_metric_results(row, unchecked);
-    }
 }
 
 void MainWindow::on_other_displays_found(int generation, const OtherDisplaysFound& found) {

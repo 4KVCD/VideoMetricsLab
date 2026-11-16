@@ -315,6 +315,7 @@ std::variant<VmafJob, QString> MainWindow::job_for(const RowData& row_data) cons
     options.vvc_on_gpu = settings_.vvc_decode_on_gpu;  // Settings' VVC decoder, as the run starts
     MetricResultSet kept = reusable_results(row_data);
     std::vector<MetricTask> tasks;
+    bool share_decode = false;
     try {
         if (!options.resample_test) {
             validate_video_pair(*source_info_, info, options);
@@ -332,15 +333,15 @@ std::variant<VmafJob, QString> MainWindow::job_for(const RowData& row_data) cons
         const DecodingCapabilities capabilities = options.gpu_decode
                                                       ? DecodingCapabilities::remembered(tools_status_.ffmpeg.path)
                                                       : DecodingCapabilities{};
-        tasks = plan_tasks(*source_info_, info, options, metric_keys, backends, kept,
-                           shares_decode(*source_info_, info, options, capabilities));
+        share_decode = shares_decode(*source_info_, info, options, capabilities);
+        tasks = plan_tasks(*source_info_, info, options, metric_keys, backends, kept, share_decode);
     } catch (const std::exception& error) {
         return QString::fromStdString(error.what());
     }
     return VmafJob{*source_info_, info, std::move(options), row_data.path, metric_keys, std::move(tasks),
                    backends, row_data.cvvdp,
                    row_data.completed_run ? std::optional(row_data.completed_run->result) : std::nullopt,
-                   std::move(kept), platform::path_text(row_data.path.stem())};
+                   std::move(kept), platform::path_text(row_data.path.stem()), share_decode};
 }
 
 // The run's state, made anew for the `checked` rows, of which `job_rows`

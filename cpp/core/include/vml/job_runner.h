@@ -123,7 +123,21 @@ struct VmafJob {
     // The video's name in the log: its file's name without the extension
     // (the Python app's VmafJob.label).
     std::string label;
+    // Whether its tasks share one decode of each video (plan_tasks's
+    // share_decode), for a plan made anew (calculate_saved_scores_of_other_bars).
+    bool share_decode = false;
 };
+
+// Before a run: each job that keeps saved scores beside those it calculates
+// (cached_metrics) but whose saved crops are not those its run cuts (a
+// black-bar rule changed since they were saved, say) is planned anew to
+// calculate them too, in this run, rather than leave them out of its result
+// (JobRun::saved_scores_fit). The crops are found as the run's tasks find
+// them, with `ffmpeg` (resolve_crops, source_own_crop), which keeps the bars
+// found for the tasks. A job whose crops cannot be found is left as planned:
+// its run says why. Stops at a cancel.
+void calculate_saved_scores_of_other_bars(std::vector<VmafJob>& jobs, const std::string& ffmpeg,
+                                          const CancelToken& cancel);
 
 // The state of one of a video's tasks, for its run line (run_line.h).
 struct TaskSnapshot {
@@ -233,6 +247,9 @@ public:
 
     // Runs every job's tasks, as run_jobs does, once.
     void run();
+
+    // calculate_saved_scores_of_other_bars for its jobs, under its cancel: before run.
+    void calculate_saved_scores_of_other_bars(const std::string& ffmpeg);
 
     // How many videos' CPU metrics may run at once (max_parallel_jobs at
     // most), from any thread. Raising it lets a waiting lane start the next

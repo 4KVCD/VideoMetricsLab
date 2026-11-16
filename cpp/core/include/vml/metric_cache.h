@@ -31,13 +31,9 @@ inline constexpr int metric_cache_format_version = 2;
 // context.json says it ("black_bars_rule"; 1 where it says none). 2: odd
 // bars rounded up to even, as HandBrake rounds them. 3: an encode cropped
 // when it was made is compared at its own size, not read as the source
-// scaled (common_picture, issue #18). A comparison saved with
-// bars Auto or Source only found by an older rule is read only where the
-// answers the rule keeps now give the same boxes (find_black_bars_of_older_scores
-// finds them); otherwise its pictures were cut otherwise than the rule cuts
-// them now, and it is calculated again. Rule 2's saved boxes tell this
-// without the bars found again for Source only, resolution tests and most of
-// Auto's pairs (rule_2_boxes_now).
+// scaled (common_picture, issue #18). A record only: saved scores of an
+// older rule are read as saved, never checked or calculated again for it (a
+// new rule applies to new calculations; Recalculate makes them anew).
 inline constexpr int black_bars_rule_version = 3;
 
 // The folder the scores are saved in unless Settings name another:
@@ -112,25 +108,6 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
                                    const ComparisonResult& result, const std::string& label,
                                    const std::vector<MetricRequestSpec>& specs);
 
-// Finds, with `find_box` (detect_crop, which keeps its answer), the black
-// bars of each video of a saved comparison load_result reads for `recipe`
-// whose bars Auto or Source only found by an older rule and cut, where the
-// current rule keeps no answer for it: with them, its scores are read where
-// the boxes come out the same (most bars, of an even number of lines). Each
-// video is looked for once; one whose bars could not be found (a failure of
-// `find_box`, logged) is not looked for again in this process. Cancelled
-// from `find_box` is thrown on. Returns whether `find_box` was called.
-bool find_black_bars_of_older_scores(const std::filesystem::path& base, const std::filesystem::path& source,
-                                     const std::filesystem::path& distorted, const ComparisonRecipe& recipe,
-                                     const std::function<void(const VideoInfo&)>& find_box);
-
-// How load_result reads the scores of a comparison cut by an older black-bar
-// rule whose videos' bars must be found to tell whether its boxes hold
-// (find_black_bars_of_older_scores): not until they are found (a run, the
-// command line), or as saved meanwhile (the window, which shows them at once,
-// then finds the bars and looks again, dropping those cut otherwise now).
-enum class ScoresWaitingForBars { not_read, read };
-
 // The saved scores of `specs` for a comparison, with the comparison's
 // details and its label; nothing when none are saved. `backends` says where
 // SSIMULACRA2 and Butteraugli are set to be calculated: set to CPU, a Vship
@@ -142,13 +119,12 @@ enum class ScoresWaitingForBars { not_read, read };
 // answer where they are Source only's (Auto compared the test video at its
 // whole frame), except for the metric keys in `not_from_other_recipes`: those
 // the user asked to calculate again, whose Source-only scores are not saved
-// yet. `waiting`: ScoresWaitingForBars.
+// yet.
 std::optional<std::pair<ComparisonResult, std::string>> load_result(
     const std::filesystem::path& base, const std::filesystem::path& source, const std::filesystem::path& distorted,
     const ComparisonRecipe& recipe, const std::vector<MetricRequestSpec>& specs,
     const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental = {},
-    const std::set<std::string>& not_from_other_recipes = {},
-    ScoresWaitingForBars waiting = ScoresWaitingForBars::not_read);
+    const std::set<std::string>& not_from_other_recipes = {});
 
 // CVVDP's scores saved for a comparison with other displays than the one
 // its request in `specs` or `supplemental` models, each with the CVVDP

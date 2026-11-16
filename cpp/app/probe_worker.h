@@ -49,18 +49,11 @@ struct SavedScoresQuery {
 
 // The saved scores found for a row, with the result's label and the token
 // of the request they were found for (metric_cache.h's lookup_token).
-// `replaces`: in the lookup's second answer for a row whose first was read
-// before the black bars its scores wait for were found
-// (ScoresWaitingForBars::read), the metrics the first answer gave: those this
-// one lacks were cut otherwise than the rule cuts them now, and are dropped
-// from the row. `unchecked`: a first answer so read, whose second follows.
 struct SavedScoresFound {
     QString path;
     ComparisonResult result;
     QString label;
     std::string token;
-    std::vector<std::string> replaces;
-    bool unchecked = false;
 };
 
 // CVVDP's scores saved for a row's comparison with other displays, and the
@@ -88,16 +81,12 @@ public:
     ProbeWorker(QStringList paths, std::string ffprobe, std::string ffmpeg, StreamScan scan,
                 QObject* parent = nullptr);
     // Looks up the saved scores of the rows `paths` (as `queries` asks for
-    // each) under `base`, compared with the reference `source`. Saved scores
-    // of an older black-bar rule that wait for black bars to be found are
-    // sent at once; once every row is answered, the bars are found with
-    // `ffmpeg` (find_black_bars_of_older_scores) and those rows looked up
-    // again (SavedScoresFound::replaces).
+    // each) under `base`, compared with the reference `source`.
     ProbeWorker(QStringList paths, std::filesystem::path base, std::filesystem::path source,
-                std::map<QString, SavedScoresQuery> queries, std::string ffmpeg, QObject* parent = nullptr);
+                std::map<QString, SavedScoresQuery> queries, QObject* parent = nullptr);
 
-    // Stops, ending the ffprobe or FFmpeg reading a video, or finding black
-    // bars; a lookup of saved files under way is let finish.
+    // Stops, ending the ffprobe or FFmpeg reading a video; a lookup under way
+    // is let finish.
     void cancel() {
         cancelled_ = true;
         cancel_.cancel();
@@ -105,8 +94,7 @@ public:
 
 signals:
     void probed(const vml::app::Probed& probed);
-    // Only for a row that has saved scores (a miss is the usual case), and for
-    // a row looked up again, whatever it found then.
+    // Only for a row that has saved scores: a miss is the usual case.
     void saved_found(const vml::app::SavedScoresFound& found);
     // For every row whose lookup includes CVVDP, so that none found clears
     // what was found before.
@@ -117,12 +105,7 @@ protected:
     void run() override;
 
 private:
-    // Sends the row's saved scores; returns the metrics sent where they wait
-    // for black bars to be found, else nothing.
-    std::optional<std::vector<std::string>> look_up(const QString& path);
-    // After the bars a row's scores waited for are found: its scores again,
-    // replacing the metrics `first` sent.
-    void look_up_again(const QString& path, const std::vector<std::string>& first);
+    void look_up(const QString& path);
 
     QStringList paths_;
     std::string ffprobe_;

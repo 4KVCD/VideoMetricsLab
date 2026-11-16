@@ -26,6 +26,7 @@
 #include "vml/isolated.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
+#include "vml/perceptual.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/result_json.h"
@@ -36,6 +37,20 @@
 namespace vml {
 
 namespace {
+
+// Whether a run cutting `source_crop` and `distorted_crop` from `source` and
+// `distorted` scores the picture `saved` was scored on: the same boxes, or
+// none and a box of the whole frame, which every route cuts as none.
+bool cuts_as_saved(const ComparisonResult& saved, const VideoInfo& source, const VideoInfo& distorted,
+                   const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop) {
+    const auto same_box = [](const std::optional<CropBox>& first, const std::optional<CropBox>& second,
+                             const VideoInfo& info) {
+        const auto [width, height] = info.frame_size();
+        const auto cuts_nothing = [&](const std::optional<CropBox>& box) { return !box || box->is_noop(width, height); };
+        return first == second || (cuts_nothing(first) && cuts_nothing(second));
+    };
+    return same_box(saved.source_crop, source_crop, source) && same_box(saved.distorted_crop, distorted_crop, distorted);
+}
 
 // Why a saved score is not kept beside a run's new scores (JobRun::saved_scores_fit).
 constexpr const char* saved_with_other_black_bars =
@@ -1046,19 +1061,13 @@ bool JobRun::task_calculates(const std::string& key) const {
 
 // Whether the saved scores are of the picture this run scored. The black-bar
 // detection can find another box than the one they were made with (v2.4's
-// replaced FFmpeg's cropdetect): together they would mix scores of different
-// pictures without a word.
+// replaced FFmpeg's cropdetect, or a black-bar rule changed since they were
+// saved): together they would mix scores of different pictures without a word.
+// calculate_saved_scores_of_other_bars has such scores calculated before the
+// run where it can tell.
 bool JobRun::saved_scores_fit() const {
-    const ComparisonResult& saved = *job_.cached_result;
-    const auto same_box = [](const std::optional<CropBox>& first, const std::optional<CropBox>& second,
-                             const VideoInfo& info) {
-        const auto [width, height] = info.frame_size();
-        const auto cuts_nothing = [&](const std::optional<CropBox>& box) { return !box || box->is_noop(width, height); };
-        return first == second || (cuts_nothing(first) && cuts_nothing(second));
-    };
-    const auto fits = [&](const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop) {
-        return same_box(saved.source_crop, source_crop, job_.source_info) &&
-               same_box(saved.distorted_crop, distorted_crop, job_.distorted_info);
+    const auto fits = [this](const std::optional<CropBox>& source_crop, const std::optional<CropBox>& distorted_crop) {
+        return cuts_as_saved(*job_.cached_result, job_.source_info, job_.distorted_info, source_crop, distorted_crop);
     };
     const std::optional<PerceptualTaskOutput> perceptual = perceptual_so_far();
     return (!perceptual || fits(perceptual->source_crop, perceptual->distorted_crop)) &&
@@ -1433,6 +1442,46 @@ void run_jobs(const std::vector<VmafJob>& jobs, int parallel_jobs, const RunEven
     run_jobs(jobs, parallel_jobs, events, runner, PerceptualRunner(), false, cores, cancel);
 }
 
+void calculate_saved_scores_of_other_bars(std::vector<VmafJob>& jobs, const std::string& ffmpeg,
+                                          const CancelToken& cancel) {
+    for (VmafJob& job : jobs) {
+        if (!job.cached_result || job.cached_metrics.empty()) {
+            continue;
+        }
+        const VmafOptions& options = job.options;
+        CropPair now;
+        try {
+            if (options.resample_test) {  // both of its sides are the source's, cut by its own box
+                const std::optional<CropBox> own = source_own_crop(options.crop_choice(), ffmpeg, job.source_info,
+                                                                   cancel, std::nullopt, options.scale_algorithm);
+                now = {own, own};
+            } else {
+                now = resolve_crops(ffmpeg, job.source_info, job.distorted_info, options.crop_choice(),
+                                    options.scale_algorithm, cancel, {});
+            }
+        } catch (const Cancelled&) {
+            return;
+        } catch (const std::exception&) {
+            continue;  // left as planned: its run finds them again, and says why it cannot
+        }
+        if (cuts_as_saved(*job.cached_result, job.source_info, job.distorted_info, now.first, now.second)) {
+            continue;
+        }
+        std::vector<MetricTask> tasks;
+        try {
+            tasks = plan_tasks(job.source_info, job.distorted_info, options, job.metric_keys, job.perceptual_backends,
+                               MetricResultSet(), job.share_decode);
+        } catch (const std::exception&) {
+            continue;  // as planned, its saved scores left out of the result (JobRun::saved_scores_fit)
+        }
+        logger.info(job.label + ": its saved " + metric_labels(job.cached_metrics.keys()) +
+                    " were made with other black bars than this run cuts: calculated again with the rest");
+        job.tasks = std::move(tasks);
+        job.cached_result.reset();
+        job.cached_metrics = MetricResultSet();
+    }
+}
+
 // ------------------------------------------------------------- JobScheduler
 
 // What the Scheduler refers to, kept here for as long as it runs.
@@ -1446,7 +1495,7 @@ struct JobScheduler::Parts {
           cancel(std::move(cancel_given)),
           scheduler(jobs, parallel_jobs, events, runner, perceptual, gpu_metrics_together, cores, cancel) {}
 
-    const std::vector<VmafJob> jobs;
+    std::vector<VmafJob> jobs;  // planned anew only before the run (calculate_saved_scores_of_other_bars)
     const RunEvents events;
     const TaskRunner runner;
     const PerceptualRunner perceptual;
@@ -1462,6 +1511,10 @@ JobScheduler::JobScheduler(std::vector<VmafJob> jobs, int parallel_jobs, RunEven
 JobScheduler::~JobScheduler() = default;
 
 void JobScheduler::run() { parts_->scheduler.run(); }
+
+void JobScheduler::calculate_saved_scores_of_other_bars(const std::string& ffmpeg) {
+    vml::calculate_saved_scores_of_other_bars(parts_->jobs, ffmpeg, parts_->cancel);
+}
 
 void JobScheduler::set_parallel_jobs(int count) { parts_->scheduler.set_parallel_jobs(count); }
 

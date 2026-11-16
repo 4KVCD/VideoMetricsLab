@@ -114,6 +114,7 @@ void RunWorker::run() {
                 gpu_decode_ ? DecodingCapabilities::detect(tools.ffmpeg.path) : DecodingCapabilities{},
                 platform::logical_cores()};
             trust_gpu_decoding();  // found wrong in an earlier run, maybe under another program's load: asked again
+            scheduler_->calculate_saved_scores_of_other_bars(environment_.ffmpeg);
             scheduler_->run();
         }
     } catch (const std::exception& error) {

@@ -104,15 +104,6 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const V
                                                                          std::optional<CropBox> source_crop,
                                                                          std::optional<CropBox> distorted_crop);
 
-// What common_picture gives now for boxes it gave under black-bar rule 2
-// (saved with a comparison), where that is known without the boxes detected:
-// the same boxes, other boxes, or unknown (only detecting them again tells).
-// Rule 3 changed only common_picture: encodes cut when they were made, the
-// source's box a test frame shows, sizes not one fraction apart.
-enum class SavedBoxesNow { same, changed, unknown };
-SavedBoxesNow rule_2_boxes_now(const VideoInfo& source, const VideoInfo& test, const CropBox& source_box,
-                               const CropBox& test_box);
-
 // What Source only cuts from the test video, which is compared at its full frame:
 // nothing, but for the odd line a box on even samples leaves out of an odd-sized
 // frame. Kept, it would stretch the source by a pixel to fit, moving every line.
