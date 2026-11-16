@@ -2,7 +2,7 @@
 
 Calculate VMAF, VMAF NEG, VMAF v1, SSIMULACRA2, Butteraugli and ColorVideo VDP on NVIDIA, AMD, Intel and Apple GPUs, alongside PSNR, SSIM and XPSNR. Compare encodes with frame-exact playback that switches between the source and each encode instantly to easily spot differences.
 
-VideoMetricsLab v2.5 adds statistics for any range of frames in Metric Graphs, black-bar crops entered by hand, ColorVideo VDP on more than one display in the window, ranges in frames, and fuller results files, along with various bug fixes. See the [changelog](CHANGELOG.md).
+VideoMetricsLab v2.5.1 fixes the problem where cached results take 10-20+ seconds to load because of black bar detection being redone, along with some bug fixes. See the [changelog](CHANGELOG.md).
 
 ## Features
 

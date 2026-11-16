@@ -1,5 +1,44 @@
 # Changelog
 
+## v2.5.1
+
+v2.5.1 fixes the problem where cached results take 10-20+ seconds to load because of black bar detection being
+redone, along with some bug fixes.
+
+### Performance
+
+- Saved scores from versions before v2.5 appear as soon as the videos are added, instead of after 5-10 s per 4K video
+  spent finding their black bars again; the bars are checked afterwards, and any score they no longer match is removed
+  and calculated on the next run.
+
+### Bug fixes
+
+Wrong scores:
+
+- Fixed an encode cropped a few lines when it was made (such as HandBrake's 1920x1078 from a 1920x1080 source) being
+  cut again and the source scaled to it, which lowered every score (PSNR 25.3 instead of 34.8 on a test clip) (#18).
+- Fixed an encode cropped and scaled when it was made (such as 1920x1078 scaled to 1280x718) being stretched by a few
+  rows against the source (PSNR 23.7 instead of 33.6 on a test clip).
+- Fixed test videos whose size is not an exact fraction of the source's (such as 854x480 or 1366x768 against
+  1920x1080) with black bars being compared a few rows off, or refused as "different shapes after cropping".
+- Fixed an encode cut to the black bars that kept a thin dark edge the detection cut from the source (1920x800 against
+  a 1918x800 picture) being scaled to the source's picture, which lowered every score (PSNR 24.1 instead of 34.4 on a
+  test clip) (#20).
+- Fixed Black bars > Manual keeping the odd line of an odd-sized video given no crop (0:0:0:0), such as 1920x1079,
+  so it was scaled by a row against the other video (PSNR 30.7 instead of 38.6 on a test clip).
+- Fixed Video Compare showing a test video's extra line with Black bars > Source only, where the scores leave it out.
+
+Other:
+
+- Fixed Export results, Save selected results, Export graph, Export CSV, BD-rate's Export CSV and the bitrate plot's
+  export opening in the program's own folder: they now open in Settings' Export folder, or Documents (#19).
+- Fixed saved resolution tests of a letterboxed video being calculated again after v2.5's black-bar change, though
+  their black bars had not changed.
+- "Calculate CPU metrics for 2 videos in parallel" now says that it does not apply to PSNR, SSIM and XPSNR when VMAF
+  runs on the GPU, as they are then calculated in VMAF's GPU pass (#21).
+- Fixed the log saying an NVIDIA decoder is why a monochrome H.264 video is decoded on the CPU on AMD and Intel GPUs.
+- The self-test checks the GPU VVC decoder, and says why a GPU decoder is unavailable.
+
 ## v2.5
 
 v2.5 adds statistics for any range of frames in Metric Graphs, black-bar crops entered by hand, ColorVideo VDP on more
