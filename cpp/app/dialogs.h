@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <optional>
+#include <string>
 
 class QWidget;
 
@@ -47,9 +48,18 @@ struct Dialogs {
     // have none.
     std::function<std::optional<FrameRateAnswer>(const QString& video, double reference_fps, int others)>
         ask_frame_rate;
+    // The folder exports start in (issue #19): Settings' Export folder, or
+    // Documents where it is blank. save_file starts a bare file name there.
+    std::function<QString()> export_folder;
 };
 
-// The real dialogs, over `parent`.
-Dialogs standard_dialogs(QWidget* parent);
+// Where a save dialog for `suggested` starts: a bare name (or relative path)
+// in `folder`, a full path as it is. Qt would start a bare name in the
+// working folder: the program's own (issue #19).
+QString save_dialog_start(const QString& suggested, const QString& folder);
+
+// The real dialogs, over `parent`. `export_dir` gives Settings' Export
+// folder, read at each export (none, or blank: Documents).
+Dialogs standard_dialogs(QWidget* parent, std::function<std::string()> export_dir = {});
 
 }  // namespace vml::app

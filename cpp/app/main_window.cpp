@@ -513,7 +513,9 @@ void MainWindow::build_ui() {
             [this](int index) { on_scale_direction_combo_changed(index); });
     connect(options_panel_, &OptionsPanel::film_grain_chosen, this, [this](bool with) { on_film_grain_chosen(with); });
     run_cvvdp_dialog_ = [](CvvdpDisplayDialog& dialog) { return dialog.exec(); };
-    dialogs_ = standard_dialogs(this);
+    // Settings' Export folder, read at each export: every save dialog starts there.
+    const auto export_dir = [this] { return settings_.export_dir; };
+    dialogs_ = standard_dialogs(this, export_dir);
     splitter->addWidget(options_panel_);
     splitter->addWidget(build_run_panel());
     splitter->setSizes({380, 300, 120});
@@ -521,6 +523,7 @@ void MainWindow::build_ui() {
 
     video_colors_ = new VideoColors(this);
     graph_panel_ = new GraphPanel(video_colors_);
+    graph_panel_->dialogs = standard_dialogs(graph_panel_, export_dir);
     graph_panel_->set_preferred_metric(settings_.graph_metric);
     connect(graph_panel_, &GraphPanel::metric_changed, this, [this](const QString& key) {
         settings_.graph_metric = key.toStdString();  // the metric chosen, shown again next time
@@ -539,12 +542,14 @@ void MainWindow::build_ui() {
     tabs_->addTab(frame_compare_panel_, app::tr("Video Compare"));
     // Its own list of videos: a finished run adds its own (on_job_finished).
     bitrate_panel_ = new BitratePanel([this] { return find_tool("ffprobe", settings_); }, video_colors_);
+    bitrate_panel_->dialogs = standard_dialogs(bitrate_panel_, export_dir);
     tabs_->addTab(new ScrollingPage(bitrate_panel_), app::tr("Bitrate Viewer"));
     // Its encodes from the runs Metric Graphs lists, brought up to date first.
     bd_rate_panel_ = new BdRatePanel([this] {
         sync_graph();
         return graph_panel_->runs();
     });
+    bd_rate_panel_->dialogs = standard_dialogs(bd_rate_panel_, export_dir);
     tabs_->addTab(new ScrollingPage(bd_rate_panel_), app::tr("BD-rate"));
     settings_panel_ = new SettingsPanel(settings_, *file_writes_, [this] { return tools_status_; }, dialogs_);
     connect(settings_panel_, &SettingsPanel::defaults_changed, this, [this] { on_default_settings_changed(); });

@@ -367,7 +367,8 @@ void MainWindow::on_save_selected() {
         }
         return;
     }
-    const QString folder = dialogs_.choose_folder(app::tr("Choose folder to save runs into"), {});
+    const QString folder =
+        dialogs_.choose_folder(app::tr("Choose folder to save runs into"), dialogs_.export_folder());
     if (folder.isEmpty()) {
         return;
     }

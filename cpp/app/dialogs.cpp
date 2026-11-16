@@ -13,6 +13,8 @@
 
 #include "i18n.h"
 #include "vml/ffprobe.h"
+#include "vml/platform/system.h"
+#include "window_helpers.h"
 
 namespace vml::app {
 
@@ -104,7 +106,17 @@ std::optional<FrameRateAnswer> ask_frame_rate(QWidget* parent, const QString& vi
 
 }  // namespace
 
-Dialogs standard_dialogs(QWidget* parent) {
+QString save_dialog_start(const QString& suggested, const QString& folder) {
+    const std::filesystem::path name = path_of(suggested);
+    return name.is_relative() ? text_of(path_of(folder) / name) : suggested;
+}
+
+Dialogs standard_dialogs(QWidget* parent, std::function<std::string()> export_dir) {
+    // Read at each export, so that a change in Settings applies at once.
+    const auto export_folder = [export_dir = std::move(export_dir)] {
+        const std::string chosen = export_dir ? export_dir() : std::string();
+        return text_of(chosen.empty() ? platform::home_directory() / "Documents" : platform::path_from_text(chosen));
+    };
     return {
         [parent](const QString& title, const QString& text) { QMessageBox::information(parent, title, text); },
         [parent](const QString& title, const QString& text) { QMessageBox::critical(parent, title, text); },
@@ -118,8 +130,8 @@ Dialogs standard_dialogs(QWidget* parent) {
         [parent](const QString& title, const QString& filter) {
             return QFileDialog::getOpenFileName(parent, title, QString(), filter);
         },
-        [parent](const QString& title, const QString& suggested, const QString& filter) {
-            return QFileDialog::getSaveFileName(parent, title, suggested, filter);
+        [parent, export_folder](const QString& title, const QString& suggested, const QString& filter) {
+            return QFileDialog::getSaveFileName(parent, title, save_dialog_start(suggested, export_folder()), filter);
         },
         [parent](const QString& title, const QString& start) {
             return QFileDialog::getExistingDirectory(parent, title, start);
@@ -128,6 +140,7 @@ Dialogs standard_dialogs(QWidget* parent) {
         [parent](const QString& video, double reference_fps, int others) {
             return ask_frame_rate(parent, video, reference_fps, others);
         },
+        export_folder,
     };
 }
 

@@ -37,6 +37,7 @@
 #include "series_colors.h"
 #include "test_videos.h"
 #include "vml/platform/system.h"
+#include "window_helpers.h"
 
 namespace vml::app {
 
@@ -292,6 +293,30 @@ TEST_F(GraphPanelTest, ExportsTheDifferenceTheBandShows) {
     ASSERT_TRUE(panel.wait_until_file_writes_idle(std::chrono::seconds(10)));
     EXPECT_TRUE(std::filesystem::exists(folder / "a_2.csv"));
     EXPECT_FALSE(std::filesystem::exists(folder / "a_minus_b_2.csv"));
+}
+
+// Issue #19: an export's dialog starts in Settings' Export folder, read at
+// each export, or in Documents where it is blank; never the working folder.
+TEST_F(GraphPanelTest, ExportsStartInTheExportFolder) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 80.0F})), "a", {}, true}});
+    std::string export_dir = "D:/exports";
+    panel.dialogs = standard_dialogs(&panel, [&export_dir] { return export_dir; });
+    QString started;
+    panel.dialogs.choose_folder = [&started](const QString&, const QString& start) {
+        started = start;
+        return QString();  // Cancel
+    };
+    export_csvs(panel);
+    EXPECT_EQ(path_of(started), path_of("D:/exports"));
+    export_dir.clear();
+    export_csvs(panel);
+    EXPECT_EQ(path_of(started), platform::home_directory() / "Documents");
+    // A save dialog: a bare name in the folder, a full path as it is.
+    EXPECT_EQ(path_of(save_dialog_start("a.csv", "D:/exports")), path_of("D:/exports/a.csv"));
+    const QString full = text_of(platform::home_directory() / "elsewhere" / "log.zip");
+    EXPECT_EQ(save_dialog_start(full, "D:/exports"), full);
 }
 
 // An export that cannot be written says so, and not that it is complete.

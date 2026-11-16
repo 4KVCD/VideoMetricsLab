@@ -2003,7 +2003,7 @@ void GraphPanel::on_export_csv() {
         dialogs.inform(app::tr("No data"), app::tr("There are no series to export."));
         return;
     }
-    const QString folder = dialogs.choose_folder(app::tr("Choose export folder"), {});
+    const QString folder = dialogs.choose_folder(app::tr("Choose export folder"), dialogs.export_folder());
     if (folder.isEmpty()) {
         return;
     }

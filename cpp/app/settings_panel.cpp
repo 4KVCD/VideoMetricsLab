@@ -639,13 +639,10 @@ void SettingsPanel::on_copy_log() {
 }
 
 void SettingsPanel::on_export_log() {
-    const std::filesystem::path start = settings_.export_dir.empty()
-                                            ? platform::home_directory() / "Documents"
-                                            : platform::path_from_text(settings_.export_dir);
-    const std::string name =
-        "VideoMetricsLab log " + QDateTime::currentDateTime().toString("yyyy-MM-dd HHmm").toStdString() + ".zip";
-    const QString path = dialogs_.save_file(app::tr("Export log"), text_of(start / platform::path_from_text(name)),
-                                            app::tr("Zip archive (*.zip)"));
+    // A bare name: the dialog starts it in the Export folder (Dialogs::export_folder).
+    const QString name =
+        "VideoMetricsLab log " + QDateTime::currentDateTime().toString("yyyy-MM-dd HHmm") + ".zip";
+    const QString path = dialogs_.save_file(app::tr("Export log"), name, app::tr("Zip archive (*.zip)"));
     if (path.isEmpty()) {
         return;
     }
