@@ -414,9 +414,38 @@ nlohmann::json optional_text(const std::optional<std::string>& text) {
     return text ? nlohmann::json(*text) : nlohmann::json(nullptr);
 }
 
+// The black bars detected in a comparison's videos, as the answers kept for
+// them (kept_crop_answer) hold them, so that a later change to how the boxes
+// are cut is checked from them, not by detecting them again
+// (boxes_now_without_detection). Nothing where no answer is kept (a video
+// whose size changes, the answers forgotten since the run) or where the
+// answers kept do not give the comparison's crops: a box another run found.
+nlohmann::json detected_bars_json(const ComparisonResult& result, const ComparisonRecipe& recipe) {
+    if (!detects_black_bars(recipe.crop_mode)) {
+        return nullptr;
+    }
+    const bool resolution_test = result.resample_target.has_value();
+    const bool auto_pair = recipe.crop_mode == CropMode::automatic && !resolution_test;
+    const std::optional<CropAnswer> source = kept_crop_answer(result.source_info);
+    const std::optional<CropAnswer> test = auto_pair ? kept_crop_answer(result.distorted_info) : std::nullopt;
+    if (!source || (auto_pair && !test)) {
+        return nullptr;
+    }
+    const std::optional<CropBox> test_box = test ? std::optional(test->box) : std::nullopt;
+    const auto now =
+        crops_from_detected(recipe.crop_mode, resolution_test, result.source_info, result.distorted_info, source->box,
+                            test_box);
+    const bool as_cut = resolution_test ? now.first == result.source_crop
+                                        : now == std::pair(result.source_crop, result.distorted_crop);
+    if (!as_cut) {
+        return nullptr;
+    }
+    return {{"source", crop_to_dict(source->box)}, {"test", crop_to_dict(test_box)}};
+}
+
 // The comparison's context.json: its files, crops, frame rate and recipe.
 nlohmann::json context_json(const ComparisonResult& result, const std::string& label, const ComparisonRecipe& recipe) {
-    return {{"format_version", metric_cache_format_version},
+    nlohmann::json context{{"format_version", metric_cache_format_version},
             {"label", label},
             {"source", python_path_text(result.source)},
             {"distorted", python_path_text(result.distorted)},
@@ -436,6 +465,10 @@ nlohmann::json context_json(const ComparisonResult& result, const std::string& l
             {"recipe", recipe.identity()},
             {"black_bars_rule", black_bars_rule_version},
             {"saved_by", build_stamp()}};
+    if (nlohmann::json detected = detected_bars_json(result, recipe); !detected.is_null()) {
+        context["detected_bars"] = std::move(detected);
+    }
+    return context;
 }
 
 // The two videos' colour tags as a comparison's context.json has them.
@@ -983,21 +1016,67 @@ std::optional<std::pair<VideoInfo, VideoInfo>> videos_of_kept_answers(const nloh
 
 namespace {
 
+// The crops a saved comparison cut, exactly as saved: forget_scores_of_another_picture compares them so too.
+std::pair<std::optional<CropBox>, std::optional<CropBox>> saved_crops(const nlohmann::json& context) {
+    return {crop_from_dict(context.value("source_crop", nlohmann::json())),
+            crop_from_dict(context.value("distorted_crop", nlohmann::json()))};
+}
+
+// Whether crops cut `now` are the saved comparison's: a resolution test's by
+// the source's box alone, which both its sides are cut by.
+bool cut_as_saved(const std::pair<std::optional<CropBox>, std::optional<CropBox>>& now, const nlohmann::json& context,
+                  bool resolution_test) {
+    const auto saved = saved_crops(context);
+    return resolution_test ? now.first == saved.first : now == saved;
+}
+
+// The boxes detected in a saved comparison's videos (detected_bars_json): the source's and, with Auto, the test
+// video's. Nothing where it saved none or they cannot be read, so that the comparison is judged as before.
+std::optional<std::pair<CropBox, std::optional<CropBox>>> saved_detected_boxes(const nlohmann::json& context) {
+    const nlohmann::json detected = context.value("detected_bars", nlohmann::json());
+    if (!detected.is_object()) {
+        return std::nullopt;
+    }
+    try {
+        const std::optional<CropBox> source = crop_from_dict(detected.value("source", nlohmann::json()));
+        if (!source) {
+            return std::nullopt;
+        }
+        return std::pair{*source, crop_from_dict(detected.value("test", nlohmann::json()))};
+    } catch (const std::exception&) {
+        // A box of another shape, or of values that are not whole numbers
+        // (nlohmann's type_error), left to cut_by_an_older_rule's catch, would read the scores as current
+        return std::nullopt;
+    }
+}
+
 // What a saved comparison's boxes are under the current rule where that is
-// known without detecting its videos' bars again. Rule 3 changed only Auto's
-// common_picture: not detection, Source only's boxes or a resolution test's
-// (the source's own box on both sides). Rule 1's boxes were rounded otherwise
-// when detected, which only detecting them again tells.
+// known without detecting its videos' bars again:
+// - From the boxes detected that it saved (detected_bars_json), cut as the
+//   rule cuts them now: rules 2 and 3 detect alike.
+// - From rule 2's crops: rule 3 changed only Auto's common_picture, not
+//   detection, Source only's boxes or a resolution test's (the source's own
+//   box on both sides).
+// Rule 1's boxes were rounded otherwise when detected, which only detecting
+// them again tells.
 SavedBoxesNow boxes_now_without_detection(const nlohmann::json& context, CropMode mode) {
     static_assert(black_bars_rule_version == 3, "a new rule: say what it keeps of the boxes older rules saved");
-    if (context.value("black_bars_rule", 1) != 2) {
+    const int rule = context.value("black_bars_rule", 1);
+    const bool resolution_test = python_truthy(context.value("resample_target", nlohmann::json()));
+    if (const auto detected = saved_detected_boxes(context);
+        rule >= 2 && detected && context.contains("source_info") && context.contains("distorted_info")) {
+        const auto now = crops_from_detected(mode, resolution_test, video_info_from_dict(context.at("source_info")),
+                                             video_info_from_dict(context.at("distorted_info")), detected->first,
+                                             detected->second);
+        return cut_as_saved(now, context, resolution_test) ? SavedBoxesNow::same : SavedBoxesNow::changed;
+    }
+    if (rule != 2) {
         return SavedBoxesNow::unknown;
     }
-    if (mode == CropMode::source_only || python_truthy(context.value("resample_target", nlohmann::json()))) {
+    if (mode == CropMode::source_only || resolution_test) {
         return SavedBoxesNow::same;
     }
-    const std::optional<CropBox> source_crop = crop_from_dict(context.value("source_crop", nlohmann::json()));
-    const std::optional<CropBox> distorted_crop = crop_from_dict(context.value("distorted_crop", nlohmann::json()));
+    const auto [source_crop, distorted_crop] = saved_crops(context);
     if (!source_crop || !distorted_crop || !context.contains("source_info") || !context.contains("distorted_info")) {
         return SavedBoxesNow::unknown;
     }
@@ -1016,26 +1095,15 @@ bool same_boxes_now(const nlohmann::json& context, CropMode mode) {
     }
     const auto& [source, distorted] = *videos;
     const std::optional<CropAnswer> source_answer = kept_crop_answer(source);
-    if (!source_answer) {
+    const bool resolution_test = python_truthy(context.value("resample_target", nlohmann::json()));
+    const bool auto_pair = mode == CropMode::automatic && !resolution_test;
+    const std::optional<CropAnswer> distorted_answer = auto_pair ? kept_crop_answer(distorted) : std::nullopt;
+    if (!source_answer || (auto_pair && !distorted_answer)) {
         return false;
     }
-    if (python_truthy(context.value("resample_target", nlohmann::json()))) {
-        // A resolution test cuts the source's box from both sides (source_own_crop), with Auto and Source only
-        return source_answer->box == crop_from_dict(context.value("source_crop", nlohmann::json()));
-    }
-    std::pair<std::optional<CropBox>, std::optional<CropBox>> now;
-    if (mode == CropMode::source_only) {
-        now = {source_answer->box, test_crop_beside_source_box(source_answer->box, distorted)};
-    } else {
-        const std::optional<CropAnswer> distorted_answer = kept_crop_answer(distorted);
-        if (!distorted_answer) {
-            return false;
-        }
-        now = common_picture(source, distorted, source_answer->box, distorted_answer->box);
-    }
-    // Exactly as saved: forget_scores_of_another_picture compares them so too
-    return now.first == crop_from_dict(context.value("source_crop", nlohmann::json())) &&
-           now.second == crop_from_dict(context.value("distorted_crop", nlohmann::json()));
+    return cut_as_saved(crops_from_detected(mode, resolution_test, source, distorted, source_answer->box,
+                                            distorted_answer ? std::optional(distorted_answer->box) : std::nullopt),
+                        context, resolution_test);
 }
 
 }  // namespace

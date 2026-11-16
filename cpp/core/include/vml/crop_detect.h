@@ -160,4 +160,14 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_for(const CropCh
                                                                     const std::optional<std::string>& distorted_hwaccel,
                                                                     const std::string& scale_algorithm);
 
+// The crops black bars `mode` (Auto or Source only) cuts from the boxes detected in the videos, as crops_for and,
+// for a resolution test, source_own_crop give them: the source's box on both sides of a resolution test; the
+// source's box beside the test's frame (test_crop_beside_source_box) for Source only; for Auto, the two boxes
+// (`test_box`: the test video's) made to cover the same picture (common_picture).
+std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_from_detected(CropMode mode, bool resolution_test,
+                                                                              const VideoInfo& source,
+                                                                              const VideoInfo& test,
+                                                                              const CropBox& source_box,
+                                                                              const std::optional<CropBox>& test_box);
+
 }  // namespace vml

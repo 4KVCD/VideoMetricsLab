@@ -1450,11 +1450,6 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const V
     }
     shared_source.x += shown.x;
     shared_source.y += shown.y;
-    if (shared_source != *source_crop || shared_distorted != *distorted_crop) {
-        logger.info("Black bars: the picture both videos show is " + box_text(shared_source) + " of the source and " +
-                    box_text(shared_distorted) + " of the test video (detected: " + box_text(*source_crop) +
-                    " and " + box_text(*distorted_crop) + ")");
-    }
     return {shared_source, shared_distorted};
 }
 
@@ -1597,14 +1592,34 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_for(const CropCh
                 box_from_edges(choice.test, distorted, "the test video")};
     case CropMode::source_only: {  // (the run's settings line says so: "black bars source")
         const CropBox source_box = detect_crop(ffmpeg, source, cancel, source_hwaccel, scale_algorithm);
-        return {source_box, test_crop_beside_source_box(source_box, distorted)};
+        return crops_from_detected(choice.mode, false, source, distorted, source_box, std::nullopt);
     }
     case CropMode::automatic:
         break;
     }
     const auto [source_box, distorted_box] =
         detect_pair(ffmpeg, source, distorted, cancel, source_hwaccel, distorted_hwaccel, scale_algorithm);
-    return common_picture(source, distorted, source_box, distorted_box);
+    const auto crops = crops_from_detected(choice.mode, false, source, distorted, source_box, distorted_box);
+    if (crops.first != source_box || crops.second != distorted_box) {
+        logger.info("Black bars: the picture both videos show is " + box_text(*crops.first) + " of the source and " +
+                    box_text(*crops.second) + " of the test video (detected: " + box_text(source_box) + " and " +
+                    box_text(distorted_box) + ")");
+    }
+    return crops;
+}
+
+std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_from_detected(CropMode mode, bool resolution_test,
+                                                                              const VideoInfo& source,
+                                                                              const VideoInfo& test,
+                                                                              const CropBox& source_box,
+                                                                              const std::optional<CropBox>& test_box) {
+    if (resolution_test) {
+        return {source_box, source_box};
+    }
+    if (mode == CropMode::source_only) {
+        return {source_box, test_crop_beside_source_box(source_box, test)};
+    }
+    return common_picture(source, test, source_box, test_box);
 }
 
 }  // namespace vml

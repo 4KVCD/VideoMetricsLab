@@ -935,6 +935,93 @@ TEST(MetricCache, ScoresOfRuleTwoAreReadWithoutFindingTheBarsWhereRuleThreeKeeps
     forget_crop_answers();
 }
 
+// A comparison saves the boxes detected in its videos (when the store keeps
+// them and they give its crops), so its scores, read under a later rule, have
+// their crops worked out from them and are never kept waiting for the bars to
+// be found again: the same crops are read, others calculated again. Frames
+// under half a percent apart in shape, which rule 2's saved crops alone
+// cannot settle, show it.
+TEST(MetricCache, SavedDetectedBoxesSettleScoresOfAnOlderRuleWithoutFindingTheBars) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    const std::filesystem::path bars = folder / "black_bars.json";
+    forget_crop_answers();
+    set_crop_store([bars] { return bars; });
+    AnalysisRequest request = request_from(stored);
+    request.recipe.crop_mode = CropMode::automatic;
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source_info.path = folder / "s.mp4";
+    result.distorted_info = result.source_info;
+    result.distorted_info.path = folder / "t.mp4";
+    const auto [width, height] = result.source_info.frame_size();
+    result.distorted_info.width = width - 4;
+    const CropBox source_box{width, height - 40, 0, 20};
+    const CropBox test_box{width - 4, height - 40, 0, 20};
+    nlohmann::json boxes = nlohmann::json::array();
+    for (const auto& [video, box] : {std::pair{result.source_info, source_box}, {result.distorted_info, test_box}}) {
+        const std::filesystem::path resolved = std::filesystem::weakly_canonical(video.path);
+        boxes.push_back({{platform::path_text(resolved), std::filesystem::file_size(resolved),
+                          *platform::modified_ns(resolved), video.duration, 0.12549},
+                         {box.w, box.h, box.x, box.y}});
+    }
+    touch(bars, nlohmann::json{{"version", 6}, {"boxes", boxes}}.dump());
+    forget_crop_answers();
+    std::tie(result.source_crop, result.distorted_crop) = crops_from_detected(
+        CropMode::automatic, false, result.source_info, result.distorted_info, source_box, test_box);
+    const std::filesystem::path directory =
+        store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe, result, "t", request.metrics);
+    nlohmann::json context = nlohmann::json::parse(*platform::read_file(directory / "context.json"));
+    EXPECT_EQ(context.at("detected_bars"),
+              (nlohmann::json{{"source", {{"w", source_box.w}, {"h", source_box.h}, {"x", 0}, {"y", 20}}},
+                              {"test", {{"w", test_box.w}, {"h", test_box.h}, {"x", 0}, {"y", 20}}}}));
+    // Read later, with the bars no longer kept, as saved by rule 2
+    context["black_bars_rule"] = 2;
+    std::filesystem::remove(bars);
+    forget_crop_answers();
+    const auto saved_with = [&](const nlohmann::json& detected) {
+        nlohmann::json saved = context;
+        if (detected.is_null()) {
+            saved.erase("detected_bars");
+        } else {
+            saved["detected_bars"] = detected;
+        }
+        touch(directory / "context.json", saved.dump());
+    };
+    const auto loaded = [&] {
+        const auto found = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                       request.metrics, request.perceptual_backends);
+        return found ? found->first.metric_results.keys().size() : 0;
+    };
+    int looked_for = 0;
+    const auto find = [&] {
+        return find_black_bars_of_older_scores(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                               [&](const VideoInfo&) { ++looked_for; });
+    };
+    saved_with(context.at("detected_bars"));
+    EXPECT_FALSE(find());
+    EXPECT_EQ(loaded(), request.metrics.size());
+    // Detected boxes that give other crops: calculated again
+    nlohmann::json other = context.at("detected_bars");
+    other["source"]["h"] = height - 44;
+    other["source"]["y"] = 22;
+    saved_with(other);
+    EXPECT_FALSE(find());
+    EXPECT_EQ(loaded(), 0U);
+    EXPECT_EQ(looked_for, 0);
+    // Without them, or with ones that cannot be read, the bars are found again
+    saved_with(nullptr);
+    EXPECT_TRUE(find());
+    saved_with(nlohmann::json{{"source", "x"}});
+    EXPECT_TRUE(find());
+    saved_with(nlohmann::json{{"source", {{"w", "a"}, {"h", 1}, {"x", 0}, {"y", 0}}}});
+    EXPECT_TRUE(find());
+    EXPECT_EQ(looked_for, 6);
+    set_crop_store({});
+    forget_crop_answers();
+}
+
 // A score of a pair with a video scored with its AV1 film grain, or an AV1
 // video whose grain is not known, says in its saved file that it was decoded
 // as dav1d decodes it (av1_grain_dav1d): one this run made as its pair says,
