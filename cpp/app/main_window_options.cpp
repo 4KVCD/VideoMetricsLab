@@ -227,7 +227,14 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         }
         return !(target == before);
     };
-    apply(default_options_);
+    // New rows start with the choices last made here, so that several similar
+    // files need not each be set up from scratch; but not black bars: they
+    // describe one pair's pictures, and another video added later, even for
+    // another reference, would be cut by them unseen (issue #22).
+    const bool black_bars = field == "crop_mode" || manual_crop_box_of(field).has_value();
+    if (!black_bars) {
+        apply(default_options_);
+    }
     if (field == "vmaf_on_gpu") {
         // The last choice is what the next session starts with.
         settings_.default_vmaf_on_gpu = panel.vmaf_on_gpu;
