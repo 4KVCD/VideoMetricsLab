@@ -441,7 +441,9 @@ std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode) {
         return "only NVIDIA's GPUs (the RTX 50 series) decode H.264 deeper than 8 bits";
     }
     if (info.monochrome_h264) {
-        return "it is monochrome H.264, whose grey chroma NVIDIA's GPU decoder leaves unset";
+        // pick_decode refuses it on every maker's decoder: only NVIDIA's was measured.
+        return "it is monochrome H.264: GPU decoders are not known to give its grey chroma (an RTX 5090's leaves it "
+               "unset)";
     }
     if (h264_444_profile(info)) {
         return "only Apple's GPUs and NVIDIA's of the RTX 50 series decode H.264's " + info.profile +

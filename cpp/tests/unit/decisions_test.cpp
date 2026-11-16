@@ -267,7 +267,8 @@ TEST(Decisions, MonochromeH264IsDecodedInSoftware) {
     }
     EXPECT_EQ(pick_decode(mac, GpuVendor::automatic, video, MacGpuDecoding::on), std::nullopt);
     EXPECT_EQ(software_decoding_reason(video, true),
-              "it is monochrome H.264, whose grey chroma NVIDIA's GPU decoder leaves unset");
+              "it is monochrome H.264: GPU decoders are not known to give its grey chroma (an RTX 5090's leaves it "
+              "unset)");
 }
 
 // A saved run's video without a profile takes the one its file is read with
