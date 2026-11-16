@@ -35,7 +35,9 @@ inline constexpr int metric_cache_format_version = 2;
 // bars Auto or Source only found by an older rule is read only where the
 // answers the rule keeps now give the same boxes (find_black_bars_of_older_scores
 // finds them); otherwise its pictures were cut otherwise than the rule cuts
-// them now, and it is calculated again.
+// them now, and it is calculated again. Rule 2's saved boxes tell this
+// without the bars found again for Source only, resolution tests and most of
+// Auto's pairs (rule_2_boxes_now).
 inline constexpr int black_bars_rule_version = 3;
 
 // The folder the scores are saved in unless Settings name another:

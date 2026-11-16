@@ -881,6 +881,60 @@ TEST(MetricCache, AResolutionTestsScoresOfAnOlderRuleAreReadWhereTheSourcesBarsG
     forget_crop_answers();
 }
 
+// Scores saved under black-bar rule 2 whose boxes rule 3 keeps are read with
+// no bars found again: a pair at one size, and an encode cut to the source's
+// box when it was made (its saved boxes are the detected ones). Boxes rule 3
+// cuts otherwise are calculated again, also without looking for the bars.
+TEST(MetricCache, ScoresOfRuleTwoAreReadWithoutFindingTheBarsWhereRuleThreeKeepsTheirBoxes) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    forget_crop_answers();
+    AnalysisRequest request = request_from(stored);
+    request.recipe.crop_mode = CropMode::automatic;
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source_info.path = folder / "s.mp4";
+    const auto [width, height] = result.source_info.frame_size();
+    const CropBox letterbox{width, height - 40, 0, 20};
+    const auto saved_by_rule_2 = [&](int test_width, int test_height, const CropBox& source_crop,
+                                     const CropBox& test_crop) {
+        result.distorted_info = result.source_info;
+        result.distorted_info.path = folder / "t.mp4";
+        result.distorted_info.width = test_width;
+        result.distorted_info.height = test_height;
+        result.source_crop = source_crop;
+        result.distorted_crop = test_crop;
+        const std::filesystem::path directory = store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4",
+                                                             request.recipe, result, "t", request.metrics);
+        nlohmann::json context = nlohmann::json::parse(*platform::read_file(directory / "context.json"));
+        context["black_bars_rule"] = 2;
+        touch(directory / "context.json", context.dump());
+    };
+    const auto loaded = [&] {
+        const auto found = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                       request.metrics, request.perceptual_backends);
+        return found ? found->first.metric_results.keys().size() : 0;
+    };
+    int looked_for = 0;
+    const auto find = [&] {
+        return find_black_bars_of_older_scores(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                               [&](const VideoInfo&) { ++looked_for; });
+    };
+    saved_by_rule_2(width, height, letterbox, letterbox);  // one size
+    EXPECT_FALSE(find());
+    EXPECT_EQ(loaded(), request.metrics.size());
+    saved_by_rule_2(width, height - 40, letterbox, CropBox{width, height - 40, 0, 0});  // cut when encoded
+    EXPECT_FALSE(find());
+    EXPECT_EQ(loaded(), request.metrics.size());
+    // Cut to a box 2 columns narrower, which the encode kept (issue #20): now compared at the box
+    saved_by_rule_2(width, height - 40, CropBox{width - 2, height - 40, 0, 20}, CropBox{width, height - 40, 0, 0});
+    EXPECT_FALSE(find());
+    EXPECT_EQ(loaded(), 0U);
+    EXPECT_EQ(looked_for, 0);
+    forget_crop_answers();
+}
+
 // A score of a pair with a video scored with its AV1 film grain, or an AV1
 // video whose grain is not known, says in its saved file that it was decoded
 // as dav1d decodes it (av1_grain_dav1d): one this run made as its pair says,

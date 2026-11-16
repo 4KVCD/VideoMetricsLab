@@ -1458,6 +1458,53 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const V
     return {shared_source, shared_distorted};
 }
 
+SavedBoxesNow rule_2_boxes_now(const VideoInfo& source, const VideoInfo& test, const CropBox& source_box,
+                               const CropBox& test_box) {
+    if (source.scaled_to || test.scaled_to) {
+        return SavedBoxesNow::unknown;
+    }
+    const auto [source_width, source_height] = source.frame_size();
+    const auto [test_width, test_height] = test.frame_size();
+    if (std::min({source_width, source_height, test_width, test_height}) <= 0) {
+        return SavedBoxesNow::unknown;
+    }
+    // Frames whose shapes are over half a percent apart: rule 2 kept the boxes
+    // as detected, so they are what common_picture is given now.
+    const double across = static_cast<double>(source_width) / test_width;
+    const double down = static_cast<double>(source_height) / test_height;
+    if (std::abs(across - down) > 0.005 * std::max(across, down)) {
+        return common_picture(source, test, source_box, test_box) == std::pair(std::optional(source_box),
+                                                                                std::optional(test_box))
+                   ? SavedBoxesNow::same
+                   : SavedBoxesNow::changed;
+    }
+    // Frames of the same shape, the test's frame one fraction of the source's
+    // (largest_grid_denominator), and saved boxes that are that grid's
+    // (shared_on_one_grid's: the test's edges on multiples of 2q, the source's
+    // the test's scaled by p/q). Such a test box lies within both detected
+    // boxes' overlap, which then holds a whole cell of the grid: both rules
+    // took the grid's boxes, from the same edges, unless rule 3 read the test
+    // as the source cut when it was encoded or as the source's box grown by a
+    // thin edge. Both need the source's detected box to fit in the test's
+    // frame, and it holds the saved one: a test frame as large as the
+    // source's, or narrower or shorter than the saved source box, rules them out.
+    if (static_cast<long long>(source_width) * test_height != static_cast<long long>(source_height) * test_width) {
+        return SavedBoxesNow::unknown;
+    }
+    const int common = std::gcd(source_width, test_width);
+    const int p = source_width / common;
+    const int q = test_width / common;
+    const int step = 2 * q;
+    const bool on_the_grid = q <= largest_grid_denominator && test_box.w > 0 && test_box.h > 0 &&
+                             test_box.w % step == 0 && test_box.h % step == 0 && test_box.x % step == 0 &&
+                             test_box.y % step == 0 &&
+                             source_box == CropBox{test_box.w / q * p, test_box.h / q * p, test_box.x / q * p,
+                                                   test_box.y / q * p};
+    const bool source_box_fits_the_test = test_width < source_width && source_box.w <= test_width &&
+                                          source_box.h <= test_height;
+    return on_the_grid && !source_box_fits_the_test ? SavedBoxesNow::same : SavedBoxesNow::unknown;
+}
+
 std::optional<CropBox> test_crop_beside_source_box(const CropBox& source_box, const VideoInfo& test) {
     const auto [width, height] = test.frame_size();
     const int extra_width = width - source_box.w;

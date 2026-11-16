@@ -983,6 +983,28 @@ std::optional<std::pair<VideoInfo, VideoInfo>> videos_of_kept_answers(const nloh
 
 namespace {
 
+// What a saved comparison's boxes are under the current rule where that is
+// known without detecting its videos' bars again. Rule 3 changed only Auto's
+// common_picture: not detection, Source only's boxes or a resolution test's
+// (the source's own box on both sides). Rule 1's boxes were rounded otherwise
+// when detected, which only detecting them again tells.
+SavedBoxesNow boxes_now_without_detection(const nlohmann::json& context, CropMode mode) {
+    static_assert(black_bars_rule_version == 3, "a new rule: say what it keeps of the boxes older rules saved");
+    if (context.value("black_bars_rule", 1) != 2) {
+        return SavedBoxesNow::unknown;
+    }
+    if (mode == CropMode::source_only || python_truthy(context.value("resample_target", nlohmann::json()))) {
+        return SavedBoxesNow::same;
+    }
+    const std::optional<CropBox> source_crop = crop_from_dict(context.value("source_crop", nlohmann::json()));
+    const std::optional<CropBox> distorted_crop = crop_from_dict(context.value("distorted_crop", nlohmann::json()));
+    if (!source_crop || !distorted_crop || !context.contains("source_info") || !context.contains("distorted_info")) {
+        return SavedBoxesNow::unknown;
+    }
+    return rule_2_boxes_now(video_info_from_dict(context.at("source_info")),
+                            video_info_from_dict(context.at("distorted_info")), *source_crop, *distorted_crop);
+}
+
 // Whether the black-bar answers kept under the current rule (kept_crop_answer)
 // give a saved comparison of `mode` the boxes it cut: what crops_for would
 // cut from its videos now. Bars of an even number of lines, the most, are
@@ -1021,7 +1043,18 @@ bool same_boxes_now(const nlohmann::json& context, CropMode mode) {
 bool cut_by_an_older_rule(const nlohmann::json& context) {
     try {
         const std::optional<CropMode> mode = mode_cut_by_an_older_rule(context);
-        return mode && !same_boxes_now(context, *mode);
+        if (!mode) {
+            return false;
+        }
+        switch (boxes_now_without_detection(context, *mode)) {
+        case SavedBoxesNow::same:
+            return false;
+        case SavedBoxesNow::changed:
+            return true;
+        case SavedBoxesNow::unknown:
+            break;
+        }
+        return !same_boxes_now(context, *mode);
     } catch (const std::exception&) {
         // A damaged context: read, or not, by the checks it has always had
     }
@@ -1183,6 +1216,9 @@ bool find_black_bars_of_older_scores(const std::filesystem::path& base, const st
         try {
             mode = mode_cut_by_an_older_rule(*context);
             videos = videos_of_kept_answers(*context);
+            if (mode && boxes_now_without_detection(*context, *mode) != SavedBoxesNow::unknown) {
+                continue;  // boxes known to differ now: calculated again, nothing to find
+            }
         } catch (const std::exception&) {
             continue;  // damaged: cut_by_an_older_rule reads it as it always has
         }
