@@ -1285,19 +1285,23 @@ TEST(MetricCache, AnAv1PairsScoresSayTheirGrainWasDav1dsAndOnlyThoseCountOutside
 
 // A pair with H.264 in a lossless 4:4:4 profile, which NVIDIA's GPUs before
 // the RTX 50 series decoded to other pictures (9f983c8), or of no known
-// profile (a context saved before 2.3), loads only the scores saved since;
-// one with other H.264 loads every score.
+// profile (a context saved before 2.3) where the video read now has none
+// either, loads only the scores saved since; one with other H.264 loads
+// every score, also from a context that has no profile.
 TEST(MetricCache, ALosslessH264PairsScoresSavedBeforeExactDecodingAreCalculatedAgain) {
     const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
     const test::Folder folder;
     touch(folder / "s.mp4", "s");
     touch(folder / "t.mp4", "t");
-    const AnalysisRequest request = request_from(stored);
+    AnalysisRequest request = request_from(stored);
     ComparisonResult result = test::result_from(stored.at("result"));
     result.distorted_info.codec_name = "h264";
     // How many scores load when the test video's profile was `saved_as` and
-    // the comparison's context then says `now` (nothing: not recorded).
-    const auto loaded_after = [&](const std::string& saved_as, const std::optional<std::string>& now) {
+    // the comparison's context then says `now` (nothing: not recorded), with
+    // the video read now as `read_now`.
+    const auto loaded_after = [&](const std::string& saved_as, const std::optional<std::string>& now,
+                                  const std::string& read_now = "") {
+        request.recipe.distorted_profile = read_now;
         result.distorted_info.profile = saved_as;
         const std::filesystem::path directory = store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4",
                                                              request.recipe, result, "t", request.metrics);
@@ -1316,6 +1320,8 @@ TEST(MetricCache, ALosslessH264PairsScoresSavedBeforeExactDecodingAreCalculatedA
     EXPECT_EQ(all, request.metrics.size());
     EXPECT_EQ(loaded_after("High", "High 4:4:4 Predictive"), 0U);  // saved as by a build without the mark
     EXPECT_EQ(loaded_after("High", std::nullopt), 0U);
+    EXPECT_EQ(loaded_after("High", std::nullopt, "High 10"), all);  // the Python app's context
+    EXPECT_EQ(loaded_after("High", std::nullopt, "High 4:4:4 Predictive"), 0U);
     EXPECT_EQ(loaded_after("High 4:4:4 Predictive", "High 4:4:4 Predictive"), all);
 }
 

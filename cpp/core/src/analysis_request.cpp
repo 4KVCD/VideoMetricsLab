@@ -123,6 +123,8 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
     }
     request.recipe.coded_at_another_size = source.coded_at_another_size || distorted.coded_at_another_size;
     request.recipe.monochrome_h264 = source.monochrome_h264 || distorted.monochrome_h264;
+    request.recipe.source_profile = source.profile;
+    request.recipe.distorted_profile = distorted.profile;
     request.perceptual_backends = automatic_perceptual_backends;
     for (const auto& [key, backend] : perceptual_backends) {
         if (!request.perceptual_backends.contains(key)) {

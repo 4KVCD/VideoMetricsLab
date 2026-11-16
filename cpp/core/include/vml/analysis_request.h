@@ -36,6 +36,11 @@ struct ComparisonRecipe {
     // Whether a video is monochrome H.264 (VideoInfo::monochrome_h264), whose
     // scores before 2.5 NVIDIA's decoder gave from unset chroma.
     bool monochrome_h264 = false;
+    // The two videos' profiles as read now (VideoInfo::profile), not in
+    // identity(): a comparison saved before 2.3 has none, and without them
+    // its H.264 scores count as maybe lossless 4:4:4 (decoding_marks).
+    std::string source_profile;
+    std::string distorted_profile;
     bool range_in_frames = false;  // range_start and range_end are frames
     // The crops entered by hand (CropMode::manual only; VmafOptions').
     CropEdges manual_source_crop;

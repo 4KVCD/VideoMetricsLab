@@ -1223,16 +1223,36 @@ void bars_not_found(const VideoInfo& video) {
     unfound.videos.insert(unfound_key(video));
 }
 
+void with_profiles_read_now(nlohmann::json& context, const ComparisonRecipe& recipe) {
+    if (!context.is_object()) {
+        return;
+    }
+    using VideoProfile = std::pair<const char*, const std::string*>;  // the context's field, the profile read now
+    for (const auto& [video, profile] :
+         {VideoProfile{"source_info", &recipe.source_profile}, VideoProfile{"distorted_info", &recipe.distorted_profile}}) {
+        auto info = context.find(video);
+        if (profile->empty() || info == context.end() || !info->is_object()) {
+            continue;
+        }
+        const auto saved = info->find("profile");
+        if (saved == info->end() || !saved->is_string() || saved->get<std::string>().empty()) {
+            (*info)["profile"] = *profile;
+        }
+    }
+}
+
 std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::filesystem::path& directory,
-                                                                const MetricRequestSpec& spec, bool ranged) {
+                                                                const MetricRequestSpec& spec, bool ranged,
+                                                                const ComparisonRecipe& recipe) {
     const nlohmann::json wanted = spec.identity();
     const nlohmann::json rest = without(wanted, {"parameters"});
     const std::vector<std::filesystem::path> paths = score_files(directory, spec.key);
-    const nlohmann::json context =
+    nlohmann::json context =
         paths.empty() ? nlohmann::json() : read_json(directory / "context.json").value_or(nlohmann::json());
     if (context.is_object() && cut_by_an_older_rule(context)) {
         return {};
     }
+    with_profiles_read_now(context, recipe);
     const std::vector<ColourTags> infos = context_colour_tags(context);
     const DecodingMarks marks = decoding_marks(context);
     std::vector<std::pair<nlohmann::json, double>> found;

@@ -97,9 +97,18 @@ std::optional<std::pair<VideoInfo, VideoInfo>> videos_of_kept_answers(const nloh
 // (load_other_parameters): CVVDP's for other displays, by the same Vship
 // build; none from a comparison cut by an older black-bar rule. In a range
 // (`ranged`), only a ranged run's: a duration limit's, saved before ranges,
-// pooled more frames than the range has.
+// pooled more frames than the range has. `recipe` gives the videos'
+// profiles where the context has none (with_profiles_read_now).
 std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::filesystem::path& directory,
-                                                                const MetricRequestSpec& spec, bool ranged);
+                                                                const MetricRequestSpec& spec, bool ranged,
+                                                                const ComparisonRecipe& recipe);
+
+// Fills in a context.json's missing video profiles from `recipe`'s, as the
+// videos are read now (in memory only). A comparison saved before 2.3 has
+// none, and its H.264 scores would otherwise count as made from a maybe
+// lossless 4:4:4 video (decoding_marks). Its folder is the same files' (by
+// their identity in recipe_hash), so the profiles read now are theirs.
+void with_profiles_read_now(nlohmann::json& context, const ComparisonRecipe& recipe);
 
 // One saved metric score (load_metric), or nothing. `backend` is where the
 // user set a perceptual metric to be calculated: "cpu" accepts only a CPU

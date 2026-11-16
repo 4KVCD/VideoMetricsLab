@@ -250,8 +250,9 @@ bool cut_to_range(LoadedMetric& metric, const ComparisonRecipe& recipe, const nl
 }
 
 // A folder's context.json, when it is one this app reads: with `waiting`
-// read, also one cut by an older black-bar rule whose bars are still to be found.
-std::optional<nlohmann::json> current_context(const std::filesystem::path& directory,
+// read, also one cut by an older black-bar rule whose bars are still to be
+// found. Its videos' missing profiles are `recipe`'s (with_profiles_read_now).
+std::optional<nlohmann::json> current_context(const std::filesystem::path& directory, const ComparisonRecipe& recipe,
                                               ScoresWaitingForBars waiting = ScoresWaitingForBars::not_read) {
     std::optional<nlohmann::json> context = read_json(directory / "context.json");
     if (context && (!context->is_object() || !current_format(*context))) {
@@ -260,6 +261,9 @@ std::optional<nlohmann::json> current_context(const std::filesystem::path& direc
     if (context && cut_by_an_older_rule(*context) &&
         (waiting == ScoresWaitingForBars::not_read || bars_to_find(*context).empty())) {
         return std::nullopt;
+    }
+    if (context) {
+        with_profiles_read_now(*context, recipe);
     }
     return context;
 }
@@ -291,7 +295,7 @@ std::optional<OtherRecipeFolder> auto_folder_for_source_only(const std::filesyst
     ComparisonRecipe automatic = recipe;
     automatic.crop_mode = CropMode::automatic;
     std::filesystem::path directory = base / format_folder / recipe_hash(source, distorted, automatic);
-    std::optional<nlohmann::json> context = current_context(directory, waiting);
+    std::optional<nlohmann::json> context = current_context(directory, automatic, waiting);
     if (!context) {
         return std::nullopt;
     }
@@ -345,7 +349,7 @@ std::optional<OtherRecipeFolder> whole_video_folder(const std::filesystem::path&
     whole.range_end = 0;
     whole.range_in_frames = false;
     std::filesystem::path directory = base / format_folder / recipe_hash(source, distorted, whole);
-    std::optional<nlohmann::json> context = current_context(directory, waiting);
+    std::optional<nlohmann::json> context = current_context(directory, whole, waiting);
     if (!context || (own_context && !same_crops(*own_context, *context))) {
         return std::nullopt;
     }
@@ -486,7 +490,8 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
     const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental,
     const std::set<std::string>& not_from_other_recipes, ScoresWaitingForBars waiting) {
     const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
-    const std::optional<nlohmann::json> context = current_context(directory, waiting);  // none: its scores are not read
+    // None: its scores are not read
+    const std::optional<nlohmann::json> context = current_context(directory, recipe, waiting);
     const std::optional<OtherRecipeFolder> automatic =
         auto_folder_for_source_only(base, source, distorted, recipe, context, waiting);
     // A range: the whole videos' scores cut to it, where it has none of its
@@ -601,16 +606,16 @@ std::optional<OtherCvvdpScores> other_cvvdp_scores(const std::filesystem::path& 
     }
     const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
     const bool ranged = recipe.range_end > 0;
-    std::vector<std::pair<nlohmann::json, double>> saved = other_parameters(directory, *spec, ranged);
+    std::vector<std::pair<nlohmann::json, double>> saved = other_parameters(directory, *spec, ranged, recipe);
     const bool other_recipes = recipe.crop_mode == CropMode::source_only && !not_from_other_recipes.contains("cvvdp");
     const auto automatic = other_recipes ? auto_folder_for_source_only(base, source, distorted, recipe,
-                                                                       current_context(directory),
+                                                                       current_context(directory, recipe),
                                                                        ScoresWaitingForBars::not_read)
                                          : std::nullopt;
     if (automatic) {
         // Auto's other displays too, where this recipe has none of its own:
         // load_result would take them (not after a Recalculate of CVVDP).
-        for (auto& [parameters, score] : other_parameters(automatic->directory, *spec, ranged)) {
+        for (auto& [parameters, score] : other_parameters(automatic->directory, *spec, ranged, recipe)) {
             const bool known = std::any_of(saved.begin(), saved.end(),
                                            [&parameters](const auto& own) { return own.first == parameters; });
             if (!known) {
