@@ -67,6 +67,16 @@ bool current_format(const nlohmann::json& metadata);
 // cuts, or may be. No other black-bar mode detects bars.
 bool cut_by_an_older_rule(const nlohmann::json& context);
 
+// For a context cut_by_an_older_rule, the videos whose black bars must be found
+// (find_black_bars_of_older_scores) before it tells whether its boxes hold: none
+// where the saved data tells it without them, where the answers are kept, where
+// they cannot be kept (a video whose size changes) or where finding them failed
+// in this process (bars_not_found); its scores are then calculated again.
+std::vector<VideoInfo> bars_to_find(const nlohmann::json& context);
+
+// Finding `video`'s bars failed: bars_to_find leaves it out from now on in this process.
+void bars_not_found(const VideoInfo& video);
+
 // The black-bar mode of a saved comparison whose context says it cut bars that
 // Auto or Source only found by an older rule, with a box that cuts something
 // from either video; none for any other comparison. Throws on a damaged

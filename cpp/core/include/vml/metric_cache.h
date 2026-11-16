@@ -124,6 +124,13 @@ bool find_black_bars_of_older_scores(const std::filesystem::path& base, const st
                                      const std::filesystem::path& distorted, const ComparisonRecipe& recipe,
                                      const std::function<void(const VideoInfo&)>& find_box);
 
+// How load_result reads the scores of a comparison cut by an older black-bar
+// rule whose videos' bars must be found to tell whether its boxes hold
+// (find_black_bars_of_older_scores): not until they are found (a run, the
+// command line), or as saved meanwhile (the window, which shows them at once,
+// then finds the bars and looks again, dropping those cut otherwise now).
+enum class ScoresWaitingForBars { not_read, read };
+
 // The saved scores of `specs` for a comparison, with the comparison's
 // details and its label; nothing when none are saved. `backends` says where
 // SSIMULACRA2 and Butteraugli are set to be calculated: set to CPU, a Vship
@@ -135,12 +142,13 @@ bool find_black_bars_of_older_scores(const std::filesystem::path& base, const st
 // answer where they are Source only's (Auto compared the test video at its
 // whole frame), except for the metric keys in `not_from_other_recipes`: those
 // the user asked to calculate again, whose Source-only scores are not saved
-// yet.
+// yet. `waiting`: ScoresWaitingForBars.
 std::optional<std::pair<ComparisonResult, std::string>> load_result(
     const std::filesystem::path& base, const std::filesystem::path& source, const std::filesystem::path& distorted,
     const ComparisonRecipe& recipe, const std::vector<MetricRequestSpec>& specs,
     const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental = {},
-    const std::set<std::string>& not_from_other_recipes = {});
+    const std::set<std::string>& not_from_other_recipes = {},
+    ScoresWaitingForBars waiting = ScoresWaitingForBars::not_read);
 
 // CVVDP's scores saved for a comparison with other displays than the one
 // its request in `specs` or `supplemental` models, each with the CVVDP

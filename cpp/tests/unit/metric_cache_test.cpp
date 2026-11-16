@@ -819,6 +819,67 @@ TEST(MetricCache, ScoresOfAnOlderRuleAreReadWhereTheBarsFoundNowGiveTheirBoxes) 
     forget_crop_answers();
 }
 
+// The window reads scores of bars an older rule found as saved while their
+// videos' bars are still to be found (ScoresWaitingForBars::read), and looks
+// again once they are: then only where the bars found give the saved boxes. A
+// run never reads them before. Bars that could not be found leave them unread.
+TEST(MetricCache, ScoresWaitingForBarsAreReadAsSavedUntilTheBarsAreFound) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    const std::filesystem::path bars = folder / "black_bars.json";
+    forget_crop_answers();
+    set_crop_store([bars] { return bars; });
+    AnalysisRequest request = request_from(stored);
+    request.recipe.crop_mode = CropMode::automatic;
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source_info.path = folder / "s.mp4";
+    result.distorted_info = result.source_info;
+    result.distorted_info.path = folder / "t.mp4";
+    const auto [width, height] = result.source_info.frame_size();
+    const CropBox letterbox{width, height - 40, 0, 20};
+    result.source_crop = letterbox;
+    result.distorted_crop = letterbox;
+    const std::filesystem::path directory =
+        store_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe, result, "t", request.metrics);
+    nlohmann::json context = nlohmann::json::parse(*platform::read_file(directory / "context.json"));
+    context.erase("black_bars_rule");  // rule 1's
+    touch(directory / "context.json", context.dump());
+    const auto keep_both = [&](const CropBox& box) {
+        nlohmann::json boxes = nlohmann::json::array();
+        for (const VideoInfo& video : {result.source_info, result.distorted_info}) {
+            const std::filesystem::path resolved = std::filesystem::weakly_canonical(video.path);
+            boxes.push_back({{platform::path_text(resolved), std::filesystem::file_size(resolved),
+                              *platform::modified_ns(resolved), video.duration, 0.12549},
+                             {box.w, box.h, box.x, box.y}});
+        }
+        touch(bars, nlohmann::json{{"version", 6}, {"boxes", boxes}}.dump());
+        forget_crop_answers();
+    };
+    const auto loaded = [&](ScoresWaitingForBars waiting) {
+        const auto found = load_result(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                       request.metrics, request.perceptual_backends, {}, {}, waiting);
+        return found ? found->first.metric_results.keys().size() : 0;
+    };
+    EXPECT_EQ(loaded(ScoresWaitingForBars::not_read), 0U);
+    EXPECT_EQ(loaded(ScoresWaitingForBars::read), request.metrics.size());
+    // Found, cut 2 lines more by the rule now: not read either way
+    keep_both(CropBox{width, height - 44, 0, 22});
+    EXPECT_EQ(loaded(ScoresWaitingForBars::read), 0U);
+    // Found, the same boxes: read either way
+    keep_both(letterbox);
+    EXPECT_EQ(loaded(ScoresWaitingForBars::not_read), request.metrics.size());
+    // Not found: nothing is waited for any more, and the scores are not read
+    std::filesystem::remove(bars);
+    forget_crop_answers();
+    EXPECT_TRUE(find_black_bars_of_older_scores(folder / "cache", folder / "s.mp4", folder / "t.mp4", request.recipe,
+                                                [](const VideoInfo&) { throw CropDetectError("no picture"); }));
+    EXPECT_EQ(loaded(ScoresWaitingForBars::read), 0U);
+    set_crop_store({});
+    forget_crop_answers();
+}
+
 // A resolution test's scores of bars an older rule found are read where the
 // source's bars found now give its box: both sides are the source's, cut by
 // that box. Its bars are looked for once, as the source's.

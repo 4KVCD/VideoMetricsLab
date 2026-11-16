@@ -1129,6 +1129,64 @@ bool cut_by_an_older_rule(const nlohmann::json& context) {
     return false;
 }
 
+namespace {
+
+// The videos whose black bars find_black_bars_of_older_scores could not find
+// in this process (path and duration): not looked for again at each lookup.
+struct UnfoundBars {
+    std::mutex mutex;
+    std::set<std::pair<std::string, double>> videos;
+};
+
+UnfoundBars& unfound_bars() {
+    static UnfoundBars unfound;
+    return unfound;
+}
+
+std::pair<std::string, double> unfound_key(const VideoInfo& video) {
+    return {platform::path_text(video.path), video.duration};
+}
+
+}  // namespace
+
+std::vector<VideoInfo> bars_to_find(const nlohmann::json& context) {
+    std::optional<CropMode> mode;
+    std::optional<std::pair<VideoInfo, VideoInfo>> videos;
+    try {
+        mode = mode_cut_by_an_older_rule(context);
+        videos = videos_of_kept_answers(context);
+        if (mode && boxes_now_without_detection(context, *mode) != SavedBoxesNow::unknown) {
+            return {};  // boxes known to differ now: calculated again, nothing to find
+        }
+    } catch (const std::exception&) {
+        return {};  // damaged: cut_by_an_older_rule reads it as it always has
+    }
+    if (!mode || !videos) {
+        return {};
+    }
+    // A run finds the source's bars, and with Auto the test video's too
+    // (a resolution test's "test video" is the source again)
+    std::vector<VideoInfo> wanted{videos->first};
+    if (*mode == CropMode::automatic && unfound_key(videos->second) != unfound_key(videos->first)) {
+        wanted.push_back(videos->second);
+    }
+    UnfoundBars& unfound = unfound_bars();
+    std::erase_if(wanted, [&unfound](const VideoInfo& video) {
+        if (kept_crop_answer(video)) {
+            return true;
+        }
+        const std::lock_guard lock(unfound.mutex);
+        return unfound.videos.contains(unfound_key(video));
+    });
+    return wanted;
+}
+
+void bars_not_found(const VideoInfo& video) {
+    UnfoundBars& unfound = unfound_bars();
+    const std::lock_guard lock(unfound.mutex);
+    unfound.videos.insert(unfound_key(video));
+}
+
 std::vector<std::pair<nlohmann::json, double>> other_parameters(const std::filesystem::path& directory,
                                                                 const MetricRequestSpec& spec, bool ranged) {
     const nlohmann::json wanted = spec.identity();
@@ -1230,18 +1288,6 @@ std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, 
 
 namespace {
 
-// The videos whose black bars find_black_bars_of_older_scores could not find
-// in this process (path and duration): not looked for again at each lookup.
-struct UnfoundBars {
-    std::mutex mutex;
-    std::set<std::pair<std::string, double>> videos;
-};
-
-UnfoundBars& unfound_bars() {
-    static UnfoundBars unfound;
-    return unfound;
-}
-
 // The recipes besides its own whose folders load_result reads for `recipe`:
 // the whole videos' for a range, and Auto's of each for Source only.
 std::vector<ComparisonRecipe> recipes_read_beside(const ComparisonRecipe& recipe) {
@@ -1279,44 +1325,20 @@ bool find_black_bars_of_older_scores(const std::filesystem::path& base, const st
         if (!context || !context->is_object() || !current_format(*context) || !cut_by_an_older_rule(*context)) {
             continue;
         }
-        std::optional<CropMode> mode;
-        std::optional<std::pair<VideoInfo, VideoInfo>> videos;
-        try {
-            mode = mode_cut_by_an_older_rule(*context);
-            videos = videos_of_kept_answers(*context);
-            if (mode && boxes_now_without_detection(*context, *mode) != SavedBoxesNow::unknown) {
-                continue;  // boxes known to differ now: calculated again, nothing to find
-            }
-        } catch (const std::exception&) {
-            continue;  // damaged: cut_by_an_older_rule reads it as it always has
-        }
-        if (!mode || !videos) {
-            continue;
-        }
-        // A run finds the source's bars, and with Auto the test video's too
-        std::vector<const VideoInfo*> detected{&videos->first};
-        if (*mode == CropMode::automatic) {
-            detected.push_back(&videos->second);
-        }
-        for (const VideoInfo* video : detected) {
-            const std::pair key{platform::path_text(video->path), video->duration};
-            if (!asked.insert(key.first).second || kept_crop_answer(*video)) {
-                continue;
-            }
-            UnfoundBars& unfound = unfound_bars();
-            if (const std::lock_guard lock(unfound.mutex); unfound.videos.contains(key)) {
+        for (const VideoInfo& video : bars_to_find(*context)) {
+            // Each video once, and not where an earlier folder's search kept its answer
+            if (!asked.insert(platform::path_text(video.path)).second || kept_crop_answer(video)) {
                 continue;
             }
             looked = true;
             try {
-                find_box(*video);
+                find_box(video);
             } catch (const Cancelled&) {
                 throw;
             } catch (const std::exception& error) {
                 app_log::write(app_log::Level::warning, "vml.metric_cache",
                                std::string("Black bars of saved scores not found: ") + error.what());
-                const std::lock_guard lock(unfound.mutex);
-                unfound.videos.insert(key);
+                bars_not_found(video);
             }
         }
     }

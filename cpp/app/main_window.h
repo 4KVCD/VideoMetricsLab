@@ -215,6 +215,10 @@ struct RowData {
     // Not kept when the app closes: after a restart the other recipes' scores
     // answer them again, which are the same scores.
     std::map<std::string, std::set<std::string>> forgotten_metrics;
+    // The saved scores on show that a lookup read before the black bars they
+    // wait for were found (SavedScoresFound::unchecked): dropped unless that
+    // lookup's second answer for the row comes (drop_unchecked_saved_scores).
+    std::vector<std::string> unchecked_saved_scores;
 
     // The file the saved scores are looked up under: the real file when the
     // row's own path is a made-up stand-in.
@@ -401,6 +405,8 @@ private:
     std::vector<std::filesystem::path> cancel_cache_lookup();
     void on_cache_lookup_finished(ProbeWorker* worker);
     void on_saved_found(int generation, const SavedScoresFound& found);
+    void drop_scores_cut_otherwise(int row, const SavedScoresFound& found);
+    void drop_unchecked_saved_scores(int row);
     void on_other_displays_found(int generation, const OtherDisplaysFound& found);
     void show_table_menu(const QPoint& position);
     void recompute_rows(const std::vector<int>& rows, bool forget_saved = true);
