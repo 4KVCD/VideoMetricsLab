@@ -7,9 +7,8 @@ redone, along with some bug fixes.
 
 ### Performance
 
-- Saved scores from versions before v2.5 appear as soon as the videos are added, instead of after 5-10 s per 4K video
-  spent finding their black bars again; the bars are checked afterwards, and any score they no longer match is removed
-  and calculated on the next run.
+- Saved scores appear as soon as the videos are added, instead of after 5-10 s per 4K video spent finding their black
+  bars again.
 
 ### Bug fixes
 
