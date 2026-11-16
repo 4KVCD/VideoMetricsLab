@@ -232,6 +232,9 @@ bool software_decoder_bundled();
 // Whether `backend`'s decoder library is bundled and loads (the GPU is not
 // asked).
 bool decoder_available(std::string_view backend);
+// Why it is not: not bundled, not loading (with the system's reason) or out of
+// date; nothing where it loads.
+std::optional<std::string> decoder_unavailable_reason(std::string_view backend);
 
 // Windows' own decoders (Media Foundation's) on AMD's GPUs, which can only
 // hand their pictures over on the GPU: opened first where AMD's decoder

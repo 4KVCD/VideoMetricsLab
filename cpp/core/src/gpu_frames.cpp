@@ -1208,12 +1208,14 @@ bool software_decoder_bundled() {
     });
 }
 
-bool decoder_available(std::string_view backend) {
+bool decoder_available(std::string_view backend) { return !decoder_unavailable_reason(backend); }
+
+std::optional<std::string> decoder_unavailable_reason(std::string_view backend) {
     try {
         load_decoder(backend);
-        return true;
-    } catch (const GpuDecodeUnavailableError&) {
-        return false;
+        return std::nullopt;
+    } catch (const GpuDecodeUnavailableError& error) {
+        return error.what();
     }
 }
 

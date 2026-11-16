@@ -153,12 +153,19 @@ void check_frame_decoders(SelfTestReport& report) {
     for (const auto& [backend, maker] :
          {std::pair(nvidia_decoder, "NVIDIA"), std::pair(intel_decoder, "Intel"), std::pair(amd_decoder, "AMD")}) {
         const std::string name = platform::shared_library_name(std::string(gpu_decoder(backend).library));
-        if (decoder_available(backend)) {
-            report.ok(std::string(maker) + " frame decoder for the GPU metrics (" + name + ")");
-        } else {
-            report.warn(std::string(maker) + " frame decoder absent (" + name +
+        if (const std::optional<std::string> why = decoder_unavailable_reason(backend)) {
+            report.warn(std::string(maker) + " frame decoder unavailable (" + *why +
                         "); FFmpeg decodes the GPU metrics' videos");
+        } else {
+            report.ok(std::string(maker) + " frame decoder for the GPU metrics (" + name + ")");
         }
+    }
+    // vvdec-vulkan, VVC's decoder on the GPU (Settings' "VVC decoder: GPU"), Windows' only.
+    if (const std::optional<std::string> why = decoder_unavailable_reason(vvdec_decoder)) {
+        report.warn("VVC decoder on the GPU unavailable (" + *why + "); VVdeC decodes VVC on the CPU");
+    } else {
+        report.ok("VVC decoder on the GPU (vvdec-vulkan, " +
+                  platform::shared_library_name(std::string(gpu_decoder(vvdec_decoder).library)) + ")");
     }
 #endif
     // The software decoder uses the app's FFmpeg libraries (tools/ffmpeg) and
