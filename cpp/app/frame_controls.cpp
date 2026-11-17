@@ -101,7 +101,7 @@ void FrameControls::on_range_box_changed() {
     } else {
         range_.reset();  // one end typed so far: the whole video until the other is
     }
-    refresh_range_boxes();
+    refresh_range_boxes(BoxBounds::keep_wider);  // a held arrow keeps stepping (issue #28)
     emit range_changed(true);
 }
 
@@ -113,12 +113,18 @@ void FrameControls::reset_range_boxes() {
     }
 }
 
-void FrameControls::refresh_range_boxes() {
+void FrameControls::refresh_range_boxes(BoxBounds bounds) {
     // The range boxes bounded by the graph's frames, widened to their own
     // ends, so that an end is shown as chosen even where the lines drawn stop
     // short of it. Each box's ends are read before setRange, which clamps the
     // value, and each box's "—" is its own lowest value, which moves with the
     // graph's first frame.
+    //
+    // setRange also stops the repeat of an arrow held down on the box, so it
+    // runs only where the bounds change; after a box's own step
+    // (BoxBounds::keep_wider) not even where they would only narrow, as they
+    // do while an end beyond the graph's frames is stepped back towards
+    // them. Both boxes always have the same bounds.
     std::array<QSpinBox*, 2> boxes{range_start_spin, range_end_spin};
     std::array<std::optional<int>, 2> ends;
     if (range_) {
@@ -138,10 +144,15 @@ void FrameControls::refresh_range_boxes() {
             hi = std::max(hi, *end);
         }
     }
+    const bool same = boxes[0]->minimum() == lo - 1 && boxes[0]->maximum() == hi;
+    const bool wider = boxes[0]->minimum() <= lo - 1 && boxes[0]->maximum() >= hi;
+    const bool set_range = !same && !(bounds == BoxBounds::keep_wider && wider);
     for (std::size_t i = 0; i < boxes.size(); ++i) {
         const bool blocked = boxes[i]->blockSignals(true);
-        boxes[i]->setRange(lo - 1, hi);
-        boxes[i]->setValue(ends[i].value_or(lo - 1));
+        if (set_range) {
+            boxes[i]->setRange(lo - 1, hi);
+        }
+        boxes[i]->setValue(ends[i].value_or(boxes[i]->minimum()));
         boxes[i]->blockSignals(blocked);
     }
     clear_range_button->setEnabled(ends[0] || ends[1]);

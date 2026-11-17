@@ -55,8 +55,12 @@ private:
     void on_range_box_changed();
     // Both range boxes back to "—" (no end), their signals held.
     void reset_range_boxes();
+    // How refresh_range_boxes sets the boxes' bounds: exactly the graph's
+    // frames and the range's ends, or, after a box's own step, left as they
+    // are where they hold those already.
+    enum class BoxBounds { exact, keep_wider };
     // The range boxes bounded by the graph's frames and the range's ends.
-    void refresh_range_boxes();
+    void refresh_range_boxes(BoxBounds bounds = BoxBounds::exact);
 
     // Nothing (no range, the whole video) until both boxes hold a frame.
     // Each box's lowest value, shown as "—", is no end.
