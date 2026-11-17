@@ -102,11 +102,12 @@ struct VideoInfo {
     std::string pix_fmt;
     long long bit_rate = 0;  // bits per second, 0 if unknown
     // The file's bitrate, soundtrack included, where the video's own is not
-    // recorded and an audio track's rate is not known either.
+    // recorded and the other streams' rates are not known either.
     bool bit_rate_whole_file = false;
-    // An estimate: the file's bitrate minus its audio tracks', where the
-    // video's own is not recorded (a Matroska file without statistics tags
-    // it can trust). Subtitles and the container's own bytes are in it.
+    // An estimate: the file's bitrate minus its other streams' (audio,
+    // subtitles), its attachments (fonts) and the container's own bytes,
+    // where the video's own is not recorded (a Matroska file without
+    // statistics tags it can trust, an MPEG-TS file).
     bool bit_rate_estimated = false;
     // The video stream's own size in bytes, from Matroska's statistics tags
     // where they are the file's (as bit_rate trusts them); 0 if unknown.

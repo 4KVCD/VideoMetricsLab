@@ -698,7 +698,7 @@
   "Calculate the rest?": "¿Calcular el resto?",
   "It could not be read. Remove it or add the file again to retry.": "No se pudo leer. Quítalo o vuelve a agregar el archivo para reintentarlo.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "La tasa de bits de todo el archivo, con el audio incluido: el archivo no registra la del video.",
-  "An estimate: the file's bitrate minus its audio's, as the file does not record the video's own. Subtitles and the container's own bytes are counted in it.": "Una estimación: la tasa de bits del archivo menos la del audio, ya que el archivo no indica la del propio vídeo. Incluye los subtítulos y los bytes propios del contenedor.",
+  "An estimate: the file's bitrate minus its audio, subtitles, attachments (fonts) and the container's own bytes, as the file does not record the video's own.": "Una estimación: la tasa de bits del archivo menos el audio, los subtítulos, los adjuntos (fuentes) y los bytes propios del contenedor, ya que el archivo no indica la del propio vídeo.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} ya está en la lista. ¿Mostrar en su lugar las puntuaciones de la ejecución guardada?",
   "Drop a video here, paste its path, or click Browse...": "Suelte un video aquí, pegue su ruta o haga clic en Examinar...",
   "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Suelte archivos de video aquí para agregarlos, arrastre filas para reordenarlas y haga clic en el encabezado de una columna para ordenar.",

@@ -698,7 +698,7 @@
   "Calculate the rest?": "هل تريد حساب البقية؟",
   "It could not be read. Remove it or add the file again to retry.": "تعذّرت قراءته. أزِله أو أضف الملف من جديد لإعادة المحاولة.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "معدل البت للملف كله بما فيه الصوت: لا يسجّل الملف معدل الفيديو وحده.",
-  "An estimate: the file's bitrate minus its audio's, as the file does not record the video's own. Subtitles and the container's own bytes are counted in it.": "تقدير: معدل بتات الملف ناقصًا معدل الصوت، إذ لا يسجّل الملف معدل الفيديو نفسه. الترجمات وبايتات الحاوية نفسها محسوبة فيه.",
+  "An estimate: the file's bitrate minus its audio, subtitles, attachments (fonts) and the container's own bytes, as the file does not record the video's own.": "تقدير: معدل بتات الملف ناقصًا الصوت والترجمات والمرفقات (الخطوط) وبايتات الحاوية نفسها، إذ لا يسجّل الملف معدل الفيديو نفسه.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} موجود في القائمة بالفعل. هل تُعرض درجات التشغيل المحفوظ مكانه؟",
   "Drop a video here, paste its path, or click Browse...": "أفلت فيديو هنا، أو الصق مساره، أو انقر استعراض...",
   "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "أفلت ملفات الفيديو هنا لإضافتها، واسحب الصفوف لتغيير ترتيبها، وانقر عنوان عمود للفرز.",

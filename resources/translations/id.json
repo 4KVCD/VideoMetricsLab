@@ -698,7 +698,7 @@
   "Calculate the rest?": "Hitung sisanya?",
   "It could not be read. Remove it or add the file again to retry.": "Tidak dapat dibaca. Hapus, atau tambahkan file lagi untuk mencoba ulang.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate seluruh file, termasuk audio: file tidak mencatat bitrate videonya sendiri.",
-  "An estimate: the file's bitrate minus its audio's, as the file does not record the video's own. Subtitles and the container's own bytes are counted in it.": "Perkiraan: laju bit berkas dikurangi laju audionya, karena berkas tidak mencatat laju video itu sendiri. Subtitel dan byte milik kontainer ikut terhitung.",
+  "An estimate: the file's bitrate minus its audio, subtitles, attachments (fonts) and the container's own bytes, as the file does not record the video's own.": "Perkiraan: laju bit berkas dikurangi audio, subtitel, lampiran (fon), dan byte milik kontainer, karena berkas tidak mencatat laju video itu sendiri.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} sudah ada di daftar. Tampilkan skor dari proses tersimpan sebagai gantinya?",
   "Drop a video here, paste its path, or click Browse...": "Letakkan video di sini, tempel jalurnya, atau klik Telusuri...",
   "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Letakkan file video di sini untuk menambahkannya, seret baris untuk mengubah urutannya, dan klik judul kolom untuk mengurutkan.",

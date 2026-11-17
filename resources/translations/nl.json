@@ -698,7 +698,7 @@
   "Calculate the rest?": "De rest berekenen?",
   "It could not be read. Remove it or add the file again to retry.": "Kon niet worden gelezen. Verwijder het, of voeg het bestand opnieuw toe om het nog eens te proberen.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "De bitrate van het hele bestand, inclusief geluid: het bestand vermeldt die van de video niet.",
-  "An estimate: the file's bitrate minus its audio's, as the file does not record the video's own. Subtitles and the container's own bytes are counted in it.": "Een schatting: de bitrate van het bestand min die van de audio, omdat het bestand die van de video zelf niet vermeldt. Ondertitels en de eigen bytes van de container tellen mee.",
+  "An estimate: the file's bitrate minus its audio, subtitles, attachments (fonts) and the container's own bytes, as the file does not record the video's own.": "Een schatting: de bitrate van het bestand min audio, ondertitels, bijlagen (lettertypen) en de eigen bytes van de container, omdat het bestand die van de video zelf niet vermeldt.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} staat al in de lijst. In plaats daarvan de scores van de opgeslagen run tonen?",
   "Drop a video here, paste its path, or click Browse...": "Sleep hier een video naartoe, plak het pad of klik op Bladeren...",
   "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Sleep videobestanden hierheen om ze toe te voegen, sleep rijen om ze te herschikken en klik op een kolomkop om te sorteren.",

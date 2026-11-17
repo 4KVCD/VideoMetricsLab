@@ -129,8 +129,7 @@ TEST(Ffprobe, StatisticsTagsCountUnlessFfmpegCopiedThem) {
 // A file FFmpeg wrote, of 1,000,000 bytes over 10 s (800 kb/s), with a video
 // and an Opus track whose sizes the tags give as `video_bytes` and
 // `audio_bytes` ("" for no tags).
-VideoInfo ffmpeg_written(const std::string& video_bytes, const std::string& audio_bytes,
-                         const AudioRates& sampled_audio = {}) {
+VideoInfo ffmpeg_written(const std::string& video_bytes, const std::string& audio_bytes) {
     const auto tags = [](const std::string& bytes) {
         return bytes.empty() ? std::string() : R"(,"tags":{"NUMBER_OF_BYTES":")" + bytes + R"("})";
     };
@@ -140,13 +139,13 @@ VideoInfo ffmpeg_written(const std::string& video_bytes, const std::string& audi
                               tags(audio_bytes) +
                               R"(}],"format":{"duration":"10.0","size":"1000000","bit_rate":"800000",)"
                               R"("format_name":"matroska,webm","tags":{"ENCODER":"Lavf63.1.101"}}})";
-    return video_info_from_probe("a.mkv", probe, sampled_audio);
+    return video_info_from_probe("a.mkv", probe);
 }
 
 // In a file FFmpeg wrote, the tags count where they add up to the file;
-// otherwise the video's rate is the file's minus the audio's (an estimate),
-// or the whole file's where the audio's is not known either.
-TEST(Ffprobe, TheVideosRateIsItsOwnOrTheFilesMinusTheAudios) {
+// otherwise, without a sample of the file's packets and with an audio track
+// that states no rate, the video's rate is the whole file's.
+TEST(Ffprobe, TheVideosRateIsItsOwnWhereTheTagsAddUp) {
     const VideoInfo tagged = ffmpeg_written("900000", "97000");  // 99.7 % of the file
     EXPECT_EQ(tagged.bit_rate, 720000);
     EXPECT_FALSE(tagged.bit_rate_estimated || tagged.bit_rate_whole_file);
@@ -156,19 +155,86 @@ TEST(Ffprobe, TheVideosRateIsItsOwnOrTheFilesMinusTheAudios) {
     EXPECT_EQ(stale.bit_rate, 800000);
     EXPECT_TRUE(stale.bit_rate_whole_file);
     EXPECT_EQ(stale.stream_bytes, 0);
-
-    const VideoInfo sampled = ffmpeg_written("", "", {{1, 77600}});
-    EXPECT_EQ(sampled.bit_rate, 800000 - 77600);
-    EXPECT_TRUE(sampled.bit_rate_estimated);
-    EXPECT_FALSE(sampled.bit_rate_whole_file);
 }
 
-// ffprobe lists a packet's duration before its size, whatever order it is
-// asked for; a stream with under a second of packets gives no rate.
-TEST(Ffprobe, AnAudioRateIsItsPacketsBytesOverTheirDurations) {
-    const AudioRates rates = audio_rates_from_packets("1,0.500000,4000\r\n1,0.500000,6000\n2,0.020000,300\n"
-                                                      "1,N/A,999\n3,0.6,100\n3,0.6,50\n");
-    EXPECT_EQ(rates, (AudioRates{{1, 80000}, {3, 1000}}));
+// A 100 s Matroska file of 800 kb/s (10,000,000 bytes) whose video states no
+// rate, with Opus audio, two subtitle tracks, a font of 100,000 bytes and
+// cover art.
+VideoInfo with_everything(const std::optional<PacketSample>& sample) {
+    const std::string probe =
+        R"({"streams":[{"index":0,"codec_type":"video","codec_name":"hevc","width":1280,"height":720,)"
+        R"("r_frame_rate":"24/1","avg_frame_rate":"24/1"},)"
+        R"({"index":1,"codec_type":"audio","codec_name":"opus"},)"
+        R"({"index":2,"codec_type":"subtitle","codec_name":"ass"},)"
+        R"({"index":3,"codec_type":"subtitle","codec_name":"ass"},)"
+        R"({"index":4,"codec_type":"attachment","codec_name":"ttf","extradata_size":100000},)"
+        R"({"index":5,"codec_type":"video","codec_name":"mjpeg","disposition":{"attached_pic":1}}],)"
+        R"("format":{"duration":"100.0","size":"10000000","bit_rate":"800000","format_name":"matroska,webm",)"
+        R"("tags":{"ENCODER":"Lavf63.1.101"}}})";
+    return video_info_from_probe("a.mkv", probe, sample);
+}
+
+// The estimate takes off the font, then the container's share, then every
+// other stream at its rate in the sample; cover art is no stream to take off.
+TEST(Ffprobe, TheVideosEstimateIsTheFilesLessEverythingElse) {
+    PacketSample sample;
+    sample.bytes = {{0, 9'000'000}, {1, 1'000'000}, {2, 5000}, {3, 5000}, {5, 50000}};
+    sample.overhead = 0.01;
+    sample.seconds = 120;  // longer than the file: its 100 s are read
+    const VideoInfo info = with_everything(sample);
+    EXPECT_EQ(info.bit_rate, 703280);  // (800,000 - 100,000 x 8 / 100) x 0.99 - 80,000 - 400 - 400
+    EXPECT_TRUE(info.bit_rate_estimated);
+    EXPECT_FALSE(info.bit_rate_whole_file);
+
+    sample.bytes[1] = 100'000'000;  // more than the file: no estimate
+    const VideoInfo too_much = with_everything(sample);
+    EXPECT_EQ(too_much.bit_rate, 800000);
+    EXPECT_TRUE(too_much.bit_rate_whole_file);
+
+    const VideoInfo unsampled = with_everything(std::nullopt);  // the Opus track's rate is not known
+    EXPECT_EQ(unsampled.bit_rate, 800000);
+    EXPECT_TRUE(unsampled.bit_rate_whole_file);
+}
+
+// A container with no audio holds the container's own bytes at least, so its
+// rate is an estimate; a raw stream is the video and nothing else.
+TEST(Ffprobe, OnlyARawStreamsFileRateIsTheVideos) {
+    const auto alone_in = [](const std::string& format_name) {
+        return video_info_from_probe(
+            "a", R"({"streams":[{"index":0,"codec_type":"video","codec_name":"h264","width":64,"height":64,)"
+                 R"("r_frame_rate":"24/1"}],"format":{"duration":"10.0","size":"125000","bit_rate":"100000",)"
+                 R"("format_name":")" + format_name + R"("}})");
+    };
+    const VideoInfo contained = alone_in("matroska,webm");
+    EXPECT_EQ(contained.bit_rate, 100000);
+    EXPECT_TRUE(contained.bit_rate_estimated);
+    const VideoInfo raw = alone_in("h264");
+    EXPECT_EQ(raw.bit_rate, 100000);
+    EXPECT_FALSE(raw.bit_rate_estimated || raw.bit_rate_whole_file);
+}
+
+// ffprobe lists a packet's index, size and place in the file, whatever order
+// it is asked for, then perhaps more; the container's share is what the
+// placed packets' span holds beyond all the packets' bytes, a packet without
+// a place (N/A) counting in the bytes.
+TEST(Ffprobe, APacketSampleCountsEachStreamsBytesAndTheContainersShare) {
+    const PacketSample sample =
+        packet_sample_from_csv("0,1000,0\r\n1,200,1010\n1,40,N/A\n0,500,1300,\nnot,a,packet\n", 30);
+    EXPECT_EQ(sample.bytes, (std::map<int, long long>{{0, 1500}, {1, 240}}));
+    EXPECT_DOUBLE_EQ(sample.overhead, 1 - 1740.0 / 1800);
+    EXPECT_EQ(sample.seconds, 30);
+
+    EXPECT_EQ(packet_sample_from_csv("0,10,0\n0,10,1000\n", 30).overhead, 0.5);  // a gap, not the container's
+    EXPECT_EQ(packet_sample_from_csv("0,10,0\n0,10,N/A\n", 30).overhead, 0.0);   // one placed packet: no span
+}
+
+// About 16 MB of a file is read, at least 5 s and at most 2 minutes of it.
+TEST(Ffprobe, APacketSampleReadsAbout16MB) {
+    EXPECT_EQ(packet_sample_seconds(1'400'000), 96);
+    EXPECT_EQ(packet_sample_seconds(8'000'000), 17);
+    EXPECT_EQ(packet_sample_seconds(60'000'000), 5);
+    EXPECT_EQ(packet_sample_seconds(100'000), 120);
+    EXPECT_EQ(packet_sample_seconds(0), 120);  // not known
 }
 
 // As measured on streams made at known rates: what ffprobe reports of a raw

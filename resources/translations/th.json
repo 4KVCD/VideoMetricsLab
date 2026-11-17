@@ -698,7 +698,7 @@
   "Calculate the rest?": "คำนวณที่เหลือไหม?",
   "It could not be read. Remove it or add the file again to retry.": "อ่านไม่ได้ นำออก หรือเพิ่มไฟล์อีกครั้งเพื่อลองใหม่",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "บิตเรตของทั้งไฟล์ รวมแทร็กเสียง: ไฟล์ไม่ได้บันทึกบิตเรตของวิดีโอไว้",
-  "An estimate: the file's bitrate minus its audio's, as the file does not record the video's own. Subtitles and the container's own bytes are counted in it.": "ค่าประมาณ: บิตเรตของไฟล์ลบบิตเรตของเสียง เพราะไฟล์ไม่ได้บันทึกบิตเรตของวิดีโอเอง รวมคำบรรยายและไบต์ของคอนเทนเนอร์เองไว้ด้วย",
+  "An estimate: the file's bitrate minus its audio, subtitles, attachments (fonts) and the container's own bytes, as the file does not record the video's own.": "ค่าประมาณ: บิตเรตของไฟล์ลบเสียง คำบรรยาย ไฟล์แนบ (ฟอนต์) และไบต์ของคอนเทนเนอร์เอง เพราะไฟล์ไม่ได้บันทึกบิตเรตของวิดีโอเอง",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} อยู่ในรายการแล้ว แสดงคะแนนของการรันที่บันทึกไว้แทนหรือไม่",
   "Drop a video here, paste its path, or click Browse...": "วางวิดีโอที่นี่ วางพาธ หรือคลิกเรียกดู...",
   "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "วางไฟล์วิดีโอที่นี่เพื่อเพิ่ม ลากแถวเพื่อจัดลำดับใหม่ และคลิกหัวคอลัมน์เพื่อเรียงลำดับ",

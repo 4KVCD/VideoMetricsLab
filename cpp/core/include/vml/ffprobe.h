@@ -106,21 +106,33 @@ long long count_video_packets(const std::filesystem::path& path, const std::stri
 VideoInfo probe_raw_yuv(const std::filesystem::path& path, const std::string& size, const std::string& pix_fmt,
                         double fps, const std::string& ffprobe, const CancelToken& cancel = CancelToken());
 
-// Audio streams' bitrates measured from their packets, by their index in the
-// file (ffprobe's "index"), for streams that state none.
-using AudioRates = std::map<int, long long>;
+// What the packets of the first `seconds` of a file hold: each stream's
+// bytes, by its index in the file (ffprobe's "index"), and the share of the
+// bytes they span that are the container's own (Matroska's cluster and block
+// headers, MPEG-TS's packet headers, tables and padding), 0 to 0.5.
+struct PacketSample {
+    std::map<int, long long> bytes;
+    double overhead = 0.0;
+    double seconds = 0.0;  // the stretch read (the file's length where it is shorter)
+};
+
+// How many seconds of a file of `bits_per_second` (0 if unknown) a
+// PacketSample reads: about 16 MB of it, at least 5 s and at most 2 minutes,
+// so that a high-rate file is not read for long.
+int packet_sample_seconds(long long bits_per_second);
 
 // The video's details in ffprobe's JSON output for `path`
 // (-print_format json -show_format -show_streams). Where the video's own
-// bitrate is not recorded, it is estimated as the file's minus its audio's,
-// a track that states none taking its rate from `sampled_audio`. Throws
+// bitrate is not recorded, it is estimated from the file's: with `sample`,
+// less its attachments (fonts), the container's own bytes and every other
+// stream (audio, subtitles, data), each at its stated rate or else its rate
+// in the sample; without, less its audio tracks' stated rates. Throws
 // ProbeError when the output cannot be read or has no video stream.
 VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_view probe_json,
-                                const AudioRates& sampled_audio = {});
+                                const std::optional<PacketSample>& sample = std::nullopt);
 
-// Each audio stream's rate in ffprobe's lines of packets (-show_entries
-// packet=stream_index,duration_time,size -of csv=p=0): its bytes over its
-// packets' durations. A stream with under a second of packets is left out.
-AudioRates audio_rates_from_packets(std::string_view packets);
+// The sample in ffprobe's lines of packets (-show_entries
+// packet=stream_index,size,pos -of csv=p=0) of the first `seconds` of a file.
+PacketSample packet_sample_from_csv(std::string_view packets, double seconds);
 
 }  // namespace vml

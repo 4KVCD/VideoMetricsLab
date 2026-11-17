@@ -698,7 +698,7 @@
   "Calculate the rest?": "Обчислити решту?",
   "It could not be read. Remove it or add the file again to retry.": "Не вдалося прочитати. Приберіть його або додайте файл знову, щоб повторити.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Бітрейт усього файлу разом зі звуковою доріжкою: бітрейт самого відео у файлі не записано.",
-  "An estimate: the file's bitrate minus its audio's, as the file does not record the video's own. Subtitles and the container's own bytes are counted in it.": "Оцінка: бітрейт файлу мінус бітрейт звуку, бо файл не вказує бітрейт самого відео. Субтитри та власні байти контейнера до неї входять.",
+  "An estimate: the file's bitrate minus its audio, subtitles, attachments (fonts) and the container's own bytes, as the file does not record the video's own.": "Оцінка: бітрейт файлу мінус звук, субтитри, вкладення (шрифти) та власні байти контейнера, бо файл не вказує бітрейт самого відео.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} уже є у списку. Показати замість цього оцінки збереженого запуску?",
   "Drop a video here, paste its path, or click Browse...": "Перетягніть сюди відео, вставте шлях до нього або натисніть «Огляд...»",
   "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Перетягніть сюди відеофайли, щоб додати їх, перетягуйте рядки, щоб змінити порядок, і клацніть заголовок стовпця для сортування.",

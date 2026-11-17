@@ -72,8 +72,8 @@ QString bitrate_note(const VideoInfo& info) {
         return tr("The whole file's bitrate, soundtrack included: the file does not record the video's own.");
     }
     if (info.bit_rate != 0 && info.bit_rate_estimated) {
-        return tr("An estimate: the file's bitrate minus its audio's, as the file does not record the video's own. "
-                  "Subtitles and the container's own bytes are counted in it.");
+        return tr("An estimate: the file's bitrate minus its audio, subtitles, attachments (fonts) and the "
+                  "container's own bytes, as the file does not record the video's own.");
     }
     return {};
 }
