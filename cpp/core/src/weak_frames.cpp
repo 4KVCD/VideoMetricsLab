@@ -1,13 +1,13 @@
 #include "vml/weak_frames.h"
 
 #include <algorithm>
-#include <charconv>
 #include <climits>
 #include <cmath>
 #include <iterator>
 #include <map>
 
 #include "vml/number_format.h"
+#include "vml/python_text.h"
 #include "vml/results_summary.h"
 #include "vml/stats.h"
 
@@ -197,13 +197,12 @@ std::optional<WeakCondition> parse_weak_condition(std::string_view text) {
     if (at == std::string_view::npos || at == 0 || at + 1 >= text.size()) {
         return std::nullopt;
     }
-    WeakCondition condition{std::string(text.substr(0, at)), text[at], 0.0};
-    const std::string_view number = text.substr(at + 1);
-    const auto [end, error] = std::from_chars(number.data(), number.data() + number.size(), condition.threshold);
-    if (error != std::errc() || end != number.data() + number.size() || !std::isfinite(condition.threshold)) {
+    // python_float, not std::from_chars: macOS's library has from_chars for a double only from macOS 26.
+    const std::optional<double> threshold = python_float(text.substr(at + 1));
+    if (!threshold || !std::isfinite(*threshold)) {
         return std::nullopt;
     }
-    return condition;
+    return WeakCondition{std::string(text.substr(0, at)), text[at], *threshold};
 }
 
 WeakCondition default_weak_condition(const MetricDefinition& metric) {
