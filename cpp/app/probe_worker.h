@@ -13,6 +13,7 @@
 #include <QThread>
 
 #include <atomic>
+#include <cstdint>
 #include <filesystem>
 #include <map>
 #include <optional>
@@ -45,6 +46,13 @@ struct SavedScoresQuery {
     AnalysisRequest request;
     std::vector<MetricRequestSpec> supplemental;
     std::set<std::string> not_from_other_recipes;
+};
+
+// A video's rate, from a stretch of its packets (sampled_video_rate): the
+// details it was read with, of which only the rate is to be taken
+// (VideoInfo::take_bit_rate).
+struct RateEstimated {
+    VideoInfo estimate;
 };
 
 // The saved scores found for a row, with the token of the request they were
@@ -91,6 +99,12 @@ public:
         cancel_.cancel();
     }
 
+    // Marked by the window as it takes lane_probed, which comes after every
+    // video's probed: from then on the worker only samples rates, which
+    // nothing waits for. The window's thread only.
+    void set_lane_taken() { lane_taken_ = true; }
+    bool lane_taken() const { return lane_taken_; }
+
 signals:
     void probed(const vml::app::Probed& probed);
     // Only for a row that has saved scores: a miss is the usual case.
@@ -98,13 +112,27 @@ signals:
     // For every row whose lookup includes CVVDP, so that none found clears
     // what was found before.
     void other_displays_found(const vml::app::OtherDisplaysFound& found);
+    // Every video has been read: what waits for the videos (the saved scores'
+    // lookup, "Reading..." taken down) need not wait for their rates.
+    void lane_probed();
+    // After lane_probed, for each video that states no rate of its own (only
+    // with StreamScan::every_codec; none for a file changed since it was read).
+    void rate_estimated(const vml::app::RateEstimated& estimated);
     void finished_all();
 
 protected:
     void run() override;
 
 private:
+    // A video whose rate is sampled once every video has been read, with the
+    // size and time its file had when it was read.
+    struct RateToSample {
+        std::filesystem::path file;
+        std::pair<std::uintmax_t, std::optional<long long>> stamp;
+    };
+
     void look_up(const QString& path);
+    void estimate_rates(const std::vector<RateToSample>& videos);
 
     QStringList paths_;
     std::string ffprobe_;
@@ -116,11 +144,13 @@ private:
     std::map<QString, SavedScoresQuery> queries_;
     bool looks_up_ = false;
     std::atomic<bool> cancelled_ = false;
+    bool lane_taken_ = false;
     CancelToken cancel_;
 };
 
 }  // namespace vml::app
 
 Q_DECLARE_METATYPE(vml::app::Probed)
+Q_DECLARE_METATYPE(vml::app::RateEstimated)
 Q_DECLARE_METATYPE(vml::app::SavedScoresFound)
 Q_DECLARE_METATYPE(vml::app::OtherDisplaysFound)

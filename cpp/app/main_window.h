@@ -358,6 +358,16 @@ private:
     void start_media_probe(const std::vector<std::filesystem::path>& paths);
     void on_probed(const Probed& probed);
     void on_probe_finished(ProbeWorker* worker);
+    // `worker` (none: a lane that ended without saying so) has read every
+    // video's details; its rates may still be coming.
+    void on_lane_probed(ProbeWorker* worker);
+    void on_rate_estimated(const RateEstimated& estimated);
+    void on_source_lane_probed(int generation, ProbeWorker* worker);
+    // The current rate of `info`'s file, as the reference or a row has it
+    // now, into `info`; unchanged when no row or reference is that file.
+    void take_current_rate(VideoInfo& info) const;
+    void take_current_rates(ComparisonResult& result) const;
+    void set_row_bitrate(int row, const VideoInfo& info);
     // Asks the frame rate of the videos just added that have none (raw streams
     // that store none), and of the reference.
     void ask_new_frame_rates();

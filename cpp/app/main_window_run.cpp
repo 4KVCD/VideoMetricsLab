@@ -154,7 +154,7 @@ void MainWindow::on_run_clicked() {
 // (else they are waited for, and the run starts by itself once they are).
 // Says why not, where it cannot.
 bool MainWindow::ready_to_run(const std::vector<int>& checked) {
-    if (source_probe_worker_ != nullptr) {  // until its answer has been taken
+    if (source_probe_worker_ != nullptr && !source_probe_worker_->lane_taken()) {  // until its answer has been taken
         dialogs_.inform(app::tr("Still reading reference"), app::tr("Wait for the reference video to finish loading."));
         return false;
     }
@@ -282,8 +282,10 @@ std::optional<std::vector<VmafJob>> MainWindow::plan_jobs(const std::vector<int>
         const std::shared_ptr<RowData>& row_data = rows_[static_cast<std::size_t>(row)];
         if (!row_data->video_info) {
             // Listed until its last answer has been taken. A worker whose thread
-            // has ended can still have its answers on their way here.
-            if (!probe_workers_.empty()) {
+            // has ended can still have its answers on their way here; one whose
+            // lane is taken has given them all, and only samples rates now.
+            if (std::any_of(probe_workers_.begin(), probe_workers_.end(),
+                            [](const ProbeWorker* worker) { return !worker->lane_taken(); })) {
                 dialogs_.inform(app::tr("Still reading videos"),
                                 app::tr("Wait for every checked test video to finish loading before running."));
                 return std::nullopt;
@@ -1015,6 +1017,9 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
         if (!result.resample_target) {
             bitrate_infos.push_back(result.distorted_info);
         }
+        for (VideoInfo& info : bitrate_infos) {
+            take_current_rate(info);
+        }
         bitrate_panel_->add_and_analyze(bitrate_infos);
     }
     if (!source_info_ || !same_path(source_info_->path, result.source)) {
@@ -1040,6 +1045,7 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
     // The video's own result so far, before this piece: its line is updated.
     const bool continuing = previous && previous->partial;
     const std::shared_ptr<CompletedRun> run = make_completed_run(row_data, result, label, final);
+    take_current_rates(run->result);  // a rate sampled since the video started
     if (final) {
         run->facts = job_facts_[job];  // sent just before the result
         run->record = run_record_;
@@ -1051,7 +1057,7 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
     if (row_data.options.resample_test) {
         set_resample_row_info(*row, *row_data.options.resample_test);  // the sizes, with the crop the run used
     } else {
-        set_row_info(*row, result.distorted_info);  // its Scaling cell, with the crops the run used
+        set_row_info(*row, run->result.distorted_info);  // its Scaling cell, with the crops the run used
     }
     if (final) {
         row_data.status_detail = with_fallbacks(index, scores_detail(run->result));
@@ -1078,8 +1084,10 @@ void MainWindow::save_job_result(std::size_t job, const RowData& row_data, const
     const AnalysisRequest request =
         analysis_request(job_options_[job], requested_metrics(row_data), automatic_perceptual_backends,
                          job_cvvdp_[job], result.source_info, result.distorted_info);
+    ComparisonResult saved = result;  // the copy the write needs anyway
+    take_current_rates(saved);        // a rate sampled since the video started
     file_writes_->submit(QStringLiteral("cache %1").arg(label),
-                         [base = cache_folder(), identity = row_data.identity_path(), result,
+                         [base = cache_folder(), identity = row_data.identity_path(), result = std::move(saved),
                           label = label.toStdString(), request] {
                              store_result(base, result.source, identity, request.recipe, result, label,
                                           request.metrics);

@@ -710,15 +710,47 @@ bool stamps_go_back_as_shown(const std::vector<long long>& picture_stamps) {
     return std::adjacent_find(picture_stamps.begin(), picture_stamps.end(), std::greater<>()) != picture_stamps.end();
 }
 
-VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe, const CancelToken& cancel) {
+namespace {
+
+// ffprobe's JSON of the file's format and streams.
+std::string format_and_streams(const std::filesystem::path& path, const std::string& ffprobe,
+                               const CancelToken& cancel) {
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
+    command.insert(command.end(), {"-print_format", "json", "-show_format", "-show_streams", text(path)});
+    return run_ffprobe(command, path, std::chrono::seconds(60), cancel);
+}
+
+}  // namespace
+
+bool needs_rate_sample(const VideoInfo& info) {
+    return (info.bit_rate_whole_file || info.bit_rate_estimated) && !info.is_raw_stream();
+}
+
+std::optional<VideoInfo> sampled_video_rate(const std::filesystem::path& path, const std::string& ffprobe,
+                                            const CancelToken& cancel) {
+    if (is_av2_file(path)) {
+        return std::nullopt;  // ffprobe cannot read AV2
+    }
+    try {
+        const std::string probe = format_and_streams(path, ffprobe, cancel);
+        const VideoInfo info = video_info_from_probe(path, probe);
+        if (const std::optional<PacketSample> sample = sampled_packets(path, info.bit_rate, ffprobe, cancel)) {
+            return video_info_from_probe(path, probe, sample);
+        }
+    } catch (const ProbeError&) {
+        // The file changed or went since it was read: its rate stays.
+    }
+    return std::nullopt;
+}
+
+VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe, const CancelToken& cancel,
+                      RateSample rate_sample) {
     if (is_av2_file(path)) {
         return probe_av2(path, cancel);  // ffprobe cannot read AV2
     }
-    std::vector<std::string> command = ffprobe_command_start(ffprobe);
-    command.insert(command.end(), {"-print_format", "json", "-show_format", "-show_streams", text(path)});
-    const std::string probe = run_ffprobe(command, path, std::chrono::seconds(60), cancel);
+    const std::string probe = format_and_streams(path, ffprobe, cancel);
     VideoInfo info = video_info_from_probe(path, probe);
-    if (info.bit_rate_whole_file || info.bit_rate_estimated) {
+    if (rate_sample == RateSample::now && needs_rate_sample(info)) {
         // The video states no rate of its own: a short stretch of the
         // file's packets gives the other streams' and the container's share.
         // The rate found so far (the file's, or the file's less the stated

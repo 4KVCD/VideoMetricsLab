@@ -168,6 +168,16 @@ void MainWindow::start_source_probe(const std::filesystem::path& path) {
     probe_workers_.push_back(worker);
     connect(worker, &ProbeWorker::probed, this,
             [this, generation](const Probed& probed) { on_source_probed(generation, probed); });
+    // Its rate comes after its details; a newer choice's reading drops an
+    // older one's.
+    connect(worker, &ProbeWorker::rate_estimated, this, [this, generation](const RateEstimated& estimated) {
+        if (generation == source_probe_generation_) {
+            on_rate_estimated(estimated);
+        }
+    });
+    // Read: what waits for the reference need not wait for its rate.
+    connect(worker, &ProbeWorker::lane_probed, this,
+            [this, generation, worker] { on_source_lane_probed(generation, worker); });
     connect(worker, &ProbeWorker::finished_all, this,
             [this, generation, worker] { on_source_probe_finished(generation, worker); });
     worker->start();
@@ -363,10 +373,9 @@ void MainWindow::retire(ProbeWorker* worker) {
     worker->deleteLater();
 }
 
-void MainWindow::on_source_probe_finished(int generation, ProbeWorker* worker) {
-    retire(worker);
+void MainWindow::on_source_lane_probed(int generation, ProbeWorker* worker) {
+    worker->set_lane_taken();  // only its rate is sampled from now on: nothing waits for it
     if (generation == source_probe_generation_) {
-        source_probe_worker_ = nullptr;
         source_reading_.reset();  // also when it stopped without a result
         open_videos_changed();    // not saved while it was read (save_open_videos)
         if (!run_active_) {
@@ -375,6 +384,13 @@ void MainWindow::on_source_probe_finished(int generation, ProbeWorker* worker) {
         on_table_selection_changed();
         // Not from inside this slot: a dialog's own event loop could end up back here.
         QTimer::singleShot(0, this, [this] { ask_new_frame_rates(); });
+    }
+}
+
+void MainWindow::on_source_probe_finished(int generation, ProbeWorker* worker) {
+    retire(worker);
+    if (generation == source_probe_generation_) {
+        source_probe_worker_ = nullptr;  // kept until now so that a newer choice cancels its rate sample
     }
 }
 

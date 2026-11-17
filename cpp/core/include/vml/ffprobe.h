@@ -53,7 +53,27 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
 // The same, ended by `cancel`: ffprobe on a large file over a slow or
 // network disk can take many seconds, and closing the window or stopping a
 // scan must not wait for it. Throws Cancelled once cancelled.
-VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe, const CancelToken& cancel);
+//
+// Where the video states no rate of its own, a short stretch of the file's
+// packets is read for the other streams' and the container's share of the
+// file's rate (0.1 to 0.6 s): with RateSample::later it is not, and the rate
+// is the file's, or the file's less the audio's stated rates (marked as an
+// estimate either way), until sampled_video_rate gives it.
+enum class RateSample { now, later };
+VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe, const CancelToken& cancel,
+                      RateSample sample = RateSample::now);
+
+// Whether a video read with RateSample::later has a better rate to be had
+// from sampled_video_rate: its own rate is not stated, and it is not a raw
+// stream (whose rate is the file's, exact).
+bool needs_rate_sample(const VideoInfo& info);
+
+// The video's details with the rate RateSample::now gives (only the rate is
+// meant to be taken from them: VideoInfo::take_bit_rate), or nothing where the
+// packets cannot be read and the rate stays as it was. Throws Cancelled once
+// cancelled.
+std::optional<VideoInfo> sampled_video_rate(const std::filesystem::path& path, const std::string& ffprobe,
+                                            const CancelToken& cancel);
 
 // The frame rate a raw stream of `codec_name` stores in its headers, given
 // what ffprobe reports of it (r_frame_rate) when told to read the stream at a

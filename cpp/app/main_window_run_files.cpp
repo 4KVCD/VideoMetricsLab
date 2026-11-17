@@ -253,6 +253,7 @@ void MainWindow::read_details_of_loaded_run(const ComparisonResult& result) {
                                    ProbeWorker::StreamScan::h264_only, this);
     probe_workers_.push_back(worker);
     connect(worker, &ProbeWorker::probed, this, [this](const Probed& probed) { take_read_details_of_file(probed); });
+    connect(worker, &ProbeWorker::lane_probed, this, [this, worker] { on_lane_probed(worker); });
     // As the rows' readers end: a "Reading..." shown while this one read is
     // then taken down.
     connect(worker, &ProbeWorker::finished_all, this, [this, worker] { on_probe_finished(worker); });

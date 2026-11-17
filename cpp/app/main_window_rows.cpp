@@ -630,8 +630,7 @@ void MainWindow::set_row_info(int row, const std::optional<VideoInfo>& info, con
             }
         }
         item->setToolTip(tip.join('\n'));
-        distorted_table_->item(row, col_bitrate)->setText(bitrate_string(*info));
-        distorted_table_->item(row, col_bitrate)->setToolTip(bitrate_note(*info));
+        set_row_bitrate(row, *info);
         RowData& row_data = *rows_[static_cast<std::size_t>(row)];
         row_data.video_info = info;
         set_row_scaling(row);
@@ -788,6 +787,9 @@ void MainWindow::start_media_probe(const std::vector<std::filesystem::path>& pat
                                    ProbeWorker::StreamScan::every_codec, this);
     probe_workers_.push_back(worker);
     connect(worker, &ProbeWorker::probed, this, [this](const Probed& probed) { on_probed(probed); });
+    connect(worker, &ProbeWorker::lane_probed, this, [this, worker] { on_lane_probed(worker); });
+    connect(worker, &ProbeWorker::rate_estimated, this,
+            [this](const RateEstimated& estimated) { on_rate_estimated(estimated); });
     connect(worker, &ProbeWorker::finished_all, this, [this, worker] { on_probe_finished(worker); });
     show_reading(ntr("Reading {count} video...", "Reading {count} videos...", static_cast<long long>(paths.size())));
     worker->start();
@@ -837,11 +839,22 @@ void MainWindow::on_probed(const Probed& probed) {
 }
 
 void MainWindow::on_probe_finished(ProbeWorker* worker) {
+    const bool lane_taken = worker->lane_taken();
     retire(worker);
+    if (!lane_taken) {
+        on_lane_probed(nullptr);  // a lookup's lane, which sends no lane_probed, or one cancelled
+    }
+}
+
+void MainWindow::on_lane_probed(ProbeWorker* worker) {
+    if (worker != nullptr) {
+        worker->set_lane_taken();  // only rates are sampled from now on: nothing waits for them
+    }
     if (!probed_lookups_.empty()) {
         start_cache_lookup(std::exchange(probed_lookups_, {}));
     }
-    if (std::any_of(probe_workers_.begin(), probe_workers_.end(), [](ProbeWorker* w) { return w->isRunning(); })) {
+    if (std::any_of(probe_workers_.begin(), probe_workers_.end(),
+                    [](const ProbeWorker* w) { return w->isRunning() && !w->lane_taken(); })) {
         return;  // another lane is still reading
     }
     if (!run_active_) {
@@ -850,6 +863,58 @@ void MainWindow::on_probe_finished(ProbeWorker* worker) {
     on_table_selection_changed();
     // Not from inside this slot: a dialog's own event loop could end up back here.
     QTimer::singleShot(0, this, [this] { ask_new_frame_rates(); });
+}
+
+void MainWindow::on_rate_estimated(const RateEstimated& estimated) {
+    // Every copy of the file's details takes it: film grain twins and
+    // resolution tests share a file, a reference can also be a test video,
+    // and the results made from them carry their own copies.
+    const VideoInfo& estimate = estimated.estimate;
+    const auto take = [&estimate](VideoInfo& info) {
+        if (same_path(info.path, estimate.path)) {
+            info.take_bit_rate(estimate);
+        }
+    };
+    if (source_info_ && same_path(source_info_->path, estimate.path)) {
+        source_info_->take_bit_rate(estimate);
+        show_source_label();
+    }
+    for (std::size_t index = 0; index < rows_.size(); ++index) {
+        RowData& row_data = *rows_[index];
+        if (row_data.completed_run) {
+            take(row_data.completed_run->result.source_info);
+            take(row_data.completed_run->result.distorted_info);
+        }
+        if (row_data.video_info && same_path(row_data.video_info->path, estimate.path)) {
+            row_data.video_info->take_bit_rate(estimate);
+            if (!row_data.options.resample_test) {  // a resolution test's Bitrate says N/A
+                set_row_bitrate(static_cast<int>(index), *row_data.video_info);
+            }
+        }
+    }
+}
+
+void MainWindow::take_current_rate(VideoInfo& info) const {
+    if (source_info_ && same_path(source_info_->path, info.path)) {
+        info.take_bit_rate(*source_info_);
+        return;
+    }
+    for (const std::shared_ptr<RowData>& row_data : rows_) {
+        if (row_data->video_info && same_path(row_data->video_info->path, info.path)) {
+            info.take_bit_rate(*row_data->video_info);
+            return;
+        }
+    }
+}
+
+void MainWindow::take_current_rates(ComparisonResult& result) const {
+    take_current_rate(result.source_info);
+    take_current_rate(result.distorted_info);
+}
+
+void MainWindow::set_row_bitrate(int row, const VideoInfo& info) {
+    distorted_table_->item(row, col_bitrate)->setText(bitrate_string(info));
+    distorted_table_->item(row, col_bitrate)->setToolTip(bitrate_note(info));
 }
 
 void MainWindow::ask_new_frame_rates() {

@@ -1,6 +1,8 @@
 #include "probe_worker.h"
 
 #include <exception>
+#include <filesystem>
+#include <system_error>
 #include <utility>
 
 #include "vml/ffprobe.h"
@@ -13,8 +15,16 @@ namespace vml::app {
 
 namespace {
 
+// A file's size and time written, which change when it is replaced.
+std::pair<std::uintmax_t, std::optional<long long>> file_stamp(const std::filesystem::path& file) {
+    std::error_code error;
+    const std::uintmax_t size = std::filesystem::file_size(file, error);
+    return {error ? 0 : size, platform::modified_ns(file)};
+}
+
 void register_types() {
     qRegisterMetaType<vml::app::Probed>();
+    qRegisterMetaType<vml::app::RateEstimated>();
     qRegisterMetaType<vml::app::SavedScoresFound>();
     qRegisterMetaType<vml::app::OtherDisplaysFound>();
 }
@@ -43,6 +53,7 @@ ProbeWorker::ProbeWorker(QStringList paths, std::filesystem::path base, std::fil
 }
 
 void ProbeWorker::run() {
+    std::vector<RateToSample> rates_to_sample;
     for (const QString& path : paths_) {
         if (cancelled_) {
             break;
@@ -53,9 +64,16 @@ void ProbeWorker::run() {
         }
         Probed result{path, std::nullopt, QString()};
         try {
-            result.info = probe_video(platform::path_from_text(path.toStdString()), ffprobe_, cancel_);
+            const std::filesystem::path file = platform::path_from_text(path.toStdString());
+            const auto stamp = file_stamp(file);
+            // The rate's sample waits until every video has been read: a
+            // row's details, and the saved scores' lookup, do not wait for it.
+            result.info = probe_video(file, ffprobe_, cancel_, RateSample::later);
             if (result.info->is_raw_stream()) {
                 result.info = raw_stream_as_found(*std::move(result.info), ffprobe_, cancel_);
+            }
+            if (scan_ == StreamScan::every_codec && needs_rate_sample(*result.info)) {
+                rates_to_sample.push_back({file, stamp});
             }
             if (!ffmpeg_.empty() &&
                 (scan_ == StreamScan::every_codec || ascii_lower(result.info->codec_name) == "h264")) {
@@ -72,7 +90,29 @@ void ProbeWorker::run() {
         }
         emit probed(result);
     }
+    if (!looks_up_) {
+        emit lane_probed();
+        estimate_rates(rates_to_sample);
+    }
     emit finished_all();
+}
+
+void ProbeWorker::estimate_rates(const std::vector<RateToSample>& videos) {
+    for (const RateToSample& video : videos) {
+        if (cancelled_) {
+            return;
+        }
+        try {
+            std::optional<VideoInfo> estimate = sampled_video_rate(video.file, ffprobe_, cancel_);
+            if (estimate && file_stamp(video.file) == video.stamp) {
+                emit rate_estimated({*std::move(estimate)});
+            }
+        } catch (const Cancelled&) {
+            return;
+        } catch (const std::exception&) {
+            // A background boundary: the video keeps the rate it was read with.
+        }
+    }
 }
 
 void ProbeWorker::look_up(const QString& path) {
