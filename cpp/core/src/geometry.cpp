@@ -113,11 +113,14 @@ std::optional<std::string> size_change_scale(const VideoInfo& info, const std::s
         return std::nullopt;
     }
     // In the video's own pixel format: the conversion to the analysis format
-    // stays where it is for every video, after the crop. Its colour matrix is
-    // cleared first: where the tag changes partway through, the scale filter
-    // would convert the later frames to the first frames' matrix, and they
-    // would no longer be the pictures stored, which the app's decoders give.
-    return "setparams=colorspace=unknown,scale=" + std::to_string(info.scaled_to->first) + ":" +
+    // stays where it is for every video, after the crop. Its colour matrix tag
+    // is cleared and its range tag set to the probed one first: where a tag
+    // changes partway through (which is what makes FFmpeg rebuild its filters
+    // for a video that keeps its size), the scale filter would convert the
+    // later frames to the first frames' matrix or levels, and they would no
+    // longer be the pictures stored, which the app's decoders give.
+    return std::string("setparams=colorspace=unknown:range=") + (info.full_range() ? "pc" : "tv") +
+           ",scale=" + std::to_string(info.scaled_to->first) + ":" +
            std::to_string(info.scaled_to->second) +
            ":flags=" + scale_algorithm + ",format=" + info.pix_fmt;
 }
