@@ -138,13 +138,19 @@ bool would_distort(const FrameComparison& comparison, const VideoInfo& info, con
 std::string frame_filter(const FrameComparison& comparison, FrameSide side, const PreviewColorSettings& colors = {},
                          std::optional<Size> output_size = std::nullopt);
 
+// How a still's PNG is written; the pixels are the same either way: stored
+// for the tab's own pictures, written and read sooner (24 MB for 4K), or
+// compressed for a file the user keeps (9 MB for 4K, about 80 ms more).
+enum class PngEncoding { stored, compressed };
+
 // The FFmpeg command that writes frame `frame` of `side` as a PNG to its
 // standard output, its keyframes decoded `lead` seconds before they are
 // shown (keyframe_lead). Throws FrameExtractError when the video has no
 // usable frame rate, std::invalid_argument for a negative frame.
 std::vector<std::string> build_frame_command(const std::string& ffmpeg, const FrameComparison& comparison,
                                              FrameSide side, long long frame,
-                                             const PreviewColorSettings& colors = {}, double lead = 0.0);
+                                             const PreviewColorSettings& colors = {}, double lead = 0.0,
+                                             PngEncoding png = PngEncoding::stored);
 
 // Whether a still of `info` is made from the app's decoder's pictures
 // (grain_feed.h's windows_from_the_app, where the app can decode it here),
@@ -162,6 +168,7 @@ std::string still_grain(const VideoInfo& info);
 // the app's decoder failing on it, a codec only the app decodes that it
 // cannot here), and Cancelled once `cancel` ends it.
 std::string extract_frame_png(const std::string& ffmpeg, const FrameComparison& comparison, FrameSide side,
-                              long long frame, const CancelToken& cancel, const PreviewColorSettings& colors = {});
+                              long long frame, const CancelToken& cancel, const PreviewColorSettings& colors = {},
+                              PngEncoding png = PngEncoding::stored);
 
 }  // namespace vml

@@ -306,13 +306,20 @@ SeekPoint frame_start(const FrameComparison& comparison, FrameSide side, long lo
 
 // A still's command after its input: the first frame through `filters`, as a
 // PNG on standard output.
-void add_png_output(std::vector<std::string>& command, const std::string& filters) {
+void add_png_output(std::vector<std::string>& command, const std::string& filters, PngEncoding png) {
     command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-an", "-sn", "-dn", "-vf", filters,
-                                   "-frames:v", "1", "-f", "image2pipe",
-                                   // Stored, not compressed: the same pixels, 25 MB for 4K
-                                   // rather than 2-8, but written 85-340 ms sooner and read
-                                   // in 27 ms rather than 64-104.
-                                   "-c:v", "png", "-compression_level", "0", "-pred", "none", "pipe:1"});
+                                   "-frames:v", "1", "-f", "image2pipe", "-c:v", "png"});
+    if (png == PngEncoding::stored) {
+        // Stored, not compressed: the same pixels, 25 MB for 4K rather than
+        // 2-8, but written 85-340 ms sooner and read in 27 ms rather than
+        // 64-104.
+        command.insert(command.end(), {"-compression_level", "0", "-pred", "none"});
+    } else {
+        // A 4K frame in 8.7 MB rather than 23.8, 77 ms more to write; higher
+        // levels save little more (8.3 MB at 3) for much more time.
+        command.insert(command.end(), {"-compression_level", "2", "-pred", "paeth"});
+    }
+    command.emplace_back("pipe:1");
 }
 
 // What a still's FFmpeg wrote: its standard output, exit code and error text.
@@ -355,12 +362,13 @@ std::string still_png(StillOutput output, long long frame, const CancelToken& ca
 // first one after shown. Throws FilmGrainRefusal where the app could not
 // feed them.
 std::string fed_still(const std::string& ffmpeg, const FrameComparison& comparison, FrameSide side, long long frame,
-                      const CancelToken& cancel, const PreviewColorSettings& colors, const SeekPoint& start) {
+                      const CancelToken& cancel, const PreviewColorSettings& colors, const SeekPoint& start,
+                      PngEncoding png) {
     // VVC's decoder asks ffprobe nothing (gpu_frames.cpp's configuration).
     PictureFeed feed(frame_video_info(comparison, side), ffmpeg, "", cancel, FeedWindow{start.seek, 0, start.skip});
     std::vector<std::string> command = ffmpeg_command_start(ffmpeg, {"-loglevel", "error"});
     append(command, feed.input_arguments());
-    add_png_output(command, frame_filter(comparison, side, colors));
+    add_png_output(command, frame_filter(comparison, side, colors), png);
     StillOutput output = run_still(command, cancel);
     feed.finish();  // a feeding that failed gives no still
     return still_png(std::move(output), frame, cancel);
@@ -381,7 +389,7 @@ std::string raw_stream_start_filter(long long frame) { return "select=gte(n\\," 
 
 std::vector<std::string> build_frame_command(const std::string& ffmpeg, const FrameComparison& comparison,
                                              FrameSide side, long long frame, const PreviewColorSettings& colors,
-                                             double lead) {
+                                             double lead, PngEncoding png) {
     const SeekPoint start = frame_start(comparison, side, frame, lead);
     const VideoInfo& info = frame_video_info(comparison, side);
     std::string filters = frame_filter(comparison, side, colors);
@@ -402,12 +410,13 @@ std::vector<std::string> build_frame_command(const std::string& ffmpeg, const Fr
         command.insert(command.end(), {"-ss", format_fixed(start.seek, 9)});
     }
     command.insert(command.end(), {as_stored, "-i", platform::path_text(error ? frame_input_path(comparison, side) : input)});
-    add_png_output(command, filters);
+    add_png_output(command, filters, png);
     return command;
 }
 
 std::string extract_frame_png(const std::string& ffmpeg, const FrameComparison& comparison, FrameSide side,
-                              long long frame, const CancelToken& cancel, const PreviewColorSettings& colors) {
+                              long long frame, const CancelToken& cancel, const PreviewColorSettings& colors,
+                              PngEncoding png) {
     const std::filesystem::path& path = frame_input_path(comparison, side);
     std::error_code error;
     if (!std::filesystem::is_regular_file(path, error)) {
@@ -419,7 +428,7 @@ std::string extract_frame_png(const std::string& ffmpeg, const FrameComparison& 
     if (still_from_the_app(info)) {
         const SeekPoint start = frame_start(comparison, side, frame, lead);
         try {
-            return fed_still(ffmpeg, comparison, side, frame, cancel, colors, start);
+            return fed_still(ffmpeg, comparison, side, frame, cancel, colors, start, png);
         } catch (const FilmGrainRefusal& refusal) {
             // Not FFmpeg's picture instead: the still is labelled and kept as
             // the app's decoder's, and scoring the video would fail too.
@@ -434,7 +443,7 @@ std::string extract_frame_png(const std::string& ffmpeg, const FrameComparison& 
         logger.info("A still of " + platform::path_text(path.filename()) +
                     " decoded by FFmpeg, as the app's decoder could not feed it (" + refusal.what() + ")");
     }
-    return still_png(run_still(build_frame_command(ffmpeg, comparison, side, frame, colors, lead), cancel), frame,
+    return still_png(run_still(build_frame_command(ffmpeg, comparison, side, frame, colors, lead, png), cancel), frame,
                      cancel);
 }
 

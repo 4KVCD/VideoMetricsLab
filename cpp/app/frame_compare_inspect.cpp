@@ -94,7 +94,8 @@ void StillSaveWorker::run() {
         // left out, as the file outlives it.
         const PreviewColorSettings colors{mode_, std::nullopt, std::nullopt};
         for (const FrameSide side : {FrameSide::source, FrameSide::distorted}) {
-            pictures.push_back(extract_frame_png(ffmpeg_, comparison_, side, frame_, cancel_, colors));
+            pictures.push_back(
+                extract_frame_png(ffmpeg_, comparison_, side, frame_, cancel_, colors, PngEncoding::compressed));
         }
     } catch (const Cancelled&) {
         return;

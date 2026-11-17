@@ -156,6 +156,27 @@ TEST(FrameExtract, SeeksEarlierWhereKeyframesAreDecodedLongBeforeShown) {
     EXPECT_NE(argument(playback, "-filter_complex").find("[in0]trim=start=1.201200000,"), std::string::npos);
 }
 
+// A still the user saves is the same picture, compressed: only the PNG's
+// settings differ from the tab's own stored one.
+TEST(FrameExtract, ASavedStillIsTheSamePictureCompressed) {
+    FrameComparison comparison;
+    comparison.source_info.path = "source.mkv";
+    comparison.source_info.width = 3840;
+    comparison.source_info.height = 2160;
+    comparison.distorted_info = comparison.source_info;
+    comparison.fps = 24;
+    const std::vector<std::string> shown = build_frame_command("<ffmpeg>", comparison, FrameSide::source, 100);
+    const std::vector<std::string> saved =
+        build_frame_command("<ffmpeg>", comparison, FrameSide::source, 100, {}, 0.0, PngEncoding::compressed);
+    const std::vector<std::string> stored = {"-compression_level", "0", "-pred", "none", "pipe:1"};
+    const std::vector<std::string> compressed = {"-compression_level", "2", "-pred", "paeth", "pipe:1"};
+    ASSERT_GT(shown.size(), stored.size());
+    EXPECT_TRUE(std::equal(stored.begin(), stored.end(), shown.end() - 5));
+    EXPECT_TRUE(std::equal(compressed.begin(), compressed.end(), saved.end() - 5));
+    EXPECT_EQ(std::vector<std::string>(shown.begin(), shown.end() - 5),
+              std::vector<std::string>(saved.begin(), saved.end() - 5));
+}
+
 // FFmpeg ignores -ss on a raw stream and starts at its first frame, so every
 // frame asked for would show that one. It is read at its rate and counted.
 TEST(FrameExtract, ARawStreamsFramesAreCountedFromItsStart) {
