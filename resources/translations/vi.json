@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "Thống kê của {label} là của các giây trọn vẹn chứa các khung này.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} chỉ chấm điểm toàn bộ video: không có điểm cho một phần video.",
   " — frames {first} to {last}": " — khung {first} đến {last}",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Khi VMAF chạy trên GPU, PSNR, SSIM và XPSNR thường được tính trong cùng lượt đó, và GPU xử lý từng video một: khi đó ô này không áp dụng cho chúng."
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Khi VMAF chạy trên GPU, PSNR, SSIM và XPSNR thường được tính trong cùng lượt đó, và GPU xử lý từng video một: khi đó ô này không áp dụng cho chúng.",
+  "A frame is weak where:": "Một khung là yếu khi:",
+  "Add condition": "Thêm điều kiện",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "CVVDP chấm điểm từng giây: mỗi hàng là khung đầu tiên của giây đó, và một chỗ tụt là các giây cách một giây tệ hơn không quá 1 s.",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "Nhấp vào một hàng để đánh dấu trên biểu đồ; nhấp đúp để mở trong So sánh video.",
+  "Double-click one to open its first frame in Video Compare.": "Nhấp đúp vào một mục để mở khung đầu tiên của nó trong So sánh video.",
+  "Export JSON...": "Xuất JSON...",
+  "Export weak segments": "Xuất các đoạn yếu",
+  "Export x265 zones...": "Xuất vùng x265...",
+  "First": "Đầu",
+  "Frame": "Khung",
+  "Join segments up to this many frames apart:": "Nối các đoạn cách nhau không quá số khung này:",
+  "Last": "Cuối",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "Liệt kê khung tệ nhất của từng chỗ tụt tệ nhất của chỉ số đang hiển thị, để xem trong So sánh video, và các đoạn có điểm vượt qua ngưỡng, để xuất.",
+  "No video shown has {metric} scores.": "Không video nào đang hiển thị có điểm {metric}.",
+  "Not in Video Compare": "Không có trong So sánh video",
+  "Only the selected frames, {first} to {last}.": "Chỉ các khung đã chọn, từ {first} đến {last}.",
+  "Open in Video Compare": "Mở trong So sánh video",
+  "Remove": "Gỡ",
+  "Shortest segment (frames):": "Đoạn ngắn nhất (khung):",
+  "Start": "Bắt đầu",
+  "Text file (*.txt)": "Tệp văn bản (*.txt)",
+  "The first {count} are listed; the exports have them all.": "Liệt kê {count} mục đầu tiên; các tệp xuất có tất cả.",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "Khung tệ nhất của mỗi chỗ tụt, tệ nhất trước: một khung cách một khung tệ hơn không quá 1 s thuộc chỗ tụt của khung đó.",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "So sánh video hiển thị các video của thẻ Video: video của đường này không nằm trong đó. Hãy thêm nó vào đó để xem các khung.",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Các khung của So sánh video kết thúc ở {last}, cuối video ngắn nhất của nó: khung {frame} nằm sau đó.",
+  "Weak segments...": "Đoạn yếu...",
+  "Weak segments: {name}": "Đoạn yếu: {name}",
+  "Weak where:": "Yếu khi:",
+  "Worst frames": "Khung tệ nhất",
+  "Worst frames: {metric}": "Khung tệ nhất: {metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "Được ghi sau các khung của mỗi vùng trong tệp vùng x265: b=1.5 cho vùng 1,5 lần bitrate, q=20 một QP cố định là 20. x265 áp dụng nó trong chừng mực bộ điều khiển tốc độ cho phép.",
+  "any condition holds": "có điều kiện bất kỳ đúng",
+  "every condition holds": "mọi điều kiện đều đúng",
+  "is above": "trên",
+  "is below": "dưới",
+  "x265 zone setting:": "Thiết lập vùng x265:",
+  "{metric} mean": "{metric} trung bình",
+  "{metric} worst": "{metric} tệ nhất",
+  "Invalid zone setting": "Thiết lập vùng không hợp lệ",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 nhận b= với một hệ số (b=1.5: 1,5 lần bitrate) hoặc q= với QP từ 0 đến 69 (q=20)."
  },
  "plurals": {
   "about {count} day": [
@@ -974,6 +1014,15 @@
   ],
   "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
    "Đã thêm {count} hàng chấm CVVDP trên {display} — bấm Tính chỉ số."
+  ],
+  "{count} dip": [
+   "{count} chỗ tụt"
+  ],
+  "{count} segment": [
+   "{count} đoạn"
+  ],
+  "{count} frame in all.": [
+   "tổng cộng {count} khung."
   ]
  }
 }

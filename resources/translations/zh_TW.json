@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "{label} 的統計取自這些影格所在的完整秒數。",
   "{label} scores whole videos only: it has no score for part of one.": "{label} 只為整部影片評分：影片的一部分沒有分數。",
   " — frames {first} to {last}": " — 第 {first} 至 {last} 影格",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "VMAF 在 GPU 上計算時，PSNR、SSIM 和 XPSNR 通常會在同一輪中計算，且 GPU 一次只處理一部影片：此時此選項對它們不起作用。"
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "VMAF 在 GPU 上計算時，PSNR、SSIM 和 XPSNR 通常會在同一輪中計算，且 GPU 一次只處理一部影片：此時此選項對它們不起作用。",
+  "A frame is weak where:": "影格在以下情況下為弱：",
+  "Add condition": "新增條件",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "CVVDP 每秒給出一個分數：每列是該秒的第一個影格，與更差的一秒相距 1 秒以內的各秒屬於同一次低谷。",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "按一下一列可在圖上標記它；按兩下可在影片比較中開啟它。",
+  "Double-click one to open its first frame in Video Compare.": "按兩下其中一個可在影片比較中開啟它的第一個影格。",
+  "Export JSON...": "匯出 JSON...",
+  "Export weak segments": "匯出弱片段",
+  "Export x265 zones...": "匯出 x265 區段...",
+  "First": "首格",
+  "Frame": "影格",
+  "Join segments up to this many frames apart:": "合併相隔不超過此影格數的片段：",
+  "Last": "末格",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "列出所顯示指標每個最差低谷中的最差影格，以便在影片比較中查看；並列出分數越過門檻的片段，以便匯出。",
+  "No video shown has {metric} scores.": "所顯示的影片都沒有 {metric} 分數。",
+  "Not in Video Compare": "不在影片比較中",
+  "Only the selected frames, {first} to {last}.": "僅所選影格，{first} 到 {last}。",
+  "Open in Video Compare": "在影片比較中開啟",
+  "Remove": "移除",
+  "Shortest segment (frames):": "最短片段（影格）：",
+  "Start": "開始",
+  "Text file (*.txt)": "文字檔 (*.txt)",
+  "The first {count} are listed; the exports have them all.": "列出了前 {count} 個；匯出檔案包含全部。",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "每次低谷的最差影格，最差的在前：與更差影格相距 1 秒以內的影格屬於其低谷。",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "影片比較顯示「影片」分頁中的影片：這條線的影片不在其中。在那裡新增它即可查看其影格。",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "影片比較的影格在 {last} 結束，即其中最短影片的結尾：第 {frame} 格在此之後。",
+  "Weak segments...": "弱片段...",
+  "Weak segments: {name}": "弱片段：{name}",
+  "Weak where:": "弱的條件：",
+  "Worst frames": "最差影格",
+  "Worst frames: {metric}": "最差影格：{metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "寫在 x265 區段檔中每個區段的影格之後：b=1.5 讓該區段獲得 1.5 倍位元率，q=20 使用固定 QP 20。x265 會在其位元率控制允許的範圍內套用。",
+  "any condition holds": "符合任一條件",
+  "every condition holds": "符合所有條件",
+  "is above": "高於",
+  "is below": "低於",
+  "x265 zone setting:": "x265 區段設定：",
+  "{metric} mean": "{metric} 平均",
+  "{metric} worst": "{metric} 最差",
+  "Invalid zone setting": "區段設定無效",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 接受帶倍數的 b=（b=1.5：1.5 倍位元率）或帶 0 到 69 之間 QP 的 q=（q=20）。"
  },
  "plurals": {
   "about {count} day": [
@@ -974,6 +1014,15 @@
   ],
   "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
    "已新增 {count} 列在 {display} 上評分 CVVDP——按一下「計算指標」。"
+  ],
+  "{count} dip": [
+   "{count} 個低谷"
+  ],
+  "{count} segment": [
+   "{count} 個片段"
+  ],
+  "{count} frame in all.": [
+   "共 {count} 格。"
   ]
  }
 }

@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "De statistieken van {label} gaan over de hele seconden waarin deze frames vallen.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} beoordeelt alleen hele video's: het heeft geen score voor een deel ervan.",
   " — frames {first} to {last}": " — frames {first} t/m {last}",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Met VMAF op de GPU worden PSNR, SSIM en XPSNR meestal in dezelfde doorgang berekend en verwerkt de GPU één video tegelijk: dit vakje geldt daar dan niet voor."
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Met VMAF op de GPU worden PSNR, SSIM en XPSNR meestal in dezelfde doorgang berekend en verwerkt de GPU één video tegelijk: dit vakje geldt daar dan niet voor.",
+  "A frame is weak where:": "Een frame is zwak waar:",
+  "Add condition": "Voorwaarde toevoegen",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "CVVDP geeft elke seconde een score: een rij is het eerste frame van zijn seconde, en een dip zijn de seconden binnen 1 s van een slechtere.",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "Klik op een rij om die in de grafiek te markeren; dubbelklik om die te openen in Video vergelijken.",
+  "Double-click one to open its first frame in Video Compare.": "Dubbelklik op een ervan om het eerste frame te openen in Video vergelijken.",
+  "Export JSON...": "JSON exporteren...",
+  "Export weak segments": "Zwakke segmenten exporteren",
+  "Export x265 zones...": "x265-zones exporteren...",
+  "First": "Eerste",
+  "Frame": "Frame",
+  "Join segments up to this many frames apart:": "Segmenten samenvoegen die hoogstens zoveel frames uit elkaar liggen:",
+  "Last": "Laatste",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "Toont het slechtste frame van elk van de slechtste dips van de getoonde metriek, om te bekijken in Video vergelijken, en de stukken waar de scores een drempel passeren, om te exporteren.",
+  "No video shown has {metric} scores.": "Geen getoonde video heeft {metric}-scores.",
+  "Not in Video Compare": "Niet in Video vergelijken",
+  "Only the selected frames, {first} to {last}.": "Alleen de geselecteerde frames, {first} tot {last}.",
+  "Open in Video Compare": "Openen in Video vergelijken",
+  "Remove": "Verwijderen",
+  "Shortest segment (frames):": "Kortste segment (frames):",
+  "Start": "Begin",
+  "Text file (*.txt)": "Tekstbestand (*.txt)",
+  "The first {count} are listed; the exports have them all.": "De eerste {count} staan in de lijst; de exports bevatten ze allemaal.",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "Het slechtste frame van elke dip, slechtste eerst: een frame binnen 1 s van een slechter frame hoort bij diens dip.",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Video vergelijken toont de video's van het tabblad Video's: de video van deze lijn is daar niet bij. Voeg hem daar toe om zijn frames te zien.",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "De frames van Video vergelijken eindigen bij {last}, het einde van de kortste video: frame {frame} ligt daarna.",
+  "Weak segments...": "Zwakke segmenten...",
+  "Weak segments: {name}": "Zwakke segmenten: {name}",
+  "Weak where:": "Zwak als:",
+  "Worst frames": "Slechtste frames",
+  "Worst frames: {metric}": "Slechtste frames: {metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "Wordt in het x265-zonebestand na de frames van elke zone geschreven: b=1.5 geeft de zone 1,5 keer de bitrate, q=20 een vaste QP van 20. x265 past het toe voor zover zijn bitrateregeling dat toelaat.",
+  "any condition holds": "een voorwaarde geldt",
+  "every condition holds": "alle voorwaarden gelden",
+  "is above": "ligt boven",
+  "is below": "ligt onder",
+  "x265 zone setting:": "x265-zone-instelling:",
+  "{metric} mean": "{metric} gemiddeld",
+  "{metric} worst": "{metric} slechtste",
+  "Invalid zone setting": "Ongeldige zone-instelling",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 accepteert b= met een factor (b=1.5: 1,5 keer de bitrate) of q= met een QP van 0 tot 69 (q=20)."
  },
  "plurals": {
   "about {count} day": [
@@ -999,6 +1039,18 @@
   "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
    "{count} rij toegevoegd die CVVDP scoort op {display} — klik op Metrieken berekenen.",
    "{count} rijen toegevoegd die CVVDP scoren op {display} — klik op Metrieken berekenen."
+  ],
+  "{count} dip": [
+   "{count} dip",
+   "{count} dips"
+  ],
+  "{count} segment": [
+   "{count} segment",
+   "{count} segmenten"
+  ],
+  "{count} frame in all.": [
+   "{count} frame in totaal.",
+   "{count} frames in totaal."
   ]
  }
 }

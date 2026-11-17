@@ -46,6 +46,7 @@ class ChartWidget;
 class FileWrites;
 class FrameControls;
 class VideoColors;
+class WorstFramesPanel;
 
 // Where an XPSNR frame identical to its reference (infinity) is drawn: above
 // every real score, or a perfect frame would dip below merely good ones. For
@@ -242,6 +243,8 @@ public:
 
     // The metric to show when a run has it (Settings.graph_metric).
     void set_preferred_metric(const std::string& key);
+    // How many dips Worst frames lists (Settings.graph_worst_frames).
+    void set_worst_count(int count);
     // Whether any run is shown.
     bool empty() const { return entries_.empty(); }
 
@@ -263,6 +266,11 @@ signals:
     // Export results, chosen from the table's right-click menu: the window's
     // export, the same from either table (results_export.h).
     void results_export_requested(ResultsFormat format);
+    // A frame of a line's video to see in Video Compare (Worst frames, Weak
+    // segments): the line's identity, Video Compare's pair.
+    void video_compare_requested(const std::string& identity, int frame);
+    // The number of dips Worst frames lists, chosen there.
+    void worst_count_changed(int count);
 
 private:
     friend class GraphPanelTest;  // the graph's tests (tests/app)
@@ -304,6 +312,10 @@ private:
     // The page in view's difference pair (MetricPage::difference_pair).
     std::optional<std::pair<int, int>> shown_difference_pair() const;
     void show_stats_menu(const QPoint& position);
+    // Worst frames brought up to date for the page shown, the lines shown
+    // and the range, while it is open.
+    void refresh_worst_frames();
+    void open_weak_segments();
     void on_file_write_failed(const QString& description, const QString& error);
     void on_file_writes_idle();
 
@@ -332,6 +344,9 @@ private:
     // shows exactly two lines.
     bool difference_on_ = false;
     QCheckBox* difference_box_ = nullptr;
+    // Worst frames (issue #24), beside the pages, shown by its button.
+    WorstFramesPanel* worst_panel_ = nullptr;
+    QPushButton* worst_button_ = nullptr;
     QLabel* status_label_ = nullptr;
     QLabel* metric_hint_ = nullptr;
 };

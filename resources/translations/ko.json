@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "{label} 통계는 이 프레임들이 속한 초 전체의 통계입니다.",
   "{label} scores whole videos only: it has no score for part of one.": "{label}은(는) 영상 전체만 평가합니다. 영상 일부에 대한 점수는 없습니다.",
   " — frames {first} to {last}": " — 프레임 {first}~{last}",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "VMAF를 GPU에서 계산하면 PSNR, SSIM, XPSNR은 보통 같은 패스에서 계산되고 GPU는 한 번에 동영상 하나씩 처리합니다. 이때 이 확인란은 이들에게 적용되지 않습니다."
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "VMAF를 GPU에서 계산하면 PSNR, SSIM, XPSNR은 보통 같은 패스에서 계산되고 GPU는 한 번에 동영상 하나씩 처리합니다. 이때 이 확인란은 이들에게 적용되지 않습니다.",
+  "A frame is weak where:": "프레임이 약한 조건:",
+  "Add condition": "조건 추가",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "CVVDP는 1초마다 점수를 매깁니다. 각 행은 그 초의 첫 프레임이며, 더 나쁜 초에서 1초 이내의 초들이 하나의 급락입니다.",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "행을 클릭하면 그래프에 표시하고, 두 번 클릭하면 영상 비교에서 엽니다.",
+  "Double-click one to open its first frame in Video Compare.": "하나를 두 번 클릭하면 그 첫 프레임을 영상 비교에서 엽니다.",
+  "Export JSON...": "JSON 내보내기...",
+  "Export weak segments": "약한 구간 내보내기",
+  "Export x265 zones...": "x265 존 내보내기...",
+  "First": "처음",
+  "Frame": "프레임",
+  "Join segments up to this many frames apart:": "이 프레임 수 이내로 떨어진 구간 합치기:",
+  "Last": "마지막",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "표시된 지표의 가장 나쁜 급락마다 가장 나쁜 프레임을 나열해 영상 비교에서 볼 수 있게 하고, 점수가 임계값을 넘는 구간을 내보낼 수 있게 합니다.",
+  "No video shown has {metric} scores.": "표시된 영상 중 {metric} 점수가 있는 영상이 없습니다.",
+  "Not in Video Compare": "영상 비교에 없음",
+  "Only the selected frames, {first} to {last}.": "선택한 프레임만, {first}~{last}.",
+  "Open in Video Compare": "영상 비교에서 열기",
+  "Remove": "제거",
+  "Shortest segment (frames):": "가장 짧은 구간(프레임):",
+  "Start": "시작",
+  "Text file (*.txt)": "텍스트 파일 (*.txt)",
+  "The first {count} are listed; the exports have them all.": "처음 {count}개만 표시합니다. 내보내기에는 모두 들어 있습니다.",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "각 급락의 가장 나쁜 프레임, 나쁜 순서: 더 나쁜 프레임에서 1초 이내의 프레임은 그 급락에 속합니다.",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "영상 비교는 [영상] 탭의 영상을 보여줍니다. 이 선의 영상은 그중에 없습니다. 프레임을 보려면 그곳에 추가하세요.",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "영상 비교의 프레임은 가장 짧은 영상의 끝인 {last}에서 끝납니다. 프레임 {frame}은(는) 그 뒤입니다.",
+  "Weak segments...": "약한 구간...",
+  "Weak segments: {name}": "약한 구간: {name}",
+  "Weak where:": "약한 조건:",
+  "Worst frames": "가장 나쁜 프레임",
+  "Worst frames: {metric}": "가장 나쁜 프레임: {metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "x265 존 파일에서 각 존의 프레임 뒤에 기록됩니다. b=1.5는 존에 비트레이트 1.5배를, q=20은 QP 20 고정을 줍니다. x265는 속도 제어가 허용하는 만큼 적용합니다.",
+  "any condition holds": "조건 중 하나라도 맞음",
+  "every condition holds": "모든 조건이 맞음",
+  "is above": "보다 높음",
+  "is below": "보다 낮음",
+  "x265 zone setting:": "x265 존 설정:",
+  "{metric} mean": "{metric} 평균",
+  "{metric} worst": "{metric} 최악",
+  "Invalid zone setting": "잘못된 존 설정",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265는 배율을 붙인 b=(b=1.5: 비트레이트 1.5배) 또는 0~69의 QP를 붙인 q=(q=20)만 받습니다."
  },
  "plurals": {
   "about {count} day": [
@@ -974,6 +1014,15 @@
   ],
   "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
    "{display}에서 CVVDP를 평가하는 행 {count}개를 추가했습니다. [지표 계산]을 클릭하세요."
+  ],
+  "{count} dip": [
+   "급락 {count}개"
+  ],
+  "{count} segment": [
+   "구간 {count}개"
+  ],
+  "{count} frame in all.": [
+   "모두 {count}프레임."
   ]
  }
 }

@@ -38,6 +38,7 @@
 #include "test_videos.h"
 #include "vml/platform/system.h"
 #include "window_helpers.h"
+#include "worst_frames_panel.h"
 
 namespace vml::app {
 
@@ -53,6 +54,8 @@ protected:
     static QSpinBox& range_end_spin(GraphPanel& panel) { return *panel.frame_controls_->range_end_spin; }
     static QPushButton& clear_range_button(GraphPanel& panel) { return *panel.frame_controls_->clear_range_button; }
     static QString stats_hint(const GraphPanel& panel) { return panel.stats_hint_->text(); }
+    static QPushButton& worst_button(GraphPanel& panel) { return *panel.worst_button_; }
+    static WorstFramesPanel& worst_panel(GraphPanel& panel) { return *panel.worst_panel_; }
     // Every cell's text, row by row.
     static std::vector<QStringList> cell_texts(GraphPanel& panel) {
         std::vector<QStringList> rows;
@@ -732,6 +735,48 @@ TEST_F(GraphPanelTest, AShiftDragAcrossTheGraphSelectsFrames) {
     EXPECT_LT(in_view(vmaf).first, 0.1);  // panned
     EXPECT_EQ(range_end_spin(panel).value(), 6);
     EXPECT_TRUE(chart.highlight());
+}
+
+TEST_F(GraphPanelTest, WorstFramesListsTheDipsAndOpensThemInVideoCompare) {
+    // Issue #24: the worst frame of each dip, within the range; a
+    // double-click asks for that frame of that line in Video Compare; Weak
+    // segments starts from the metric's first band of worse frames.
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    std::vector<float> values(90, 95.0F);
+    values[9] = 60.0F;
+    values[10] = 40.0F;
+    values[70] = 50.0F;
+    panel.add_run({shared(vmaf_result("a.mkv", values)), "a", "row:a", true});
+    page(panel, "vmaf");
+    worst_button(panel).click();
+    QTableWidget& list = *worst_panel(panel).table();
+    ASSERT_EQ(list.rowCount(), 2);
+    EXPECT_EQ(list.item(0, 0)->text(), "10");
+    EXPECT_EQ(list.item(1, 0)->text(), "70");
+    EXPECT_EQ(list.item(0, 2)->text(), "40.00");
+
+    std::pair<std::string, int> asked;
+    QObject::connect(&panel, &GraphPanel::video_compare_requested,
+                     [&asked](const std::string& identity, int frame) { asked = {identity, frame}; });
+    emit list.cellDoubleClicked(1, 0);
+    const std::pair<std::string, int> wanted{"row:a", 70};
+    EXPECT_EQ(asked, wanted);
+
+    range_start_spin(panel).setValue(50);
+    range_end_spin(panel).setValue(89);
+    ASSERT_EQ(list.rowCount(), 1);
+    EXPECT_EQ(list.item(0, 0)->text(), "70");
+
+    range_start_spin(panel).setValue(0);
+    worst_panel(panel).segments_button()->click();
+    auto* dialog = panel.findChild<WeakSegmentsDialog*>();
+    ASSERT_NE(dialog, nullptr);
+    EXPECT_EQ(dialog->rules().conditions.front().text(), "vmaf<85");
+    ASSERT_EQ(dialog->segments().size(), 2U);
+    EXPECT_EQ(dialog->segments()[0].first_frame, 9);
+    EXPECT_EQ(dialog->segments()[0].last_frame, 10);
+    EXPECT_EQ(dialog->segments()[1].first_frame, 70);
 }
 }  // namespace
 }  // namespace vml::app

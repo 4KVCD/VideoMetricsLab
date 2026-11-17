@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "As estatísticas de {label} são dos segundos inteiros em que esses quadros estão.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} avalia apenas vídeos inteiros: não tem pontuação para uma parte.",
   " — frames {first} to {last}": " — quadros {first} a {last}",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Com o VMAF na GPU, PSNR, SSIM e XPSNR geralmente são calculados na mesma passagem, e a GPU processa um vídeo por vez: esta opção então não se aplica a eles."
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Com o VMAF na GPU, PSNR, SSIM e XPSNR geralmente são calculados na mesma passagem, e a GPU processa um vídeo por vez: esta opção então não se aplica a eles.",
+  "A frame is weak where:": "Um quadro é fraco onde:",
+  "Add condition": "Adicionar condição",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "O CVVDP pontua cada segundo: uma linha é o primeiro quadro do seu segundo, e uma queda são os segundos a menos de 1 s de um pior.",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "Clique em uma linha para marcá-la no gráfico; clique duas vezes para abri-la em Comparar vídeos.",
+  "Double-click one to open its first frame in Video Compare.": "Clique duas vezes em um para abrir o primeiro quadro dele em Comparar vídeos.",
+  "Export JSON...": "Exportar JSON...",
+  "Export weak segments": "Exportar segmentos fracos",
+  "Export x265 zones...": "Exportar zonas do x265...",
+  "First": "Primeiro",
+  "Frame": "Quadro",
+  "Join segments up to this many frames apart:": "Juntar segmentos separados por no máximo estes quadros:",
+  "Last": "Último",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "Lista o pior quadro de cada uma das piores quedas da métrica mostrada, para ver em Comparar vídeos, e os trechos em que as pontuações passam de um limite, para exportar.",
+  "No video shown has {metric} scores.": "Nenhum vídeo mostrado tem pontuações de {metric}.",
+  "Not in Video Compare": "Não está em Comparar vídeos",
+  "Only the selected frames, {first} to {last}.": "Só os quadros selecionados, de {first} a {last}.",
+  "Open in Video Compare": "Abrir em Comparar vídeos",
+  "Remove": "Remover",
+  "Shortest segment (frames):": "Segmento mais curto (quadros):",
+  "Start": "Início",
+  "Text file (*.txt)": "Arquivo de texto (*.txt)",
+  "The first {count} are listed; the exports have them all.": "Os primeiros {count} estão listados; as exportações têm todos.",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "O pior quadro de cada queda, o pior primeiro: um quadro a menos de 1 s de um pior faz parte da queda dele.",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Comparar vídeos mostra os vídeos da aba Vídeos: o vídeo desta linha não é um deles. Adicione-o lá para ver seus quadros.",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Os quadros de Comparar vídeos terminam em {last}, o fim do seu vídeo mais curto: o quadro {frame} fica depois disso.",
+  "Weak segments...": "Segmentos fracos...",
+  "Weak segments: {name}": "Segmentos fracos: {name}",
+  "Weak where:": "Fraco quando:",
+  "Worst frames": "Piores quadros",
+  "Worst frames: {metric}": "Piores quadros: {metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "Escrito depois dos quadros de cada zona no arquivo de zonas do x265: b=1.5 dá à zona 1,5 vez a taxa de bits, q=20 um QP fixo de 20. O x265 aplica isso conforme o controle de taxa permitir.",
+  "any condition holds": "alguma condição vale",
+  "every condition holds": "todas as condições valem",
+  "is above": "está acima de",
+  "is below": "está abaixo de",
+  "x265 zone setting:": "Ajuste de zona do x265:",
+  "{metric} mean": "{metric} média",
+  "{metric} worst": "{metric} pior",
+  "Invalid zone setting": "Ajuste de zona inválido",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "O x265 aceita b= com um fator (b=1.5: 1,5 vez a taxa de bits) ou q= com um QP de 0 a 69 (q=20)."
  },
  "plurals": {
   "about {count} day": [
@@ -999,6 +1039,18 @@
   "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
    "{count} linha adicionada avaliando o CVVDP em {display} — clique em Calcular métricas.",
    "{count} linhas adicionadas avaliando o CVVDP em {display} — clique em Calcular métricas."
+  ],
+  "{count} dip": [
+   "{count} queda",
+   "{count} quedas"
+  ],
+  "{count} segment": [
+   "{count} segmento",
+   "{count} segmentos"
+  ],
+  "{count} frame in all.": [
+   "{count} quadro no total.",
+   "{count} quadros no total."
   ]
  }
 }

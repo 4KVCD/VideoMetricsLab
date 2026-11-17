@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "Statistik {label} berasal dari detik utuh tempat bingkai-bingkai ini berada.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} hanya menilai video utuh: tidak ada skor untuk sebagian video.",
   " — frames {first} to {last}": " — bingkai {first} sampai {last}",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Jika VMAF berjalan di GPU, PSNR, SSIM, dan XPSNR biasanya dihitung dalam proses yang sama, dan GPU mengerjakan satu video dalam satu waktu: kotak ini lalu tidak berlaku untuk metrik tersebut."
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Jika VMAF berjalan di GPU, PSNR, SSIM, dan XPSNR biasanya dihitung dalam proses yang sama, dan GPU mengerjakan satu video dalam satu waktu: kotak ini lalu tidak berlaku untuk metrik tersebut.",
+  "A frame is weak where:": "Bingkai lemah jika:",
+  "Add condition": "Tambah syarat",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "CVVDP memberi skor tiap detik: satu baris adalah bingkai pertama detiknya, dan satu penurunan adalah detik-detik dalam 1 d dari detik yang lebih buruk.",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "Klik baris untuk menandainya di grafik; klik ganda untuk membukanya di Bandingkan video.",
+  "Double-click one to open its first frame in Video Compare.": "Klik ganda salah satunya untuk membuka bingkai pertamanya di Bandingkan video.",
+  "Export JSON...": "Ekspor JSON...",
+  "Export weak segments": "Ekspor segmen lemah",
+  "Export x265 zones...": "Ekspor zona x265...",
+  "First": "Pertama",
+  "Frame": "Bingkai",
+  "Join segments up to this many frames apart:": "Gabungkan segmen yang berjarak paling banyak sejumlah bingkai ini:",
+  "Last": "Terakhir",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "Mencantumkan bingkai terburuk dari tiap penurunan terburuk metrik yang ditampilkan, untuk dilihat di Bandingkan video, dan bagian tempat skor melewati ambang, untuk diekspor.",
+  "No video shown has {metric} scores.": "Tidak ada video yang ditampilkan yang memiliki skor {metric}.",
+  "Not in Video Compare": "Tidak ada di Bandingkan video",
+  "Only the selected frames, {first} to {last}.": "Hanya bingkai yang dipilih, {first} sampai {last}.",
+  "Open in Video Compare": "Buka di Bandingkan video",
+  "Remove": "Hapus",
+  "Shortest segment (frames):": "Segmen terpendek (bingkai):",
+  "Start": "Mulai",
+  "Text file (*.txt)": "Berkas teks (*.txt)",
+  "The first {count} are listed; the exports have them all.": "{count} yang pertama dicantumkan; ekspor memuat semuanya.",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "Bingkai terburuk dari tiap penurunan, terburuk dulu: bingkai dalam 1 d dari bingkai yang lebih buruk termasuk penurunannya.",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Bandingkan video menampilkan video di tab Video: video garis ini bukan salah satunya. Tambahkan di sana untuk melihat bingkainya.",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Bingkai Bandingkan video berakhir di {last}, akhir video terpendeknya: bingkai {frame} berada setelahnya.",
+  "Weak segments...": "Segmen lemah...",
+  "Weak segments: {name}": "Segmen lemah: {name}",
+  "Weak where:": "Lemah jika:",
+  "Worst frames": "Bingkai terburuk",
+  "Worst frames: {metric}": "Bingkai terburuk: {metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "Ditulis setelah bingkai tiap zona di berkas zona x265: b=1.5 memberi zona 1,5 kali bitrate, q=20 QP tetap 20. x265 menerapkannya sejauh kendali lajunya mengizinkan.",
+  "any condition holds": "salah satu syarat terpenuhi",
+  "every condition holds": "semua syarat terpenuhi",
+  "is above": "di atas",
+  "is below": "di bawah",
+  "x265 zone setting:": "Pengaturan zona x265:",
+  "{metric} mean": "{metric} rata-rata",
+  "{metric} worst": "{metric} terburuk",
+  "Invalid zone setting": "Pengaturan zona tidak valid",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 menerima b= dengan faktor (b=1.5: 1,5 kali bitrate) atau q= dengan QP dari 0 sampai 69 (q=20)."
  },
  "plurals": {
   "about {count} day": [
@@ -974,6 +1014,15 @@
   ],
   "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
    "{count} baris ditambahkan untuk menilai CVVDP pada {display} — klik Hitung metrik."
+  ],
+  "{count} dip": [
+   "{count} penurunan"
+  ],
+  "{count} segment": [
+   "{count} segmen"
+  ],
+  "{count} frame in all.": [
+   "total {count} bingkai."
   ]
  }
 }

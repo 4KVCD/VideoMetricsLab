@@ -193,6 +193,13 @@ public:
     const FrameComparisonEntry* current_entry() const;
     // Shows frame `frame`.
     void set_frame(long long frame);
+    // Chooses the pair `identity` names and shows its frame `frame` (when
+    // off screen, once shown). Not when no pair has that identity, or the
+    // frame is past the frames the tab offers (the shortest pair's).
+    enum class OpenAt { shown, no_pair, past_end };
+    OpenAt open_at(const std::string& identity, long long frame);
+    // The last frame the tab offers.
+    long long last_frame() const;
     // Shows the next (1) or previous (-1) test video.
     void cycle_distorted(int direction);
     // How many test videos playback keeps decoding (the Settings tab).

@@ -69,6 +69,27 @@ void MainWindow::open_or_update_graph(const std::vector<std::shared_ptr<Complete
     }
 }
 
+void MainWindow::show_in_video_compare(const std::string& identity, int frame) {
+    sync_frame_compare();  // the rows' pairs as they are now
+    switch (frame_compare_panel_->open_at(identity, frame)) {
+    case FrameComparePanel::OpenAt::shown:
+        tabs_->setCurrentIndex(tab_frame_compare);
+        return;
+    case FrameComparePanel::OpenAt::no_pair:
+        // A line added from a results file, or one whose row is gone.
+        dialogs_.inform(app::tr("Not in Video Compare"),
+                        app::tr("Video Compare shows the videos of the Videos tab: this line's video is not one of "
+                                "them. Add it there to see its frames."));
+        return;
+    case FrameComparePanel::OpenAt::past_end:
+        dialogs_.inform(app::tr("Not in Video Compare"),
+                        app::tr("Video Compare's frames end at {last}, the end of its shortest video: frame "
+                                "{frame} is past it.",
+                                {{"last", frame_compare_panel_->last_frame()}, {"frame", frame}}));
+        return;
+    }
+}
+
 void MainWindow::on_show_graph_clicked() {
     // Every row's result, not only the first ones finished: looked at again
     // during a run (4 of 8 done), it shows all 4.

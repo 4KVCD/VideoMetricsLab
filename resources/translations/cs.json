@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "Statistiky {label} jsou z celých sekund, do kterých tyto snímky spadají.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} hodnotí jen celá videa: pro jejich část skóre nemá.",
   " — frames {first} to {last}": " — snímky {first} až {last}",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Když VMAF běží na GPU, PSNR, SSIM a XPSNR se obvykle počítají v jeho průchodu a GPU zpracovává jedno video po druhém: na ně se pak tato volba nevztahuje."
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Když VMAF běží na GPU, PSNR, SSIM a XPSNR se obvykle počítají v jeho průchodu a GPU zpracovává jedno video po druhém: na ně se pak tato volba nevztahuje.",
+  "A frame is weak where:": "Snímek je slabý, kde:",
+  "Add condition": "Přidat podmínku",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "CVVDP hodnotí každou sekundu: řádek je první snímek své sekundy a propad tvoří sekundy do 1 s od horší.",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "Kliknutím na řádek ho označíte v grafu; dvojklikem ho otevřete v Porovnání videa.",
+  "Double-click one to open its first frame in Video Compare.": "Dvojklikem na některý otevřete jeho první snímek v Porovnání videa.",
+  "Export JSON...": "Exportovat JSON...",
+  "Export weak segments": "Exportovat slabé úseky",
+  "Export x265 zones...": "Exportovat zóny x265...",
+  "First": "První",
+  "Frame": "Snímek",
+  "Join segments up to this many frames apart:": "Spojit úseky vzdálené nejvýše tolik snímků:",
+  "Last": "Poslední",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "Vypíše nejhorší snímek každého z nejhorších propadů zobrazené metriky, k prohlédnutí v Porovnání videa, a úseky, kde skóre překročí práh, k exportu.",
+  "No video shown has {metric} scores.": "Žádné zobrazené video nemá skóre {metric}.",
+  "Not in Video Compare": "Není v Porovnání videa",
+  "Only the selected frames, {first} to {last}.": "Jen vybrané snímky, {first} až {last}.",
+  "Open in Video Compare": "Otevřít v Porovnání videa",
+  "Remove": "Odebrat",
+  "Shortest segment (frames):": "Nejkratší úsek (snímky):",
+  "Start": "Začátek",
+  "Text file (*.txt)": "Textový soubor (*.txt)",
+  "The first {count} are listed; the exports have them all.": "Vypsáno je prvních {count}; exporty obsahují všechny.",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "Nejhorší snímek každého propadu, nejhorší první: snímek do 1 s od horšího patří k jeho propadu.",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Porovnání videa ukazuje videa z karty Videa: video této čáry mezi nimi není. Přidejte ho tam, abyste viděli jeho snímky.",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Snímky Porovnání videa končí na {last}, konci jeho nejkratšího videa: snímek {frame} je až za ním.",
+  "Weak segments...": "Slabé úseky...",
+  "Weak segments: {name}": "Slabé úseky: {name}",
+  "Weak where:": "Slabé, když:",
+  "Worst frames": "Nejhorší snímky",
+  "Worst frames: {metric}": "Nejhorší snímky: {metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "Zapíše se za snímky každé zóny v souboru zón x265: b=1.5 dá zóně 1,5násobek datového toku, q=20 pevný QP 20. x265 ho použije, nakolik to jeho řízení toku dovolí.",
+  "any condition holds": "platí některá podmínka",
+  "every condition holds": "platí všechny podmínky",
+  "is above": "je nad",
+  "is below": "je pod",
+  "x265 zone setting:": "Nastavení zóny x265:",
+  "{metric} mean": "{metric} průměr",
+  "{metric} worst": "{metric} nejhorší",
+  "Invalid zone setting": "Neplatné nastavení zóny",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 přijímá b= s násobkem (b=1.5: 1,5násobek datového toku) nebo q= s QP od 0 do 69 (q=20)."
  },
  "plurals": {
   "about {count} day": [
@@ -1024,6 +1064,21 @@
    "Přidán {count} řádek hodnotící CVVDP na {display} — klikněte na Spočítat metriky.",
    "Přidány {count} řádky hodnotící CVVDP na {display} — klikněte na Spočítat metriky.",
    "Přidáno {count} řádků hodnotících CVVDP na {display} — klikněte na Spočítat metriky."
+  ],
+  "{count} dip": [
+   "{count} propad",
+   "{count} propady",
+   "{count} propadů"
+  ],
+  "{count} segment": [
+   "{count} úsek",
+   "{count} úseky",
+   "{count} úseků"
+  ],
+  "{count} frame in all.": [
+   "celkem {count} snímek.",
+   "celkem {count} snímky.",
+   "celkem {count} snímků."
   ]
  }
 }

@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "{label} の統計は、これらのフレームを含む秒全体のものです。",
   "{label} scores whole videos only: it has no score for part of one.": "{label} は動画全体のみを評価します。動画の一部のスコアはありません。",
   " — frames {first} to {last}": " — フレーム {first}～{last}",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "VMAF を GPU で計算する場合、PSNR、SSIM、XPSNR は通常その同じ処理で計算され、GPU は動画を 1 本ずつ処理します。その場合、このチェックボックスはそれらには適用されません。"
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "VMAF を GPU で計算する場合、PSNR、SSIM、XPSNR は通常その同じ処理で計算され、GPU は動画を 1 本ずつ処理します。その場合、このチェックボックスはそれらには適用されません。",
+  "A frame is weak where:": "フレームが弱いとする条件：",
+  "Add condition": "条件を追加",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "CVVDP は 1 秒ごとに採点します。各行はその秒の最初のフレームで、より悪い秒から 1 秒以内の秒は同じ落ち込みです。",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "行をクリックするとグラフ上に印を付け、ダブルクリックすると動画比較で開きます。",
+  "Double-click one to open its first frame in Video Compare.": "ダブルクリックすると、その最初のフレームを動画比較で開きます。",
+  "Export JSON...": "JSON をエクスポート...",
+  "Export weak segments": "弱い区間をエクスポート",
+  "Export x265 zones...": "x265 ゾーンをエクスポート...",
+  "First": "最初",
+  "Frame": "フレーム",
+  "Join segments up to this many frames apart:": "この数以内のフレームしか離れていない区間をつなげる：",
+  "Last": "最後",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "表示中の指標で最も悪い落ち込みそれぞれの最悪フレームを一覧にして動画比較で確認でき、スコアがしきい値を越える区間をエクスポートできます。",
+  "No video shown has {metric} scores.": "表示中の動画に {metric} のスコアはありません。",
+  "Not in Video Compare": "動画比較にありません",
+  "Only the selected frames, {first} to {last}.": "選択したフレーム（{first}～{last}）のみ。",
+  "Open in Video Compare": "動画比較で開く",
+  "Remove": "削除",
+  "Shortest segment (frames):": "最短の区間（フレーム）：",
+  "Start": "開始",
+  "Text file (*.txt)": "テキストファイル (*.txt)",
+  "The first {count} are listed; the exports have them all.": "最初の {count} 件を表示しています。エクスポートにはすべて含まれます。",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "各落ち込みの最悪フレーム（悪い順）。より悪いフレームから 1 秒以内のフレームはその落ち込みに含まれます。",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "動画比較は［動画］タブの動画を表示します。この線の動画はその中にありません。フレームを見るにはそこに追加してください。",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "動画比較のフレームは最も短い動画の終わりである {last} までです。フレーム {frame} はその先です。",
+  "Weak segments...": "弱い区間...",
+  "Weak segments: {name}": "弱い区間：{name}",
+  "Weak where:": "弱いとする条件：",
+  "Worst frames": "最悪のフレーム",
+  "Worst frames: {metric}": "最悪のフレーム：{metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "x265 ゾーンファイルで各ゾーンのフレームの後に書かれます。b=1.5 はゾーンのビットレートを 1.5 倍に、q=20 は QP を 20 に固定します。x265 はレート制御が許す範囲で適用します。",
+  "any condition holds": "いずれかの条件を満たす",
+  "every condition holds": "すべての条件を満たす",
+  "is above": "より上",
+  "is below": "より下",
+  "x265 zone setting:": "x265 ゾーン設定：",
+  "{metric} mean": "{metric} 平均",
+  "{metric} worst": "{metric} 最悪",
+  "Invalid zone setting": "無効なゾーン設定",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 が受け付けるのは、係数付きの b=（b=1.5: ビットレート 1.5 倍）か、0～69 の QP 付きの q=（q=20）です。"
  },
  "plurals": {
   "about {count} day": [
@@ -974,6 +1014,15 @@
   ],
   "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
    "{display} で CVVDP を評価する行を {count} 行追加しました。［指標を計算］をクリックしてください。"
+  ],
+  "{count} dip": [
+   "{count} 個の落ち込み"
+  ],
+  "{count} segment": [
+   "{count} 区間"
+  ],
+  "{count} frame in all.": [
+   "合計 {count} フレーム。"
   ]
  }
 }

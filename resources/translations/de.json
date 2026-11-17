@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "Die Statistiken von {label} gelten für die ganzen Sekunden, in denen diese Bilder liegen.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} bewertet nur ganze Videos: Für einen Teil davon gibt es keinen Wert.",
   " — frames {first} to {last}": " — Bilder {first} bis {last}",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Läuft VMAF auf der GPU, werden PSNR, SSIM und XPSNR meist in deren Durchlauf berechnet, und die GPU bearbeitet ein Video nach dem anderen: Für sie gilt dieses Kästchen dann nicht."
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Läuft VMAF auf der GPU, werden PSNR, SSIM und XPSNR meist in deren Durchlauf berechnet, und die GPU bearbeitet ein Video nach dem anderen: Für sie gilt dieses Kästchen dann nicht.",
+  "A frame is weak where:": "Ein Bild ist schwach, wo:",
+  "Add condition": "Bedingung hinzufügen",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "CVVDP bewertet jede Sekunde: Eine Zeile ist das erste Bild ihrer Sekunde, und ein Einbruch sind die Sekunden innerhalb 1 s um eine schlechtere.",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "Klicken Sie auf eine Zeile, um sie im Diagramm zu markieren; Doppelklick öffnet sie im Videovergleich.",
+  "Double-click one to open its first frame in Video Compare.": "Doppelklicken Sie auf einen, um sein erstes Bild im Videovergleich zu öffnen.",
+  "Export JSON...": "JSON exportieren...",
+  "Export weak segments": "Schwache Abschnitte exportieren",
+  "Export x265 zones...": "x265-Zonen exportieren...",
+  "First": "Erstes",
+  "Frame": "Bild",
+  "Join segments up to this many frames apart:": "Abschnitte verbinden, die höchstens so viele Bilder auseinanderliegen:",
+  "Last": "Letztes",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "Listet das schlechteste Bild jedes der schlimmsten Einbrüche der gezeigten Metrik auf, zum Ansehen im Videovergleich, und die Abschnitte, in denen die Werte eine Schwelle überschreiten, zum Exportieren.",
+  "No video shown has {metric} scores.": "Kein gezeigtes Video hat {metric}-Werte.",
+  "Not in Video Compare": "Nicht im Videovergleich",
+  "Only the selected frames, {first} to {last}.": "Nur die ausgewählten Bilder, {first} bis {last}.",
+  "Open in Video Compare": "Im Videovergleich öffnen",
+  "Remove": "Entfernen",
+  "Shortest segment (frames):": "Kürzester Abschnitt (Bilder):",
+  "Start": "Beginn",
+  "Text file (*.txt)": "Textdatei (*.txt)",
+  "The first {count} are listed; the exports have them all.": "Die ersten {count} sind aufgelistet; die Exporte enthalten alle.",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "Das schlechteste Bild jedes Einbruchs, das schlechteste zuerst: Ein Bild innerhalb 1 s um ein schlechteres gehört zu dessen Einbruch.",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Der Videovergleich zeigt die Videos des Tabs „Videos“: Das Video dieser Linie ist keins davon. Fügen Sie es dort hinzu, um seine Bilder zu sehen.",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Die Bilder des Videovergleichs enden bei {last}, dem Ende seines kürzesten Videos: Bild {frame} liegt dahinter.",
+  "Weak segments...": "Schwache Abschnitte...",
+  "Weak segments: {name}": "Schwache Abschnitte: {name}",
+  "Weak where:": "Schwach, wenn:",
+  "Worst frames": "Schlechteste Bilder",
+  "Worst frames: {metric}": "Schlechteste Bilder: {metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "Wird in der x265-Zonendatei hinter die Bilder jeder Zone geschrieben: b=1.5 gibt der Zone die 1,5-fache Bitrate, q=20 einen festen QP von 20. x265 wendet es an, soweit seine Ratensteuerung es zulässt.",
+  "any condition holds": "eine Bedingung erfüllt ist",
+  "every condition holds": "alle Bedingungen erfüllt sind",
+  "is above": "liegt über",
+  "is below": "liegt unter",
+  "x265 zone setting:": "x265-Zoneneinstellung:",
+  "{metric} mean": "{metric} Mittel",
+  "{metric} worst": "{metric} schlechtester",
+  "Invalid zone setting": "Ungültige Zoneneinstellung",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 nimmt b= mit einem Faktor (b=1.5: die 1,5-fache Bitrate) oder q= mit einem QP von 0 bis 69 (q=20)."
  },
  "plurals": {
   "about {count} day": [
@@ -999,6 +1039,18 @@
   "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
    "{count} Zeile hinzugefügt, die CVVDP auf {display} bewertet – klicken Sie auf „Metriken berechnen“.",
    "{count} Zeilen hinzugefügt, die CVVDP auf {display} bewerten – klicken Sie auf „Metriken berechnen“."
+  ],
+  "{count} dip": [
+   "{count} Einbruch",
+   "{count} Einbrüche"
+  ],
+  "{count} segment": [
+   "{count} Abschnitt",
+   "{count} Abschnitte"
+  ],
+  "{count} frame in all.": [
+   "{count} Bild insgesamt.",
+   "{count} Bilder insgesamt."
   ]
  }
 }

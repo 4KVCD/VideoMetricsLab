@@ -705,6 +705,39 @@ void FrameComparePanel::set_frame(long long frame) {
     }
 }
 
+FrameComparePanel::OpenAt FrameComparePanel::open_at(const std::string& identity, long long frame) {
+    const auto found = std::find_if(entries_.begin(), entries_.end(),
+                                    [&identity](const FrameComparisonEntry& entry) { return entry.identity == identity; });
+    if (found == entries_.end()) {
+        return OpenAt::no_pair;
+    }
+    if (frame < 0 || frame > last_frame()) {
+        return OpenAt::past_end;
+    }
+    const auto index = static_cast<std::size_t>(found - entries_.begin());
+    if (index == current_index_) {
+        set_frame(frame);
+        return OpenAt::shown;
+    }
+    current_index_ = index;
+    {
+        const QSignalBlocker blocker(video_combo);
+        video_combo->setCurrentIndex(static_cast<int>(index));
+    }
+    // The frame first: the pair is shown, or loaded to play, from it.
+    frame_ = frame;
+    sync_seek_widgets();
+    if (on_screen_) {
+        show_chosen_video();
+    } else {
+        update_labels();  // showEvent shows it
+        update_enabled_state();
+    }
+    return OpenAt::shown;
+}
+
+long long FrameComparePanel::last_frame() const { return frame_spin->maximum(); }
+
 void FrameComparePanel::cycle_distorted(int direction) {
     if (entries_.size() < 2) {
         return;

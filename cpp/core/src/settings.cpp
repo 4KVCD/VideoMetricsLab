@@ -44,6 +44,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"default_vship_build", &Settings::default_vship_build},
         {"film_grain_default", &Settings::film_grain_default},
         {"graph_metric", &Settings::graph_metric},
+        {"graph_worst_frames", &Settings::graph_worst_frames},
         {"parallel_jobs", &Settings::parallel_jobs},
         {"gpu_metrics_together", &Settings::gpu_metrics_together},
         {"vvc_decode_on_gpu", &Settings::vvc_decode_on_gpu},
@@ -227,6 +228,7 @@ std::string Settings::text() const {
     data["default_vship_build"] = default_vship_build;
     data["film_grain_default"] = film_grain_default;
     data["graph_metric"] = graph_metric;
+    data["graph_worst_frames"] = graph_worst_frames;
     data["parallel_jobs"] = parallel_jobs;
     data["gpu_metrics_together"] = gpu_metrics_together;
     data["vvc_decode_on_gpu"] = vvc_decode_on_gpu;

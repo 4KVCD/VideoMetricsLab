@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "Statystyki {label} dotyczą pełnych sekund, w których leżą te klatki.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} ocenia tylko całe wideo: nie ma wyniku dla jego części.",
   " — frames {first} to {last}": " — klatki {first}–{last}",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Gdy VMAF działa na GPU, PSNR, SSIM i XPSNR są zwykle obliczane w tym samym przebiegu, a GPU przetwarza jedno wideo naraz: to pole ich wtedy nie dotyczy."
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Gdy VMAF działa na GPU, PSNR, SSIM i XPSNR są zwykle obliczane w tym samym przebiegu, a GPU przetwarza jedno wideo naraz: to pole ich wtedy nie dotyczy.",
+  "A frame is weak where:": "Klatka jest słaba, gdy:",
+  "Add condition": "Dodaj warunek",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "CVVDP ocenia każdą sekundę: wiersz to pierwsza klatka jego sekundy, a spadek to sekundy w odległości do 1 s od gorszej.",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "Kliknij wiersz, aby zaznaczyć go na wykresie; kliknij dwukrotnie, aby otworzyć go w Porównaniu wideo.",
+  "Double-click one to open its first frame in Video Compare.": "Kliknij dwukrotnie jeden z nich, aby otworzyć jego pierwszą klatkę w Porównaniu wideo.",
+  "Export JSON...": "Eksportuj JSON...",
+  "Export weak segments": "Eksportuj słabe odcinki",
+  "Export x265 zones...": "Eksportuj strefy x265...",
+  "First": "Pierwsza",
+  "Frame": "Klatka",
+  "Join segments up to this many frames apart:": "Łącz odcinki oddalone o najwyżej tyle klatek:",
+  "Last": "Ostatnia",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "Wyświetla najgorszą klatkę każdego z najgorszych spadków pokazanej metryki, do obejrzenia w Porównaniu wideo, oraz odcinki, w których wyniki przekraczają próg, do eksportu.",
+  "No video shown has {metric} scores.": "Żadne pokazane wideo nie ma wyników {metric}.",
+  "Not in Video Compare": "Brak w Porównaniu wideo",
+  "Only the selected frames, {first} to {last}.": "Tylko zaznaczone klatki, od {first} do {last}.",
+  "Open in Video Compare": "Otwórz w Porównaniu wideo",
+  "Remove": "Usuń",
+  "Shortest segment (frames):": "Najkrótszy odcinek (klatki):",
+  "Start": "Początek",
+  "Text file (*.txt)": "Plik tekstowy (*.txt)",
+  "The first {count} are listed; the exports have them all.": "Na liście jest pierwszych {count}; eksporty zawierają wszystkie.",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "Najgorsza klatka każdego spadku, najgorsza pierwsza: klatka w odległości do 1 s od gorszej należy do jej spadku.",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Porównanie wideo pokazuje wideo z karty Wideo: wideo tej linii nie jest jednym z nich. Dodaj je tam, aby zobaczyć jego klatki.",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Klatki Porównania wideo kończą się na {last}, końcu jego najkrótszego wideo: klatka {frame} jest dalej.",
+  "Weak segments...": "Słabe odcinki...",
+  "Weak segments: {name}": "Słabe odcinki: {name}",
+  "Weak where:": "Słabe, gdy:",
+  "Worst frames": "Najgorsze klatki",
+  "Worst frames: {metric}": "Najgorsze klatki: {metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "Zapisywane po klatkach każdej strefy w pliku stref x265: b=1.5 daje strefie 1,5 raza większą przepływność, q=20 stałe QP 20. x265 stosuje to na tyle, na ile pozwala jego sterowanie przepływnością.",
+  "any condition holds": "spełniony jest dowolny warunek",
+  "every condition holds": "spełnione są wszystkie warunki",
+  "is above": "jest powyżej",
+  "is below": "jest poniżej",
+  "x265 zone setting:": "Ustawienie strefy x265:",
+  "{metric} mean": "{metric} średnia",
+  "{metric} worst": "{metric} najgorszy",
+  "Invalid zone setting": "Nieprawidłowe ustawienie strefy",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 przyjmuje b= z mnożnikiem (b=1.5: 1,5 raza większa przepływność) lub q= z QP od 0 do 69 (q=20)."
  },
  "plurals": {
   "about {count} day": [
@@ -1024,6 +1064,21 @@
    "Dodano {count} wiersz oceniający CVVDP na {display} — kliknij Oblicz metryki.",
    "Dodano {count} wiersze oceniające CVVDP na {display} — kliknij Oblicz metryki.",
    "Dodano {count} wierszy oceniających CVVDP na {display} — kliknij Oblicz metryki."
+  ],
+  "{count} dip": [
+   "{count} spadek",
+   "{count} spadki",
+   "{count} spadków"
+  ],
+  "{count} segment": [
+   "{count} odcinek",
+   "{count} odcinki",
+   "{count} odcinków"
+  ],
+  "{count} frame in all.": [
+   "łącznie {count} klatka.",
+   "łącznie {count} klatki.",
+   "łącznie {count} klatek."
   ]
  }
 }

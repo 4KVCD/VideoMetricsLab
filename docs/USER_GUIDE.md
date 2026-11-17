@@ -41,6 +41,16 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
    — then; its graph's statistics are of the whole seconds the frames fall in.
    **Clear range** goes back to the whole videos. The CSV export always holds
    every frame.
+   **Worst frames** lists, for one video, the worst frame of each of the
+   shown metric's 10, 25 or 50 worst dips (a frame within 1 s of a worse
+   one is part of its dip), with every metric's score there, within the
+   highlighted range if there is one. Click a row to mark its frame on the
+   graph; double-click it, or **Open in Video Compare**, to see it there.
+   **Weak segments...** lists the stretches where the video's scores fall
+   past thresholds you set (any or every condition, the shortest segment,
+   the gap to join across) and exports them as JSON, CSV or a value for
+   x265's `--zones`, each zone's setting typed in (`b=1.5`, 1.5 times the
+   bitrate, by default; `q=N` for a QP).
 
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one.

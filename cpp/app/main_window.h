@@ -455,6 +455,9 @@ private:
     void on_tab_changed(int index);
     void sync_graph();
     void open_or_update_graph(const std::vector<std::shared_ptr<CompletedRun>>& runs, bool show = true);
+    // Video Compare at `frame` of the pair `identity` (a graph line's), or
+    // why it cannot show it.
+    void show_in_video_compare(const std::string& identity, int frame);
     void on_show_graph_clicked();
 
     // -------------------------------------- saved runs (main_window_run_files.cpp)

@@ -47,6 +47,8 @@ struct Settings {
     // Calculate metrics (VideoInfo::with_film_grain).
     std::string film_grain_default;
     std::string graph_metric = "vmaf";
+    // How many dips Metric Graphs' Worst frames list shows (10, 25 or 50).
+    int graph_worst_frames = 10;
 
     // How many videos to score at once (1 or 2).
     int parallel_jobs = 1;

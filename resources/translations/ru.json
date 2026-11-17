@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "Статистика {label} — по целым секундам, в которые попадают эти кадры.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} оценивает только видео целиком: для части видео оценки нет.",
   " — frames {first} to {last}": " — кадры {first}–{last}",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Когда VMAF считается на GPU, PSNR, SSIM и XPSNR обычно вычисляются в том же проходе, а GPU обрабатывает видео по одному: тогда этот флажок к ним не относится."
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Когда VMAF считается на GPU, PSNR, SSIM и XPSNR обычно вычисляются в том же проходе, а GPU обрабатывает видео по одному: тогда этот флажок к ним не относится.",
+  "A frame is weak where:": "Кадр слабый, где:",
+  "Add condition": "Добавить условие",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "CVVDP оценивает каждую секунду: строка — первый кадр своей секунды, а провал — секунды в пределах 1 с от худшей.",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "Щёлкните строку, чтобы отметить её на графике; двойной щелчок открывает её в «Сравнении видео».",
+  "Double-click one to open its first frame in Video Compare.": "Дважды щёлкните один из них, чтобы открыть его первый кадр в «Сравнении видео».",
+  "Export JSON...": "Экспорт JSON...",
+  "Export weak segments": "Экспорт слабых участков",
+  "Export x265 zones...": "Экспорт зон x265...",
+  "First": "Первый",
+  "Frame": "Кадр",
+  "Join segments up to this many frames apart:": "Объединять участки, отстоящие не более чем на столько кадров:",
+  "Last": "Последний",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "Показывает худший кадр каждого из худших провалов выбранной метрики, чтобы посмотреть его в «Сравнении видео», и участки, где оценки переходят порог, для экспорта.",
+  "No video shown has {metric} scores.": "Ни у одного показанного видео нет оценок {metric}.",
+  "Not in Video Compare": "Нет в «Сравнении видео»",
+  "Only the selected frames, {first} to {last}.": "Только выбранные кадры, с {first} по {last}.",
+  "Open in Video Compare": "Открыть в «Сравнении видео»",
+  "Remove": "Убрать",
+  "Shortest segment (frames):": "Самый короткий участок (кадры):",
+  "Start": "Начало",
+  "Text file (*.txt)": "Текстовый файл (*.txt)",
+  "The first {count} are listed; the exports have them all.": "В списке первые {count}; в экспорте есть все.",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "Худший кадр каждого провала, худшие первыми: кадр в пределах 1 с от худшего относится к его провалу.",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "«Сравнение видео» показывает видео со вкладки «Видео»: видео этой линии среди них нет. Добавьте его туда, чтобы увидеть его кадры.",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Кадры «Сравнения видео» заканчиваются на {last}, конце его самого короткого видео: кадр {frame} дальше.",
+  "Weak segments...": "Слабые участки...",
+  "Weak segments: {name}": "Слабые участки: {name}",
+  "Weak where:": "Слабый, если:",
+  "Worst frames": "Худшие кадры",
+  "Worst frames: {metric}": "Худшие кадры: {metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "Пишется после кадров каждой зоны в файле зон x265: b=1.5 даёт зоне битрейт в 1,5 раза выше, q=20 — постоянный QP 20. x265 применяет это, насколько позволяет его управление битрейтом.",
+  "any condition holds": "выполнено любое условие",
+  "every condition holds": "выполнены все условия",
+  "is above": "выше",
+  "is below": "ниже",
+  "x265 zone setting:": "Настройка зоны x265:",
+  "{metric} mean": "{metric} среднее",
+  "{metric} worst": "{metric} худшее",
+  "Invalid zone setting": "Неверная настройка зоны",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 принимает b= с множителем (b=1.5: битрейт в 1,5 раза выше) или q= с QP от 0 до 69 (q=20)."
  },
  "plurals": {
   "about {count} day": [
@@ -1024,6 +1064,21 @@
    "Добавлена {count} строка с оценкой CVVDP на {display} — нажмите «Вычислить метрики».",
    "Добавлено {count} строки с оценкой CVVDP на {display} — нажмите «Вычислить метрики».",
    "Добавлено {count} строк с оценкой CVVDP на {display} — нажмите «Вычислить метрики»."
+  ],
+  "{count} dip": [
+   "{count} провал",
+   "{count} провала",
+   "{count} провалов"
+  ],
+  "{count} segment": [
+   "{count} участок",
+   "{count} участка",
+   "{count} участков"
+  ],
+  "{count} frame in all.": [
+   "всего {count} кадр.",
+   "всего {count} кадра.",
+   "всего {count} кадров."
   ]
  }
 }

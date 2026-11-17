@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "สถิติของ {label} มาจากวินาทีเต็มที่เฟรมเหล่านี้อยู่",
   "{label} scores whole videos only: it has no score for part of one.": "{label} ให้คะแนนเฉพาะทั้งวิดีโอ: ไม่มีคะแนนสำหรับบางส่วนของวิดีโอ",
   " — frames {first} to {last}": " — เฟรม {first} ถึง {last}",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "เมื่อคำนวณ VMAF บน GPU ค่า PSNR, SSIM และ XPSNR มักคำนวณในรอบเดียวกัน และ GPU จะประมวลผลทีละวิดีโอ: ในกรณีนั้นช่องนี้จึงไม่มีผลกับค่าเหล่านี้"
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "เมื่อคำนวณ VMAF บน GPU ค่า PSNR, SSIM และ XPSNR มักคำนวณในรอบเดียวกัน และ GPU จะประมวลผลทีละวิดีโอ: ในกรณีนั้นช่องนี้จึงไม่มีผลกับค่าเหล่านี้",
+  "A frame is weak where:": "เฟรมถือว่าอ่อนเมื่อ:",
+  "Add condition": "เพิ่มเงื่อนไข",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "CVVDP ให้คะแนนทุกวินาที: แต่ละแถวคือเฟรมแรกของวินาทีนั้น และช่วงที่คะแนนตกคือวินาทีที่อยู่ห่างจากวินาทีที่แย่กว่าไม่เกิน 1 วินาที",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "คลิกแถวเพื่อทำเครื่องหมายบนกราฟ ดับเบิลคลิกเพื่อเปิดในเปรียบเทียบวิดีโอ",
+  "Double-click one to open its first frame in Video Compare.": "ดับเบิลคลิกรายการหนึ่งเพื่อเปิดเฟรมแรกของรายการนั้นในเปรียบเทียบวิดีโอ",
+  "Export JSON...": "ส่งออก JSON...",
+  "Export weak segments": "ส่งออกช่วงที่อ่อน",
+  "Export x265 zones...": "ส่งออกโซน x265...",
+  "First": "แรก",
+  "Frame": "เฟรม",
+  "Join segments up to this many frames apart:": "รวมช่วงที่ห่างกันไม่เกินจำนวนเฟรมนี้:",
+  "Last": "สุดท้าย",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "แสดงเฟรมที่แย่ที่สุดของแต่ละช่วงที่คะแนนตกมากที่สุดของเมตริกที่แสดง เพื่อดูในเปรียบเทียบวิดีโอ และช่วงที่คะแนนเลยเกณฑ์ เพื่อส่งออก",
+  "No video shown has {metric} scores.": "ไม่มีวิดีโอที่แสดงอยู่ที่มีคะแนน {metric}",
+  "Not in Video Compare": "ไม่อยู่ในเปรียบเทียบวิดีโอ",
+  "Only the selected frames, {first} to {last}.": "เฉพาะเฟรมที่เลือก {first} ถึง {last}",
+  "Open in Video Compare": "เปิดในเปรียบเทียบวิดีโอ",
+  "Remove": "นำออก",
+  "Shortest segment (frames):": "ช่วงที่สั้นที่สุด (เฟรม):",
+  "Start": "เริ่ม",
+  "Text file (*.txt)": "ไฟล์ข้อความ (*.txt)",
+  "The first {count} are listed; the exports have them all.": "แสดง {count} รายการแรก ไฟล์ที่ส่งออกมีครบทุกรายการ",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "เฟรมที่แย่ที่สุดของแต่ละช่วงที่คะแนนตก เรียงจากแย่ที่สุด: เฟรมที่อยู่ห่างจากเฟรมที่แย่กว่าไม่เกิน 1 วินาทีเป็นส่วนหนึ่งของช่วงนั้น",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "เปรียบเทียบวิดีโอแสดงวิดีโอในแท็บวิดีโอ: วิดีโอของเส้นนี้ไม่ได้อยู่ในนั้น เพิ่มวิดีโอนี้ที่นั่นเพื่อดูเฟรม",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "เฟรมของเปรียบเทียบวิดีโอสิ้นสุดที่ {last} ซึ่งเป็นจุดจบของวิดีโอที่สั้นที่สุด: เฟรม {frame} อยู่หลังจากนั้น",
+  "Weak segments...": "ช่วงที่อ่อน...",
+  "Weak segments: {name}": "ช่วงที่อ่อน: {name}",
+  "Weak where:": "อ่อนเมื่อ:",
+  "Worst frames": "เฟรมที่แย่ที่สุด",
+  "Worst frames: {metric}": "เฟรมที่แย่ที่สุด: {metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "เขียนต่อท้ายเฟรมของแต่ละโซนในไฟล์โซนของ x265: b=1.5 ให้โซนได้บิตเรต 1.5 เท่า q=20 ใช้ QP คงที่ 20 x265 จะใช้ค่านี้เท่าที่การควบคุมอัตราของมันอนุญาต",
+  "any condition holds": "เงื่อนไขใดเงื่อนไขหนึ่งเป็นจริง",
+  "every condition holds": "ทุกเงื่อนไขเป็นจริง",
+  "is above": "สูงกว่า",
+  "is below": "ต่ำกว่า",
+  "x265 zone setting:": "การตั้งค่าโซน x265:",
+  "{metric} mean": "{metric} เฉลี่ย",
+  "{metric} worst": "{metric} แย่ที่สุด",
+  "Invalid zone setting": "การตั้งค่าโซนไม่ถูกต้อง",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 รับ b= ตามด้วยตัวคูณ (b=1.5: บิตเรต 1.5 เท่า) หรือ q= ตามด้วย QP ตั้งแต่ 0 ถึง 69 (q=20)"
  },
  "plurals": {
   "about {count} day": [
@@ -974,6 +1014,15 @@
   ],
   "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
    "เพิ่ม {count} แถวที่ให้คะแนน CVVDP บน {display} แล้ว — คลิก คำนวณเมตริก"
+  ],
+  "{count} dip": [
+   "{count} ช่วงที่คะแนนตก"
+  ],
+  "{count} segment": [
+   "{count} ช่วง"
+  ],
+  "{count} frame in all.": [
+   "รวม {count} เฟรม"
   ]
  }
 }

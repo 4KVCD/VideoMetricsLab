@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "إحصاءات {label} مأخوذة من الثواني الكاملة التي تقع فيها هذه الإطارات.",
   "{label} scores whole videos only: it has no score for part of one.": "يقيّم {label} الفيديو كاملًا فقط: لا توجد له درجة لجزء من الفيديو.",
   " — frames {first} to {last}": " — الإطارات من {first} إلى {last}",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "عند حساب VMAF على GPU، تُحسب PSNR وSSIM وXPSNR عادةً في مروره نفسه، ويعالج GPU فيديو واحدًا في كل مرة: عندها لا ينطبق هذا الخيار عليها."
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "عند حساب VMAF على GPU، تُحسب PSNR وSSIM وXPSNR عادةً في مروره نفسه، ويعالج GPU فيديو واحدًا في كل مرة: عندها لا ينطبق هذا الخيار عليها.",
+  "A frame is weak where:": "يكون الإطار ضعيفًا حيث:",
+  "Add condition": "إضافة شرط",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "يقيّم CVVDP كل ثانية: الصف هو أول إطار في ثانيته، والانخفاض هو الثواني الواقعة ضمن 1 ث من ثانية أسوأ.",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "انقر صفًا لتمييزه على الرسم؛ وانقر مرتين لفتحه في «مقارنة الفيديو».",
+  "Double-click one to open its first frame in Video Compare.": "انقر أحدها مرتين لفتح أول إطار فيه في «مقارنة الفيديو».",
+  "Export JSON...": "تصدير JSON...",
+  "Export weak segments": "تصدير المقاطع الضعيفة",
+  "Export x265 zones...": "تصدير مناطق x265...",
+  "First": "الأول",
+  "Frame": "الإطار",
+  "Join segments up to this many frames apart:": "ضمّ المقاطع التي يفصل بينها هذا العدد من الإطارات على الأكثر:",
+  "Last": "الأخير",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "يسرد أسوأ إطار في كل انخفاض من أسوأ انخفاضات المقياس المعروض، لمشاهدته في «مقارنة الفيديو»، والمقاطع التي تتجاوز فيها الدرجات حدًا، لتصديرها.",
+  "No video shown has {metric} scores.": "لا يحتوي أي فيديو معروض على درجات {metric}.",
+  "Not in Video Compare": "ليس في «مقارنة الفيديو»",
+  "Only the selected frames, {first} to {last}.": "الإطارات المحددة فقط، من {first} إلى {last}.",
+  "Open in Video Compare": "فتح في «مقارنة الفيديو»",
+  "Remove": "إزالة",
+  "Shortest segment (frames):": "أقصر مقطع (إطارات):",
+  "Start": "البداية",
+  "Text file (*.txt)": "ملف نصي (*.txt)",
+  "The first {count} are listed; the exports have them all.": "تُسرد أول {count}؛ وتحتوي ملفات التصدير عليها كلها.",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "أسوأ إطار في كل انخفاض، الأسوأ أولًا: الإطار الواقع ضمن 1 ث من إطار أسوأ جزء من انخفاضه.",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "تعرض «مقارنة الفيديو» مقاطع تبويب «الفيديو»: فيديو هذا الخط ليس واحدًا منها. أضفه هناك لرؤية إطاراته.",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "تنتهي إطارات «مقارنة الفيديو» عند {last}، نهاية أقصر فيديو فيها: الإطار {frame} بعدها.",
+  "Weak segments...": "المقاطع الضعيفة...",
+  "Weak segments: {name}": "المقاطع الضعيفة: {name}",
+  "Weak where:": "ضعيف عندما:",
+  "Worst frames": "أسوأ الإطارات",
+  "Worst frames: {metric}": "أسوأ الإطارات: {metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "يُكتب بعد إطارات كل منطقة في ملف مناطق x265: b=1.5 يعطي المنطقة 1.5 ضعف معدل البت، وq=20 قيمة QP ثابتة قدرها 20. يطبّقه x265 بقدر ما يسمح به التحكم في المعدل.",
+  "any condition holds": "يتحقق أي شرط",
+  "every condition holds": "تتحقق كل الشروط",
+  "is above": "أعلى من",
+  "is below": "أقل من",
+  "x265 zone setting:": "إعداد منطقة x265:",
+  "{metric} mean": "{metric} المتوسط",
+  "{metric} worst": "{metric} الأسوأ",
+  "Invalid zone setting": "إعداد منطقة غير صالح",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "يقبل x265 ‏b= مع معامل (b=1.5: ‏1.5 ضعف معدل البت) أو q= مع قيمة QP من 0 إلى 69 (q=20)."
  },
  "plurals": {
   "about {count} day": [
@@ -1099,6 +1139,30 @@
    "أُضيفت {count} صفوف تقيّم CVVDP على {display} — انقر «حساب المقاييس».",
    "أُضيف {count} صفًا تقيّم CVVDP على {display} — انقر «حساب المقاييس».",
    "أُضيف {count} صف تقيّم CVVDP على {display} — انقر «حساب المقاييس»."
+  ],
+  "{count} dip": [
+   "{count} انخفاض",
+   "انخفاض واحد ({count})",
+   "انخفاضان ({count})",
+   "{count} انخفاضات",
+   "{count} انخفاضًا",
+   "{count} انخفاض"
+  ],
+  "{count} segment": [
+   "{count} مقطع",
+   "مقطع واحد ({count})",
+   "مقطعان ({count})",
+   "{count} مقاطع",
+   "{count} مقطعًا",
+   "{count} مقطع"
+  ],
+  "{count} frame in all.": [
+   "{count} إطار إجمالًا.",
+   "إطار واحد ({count}) إجمالًا.",
+   "إطاران ({count}) إجمالًا.",
+   "{count} إطارات إجمالًا.",
+   "{count} إطارًا إجمالًا.",
+   "{count} إطار إجمالًا."
   ]
  }
 }

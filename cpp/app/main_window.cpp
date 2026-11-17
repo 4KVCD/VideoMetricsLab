@@ -541,6 +541,13 @@ void MainWindow::build_ui() {
     });
     connect(graph_panel_, &GraphPanel::results_export_requested, this,
             [this](ResultsFormat format) { export_results(format); });
+    graph_panel_->set_worst_count(settings_.graph_worst_frames);
+    connect(graph_panel_, &GraphPanel::worst_count_changed, this, [this](int count) {
+        settings_.graph_worst_frames = count;
+        save_settings();
+    });
+    connect(graph_panel_, &GraphPanel::video_compare_requested, this,
+            [this](const std::string& identity, int frame) { show_in_video_compare(identity, frame); });
     tabs_->addTab(new ScrollingPage(graph_panel_), app::tr("Metric Graphs"));
     frame_compare_panel_ = new FrameComparePanel([this] { return tools_status_.ffmpeg.path; },
                                                  preview_color_mode_from(settings_.frame_preview_color_mode),

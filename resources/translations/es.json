@@ -897,7 +897,47 @@
   "{label}'s statistics are of the whole seconds these frames are in.": "Las estadísticas de {label} son de los segundos completos en los que caen estos fotogramas.",
   "{label} scores whole videos only: it has no score for part of one.": "{label} puntúa solo videos completos: no tiene puntuación para una parte.",
   " — frames {first} to {last}": " — fotogramas {first} a {last}",
-  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Con VMAF en la GPU, PSNR, SSIM y XPSNR suelen calcularse en su misma pasada, y la GPU procesa un vídeo cada vez: entonces esta casilla no se aplica a ellas."
+  "With VMAF on the GPU, PSNR, SSIM and XPSNR are usually calculated in its pass, and the GPU takes one video at a time: this box then does not apply to them.": "Con VMAF en la GPU, PSNR, SSIM y XPSNR suelen calcularse en su misma pasada, y la GPU procesa un vídeo cada vez: entonces esta casilla no se aplica a ellas.",
+  "A frame is weak where:": "Un fotograma es débil donde:",
+  "Add condition": "Añadir condición",
+  "CVVDP scores each second: a row is its second's first frame, and a dip is the seconds within 1 s of a worse one.": "CVVDP puntúa cada segundo: una fila es el primer fotograma de su segundo, y una caída son los segundos a menos de 1 s de uno peor.",
+  "Click a row to mark it on the graph; double-click it to open it in Video Compare.": "Haz clic en una fila para marcarla en el gráfico; doble clic para abrirla en Comparar videos.",
+  "Double-click one to open its first frame in Video Compare.": "Haz doble clic en uno para abrir su primer fotograma en Comparar videos.",
+  "Export JSON...": "Exportar JSON...",
+  "Export weak segments": "Exportar segmentos débiles",
+  "Export x265 zones...": "Exportar zonas de x265...",
+  "First": "Primero",
+  "Frame": "Fotograma",
+  "Join segments up to this many frames apart:": "Unir segmentos separados por como mucho estos fotogramas:",
+  "Last": "Último",
+  "Lists the worst frame of each of the worst dips of the metric shown, to look at in Video Compare, and the stretches where scores fall past a threshold, to export.": "Muestra el peor fotograma de cada una de las peores caídas de la métrica mostrada, para verlo en Comparar videos, y los tramos donde las puntuaciones cruzan un umbral, para exportarlos.",
+  "No video shown has {metric} scores.": "Ningún video mostrado tiene puntuaciones de {metric}.",
+  "Not in Video Compare": "No está en Comparar videos",
+  "Only the selected frames, {first} to {last}.": "Solo los fotogramas seleccionados, de {first} a {last}.",
+  "Open in Video Compare": "Abrir en Comparar videos",
+  "Remove": "Quitar",
+  "Shortest segment (frames):": "Segmento más corto (fotogramas):",
+  "Start": "Inicio",
+  "Text file (*.txt)": "Archivo de texto (*.txt)",
+  "The first {count} are listed; the exports have them all.": "Se muestran los primeros {count}; las exportaciones los tienen todos.",
+  "The worst frame of each dip, worst first: a frame within 1 s of a worse one is part of its dip.": "El peor fotograma de cada caída, el peor primero: un fotograma a menos de 1 s de uno peor forma parte de su caída.",
+  "Video Compare shows the videos of the Videos tab: this line's video is not one of them. Add it there to see its frames.": "Comparar videos muestra los videos de la pestaña Videos: el video de esta línea no es uno de ellos. Añádelo allí para ver sus fotogramas.",
+  "Video Compare's frames end at {last}, the end of its shortest video: frame {frame} is past it.": "Los fotogramas de Comparar videos terminan en {last}, el final de su video más corto: el fotograma {frame} queda después.",
+  "Weak segments...": "Segmentos débiles...",
+  "Weak segments: {name}": "Segmentos débiles: {name}",
+  "Weak where:": "Débil cuando:",
+  "Worst frames": "Peores fotogramas",
+  "Worst frames: {metric}": "Peores fotogramas: {metric}",
+  "Written after each zone's frames in the x265 zones file: b=1.5 gives the zone 1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate control allows.": "Se escribe tras los fotogramas de cada zona en el archivo de zonas de x265: b=1.5 da a la zona 1,5 veces la tasa de bits, q=20 un QP fijo de 20. x265 lo aplica según lo permita su control de tasa.",
+  "any condition holds": "se cumple alguna condición",
+  "every condition holds": "se cumplen todas las condiciones",
+  "is above": "está por encima de",
+  "is below": "está por debajo de",
+  "x265 zone setting:": "Ajuste de zona de x265:",
+  "{metric} mean": "{metric} media",
+  "{metric} worst": "{metric} peor",
+  "Invalid zone setting": "Ajuste de zona no válido",
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 acepta b= con un factor (b=1.5: 1,5 veces la tasa de bits) o q= con un QP de 0 a 69 (q=20)."
  },
  "plurals": {
   "about {count} day": [
@@ -999,6 +1039,18 @@
   "Added {count} row scoring CVVDP on {display} -- click Calculate metrics.": [
    "Se agregó {count} fila que puntúa CVVDP en {display}; haz clic en Calcular métricas.",
    "Se agregaron {count} filas que puntúan CVVDP en {display}; haz clic en Calcular métricas."
+  ],
+  "{count} dip": [
+   "{count} caída",
+   "{count} caídas"
+  ],
+  "{count} segment": [
+   "{count} segmento",
+   "{count} segmentos"
+  ],
+  "{count} frame in all.": [
+   "{count} fotograma en total.",
+   "{count} fotogramas en total."
   ]
  }
 }
