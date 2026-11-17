@@ -351,6 +351,23 @@ std::vector<std::string> packet_reader_command(const std::string& ffmpeg, const 
                                                std::string_view codec, const std::string& listing_pipe,
                                                const std::vector<std::string>& input_options = {});
 
+// An H.264 stream's SPS and PPS from its configuration (FFmpeg's extradata),
+// each after a 00 00 00 01 start code: an avcC record's converted, Annex B
+// ones as they are. Empty when there are none or the record is cut short.
+std::vector<unsigned char> h264_parameter_sets(const std::vector<unsigned char>& extradata);
+
+// FFmpeg's hevc_mp4toannexb and vvc_mp4toannexb put the stream's whole
+// configuration before every packet with a random access picture, where it
+// replaces newer in-band parameter sets that the packet does not repeat
+// (issue #23). Where that copy (`size` bytes with this Adler-32, as the
+// packet listing's "#extradata" line says) is in `packet`, [start, end): the
+// first run of whole units that matches before the picture's first slice.
+// Nothing for a packet whose first slice is not a random access picture's,
+// or without the copy.
+std::optional<std::pair<std::size_t, std::size_t>> find_inserted_configuration(const std::vector<std::uint8_t>& packet,
+                                                                               std::string_view codec,
+                                                                               std::size_t size, std::uint32_t adler);
+
 // How many decoders this process gave up closing because their library
 // never returned. Such a process cannot be trusted to end by itself (the
 // stuck call holds the driver's locks), so a process of its own that ran a

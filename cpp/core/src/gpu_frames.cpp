@@ -22,6 +22,8 @@
 #include <thread>
 #include <tuple>
 
+#include <miniz.h>
+
 #include "vml/app_log.h"
 #include "vml/append.h"
 #include "vml/av2_stream.h"
@@ -53,10 +55,15 @@ namespace {
 // used for it (NVIDIA's would take VP9, but it is untried; MPEG-2 is decoded
 // in software, gpu_decodes_exactly).
 //
-// H.264, HEVC and VVC get Annex B start codes, with the parameter sets from
-// the stream's configuration before every keyframe (mp4toannexb adds them
-// only before an IDR, and an open-GOP H.264 stream cut at a recovery point
-// has none, so NVIDIA's decoder decoded nothing of it). AV1's packets are
+// H.264, HEVC and VVC get Annex B start codes (mp4toannexb), and the
+// decoder the parameter sets FFmpeg's own decoding uses: the stream's
+// configuration first, then the newest in-band ones. The configuration put
+// before every keyframe (dump_extra, and HEVC's and VVC's mp4toannexb)
+// replaced a newer in-band PPS where a keyframe does not repeat it (a
+// Blu-ray stream's changing PPS, issue #23), and the pictures up to the next
+// parameter sets were decoded wrongly. PacketReader takes those copies out
+// again, and gives a first packet without parameter sets the
+// configuration's (decode_with_stream_parameter_sets). AV1's packets are
 // already in its low-overhead OBU format, and its sequence header goes to
 // the parser separately. MPEG-2's sequence header, which a container may
 // keep only in its configuration, is put before every keyframe too. VP9's
@@ -80,10 +87,10 @@ struct Codec {
     bool gpu;
 };
 constexpr Codec codecs[] = {
-    {"h264", 4, "h264_mp4toannexb,dump_extra=freq=keyframe", true},
-    {"hevc", 8, "hevc_mp4toannexb,dump_extra=freq=keyframe,setts=pts=PTS:dts=N-1000000000", true},
+    {"h264", 4, "h264_mp4toannexb", true},
+    {"hevc", 8, "hevc_mp4toannexb,setts=pts=PTS:dts=N-1000000000", true},
     {"av1", 11, "", true},
-    {"vvc", 100, "vvc_mp4toannexb,dump_extra=freq=keyframe,setts=pts=PTS:dts=N-1000000000", false},
+    {"vvc", 100, "vvc_mp4toannexb,setts=pts=PTS:dts=N-1000000000", false},
     {"vp9", 10, "", false},
     {"mpeg2video", 1, "dump_extra=freq=keyframe", false},
     {"ffv1", 101, "", false},
@@ -601,6 +608,49 @@ public:
     virtual std::optional<Rational> wait_time_base(const CancelToken& cancel) = 0;
 };
 
+std::vector<unsigned char> extradata(const std::string& ffprobe, const std::filesystem::path& video);
+
+// Whether a stream's configuration (extradata) is Annex B units, as a raw or
+// MPEG-TS stream's is, rather than a configuration record (avcC, hvcC, vvcC).
+bool is_annex_b(const std::vector<unsigned char>& extradata) {
+    return extradata.size() >= 4 && extradata[0] == 0 && extradata[1] == 0 &&
+           (extradata[2] == 1 || (extradata[2] == 0 && extradata[3] == 1));
+}
+
+// Whether an H.264, HEVC or VVC packet in Annex B form holds both an SPS and
+// a PPS.
+bool has_parameter_sets(std::string_view codec, const std::vector<std::uint8_t>& packet) {
+    const auto [sps_type, pps_type] = codec == "h264" ? std::pair{7, 8} : codec == "hevc" ? std::pair{33, 34}
+                                                                                          : std::pair{15, 16};
+    bool sps = false;
+    bool pps = false;
+    // Each unit starts after a 00 00 01 start code (a 4-byte one ends the same way).
+    for (std::size_t at = 0; at + 4 < packet.size(); ++at) {
+        if (packet[at] == 0 && packet[at + 1] == 0 && packet[at + 2] == 1) {
+            const int type = codec == "h264"   ? packet[at + 3] & 0x1F
+                             : codec == "hevc" ? hevc_unit::type_of(packet[at + 3])
+                                               : packet[at + 4] >> 3;
+            sps = sps || type == sps_type;
+            pps = pps || type == pps_type;
+            at += 2;
+        }
+    }
+    return sps && pps;
+}
+
+// The parameter sets of a stream's configuration (`extradata`) as Annex B
+// units, for a first packet without them: H.264's (h264_parameter_sets),
+// or HEVC's and VVC's when they are Annex B already (from a raw or MPEG-TS
+// stream). A configuration record of HEVC or VVC gives nothing: from one,
+// mp4toannexb puts the configuration before the first random access picture
+// itself.
+std::vector<unsigned char> annex_b_parameter_sets(std::string_view codec, const std::vector<unsigned char>& extradata) {
+    if (codec == "h264") {
+        return h264_parameter_sets(extradata);
+    }
+    return is_annex_b(extradata) ? extradata : std::vector<unsigned char>();
+}
+
 // An FFmpeg that copies the video's first video stream out of its
 // container. It writes the packets to its standard output (-f data), and
 // each packet's timestamp and size to a framecrc listing on a pipe served
@@ -613,9 +663,18 @@ public:
                  const std::vector<std::string>& input_options = {}, bool untimed = false)
         : listing_pipe_("gpu-frames", listing_pipe_bytes),
           command_(packet_reader_command(ffmpeg, video, codec, listing_pipe_.path(), input_options)),
+          video_(video),
+          codec_(codec),
           file_name_(platform::path_text(video.filename())),
           leading_(codec),
           untimed_(untimed) {}
+
+    // For a reader whose packets are decoded: the decoder gets the parameter
+    // sets FFmpeg's own decoding uses, which starts from the stream's
+    // configuration and then keeps the newest in-band ones (issue #23).
+    // `ffprobe` reads the configuration where that needs it
+    // (keep_stream_parameter_sets).
+    void decode_with_stream_parameter_sets(const std::string& ffprobe) { ffprobe_ = ffprobe; }
 
     ~PacketReader() override {
         close();
@@ -677,6 +736,9 @@ public:
             if (const std::optional<std::string> warning = timestamp_warning()) {
                 throw GpuDecodeFailedError("FFmpeg rewrote the video's timestamps: " + *warning);
             }
+            if (!ffprobe_.empty()) {
+                keep_stream_parameter_sets(data);
+            }
             first_ = false;
             pts = time;
             flags = item->flags;
@@ -727,6 +789,59 @@ private:
         long long size;
         int flags;
     };
+
+    // The configuration the bitstream filters give the packets, as the
+    // listing's header says it: "#extradata 0:       84, 0x31ed0d9d".
+    struct ListedConfiguration {
+        std::size_t size;
+        std::uint32_t adler;  // its Adler-32, started from 0 as framecrc does
+    };
+
+    // decode_with_stream_parameter_sets's work on the packet next() returns.
+    // A first packet without SPS or PPS gets the configuration's: an H.264
+    // stream cut at a recovery point (mp4toannexb adds them only before an
+    // IDR), or a raw or MPEG-TS stream cut where it does not repeat them.
+    // HEVC and VVC from a configuration record: mp4toannexb puts the
+    // configuration before every random access picture, where it would
+    // replace newer in-band parameter sets the packet does not repeat; after
+    // the first packet that copy is taken out again.
+    void keep_stream_parameter_sets(std::vector<std::uint8_t>& data) {
+        if (first_) {
+            if ((codec_ == "h264" || codec_ == "hevc" || codec_ == "vvc") && !has_parameter_sets(codec_, data)) {
+                const std::vector<unsigned char> sets = annex_b_parameter_sets(codec_, extradata(ffprobe_, video_));
+                data.insert(data.begin(), sets.begin(), sets.end());
+            }
+            return;
+        }
+        if (codec_ != "hevc" && codec_ != "vvc") {
+            return;
+        }
+        std::optional<ListedConfiguration> listed;
+        {
+            const std::lock_guard lock(mutex_);
+            listed = listed_configuration_;
+        }
+        if (!listed || configuration_inserted_ == false) {
+            return;
+        }
+        const std::optional<std::pair<std::size_t, std::size_t>> copy =
+            find_inserted_configuration(data, codec_, listed->size, listed->adler);
+        if (!copy) {
+            return;
+        }
+        if (!configuration_inserted_) {
+            // The filters insert it only from a configuration record (hvcC,
+            // vvcC); an Annex B stream's passes through, and a match is then
+            // the stream's own parameter sets.
+            const std::vector<unsigned char> source = extradata(ffprobe_, video_);
+            configuration_inserted_ = !source.empty() && !is_annex_b(source);
+            if (!*configuration_inserted_) {
+                return;
+            }
+        }
+        data.erase(data.begin() + static_cast<std::ptrdiff_t>(copy->first),
+                   data.begin() + static_cast<std::ptrdiff_t>(copy->second));
+    }
 
     // The listing's next packet, waited for; nothing at its end. Throws
     // GpuDecodeFailedError when reading the listing failed.
@@ -882,10 +997,23 @@ private:
     }
 
     // A line of the listing's header: "#tb 0: 1/1000" says the time base of
-    // the packets' timestamps.
+    // the packets' timestamps, "#extradata 0: 84, 0x31ed0d9d" the size and
+    // Adler-32 of their configuration (ListedConfiguration).
     void take_header_line(std::string_view line) {
+        static const std::regex configuration_line(R"(#extradata 0: *(\d+), *0x([0-9a-f]+))");
         static const std::regex time_base_line(R"(#tb 0: (\d+)/(\d+))");
         std::match_results<std::string_view::const_iterator> match;
+        if (std::regex_search(line.begin(), line.end(), match, configuration_line,
+                              std::regex_constants::match_continuous)) {
+            const std::optional<long long> size = python_int(match.str(1));
+            const std::optional<long long> adler = hex_int(match.str(2));
+            if (size && adler && *size > 0 && *adler >= 0 && *adler <= 0xFFFFFFFFLL) {
+                const std::lock_guard lock(mutex_);
+                listed_configuration_ =
+                    ListedConfiguration{static_cast<std::size_t>(*size), static_cast<std::uint32_t>(*adler)};
+            }
+            return;
+        }
         if (!std::regex_search(line.begin(), line.end(), match, time_base_line,
                                std::regex_constants::match_continuous)) {
             return;
@@ -964,6 +1092,11 @@ private:
     std::vector<std::string> error_lines_;
     std::optional<std::string> timestamp_warning_;
     bool first_ = true;
+    std::filesystem::path video_;
+    std::string codec_;
+    std::string ffprobe_;  // decode_with_stream_parameter_sets: empty when not asked
+    std::optional<ListedConfiguration> listed_configuration_;  // the listing's "#extradata" line
+    std::optional<bool> configuration_inserted_;  // whether the filter put it in, once a copy is found
     std::string file_name_;  // for the log
     LeadingPictures leading_;  // what of the video's start is passed over
     bool untimed_ = false;
@@ -1383,6 +1516,41 @@ bool downloads_at_once(const std::string& source_decoder, const std::string& tes
     return gpu_decoder(source_decoder).streams_share_no_memory && gpu_decoder(test_decoder).streams_share_no_memory;
 }
 
+std::vector<unsigned char> h264_parameter_sets(const std::vector<unsigned char>& extradata) {
+    if (is_annex_b(extradata)) {
+        return extradata;  // a raw or MPEG-TS stream's
+    }
+    // avcC (ISO 14496-15): version 1, profile, compatibility, level, length
+    // size; then a count of SPS (low 5 bits), each a 2-byte length and its
+    // bytes; then a count of PPS, each the same.
+    if (extradata.size() < 6 || extradata[0] != 1) {
+        return {};
+    }
+    std::vector<unsigned char> sets;
+    std::size_t at = 5;
+    for (const int count_mask : {0x1F, 0xFF}) {  // the SPS, then the PPS
+        if (at >= extradata.size()) {
+            return {};
+        }
+        const int count = extradata[at++] & count_mask;
+        for (int i = 0; i < count; ++i) {
+            if (at + 2 > extradata.size()) {
+                return {};
+            }
+            const std::size_t size = std::size_t{extradata[at]} << 8 | extradata[at + 1];
+            at += 2;
+            if (size == 0 || at + size > extradata.size()) {
+                return {};
+            }
+            sets.insert(sets.end(), {0, 0, 0, 1});
+            sets.insert(sets.end(), extradata.begin() + static_cast<std::ptrdiff_t>(at),
+                        extradata.begin() + static_cast<std::ptrdiff_t>(at + size));
+            at += size;
+        }
+    }
+    return sets;
+}
+
 std::vector<std::string> packet_reader_command(const std::string& ffmpeg, const std::filesystem::path& video,
                                                std::string_view codec, const std::string& listing_pipe,
                                                const std::vector<std::string>& input_options) {
@@ -1439,6 +1607,49 @@ std::optional<int> vvc_picture(const std::vector<std::uint8_t>& packet) {
 }
 
 }  // namespace
+
+std::optional<std::pair<std::size_t, std::size_t>> find_inserted_configuration(const std::vector<std::uint8_t>& packet,
+                                                                               std::string_view codec,
+                                                                               std::size_t size, std::uint32_t adler) {
+    constexpr int vvc_first_irap = 7, vvc_last_irap = 11;  // IDR_W_RADL to RSV_IRAP_11, as the filters count them
+    // Where each unit starts, its start code included: the filters write 4-byte ones (00 00 00 01), the copy's
+    // included; a packet passed through as it was may have 3-byte ones.
+    std::vector<std::size_t> units;
+    std::optional<std::size_t> irap;
+    for (std::size_t at = 0; at + 4 < packet.size(); ++at) {
+        if (packet[at] != 0 || packet[at + 1] != 0 || packet[at + 2] != 1) {
+            continue;
+        }
+        const std::size_t start = at > 0 && packet[at - 1] == 0 ? at - 1 : at;
+        const int type = codec == "vvc" ? vvc_unit::type_of(packet[at + 4]) : hevc_unit::type_of(packet[at + 3]);
+        if (codec == "vvc" ? type >= vvc_first_irap && type <= vvc_last_irap
+                           : type >= hevc_unit::first_random_access && type <= hevc_unit::last_random_access) {
+            irap = start;
+            break;
+        }
+        // Any other picture's slice: no copy, and the rest of a large packet is not read. (A VVC picture whose
+        // subpictures mix types is taken by its first slice.)
+        if (type <= (codec == "vvc" ? vvc_unit::last_picture : hevc_unit::last_picture)) {
+            return std::nullopt;
+        }
+        units.push_back(start);
+        at += 2;
+    }
+    if (!irap || size == 0) {
+        return std::nullopt;  // the filters add it only before a random access picture's slices
+    }
+    for (const std::size_t start : units) {
+        const std::size_t end = start + size;
+        // A run of whole units: the copy ends where a unit starts.
+        if (end > *irap || (end != *irap && !std::binary_search(units.begin(), units.end(), end))) {
+            continue;
+        }
+        if (mz_adler32(0, packet.data() + start, size) == adler) {  // framecrc's, which starts from 0, not 1
+            return std::pair{start, end};
+        }
+    }
+    return std::nullopt;
+}
 
 LeadingPictures::Verdict LeadingPictures::take(const std::vector<std::uint8_t>& packet) {
     if (!open_) {
@@ -2020,7 +2231,9 @@ GpuFrameStream::GpuFrameStream(const VideoInfo& info, const DecodePlan& plan, in
         const Rational rate = frame_rate(info);
         state.reader = std::make_unique<Av2PacketSource>(info.path, Rational{rate.denominator, rate.numerator}, start);
     } else {
-        state.reader = std::make_unique<PacketReader>(ffmpeg, info.path, plan.codec, reader_options, plan.untimed);
+        auto reader = std::make_unique<PacketReader>(ffmpeg, info.path, plan.codec, reader_options, plan.untimed);
+        reader->decode_with_stream_parameter_sets(ffprobe);
+        state.reader = std::move(reader);
     }
     state.configuration = configuration(ffprobe, info.path, plan.codec);
     // vvdec-vulkan's decoder only hands over: on the GPU, or into host memory it imported

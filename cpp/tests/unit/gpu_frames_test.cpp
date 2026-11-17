@@ -18,6 +18,7 @@
 
 #include "reference.h"
 #include "test_videos.h"
+#include "vml/append.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/film_grain_detect.h"
@@ -183,6 +184,65 @@ TEST(GpuFrames, CopiesThePacketsWithThePythonAppsCommand) {
         }
         EXPECT_EQ(command, expected.get<std::vector<std::string>>());
     }
+}
+
+// What an H.264 stream cut at a recovery point is given before its first
+// packet: the configuration's SPS and PPS with start codes.
+TEST(GpuFrames, TakesTheParameterSetsOutOfAnAvccRecord) {
+    // avcC: version, profile, compatibility, level, length size; 1 SPS of 3
+    // bytes; 2 PPS of 2 and 1 bytes.
+    const std::vector<unsigned char> avcc = {1,    0x64, 0,    0x28, 0xFF, 0xE1, 0, 3, 0x67, 0x64, 0x28,
+                                             2,    0,    2,    0x68, 0xEE, 0,    1, 0x68};
+    const std::vector<unsigned char> expected = {0, 0, 0, 1, 0x67, 0x64, 0x28, 0, 0, 0, 1,
+                                                 0x68, 0xEE, 0, 0, 0, 1, 0x68};
+    EXPECT_EQ(h264_parameter_sets(avcc), expected);
+    // Annex B extradata (a raw stream's) is given as it is.
+    EXPECT_EQ(h264_parameter_sets(expected), expected);
+    // A record cut short, or none, gives nothing rather than half of it.
+    EXPECT_TRUE(h264_parameter_sets({avcc.begin(), avcc.end() - 1}).empty());
+    EXPECT_TRUE(h264_parameter_sets({}).empty());
+}
+
+// The copy of the configuration FFmpeg's hevc_mp4toannexb puts before a
+// random access picture, found by the size and Adler-32 the packet listing
+// gives, so that the stream's own newer parameter sets are not replaced.
+TEST(GpuFrames, FindsTheConfigurationTheFilterInserted) {
+    const auto unit = [](std::vector<std::uint8_t> body) {  // after a 4-byte start code, as the filter writes
+        body.insert(body.begin(), {0, 0, 0, 1});
+        return body;
+    };
+    const auto adler32 = [](const std::vector<std::uint8_t>& data) {  // as FFmpeg's framecrc: from 0, not 1
+        std::uint32_t a = 0, b = 0;
+        for (const std::uint8_t byte : data) {
+            a = (a + byte) % 65521;
+            b = (b + a) % 65521;
+        }
+        return (b << 16) | a;
+    };
+    // HEVC unit types (first header byte = type << 1): SEI 39, VPS 32, SPS 33, PPS 34, CRA 21, trailing 1.
+    const std::vector<std::uint8_t> sei = unit({39 << 1, 1, 5}), vps = unit({32 << 1, 1, 7}),
+                                    sps = unit({33 << 1, 1, 8}), pps = unit({34 << 1, 1, 9}),
+                                    cra = unit({21 << 1, 1, 0xAF, 0x80}), trailing = unit({1 << 1, 1, 0x80});
+    std::vector<std::uint8_t> configuration = vps;
+    append(configuration, sps);
+    append(configuration, pps);
+    std::vector<std::uint8_t> packet = sei;
+    append(packet, configuration);
+    append(packet, cra);
+    const auto found = find_inserted_configuration(packet, "hevc", configuration.size(), adler32(configuration));
+    ASSERT_TRUE(found);
+    EXPECT_EQ(found->first, sei.size());
+    EXPECT_EQ(found->second, sei.size() + configuration.size());
+    // Not where the checksum differs (the stream's own, newer parameter sets),
+    // nor in a packet whose first slice is another picture's.
+    EXPECT_FALSE(find_inserted_configuration(packet, "hevc", configuration.size(), adler32(configuration) + 1));
+    std::vector<std::uint8_t> no_irap = configuration;
+    append(no_irap, trailing);
+    EXPECT_FALSE(find_inserted_configuration(no_irap, "hevc", configuration.size(), adler32(configuration)));
+    std::vector<std::uint8_t> after_a_slice = trailing;
+    append(after_a_slice, configuration);
+    append(after_a_slice, cra);
+    EXPECT_FALSE(find_inserted_configuration(after_a_slice, "hevc", configuration.size(), adler32(configuration)));
 }
 
 // An HEVC packet in Annex B: each unit (type, layer) after a 00 00 01 start
