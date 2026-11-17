@@ -189,6 +189,9 @@ TEST(CommandLine, FindsTestVideosAsThePythonApp) {
         }
         EXPECT_EQ(found, expected["found"].get<std::vector<std::string>>());
     }
+    // A pattern kept because it found nothing says so; a missing file named as it is is left to ffprobe.
+    EXPECT_EQ(found_nothing(folder / "nothing*.mkv"), "no file matches it");
+    EXPECT_EQ(found_nothing(folder / "missing.mkv"), std::nullopt);
     std::error_code error;
     std::filesystem::remove_all(folder, error);
 }

@@ -51,6 +51,10 @@ std::optional<std::vector<BitrateVideo>> read_videos(const std::vector<std::file
     bool any_raw = false;
     for (const std::filesystem::path& path : paths) {
         BitrateVideo& video = videos.emplace_back(BitrateVideo{path, std::nullopt, std::nullopt, {}});
+        if (std::optional<std::string> nothing = found_nothing(path)) {
+            video.error = *std::move(nothing);
+            continue;
+        }
         if (is_raw_yuv(path)) {
             video.error = "a raw YUV file has pictures and no encoded packets, so it has no bitrate";
             continue;

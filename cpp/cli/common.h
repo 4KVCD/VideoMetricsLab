@@ -119,8 +119,8 @@ public:
         if (!redraw_) {
             const Clock::time_point now = Clock::now();
             const auto last = last_written_.find(index);
-            if (last == last_written_.end() || now - last->second >= write_every_) {
-                last_written_[index] = now;
+            if (last == last_written_.end() || now - last->second.when >= write_every_) {
+                last_written_[index] = {now, text};
                 write(text);
             }
             return;
@@ -137,7 +137,9 @@ public:
     }
 
     // Writes `text`, a line that stays, for the video of job `index`, which
-    // has ended: its line is not drawn again.
+    // has ended: its line is not drawn again. Elsewhere than on a terminal,
+    // not when it is the video's last line written (a short video's only
+    // progress line can be its final count).
     void finished(std::size_t index, const std::string& text) {
         const std::lock_guard lock(mutex_);
         lines_.erase(index);
@@ -146,7 +148,14 @@ public:
             shown_.clear();
             shown_index_.reset();
         }
-        write(text);
+        const auto last = last_written_.find(index);
+        const bool written_already = last != last_written_.end() && last->second.text == text;
+        if (last != last_written_.end()) {
+            last_written_.erase(last);
+        }
+        if (!written_already) {
+            write(text);
+        }
     }
 
     // Wipes the line being redrawn, at the end of the run.
@@ -245,8 +254,12 @@ private:
     std::thread ticker_;
     std::condition_variable woken_;
     bool stopping_ = false;
-    // Elsewhere: when each video's line was last written.
-    std::map<std::size_t, Clock::time_point> last_written_;
+    // Elsewhere: when each running video's line was last written, and what it said.
+    struct Written {
+        Clock::time_point when;
+        std::string text;
+    };
+    std::map<std::size_t, Written> last_written_;
 };
 
 }  // namespace vml::cli

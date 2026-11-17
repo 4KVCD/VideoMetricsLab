@@ -83,13 +83,17 @@ std::string resolved(const std::filesystem::path& path);
 // The test videos named: each file as given, and what each pattern finds,
 // in name order; the reference and files already listed are left out of
 // what patterns find. A pattern that finds nothing is kept, to be reported
-// as a video that could not be read.
+// as a video not compared (found_nothing).
 std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& patterns,
                                                 const std::filesystem::path& reference);
 // expand_tests for any command's videos: `excluded` (if any) left out of what
 // patterns find, as the reference is.
 std::vector<std::filesystem::path> expand_videos(const std::vector<std::string>& patterns,
                                                  const std::optional<std::filesystem::path>& excluded);
+// Why a path expand_videos gave is not read, if it is a pattern it kept
+// because the pattern found no file: ffprobe would only call it an invalid
+// argument.
+std::optional<std::string> found_nothing(const std::filesystem::path& path);
 
 // Why --difference cannot be used with `test_count` test videos (as
 // expand_tests finds them): it needs exactly two. Nothing when it can.

@@ -942,7 +942,7 @@ std::vector<std::filesystem::path> expand_videos(const std::vector<std::string>&
         }
         std::sort(matches.begin(), matches.end(), sorts_before);
         if (matches.empty()) {
-            found.push_back(path);  // named in the results as not readable
+            found.push_back(path);  // named in the results as not read (found_nothing)
         }
         for (const std::filesystem::path& match : matches) {
             if (const std::string file = resolved(match); file != excluded_file) {
@@ -951,6 +951,14 @@ std::vector<std::filesystem::path> expand_videos(const std::vector<std::string>&
         }
     }
     return found;
+}
+
+std::optional<std::string> found_nothing(const std::filesystem::path& path) {
+    std::error_code error;
+    if (has_magic(platform::path_text(path)) && !std::filesystem::exists(path, error)) {
+        return "no file matches it";
+    }
+    return std::nullopt;
 }
 
 namespace {
@@ -1098,6 +1106,10 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
                                                    const std::string& ffmpeg) {
     TestVideo& video = videos.emplace_back();
     video.path = path;
+    if (std::optional<std::string> nothing = found_nothing(path)) {
+        video.error = *std::move(nothing);
+        return std::nullopt;
+    }
     try {
         std::string wrong;
         std::optional<VideoInfo> read = read_video(path, arguments_, film_grain_choice(arguments_, settings_), ffprobe,
