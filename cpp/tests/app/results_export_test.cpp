@@ -61,7 +61,7 @@ TEST(ResultsExport, RecordsTheRunsAsOneAndEachVideosFacts) {
     facts->settings.metrics = {"psnr"};
     facts->settings.options.crop_mode = CropMode::none;
     facts->started_utc = "2026-11-14T10:00:01Z";
-    facts->passes = {PassTiming{"ffmpeg", {"psnr"}, "cpu", 4.0, 0.0, 1.0, 48, 16.0, "done", std::nullopt}};
+    facts->passes = {PassTiming{"ffmpeg", {"psnr"}, "cpu", 4.0, 0.0, 1.0, 48, 16.0, "done", std::nullopt, {}}};
     facts->metrics = {{"psnr", MetricOutcome{metric_calculated, ""}}};
     const auto result = std::make_shared<const ComparisonResult>();
     // Two videos of the later run, one of the earlier (a saved run loaded:
