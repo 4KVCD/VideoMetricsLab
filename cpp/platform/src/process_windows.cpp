@@ -267,12 +267,17 @@ ChildProcess ChildProcess::start(const std::vector<std::string>& arguments, cons
     const std::wstring folder = options.working_directory.empty() ? std::wstring() : options.working_directory.wstring();
     PROCESS_INFORMATION started{};
     // Started suspended, so that it is in its job before it can start
-    // anything of its own.
-    const BOOL made = CreateProcessW(nullptr, line.data(), nullptr, nullptr, TRUE,
-                                     CREATE_NO_WINDOW | CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT |
-                                         CREATE_UNICODE_ENVIRONMENT,
-                                     nullptr, folder.empty() ? nullptr : folder.c_str(), &startup.StartupInfo,
-                                     &started);
+    // anything of its own. Without a priority class Windows starts it at
+    // this process's if that is Idle or Below normal, else at Normal.
+    DWORD flags = CREATE_NO_WINDOW | CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
+    if (options.at_least_normal_priority) {
+        const DWORD own = GetPriorityClass(GetCurrentProcess());
+        if (own == IDLE_PRIORITY_CLASS || own == BELOW_NORMAL_PRIORITY_CLASS) {
+            flags |= NORMAL_PRIORITY_CLASS;
+        }
+    }
+    const BOOL made = CreateProcessW(nullptr, line.data(), nullptr, nullptr, TRUE, flags, nullptr,
+                                     folder.empty() ? nullptr : folder.c_str(), &startup.StartupInfo, &started);
     const DWORD start_error = made ? ERROR_SUCCESS : GetLastError();
     DeleteProcThreadAttributeList(attributes);
     if (!made) {

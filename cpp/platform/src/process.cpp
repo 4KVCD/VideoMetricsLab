@@ -79,7 +79,12 @@ void keep_error_tail(std::string& kept, std::string_view written) {
 
 ProcessOutput run_program(const std::vector<std::string>& arguments, std::chrono::milliseconds timeout,
                           const ProcessOptions& options, const std::function<bool()>& stop) {
-    ChildProcess child = ChildProcess::start(arguments, options);
+    // A question with a time limit (a tool's version, a file's streams): at
+    // Idle priority on a busy PC it could take minutes and run out of time,
+    // which would be taken for a broken tool or file.
+    ProcessOptions question = options;
+    question.at_least_normal_priority = true;
+    ChildProcess child = ChildProcess::start(arguments, question);
     // Read on a thread of its own, so that a program writing a lot is never
     // held up by a full pipe while this one waits for it to end.
     std::string output;

@@ -73,6 +73,10 @@ struct ProcessOptions {
     // it has started or could not, so that their reader sees the end exactly
     // when the program ends.
     std::vector<int> inherited_descriptors = {};
+    // Started at normal priority where this process runs below it, rather
+    // than at this one's, on Windows; elsewhere a lowered priority cannot be
+    // raised again, and the program keeps this one's.
+    bool at_least_normal_priority = false;
 };
 
 // A program run to its end: its exit code, everything it wrote to standard
