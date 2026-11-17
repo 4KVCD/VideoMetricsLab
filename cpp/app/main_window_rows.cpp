@@ -532,18 +532,31 @@ std::pair<QString, QString> MainWindow::resize_mismatch(int row) const {
     const bool cropped_either =
         reference != Size{source.width, source.height} || test != Size{distorted.width, distorted.height};
     const QString cropped = cropped_either ? app::tr(" (after black bars)") : QString();
-    std::pair<QString, QString> scaling =
-        direction == ScaleDirection::distorted_to_source
-            ? std::pair(app::tr("Test upscaled to source"),
-                        app::tr("Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.",
-                                {{"from_size", size_text(test.first, test.second)},
-                                 {"to_size", size_text(reference.first, reference.second)},
-                                 {"cropped", cropped}}))
-            : std::pair(app::tr("\u2193 source"),
-                        app::tr("Reference downscaled {from_size} -> {to_size}{cropped} to match the test video.",
-                                {{"from_size", size_text(reference.first, reference.second)},
-                                 {"to_size", size_text(test.first, test.second)},
-                                 {"cropped", cropped}}));
+    // The scaled video goes to the other's size, larger or smaller than its
+    // own (a test video may be bigger than its reference). The shapes match
+    // by now, so the areas say which.
+    const auto area = [](const Size& size) { return static_cast<long long>(size.first) * size.second; };
+    const bool test_scaled = direction == ScaleDirection::distorted_to_source;
+    const Size& from = test_scaled ? test : reference;
+    const Size& to = test_scaled ? reference : test;
+    const bool grows = area(to) > area(from);
+    const std::vector<app::NamedValue> sizes = {{"from_size", size_text(from.first, from.second)},
+                                                {"to_size", size_text(to.first, to.second)},
+                                                {"cropped", cropped}};
+    std::pair<QString, QString> scaling;
+    if (test_scaled && grows) {
+        scaling = {app::tr("Test upscaled to source"),
+                   app::tr("Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.", sizes)};
+    } else if (test_scaled) {
+        scaling = {app::tr("Test downscaled to source"),
+                   app::tr("Test video downscaled {from_size} -> {to_size}{cropped} to match the reference.", sizes)};
+    } else if (grows) {
+        scaling = {app::tr("\u2191 source"),
+                   app::tr("Reference upscaled {from_size} -> {to_size}{cropped} to match the test video.", sizes)};
+    } else {
+        scaling = {app::tr("\u2193 source"),
+                   app::tr("Reference downscaled {from_size} -> {to_size}{cropped} to match the test video.", sizes)};
+    }
     if (near_miss_crop(source, distorted, source_crop, test_crop, direction)) {
         // The same picture cropped a few lines apart (geometry.h): said, as
         // the scaling lowers every score and crops entered by hand end it.

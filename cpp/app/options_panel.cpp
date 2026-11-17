@@ -291,7 +291,9 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
     form->addRow(app::tr("Scaling algorithm:"), scale_algo_combo);
 
     scale_direction_combo = new QComboBox;
-    scale_direction_combo->addItems({app::tr("Source downscaled to test"), app::tr("Test upscaled to source"),
+    // "scaled", not up or down: a test video can be larger than its source.
+    // The row's Scaling note says which way, from the two sizes.
+    scale_direction_combo->addItems({app::tr("Source scaled to test"), app::tr("Test scaled to source"),
                                      app::tr("Test both (adds a comparison row)")});
     scale_direction_combo->setToolTip(
         app::tr("When the two resolutions differ: either evaluate quality at the resolution actually\n"
