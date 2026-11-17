@@ -25,6 +25,7 @@
 
 #include "dialogs.h"
 #include "export_image.h"
+#include "theme.h"
 #include "vml/bitrate.h"
 #include "vml/cancel.h"
 #include "vml/video.h"
@@ -137,6 +138,9 @@ public:
 
     // Its questions and messages; the tests answer them.
     Dialogs dialogs;
+    // The colours Export PNG draws in (Settings' Exported graphs), asked at
+    // each export; the light chart colours when not set.
+    std::function<theme::ChartColours()> export_colours;
 
     QPushButton* add_button = nullptr;
     QPushButton* remove_button = nullptr;

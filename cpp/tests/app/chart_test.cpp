@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "reference.h"
+#include "theme.h"
 
 namespace vml::app {
 
@@ -490,6 +491,32 @@ TEST_F(ChartTest, AShiftDragSelectsATimeRangeWhereItIsOnAndPansWhereNot) {
     EXPECT_NEAR(std::get<1>(dragged[1]), 60.0, chart.seconds_per_pixel());
     EXPECT_TRUE(std::get<2>(dragged[1]));
     EXPECT_EQ(chart.x_range(), std::pair(0.0, 100.0));
+}
+
+// Settings' Exported graphs: the light colours unless "dark" or "window" is
+// asked for; a chosen background and text take the place of the palette's,
+// with the axes between the two and the grid the text, faint.
+TEST(ExportChartColours, ThePaletteAskedForWithTheColoursChosen) {
+    const auto same = [](const theme::ChartColours& a, const theme::ChartColours& b) {
+        return a.background == b.background && a.text == b.text && a.axis == b.axis && a.grid == b.grid &&
+               a.highlight == b.highlight && a.difference == b.difference;
+    };
+    EXPECT_TRUE(same(theme::export_chart_colours("light", "", ""), theme::chart_colours(false)));
+    EXPECT_TRUE(same(theme::export_chart_colours("", "", ""), theme::chart_colours(false)));
+    EXPECT_TRUE(same(theme::export_chart_colours("not a palette", "", ""), theme::chart_colours(false)));
+    EXPECT_TRUE(same(theme::export_chart_colours("dark", "", ""), theme::chart_colours(true)));
+    EXPECT_TRUE(same(theme::export_chart_colours("window", "", ""), theme::chart_colours()));
+
+    const theme::ChartColours chosen = theme::export_chart_colours("dark", "#102030", "#f0e0d0");
+    EXPECT_EQ(chosen.background, QColor(0x10, 0x20, 0x30));
+    EXPECT_EQ(chosen.text, QColor(0xf0, 0xe0, 0xd0));
+    EXPECT_GT(chosen.axis.red(), 0x10);  // part way from the background to the text
+    EXPECT_LT(chosen.axis.red(), 0xf0);
+    EXPECT_EQ(chosen.grid.rgb(), chosen.text.rgb());
+    EXPECT_EQ(chosen.grid.alpha(), 40);
+    EXPECT_EQ(chosen.highlight, theme::chart_colours(true).highlight);  // the palette's own
+    // A colour that is not one is not chosen.
+    EXPECT_TRUE(same(theme::export_chart_colours("dark", "not a colour", ""), theme::chart_colours(true)));
 }
 
 }  // namespace

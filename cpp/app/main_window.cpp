@@ -593,6 +593,13 @@ void MainWindow::build_ui() {
     // Its own list of videos: a finished run adds its own (on_job_finished).
     bitrate_panel_ = new BitratePanel([this] { return find_tool("ffprobe", settings_); }, video_colors_);
     bitrate_panel_->dialogs = standard_dialogs(bitrate_panel_, export_dir);
+    // Settings' Exported graphs, read at each export as the folder is.
+    const auto export_colours = [this] {
+        return theme::export_chart_colours(settings_.export_graph_theme, settings_.export_graph_background,
+                                           settings_.export_graph_text);
+    };
+    graph_panel_->export_colours = export_colours;
+    bitrate_panel_->export_colours = export_colours;
     tabs_->addTab(new ScrollingPage(bitrate_panel_), app::tr("Bitrate Viewer"));
     // Its encodes from the runs Metric Graphs lists, brought up to date first.
     bd_rate_panel_ = new BdRatePanel([this] {

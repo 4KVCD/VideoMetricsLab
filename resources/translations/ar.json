@@ -967,7 +967,14 @@
   "The release gives no checksum to check the download against.": "لا يقدّم الإصدار مجموع تحقق للتحقق من التنزيل.",
   "Downloading FFmpeg {version} ({size} MB)...": "جارٍ تنزيل FFmpeg {version} ({size} ميغابايت)...",
   "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "التنزيل لا يطابق مجموع التحقق الخاص به: إما أنه تلف، أو تغيّر الإصدار أثناء التنزيل. حاول مرة أخرى.",
-  "Unpacking FFmpeg...": "جارٍ فك ضغط FFmpeg..."
+  "Unpacking FFmpeg...": "جارٍ فك ضغط FFmpeg...",
+  "Exported graphs:": "الرسوم المُصدَّرة:",
+  "Same as the window": "مثل النافذة",
+  "Background": "الخلفية",
+  "Text": "النص",
+  "Exported graphs' background": "خلفية الرسوم المُصدَّرة",
+  "Exported graphs' text": "نص الرسوم المُصدَّرة",
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "ألوان صور PNG التي تُصدِّرها رسوم المقاييس وعارض معدل البت. لون الخلفية أو النص، عند اختياره، يحل محل لون المظهر؛ ويعيده زر إعادة ضبط اللون في نافذته. تحتفظ الخطوط بألوانها."
  },
  "plurals": {
   "about {count} day": [

@@ -25,6 +25,8 @@
 #include <utility>
 #include <vector>
 
+#include "theme.h"
+
 class QTimer;
 
 namespace vml::app {
@@ -142,9 +144,10 @@ public:
     // panning, as a plain drag still does.
     void set_range_selection(bool on) { range_selection_ = on; }
 
-    // The chart for a PNG export: in the light theme's colours whatever the
-    // window shows, as an exported file is read elsewhere.
-    QPixmap render_to_pixmap() const;
+    // The chart for a PNG export, in `colours` whatever the window shows
+    // (Settings' Exported graphs: theme::export_chart_colours); light unless
+    // asked otherwise.
+    QPixmap render_to_pixmap(const theme::ChartColours& colours = theme::chart_colours(false)) const;
 
 signals:
     // The time and value under the pointer.
@@ -188,11 +191,11 @@ private:
     double height_fraction(double value_fraction) const { return invert_y_ ? 1.0 - value_fraction : value_fraction; }
     void invalidate(bool refit = false);
     void rebuild_cache();
-    QPixmap render(bool dark) const;
-    void draw(QPixmap& pixmap, bool dark) const;
+    QPixmap render(const theme::ChartColours& colours) const;
+    void draw(QPixmap& pixmap, const theme::ChartColours& colours) const;
     bool cache_matches_display() const;
-    void draw_axes(QPainter& painter, bool dark) const;
-    void draw_band(QPainter& painter, const QRect& rect, bool dark) const;
+    void draw_axes(QPainter& painter, const theme::ChartColours& colours) const;
+    void draw_band(QPainter& painter, const QRect& rect, const theme::ChartColours& colours) const;
     void draw_highlight(QPainter& painter, const QRect& rect, const QColor& colour) const;
     double time_within_data(int px) const;
     // Ticks for `range` drawn in `rect`, about `count` of them.

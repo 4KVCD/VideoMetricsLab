@@ -1245,7 +1245,8 @@ QPixmap BitratePanel::render_export_image() {
                 {QStringLiteral("P"), colors[frame_type_p]},
                 {QStringLiteral("B"), colors[frame_type_b]}};
     }
-    return export_image(*chart, export_title(), export_table(), font(), keys);
+    return export_image(*chart, export_title(), export_table(), font(),
+                        export_colours ? export_colours() : theme::chart_colours(false), keys);
 }
 
 void BitratePanel::on_export_png() {

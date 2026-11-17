@@ -16,6 +16,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -28,6 +29,7 @@
 
 #include "dialogs.h"
 #include "results_export.h"
+#include "theme.h"
 #include "vml/metrics.h"
 #include "vml/results.h"
 #include "vml/stats.h"
@@ -260,6 +262,9 @@ public:
 
     // The dialogs that wait for the user, which the tests answer.
     Dialogs dialogs;
+    // The colours Export PNG draws in (Settings' Exported graphs), asked at
+    // each export; the light chart colours when not set.
+    std::function<theme::ChartColours()> export_colours;
 
 signals:
     // The metric the user chose to look at.

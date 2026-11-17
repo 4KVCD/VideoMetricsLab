@@ -1927,7 +1927,8 @@ QPixmap GraphPanel::render_export_image() {
     if (const std::optional<std::pair<int, int>> frames = selected_frames()) {
         title += app::tr(" — frames {first} to {last}", {{"first", frames->first}, {"last", frames->second}});
     }
-    return export_image(pages_.at(std::string(metric.key))->chart(), title, export_table(), font());
+    return export_image(pages_.at(std::string(metric.key))->chart(), title, export_table(), font(),
+                        export_colours ? export_colours() : theme::chart_colours(false));
 }
 
 void GraphPanel::on_add_saved_run() {

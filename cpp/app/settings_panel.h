@@ -81,6 +81,12 @@ public:
     QLineEdit* cache_edit = nullptr;
     QLabel* cache_summary = nullptr;
     QLineEdit* export_edit = nullptr;
+    // Exported graphs' colours: the palette, and a chosen background and
+    // text colour, each button's in its "chosen" property ("#rrggbb", or
+    // empty for the palette's own).
+    QComboBox* export_graph_theme = nullptr;
+    QPushButton* export_background_button = nullptr;
+    QPushButton* export_text_button = nullptr;
     QCheckBox* use_cache = nullptr;
     QLabel* log_label = nullptr;
     QPushButton* copy_log_button = nullptr;
@@ -133,6 +139,12 @@ private:
     void apply_global_changes(const Settings& before);
     // Lets the user pick a folder for `edit`, and saves it.
     void pick_directory(const QString& title, QLineEdit* edit);
+    // Exported graphs' colour buttons: each shows the colour exports use
+    // now, and its value when one is chosen.
+    void show_export_colors();
+    // Lets the user choose a colour for `button` (or go back to the
+    // palette's, with Reset color), and saves it.
+    void choose_export_color(QPushButton* button, const QString& title);
     void on_copy_log();
     void on_export_log();
 

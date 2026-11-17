@@ -10,15 +10,16 @@
 // color(name) is the colour for the theme in use. A widget styled with
 // style(widget, "color: {muted};") is styled again when the theme changes
 // (refresh), as the palette's own colours are. Painted things (the charts,
-// the table's cells) ask for their colours when they draw. Files the app
-// writes (an exported graph) keep the light colours whatever the window
-// shows.
+// the table's cells) ask for their colours when they draw. An exported
+// graph is drawn in the colours Settings' Exported graphs asks for
+// (export_chart_colours): light unless the user chose otherwise.
 #pragma once
 
 #include <QColor>
 #include <QString>
 
 #include <optional>
+#include <string>
 
 class QTableWidgetItem;
 class QWidget;
@@ -48,6 +49,14 @@ QColor readable(const QColor& series_colour);
 
 // The chart colours for the theme in use (or for dark or light, if given).
 ChartColours chart_colours(std::optional<bool> dark = std::nullopt);
+
+// The colours an exported graph is drawn in (Settings' Exported graphs):
+// `palette` "dark" or "window" (the theme in use) for those charts' colours,
+// anything else the light ones; then `background` and `text` ("#rrggbb"),
+// where given, in place of the palette's. With either given, the axes and
+// the grid are worked out from the two, so that they read on any
+// background; the lines, the difference and the frame range keep theirs.
+ChartColours export_chart_colours(const std::string& palette, const std::string& background, const std::string& text);
 
 // widget->setStyleSheet(template) with {name}s filled in from this theme's
 // colours, done again by refresh() when the theme changes.

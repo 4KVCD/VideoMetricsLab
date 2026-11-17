@@ -967,7 +967,14 @@
   "The release gives no checksum to check the download against.": "รุ่นนี้ไม่มีค่า checksum สำหรับตรวจสอบไฟล์ที่ดาวน์โหลด",
   "Downloading FFmpeg {version} ({size} MB)...": "กำลังดาวน์โหลด FFmpeg {version} ({size} MB)...",
   "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "ไฟล์ที่ดาวน์โหลดไม่ตรงกับ checksum: ไฟล์เสียหาย หรือรุ่นเปลี่ยนไประหว่างดาวน์โหลด โปรดลองอีกครั้ง",
-  "Unpacking FFmpeg...": "กำลังแตกไฟล์ FFmpeg..."
+  "Unpacking FFmpeg...": "กำลังแตกไฟล์ FFmpeg...",
+  "Exported graphs:": "กราฟที่ส่งออก:",
+  "Same as the window": "เหมือนหน้าต่าง",
+  "Background": "พื้นหลัง",
+  "Text": "ข้อความ",
+  "Exported graphs' background": "พื้นหลังของกราฟที่ส่งออก",
+  "Exported graphs' text": "ข้อความของกราฟที่ส่งออก",
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "สีของภาพ PNG ที่กราฟเมตริกและดูบิตเรตส่งออก สีพื้นหลังหรือสีข้อความที่เลือกจะใช้แทนสีของธีม และรีเซ็ตสีในกล่องโต้ตอบจะกลับไปใช้สีของธีม เส้นกราฟยังคงใช้สีของตัวเอง"
  },
  "plurals": {
   "about {count} day": [

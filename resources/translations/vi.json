@@ -967,7 +967,14 @@
   "The release gives no checksum to check the download against.": "Bản phát hành không có checksum để kiểm tra tệp tải về.",
   "Downloading FFmpeg {version} ({size} MB)...": "Đang tải FFmpeg {version} ({size} MB)...",
   "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "Tệp tải về không khớp với checksum: tệp bị hỏng, hoặc bản dựng đã thay đổi trong lúc tải. Hãy thử lại.",
-  "Unpacking FFmpeg...": "Đang giải nén FFmpeg..."
+  "Unpacking FFmpeg...": "Đang giải nén FFmpeg...",
+  "Exported graphs:": "Biểu đồ xuất:",
+  "Same as the window": "Giống cửa sổ",
+  "Background": "Nền",
+  "Text": "Chữ",
+  "Exported graphs' background": "Nền của biểu đồ xuất",
+  "Exported graphs' text": "Chữ của biểu đồ xuất",
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Màu của ảnh PNG mà Biểu đồ chỉ số và Xem bitrate xuất ra. Màu nền hoặc màu chữ, khi được chọn, thay cho màu của giao diện; Đặt lại màu trong hộp thoại sẽ trở về màu đó. Các đường giữ màu riêng."
  },
  "plurals": {
   "about {count} day": [

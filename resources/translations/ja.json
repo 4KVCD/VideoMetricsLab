@@ -967,7 +967,14 @@
   "The release gives no checksum to check the download against.": "リリースに、ダウンロードを確認するためのチェックサムがありません。",
   "Downloading FFmpeg {version} ({size} MB)...": "FFmpeg {version} をダウンロードしています（{size} MB）...",
   "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "ダウンロードがチェックサムと一致しません：破損したか、ダウンロード中にビルドが変わりました。もう一度お試しください。",
-  "Unpacking FFmpeg...": "FFmpeg を展開しています..."
+  "Unpacking FFmpeg...": "FFmpeg を展開しています...",
+  "Exported graphs:": "エクスポートするグラフ：",
+  "Same as the window": "ウィンドウと同じ",
+  "Background": "背景",
+  "Text": "文字",
+  "Exported graphs' background": "エクスポートするグラフの背景",
+  "Exported graphs' text": "エクスポートするグラフの文字",
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "指標グラフとビットレートビューアーがエクスポートする PNG 画像の色です。背景または文字の色を選ぶと、テーマの色の代わりに使われます。ダイアログの「色をリセット」でテーマの色に戻ります。線はそれぞれの色のままです。"
  },
  "plurals": {
   "about {count} day": [

@@ -284,6 +284,13 @@ TEST_F(BitratePanelTest, TheExportedImageNamesItsGraphAndLines) {
     }
     // Around the chart, not instead of it.
     EXPECT_GT(panel->render_export_image().height(), panel->chart->render_to_pixmap().height());
+    // In the colours Settings asks for: a chosen background around the
+    // chart and in it.
+    panel->export_colours = [] { return theme::export_chart_colours("light", "#203040", "#e0e0e0"); };
+    EXPECT_EQ(panel->render_export_image().toImage().pixelColor(1, 1), QColor(0x20, 0x30, 0x40));
+    EXPECT_EQ(panel->chart->render_to_pixmap(panel->export_colours()).toImage().pixelColor(1, 1),
+              QColor(0x20, 0x30, 0x40));
+    panel->export_colours = nullptr;
 
     // A frame range: in the title, and the figures are of it; a line not
     // drawn is not listed.

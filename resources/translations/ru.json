@@ -967,7 +967,14 @@
   "The release gives no checksum to check the download against.": "Выпуск не содержит контрольной суммы для проверки загрузки.",
   "Downloading FFmpeg {version} ({size} MB)...": "Скачивание FFmpeg {version} ({size} МБ)...",
   "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "Загрузка не совпадает со своей контрольной суммой: она повреждена, или сборка изменилась во время скачивания. Повторите попытку.",
-  "Unpacking FFmpeg...": "Распаковка FFmpeg..."
+  "Unpacking FFmpeg...": "Распаковка FFmpeg...",
+  "Exported graphs:": "Экспортируемые графики:",
+  "Same as the window": "Как у окна",
+  "Background": "Фон",
+  "Text": "Текст",
+  "Exported graphs' background": "Фон экспортируемых графиков",
+  "Exported graphs' text": "Текст экспортируемых графиков",
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Цвета PNG-изображений, которые экспортируют Графики метрик и Просмотр битрейта. Выбранный цвет фона или текста заменяет цвет темы; «Сбросить цвет» в его диалоге возвращает цвет темы. Линии сохраняют свои цвета."
  },
  "plurals": {
   "about {count} day": [

@@ -83,6 +83,13 @@ struct Settings {
     // Video Compare's loop: how long it plays before and after its frame (ms).
     int compare_loop_before_ms = 1000;
     int compare_loop_after_ms = 1000;
+    // Exported graphs' colours (Metric Graphs' and the Bitrate tab's Export
+    // PNG): the chart colours of "light", "dark" or "window" (the theme in
+    // use), and a background and text colour ("#rrggbb") in place of
+    // theirs, none when empty.
+    std::string export_graph_theme = "light";
+    std::string export_graph_background;
+    std::string export_graph_text;
     // The metrics left out of the test-video table (and not calculated).
     std::vector<std::string> hidden_metrics;
     // The CVVDP presets the user saved, as JSON text of their list

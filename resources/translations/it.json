@@ -967,7 +967,14 @@
   "The release gives no checksum to check the download against.": "La release non fornisce alcun checksum con cui verificare il download.",
   "Downloading FFmpeg {version} ({size} MB)...": "Download di FFmpeg {version} ({size} MB)...",
   "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "Il download non corrisponde al suo checksum: si è danneggiato, oppure la build è cambiata durante il download. Riprova.",
-  "Unpacking FFmpeg...": "Estrazione di FFmpeg..."
+  "Unpacking FFmpeg...": "Estrazione di FFmpeg...",
+  "Exported graphs:": "Grafici esportati:",
+  "Same as the window": "Come la finestra",
+  "Background": "Sfondo",
+  "Text": "Testo",
+  "Exported graphs' background": "Sfondo dei grafici esportati",
+  "Exported graphs' text": "Testo dei grafici esportati",
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "I colori delle immagini PNG esportate da Grafici metriche e Visualizzatore bitrate. Un colore di sfondo o di testo, se scelto, sostituisce quello del tema; Ripristina colore nella sua finestra di dialogo torna a esso. Le linee mantengono i loro colori."
  },
  "plurals": {
   "about {count} day": [

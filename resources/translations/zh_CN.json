@@ -967,7 +967,14 @@
   "The release gives no checksum to check the download against.": "该发布版本未提供用于校验下载的校验和。",
   "Downloading FFmpeg {version} ({size} MB)...": "正在下载 FFmpeg {version}（{size} MB）...",
   "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "下载内容与其校验和不符：文件已损坏，或下载期间版本发生了变化。请重试。",
-  "Unpacking FFmpeg...": "正在解压 FFmpeg..."
+  "Unpacking FFmpeg...": "正在解压 FFmpeg...",
+  "Exported graphs:": "导出的图表：",
+  "Same as the window": "跟随窗口",
+  "Background": "背景",
+  "Text": "文字",
+  "Exported graphs' background": "导出图表的背景",
+  "Exported graphs' text": "导出图表的文字",
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "指标图表和码率查看器导出的 PNG 图片的颜色。选定的背景色或文字色会取代主题的颜色；在其对话框中点“重置颜色”即可恢复。曲线保持各自的颜色。"
  },
  "plurals": {
   "about {count} day": [

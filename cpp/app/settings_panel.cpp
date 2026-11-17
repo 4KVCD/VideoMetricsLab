@@ -1,19 +1,25 @@
 #include "settings_panel.h"
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDesktopServices>
+#include <QDialogButtonBox>
 #include <QFontMetrics>
 #include <QRawFont>
 #include <QFormLayout>
 #include <QFutureWatcher>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPainter>
+#include <QPixmap>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSizePolicy>
@@ -150,6 +156,41 @@ QGroupBox* SettingsPanel::build_storage_box() {
     export_row->addWidget(export_edit, 1);
     export_row->addWidget(browse_export);
     storage_form->addRow(app::tr("Export folder:"), export_row);
+
+    // The colours Metric Graphs' and the Bitrate tab's Export PNG draw in:
+    // light unless chosen otherwise, whatever the window shows.
+    const QString colors_tip =
+        app::tr("The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text "
+                "color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. "
+                "The lines keep their own colors.");
+    export_graph_theme = new QComboBox;
+    export_graph_theme->addItem(app::tr("Same as the window"), "window");
+    export_graph_theme->addItem(app::tr("Light"), "light");
+    export_graph_theme->addItem(app::tr("Dark"), "dark");
+    const int chosen_theme = export_graph_theme->findData(text_of(settings_.export_graph_theme));
+    export_graph_theme->setCurrentIndex(chosen_theme >= 0 ? chosen_theme : export_graph_theme->findData("light"));
+    export_graph_theme->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    export_graph_theme->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    export_graph_theme->setToolTip(colors_tip);
+    connect(export_graph_theme, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
+    export_background_button = new QPushButton;
+    export_background_button->setProperty("chosen", text_of(settings_.export_graph_background));
+    export_background_button->setToolTip(colors_tip);
+    connect(export_background_button, &QPushButton::clicked, this, [this] {
+        choose_export_color(export_background_button, app::tr("Exported graphs' background"));
+    });
+    export_text_button = new QPushButton;
+    export_text_button->setProperty("chosen", text_of(settings_.export_graph_text));
+    export_text_button->setToolTip(colors_tip);
+    connect(export_text_button, &QPushButton::clicked, this,
+            [this] { choose_export_color(export_text_button, app::tr("Exported graphs' text")); });
+    auto* export_colors_row = new QHBoxLayout;
+    export_colors_row->addWidget(export_graph_theme);
+    export_colors_row->addWidget(export_background_button);
+    export_colors_row->addWidget(export_text_button);
+    export_colors_row->addStretch(1);
+    storage_form->addRow(app::tr("Exported graphs:"), export_colors_row);
+    show_export_colors();
 
     use_cache = new QCheckBox(app::tr("Reuse a saved result when a video is added again"));
     use_cache->setChecked(settings_.use_cache);
@@ -553,6 +594,7 @@ void SettingsPanel::on_file_writes_idle() {
 void SettingsPanel::on_edited() {
     const Settings before = settings_;  // to see what this edit changed
     read_controls();
+    show_export_colors();
     emit decoded_videos_changed(settings_.compare_decoded_videos);
     apply_global_changes(before);
     // Only the starting point for new rows; rows already in the table keep
@@ -575,6 +617,9 @@ void SettingsPanel::read_controls() {
     settings_.ffmpeg_dir = ffmpeg_edit->text().toStdString();
     settings_.cache_dir = cache_edit->text().toStdString();
     settings_.export_dir = export_edit->text().toStdString();
+    settings_.export_graph_theme = export_graph_theme->currentData().toString().toStdString();
+    settings_.export_graph_background = export_background_button->property("chosen").toString().toStdString();
+    settings_.export_graph_text = export_text_button->property("chosen").toString().toStdString();
     settings_.use_cache = use_cache->isChecked();
     settings_.default_gpu_decode = default_gpu->isChecked();
     for (const auto& [key, box] : default_metrics) {
@@ -606,6 +651,52 @@ void SettingsPanel::apply_global_changes(const Settings& before) {
     if (settings_.theme != before.theme) {
         theme::apply_theme(text_of(settings_.theme));  // the window's changeEvent follows
     }
+}
+
+void SettingsPanel::show_export_colors() {
+    // The colours an export uses now, from the controls (not yet saved
+    // while the panel is built).
+    const std::string palette = export_graph_theme->currentData().toString().toStdString();
+    const QString background = export_background_button->property("chosen").toString();
+    const QString text = export_text_button->property("chosen").toString();
+    const theme::ChartColours colours =
+        theme::export_chart_colours(palette, background.toStdString(), text.toStdString());
+    const auto show = [](QPushButton* button, const QString& label, const QString& chosen, const QColor& colour) {
+        QPixmap swatch(14, 14);
+        swatch.fill(colour);
+        QPainter painter(&swatch);
+        painter.setPen(QColor(128, 128, 128));
+        painter.drawRect(0, 0, 13, 13);
+        painter.end();
+        button->setIcon(QIcon(swatch));
+        button->setText(chosen.isEmpty() ? label : label + QStringLiteral("  ") + chosen.toUpper());
+    };
+    show(export_background_button, app::tr("Background"), background, colours.background);
+    show(export_text_button, app::tr("Text"), text, colours.text);
+}
+
+void SettingsPanel::choose_export_color(QPushButton* button, const QString& title) {
+    // Starts at the colour exports use now; Reset color goes back to the
+    // palette's own.
+    const bool background = button == export_background_button;
+    const theme::ChartColours colours = theme::export_chart_colours(
+        settings_.export_graph_theme, settings_.export_graph_background, settings_.export_graph_text);
+    QColorDialog dialog(background ? colours.background : colours.text, this);
+    dialog.setWindowTitle(title);
+    dialog.setOption(QColorDialog::DontUseNativeDialog, true);
+    bool reset = false;
+    if (auto* buttons = dialog.findChild<QDialogButtonBox*>()) {
+        QAbstractButton* reset_button = buttons->addButton(app::tr("Reset color"), QDialogButtonBox::ResetRole);
+        connect(reset_button, &QAbstractButton::clicked, &dialog, [&dialog, &reset] {
+            reset = true;
+            dialog.accept();
+        });
+    }
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    button->setProperty("chosen", reset ? QString() : dialog.currentColor().name());
+    on_edited();
 }
 
 void SettingsPanel::pick_directory(const QString& title, QLineEdit* edit) {

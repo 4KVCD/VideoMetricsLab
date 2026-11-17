@@ -967,7 +967,14 @@
   "The release gives no checksum to check the download against.": "A kiadás nem ad ellenőrzőösszeget a letöltés ellenőrzéséhez.",
   "Downloading FFmpeg {version} ({size} MB)...": "FFmpeg {version} letöltése ({size} MB)...",
   "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "A letöltés nem egyezik az ellenőrzőösszegével: megsérült, vagy a build megváltozott letöltés közben. Próbálja újra.",
-  "Unpacking FFmpeg...": "FFmpeg kicsomagolása..."
+  "Unpacking FFmpeg...": "FFmpeg kicsomagolása...",
+  "Exported graphs:": "Exportált grafikonok:",
+  "Same as the window": "Mint az ablak",
+  "Background": "Háttér",
+  "Text": "Szöveg",
+  "Exported graphs' background": "Az exportált grafikonok háttere",
+  "Exported graphs' text": "Az exportált grafikonok szövege",
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "A Metrikagrafikonok és a Bitrátanéző által exportált PNG-képek színei. A kiválasztott háttér- vagy szövegszín a téma színét váltja fel; a párbeszédablak Szín visszaállítása gombja visszatér hozzá. A vonalak megtartják a saját színüket."
  },
  "plurals": {
   "about {count} day": [

@@ -607,27 +607,26 @@ void ChartWidget::rebuild_cache() {
         cache_.emplace(size);
         cache_->setDevicePixelRatio(ratio);
     }
-    draw(*cache_, cache_dark_);
+    draw(*cache_, theme::chart_colours(cache_dark_));
     cache_stale_ = false;
     ++renders_;
 }
 
-QPixmap ChartWidget::render(bool dark) const {
+QPixmap ChartWidget::render(const theme::ChartColours& colours) const {
     // The chart without the crosshair, at the screen's pixel ratio.
     const double ratio = devicePixelRatioF();
     QPixmap pixmap(static_cast<int>(std::ceil(width() * ratio)), static_cast<int>(std::ceil(height() * ratio)));
     pixmap.setDevicePixelRatio(ratio);
-    draw(pixmap, dark);
+    draw(pixmap, colours);
     return pixmap;
 }
 
-void ChartWidget::draw(QPixmap& pixmap, bool dark) const {
-    // The chart, over all of `pixmap`.
-    const theme::ChartColours colours = theme::chart_colours(dark);
+void ChartWidget::draw(QPixmap& pixmap, const theme::ChartColours& colours) const {
+    // The chart, over all of `pixmap`, in `colours`.
     pixmap.fill(colours.background);
     QPainter painter(&pixmap);
     painter.setFont(font());
-    draw_axes(painter, dark);
+    draw_axes(painter, colours);
     const QRect lines = lines_rect();
     const std::optional<QRect> band = band_rect();
     draw_highlight(painter, lines, colours.highlight);
@@ -640,7 +639,7 @@ void ChartWidget::draw(QPixmap& pixmap, bool dark) const {
     painter.setPen(QPen(colours.axis, 1));
     painter.drawRect(lines.adjusted(0, 0, -1, -1));
     if (band) {
-        draw_band(painter, *band, dark);
+        draw_band(painter, *band, colours);
     }
     painter.end();
 }
@@ -659,10 +658,9 @@ void ChartWidget::draw_highlight(QPainter& painter, const QRect& rect, const QCo
     painter.fillRect(QRect(QPoint(left, rect.top()), QPoint(std::max(left, right), rect.bottom())), colour);
 }
 
-void ChartWidget::draw_band(QPainter& painter, const QRect& rect, bool dark) const {
+void ChartWidget::draw_band(QPainter& painter, const QRect& rect, const theme::ChartColours& colours) const {
     // The band's line, its zero line, frame and label (its grid and ticks
     // are draw_axes').
-    const theme::ChartColours colours = theme::chart_colours(dark);
     const auto [y0, y1] = band_range_;
     const double zero_fraction = height_fraction((0.0 - y0) / std::max(1e-9, y1 - y0));
     const int zero_row = rect.bottom() - static_cast<int>(zero_fraction * rect.height());
@@ -694,12 +692,11 @@ bool ChartWidget::cache_matches_display() const {
            cache_->height() == static_cast<int>(std::ceil(height() * ratio));
 }
 
-void ChartWidget::draw_axes(QPainter& painter, bool dark) const {
+void ChartWidget::draw_axes(QPainter& painter, const theme::ChartColours& colours) const {
     // The grid, the axes' labels and the value axis's title: the time axis
     // under the plotting area, the lines' value axis beside them, and the
     // band's (if any) beside it.
     const QFontMetrics metrics(painter.font());
-    const theme::ChartColours colours = theme::chart_colours(dark);
     const QRect plot = plot_rect();
     const QRect lines = lines_rect();
     const std::optional<QRect> band = band_rect();
@@ -1058,8 +1055,8 @@ void ChartWidget::wheelEvent(QWheelEvent* event) {
     emit view_changed();
 }
 
-QPixmap ChartWidget::render_to_pixmap() const {
-    QPixmap exported = render(false);
+QPixmap ChartWidget::render_to_pixmap(const theme::ChartColours& colours) const {
+    QPixmap exported = render(colours);
     exported.setDevicePixelRatio(1.0);  // what export compositors lay out by
     return exported;
 }

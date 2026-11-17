@@ -967,7 +967,14 @@
   "The release gives no checksum to check the download against.": "Rilis tidak memberikan checksum untuk memeriksa unduhan.",
   "Downloading FFmpeg {version} ({size} MB)...": "Mengunduh FFmpeg {version} ({size} MB)...",
   "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "Unduhan tidak cocok dengan checksum-nya: unduhan rusak, atau build berubah saat diunduh. Coba lagi.",
-  "Unpacking FFmpeg...": "Mengekstrak FFmpeg..."
+  "Unpacking FFmpeg...": "Mengekstrak FFmpeg...",
+  "Exported graphs:": "Grafik yang diekspor:",
+  "Same as the window": "Sama seperti jendela",
+  "Background": "Latar",
+  "Text": "Teks",
+  "Exported graphs' background": "Latar grafik yang diekspor",
+  "Exported graphs' text": "Teks grafik yang diekspor",
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Warna gambar PNG yang diekspor Grafik metrik dan Penampil bitrate. Warna latar atau teks yang dipilih menggantikan warna tema; Atur ulang warna di dialognya mengembalikannya. Garis tetap memakai warnanya sendiri."
  },
  "plurals": {
   "about {count} day": [

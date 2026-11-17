@@ -21,11 +21,11 @@ constexpr int export_row_padding = 6;
 }  // namespace
 
 QPixmap export_image(const ChartWidget& chart_widget, const QString& title, const ExportTable& table,
-                     const QFont& font, std::span<const ExportKey> keys) {
+                     const QFont& font, const theme::ChartColours& colours, std::span<const ExportKey> keys) {
     // The chart comes in the screen's pixels (twice its size on a Retina
     // display); the title, legend and table are drawn at the same scale, in
     // the same units, or their text would be half the size of its labels.
-    QPixmap chart = chart_widget.render_to_pixmap();
+    QPixmap chart = chart_widget.render_to_pixmap(colours);
     const double ratio = std::max(1.0, chart_widget.devicePixelRatioF());
     chart.setDevicePixelRatio(ratio);
     const int chart_width = static_cast<int>(std::lround(chart.width() / ratio));
@@ -65,9 +65,9 @@ QPixmap export_image(const ChartWidget& chart_widget, const QString& title, cons
     QPixmap image(static_cast<int>(std::lround((content_width + 2 * export_margin) * ratio)),
                   static_cast<int>(std::lround(height * ratio)));
     image.setDevicePixelRatio(ratio);
-    image.fill(Qt::white);
+    image.fill(colours.background);
     QPainter painter(&image);
-    painter.setPen(QColor(QStringLiteral("#111111")));
+    painter.setPen(colours.text);
     painter.setFont(title_font);
     const int title_baseline = export_margin + title_metrics.ascent();
     painter.drawText(export_margin, title_baseline, title);
@@ -86,7 +86,7 @@ QPixmap export_image(const ChartWidget& chart_widget, const QString& title, cons
         header_font.setBold(true);
         int baseline = y + cell_metrics.ascent() + export_row_padding / 2;
         painter.setFont(header_font);
-        painter.setPen(QColor(QStringLiteral("#111111")));
+        painter.setPen(colours.text);
         int x = export_margin;
         for (std::size_t column = 0; column < headers.size(); ++column) {
             painter.drawText(x + export_gap, baseline, headers[column]);
@@ -100,7 +100,7 @@ QPixmap export_image(const ChartWidget& chart_widget, const QString& title, cons
             x = export_margin;
             // The square ties the row to its line on the chart above.
             painter.fillRect(x + export_gap, baseline - export_swatch, export_swatch, export_swatch, color);
-            painter.setPen(QColor(QStringLiteral("#111111")));
+            painter.setPen(colours.text);
             painter.drawText(x + export_gap + export_swatch + export_gap, baseline, label);
             x += widths[0];
             for (std::size_t column = 0; column < cells.size(); ++column) {

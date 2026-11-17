@@ -967,7 +967,14 @@
   "The release gives no checksum to check the download against.": "릴리스에 다운로드를 확인할 체크섬이 없습니다.",
   "Downloading FFmpeg {version} ({size} MB)...": "FFmpeg {version} 다운로드 중({size}MB)...",
   "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "다운로드가 체크섬과 일치하지 않습니다: 손상되었거나 다운로드 중에 빌드가 바뀌었습니다. 다시 시도하세요.",
-  "Unpacking FFmpeg...": "FFmpeg 압축을 푸는 중..."
+  "Unpacking FFmpeg...": "FFmpeg 압축을 푸는 중...",
+  "Exported graphs:": "내보낸 그래프:",
+  "Same as the window": "창과 같게",
+  "Background": "배경",
+  "Text": "텍스트",
+  "Exported graphs' background": "내보낸 그래프의 배경",
+  "Exported graphs' text": "내보낸 그래프의 텍스트",
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "지표 그래프와 비트레이트 뷰어가 내보내는 PNG 이미지의 색상입니다. 배경 또는 텍스트 색상을 고르면 테마의 색상 대신 쓰이며, 대화 상자의 색상 초기화로 테마 색상으로 돌아갑니다. 선은 각자의 색상을 유지합니다."
  },
  "plurals": {
   "about {count} day": [

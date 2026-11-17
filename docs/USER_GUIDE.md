@@ -65,6 +65,12 @@ other metrics are not calculated again). Repeat it for more displays.
 whether the app reopens the videos it had open when it was last closed (off by
 default).
 
+**Settings > Storage > Exported graphs** chooses the colours of the PNGs that
+Metric Graphs and the Bitrate Viewer export: Light (the default), Dark, or the
+same as the window, and, if you like, a **Background** and a **Text** colour of
+your own in place of the theme's (**Reset color** in their dialog goes back to
+it). The lines keep their own colours.
+
 SSIMULACRA2, Butteraugli and CVVDP are calculated on the GPU with the app's own
 Vship ([Vship-fast](https://github.com/4KVCD/Vship-fast)), a faster Vship whose
 metrics compute as libjxl's and the reference CVVDP's do,

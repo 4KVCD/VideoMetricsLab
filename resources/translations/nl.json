@@ -967,7 +967,14 @@
   "The release gives no checksum to check the download against.": "De release geeft geen controlesom om de download mee te controleren.",
   "Downloading FFmpeg {version} ({size} MB)...": "FFmpeg {version} downloaden ({size} MB)...",
   "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "De download klopt niet met de controlesom: hij is beschadigd, of de build is tijdens het downloaden veranderd. Probeer het opnieuw.",
-  "Unpacking FFmpeg...": "FFmpeg uitpakken..."
+  "Unpacking FFmpeg...": "FFmpeg uitpakken...",
+  "Exported graphs:": "Geëxporteerde grafieken:",
+  "Same as the window": "Zelfde als het venster",
+  "Background": "Achtergrond",
+  "Text": "Tekst",
+  "Exported graphs' background": "Achtergrond van geëxporteerde grafieken",
+  "Exported graphs' text": "Tekst van geëxporteerde grafieken",
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "De kleuren van de PNG-afbeeldingen die Metriekgrafieken en Bitrateweergave exporteren. Een gekozen achtergrond- of tekstkleur vervangt die van het thema; Kleur herstellen in het dialoogvenster gaat daarnaar terug. De lijnen houden hun eigen kleuren."
  },
  "plurals": {
   "about {count} day": [

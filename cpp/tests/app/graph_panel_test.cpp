@@ -339,6 +339,18 @@ TEST_F(GraphPanelTest, AFailedExportDoesNotSayItIsComplete) {
     EXPECT_TRUE(status(panel).startsWith("Could not")) << status(panel).toStdString();
 }
 
+// Export PNG draws in the colours Settings asks for (export_colours), the
+// space around the chart too; light when none are asked for.
+TEST_F(GraphPanelTest, TheExportIsInTheColoursAskedFor) {
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_runs({{shared(vmaf_result("a.mkv", {90.0F, 80.0F})), "a", {}, true}});
+    page(panel, "vmaf");
+    EXPECT_EQ(panel.render_export_image().toImage().pixelColor(1, 1), theme::chart_colours(false).background);
+    panel.export_colours = [] { return theme::export_chart_colours("dark", "", ""); };
+    EXPECT_EQ(panel.render_export_image().toImage().pixelColor(1, 1), theme::chart_colours(true).background);
+}
+
 // The readout pairs two lines by frame, as the Difference band does: every
 // line at the frame the pointer picked, and the Δ row only for the same
 // frame. (graph.json's Python app paired by time.)

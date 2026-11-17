@@ -14,6 +14,8 @@
 #include <utility>
 #include <vector>
 
+#include "theme.h"
+
 namespace vml::app {
 
 class ChartWidget;
@@ -39,9 +41,10 @@ struct ExportKey {
 };
 
 // `chart` as shown, with `title` above it (then `keys`) and `table` under
-// it (none without rows), in `font` for the title. At the chart's pixel
-// ratio, so that the text is the size of its labels.
+// it (none without rows), in `font` for the title; all of it in `colours`
+// (theme::export_chart_colours). At the chart's pixel ratio, so that the
+// text is the size of its labels.
 QPixmap export_image(const ChartWidget& chart, const QString& title, const ExportTable& table, const QFont& font,
-                     std::span<const ExportKey> keys = {});
+                     const theme::ChartColours& colours, std::span<const ExportKey> keys = {});
 
 }  // namespace vml::app

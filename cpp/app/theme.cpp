@@ -116,6 +116,34 @@ ChartColours chart_colours(std::optional<bool> dark) {
             QColor(120, 60, 200), QColor(40, 110, 230, 40)};
 }
 
+ChartColours export_chart_colours(const std::string& palette, const std::string& background, const std::string& text) {
+    ChartColours exported = chart_colours(palette == "dark"     ? std::optional<bool>(true)
+                                          : palette == "window" ? std::nullopt
+                                                                : std::optional<bool>(false));
+    const QColor chosen_background(QString::fromStdString(background));
+    const QColor chosen_text(QString::fromStdString(text));
+    if (!chosen_background.isValid() && !chosen_text.isValid()) {
+        return exported;
+    }
+    if (chosen_background.isValid()) {
+        exported.background = chosen_background;
+    }
+    if (chosen_text.isValid()) {
+        exported.text = chosen_text;
+    }
+    // The axes part way from the background to the text, as the palettes'
+    // are; the grid the text, faint, as theirs is.
+    const auto mix = [](const QColor& from, const QColor& to, double share) {
+        return QColor::fromRgbF(static_cast<float>(from.redF() + (to.redF() - from.redF()) * share),
+                                static_cast<float>(from.greenF() + (to.greenF() - from.greenF()) * share),
+                                static_cast<float>(from.blueF() + (to.blueF() - from.blueF()) * share));
+    };
+    exported.axis = mix(exported.background, exported.text, 0.6);
+    exported.grid = exported.text;
+    exported.grid.setAlpha(40);
+    return exported;
+}
+
 void style(QWidget* widget, const QString& template_text) {
     QHash<QWidget*, QString>& widgets = styled();
     if (!widgets.contains(widget)) {

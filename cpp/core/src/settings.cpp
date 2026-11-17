@@ -67,6 +67,9 @@ const std::unordered_map<std::string, Field>& fields() {
         {"compare_decoded_videos", &Settings::compare_decoded_videos},
         {"compare_loop_before_ms", &Settings::compare_loop_before_ms},
         {"compare_loop_after_ms", &Settings::compare_loop_after_ms},
+        {"export_graph_theme", &Settings::export_graph_theme},
+        {"export_graph_background", &Settings::export_graph_background},
+        {"export_graph_text", &Settings::export_graph_text},
         {"hidden_metrics", &Settings::hidden_metrics},
         {"cvvdp_default_preset", &Settings::cvvdp_default_preset},
     };
@@ -253,6 +256,9 @@ std::string Settings::text() const {
     data["compare_decoded_videos"] = compare_decoded_videos;
     data["compare_loop_before_ms"] = compare_loop_before_ms;
     data["compare_loop_after_ms"] = compare_loop_after_ms;
+    data["export_graph_theme"] = export_graph_theme;
+    data["export_graph_background"] = export_graph_background;
+    data["export_graph_text"] = export_graph_text;
     data["hidden_metrics"] = hidden_metrics;
     Json presets = Json::parse(cvvdp_presets_json, nullptr, false);
     data["cvvdp_presets"] = presets.is_array() ? presets : Json::array();

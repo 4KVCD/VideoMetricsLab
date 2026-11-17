@@ -967,7 +967,14 @@
   "The release gives no checksum to check the download against.": "Vydání neuvádí kontrolní součet, se kterým by šlo stažený soubor ověřit.",
   "Downloading FFmpeg {version} ({size} MB)...": "Stahuje se FFmpeg {version} ({size} MB)...",
   "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "Stažený soubor neodpovídá kontrolnímu součtu: poškodil se, nebo se sestavení během stahování změnilo. Zkuste to znovu.",
-  "Unpacking FFmpeg...": "Rozbaluje se FFmpeg..."
+  "Unpacking FFmpeg...": "Rozbaluje se FFmpeg...",
+  "Exported graphs:": "Exportované grafy:",
+  "Same as the window": "Stejně jako okno",
+  "Background": "Pozadí",
+  "Text": "Text",
+  "Exported graphs' background": "Pozadí exportovaných grafů",
+  "Exported graphs' text": "Text exportovaných grafů",
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Barvy obrázků PNG, které exportují Grafy metrik a Prohlížeč bitrate. Zvolená barva pozadí nebo textu nahradí barvu motivu; Obnovit barvu v jejím dialogu ji vrátí. Čáry si ponechají své barvy."
  },
  "plurals": {
   "about {count} day": [
