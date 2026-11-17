@@ -165,6 +165,26 @@ bool grain_needs_software_decoding(const VideoInfo& video, const std::string& hw
 // `gpu_decode`), or what pick_decode refuses in it.
 std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode);
 
+// The same, where one of those rules is why; nothing where they let a GPU
+// decode it (and only this PC's decoders, or a failure, can say why not).
+std::optional<std::string> software_decoding_rule(const VideoInfo& info, bool gpu_decode);
+
+// Why each video of a pass was decoded on the CPU, for the results JSON;
+// empty for a video decoded on the GPU.
+struct SoftwareDecodingWhy {
+    std::string source;
+    std::string distorted;
+    bool operator==(const SoftwareDecodingWhy&) const = default;
+};
+
+// The reasons for a pass's decode plan as it was shown (nothing without a
+// plan): VVC is VVdeC's, then software_decoding_rule, then the GPU's video
+// decoding having failed in this run (`gpu_decoding_failure`,
+// gpu_decoding_distrusted), else no decoder here for its codec.
+SoftwareDecodingWhy software_decoding_why(const std::optional<HardwareDecoding>& plan, const VideoInfo& source,
+                                          const VideoInfo& distorted, bool gpu_decode,
+                                          const std::optional<std::string>& gpu_decoding_failure);
+
 // The plan for a comparison of two videos (pick_decode for each): software
 // decoding for a video whose size changes (VideoInfo::scaled_to).
 HardwareDecoding plan_hardware_decoding(const DecodingCapabilities& capabilities, GpuVendor vendor,

@@ -63,11 +63,20 @@ Json summary_rules() {
 
 std::string decoder_text(const std::optional<std::string>& decoder) { return decoder.value_or("software"); }
 
-Json decode_json(const std::optional<HardwareDecoding>& decode) {
+// Each video's decoder, and for one decoded in software why ("source_why",
+// "test_why"; absent for one on the GPU).
+Json decode_json(const std::optional<HardwareDecoding>& decode, const SoftwareDecodingWhy& why) {
     if (!decode) {
         return nullptr;
     }
-    return Json{{"source", decoder_text(decode->source)}, {"test", decoder_text(decode->distorted)}};
+    Json json{{"source", decoder_text(decode->source)}, {"test", decoder_text(decode->distorted)}};
+    if (!why.source.empty()) {
+        json["source_why"] = why.source;
+    }
+    if (!why.distorted.empty()) {
+        json["test_why"] = why.distorted;
+    }
+    return json;
 }
 
 Json box_json(const std::optional<CropBox>& box) { return summary_crop_json(box); }
@@ -312,7 +321,8 @@ void add_video_record(Json& entry, const RunFacts* facts, const ComparisonResult
     Json plans = Json::array();
     Json passes = Json::array();
     for (const PassTiming& pass : facts->passes) {
-        plans.push_back(Json{{"metrics", pass.metric_keys}, {"decoders", decode_json(pass.decode)}});
+        plans.push_back(
+            Json{{"metrics", pass.metric_keys}, {"decoders", decode_json(pass.decode, pass.decode_why)}});
         passes.push_back(pass_json(pass));
     }
     // A video that never started (cancelled first, or answered by its saved

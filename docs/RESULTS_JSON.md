@@ -76,7 +76,7 @@ the `low` or `high` ones, and its `bands`.
 | `settings` | Every setting that changes the scores or how to read them (below). |
 | `black_bars` | How the black bars were found (below). |
 | `metric_status` | For each metric asked for: `status` is `calculated`, `saved` (taken from saved scores), `failed` or `cancelled`, or `not run`; `why` for the failed and not run ones. |
-| `decode_plan` | For each pass, its `metrics` and the `decoders` it used for the `source` and the `test` video, after any fallback: FFmpeg's hardware decoder (`cuda`, `d3d11va`, `vulkan`, `videotoolbox`) or `software`. |
+| `decode_plan` | For each pass, its `metrics` and the `decoders` it used for the `source` and the `test` video, after any fallback: FFmpeg's hardware decoder (`cuda`, `d3d11va`, `vulkan`, `videotoolbox`), `vvdec` (VVC decoded on the GPU by vvdec-vulkan) or `software`; for a video decoded in `software`, `source_why` or `test_why` says why (GPU decoding is off, a format or codec GPU decoders do not decode exactly, VVdeC decoding VVC on the CPU, the GPU's decoding having failed in the run, or no GPU decoder here for its codec). |
 | `timings` | `started_utc`, `seconds` (pauses included), `paused_seconds`, and `passes` (below). |
 
 `settings`, `black_bars` and `metric_status` are `null` for a saved run

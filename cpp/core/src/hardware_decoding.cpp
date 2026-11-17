@@ -421,7 +421,7 @@ std::optional<std::string> pick_decode(const DecodingCapabilities& capabilities,
     return hwaccel;
 }
 
-std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode) {
+std::optional<std::string> software_decoding_rule(const VideoInfo& info, bool gpu_decode) {
     if (!gpu_decode) {
         return "GPU decoding is off";
     }
@@ -468,7 +468,36 @@ std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode) {
         return "its film grain is not known, and Apple's decoder may leave it out";
     }
 #endif
-    return "no GPU decoder here for " + info.codec_name;
+    return std::nullopt;
+}
+
+std::string software_decoding_reason(const VideoInfo& info, bool gpu_decode) {
+    return software_decoding_rule(info, gpu_decode).value_or("no GPU decoder here for " + info.codec_name);
+}
+
+SoftwareDecodingWhy software_decoding_why(const std::optional<HardwareDecoding>& plan, const VideoInfo& source,
+                                          const VideoInfo& distorted, bool gpu_decode,
+                                          const std::optional<std::string>& gpu_decoding_failure) {
+    const auto why = [&](const std::optional<std::string>& decoder, const VideoInfo& video) -> std::string {
+        if (decoder) {
+            return {};
+        }
+        // A plan never takes VVC: vvdec-vulkan's videos are marked in the shown plan, the rest are VVdeC's.
+        if (ascii_lower(video.codec_name) == "vvc") {
+            return "VVdeC decodes it on the CPU";
+        }
+        if (std::optional<std::string> rule = software_decoding_rule(video, gpu_decode)) {
+            return *rule;
+        }
+        if (gpu_decoding_failure) {
+            return "the GPU's video decoding failed in this run (" + *gpu_decoding_failure + ")";
+        }
+        return "no GPU decoder here for " + video.codec_name;
+    };
+    if (!plan) {
+        return {};
+    }
+    return {why(plan->source, source), why(plan->distorted, distorted)};
 }
 
 HardwareDecoding plan_hardware_decoding(const DecodingCapabilities& capabilities, GpuVendor vendor,

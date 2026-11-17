@@ -72,6 +72,9 @@ enum class StatusKind {
     // vvdec-vulkan refused, failed or crashed and is off for the rest of the run (turn_off_vvdec; the text is why):
     // logged, not shown as a step.
     vvdec_off,
+    // Why the decode plan just made leaves each video it does in software (decoding_why_status): kept for the
+    // results JSON (JobRun::report_status), neither logged nor shown.
+    decoding_why,
 };
 
 // Whether a status says that a GPU route failed (or its check did) and its
@@ -97,6 +100,8 @@ struct RunStatus {
     // The decode plan the text names, for the window's "Decoder: ..."
     // (the Python app's Status.decode).
     std::optional<HardwareDecoding> decoding{};
+    // StatusKind::decoding_why's reasons.
+    SoftwareDecodingWhy decoding_why{};
 };
 using StatusCallback = std::function<void(const RunStatus&)>;
 
@@ -105,6 +110,11 @@ using StatusCallback = std::function<void(const RunStatus&)>;
 // cpu)...".
 RunStatus decoding_status(const std::string& brief, const HardwareDecoding& decoding,
                           StatusKind kind = StatusKind::step, std::string_view ending = "...");
+
+// Why the plan just made with GPU decoding on (`plan`) leaves each video it
+// does in software, from the videos as the run scores them: a size change
+// marked, which the run's process notes for others only once the task ends.
+RunStatus decoding_why_status(const HardwareDecoding& plan, const VideoInfo& source, const VideoInfo& distorted);
 
 // A status as a process of its own sends it to the run (isolated.h), and
 // back.

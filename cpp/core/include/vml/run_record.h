@@ -43,6 +43,7 @@ struct PassTiming {
     // The decode plan the pass's statuses named last: what it was set to
     // decode each video with, after the run's own fallbacks.
     std::optional<HardwareDecoding> decode;
+    SoftwareDecodingWhy decode_why;  // why each video `decode` left in software was
     bool operator==(const PassTiming&) const = default;
 };
 

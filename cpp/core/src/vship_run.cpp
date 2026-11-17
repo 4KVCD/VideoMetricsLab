@@ -2206,6 +2206,9 @@ private:
                                                          request_.source, request_.distorted, MacGpuDecoding::on)
                                 : HardwareDecoding{},
                             build_};
+        if (hooks_.on_status && request_.options.gpu_decode) {
+            hooks_.on_status(decoding_why_status(plan.decoding, request_.source, request_.distorted));
+        }
         return run_vship_pass(request_, plan, progress, hooks_.on_status, cancel_);
     }
 

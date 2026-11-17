@@ -19,6 +19,7 @@
 
 #include "vml/film_grain_detect.h"
 #include "vml/gpu_decoders.h"
+#include "vml/run_record.h"
 
 namespace vml {
 namespace {
@@ -342,6 +343,10 @@ TEST(JobRunner, AVideosFactsSayHowItsMetricsCameOutAndHowLongItsPassesTook) {
     job.metric_keys.emplace_back("ssim");
     job.cached_result = result_with({{"ssim", {0, 1}}});
     job.cached_metrics = job.cached_result->metric_results;
+    job.distorted_info.codec_name = "hevc";
+    job.distorted_info.pix_fmt = "yuv444p";
+    job.distorted_info.width = 1920;
+    job.distorted_info.height = 1080;
     FakeClock clock;
     CancelToken cancel([&clock] { return clock.now(); });
     Reported reported;
@@ -356,6 +361,9 @@ TEST(JobRunner, AVideosFactsSayHowItsMetricsCameOutAndHowLongItsPassesTook) {
             if (options.compute_vmaf) {
                 throw VmafRunError("Vulkan ran out of memory.");
             }
+            RunStatus planned{"", StatusKind::decoding_why};
+            planned.decoding_why = {"", "its picture size changes partway through"};
+            status(planned);
             status({"Calculating", StatusKind::step, "Calculating", decode});
             clock.advance(1.0);
             progress(24, 48, 24.0);
@@ -385,8 +393,19 @@ TEST(JobRunner, AVideosFactsSayHowItsMetricsCameOutAndHowLongItsPassesTook) {
     const auto cpu = std::find_if(video.passes.begin(), video.passes.end(),
                                   [](const PassTiming& pass) { return pass.task == "ffmpeg"; });
     ASSERT_NE(cpu, video.passes.end());
-    // A second to its first frame, then 48 frames in three seconds less the pause's two
-    EXPECT_EQ(*cpu, (PassTiming{"ffmpeg", {"psnr", "xpsnr"}, "cpu", 4.0, 2.0, 1.0, 48, 48.0, "done", decode}));
+    // A second to its first frame, then 48 frames in three seconds less the pause's two. The test video, decoded
+    // in software, says why, in the results JSON too: as the run said when it made its plan (it knew of the size
+    // change), not as its file's details alone would (4:4:4)
+    const std::string why = "its picture size changes partway through";
+    EXPECT_EQ(*cpu, (PassTiming{"ffmpeg", {"psnr", "xpsnr"}, "cpu", 4.0, 2.0, 1.0, 48, 48.0, "done", decode,
+                                {"", why}}));
+    nlohmann::ordered_json entry;
+    add_video_record(entry, &video, nullptr, "");
+    const auto planned = std::find_if(entry["decode_plan"].begin(), entry["decode_plan"].end(),
+                                      [](const auto& plan) { return plan["metrics"].size() == 2; });
+    ASSERT_NE(planned, entry["decode_plan"].end());
+    EXPECT_EQ((*planned)["decoders"],
+              (nlohmann::ordered_json{{"source", "cuda"}, {"test", "software"}, {"test_why", why}}));
     const auto gpu = std::find_if(video.passes.begin(), video.passes.end(),
                                   [](const PassTiming& pass) { return pass.task != "ffmpeg"; });
     EXPECT_EQ(gpu->on, "gpu");

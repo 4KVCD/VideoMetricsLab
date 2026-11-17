@@ -271,6 +271,34 @@ TEST(Decisions, MonochromeH264IsDecodedInSoftware) {
               "unset)");
 }
 
+// A pass says why each video it decoded in software was: VVdeC's for VVC, a
+// rule, the GPU's video decoding having failed in the run, or no decoder
+// here; nothing for a video on the GPU, or for a pass without a plan.
+TEST(Decisions, APassSaysWhyEachVideoItDecodedInSoftwareWas) {
+    VideoInfo h264;
+    h264.codec_name = "h264";
+    h264.pix_fmt = "yuv420p";
+    h264.width = 1920;
+    h264.height = 1080;
+    h264.profile = "High";
+    VideoInfo vvc = h264;
+    vvc.codec_name = "vvc";
+    VideoInfo monochrome = h264;
+    monochrome.monochrome_h264 = true;
+    const HardwareDecoding software{};
+    EXPECT_EQ(software_decoding_why(std::nullopt, h264, monochrome, true, std::nullopt), SoftwareDecodingWhy{});
+    // A rule comes before the run's failure.
+    EXPECT_EQ(software_decoding_why(HardwareDecoding{"cuda", std::nullopt}, h264, monochrome, true, "it hung"),
+              (SoftwareDecodingWhy{"", software_decoding_reason(monochrome, true)}));
+    EXPECT_EQ(software_decoding_why(software, vvc, h264, true, "it hung"),
+              (SoftwareDecodingWhy{"VVdeC decodes it on the CPU",
+                                   "the GPU's video decoding failed in this run (it hung)"}));
+    EXPECT_EQ(software_decoding_why(software, h264, h264, true, std::nullopt).distorted,
+              "no GPU decoder here for h264");
+    EXPECT_EQ(software_decoding_why(software, h264, h264, false, "it hung"),
+              (SoftwareDecodingWhy{"GPU decoding is off", "GPU decoding is off"}));
+}
+
 // A saved run's video without a profile takes the one its file is read with
 // again, and nothing else; one with a profile, or another file or codec,
 // keeps what it had.

@@ -1376,6 +1376,12 @@ RunStatus decoding_status(const std::string& brief, const HardwareDecoding& deco
     return {brief + " (GPU decode: " + decoding.describe() + ")" + std::string(ending), kind, brief, decoding};
 }
 
+RunStatus decoding_why_status(const HardwareDecoding& plan, const VideoInfo& source, const VideoInfo& distorted) {
+    RunStatus status{"", StatusKind::decoding_why};
+    status.decoding_why = software_decoding_why(plan, source, distorted, true, std::nullopt);
+    return status;
+}
+
 void distrust_failed_decoder(const GpuDecodeFailedError& error, const StatusCallback& on_status) {
     if (!error.gpu_decoder()) {
         return;  // the file's reading failed, or the app's own software decoder: nothing says the GPU is wrong
@@ -2123,6 +2129,9 @@ ComparisonResult run_vmaf_once(const RunEnvironment& environment, const VideoInf
     if (options.gpu_decode) {
         decoding = plan_hardware_decoding(environment.decoding, options.gpu_vendor, source, distorted);
         log_software_decoding(decoding, source, distorted);
+        if (on_status) {
+            on_status(decoding_why_status(decoding, source, distorted));
+        }
     }
     const auto [source_crop, distorted_crop] = run_crops(environment, source, distorted, options, decoding, on_status, cancel);
     // After cropping: removing a letterbox is what makes a letterboxed source

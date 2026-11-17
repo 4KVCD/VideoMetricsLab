@@ -231,6 +231,7 @@ private:
         std::string waiting_for;  // "GPU" or "CPU" while it waits
         RunStatus step;           // its latest status
         std::optional<HardwareDecoding> decode;  // the last decode plan a status named
+        SoftwareDecodingWhy plan_why;            // why the run's last plan left videos in software (decoding_why)
         bool on_vvdec_vulkan = false;            // its VVC videos are decoded on the GPU (a vvdec_used status)
         // Its passes' times: those that ended, and the one under way (while
         // `open`): its metrics, and the run's clock, paused time and the
@@ -266,6 +267,7 @@ private:
     std::vector<TaskSnapshot> snapshots() const;
     // Task `task`'s snapshot for its metrics `keys`, as `backend` in `lane`.
     std::optional<HardwareDecoding> shown_decoding(const TaskState& state) const;
+    SoftwareDecodingWhy decode_why(const TaskState& state, const std::optional<HardwareDecoding>& shown) const;
     TaskSnapshot snapshot_of(std::size_t task, const std::string& backend, const std::string& lane,
                              const std::vector<std::string>& keys) const;
     void send_snapshots() const;
@@ -633,6 +635,11 @@ void JobRun::report_progress(std::size_t task, long long current, long long tota
 }
 
 void JobRun::report_status(std::size_t task, const RunStatus& status) {
+    if (status.kind == StatusKind::decoding_why) {
+        const std::lock_guard lock(mutex_);
+        tasks_[task].plan_why = status.decoding_why;  // for the results JSON; the run's log says them itself
+        return;
+    }
     logger.info(name() + ": " + status.text);
     if (status.kind == StatusKind::gpu_decoder_failed || status.kind == StatusKind::vvdec_used ||
         status.kind == StatusKind::vvdec_off) {
@@ -911,6 +918,26 @@ std::optional<HardwareDecoding> JobRun::shown_decoding(const TaskState& state) c
     return shown;
 }
 
+// Why the task's shown plan left each video it did in software: the run's own reasons, given as it made its plan
+// from the videos as it scores them (decoding_why_status); else, for a video its plan put on the GPU, which the GPU's
+// decoding failing then took off it, or where it gave none (GPU decoding off, a resolution test, whose test video is
+// decoded from the source), the reasons found here.
+SoftwareDecodingWhy JobRun::decode_why(const TaskState& state, const std::optional<HardwareDecoding>& shown) const {
+    if (!shown) {
+        return {};
+    }
+    const VideoInfo& test = options_.resample_test ? job_.source_info : job_.distorted_info;
+    SoftwareDecodingWhy why =
+        software_decoding_why(shown, job_.source_info, test, options_.gpu_decode, gpu_decoding_distrusted());
+    if (!shown->source && !state.plan_why.source.empty()) {
+        why.source = state.plan_why.source;
+    }
+    if (!shown->distorted && !state.plan_why.distorted.empty()) {
+        why.distorted = state.plan_why.distorted;
+    }
+    return why;
+}
+
 void JobRun::open_pass(std::size_t task, const std::vector<std::string>& keys) {
     TaskState& state = tasks_[task];
     state.open = true;
@@ -948,6 +975,7 @@ void JobRun::close_pass(std::size_t task, const std::string& end, std::optional<
     }
     pass.end = end;
     pass.decode = shown_decoding(state);
+    pass.decode_why = decode_why(state, pass.decode);
     state.timings.push_back(std::move(pass));
 }
 
