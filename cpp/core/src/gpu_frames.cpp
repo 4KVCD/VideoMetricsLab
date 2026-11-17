@@ -2814,6 +2814,35 @@ bool skip_both(GpuFrameStream& test, GpuFrameStream& reference, long long count,
     }
 }
 
+// The frames per second since the first frame came, for the speed and time
+// left on the progress line. The wait for that frame is left out: it is the
+// decoders' start-up (the GPU VVC decoder's first run compiles its shaders
+// for tens of seconds), and spread over the few frames done it read as
+// "0.0 fps, 1:13:30 remaining" on a run that then took seconds. 0 (nothing
+// shown) until a frame has come after the first.
+class FrameRate {
+public:
+    using Clock = std::chrono::steady_clock;
+
+    // The first frame came at `now`, with `frames` counted; later calls do nothing.
+    void first(Clock::time_point now, long long frames) {
+        if (!first_) {
+            first_ = {now, frames};
+        }
+    }
+
+    double fps(Clock::time_point now, long long frames) const {
+        if (!first_ || frames <= first_->second) {
+            return 0.0;
+        }
+        const double seconds = std::chrono::duration<double>(now - first_->first).count();
+        return seconds > 0 ? static_cast<double>(frames - first_->second) / seconds : 0.0;
+    }
+
+private:
+    std::optional<std::pair<Clock::time_point, long long>> first_;
+};
+
 }  // namespace
 
 void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const FrameRange& range,
@@ -2831,20 +2860,23 @@ void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const Fr
     // most of the time a range late in a long video takes; a seek's are not.
     const long long skipped = range.decode_start - std::min(test.seeked_over(), reference.seeked_over());
     const long long whole = total_frames + skipped;
-    const auto started = std::chrono::steady_clock::now();
+    FrameRate skip_rate;
     if (range.decode_start > 0 &&
         !skip_both(test, reference, range.decode_start, cancel, [&](long long done) {
             if (on_progress) {
                 const auto now = std::chrono::steady_clock::now();
-                const double seconds = std::chrono::duration<double>(now - started).count();
-                on_progress(done, whole, static_cast<double>(done) / seconds);
+                if (done > 0) {  // it is also called while the first frame is awaited
+                    skip_rate.first(now, done);
+                }
+                on_progress(done, whole, skip_rate.fps(now, done));
             }
         })) {
         return;  // the videos end before the range
     }
     const std::optional<long long> limit =
         range.decode_end ? std::optional(*range.decode_end - range.decode_start) : std::nullopt;
-    auto reported = started;
+    auto reported = std::chrono::steady_clock::now();
+    FrameRate rate;
     long long count = 0;
     while (!limit || count < *limit) {
         const std::optional<GpuFrameStream::Picture> test_picture = test.next(cancel);
@@ -2861,10 +2893,12 @@ void score_frame_pairs(GpuFrameStream& test, GpuFrameStream& reference, const Fr
         release.reference(reference_picture->slot);
         ++count;
         const auto now = std::chrono::steady_clock::now();
+        if (count == 1) {
+            rate.first(now, skipped + count);
+        }
         if (on_progress && now - reported >= std::chrono::milliseconds(250)) {
             reported = now;
-            const double seconds = std::chrono::duration<double>(now - started).count();
-            on_progress(skipped + count, whole, static_cast<double>(skipped + count) / seconds);
+            on_progress(skipped + count, whole, rate.fps(now, skipped + count));
         }
     }
 }
