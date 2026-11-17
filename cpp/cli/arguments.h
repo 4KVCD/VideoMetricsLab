@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "vml/video.h"
+#include "vml/weak_frames.h"
 
 namespace vml::cli {
 
@@ -60,6 +61,15 @@ struct CompareArguments {
     bool difference = false;  // the first test video minus the second, too
     std::optional<std::string> csv;
     std::optional<std::string> json_path;  // "-" prints the JSON instead of the tables
+    std::optional<int> worst;  // --worst N: each metric's N worst dips, after the tables
+    // --segments: where scores fall past these (weak_frames.h), with the
+    // options that shape the segments; unset ones take SegmentRules' defaults.
+    std::vector<WeakCondition> segments;
+    bool segments_all = false;
+    std::optional<int> segment_min_frames;
+    std::optional<int> segment_merge_frames;
+    std::optional<std::string> zones_option;  // each x265 zone's setting (default b=1.5)
+    std::optional<std::string> segments_dir;  // the folder for each video's segment files
     bool quiet = false;
     bool verbose = false;
 };

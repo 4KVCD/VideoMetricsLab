@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
-#include <span>
 #include <stdexcept>
 #include <system_error>
 #include <utility>
@@ -18,6 +17,7 @@
 #include "vml/number_format.h"
 #include "vml/python_text.h"
 #include "vml/stats.h"
+#include "vml/weak_frames.h"
 
 namespace vml {
 
@@ -36,12 +36,15 @@ namespace {
 
 using Json = nlohmann::ordered_json;
 
-// The statistics of `values`, a metric's frames or CVVDP's seconds (`unit`),
-// added to `summary`: how many have a score, then the rest, each null where
-// none has.
-void add_statistics(Json& summary, std::span<const float> values, const MetricDefinition& definition,
+// How many dips' worst frames a summary lists ("worst_frames").
+constexpr std::size_t summary_worst_frames = 10;
+
+// The statistics of `samples`, a metric's frames or CVVDP's seconds
+// (`unit`), added to `summary`: how many have a score, then the rest, each
+// null where none has, then the worst frames of its worst dips.
+void add_statistics(Json& summary, const ScoreSamples& samples, const MetricDefinition& definition,
                     const std::string& unit) {
-    const std::vector<double> scores(values.begin(), values.end());
+    const std::vector<double> scores(samples.values.begin(), samples.values.end());
     const ScoreStats stats = compute_stats(scores, definition.thresholds, definition.aggregation, definition.direction);
     const auto statistic = [&stats](double value) { return stats.count == 0 ? Json(nullptr) : json_number(value); };
     summary[unit] = stats.count;
@@ -66,6 +69,18 @@ void add_statistics(Json& summary, std::span<const float> values, const MetricDe
         }
         summary["percent_of_" + unit] = std::move(bands);
     }
+    // As three lists rather than a list of objects, so that the CSV gets a
+    // cell for each (flatten).
+    Json frames = Json::array();
+    Json times = Json::array();
+    Json worst_scores = Json::array();
+    for (const WorstFrame& worst : worst_frames(samples, definition.direction, summary_worst_frames)) {
+        frames.push_back(worst.frame);
+        times.push_back(json_number(worst.time));
+        worst_scores.push_back(json_number(worst.score));
+    }
+    summary["worst_frames"] =
+        Json{{"frame", std::move(frames)}, {"time", std::move(times)}, {"score", std::move(worst_scores)}};
 }
 
 void add_provenance(Json& summary, const MetricProvenance& provenance) {
@@ -125,7 +140,8 @@ std::optional<Json> metric_summary(const ComparisonResult& result, const std::st
         Json summary{{"score", json_number(sequence->score)}, {"frames", result.compared_frame_count}};
         if (sequence->has_timeline()) {
             Json per_second = Json::object();
-            add_statistics(per_second, sequence->values, definition, "seconds");
+            const ScoreSamples seconds{sequence->frame, sequence->time, sequence->values, true};
+            add_statistics(per_second, seconds, definition, "seconds");
             summary["per_second"] = std::move(per_second);
         }
         add_provenance(summary, sequence->provenance);
@@ -136,7 +152,7 @@ std::optional<Json> metric_summary(const ComparisonResult& result, const std::st
         return std::nullopt;
     }
     Json summary{{"score", json_number(metric->aggregate())}};
-    add_statistics(summary, metric->values, definition, "frames");
+    add_statistics(summary, ScoreSamples{metric->frame, metric->time, metric->values, false}, definition, "frames");
     add_provenance(summary, metric->provenance);
     return summary;
 }

@@ -315,6 +315,12 @@ $run.videos[0].metrics.vmaf.score
 | `--difference` | With exactly two test videos: the first minus the second as well, frame by frame (CVVDP second by second), paired as **Difference** in Metric Graphs pairs them. The tables end with a difference table (Score: the two scores subtracted; Mean, Min, Max: of the frames' differences; Paired: the frames, or seconds, both have), the JSON gets a `difference` section, and with `--csv` it is written as `<first>_minus_<second>.csv` (the files' names). |
 | `--csv FOLDER` | Write each video's per-frame scores as `<video>.csv`, as **Export CSV** does. |
 | `--json FILE` | Also write the results as JSON. `--json -` prints the JSON instead of the tables, for a script to read. |
+| `--worst N` | After the tables, each metric's N worst dips: the worst frame of each (a frame within 1 s of a worse one is part of its dip), with every metric's score there. |
+| `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. |
+| `--segments-all` | A frame is weak only where every `--segments` condition holds. |
+| `--segment-min-frames N`, `--segment-merge-frames N` | Leave out segments shorter than N frames (default 1); join segments at most N frames apart (default 0). |
+| `--segments-dir FOLDER` | Write each video's segments to FOLDER as `<video>.segments.json`, `<video>.segments.csv` and `<video>.zones.txt`, a value for x265's `--zones`. |
+| `--zones-option TEXT` | Each x265 zone's setting in the `.zones.txt` file: `b=1.5` (the default) for 1.5 times the bitrate, or `q=N` for a QP from 0 to 69. x265 applies it as its rate control allows. |
 | `-q`, `--quiet` | No progress, only the results. |
 | `-v`, `--verbose` | The app's log as well. |
 

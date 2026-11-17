@@ -8,6 +8,7 @@ add_library(vml_cli STATIC
     compare.cpp
     devices.cpp
     report.cpp
+    weak_report.cpp
 )
 target_include_directories(vml_cli PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(vml_cli PUBLIC vml_core PRIVATE vml_compile_options)

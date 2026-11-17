@@ -39,6 +39,7 @@ add_executable(vml_tests
     unit/settings_test.cpp
     unit/sha256_test.cpp
     unit/stats_test.cpp
+    unit/weak_frames_test.cpp
     unit/temp_files_test.cpp
     unit/update_check_test.cpp
     unit/film_grain_detect_test.cpp

@@ -19,6 +19,7 @@
 
 #include "common.h"
 #include "report.h"
+#include "weak_report.h"
 #include "vml/app_log.h"
 #include "vml/append.h"
 #include "vml/cancel.h"
@@ -58,6 +59,10 @@ namespace vml::cli {
 namespace {
 
 using Clock = std::chrono::steady_clock;
+
+// How many of a video's weak segments --segments prints; its files and the
+// --json have them all.
+constexpr std::size_t shown_segments = 20;
 
 // ----------------------------------------------------------------- the paths
 
@@ -1372,15 +1377,32 @@ bool write_results(const CompareArguments& arguments, const VideoInfo& source, s
             written = write_difference_csv(videos, folder, message, failed) && written;
         }
     }
+    const SegmentRules rules = segment_rules(arguments);
+    if (!rules.conditions.empty() && arguments.segments_dir) {
+        const auto message = [&progress](const std::string& text) { progress.message(text); };
+        const auto failed = [&progress](const std::string& text) { progress.problem(text); };
+        written = write_segment_files(videos, rules, arguments.zones_option.value_or(default_zones_option),
+                                      python_path(*arguments.segments_dir), message, failed) &&
+                  written;
+    }
     // After the CSV files: it says where each one went.
-    const nlohmann::ordered_json document =
-        results_document(source, videos, summaries, cancelled, difference, &record);
+    nlohmann::ordered_json document = results_document(source, videos, summaries, cancelled, difference, &record);
+    if (!rules.conditions.empty()) {
+        add_segments_json(document, videos, rules);
+    }
     const std::optional<std::filesystem::path> json_file =
         arguments.json_path ? std::optional(python_path(*arguments.json_path)) : std::nullopt;
     if (json_file && platform::path_text(*json_file) == "-") {
         return print_results(python_json_dumps(document) + "\n") && written;
     }
-    written = print_results(results_table(source, videos, summaries, cancelled, difference) + "\n") && written;
+    std::string tables = results_table(source, videos, summaries, cancelled, difference);
+    if (arguments.worst) {
+        tables += "\n" + worst_text(videos, static_cast<std::size_t>(*arguments.worst));
+    }
+    if (!rules.conditions.empty()) {
+        tables += "\n" + segments_text(videos, rules, shown_segments);
+    }
+    written = print_results(tables + "\n") && written;
     if (json_file) {
         if (const std::optional<std::string> failure = write_json_file(*json_file, document)) {
             print_error("The JSON file could not be written: " + *failure);
@@ -1441,6 +1463,10 @@ int compare(const CompareArguments& arguments) {
     const std::vector<std::string> asked = arguments.metrics.value_or(default_metrics(settings));
     if (const std::optional<std::string> wrong = model_file_wrong(arguments, asked)) {
         print_error(*wrong);
+        return exit_usage;
+    }
+    if (const std::optional<std::string> refused = segments_refusal(arguments.segments, asked)) {
+        print_error(*refused);
         return exit_usage;
     }
     if (arguments.vship && !vship_build_bundled(vship_build_from(*arguments.vship))) {

@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <map>
 #include <regex>
 #include <set>
@@ -47,7 +48,12 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    --gpu-decode {auto,nvidia,intel,amd}]
                                    [--vvc-decoder {gpu,cpu}] [--parallel N]
                                    [--recalculate] [--difference]
-                                   [--csv FOLDER] [--json FILE] [-q] [-v]
+                                   [--csv FOLDER] [--json FILE] [--worst N]
+                                   [--segments CONDITIONS] [--segments-all]
+                                   [--segment-min-frames N]
+                                   [--segment-merge-frames N]
+                                   [--zones-option TEXT]
+                                   [--segments-dir FOLDER] [-q] [-v]
                                    REFERENCE TEST [TEST ...]
 )";
 
@@ -256,6 +262,31 @@ options:
                         said, and is in the --json
   --json FILE           also write the results as JSON to FILE; - prints the
                         JSON instead of the tables
+  --worst N             after the tables, each metric's N worst dips: the
+                        worst frame of each (a frame within 1 s of a worse
+                        one is part of its dip), with every metric's score
+                        there
+  --segments CONDITIONS
+                        list the stretches where scores fall past a
+                        threshold, such as "vmaf<90,ssimulacra2<70" (quoted:
+                        < and > are the shell's; Butteraugli's worst are
+                        high: "butteraugli>2"); a frame is weak where any of
+                        them holds. Frames are numbered from the video's
+                        first, as its encoder numbers them; a subsample's
+                        frames between two weak ones are weak, and CVVDP is
+                        judged second by second
+  --segments-all        a frame is weak only where every condition holds
+  --segment-min-frames N
+                        leave out segments shorter than N frames (default 1)
+  --segment-merge-frames N
+                        join segments at most N frames apart (default 0)
+  --zones-option TEXT   each x265 zone's setting in the .zones.txt file
+                        (default b=1.5, 1.5 times the bitrate; q=N sets the
+                        QP); x265 applies it as its rate control allows
+  --segments-dir FOLDER
+                        write each video's segments to FOLDER as
+                        <video>.segments.json, <video>.segments.csv and
+                        <video>.zones.txt (a value for x265's --zones)
   -q, --quiet           no progress, only the results
   -v, --verbose         the app's log as well
 
@@ -772,6 +803,49 @@ long long positive_int(const std::string& text) {
     return *value;
 }
 
+// The conditions of a --segments value ("vmaf<90,ssimulacra2<70"), each
+// naming a metric.
+std::vector<WeakCondition> weak_conditions(const std::string& text) {
+    std::vector<WeakCondition> conditions;
+    for (std::size_t start = 0; start <= text.size();) {
+        std::size_t end = text.find(',', start);
+        if (end == std::string::npos) {
+            end = text.size();
+        }
+        const std::string part = ascii_lower(python_strip(text.substr(start, end - start)));
+        start = end + 1;
+        if (part.empty()) {
+            continue;
+        }
+        std::optional<WeakCondition> condition = parse_weak_condition(part);
+        if (!condition) {
+            throw ArgumentError{"invalid condition " + python_string_repr(part) +
+                                ": write METRIC<VALUE or METRIC>VALUE, such as vmaf<90"};
+        }
+        condition->key = std::string(python_strip(condition->key));
+        if (find_metric(condition->key) == nullptr) {
+            throw ArgumentError{"unknown metric " + condition->key + "; choose from: " + metric_keys_text()};
+        }
+        conditions.push_back(std::move(*condition));
+    }
+    if (conditions.empty()) {
+        throw ArgumentError{"no condition given: write METRIC<VALUE or METRIC>VALUE, such as vmaf<90"};
+    }
+    return conditions;
+}
+
+// A whole number from 0 up, read as Python's int() reads it.
+int int_from_zero(const std::string& text) {
+    const std::optional<long long> value = python_int(text);
+    if (!value) {
+        throw ArgumentError{"invalid int value: " + python_string_repr(text)};
+    }
+    if (*value < 0 || *value > std::numeric_limits<int>::max()) {
+        throw ArgumentError{"must be 0 or more"};
+    }
+    return static_cast<int>(*value);
+}
+
 // A whole number from 1 to `most`, the range the app's own field takes
 // (options_panel.cpp): --threads and --subsample.
 int int_up_to(const std::string& text, int most) {
@@ -1030,6 +1104,24 @@ Parser compare_parser(CompareArguments& parsed) {
         flag({"--difference"}, parsed.difference),
         option({"--csv"}, [&parsed](const std::string& value) { parsed.csv = value; }),
         option({"--json"}, [&parsed](const std::string& value) { parsed.json_path = value; }),
+        option({"--worst"}, [&parsed](const std::string& value) { parsed.worst = int_up_to(value, 1000); }),
+        option({"--segments"}, [&parsed](const std::string& value) { parsed.segments = weak_conditions(value); }),
+        flag({"--segments-all"}, parsed.segments_all),
+        option({"--segment-min-frames"},
+               [&parsed](const std::string& value) {
+                   parsed.segment_min_frames = int_up_to(value, std::numeric_limits<int>::max());
+               }),
+        option({"--segment-merge-frames"},
+               [&parsed](const std::string& value) { parsed.segment_merge_frames = int_from_zero(value); }),
+        option({"--zones-option"},
+               [&parsed](const std::string& value) {
+                   if (!valid_zones_option(value)) {
+                       throw ArgumentError{"invalid zone setting " + python_string_repr(value) +
+                                           ": write b=FACTOR or q=QP, such as b=1.5 or q=20"};
+                   }
+                   parsed.zones_option = value;
+               }),
+        option({"--segments-dir"}, [&parsed](const std::string& value) { parsed.segments_dir = value; }),
         flag({"-q", "--quiet"}, parsed.quiet),
         flag({"-v", "--verbose"}, parsed.verbose),
     };
@@ -1095,6 +1187,33 @@ std::string top_help() {
 
 const std::string& version_line() { return version_text; }
 
+namespace {
+
+// An option given that only --segments uses, when --segments is not.
+std::optional<std::string> segment_option_alone(const CompareArguments& arguments) {
+    if (!arguments.segments.empty()) {
+        return std::nullopt;
+    }
+    if (arguments.segments_all) {
+        return "--segments-all";
+    }
+    if (arguments.segment_min_frames) {
+        return "--segment-min-frames";
+    }
+    if (arguments.segment_merge_frames) {
+        return "--segment-merge-frames";
+    }
+    if (arguments.zones_option) {
+        return "--zones-option";
+    }
+    if (arguments.segments_dir) {
+        return "--segments-dir";
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
 Arguments parse_arguments(const std::vector<std::string>& arguments) {
     Arguments parsed;
     std::vector<std::string> command_extras;
@@ -1116,7 +1235,12 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
                  parsed.command = Command::compare;
                  parsed.compare.command_line = arguments;
                  const Parser parser = compare_parser(parsed.compare);
-                 command_extras = parse_command(parser, compare_usage, std::string(program) + " compare", rest);
+                 const std::string prog = std::string(program) + " compare";
+                 command_extras = parse_command(parser, compare_usage, prog, rest);
+                 if (const std::optional<std::string> option = segment_option_alone(parsed.compare)) {
+                     throw UsageError(std::string(compare_usage) + prog + ": error: argument " + *option +
+                                      ": only with --segments, whose segments it shapes");
+                 }
              } else if (command == "bitrate") {
                  parsed.command = Command::bitrate;
                  const Parser parser = bitrate_parser(parsed.bitrate);

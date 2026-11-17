@@ -119,6 +119,42 @@ TEST(CommandLine, ReadsArgumentsAsThePythonApp) {
     }
 }
 
+// --worst and --segments (issue #24, which the Python app never had): the
+// conditions read, each named metric checked, and the segments' options
+// refused without --segments.
+TEST(CommandLine, ReadsWorstFramesAndSegments) {
+    const CompareArguments read =
+        parse_arguments({"compare", "ref.mkv", "a.mkv", "--worst", "5", "--segments", " VMAF<90, butteraugli>2.5",
+                         "--segments-all", "--segment-min-frames", "3", "--segment-merge-frames", "0",
+                         "--zones-option", "q=20", "--segments-dir", "out"})
+            .compare;
+    EXPECT_EQ(read.worst, 5);
+    ASSERT_EQ(read.segments.size(), 2U);
+    EXPECT_EQ(read.segments[0].text(), "vmaf<90");
+    EXPECT_EQ(read.segments[1].text(), "butteraugli>2.5");
+    EXPECT_TRUE(read.segments_all);
+    EXPECT_EQ(read.segment_min_frames, 3);
+    EXPECT_EQ(read.segment_merge_frames, 0);
+    EXPECT_EQ(read.zones_option, "q=20");
+    EXPECT_EQ(read.segments_dir, "out");
+    const auto error_of = [](const std::vector<std::string>& arguments) {
+        try {
+            parse_arguments(arguments);
+        } catch (const UsageError& error) {
+            const std::string text = error.what();
+            return text.substr(text.find("error: "));
+        }
+        return std::string("no error");
+    };
+    EXPECT_EQ(error_of({"compare", "ref.mkv", "a.mkv", "--segments-dir", "out"}),
+              "error: argument --segments-dir: only with --segments, whose segments it shapes");
+    EXPECT_EQ(error_of({"compare", "ref.mkv", "a.mkv", "--segments", "vmaf=90"}),
+              "error: argument --segments: invalid condition 'vmaf=90': write METRIC<VALUE or METRIC>VALUE, such as "
+              "vmaf<90");
+    EXPECT_TRUE(error_of({"compare", "ref.mkv", "a.mkv", "--segments", "vmav<90"})
+                    .starts_with("error: argument --segments: unknown metric vmav; choose from: "));
+}
+
 TEST(CommandLine, FindsTestVideosAsThePythonApp) {
     const Json reference = test::load_reference("cli.json")["patterns"];
     const std::filesystem::path folder =

@@ -98,6 +98,7 @@ Each metric's key (`vmaf`, `vmaf_neg`, `vmaf_v1`, `psnr`, `ssim`, `xpsnr`,
 | `worst_10_percent` ... `worst_0.1_percent` | The score that share of the frames is worse than. |
 | `identical_frames` | Frames identical to the reference (where any). |
 | `percent_of_frames` | The share of frames in each band, in %. |
+| `worst_frames` | The worst frame of each of the 10 worst dips, worst first: `frame` (numbered from the video's first frame, as the encoder numbers them), `time` (seconds) and `score`, three lists in step. Frames within 1 s of a worse one are the same dip. CVVDP's are under `per_second`, a frame per second. |
 | `per_second` | CVVDP only: the same statistics of its per-second scores. |
 | `computed_on`, `implementation`, `version` | Where and with what the metric was calculated (`cpu` or `gpu`; `libvmaf/vulkan`, `Vship/ssimulacra2`...). |
 

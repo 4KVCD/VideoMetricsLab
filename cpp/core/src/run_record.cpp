@@ -54,6 +54,9 @@ Json summary_rules() {
                  "worst_10_percent ... worst_0.1_percent: the score below which that share of the frames falls "
                  "(above which, where worst_is is high), numpy's linear percentile"},
                 {"percent_of_frames", "the share of frames above (>) or below (<) each band's value, in %"},
+                {"worst_frames",
+                 "the worst frame of each of the 10 worst dips, worst first; a frame within 1 s (or the scores' "
+                 "step, if longer) of a worse one is part of its dip"},
                 {"frames_with_no_score", "left out (NaN); an identical frame scores inf and is counted"},
                 {"metrics", std::move(per_metric)}};
 }
