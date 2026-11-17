@@ -75,9 +75,13 @@ std::filesystem::path synthetic_scale_direction_variant_path(const std::filesyst
     return distorted.parent_path() / name;
 }
 
+std::string_view film_grain_variant_suffix(bool with_film_grain) {
+    return with_film_grain ? " [with film grain]" : " [without film grain]";
+}
+
 std::filesystem::path synthetic_film_grain_variant_path(const std::filesystem::path& distorted, bool with_film_grain) {
     std::filesystem::path name = distorted.stem();
-    name += with_film_grain ? " [with film grain]" : " [without film grain]";
+    name += film_grain_variant_suffix(with_film_grain);
     name += distorted.extension();
     return distorted.parent_path() / name;
 }

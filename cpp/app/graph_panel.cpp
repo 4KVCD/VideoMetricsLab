@@ -41,6 +41,7 @@
 #include "vml/export_csv.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/number_format.h"
+#include "vml/options.h"
 #include "vml/run_file.h"
 #include "vml/stats.h"
 #include "vml/time_format.h"
@@ -1597,9 +1598,11 @@ bool GraphPanel::add_series(const Run& run) {
         suppressed_identities_.erase(identity);
     }
     // A test video scored without the film grain its stream asks for says so:
-    // its scores are not those of the video viewers see.
+    // its scores are not those of the video viewers see. A film grain twin's
+    // name ("film [without film grain]") says so already.
     const QString name = run.label.isEmpty() ? text_of(run.result->distorted.stem()) : run.label;
-    const QString label = effective_film_grain(run.result->distorted_info).scoring == GrainScoring::without
+    const QString label = effective_film_grain(run.result->distorted_info).scoring == GrainScoring::without &&
+                                  !name.endsWith(QString::fromUtf8(film_grain_variant_suffix(false)))
                               ? app::tr("{name} (without film grain)", {{"name", name}})
                               : name;
     // A resolution test's or a direction companion's made-up path: the

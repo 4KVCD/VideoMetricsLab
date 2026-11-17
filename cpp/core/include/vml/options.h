@@ -65,6 +65,10 @@ std::filesystem::path synthetic_scale_direction_variant_path(const std::filesyst
 // the video can be scored with its film grain and without it side by side.
 std::filesystem::path synthetic_film_grain_variant_path(const std::filesystem::path& distorted, bool with_film_grain);
 
+// What that path adds to the video's name: " [with film grain]" or
+// " [without film grain]".
+std::string_view film_grain_variant_suffix(bool with_film_grain);
+
 // The film grain choice `path` stands for when it is `distorted`'s
 // synthetic_film_grain_variant_path; nothing otherwise.
 std::optional<bool> film_grain_variant_choice(const std::filesystem::path& path,
