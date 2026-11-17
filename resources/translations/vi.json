@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "Không có thư mục xuất: hãy chọn trong Cài đặt.",
   "Stills saved": "Đã lưu ảnh tĩnh",
   "Saved:\n{files}": "Đã lưu:\n{files}",
-  "Save still failed": "Không lưu được ảnh tĩnh"
+  "Save still failed": "Không lưu được ảnh tĩnh",
+  "Download FFmpeg": "Tải FFmpeg",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  Bấm Tải FFmpeg để tải về, hoặc Tìm ffmpeg.exe... để chỉ đến nó.",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\nỨng dụng có thể tải FFmpeg cho bạn (khoảng 200 MB, từ dự án FFmpeg-Builds trên GitHub), hoặc bạn có thể chỉ đến ffmpeg.exe mà bạn đã có.",
+  "Not now": "Để sau",
+  "FFmpeg download failed": "Tải FFmpeg thất bại",
+  "FFmpeg download cancelled": "Đã hủy tải FFmpeg",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\nBạn cũng có thể tự cài FFmpeg (winget install Gyan.FFmpeg) rồi bấm Tìm ffmpeg.exe....",
+  "Looking for the latest FFmpeg build...": "Đang tìm bản dựng FFmpeg mới nhất...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "GitHub tạm thời từ chối: quá nhiều yêu cầu từ mạng này. Hãy thử lại sau một giờ.",
+  "GitHub could not be reached: {error}": "Không kết nối được GitHub: {error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "GitHub không có bản dựng FFmpeg {version} trở lên cho Windows.",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "Không đủ dung lượng trống trong {folder}: cần {needed} MB, còn trống {free} MB.",
+  "The release gives no checksum to check the download against.": "Bản phát hành không có checksum để kiểm tra tệp tải về.",
+  "Downloading FFmpeg {version} ({size} MB)...": "Đang tải FFmpeg {version} ({size} MB)...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "Tệp tải về không khớp với checksum: tệp bị hỏng, hoặc bản dựng đã thay đổi trong lúc tải. Hãy thử lại.",
+  "Unpacking FFmpeg...": "Đang giải nén FFmpeg..."
  },
  "plurals": {
   "about {count} day": [

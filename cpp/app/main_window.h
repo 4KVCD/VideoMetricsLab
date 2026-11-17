@@ -69,6 +69,7 @@ namespace vml::app {
 class CheckableHeaderView;
 class ElidedLabel;
 class CvvdpDisplayDialog;
+class FfmpegDownload;
 class FileWrites;
 class BdRatePanel;
 class BitratePanel;
@@ -302,6 +303,11 @@ private:
     // ------------------------------------------------------ FFmpeg's presence
     bool check_ffmpeg(bool prompt);
     bool on_locate_ffmpeg();
+    // Downloads FFmpeg into the app's own folder and uses it (Windows).
+    void on_download_ffmpeg();
+    void on_ffmpeg_downloaded(const std::filesystem::path& folder);
+    // Hides the FFmpeg banner and says which ffmpeg is used now.
+    void ffmpeg_found(const ToolsStatus& status, const std::filesystem::path& directory);
 
     // ------------------------------------------------------------ the source
     void on_browse_source();
@@ -685,6 +691,8 @@ private:
 
     QLabel* ffmpeg_banner_ = nullptr;
     QPushButton* locate_ffmpeg_button_ = nullptr;
+    QPushButton* download_ffmpeg_button_ = nullptr;  // Windows only
+    FfmpegDownload* ffmpeg_download_ = nullptr;  // while one runs
     QuietTabWidget* tabs_ = nullptr;
     QGroupBox* files_box_ = nullptr;
     QLineEdit* source_edit_ = nullptr;

@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "Dışa aktarma klasörü yok: Ayarlar'da bir tane seçin.",
   "Stills saved": "Kareler kaydedildi",
   "Saved:\n{files}": "Kaydedildi:\n{files}",
-  "Save still failed": "Kare kaydedilemedi"
+  "Save still failed": "Kare kaydedilemedi",
+  "Download FFmpeg": "FFmpeg'i indir",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  Edinmek için \"FFmpeg'i indir\" düğmesine, konumunu göstermek için \"ffmpeg.exe'yi bul...\" düğmesine tıklayın.",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\nUygulama FFmpeg'i sizin için indirebilir (yaklaşık 200 MB, GitHub'daki FFmpeg-Builds projesinden) ya da zaten sahip olduğunuz bir ffmpeg.exe'yi gösterebilirsiniz.",
+  "Not now": "Şimdi değil",
+  "FFmpeg download failed": "FFmpeg indirilemedi",
+  "FFmpeg download cancelled": "FFmpeg indirmesi iptal edildi",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\nFFmpeg'i kendiniz de kurabilir (winget install Gyan.FFmpeg) ve \"ffmpeg.exe'yi bul...\" düğmesine tıklayabilirsiniz.",
+  "Looking for the latest FFmpeg build...": "En yeni FFmpeg derlemesi aranıyor...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "GitHub şimdilik reddediyor: bu ağdan çok fazla istek geldi. Bir saat sonra yeniden deneyin.",
+  "GitHub could not be reached: {error}": "GitHub'a ulaşılamadı: {error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "GitHub, FFmpeg {version} veya daha yenisinin Windows derlemesini listelemiyor.",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "{folder} içinde yeterli boş alan yok: {needed} MB gerekiyor, {free} MB boş.",
+  "The release gives no checksum to check the download against.": "Sürüm, indirmeyi doğrulamak için bir sağlama toplamı vermiyor.",
+  "Downloading FFmpeg {version} ({size} MB)...": "FFmpeg {version} indiriliyor ({size} MB)...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "İndirme, sağlama toplamıyla eşleşmiyor: bozuldu ya da indirme sırasında derleme değişti. Yeniden deneyin.",
+  "Unpacking FFmpeg...": "FFmpeg açılıyor..."
  },
  "plurals": {
   "about {count} day": [

@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "내보내기 폴더가 없습니다. 설정에서 선택하세요.",
   "Stills saved": "정지 화면을 저장했습니다",
   "Saved:\n{files}": "저장됨:\n{files}",
-  "Save still failed": "정지 화면을 저장하지 못했습니다"
+  "Save still failed": "정지 화면을 저장하지 못했습니다",
+  "Download FFmpeg": "FFmpeg 다운로드",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  [FFmpeg 다운로드]를 클릭해 받거나, [ffmpeg.exe 위치 지정...]을 클릭해 지정하세요.",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\n앱이 FFmpeg를 대신 다운로드할 수 있습니다(약 200MB, GitHub의 FFmpeg-Builds 프로젝트에서). 이미 있는 ffmpeg.exe를 지정할 수도 있습니다.",
+  "Not now": "나중에",
+  "FFmpeg download failed": "FFmpeg 다운로드 실패",
+  "FFmpeg download cancelled": "FFmpeg 다운로드 취소됨",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\nFFmpeg를 직접 설치(winget install Gyan.FFmpeg)한 뒤 [ffmpeg.exe 위치 지정...]을 클릭할 수도 있습니다.",
+  "Looking for the latest FFmpeg build...": "최신 FFmpeg 빌드를 찾는 중...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "GitHub가 지금은 요청을 거부합니다: 이 네트워크에서 요청이 너무 많습니다. 한 시간 뒤에 다시 시도하세요.",
+  "GitHub could not be reached: {error}": "GitHub에 연결할 수 없습니다: {error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "GitHub에 FFmpeg {version} 이상의 Windows 빌드가 없습니다.",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "{folder}의 여유 공간이 부족합니다: {needed}MB가 필요하고 {free}MB가 남아 있습니다.",
+  "The release gives no checksum to check the download against.": "릴리스에 다운로드를 확인할 체크섬이 없습니다.",
+  "Downloading FFmpeg {version} ({size} MB)...": "FFmpeg {version} 다운로드 중({size}MB)...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "다운로드가 체크섬과 일치하지 않습니다: 손상되었거나 다운로드 중에 빌드가 바뀌었습니다. 다시 시도하세요.",
+  "Unpacking FFmpeg...": "FFmpeg 압축을 푸는 중..."
  },
  "plurals": {
   "about {count} day": [

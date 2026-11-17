@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "Немає теки експорту: виберіть її в «Налаштуваннях».",
   "Stills saved": "Кадри збережено",
   "Saved:\n{files}": "Збережено:\n{files}",
-  "Save still failed": "Не вдалося зберегти кадр"
+  "Save still failed": "Не вдалося зберегти кадр",
+  "Download FFmpeg": "Завантажити FFmpeg",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  Натисніть «Завантажити FFmpeg», щоб отримати його, або «Знайти ffmpeg.exe...», щоб указати його.",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\nЗастосунок може завантажити FFmpeg для вас (близько 200 МБ, з проєкту FFmpeg-Builds на GitHub), або ви можете вказати вже наявний ffmpeg.exe.",
+  "Not now": "Не зараз",
+  "FFmpeg download failed": "Не вдалося завантажити FFmpeg",
+  "FFmpeg download cancelled": "Завантаження FFmpeg скасовано",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\nВи також можете встановити FFmpeg самостійно (winget install Gyan.FFmpeg) і натиснути «Знайти ffmpeg.exe...».",
+  "Looking for the latest FFmpeg build...": "Пошук найновішої збірки FFmpeg...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "GitHub поки відмовляє: забагато запитів із цієї мережі. Спробуйте ще раз за годину.",
+  "GitHub could not be reached: {error}": "Не вдалося з'єднатися з GitHub: {error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "На GitHub немає збірки FFmpeg {version} або новішої для Windows.",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "Недостатньо вільного місця в {folder}: потрібно {needed} МБ, вільно {free} МБ.",
+  "The release gives no checksum to check the download against.": "Випуск не містить контрольної суми для перевірки завантаження.",
+  "Downloading FFmpeg {version} ({size} MB)...": "Завантаження FFmpeg {version} ({size} МБ)...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "Завантажений файл не збігається зі своєю контрольною сумою: він пошкоджений, або збірка змінилася під час завантаження. Спробуйте ще раз.",
+  "Unpacking FFmpeg...": "Розпакування FFmpeg..."
  },
  "plurals": {
   "about {count} day": [

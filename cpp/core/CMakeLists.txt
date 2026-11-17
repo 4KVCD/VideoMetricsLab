@@ -17,6 +17,7 @@ add_library(vml_core
     src/difference.cpp
     src/export_csv.cpp
     src/ffmpeg_commands.cpp
+    src/ffmpeg_download.cpp
     src/ffmpeg_run.cpp
     src/ffmpeg_tools.cpp
     src/ffprobe.cpp

@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "エクスポート先フォルダーがありません。設定で選んでください。",
   "Stills saved": "静止画を保存しました",
   "Saved:\n{files}": "保存しました:\n{files}",
-  "Save still failed": "静止画を保存できませんでした"
+  "Save still failed": "静止画を保存できませんでした",
+  "Download FFmpeg": "FFmpeg をダウンロード",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  ［FFmpeg をダウンロード］をクリックして入手するか、［ffmpeg.exe の場所を指定...］をクリックして指定してください。",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\nアプリが FFmpeg をダウンロードできます（約 200 MB、GitHub の FFmpeg-Builds プロジェクトから）。すでにある ffmpeg.exe を指定することもできます。",
+  "Not now": "後で",
+  "FFmpeg download failed": "FFmpeg のダウンロードに失敗しました",
+  "FFmpeg download cancelled": "FFmpeg のダウンロードを取り消しました",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\nFFmpeg を自分でインストール（winget install Gyan.FFmpeg）して、［ffmpeg.exe の場所を指定...］をクリックすることもできます。",
+  "Looking for the latest FFmpeg build...": "最新の FFmpeg ビルドを探しています...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "GitHub が現在リクエストを拒否しています：このネットワークからのリクエストが多すぎます。1 時間後にもう一度お試しください。",
+  "GitHub could not be reached: {error}": "GitHub に接続できません：{error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "GitHub に FFmpeg {version} 以降の Windows 版ビルドがありません。",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "{folder} の空き容量が足りません：{needed} MB 必要ですが、空きは {free} MB です。",
+  "The release gives no checksum to check the download against.": "リリースに、ダウンロードを確認するためのチェックサムがありません。",
+  "Downloading FFmpeg {version} ({size} MB)...": "FFmpeg {version} をダウンロードしています（{size} MB）...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "ダウンロードがチェックサムと一致しません：破損したか、ダウンロード中にビルドが変わりました。もう一度お試しください。",
+  "Unpacking FFmpeg...": "FFmpeg を展開しています..."
  },
  "plurals": {
   "about {count} day": [

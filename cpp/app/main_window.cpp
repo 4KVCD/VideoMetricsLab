@@ -36,6 +36,7 @@
 #include "bd_rate_panel.h"
 #include "bitrate_panel.h"
 #include "cvvdp_display_dialog.h"
+#include "ffmpeg_download_dialog.h"
 #include "file_writes.h"
 #include "frame_compare_panel.h"
 #include "graph_panel.h"
@@ -65,6 +66,15 @@ namespace vml::app {
 namespace {
 
 const app_log::Logger logger("vml.main_window");
+
+// What is wrong with FFmpeg, one text each.
+QStringList tool_problems(const ToolsStatus& status) {
+    QStringList problems;
+    for (const std::string& problem : status.problems()) {
+        problems.append(QString::fromStdString(problem));
+    }
+    return problems;
+}
 
 // FFmpeg's version and the GPUs found, for this session's log, from the
 // checks made at the start (the Python app's log_tools).
@@ -481,6 +491,12 @@ void MainWindow::build_ui() {
     connect(locate_ffmpeg_button_, &QPushButton::clicked, this, [this] { on_locate_ffmpeg(); });
     locate_ffmpeg_button_->setVisible(false);
     banner_row->addWidget(ffmpeg_banner_, 1);
+#ifdef _WIN32
+    download_ffmpeg_button_ = new QPushButton(app::tr("Download FFmpeg"));
+    connect(download_ffmpeg_button_, &QPushButton::clicked, this, [this] { on_download_ffmpeg(); });
+    download_ffmpeg_button_->setVisible(false);
+    banner_row->addWidget(download_ffmpeg_button_);
+#endif
     banner_row->addWidget(locate_ffmpeg_button_);
     root->addLayout(banner_row);
 
@@ -1024,36 +1040,122 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     }
     if (status.ok()) {
         ffmpeg_banner_->setVisible(false);
+        locate_ffmpeg_button_->setVisible(false);
+        if (download_ffmpeg_button_ != nullptr) {
+            download_ffmpeg_button_->setVisible(false);
+        }
         return true;
     }
-    QStringList problems;
-    for (const std::string& problem : status.problems()) {
-        problems.append(QString::fromStdString(problem));
-    }
+    const QStringList problems = tool_problems(status);
 #ifdef __APPLE__
     // The formula with zscale, which plain ffmpeg lacks (missing_zscale_text).
     const QString install = app::tr("  Install it with Homebrew: brew install ffmpeg-full.");
 #else
     const QString install;
 #endif
-    ffmpeg_banner_->setText(problems.join("  ") + install +
-                            app::with_program_names(app::tr("  Click \"Locate ffmpeg.exe...\" to point at it.")));
+#ifdef _WIN32
+    const QString click = app::tr("  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.");
+    download_ffmpeg_button_->setVisible(true);
+#else
+    const QString click = app::with_program_names(app::tr("  Click \"Locate ffmpeg.exe...\" to point at it."));
+#endif
+    ffmpeg_banner_->setText(problems.join("  ") + install + click);
     ffmpeg_banner_->setVisible(true);
     locate_ffmpeg_button_->setVisible(true);
     // A run with no screen (the tests) has nobody to answer a dialog.
-    if (prompt && qEnvironmentVariable("QT_QPA_PLATFORM") != "offscreen") {
-        const auto answer = QMessageBox::warning(
-            this, app::tr("ffmpeg not usable"),
-            problems.join("\n") + install +
-                app::tr("\n\nffmpeg was looked for at:\n  {path}", {{"path", status.ffmpeg.path}}) +
-                app::tr("\nffprobe at:\n  {path}", {{"path", status.ffprobe.path}}) +
-                app::with_program_names(app::tr("\n\nWould you like to point the app at ffmpeg.exe now?")),
-            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
-        if (answer == QMessageBox::Yes) {
-            return on_locate_ffmpeg();
-        }
+    if (!prompt || qEnvironmentVariable("QT_QPA_PLATFORM") == "offscreen") {
+        return false;
     }
+    const QString found_where = app::tr("\n\nffmpeg was looked for at:\n  {path}", {{"path", status.ffmpeg.path}}) +
+                                app::tr("\nffprobe at:\n  {path}", {{"path", status.ffprobe.path}});
+#ifdef _WIN32
+    QMessageBox box(QMessageBox::Warning, app::tr("ffmpeg not usable"),
+                    problems.join("\n") + found_where +
+                        app::tr("\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds "
+                                "project on GitHub), or you can point it at an ffmpeg.exe you already have."),
+                    QMessageBox::NoButton, this);
+    QPushButton* download = box.addButton(app::tr("Download FFmpeg"), QMessageBox::AcceptRole);
+    QPushButton* locate = box.addButton(app::tr("Locate ffmpeg.exe..."), QMessageBox::ActionRole);
+    box.addButton(app::tr("Not now"), QMessageBox::RejectRole);
+    box.setDefaultButton(download);
+    box.exec();
+    if (box.clickedButton() == download) {
+        on_download_ffmpeg();
+    } else if (box.clickedButton() == locate) {
+        return on_locate_ffmpeg();
+    }
+#else
+    const auto answer = QMessageBox::warning(
+        this, app::tr("ffmpeg not usable"),
+        problems.join("\n") + install + found_where +
+            app::with_program_names(app::tr("\n\nWould you like to point the app at ffmpeg.exe now?")),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+    if (answer == QMessageBox::Yes) {
+        return on_locate_ffmpeg();
+    }
+#endif
     return false;
+}
+
+void MainWindow::on_download_ffmpeg() {
+#ifdef _WIN32
+    if (ffmpeg_download_ != nullptr) {
+        return;  // one is running
+    }
+    ffmpeg_download_ = new FfmpegDownload(downloaded_ffmpeg_folder(), this);
+    const auto finished = [this] {
+        ffmpeg_download_->deleteLater();
+        ffmpeg_download_ = nullptr;
+    };
+    connect(ffmpeg_download_, &FfmpegDownload::downloaded, this, [this, finished](const QString& folder) {
+        finished();
+        on_ffmpeg_downloaded(path_of(folder));
+    });
+    connect(ffmpeg_download_, &FfmpegDownload::failed, this, [this, finished](const QString& message) {
+        finished();
+        QMessageBox::warning(this, app::tr("FFmpeg download failed"), message);
+    });
+    connect(ffmpeg_download_, &FfmpegDownload::cancelled, this, [this, finished] {
+        finished();
+        show_status(app::tr("FFmpeg download cancelled"));
+    });
+    ffmpeg_download_->start();
+#endif
+}
+
+void MainWindow::on_ffmpeg_downloaded(const std::filesystem::path& folder) {
+    // Checked before it is kept: a download that does not run leaves the
+    // setting as it was.
+    Settings trial = settings_;
+    trial.ffmpeg_dir = platform::path_text(folder);
+    const ToolsStatus status = check_tools(trial);
+    if (!status.ok()) {
+        const QStringList problems = tool_problems(status);
+        QMessageBox::warning(this, app::tr("Still not usable"), problems.join("\n"));
+        // Of no use, and the app's own: not left for the next start.
+        std::error_code error;
+        std::filesystem::remove(folder / "ffmpeg.exe", error);
+        std::filesystem::remove(folder / "ffprobe.exe", error);
+        return;
+    }
+    settings_.ffmpeg_dir = trial.ffmpeg_dir;
+    settings_panel_->show_ffmpeg_folder(QString::fromStdString(settings_.ffmpeg_dir));
+    tools_status_ = status;
+    log_tools(status, detected_gpu_vendors_);
+    ffmpeg_found(status, folder);
+    if (const std::optional<std::string> problem = settings_.save()) {
+        show_status(tr_message(QString::fromStdString(*problem)));  // used until the app closes
+    }
+}
+
+void MainWindow::ffmpeg_found(const ToolsStatus& status, const std::filesystem::path& directory) {
+    ffmpeg_banner_->setVisible(false);
+    locate_ffmpeg_button_->setVisible(false);
+    if (download_ffmpeg_button_ != nullptr) {
+        download_ffmpeg_button_->setVisible(false);
+    }
+    show_status(app::tr("Using ffmpeg {version} from {directory}",
+                        {{"version", format_version(status.ffmpeg.version)}, {"directory", text_of(directory)}}));
 }
 
 bool MainWindow::on_locate_ffmpeg() {
@@ -1103,18 +1205,12 @@ bool MainWindow::on_locate_ffmpeg() {
     const ToolsStatus status = check_tools(settings_);
     tools_status_ = status;
     if (!status.ok()) {
-        QStringList problems;
-        for (const std::string& problem : status.problems()) {
-            problems.append(QString::fromStdString(problem));
-        }
+        const QStringList problems = tool_problems(status);
         QMessageBox::warning(this, app::tr("Still not usable"), problems.join("\n"));
         check_ffmpeg(false);
         return false;
     }
-    ffmpeg_banner_->setVisible(false);
-    locate_ffmpeg_button_->setVisible(false);
-    show_status(app::tr("Using ffmpeg {version} from {directory}",
-                        {{"version", format_version(status.ffmpeg.version)}, {"directory", text_of(directory)}}));
+    ffmpeg_found(status, directory);
     return true;
 }
 

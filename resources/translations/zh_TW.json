@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "沒有匯出資料夾：請在「設定」中選擇。",
   "Stills saved": "靜態影格已儲存",
   "Saved:\n{files}": "已儲存：\n{files}",
-  "Save still failed": "儲存靜態影格失敗"
+  "Save still failed": "儲存靜態影格失敗",
+  "Download FFmpeg": "下載 FFmpeg",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  按一下「下載 FFmpeg」取得它，或按一下「找出 ffmpeg.exe...」指定它的位置。",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\n應用程式可以為你下載 FFmpeg（約 200 MB，來自 GitHub 上的 FFmpeg-Builds 專案），你也可以指定一個已有的 ffmpeg.exe。",
+  "Not now": "以後再說",
+  "FFmpeg download failed": "FFmpeg 下載失敗",
+  "FFmpeg download cancelled": "已取消 FFmpeg 下載",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\n你也可以自行安裝 FFmpeg（winget install Gyan.FFmpeg），然後按一下「找出 ffmpeg.exe...」。",
+  "Looking for the latest FFmpeg build...": "正在尋找最新的 FFmpeg 版本...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "GitHub 暫時拒絕要求：來自此網路的要求過多。請一小時後再試。",
+  "GitHub could not be reached: {error}": "無法連線到 GitHub：{error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "GitHub 上沒有 FFmpeg {version} 或更新版本的 Windows 版。",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "{folder} 的可用空間不足：需要 {needed} MB，可用 {free} MB。",
+  "The release gives no checksum to check the download against.": "此發行版本未提供用來驗證下載的總和檢查碼。",
+  "Downloading FFmpeg {version} ({size} MB)...": "正在下載 FFmpeg {version}（{size} MB）...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "下載內容與其總和檢查碼不符：檔案已損毀，或下載期間版本有所變更。請再試一次。",
+  "Unpacking FFmpeg...": "正在解壓縮 FFmpeg..."
  },
  "plurals": {
   "about {count} day": [

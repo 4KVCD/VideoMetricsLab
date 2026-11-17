@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "Geen exportmap: kies er een in Instellingen.",
   "Stills saved": "Stills opgeslagen",
   "Saved:\n{files}": "Opgeslagen:\n{files}",
-  "Save still failed": "Still opslaan mislukt"
+  "Save still failed": "Still opslaan mislukt",
+  "Download FFmpeg": "FFmpeg downloaden",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  Klik op FFmpeg downloaden om het op te halen, of op ffmpeg.exe zoeken... om het aan te wijzen.",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\nDe app kan FFmpeg voor u downloaden (ongeveer 200 MB, van het project FFmpeg-Builds op GitHub), of u kunt een ffmpeg.exe aanwijzen die u al hebt.",
+  "Not now": "Niet nu",
+  "FFmpeg download failed": "Downloaden van FFmpeg mislukt",
+  "FFmpeg download cancelled": "Downloaden van FFmpeg geannuleerd",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\nU kunt FFmpeg ook zelf installeren (winget install Gyan.FFmpeg) en op ffmpeg.exe zoeken... klikken.",
+  "Looking for the latest FFmpeg build...": "Zoeken naar de nieuwste FFmpeg-build...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "GitHub weigert voorlopig: te veel verzoeken vanaf dit netwerk. Probeer het over een uur opnieuw.",
+  "GitHub could not be reached: {error}": "GitHub is niet bereikbaar: {error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "GitHub biedt geen Windows-build van FFmpeg {version} of nieuwer.",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "Niet genoeg vrije ruimte in {folder}: {needed} MB nodig, {free} MB vrij.",
+  "The release gives no checksum to check the download against.": "De release geeft geen controlesom om de download mee te controleren.",
+  "Downloading FFmpeg {version} ({size} MB)...": "FFmpeg {version} downloaden ({size} MB)...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "De download klopt niet met de controlesom: hij is beschadigd, of de build is tijdens het downloaden veranderd. Probeer het opnieuw.",
+  "Unpacking FFmpeg...": "FFmpeg uitpakken..."
  },
  "plurals": {
   "about {count} day": [

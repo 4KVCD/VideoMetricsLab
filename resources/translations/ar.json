@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "لا يوجد مجلد تصدير: اختر واحدًا في «الإعدادات».",
   "Stills saved": "تم حفظ اللقطات",
   "Saved:\n{files}": "تم الحفظ:\n{files}",
-  "Save still failed": "فشل حفظ اللقطة"
+  "Save still failed": "فشل حفظ اللقطة",
+  "Download FFmpeg": "تنزيل FFmpeg",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  انقر «تنزيل FFmpeg» للحصول عليه، أو «تحديد موقع ffmpeg.exe...» للإشارة إليه.",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\nيمكن للتطبيق تنزيل FFmpeg لك (نحو 200 ميغابايت، من مشروع FFmpeg-Builds على GitHub)، أو يمكنك توجيهه إلى ملف ffmpeg.exe لديك بالفعل.",
+  "Not now": "ليس الآن",
+  "FFmpeg download failed": "فشل تنزيل FFmpeg",
+  "FFmpeg download cancelled": "أُلغي تنزيل FFmpeg",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\nيمكنك أيضًا تثبيت FFmpeg بنفسك (winget install Gyan.FFmpeg) ثم النقر على «تحديد موقع ffmpeg.exe...».",
+  "Looking for the latest FFmpeg build...": "جارٍ البحث عن أحدث إصدار من FFmpeg...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "رفض GitHub الطلب حاليًا: طلبات كثيرة جدًا من هذه الشبكة. حاول مرة أخرى بعد ساعة.",
+  "GitHub could not be reached: {error}": "تعذر الوصول إلى GitHub: {error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "لا يسرد GitHub أي إصدار Windows من FFmpeg {version} أو أحدث.",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "لا توجد مساحة حرة كافية في {folder}: يلزم {needed} ميغابايت، والمتاح {free} ميغابايت.",
+  "The release gives no checksum to check the download against.": "لا يقدّم الإصدار مجموع تحقق للتحقق من التنزيل.",
+  "Downloading FFmpeg {version} ({size} MB)...": "جارٍ تنزيل FFmpeg {version} ({size} ميغابايت)...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "التنزيل لا يطابق مجموع التحقق الخاص به: إما أنه تلف، أو تغيّر الإصدار أثناء التنزيل. حاول مرة أخرى.",
+  "Unpacking FFmpeg...": "جارٍ فك ضغط FFmpeg..."
  },
  "plurals": {
   "about {count} day": [

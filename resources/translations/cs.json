@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "Žádná složka exportu: zvolte ji v Nastavení.",
   "Stills saved": "Snímky uloženy",
   "Saved:\n{files}": "Uloženo:\n{files}",
-  "Save still failed": "Uložení snímku selhalo"
+  "Save still failed": "Uložení snímku selhalo",
+  "Download FFmpeg": "Stáhnout FFmpeg",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  Klikněte na Stáhnout FFmpeg, nebo na Najít ffmpeg.exe... a zadejte jeho umístění.",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\nAplikace může FFmpeg stáhnout za vás (asi 200 MB, z projektu FFmpeg-Builds na GitHubu), nebo ji můžete nasměrovat na ffmpeg.exe, který už máte.",
+  "Not now": "Teď ne",
+  "FFmpeg download failed": "Stažení FFmpeg se nezdařilo",
+  "FFmpeg download cancelled": "Stahování FFmpeg zrušeno",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\nFFmpeg si také můžete nainstalovat sami (winget install Gyan.FFmpeg) a kliknout na Najít ffmpeg.exe....",
+  "Looking for the latest FFmpeg build...": "Hledá se nejnovější sestavení FFmpeg...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "GitHub zatím odmítá: z této sítě přišlo příliš mnoho požadavků. Zkuste to znovu za hodinu.",
+  "GitHub could not be reached: {error}": "GitHub není dostupný: {error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "GitHub neuvádí žádné sestavení FFmpeg {version} nebo novější pro Windows.",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "Nedostatek volného místa v {folder}: je potřeba {needed} MB, volných je {free} MB.",
+  "The release gives no checksum to check the download against.": "Vydání neuvádí kontrolní součet, se kterým by šlo stažený soubor ověřit.",
+  "Downloading FFmpeg {version} ({size} MB)...": "Stahuje se FFmpeg {version} ({size} MB)...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "Stažený soubor neodpovídá kontrolnímu součtu: poškodil se, nebo se sestavení během stahování změnilo. Zkuste to znovu.",
+  "Unpacking FFmpeg...": "Rozbaluje se FFmpeg..."
  },
  "plurals": {
   "about {count} day": [

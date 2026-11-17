@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "Нет папки экспорта: выберите её в «Настройках».",
   "Stills saved": "Кадры сохранены",
   "Saved:\n{files}": "Сохранено:\n{files}",
-  "Save still failed": "Не удалось сохранить кадр"
+  "Save still failed": "Не удалось сохранить кадр",
+  "Download FFmpeg": "Скачать FFmpeg",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  Нажмите «Скачать FFmpeg», чтобы получить его, или «Указать ffmpeg.exe...», чтобы указать его.",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\nПриложение может скачать FFmpeg для вас (около 200 МБ, из проекта FFmpeg-Builds на GitHub), или вы можете указать уже имеющийся ffmpeg.exe.",
+  "Not now": "Не сейчас",
+  "FFmpeg download failed": "Не удалось скачать FFmpeg",
+  "FFmpeg download cancelled": "Скачивание FFmpeg отменено",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\nВы также можете установить FFmpeg сами (winget install Gyan.FFmpeg) и нажать «Указать ffmpeg.exe...».",
+  "Looking for the latest FFmpeg build...": "Поиск последней сборки FFmpeg...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "GitHub пока отказывает: слишком много запросов из этой сети. Повторите попытку через час.",
+  "GitHub could not be reached: {error}": "Не удалось подключиться к GitHub: {error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "На GitHub нет сборки FFmpeg {version} или новее для Windows.",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "Недостаточно свободного места в {folder}: нужно {needed} МБ, свободно {free} МБ.",
+  "The release gives no checksum to check the download against.": "Выпуск не содержит контрольной суммы для проверки загрузки.",
+  "Downloading FFmpeg {version} ({size} MB)...": "Скачивание FFmpeg {version} ({size} МБ)...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "Загрузка не совпадает со своей контрольной суммой: она повреждена, или сборка изменилась во время скачивания. Повторите попытку.",
+  "Unpacking FFmpeg...": "Распаковка FFmpeg..."
  },
  "plurals": {
   "about {count} day": [

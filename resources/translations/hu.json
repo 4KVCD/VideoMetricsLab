@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "Nincs exportálási mappa: válasszon egyet a Beállításokban.",
   "Stills saved": "Állóképek mentve",
   "Saved:\n{files}": "Mentve:\n{files}",
-  "Save still failed": "Az állókép mentése sikertelen"
+  "Save still failed": "Az állókép mentése sikertelen",
+  "Download FFmpeg": "FFmpeg letöltése",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  Kattintson az FFmpeg letöltése gombra a beszerzéséhez, vagy az ffmpeg.exe keresése... gombra a megadásához.",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\nAz alkalmazás letöltheti Önnek az FFmpeg-et (kb. 200 MB, a GitHubon lévő FFmpeg-Builds projektből), vagy megadhat egy már meglévő ffmpeg.exe-t.",
+  "Not now": "Most nem",
+  "FFmpeg download failed": "Az FFmpeg letöltése nem sikerült",
+  "FFmpeg download cancelled": "Az FFmpeg letöltése megszakítva",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\nAz FFmpeg-et saját maga is telepítheti (winget install Gyan.FFmpeg), majd kattintson az ffmpeg.exe keresése... gombra.",
+  "Looking for the latest FFmpeg build...": "A legújabb FFmpeg-build keresése...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "A GitHub egyelőre elutasítja: túl sok kérés érkezett erről a hálózatról. Próbálja újra egy óra múlva.",
+  "GitHub could not be reached: {error}": "A GitHub nem érhető el: {error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "A GitHub nem kínál {version} vagy újabb FFmpeg-buildet Windowsra.",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "Nincs elég szabad hely itt: {folder}: {needed} MB kell, {free} MB szabad.",
+  "The release gives no checksum to check the download against.": "A kiadás nem ad ellenőrzőösszeget a letöltés ellenőrzéséhez.",
+  "Downloading FFmpeg {version} ({size} MB)...": "FFmpeg {version} letöltése ({size} MB)...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "A letöltés nem egyezik az ellenőrzőösszegével: megsérült, vagy a build megváltozott letöltés közben. Próbálja újra.",
+  "Unpacking FFmpeg...": "FFmpeg kicsomagolása..."
  },
  "plurals": {
   "about {count} day": [

@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "Tidak ada folder ekspor: pilih satu di Pengaturan.",
   "Stills saved": "Gambar diam disimpan",
   "Saved:\n{files}": "Disimpan:\n{files}",
-  "Save still failed": "Gagal menyimpan gambar diam"
+  "Save still failed": "Gagal menyimpan gambar diam",
+  "Download FFmpeg": "Unduh FFmpeg",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  Klik Unduh FFmpeg untuk mendapatkannya, atau Cari ffmpeg.exe... untuk menunjuknya.",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\nAplikasi dapat mengunduh FFmpeg untuk Anda (sekitar 200 MB, dari proyek FFmpeg-Builds di GitHub), atau Anda dapat menunjukkan ffmpeg.exe yang sudah Anda miliki.",
+  "Not now": "Nanti saja",
+  "FFmpeg download failed": "Unduhan FFmpeg gagal",
+  "FFmpeg download cancelled": "Unduhan FFmpeg dibatalkan",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\nAnda juga dapat menginstal FFmpeg sendiri (winget install Gyan.FFmpeg) lalu klik Cari ffmpeg.exe....",
+  "Looking for the latest FFmpeg build...": "Mencari build FFmpeg terbaru...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "GitHub menolak untuk sementara: terlalu banyak permintaan dari jaringan ini. Coba lagi dalam satu jam.",
+  "GitHub could not be reached: {error}": "GitHub tidak dapat dijangkau: {error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "GitHub tidak mencantumkan build Windows FFmpeg {version} atau yang lebih baru.",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "Ruang kosong di {folder} tidak cukup: perlu {needed} MB, tersedia {free} MB.",
+  "The release gives no checksum to check the download against.": "Rilis tidak memberikan checksum untuk memeriksa unduhan.",
+  "Downloading FFmpeg {version} ({size} MB)...": "Mengunduh FFmpeg {version} ({size} MB)...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "Unduhan tidak cocok dengan checksum-nya: unduhan rusak, atau build berubah saat diunduh. Coba lagi.",
+  "Unpacking FFmpeg...": "Mengekstrak FFmpeg..."
  },
  "plurals": {
   "about {count} day": [

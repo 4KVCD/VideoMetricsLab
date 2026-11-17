@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "ไม่มีโฟลเดอร์ส่งออก: เลือกได้ในการตั้งค่า",
   "Stills saved": "บันทึกภาพนิ่งแล้ว",
   "Saved:\n{files}": "บันทึกแล้ว:\n{files}",
-  "Save still failed": "บันทึกภาพนิ่งไม่สำเร็จ"
+  "Save still failed": "บันทึกภาพนิ่งไม่สำเร็จ",
+  "Download FFmpeg": "ดาวน์โหลด FFmpeg",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  คลิก ดาวน์โหลด FFmpeg เพื่อรับมา หรือ ค้นหา ffmpeg.exe... เพื่อระบุตำแหน่ง",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\nแอปสามารถดาวน์โหลด FFmpeg ให้คุณได้ (ประมาณ 200 MB จากโปรเจกต์ FFmpeg-Builds บน GitHub) หรือคุณสามารถระบุ ffmpeg.exe ที่มีอยู่แล้วได้",
+  "Not now": "ไว้ทีหลัง",
+  "FFmpeg download failed": "ดาวน์โหลด FFmpeg ไม่สำเร็จ",
+  "FFmpeg download cancelled": "ยกเลิกการดาวน์โหลด FFmpeg แล้ว",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\nคุณยังสามารถติดตั้ง FFmpeg เอง (winget install Gyan.FFmpeg) แล้วคลิก ค้นหา ffmpeg.exe...",
+  "Looking for the latest FFmpeg build...": "กำลังค้นหา FFmpeg รุ่นล่าสุด...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "GitHub ปฏิเสธชั่วคราว: มีคำขอจากเครือข่ายนี้มากเกินไป โปรดลองอีกครั้งในหนึ่งชั่วโมง",
+  "GitHub could not be reached: {error}": "ไม่สามารถเชื่อมต่อ GitHub: {error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "GitHub ไม่มี FFmpeg {version} หรือใหม่กว่าสำหรับ Windows",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "พื้นที่ว่างใน {folder} ไม่พอ: ต้องใช้ {needed} MB ว่างอยู่ {free} MB",
+  "The release gives no checksum to check the download against.": "รุ่นนี้ไม่มีค่า checksum สำหรับตรวจสอบไฟล์ที่ดาวน์โหลด",
+  "Downloading FFmpeg {version} ({size} MB)...": "กำลังดาวน์โหลด FFmpeg {version} ({size} MB)...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "ไฟล์ที่ดาวน์โหลดไม่ตรงกับ checksum: ไฟล์เสียหาย หรือรุ่นเปลี่ยนไประหว่างดาวน์โหลด โปรดลองอีกครั้ง",
+  "Unpacking FFmpeg...": "กำลังแตกไฟล์ FFmpeg..."
  },
  "plurals": {
   "about {count} day": [

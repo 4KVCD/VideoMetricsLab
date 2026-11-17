@@ -951,7 +951,23 @@
   "No export folder: choose one in Settings.": "Aucun dossier d'export : choisissez-en un dans les Paramètres.",
   "Stills saved": "Images enregistrées",
   "Saved:\n{files}": "Enregistré :\n{files}",
-  "Save still failed": "Échec de l'enregistrement de l'image"
+  "Save still failed": "Échec de l'enregistrement de l'image",
+  "Download FFmpeg": "Télécharger FFmpeg",
+  "  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.": "  Cliquez sur « Télécharger FFmpeg » pour l'obtenir, ou sur « Localiser ffmpeg.exe... » pour l'indiquer.",
+  "\n\nThe app can download FFmpeg for you (about 200 MB, from the FFmpeg-Builds project on GitHub), or you can point it at an ffmpeg.exe you already have.": "\n\nL'application peut télécharger FFmpeg pour vous (environ 200 Mo, depuis le projet FFmpeg-Builds sur GitHub), ou vous pouvez lui indiquer un ffmpeg.exe que vous avez déjà.",
+  "Not now": "Pas maintenant",
+  "FFmpeg download failed": "Échec du téléchargement de FFmpeg",
+  "FFmpeg download cancelled": "Téléchargement de FFmpeg annulé",
+  "\n\nYou can also install FFmpeg yourself (winget install Gyan.FFmpeg) and click \"Locate ffmpeg.exe...\".": "\n\nVous pouvez aussi installer FFmpeg vous-même (winget install Gyan.FFmpeg) puis cliquer sur « Localiser ffmpeg.exe... ».",
+  "Looking for the latest FFmpeg build...": "Recherche de la dernière version de FFmpeg...",
+  "GitHub refused for now: too many requests from this network. Try again in an hour.": "GitHub refuse pour l'instant : trop de requêtes depuis ce réseau. Réessayez dans une heure.",
+  "GitHub could not be reached: {error}": "Impossible de joindre GitHub : {error}",
+  "GitHub lists no Windows build of FFmpeg {version} or newer.": "GitHub ne propose aucune version Windows de FFmpeg {version} ou plus récente.",
+  "Not enough free space in {folder}: {needed} MB are needed, {free} MB are free.": "Espace libre insuffisant dans {folder} : {needed} Mo nécessaires, {free} Mo libres.",
+  "The release gives no checksum to check the download against.": "La version ne fournit aucune somme de contrôle pour vérifier le téléchargement.",
+  "Downloading FFmpeg {version} ({size} MB)...": "Téléchargement de FFmpeg {version} ({size} Mo)...",
+  "The download does not match its checksum: it was damaged, or the build changed while it downloaded. Try again.": "Le téléchargement ne correspond pas à sa somme de contrôle : il a été endommagé, ou la version a changé pendant le téléchargement. Réessayez.",
+  "Unpacking FFmpeg...": "Décompression de FFmpeg..."
  },
  "plurals": {
   "about {count} day": [

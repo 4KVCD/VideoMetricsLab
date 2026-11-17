@@ -832,7 +832,14 @@ std::string ffmpeg_problem(const ToolsStatus& status) {
     for (const std::string& problem : status.problems()) {
         text += "\n  " + problem;
     }
+#ifdef _WIN32
+    // The window downloads it into a folder this program uses too (the
+    // settings' FFmpeg folder).
+    return text + "\nOpen the VideoMetricsLab window once and click \"Download FFmpeg\", put ffmpeg and ffprobe on "
+                  "PATH, or set FFmpeg's folder in the app's Settings tab.";
+#else
     return text + "\nPut ffmpeg and ffprobe on PATH, or set FFmpeg's folder in the app's Settings tab.";
+#endif
 }
 
 }  // namespace
