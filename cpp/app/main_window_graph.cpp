@@ -5,6 +5,7 @@
 
 #include <QTabWidget>
 
+#include <algorithm>
 #include <atomic>
 #include <string>
 
@@ -69,12 +70,21 @@ void MainWindow::open_or_update_graph(const std::vector<std::shared_ptr<Complete
     }
 }
 
-void MainWindow::show_in_video_compare(const std::string& identity, int frame) {
+void MainWindow::show_in_video_compare(const std::string& identity, int frame, const WorstFrameList& list) {
     sync_frame_compare();  // the rows' pairs as they are now
     switch (frame_compare_panel_->open_at(identity, frame)) {
-    case FrameComparePanel::OpenAt::shown:
+    case FrameComparePanel::OpenAt::shown: {
+        // Worst frames' list, from the stop opened, to step through there.
+        const auto stop = std::find_if(list.stops.begin(), list.stops.end(),
+                                       [frame](const WorstFrameList::Stop& each) { return each.frame == frame; });
+        if (stop == list.stops.end()) {
+            frame_compare_panel_->clear_worst_list();
+        } else {
+            frame_compare_panel_->set_worst_list(list, static_cast<std::size_t>(stop - list.stops.begin()));
+        }
         tabs_->setCurrentIndex(tab_frame_compare);
         return;
+    }
     case FrameComparePanel::OpenAt::no_pair:
         // A line added from a results file, or one whose row is gone.
         dialogs_.inform(app::tr("Not in Video Compare"),

@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "dialogs.h"
+#include "worst_frame_list.h"
 #include "vml/metrics.h"
 #include "vml/results.h"
 #include "vml/weak_frames.h"
@@ -54,6 +55,8 @@ public:
     void set_count(int count);
     int count() const { return count_; }
     const WeakFramesVideo* chosen_video() const;
+    // The list as shown, for Video Compare to step through.
+    WorstFrameList shown_list() const;
 
     // For the tests.
     QTableWidget* table() const { return table_; }

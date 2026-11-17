@@ -4,6 +4,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDoubleSpinBox>
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -369,6 +370,7 @@ FrameComparePanel::FrameComparePanel(std::function<std::string()> ffmpeg, Previe
     add_colour_row(root);
     add_view(root);
     add_seek_rows(root);
+    add_inspect_row(root);
     add_labels(root);
     make_timers();
 
@@ -691,6 +693,11 @@ void FrameComparePanel::set_frame(long long frame) {
     const long long bounded = std::clamp(frame, 0LL, static_cast<long long>(frame_spin->maximum()));
     const bool changed = bounded != frame_;
     frame_ = bounded;
+    if (!syncing_video_position_) {
+        // A frame the user went to: the loop is around it now.
+        loop_centre_ = frame_;
+        loop_jump_pending_ = false;
+    }
     sync_seek_widgets();
     update_labels();
     if (is_video_mode()) {
@@ -726,6 +733,8 @@ FrameComparePanel::OpenAt FrameComparePanel::open_at(const std::string& identity
     }
     // The frame first: the pair is shown, or loaded to play, from it.
     frame_ = frame;
+    loop_centre_ = frame;
+    loop_jump_pending_ = false;
     sync_seek_widgets();
     if (on_screen_) {
         show_chosen_video();
@@ -792,6 +801,9 @@ std::vector<QThread*> FrameComparePanel::live_workers() const {
             live.push_back(worker);
         }
     }
+    if (still_worker_ != nullptr && still_worker_->isRunning()) {
+        live.push_back(still_worker_);
+    }
     return live;
 }
 
@@ -800,6 +812,9 @@ void FrameComparePanel::cancel() {
     ++generation_;
     cancel_workers();
     cancel_crop_workers();
+    if (still_worker_ != nullptr) {
+        still_worker_->cancel();
+    }
     if (video_view != nullptr) {
         video_view->clear();
     }
@@ -993,7 +1008,13 @@ void FrameComparePanel::on_play_clicked() {
         on_video_status_changed(qt_text(reason));
         return;
     }
-    view.set_playing(!view.playback_requested());
+    const bool play = !view.playback_requested();
+    user_paused_ = !play;
+    if (play && loop_checkbox->isChecked() && frame_ == loop_centre_ && entry->comparison.fps > 0) {
+        // Just gone to the frame: the loop plays from its beginning.
+        loop_jump_to(loop_start(loop_centre_, loop_before_spin->value(), entry->comparison.fps));
+    }
+    view.set_playing(play);
 }
 
 void FrameComparePanel::on_video_position_changed(int position_ms) {
@@ -1004,6 +1025,7 @@ void FrameComparePanel::on_video_position_changed(int position_ms) {
         return;
     }
     const auto frame = static_cast<long long>(std::nearbyint(position_ms / 1000.0 * entry->comparison.fps));
+    follow_loop(frame);
     const long long bounded = std::clamp(frame, 0LL, static_cast<long long>(frame_spin->maximum()));
     if (bounded == frame_) {
         return;
@@ -1040,6 +1062,9 @@ void FrameComparePanel::on_video_playing_changed(bool playing) {
     }
     if (is_video_mode()) {
         update_color_status();
+    }
+    if (!playing) {
+        restart_loop_at_end();
     }
 }
 
@@ -1229,6 +1254,10 @@ void FrameComparePanel::update_enabled_state() {
     const bool playable = is_video_mode();
     play_button->setEnabled(available && playable);
     audio_checkbox->setEnabled(available && playable);
+    for (QWidget* widget : std::initializer_list<QWidget*>{loop_checkbox, loop_before_spin, loop_after_spin}) {
+        widget->setEnabled(available && playable);
+    }
+    save_still_button->setEnabled(available && still_worker_ == nullptr);
     source_resolution_combo->setEnabled(playable);
     color_mode_combo->setEnabled(available);
 }
@@ -1257,6 +1286,7 @@ void FrameComparePanel::update_labels() {
     showing_label->setText(side + QString::fromUtf8(" \xE2\x80\x94 ") + name +
                            (grain_not_shown ? QString::fromUtf8(" \xC2\xB7 ") + app::tr("film grain not shown in stills")
                                             : QString()));
+    update_worst_row();  // shown for the list's pair only
     update_frame_line();
     update_color_status();
 }

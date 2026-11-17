@@ -937,7 +937,21 @@
   "{metric} mean": "{metric} átlag",
   "{metric} worst": "{metric} legrosszabb",
   "Invalid zone setting": "Érvénytelen zónabeállítás",
-  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "Az x265 a b= után szorzót (b=1.5: 1,5-szeres bitráta), a q= után 0 és 69 közötti QP-t fogad el (q=20)."
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "Az x265 a b= után szorzót (b=1.5: 1,5-szeres bitráta), a q= után 0 és 69 közötti QP-t fogad el (q=20).",
+  "Previous worst": "Előző legrosszabb",
+  "Next worst": "Következő legrosszabb",
+  "Steps through the Worst frames list opened from Metric Graphs.": "Végiglépked a Metrikagrafikonokból megnyitott Legrosszabb képkockák listán.",
+  "Worst {number} of {count}: {metric} {score}": "Legrosszabb: {number} / {count}: {metric} {score}",
+  "Loop": "Ismétlés",
+  "Plays the seconds around the frame you went to, again and again: Play starts them from the beginning.": "Újra meg újra lejátssza a kiválasztott képkocka körüli másodperceket: a Lejátszás az elejéről indítja őket.",
+  "before:": "előtte:",
+  "after:": "utána:",
+  "Save still": "Állókép mentése",
+  "Saves this frame of the reference and of the test video as PNG files in Settings' Export folder, cropped and scaled as they are compared, HDR mapped to SDR. They are decoded as Video Compare's still frames are.": "Ezt a képkockát a referenciából és a tesztvideóból PNG-fájlként menti a Beállítások exportálási mappájába, az összehasonlításhoz használt vágással és méretezéssel, a HDR-t SDR-re alakítva. A Videó-összehasonlítás állóképeivel azonos módon dekódolja őket.",
+  "No export folder: choose one in Settings.": "Nincs exportálási mappa: válasszon egyet a Beállításokban.",
+  "Stills saved": "Állóképek mentve",
+  "Saved:\n{files}": "Mentve:\n{files}",
+  "Save still failed": "Az állókép mentése sikertelen"
  },
  "plurals": {
   "about {count} day": [

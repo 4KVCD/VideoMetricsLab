@@ -937,7 +937,21 @@
   "{metric} mean": "{metric} 平均",
   "{metric} worst": "{metric} 最悪",
   "Invalid zone setting": "無効なゾーン設定",
-  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 が受け付けるのは、係数付きの b=（b=1.5: ビットレート 1.5 倍）か、0～69 の QP 付きの q=（q=20）です。"
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 が受け付けるのは、係数付きの b=（b=1.5: ビットレート 1.5 倍）か、0～69 の QP 付きの q=（q=20）です。",
+  "Previous worst": "前の最悪",
+  "Next worst": "次の最悪",
+  "Steps through the Worst frames list opened from Metric Graphs.": "指標グラフから開いた「最悪のフレーム」の一覧を順に移動します。",
+  "Worst {number} of {count}: {metric} {score}": "最悪 {number}/{count}: {metric} {score}",
+  "Loop": "ループ",
+  "Plays the seconds around the frame you went to, again and again: Play starts them from the beginning.": "移動したフレームの前後数秒を繰り返し再生します。再生ボタンでその先頭から始まります。",
+  "before:": "前:",
+  "after:": "後:",
+  "Save still": "静止画を保存",
+  "Saves this frame of the reference and of the test video as PNG files in Settings' Export folder, cropped and scaled as they are compared, HDR mapped to SDR. They are decoded as Video Compare's still frames are.": "このフレームを参照動画とテスト動画それぞれ PNG ファイルとして、設定のエクスポート先フォルダーに保存します。比較時と同じく切り抜き・拡大縮小し、HDR は SDR に変換します。デコードは動画比較の静止フレームと同じ方法です。",
+  "No export folder: choose one in Settings.": "エクスポート先フォルダーがありません。設定で選んでください。",
+  "Stills saved": "静止画を保存しました",
+  "Saved:\n{files}": "保存しました:\n{files}",
+  "Save still failed": "静止画を保存できませんでした"
  },
  "plurals": {
   "about {count} day": [

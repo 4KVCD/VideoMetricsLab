@@ -156,6 +156,28 @@ TEST(FrameCompare, TimestampsAreReadInEveryFormTheUserMayType) {
     }
 }
 
+// Issue #24's loop: its first frame never before the video's, and playback
+// past its end goes back to that first frame; near the video's end, the
+// loop ends a frame before the last, where playback would stop.
+TEST(FrameCompare, TheLoopGoesBackToItsStartPastItsEnd) {
+    EXPECT_EQ(loop_start(48, 0.5, 24.0), 36);
+    EXPECT_EQ(loop_start(5, 1.0, 24.0), 0);
+    EXPECT_EQ(loop_restart(60, 48, 0.5, 0.5, 24.0, 119), std::nullopt);
+    EXPECT_EQ(loop_restart(61, 48, 0.5, 0.5, 24.0, 119), 36);
+    EXPECT_EQ(loop_restart(118, 118, 1.0, 1.0, 24.0, 119), std::nullopt);
+    EXPECT_EQ(loop_restart(119, 118, 1.0, 1.0, 24.0, 119), 94);
+    EXPECT_EQ(loop_restart(61, 48, 0.5, 0.5, 0.0, 119), std::nullopt);  // no frame rate: no loop
+}
+
+// A still's file says the video, frame, time, the score that listed it and
+// its side, without characters a file name cannot have.
+TEST(FrameCompare, StillsAreNamedAfterTheirFrame) {
+    EXPECT_EQ(still_file_name("enc.mkv", 72, 3.0, "PSNR 50.89", "reference").toStdString(),
+              "enc.mkv - frame 000072 - 0h00m03.000s - PSNR 50.89 - reference.png");
+    EXPECT_EQ(still_file_name("a:b", 90061, 3725.5, "", "test").toStdString(),
+              "a_b - frame 090061 - 1h02m05.500s - test.png");
+}
+
 }  // namespace
 
 // The pairs are listed, on the frames they all have; a frame shown is in
@@ -203,6 +225,38 @@ TEST_F(FramePanelTest, ThePairsAreListedOnTheirCommonFramesAndStepTogether) {
     EXPECT_EQ(panel->frame_spin->maximum(), 119);
     EXPECT_TRUE(panel->detail_label->full_text().contains("No metric results loaded"));
     EXPECT_FALSE(panel->detail_label->full_text().contains("VMAF"));
+}
+
+// Issue #24: the Worst frames list from Metric Graphs is stepped through
+// while its video is shown, and hidden for another; Save still without an
+// export folder says where to choose one.
+TEST_F(FramePanelTest, TheWorstFramesListIsSteppedThroughOnItsVideo) {
+    const auto panel = make_panel();
+    panel->set_runs({scored("first"), scored("second")});
+    ASSERT_EQ(panel->open_at("run:first", 10), FrameComparePanel::OpenAt::shown);
+    panel->set_worst_list({"run:first", "VMAF", {{10, "40.00"}, {70, "50.00"}}}, 0);
+    EXPECT_FALSE(panel->worst_label->isHidden());
+    EXPECT_EQ(panel->worst_label->text().toStdString(), "Worst 1 of 2: VMAF 40.00");
+    EXPECT_FALSE(panel->previous_worst_button->isEnabled());
+    EXPECT_TRUE(panel->next_worst_button->isEnabled());
+
+    panel->next_worst_button->click();
+    EXPECT_EQ(panel->frame_spin->value(), 70);
+    EXPECT_EQ(panel->worst_label->text().toStdString(), "Worst 2 of 2: VMAF 50.00");
+    EXPECT_TRUE(panel->previous_worst_button->isEnabled());
+    EXPECT_FALSE(panel->next_worst_button->isEnabled());
+
+    panel->cycle_distorted(1);
+    EXPECT_EQ(panel->video_combo->currentText().toStdString(), "second");
+    EXPECT_TRUE(panel->worst_label->isHidden());
+    EXPECT_TRUE(panel->next_worst_button->isHidden());
+
+    QString failure;
+    QObject::connect(panel.get(), &FrameComparePanel::still_failed, [&failure](const QString& error) { failure = error; });
+    panel->export_folder = [] { return QString(); };
+    panel->save_still_button->click();
+    EXPECT_EQ(failure.toStdString(), "No export folder: choose one in Settings.");
+    EXPECT_TRUE(idle(*panel));
 }
 
 // Holding S shows the source, letting go the test video again.

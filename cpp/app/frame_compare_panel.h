@@ -26,6 +26,7 @@
 
 #include "display_hdr.h"
 #include "frame_drag.h"
+#include "worst_frame_list.h"
 #include "vml/cancel.h"
 #include "vml/frame_extract.h"
 #include "vml/platform/system.h"
@@ -34,6 +35,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -65,6 +67,24 @@ struct FrameComparisonEntry {
 // Seconds, M:SS or H:MM:SS(.sss) as seconds. Throws std::invalid_argument
 // with the message to show (translated) when it is not one.
 double parse_timestamp(const QString& value);
+
+// The first frame of the loop around frame `centre`: `before` seconds
+// before it (at `fps`), at frame 0 at the earliest.
+long long loop_start(long long centre, double before, double fps);
+// Where playback looping around frame `centre` jumps back to once it shows
+// `frame`: the loop runs from `before` seconds before the centre to `after`
+// seconds after it (at `fps`), and ends a frame before `last` at the latest
+// (playback stops at the last frame). Its first frame when `frame` is past
+// its end; nothing while inside it.
+std::optional<long long> loop_restart(long long frame, long long centre, double before, double after, double fps,
+                                      long long last);
+
+// The file name of a still Save still writes: the video, the frame (six
+// digits at least, as the encoder counts it), its time, the metric and
+// score when known ("PSNR 32.64"), and the side ("reference" or "test"),
+// with what Windows refuses in a name replaced.
+QString still_file_name(const QString& video, long long frame, double seconds, const QString& metric_score,
+                        const QString& side);
 
 // A still frame, fitted to the view or zoomed (the tab's one Zoom), dragged
 // with the mouse when larger than the view. Without one, a black screen
@@ -173,6 +193,37 @@ private:
     CancelToken cancel_;
 };
 
+// Saves the reference's and the test video's frame as PNGs (Save still), on
+// a thread of its own: Video Compare's still decode of that frame, HDR
+// converted to SDR (an 8-bit PNG), cropped and scaled as compared, written
+// as FFmpeg made them. Both files or neither: a test still that fails
+// removes the reference's.
+class StillSaveWorker : public QThread {
+    Q_OBJECT
+
+public:
+    // `files`: the reference's, then the test video's; `mode`: the tab's
+    // colour mode.
+    StillSaveWorker(std::string ffmpeg, FrameComparison comparison, long long frame,
+                    std::vector<std::filesystem::path> files, PreviewColorMode mode, QObject* parent = nullptr);
+    void cancel() { cancel_.cancel(); }
+
+signals:
+    void saved(const QStringList& files);
+    void failed(const QString& error);
+
+protected:
+    void run() override;
+
+private:
+    std::string ffmpeg_;
+    FrameComparison comparison_;
+    long long frame_;
+    std::vector<std::filesystem::path> files_;
+    PreviewColorMode mode_;
+    CancelToken cancel_;
+};
+
 class FramePanelTest;
 class VideoCompareView;
 
@@ -200,6 +251,15 @@ public:
     OpenAt open_at(const std::string& identity, long long frame);
     // The last frame the tab offers.
     long long last_frame() const;
+    // The Worst frames list to step through with Previous / Next worst, at
+    // its stop `index` (the one just opened); cleared by anything else
+    // opening a frame from outside.
+    void set_worst_list(WorstFrameList list, std::size_t index);
+    void clear_worst_list();
+    // The loop's seconds before and after its frame (the saved settings).
+    void set_loop_seconds(double before, double after);
+    // Where Save still writes: Settings' Export folder.
+    std::function<QString()> export_folder;
     // Shows the next (1) or previous (-1) test video.
     void cycle_distorted(int direction);
     // How many test videos playback keeps decoding (the Settings tab).
@@ -231,6 +291,14 @@ public:
     QLineEdit* timestamp_edit = nullptr;
     QPushButton* next_frame_button = nullptr;
     QSlider* timeline = nullptr;
+    // Issue #24: the worst frames handed over, the loop, the stills.
+    QPushButton* previous_worst_button = nullptr;
+    QLabel* worst_label = nullptr;
+    QPushButton* next_worst_button = nullptr;
+    QCheckBox* loop_checkbox = nullptr;
+    QDoubleSpinBox* loop_before_spin = nullptr;
+    QDoubleSpinBox* loop_after_spin = nullptr;
+    QPushButton* save_still_button = nullptr;
     ElidedLabel* detail_label = nullptr;
     QLabel* guide_label = nullptr;
     // The playback view, made when a pair first plays.
@@ -239,6 +307,11 @@ public:
 signals:
     // The colour mode chosen, to save ("display_aware", ...).
     void color_mode_changed(const QString& mode);
+    // The loop's seconds changed, to save.
+    void loop_seconds_changed(double before, double after);
+    // Save still wrote `files`, or could not.
+    void still_saved(const QStringList& files);
+    void still_failed(const QString& error);
 
 protected:
     void showEvent(QShowEvent* event) override;
@@ -283,7 +356,16 @@ private:
     void add_view(QVBoxLayout* root);
     void add_seek_rows(QVBoxLayout* root);
     void add_labels(QVBoxLayout* root);
+    void add_inspect_row(QVBoxLayout* root);
     void make_timers();
+    // Issue #24's tools (frame_compare_inspect.cpp).
+    void step_worst(int direction);
+    void update_worst_row();
+    void on_loop_toggled(bool on);
+    void loop_jump_to(long long frame);
+    void follow_loop(long long frame);
+    void restart_loop_at_end();
+    void save_still();
     void release_held();
     void on_video_selected(int index);
     void on_zoom_chosen(int index);
@@ -375,6 +457,16 @@ private:
     bool syncing_video_position_ = false;
     // Playback's status as the view said it, in English.
     QString video_status_;
+    // The Worst frames list handed over, and the stop shown last.
+    std::optional<WorstFrameList> worst_list_;
+    std::size_t worst_index_ = 0;
+    // The loop: the frame it is around (the one the user last went to), a
+    // jump back made whose position has not come yet, and whether the last
+    // pause was the user's (not playback's own stop at the end).
+    long long loop_centre_ = 0;
+    bool loop_jump_pending_ = false;
+    bool user_paused_ = false;
+    StillSaveWorker* still_worker_ = nullptr;
 };
 
 }  // namespace vml::app

@@ -937,7 +937,21 @@
   "{metric} mean": "{metric} เฉลี่ย",
   "{metric} worst": "{metric} แย่ที่สุด",
   "Invalid zone setting": "การตั้งค่าโซนไม่ถูกต้อง",
-  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 รับ b= ตามด้วยตัวคูณ (b=1.5: บิตเรต 1.5 เท่า) หรือ q= ตามด้วย QP ตั้งแต่ 0 ถึง 69 (q=20)"
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 รับ b= ตามด้วยตัวคูณ (b=1.5: บิตเรต 1.5 เท่า) หรือ q= ตามด้วย QP ตั้งแต่ 0 ถึง 69 (q=20)",
+  "Previous worst": "แย่ที่สุดก่อนหน้า",
+  "Next worst": "แย่ที่สุดถัดไป",
+  "Steps through the Worst frames list opened from Metric Graphs.": "เลื่อนไปตามรายการ เฟรมที่แย่ที่สุด ที่เปิดจาก กราฟเมตริก",
+  "Worst {number} of {count}: {metric} {score}": "แย่ที่สุด {number} จาก {count}: {metric} {score}",
+  "Loop": "วนซ้ำ",
+  "Plays the seconds around the frame you went to, again and again: Play starts them from the beginning.": "เล่นวินาทีรอบเฟรมที่ไปถึงซ้ำไปเรื่อย ๆ: ปุ่มเล่นจะเริ่มจากต้นช่วง",
+  "before:": "ก่อน:",
+  "after:": "หลัง:",
+  "Save still": "บันทึกภาพนิ่ง",
+  "Saves this frame of the reference and of the test video as PNG files in Settings' Export folder, cropped and scaled as they are compared, HDR mapped to SDR. They are decoded as Video Compare's still frames are.": "บันทึกเฟรมนี้ของต้นฉบับอ้างอิงและวิดีโอทดสอบเป็นไฟล์ PNG ในโฟลเดอร์ส่งออกของการตั้งค่า ครอปและปรับขนาดเหมือนตอนเปรียบเทียบ แปลง HDR เป็น SDR ถอดรหัสแบบเดียวกับเฟรมนิ่งของ เปรียบเทียบวิดีโอ",
+  "No export folder: choose one in Settings.": "ไม่มีโฟลเดอร์ส่งออก: เลือกได้ในการตั้งค่า",
+  "Stills saved": "บันทึกภาพนิ่งแล้ว",
+  "Saved:\n{files}": "บันทึกแล้ว:\n{files}",
+  "Save still failed": "บันทึกภาพนิ่งไม่สำเร็จ"
  },
  "plurals": {
   "about {count} day": [

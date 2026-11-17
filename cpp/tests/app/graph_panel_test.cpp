@@ -757,11 +757,21 @@ TEST_F(GraphPanelTest, WorstFramesListsTheDipsAndOpensThemInVideoCompare) {
     EXPECT_EQ(list.item(0, 2)->text(), "40.00");
 
     std::pair<std::string, int> asked;
+    WorstFrameList handed;
     QObject::connect(&panel, &GraphPanel::video_compare_requested,
-                     [&asked](const std::string& identity, int frame) { asked = {identity, frame}; });
+                     [&](const std::string& identity, int frame, const WorstFrameList& stops) {
+                         asked = {identity, frame};
+                         handed = stops;
+                     });
     emit list.cellDoubleClicked(1, 0);
     const std::pair<std::string, int> wanted{"row:a", 70};
     EXPECT_EQ(asked, wanted);
+    // The list goes with it, for Video Compare's Previous and Next worst.
+    EXPECT_EQ(handed.identity, "row:a");
+    ASSERT_EQ(handed.stops.size(), 2U);
+    EXPECT_EQ(handed.stops[0].frame, 10);
+    EXPECT_EQ(handed.stops[0].score, "40.00");
+    EXPECT_EQ(handed.stops[1].frame, 70);
 
     range_start_spin(panel).setValue(50);
     range_end_spin(panel).setValue(89);

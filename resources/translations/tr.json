@@ -937,7 +937,21 @@
   "{metric} mean": "{metric} ortalama",
   "{metric} worst": "{metric} en kötü",
   "Invalid zone setting": "Geçersiz bölge ayarı",
-  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265, bir katsayıyla b= (b=1.5: 1,5 kat bit hızı) veya 0 ile 69 arası bir QP ile q= (q=20) kabul eder."
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265, bir katsayıyla b= (b=1.5: 1,5 kat bit hızı) veya 0 ile 69 arası bir QP ile q= (q=20) kabul eder.",
+  "Previous worst": "Önceki en kötü",
+  "Next worst": "Sonraki en kötü",
+  "Steps through the Worst frames list opened from Metric Graphs.": "Metrik grafiklerinden açılan En kötü kareler listesinde gezinir.",
+  "Worst {number} of {count}: {metric} {score}": "En kötü {number} / {count}: {metric} {score}",
+  "Loop": "Döngü",
+  "Plays the seconds around the frame you went to, again and again: Play starts them from the beginning.": "Gidilen karenin çevresindeki saniyeleri tekrar tekrar oynatır: Oynat onları baştan başlatır.",
+  "before:": "önce:",
+  "after:": "sonra:",
+  "Save still": "Kareyi kaydet",
+  "Saves this frame of the reference and of the test video as PNG files in Settings' Export folder, cropped and scaled as they are compared, HDR mapped to SDR. They are decoded as Video Compare's still frames are.": "Bu kareyi referanstan ve test videosundan PNG dosyaları olarak Ayarlar'daki dışa aktarma klasörüne kaydeder; karşılaştırıldıkları gibi kırpılmış ve ölçeklenmiş, HDR SDR'ye dönüştürülmüş olarak. Video karşılaştırmanın durağan kareleri gibi çözülürler.",
+  "No export folder: choose one in Settings.": "Dışa aktarma klasörü yok: Ayarlar'da bir tane seçin.",
+  "Stills saved": "Kareler kaydedildi",
+  "Saved:\n{files}": "Kaydedildi:\n{files}",
+  "Save still failed": "Kare kaydedilemedi"
  },
  "plurals": {
   "about {count} day": [

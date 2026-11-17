@@ -175,6 +175,24 @@ const WeakFramesVideo* WorstFramesPanel::chosen_video() const {
                                                                          : nullptr;
 }
 
+WorstFrameList WorstFramesPanel::shown_list() const {
+    WorstFrameList list;
+    const WeakFramesVideo* video = chosen_video();
+    if (video == nullptr || metric_ == nullptr) {
+        return list;
+    }
+    list.identity = video->identity;
+    list.metric = qt_text(metric_->label);
+    for (int row = 0; row < table_->rowCount(); ++row) {
+        const std::optional<int> frame = frame_of_row(row);
+        const QTableWidgetItem* score = table_->item(row, 2);  // the metric listed
+        if (frame && score != nullptr) {
+            list.stops.push_back({*frame, score->text()});
+        }
+    }
+    return list;
+}
+
 std::optional<int> WorstFramesPanel::frame_of_row(int row) const {
     const QTableWidgetItem* item = table_->item(row, 0);
     return item != nullptr ? std::optional(item->data(Qt::UserRole).toInt()) : std::nullopt;

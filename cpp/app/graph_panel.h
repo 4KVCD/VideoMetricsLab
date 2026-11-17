@@ -32,6 +32,7 @@
 #include "vml/results.h"
 #include "vml/stats.h"
 #include "widgets.h"
+#include "worst_frame_list.h"
 
 class QCheckBox;
 class QLabel;
@@ -267,8 +268,9 @@ signals:
     // export, the same from either table (results_export.h).
     void results_export_requested(ResultsFormat format);
     // A frame of a line's video to see in Video Compare (Worst frames, Weak
-    // segments): the line's identity, Video Compare's pair.
-    void video_compare_requested(const std::string& identity, int frame);
+    // segments): the line's identity, Video Compare's pair; from Worst
+    // frames, its list too, to step through there (else no stops).
+    void video_compare_requested(const std::string& identity, int frame, const vml::app::WorstFrameList& list);
     // The number of dips Worst frames lists, chosen there.
     void worst_count_changed(int count);
 

@@ -65,6 +65,8 @@ const std::unordered_map<std::string, Field>& fields() {
         {"highlight_best_worst", &Settings::highlight_best_worst},
         {"frame_preview_color_mode", &Settings::frame_preview_color_mode},
         {"compare_decoded_videos", &Settings::compare_decoded_videos},
+        {"compare_loop_before_ms", &Settings::compare_loop_before_ms},
+        {"compare_loop_after_ms", &Settings::compare_loop_after_ms},
         {"hidden_metrics", &Settings::hidden_metrics},
         {"cvvdp_default_preset", &Settings::cvvdp_default_preset},
     };
@@ -249,6 +251,8 @@ std::string Settings::text() const {
     data["highlight_best_worst"] = highlight_best_worst;
     data["frame_preview_color_mode"] = frame_preview_color_mode;
     data["compare_decoded_videos"] = compare_decoded_videos;
+    data["compare_loop_before_ms"] = compare_loop_before_ms;
+    data["compare_loop_after_ms"] = compare_loop_after_ms;
     data["hidden_metrics"] = hidden_metrics;
     Json presets = Json::parse(cvvdp_presets_json, nullptr, false);
     data["cvvdp_presets"] = presets.is_array() ? presets : Json::array();

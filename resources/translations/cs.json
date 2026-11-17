@@ -937,7 +937,21 @@
   "{metric} mean": "{metric} průměr",
   "{metric} worst": "{metric} nejhorší",
   "Invalid zone setting": "Neplatné nastavení zóny",
-  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 přijímá b= s násobkem (b=1.5: 1,5násobek datového toku) nebo q= s QP od 0 do 69 (q=20)."
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 přijímá b= s násobkem (b=1.5: 1,5násobek datového toku) nebo q= s QP od 0 do 69 (q=20).",
+  "Previous worst": "Předchozí nejhorší",
+  "Next worst": "Další nejhorší",
+  "Steps through the Worst frames list opened from Metric Graphs.": "Prochází seznam Nejhorší snímky otevřený z Grafů metrik.",
+  "Worst {number} of {count}: {metric} {score}": "Nejhorší {number} z {count}: {metric} {score}",
+  "Loop": "Smyčka",
+  "Plays the seconds around the frame you went to, again and again: Play starts them from the beginning.": "Přehrává sekundy kolem snímku, na který jste přešli, stále dokola: Přehrát je spustí od začátku.",
+  "before:": "před:",
+  "after:": "po:",
+  "Save still": "Uložit snímek",
+  "Saves this frame of the reference and of the test video as PNG files in Settings' Export folder, cropped and scaled as they are compared, HDR mapped to SDR. They are decoded as Video Compare's still frames are.": "Uloží tento snímek reference a testovaného videa jako soubory PNG do složky exportu z Nastavení, oříznuté a zmenšené tak, jak se porovnávají, HDR převedené na SDR. Dekódují se stejně jako statické snímky Porovnání videa.",
+  "No export folder: choose one in Settings.": "Žádná složka exportu: zvolte ji v Nastavení.",
+  "Stills saved": "Snímky uloženy",
+  "Saved:\n{files}": "Uloženo:\n{files}",
+  "Save still failed": "Uložení snímku selhalo"
  },
  "plurals": {
   "about {count} day": [

@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <thread>
 #include <tuple>
 
@@ -547,7 +548,9 @@ void MainWindow::build_ui() {
         save_settings();
     });
     connect(graph_panel_, &GraphPanel::video_compare_requested, this,
-            [this](const std::string& identity, int frame) { show_in_video_compare(identity, frame); });
+            [this](const std::string& identity, int frame, const WorstFrameList& list) {
+                show_in_video_compare(identity, frame, list);
+            });
     tabs_->addTab(new ScrollingPage(graph_panel_), app::tr("Metric Graphs"));
     frame_compare_panel_ = new FrameComparePanel([this] { return tools_status_.ffmpeg.path; },
                                                  preview_color_mode_from(settings_.frame_preview_color_mode),
@@ -555,6 +558,20 @@ void MainWindow::build_ui() {
     connect(frame_compare_panel_, &FrameComparePanel::color_mode_changed, this, [this](const QString& mode) {
         settings_.frame_preview_color_mode = mode.toStdString();  // the colour mode chosen, next time too
         save_settings();
+    });
+    frame_compare_panel_->set_loop_seconds(settings_.compare_loop_before_ms / 1000.0,
+                                           settings_.compare_loop_after_ms / 1000.0);
+    connect(frame_compare_panel_, &FrameComparePanel::loop_seconds_changed, this, [this](double before, double after) {
+        settings_.compare_loop_before_ms = static_cast<int>(std::lround(before * 1000));
+        settings_.compare_loop_after_ms = static_cast<int>(std::lround(after * 1000));
+        save_settings();
+    });
+    frame_compare_panel_->export_folder = dialogs_.export_folder;
+    connect(frame_compare_panel_, &FrameComparePanel::still_saved, this, [this](const QStringList& files) {
+        dialogs_.inform(app::tr("Stills saved"), app::tr("Saved:\n{files}", {{"files", files.join("\n")}}));
+    });
+    connect(frame_compare_panel_, &FrameComparePanel::still_failed, this, [this](const QString& error) {
+        dialogs_.alert(app::tr("Save still failed"), tr_message(error));
     });
     tabs_->addTab(frame_compare_panel_, app::tr("Video Compare"));
     // Its own list of videos: a finished run adds its own (on_job_finished).

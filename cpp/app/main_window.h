@@ -39,6 +39,7 @@
 #include "probe_worker.h"
 #include "results_export.h"
 #include "row_state.h"
+#include "worst_frame_list.h"
 #include "vml/analysis_request.h"
 #include "vml/cvvdp.h"
 #include "vml/ffmpeg_tools.h"
@@ -456,8 +457,9 @@ private:
     void sync_graph();
     void open_or_update_graph(const std::vector<std::shared_ptr<CompletedRun>>& runs, bool show = true);
     // Video Compare at `frame` of the pair `identity` (a graph line's), or
-    // why it cannot show it.
-    void show_in_video_compare(const std::string& identity, int frame);
+    // why it cannot show it; with Worst frames' `list` to step through, if
+    // opened from it.
+    void show_in_video_compare(const std::string& identity, int frame, const WorstFrameList& list);
     void on_show_graph_clicked();
 
     // -------------------------------------- saved runs (main_window_run_files.cpp)

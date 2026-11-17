@@ -937,7 +937,21 @@
   "{metric} mean": "{metric} media",
   "{metric} worst": "{metric} peggiore",
   "Invalid zone setting": "Impostazione della zona non valida",
-  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 accetta b= con un fattore (b=1.5: 1,5 volte il bitrate) o q= con un QP da 0 a 69 (q=20)."
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 accetta b= con un fattore (b=1.5: 1,5 volte il bitrate) o q= con un QP da 0 a 69 (q=20).",
+  "Previous worst": "Peggiore precedente",
+  "Next worst": "Peggiore successivo",
+  "Steps through the Worst frames list opened from Metric Graphs.": "Scorre l'elenco Fotogrammi peggiori aperto da Grafici metriche.",
+  "Worst {number} of {count}: {metric} {score}": "Peggiore {number} di {count}: {metric} {score}",
+  "Loop": "Ciclo",
+  "Plays the seconds around the frame you went to, again and again: Play starts them from the beginning.": "Riproduce più volte i secondi attorno al fotogramma raggiunto: Riproduci li avvia dall'inizio.",
+  "before:": "prima:",
+  "after:": "dopo:",
+  "Save still": "Salva fotogramma",
+  "Saves this frame of the reference and of the test video as PNG files in Settings' Export folder, cropped and scaled as they are compared, HDR mapped to SDR. They are decoded as Video Compare's still frames are.": "Salva questo fotogramma del riferimento e del video di prova come file PNG nella cartella di esportazione delle Impostazioni, ritagliati e scalati come nel confronto, con l'HDR convertito in SDR. Sono decodificati come i fotogrammi fissi di Confronto video.",
+  "No export folder: choose one in Settings.": "Nessuna cartella di esportazione: sceglierne una nelle Impostazioni.",
+  "Stills saved": "Fotogrammi salvati",
+  "Saved:\n{files}": "Salvato:\n{files}",
+  "Save still failed": "Salvataggio del fotogramma non riuscito"
  },
  "plurals": {
   "about {count} day": [

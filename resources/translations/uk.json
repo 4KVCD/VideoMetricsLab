@@ -937,7 +937,21 @@
   "{metric} mean": "{metric} середнє",
   "{metric} worst": "{metric} найгірше",
   "Invalid zone setting": "Неправильне налаштування зони",
-  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 приймає b= з множником (b=1.5: бітрейт у 1,5 раза вищий) або q= з QP від 0 до 69 (q=20)."
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 приймає b= з множником (b=1.5: бітрейт у 1,5 раза вищий) або q= з QP від 0 до 69 (q=20).",
+  "Previous worst": "Попередній найгірший",
+  "Next worst": "Наступний найгірший",
+  "Steps through the Worst frames list opened from Metric Graphs.": "Переходить списком «Найгірші кадри», відкритим із «Графіків метрик».",
+  "Worst {number} of {count}: {metric} {score}": "Найгірший {number} з {count}: {metric} {score}",
+  "Loop": "Повтор",
+  "Plays the seconds around the frame you went to, again and again: Play starts them from the beginning.": "Знову і знову відтворює секунди навколо вибраного кадру: «Відтворити» запускає їх з початку.",
+  "before:": "до:",
+  "after:": "після:",
+  "Save still": "Зберегти кадр",
+  "Saves this frame of the reference and of the test video as PNG files in Settings' Export folder, cropped and scaled as they are compared, HDR mapped to SDR. They are decoded as Video Compare's still frames are.": "Зберігає цей кадр еталона й тестового відео як файли PNG у теку експорту з «Налаштувань», обрізаними й масштабованими так само, як під час порівняння, з перетворенням HDR на SDR. Вони декодуються так само, як нерухомі кадри «Порівняння відео».",
+  "No export folder: choose one in Settings.": "Немає теки експорту: виберіть її в «Налаштуваннях».",
+  "Stills saved": "Кадри збережено",
+  "Saved:\n{files}": "Збережено:\n{files}",
+  "Save still failed": "Не вдалося зберегти кадр"
  },
  "plurals": {
   "about {count} day": [

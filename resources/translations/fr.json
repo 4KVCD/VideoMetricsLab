@@ -937,7 +937,21 @@
   "{metric} mean": "{metric} moyenne",
   "{metric} worst": "{metric} pire",
   "Invalid zone setting": "Réglage de zone invalide",
-  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 accepte b= avec un facteur (b=1.5 : 1,5 fois le débit) ou q= avec un QP de 0 à 69 (q=20)."
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 accepte b= avec un facteur (b=1.5 : 1,5 fois le débit) ou q= avec un QP de 0 à 69 (q=20).",
+  "Previous worst": "Pire précédente",
+  "Next worst": "Pire suivante",
+  "Steps through the Worst frames list opened from Metric Graphs.": "Parcourt la liste Pires images ouverte depuis Graphiques des métriques.",
+  "Worst {number} of {count}: {metric} {score}": "Pire {number} sur {count} : {metric} {score}",
+  "Loop": "Boucle",
+  "Plays the seconds around the frame you went to, again and again: Play starts them from the beginning.": "Lit en boucle les secondes autour de l'image atteinte : Lecture les reprend depuis le début.",
+  "before:": "avant :",
+  "after:": "après :",
+  "Save still": "Enregistrer l'image",
+  "Saves this frame of the reference and of the test video as PNG files in Settings' Export folder, cropped and scaled as they are compared, HDR mapped to SDR. They are decoded as Video Compare's still frames are.": "Enregistre cette image de la référence et de la vidéo testée en fichiers PNG dans le dossier d'export des Paramètres, recadrées et mises à l'échelle comme lors de la comparaison, le HDR converti en SDR. Elles sont décodées comme les images fixes de Comparaison vidéo.",
+  "No export folder: choose one in Settings.": "Aucun dossier d'export : choisissez-en un dans les Paramètres.",
+  "Stills saved": "Images enregistrées",
+  "Saved:\n{files}": "Enregistré :\n{files}",
+  "Save still failed": "Échec de l'enregistrement de l'image"
  },
  "plurals": {
   "about {count} day": [

@@ -188,6 +188,16 @@ optional. Use still mode for frame inspection or playback mode for motion.
 - Use the frame/timestamp controls to select a position.
 - **Zoom** shows the frame fitted to the window, or at a size you choose or type in:
   100% is the video's own pixels. Drag a zoomed frame to move it.
+- Opened from Metric Graphs' **Worst frames** list, **Previous worst** and
+  **Next worst** step through that list's frames while its video is shown.
+- **Loop** plays the seconds around the frame you went to (**before** and
+  **after** it, 1 s each unless changed) again and again; Play starts them
+  from the beginning.
+- **Save still** saves the frame of the reference and of the test video as
+  two PNG files in Settings' Export folder (Documents unless set), named
+  after the video, the frame, its time, the Worst frames score when it is
+  one, and the side. They are cropped and scaled as compared, HDR mapped to
+  SDR.
 - A video whose stream asks the player to add film grain (VVC's H.274
   grain, such as VVenC's film grain analysis writes, AV1's, AFGS1) is shown
   as it is scored: with its grain, or without it if it is scored without

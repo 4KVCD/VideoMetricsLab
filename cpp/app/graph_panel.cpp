@@ -1152,8 +1152,9 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     worst_panel_ = new WorstFramesPanel;
     worst_panel_->hide();
     connect(worst_panel_, &WorstFramesPanel::frame_clicked, this, [this](int frame) { on_frame_requested(frame); });
-    connect(worst_panel_, &WorstFramesPanel::open_requested, this,
-            [this](const std::string& identity, int frame) { emit video_compare_requested(identity, frame); });
+    connect(worst_panel_, &WorstFramesPanel::open_requested, this, [this](const std::string& identity, int frame) {
+        emit video_compare_requested(identity, frame, worst_panel_->shown_list());
+    });
     connect(worst_panel_, &WorstFramesPanel::count_changed, this, [this](int count) { emit worst_count_changed(count); });
     connect(worst_panel_, &WorstFramesPanel::segments_requested, this, [this] { open_weak_segments(); });
     middle->addWidget(worst_panel_);
@@ -1338,7 +1339,7 @@ void GraphPanel::open_weak_segments() {
     auto* dialog = new WeakSegmentsDialog(*video, current_metric(), selected_frames(), dialogs, this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     connect(dialog, &WeakSegmentsDialog::open_requested, this,
-            [this](const std::string& identity, int frame) { emit video_compare_requested(identity, frame); });
+            [this](const std::string& identity, int frame) { emit video_compare_requested(identity, frame, {}); });
     dialog->show();
 }
 

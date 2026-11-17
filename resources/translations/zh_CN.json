@@ -937,7 +937,21 @@
   "{metric} mean": "{metric} 平均",
   "{metric} worst": "{metric} 最差",
   "Invalid zone setting": "分区设置无效",
-  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 接受带倍数的 b=（b=1.5：1.5 倍码率）或带 0 到 69 之间 QP 的 q=（q=20）。"
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 接受带倍数的 b=（b=1.5：1.5 倍码率）或带 0 到 69 之间 QP 的 q=（q=20）。",
+  "Previous worst": "上一个最差",
+  "Next worst": "下一个最差",
+  "Steps through the Worst frames list opened from Metric Graphs.": "逐个浏览从指标图表打开的“最差帧”列表。",
+  "Worst {number} of {count}: {metric} {score}": "最差 {number}/{count}：{metric} {score}",
+  "Loop": "循环",
+  "Plays the seconds around the frame you went to, again and again: Play starts them from the beginning.": "反复播放所跳转帧前后的几秒：点“播放”从头开始。",
+  "before:": "之前：",
+  "after:": "之后：",
+  "Save still": "保存静帧",
+  "Saves this frame of the reference and of the test video as PNG files in Settings' Export folder, cropped and scaled as they are compared, HDR mapped to SDR. They are decoded as Video Compare's still frames are.": "将参考视频和测试视频的这一帧分别保存为 PNG 文件，放在“设置”中的导出文件夹里，按比较时的方式裁剪和缩放，HDR 转为 SDR。解码方式与视频对比的静止帧相同。",
+  "No export folder: choose one in Settings.": "没有导出文件夹：请在“设置”中选择。",
+  "Stills saved": "静帧已保存",
+  "Saved:\n{files}": "已保存：\n{files}",
+  "Save still failed": "保存静帧失败"
  },
  "plurals": {
   "about {count} day": [

@@ -937,7 +937,21 @@
   "{metric} mean": "{metric} rata-rata",
   "{metric} worst": "{metric} terburuk",
   "Invalid zone setting": "Pengaturan zona tidak valid",
-  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 menerima b= dengan faktor (b=1.5: 1,5 kali bitrate) atau q= dengan QP dari 0 sampai 69 (q=20)."
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 menerima b= dengan faktor (b=1.5: 1,5 kali bitrate) atau q= dengan QP dari 0 sampai 69 (q=20).",
+  "Previous worst": "Terburuk sebelumnya",
+  "Next worst": "Terburuk berikutnya",
+  "Steps through the Worst frames list opened from Metric Graphs.": "Menelusuri daftar Bingkai terburuk yang dibuka dari Grafik metrik.",
+  "Worst {number} of {count}: {metric} {score}": "Terburuk {number} dari {count}: {metric} {score}",
+  "Loop": "Ulang",
+  "Plays the seconds around the frame you went to, again and again: Play starts them from the beginning.": "Memutar detik-detik di sekitar bingkai yang dituju berulang kali: Putar memulainya dari awal.",
+  "before:": "sebelum:",
+  "after:": "sesudah:",
+  "Save still": "Simpan gambar diam",
+  "Saves this frame of the reference and of the test video as PNG files in Settings' Export folder, cropped and scaled as they are compared, HDR mapped to SDR. They are decoded as Video Compare's still frames are.": "Menyimpan bingkai ini dari referensi dan video uji sebagai file PNG di folder ekspor Pengaturan, dipotong dan diskalakan seperti saat dibandingkan, HDR diubah ke SDR. Didekode seperti bingkai diam Bandingkan video.",
+  "No export folder: choose one in Settings.": "Tidak ada folder ekspor: pilih satu di Pengaturan.",
+  "Stills saved": "Gambar diam disimpan",
+  "Saved:\n{files}": "Disimpan:\n{files}",
+  "Save still failed": "Gagal menyimpan gambar diam"
  },
  "plurals": {
   "about {count} day": [

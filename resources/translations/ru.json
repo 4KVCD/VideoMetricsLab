@@ -937,7 +937,21 @@
   "{metric} mean": "{metric} среднее",
   "{metric} worst": "{metric} худшее",
   "Invalid zone setting": "Неверная настройка зоны",
-  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 принимает b= с множителем (b=1.5: битрейт в 1,5 раза выше) или q= с QP от 0 до 69 (q=20)."
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265 принимает b= с множителем (b=1.5: битрейт в 1,5 раза выше) или q= с QP от 0 до 69 (q=20).",
+  "Previous worst": "Предыдущий худший",
+  "Next worst": "Следующий худший",
+  "Steps through the Worst frames list opened from Metric Graphs.": "Переходит по списку «Худшие кадры», открытому из «Графиков метрик».",
+  "Worst {number} of {count}: {metric} {score}": "Худший {number} из {count}: {metric} {score}",
+  "Loop": "Повтор",
+  "Plays the seconds around the frame you went to, again and again: Play starts them from the beginning.": "Снова и снова воспроизводит секунды вокруг выбранного кадра: «Воспроизвести» запускает их с начала.",
+  "before:": "до:",
+  "after:": "после:",
+  "Save still": "Сохранить кадр",
+  "Saves this frame of the reference and of the test video as PNG files in Settings' Export folder, cropped and scaled as they are compared, HDR mapped to SDR. They are decoded as Video Compare's still frames are.": "Сохраняет этот кадр эталона и тестового видео как файлы PNG в папку экспорта из «Настроек», обрезанными и масштабированными так же, как при сравнении, с переводом HDR в SDR. Они декодируются так же, как неподвижные кадры «Сравнения видео».",
+  "No export folder: choose one in Settings.": "Нет папки экспорта: выберите её в «Настройках».",
+  "Stills saved": "Кадры сохранены",
+  "Saved:\n{files}": "Сохранено:\n{files}",
+  "Save still failed": "Не удалось сохранить кадр"
  },
  "plurals": {
   "about {count} day": [

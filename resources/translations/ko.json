@@ -937,7 +937,21 @@
   "{metric} mean": "{metric} 평균",
   "{metric} worst": "{metric} 최악",
   "Invalid zone setting": "잘못된 존 설정",
-  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265는 배율을 붙인 b=(b=1.5: 비트레이트 1.5배) 또는 0~69의 QP를 붙인 q=(q=20)만 받습니다."
+  "x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP from 0 to 69 (q=20).": "x265는 배율을 붙인 b=(b=1.5: 비트레이트 1.5배) 또는 0~69의 QP를 붙인 q=(q=20)만 받습니다.",
+  "Previous worst": "이전 최악",
+  "Next worst": "다음 최악",
+  "Steps through the Worst frames list opened from Metric Graphs.": "지표 그래프에서 연 '가장 나쁜 프레임' 목록을 차례로 이동합니다.",
+  "Worst {number} of {count}: {metric} {score}": "최악 {number}/{count}: {metric} {score}",
+  "Loop": "반복",
+  "Plays the seconds around the frame you went to, again and again: Play starts them from the beginning.": "이동한 프레임 앞뒤의 몇 초를 계속 반복 재생합니다. 재생을 누르면 처음부터 시작합니다.",
+  "before:": "앞:",
+  "after:": "뒤:",
+  "Save still": "정지 화면 저장",
+  "Saves this frame of the reference and of the test video as PNG files in Settings' Export folder, cropped and scaled as they are compared, HDR mapped to SDR. They are decoded as Video Compare's still frames are.": "이 프레임을 원본과 테스트 영상 각각 PNG 파일로 설정의 내보내기 폴더에 저장합니다. 비교할 때처럼 자르고 크기를 맞추며 HDR은 SDR로 변환합니다. 영상 비교의 정지 프레임과 같은 방식으로 디코딩합니다.",
+  "No export folder: choose one in Settings.": "내보내기 폴더가 없습니다. 설정에서 선택하세요.",
+  "Stills saved": "정지 화면을 저장했습니다",
+  "Saved:\n{files}": "저장됨:\n{files}",
+  "Save still failed": "정지 화면을 저장하지 못했습니다"
  },
  "plurals": {
   "about {count} day": [
