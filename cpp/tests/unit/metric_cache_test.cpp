@@ -541,6 +541,46 @@ TEST_F(SourceOnlyReuse, AutosScoresAnswerWhereAutoKeptTheTestVideosWholeFrame) {
     EXPECT_EQ(tested->first.distorted_crop, made.source_crop);
 }
 
+// Where nothing was scaled (the two videos the same size), the scores saved
+// with another scaling algorithm or direction answer, as made with the one
+// asked for; not for the metrics asked for again, not where its own
+// comparison cut other black bars (its own scores come first), and never
+// where a video was scaled.
+TEST_F(SourceOnlyReuse, AnotherScalersScoresAnswerWhereNothingWasScaled) {
+    ComparisonResult same_size = made;
+    same_size.source_crop.reset();  // both 1920x1080
+    save("same", automatic, same_size);
+    ComparisonRecipe lanczos = automatic;
+    lanczos.scale_algorithm = "lanczos";
+    const auto loaded = load("same", lanczos);
+    ASSERT_EQ(found(loaded), request.metrics.size());
+    EXPECT_EQ(loaded->first.scale_algorithm, "lanczos");
+    EXPECT_FALSE(loaded->first.source_crop.has_value());
+    ComparisonRecipe upscaled = automatic;
+    upscaled.scale_direction = ScaleDirection::distorted_to_source;
+    const auto up = load("same", upscaled);
+    ASSERT_EQ(found(up), request.metrics.size());
+    EXPECT_EQ(up->first.scale_direction, ScaleDirection::distorted_to_source);
+    EXPECT_EQ(found(load("same", lanczos, {"vmaf"})), request.metrics.size() - 1);
+
+    FrameMetricResult own_psnr = *made.metric_results.frame("psnr");
+    own_psnr.values.front() = 1.0F;
+    ComparisonResult own = only(own_psnr);
+    own.source_crop = made.source_crop;
+    own.distorted_crop = made.source_crop;  // the same size, other bars
+    save("same", lanczos, own);
+    EXPECT_EQ(found(load("same", lanczos)), 1U);
+    own.source_crop.reset();
+    own.distorted_crop.reset();
+    save("same", lanczos, own);
+    const auto both = load("same", lanczos);
+    ASSERT_EQ(found(both), request.metrics.size());
+    EXPECT_EQ(both->first.metric_results.frame("psnr")->values.front(), 1.0F);
+
+    save("scaled", automatic, made);  // the source cropped to 1920x800, the test video 1920x1080
+    EXPECT_FALSE(load("scaled", lanczos));
+}
+
 // Vship's SSIMULACRA2 in Auto's folder comes before the CPU's in its own (as
 // within one folder), the CPU's once asked for again; Auto's CVVDP for
 // another display is listed, not once CVVDP is asked for again; and a folder

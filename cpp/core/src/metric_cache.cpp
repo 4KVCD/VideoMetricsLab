@@ -128,10 +128,6 @@ DecodingMarks decoding_marks(const std::string& source_codec, const std::string&
             lossless_h264(source_codec, source_profile) || lossless_h264(distorted_codec, distorted_profile)};
 }
 
-// The scaling algorithms of the older identity, which had one folder per
-// algorithm (recipe_directory).
-constexpr std::array<std::string_view, 4> legacy_scale_algorithms{"bicubic", "lanczos", "bilinear", "spline"};
-
 // The RGB pixel formats Vship scored wrongly without a transfer tag before
 // app version 1.2.2, and the transfer tags that count as none.
 const std::regex& old_vship_rgb() {
@@ -144,12 +140,6 @@ std::string sha256_hex(const std::string& text) {
     Sha256 hash;
     hash.update(text.data(), text.size());
     return hash.hexdigest();
-}
-
-std::string hash_of(const std::string& source_identity, const std::string& distorted_identity,
-                    const nlohmann::json& recipe_identity) {
-    return sha256_hex(python_json_compact(
-        {{"source", source_identity}, {"distorted", distorted_identity}, {"recipe", recipe_identity}}));
 }
 
 // A provenance read back (provenance_from_dict); nothing for one of another
@@ -888,6 +878,12 @@ void merge_legacy(const std::filesystem::path& legacy, const std::filesystem::pa
 
 namespace cache_parts {
 
+std::string hash_of(const std::string& source_identity, const std::string& distorted_identity,
+                    const nlohmann::json& recipe_identity) {
+    return sha256_hex(python_json_compact(
+        {{"source", source_identity}, {"distorted", distorted_identity}, {"recipe", recipe_identity}}));
+}
+
 std::optional<nlohmann::json> parameter(const MetricProvenance& provenance, const std::string& name) {
     const auto found = provenance.parameters.find(name);
     if (found == provenance.parameters.end()) {
@@ -1087,7 +1083,7 @@ std::filesystem::path recipe_directory(const std::filesystem::path& base, const 
         return directory;
     }
     std::vector<std::string> algorithms{recipe.scale_algorithm};
-    for (const std::string_view algorithm : legacy_scale_algorithms) {
+    for (const std::string_view algorithm : scale_algorithms) {
         if (algorithm != recipe.scale_algorithm) {
             algorithms.emplace_back(algorithm);
         }

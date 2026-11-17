@@ -117,9 +117,10 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
 // of every n-th) would stand for it and never be calculated as asked.
 // With black bars set to Source only, Auto's saved scores of the comparison
 // answer where they are Source only's (Auto compared the test video at its
-// whole frame), except for the metric keys in `not_from_other_recipes`: those
-// the user asked to calculate again, whose Source-only scores are not saved
-// yet.
+// whole frame), and the comparison's scores saved with another scaling
+// algorithm or direction answer where it scaled neither video; except for
+// the metric keys in `not_from_other_recipes`: those the user asked to
+// calculate again, whose scores under this recipe are not saved yet.
 std::optional<std::pair<ComparisonResult, std::string>> load_result(
     const std::filesystem::path& base, const std::filesystem::path& source, const std::filesystem::path& distorted,
     const ComparisonRecipe& recipe, const std::vector<MetricRequestSpec>& specs,
@@ -132,7 +133,8 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
 // that request's parameters; nothing when neither asks for CVVDP. Never an
 // answer for the request: a CVVDP score holds for its own display only.
 // With black bars set to Source only, Auto's come too where load_result
-// would take them (not with "cvvdp" in `not_from_other_recipes`).
+// would take them, and so do another scaling algorithm's or direction's
+// (not with "cvvdp" in `not_from_other_recipes`).
 struct OtherCvvdpScores {
     nlohmann::json parameters;                             // the request's
     std::vector<std::pair<CvvdpSettings, double>> scores;  // made for other displays

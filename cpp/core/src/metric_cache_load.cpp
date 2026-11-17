@@ -1,7 +1,8 @@
 // Loading a request's saved scores (metric_cache.h's load_result): its own
 // comparison's, a range's cut from a run over the whole videos, Source
-// only's from Auto's where Auto compared the same pictures, the better of
-// two where both have one; and other displays' CVVDP scores.
+// only's from Auto's where Auto compared the same pictures, another scaling
+// algorithm's or direction's where nothing was scaled, the better of two
+// where both have one; and other displays' CVVDP scores.
 #include "vml/metric_cache.h"
 
 #include "metric_cache_parts.h"
@@ -10,12 +11,15 @@
 #include <cmath>
 #include <functional>
 #include <stdexcept>
+#include <string_view>
 #include <tuple>
 #include <variant>
 
+#include "vml/analysis_request.h"
 #include "vml/append.h"
 #include "vml/frame_range.h"
 #include "vml/frame_sync.h"
+#include "vml/geometry.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
@@ -358,6 +362,64 @@ ComparisonRecipe whole_video_recipe(ComparisonRecipe recipe) {
     return recipe;
 }
 
+// Whether a comparison's context scaled neither video: no resolution test,
+// no video scaled to its first frames' size (VideoInfo::scaled_to), and the
+// two the same size after their crops. The scaling algorithm and direction
+// then change nothing in the pictures compared.
+bool scaled_nothing(const nlohmann::json& context) {
+    try {
+        if (python_truthy(context.value("resample_target", nlohmann::json()))) {
+            return false;
+        }
+        const VideoInfo source = video_info_from_dict(context.at("source_info"));
+        const VideoInfo distorted = video_info_from_dict(context.at("distorted_info"));
+        return !source.scaled_to && !distorted.scaled_to &&
+               content_size(source, crop_from_dict(context.value("source_crop", nlohmann::json()))) ==
+                   content_size(distorted, crop_from_dict(context.value("distorted_crop", nlohmann::json())));
+    } catch (const nlohmann::json::exception&) {
+        return false;
+    } catch (const std::invalid_argument&) {
+        return false;
+    }
+}
+
+// The same comparison's folders under the other scaling algorithms and
+// directions, where it scaled nothing (scaled_nothing): their scores are
+// this recipe's, whose identity holds both, so that choosing another
+// algorithm does not calculate them again. Nothing for a resolution test,
+// which scales; nor where this recipe's own comparison scaled, which theirs
+// with the same crops did too.
+std::vector<OtherRecipeFolder> unscaled_folders(const std::filesystem::path& base,
+                                                const std::filesystem::path& source,
+                                                const std::filesystem::path& distorted,
+                                                const ComparisonRecipe& recipe,
+                                                const std::optional<nlohmann::json>& own_context) {
+    std::vector<OtherRecipeFolder> found;
+    if (recipe.resample_test || (own_context && !scaled_nothing(*own_context))) {
+        return found;
+    }
+    const std::string source_identity = file_identity(source);
+    const std::string distorted_identity = file_identity(distorted);
+    constexpr std::array directions{ScaleDirection::source_to_distorted, ScaleDirection::distorted_to_source};
+    for (const std::string_view algorithm : scale_algorithms) {
+        for (const ScaleDirection direction : directions) {
+            if (algorithm == recipe.scale_algorithm && direction == recipe.scale_direction) {
+                continue;
+            }
+            ComparisonRecipe other = recipe;
+            other.scale_algorithm = algorithm;
+            other.scale_direction = direction;
+            std::filesystem::path directory =
+                base / format_folder / hash_of(source_identity, distorted_identity, other.identity());
+            std::optional<nlohmann::json> context = current_context(directory, other);
+            if (context && scaled_nothing(*context) && (!own_context || same_crops(*own_context, *context))) {
+                found.push_back(OtherRecipeFolder{std::move(directory), std::move(*context)});
+            }
+        }
+    }
+    return found;
+}
+
 // Whether a SSIMULACRA2 or Butteraugli score is Vship's, as
 // auto_perceptual_candidates ranks them.
 bool made_by_vship(const LoadedMetric& metric) { return is_vship_id(provenance_of(metric).implementation_compatibility_id); }
@@ -501,7 +563,10 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
                                           : automatic ? std::optional(automatic->context)
                                                       : context)
             : std::nullopt;
-    if (!context && !automatic && !whole && !automatic_whole) {
+    // The same comparison saved with another scaling algorithm or direction,
+    // where it scaled nothing.
+    const std::vector<OtherRecipeFolder> unscaled = unscaled_folders(base, source, distorted, recipe, context);
+    if (!context && !automatic && !whole && !automatic_whole && unscaled.empty()) {
         return std::nullopt;
     }
     MetricResultSet results;
@@ -536,6 +601,12 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
                                        spec, backend);
                 }
             }
+            for (const OtherRecipeFolder& found : unscaled) {
+                metric = better_of(
+                    std::move(metric),
+                    [&] { return load_in_range(found.directory, spec, backend, found.context, recipe); }, spec,
+                    backend);
+            }
         }
         if (metric) {
             std::visit([&results](auto&& loaded) { results.add(std::move(loaded)); }, std::move(*metric));
@@ -558,6 +629,16 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
     append(loaded_for, supplemental);
     if (context) {
         return comparison_from(*context, recipe, std::move(results), loaded_for);
+    }
+    if (!automatic && !whole && !automatic_whole) {
+        // Only another scaling algorithm's or direction's: the same
+        // comparison, its crops and frames as they are, made with this one.
+        auto found = comparison_from(unscaled.front().context, recipe, std::move(results), loaded_for);
+        if (found) {
+            found->first.scale_algorithm = recipe.scale_algorithm;
+            found->first.scale_direction = recipe.scale_direction;
+        }
+        return found;
     }
     // This recipe's folder has no context this app reads: another recipe's
     // comparison. Auto's as a Source-only run gives it (the test video at its
@@ -596,14 +677,21 @@ std::optional<OtherCvvdpScores> other_cvvdp_scores(const std::filesystem::path& 
     const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
     const bool ranged = recipe.range_end > 0;
     std::vector<std::pair<nlohmann::json, double>> saved = other_parameters(directory, *spec, ranged, recipe);
-    const bool other_recipes = recipe.crop_mode == CropMode::source_only && !not_from_other_recipes.contains("cvvdp");
-    const auto automatic = other_recipes ? auto_folder_for_source_only(base, source, distorted, recipe,
-                                                                       current_context(directory, recipe))
-                                         : std::nullopt;
-    if (automatic) {
-        // Auto's other displays too, where this recipe has none of its own:
-        // load_result would take them (not after a Recalculate of CVVDP).
-        for (auto& [parameters, score] : other_parameters(automatic->directory, *spec, ranged, recipe)) {
+    // Auto's other displays too, and another scaling algorithm's or
+    // direction's where nothing was scaled, where this recipe has none of its
+    // own: load_result would take them (not after a Recalculate of CVVDP).
+    std::vector<std::filesystem::path> others;
+    if (!not_from_other_recipes.contains("cvvdp")) {
+        const std::optional<nlohmann::json> context = current_context(directory, recipe);
+        if (const auto automatic = auto_folder_for_source_only(base, source, distorted, recipe, context)) {
+            others.push_back(automatic->directory);
+        }
+        for (const OtherRecipeFolder& unscaled : unscaled_folders(base, source, distorted, recipe, context)) {
+            others.push_back(unscaled.directory);
+        }
+    }
+    for (const std::filesystem::path& other : others) {
+        for (auto& [parameters, score] : other_parameters(other, *spec, ranged, recipe)) {
             const bool known = std::any_of(saved.begin(), saved.end(),
                                            [&parameters](const auto& own) { return own.first == parameters; });
             if (!known) {

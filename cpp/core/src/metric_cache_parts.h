@@ -6,6 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <array>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -21,6 +22,17 @@ namespace vml::cache_parts {
 
 // The folder of this format's comparisons under the cache's base.
 inline constexpr const char* format_folder = "v2";
+
+// The scaling algorithms a comparison can be made with (the Options panel's
+// and the command line's --scaler), each with a folder of its own: the
+// recipe's identity holds it, and the older identity had one folder per
+// algorithm even for a resolution test (recipe_directory).
+inline constexpr std::array<std::string_view, 4> scale_algorithms{"bicubic", "lanczos", "bilinear", "spline"};
+
+// A comparison's folder name: the hash of its two files' identities
+// (file_identity) and its recipe's identity.
+std::string hash_of(const std::string& source_identity, const std::string& distorted_identity,
+                    const nlohmann::json& recipe_identity);
 
 using LoadedMetric = std::variant<FrameMetricResult, SequenceMetricResult>;
 
