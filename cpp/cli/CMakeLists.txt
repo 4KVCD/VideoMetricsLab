@@ -8,6 +8,7 @@ add_library(vml_cli STATIC
     common.cpp
     compare.cpp
     devices.cpp
+    file_names.cpp
     report.cpp
     weak_report.cpp
 )

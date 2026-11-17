@@ -165,7 +165,7 @@ void add_segments_json(Json& document, const std::vector<TestVideo>& videos, con
     }
 }
 
-bool write_segment_files(const std::vector<TestVideo>& videos, const SegmentRules& rules,
+bool write_segment_files(std::vector<TestVideo>& videos, const SegmentRules& rules,
                          const std::filesystem::path& folder,
                          const std::function<void(const std::string&)>& message,
                          const std::function<void(const std::string&)>& failed) {
@@ -177,13 +177,13 @@ bool write_segment_files(const std::vector<TestVideo>& videos, const SegmentRule
     }
     bool written = true;
     std::set<std::filesystem::path> reserved;
-    for (const TestVideo& video : videos) {
+    for (TestVideo& video : videos) {
         if (!video.result) {
             continue;
         }
         const std::vector<WeakSegment> segments = weak_segments(*video.result, rules);
-        const std::vector<std::filesystem::path> paths = unique_output_paths(
-            folder, platform::path_text(video.path.stem()), {".segments.json", ".segments.csv"}, reserved);
+        const std::vector<std::filesystem::path> paths =
+            unique_output_paths(folder, video.file_stem(), {".segments.json", ".segments.csv"}, reserved);
         try {
             if (const std::optional<std::string> wrong = write_json_file(paths[0], segments_json(segments, rules))) {
                 throw std::runtime_error(*wrong);
@@ -194,6 +194,7 @@ bool write_segment_files(const std::vector<TestVideo>& videos, const SegmentRule
             written = false;
             continue;
         }
+        video.segment_files = paths;
         message(video.name() + ": its weak segments in " + platform::path_text(paths[0]) + " and .segments.csv");
     }
     return written;

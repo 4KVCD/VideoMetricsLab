@@ -4,8 +4,9 @@
 // are gone by then). It is written to <user data>/logs/VideoMetricsLab.log,
 // in the Python app's form, and rotated at 5 MB with four older files kept.
 //
-// Only the app turns it on (start_logging); the command line writes its
-// lines to standard error (log_to_console), and tests log nowhere. The
+// The app turns it on (start_logging); the command line writes its lines to
+// standard error (log_to_console), and to a file of its own only when asked
+// (--log-file: start_logging_to). Tests log nowhere. The
 // scoring process the app starts (isolated.h) hands its lines to the app,
 // which writes them.
 #pragma once
@@ -45,6 +46,10 @@ std::filesystem::path log_dir();
 // the calling thread "MainThread". Returns the log file's path, or nothing
 // when it could not be opened: the app runs the same without a log.
 std::optional<std::filesystem::path> start_logging(const std::optional<std::filesystem::path>& directory = {});
+// start_logging into `file`, a name of the caller's choosing (the command
+// line's --log-file), its folder made first; added to when it is there
+// already, and rotated as the app's log is (file.1 to file.4).
+std::optional<std::filesystem::path> start_logging_to(const std::filesystem::path& file);
 // Undoes start_logging (for tests).
 void stop_logging();
 

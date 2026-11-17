@@ -9,6 +9,7 @@
 #include <regex>
 #include <set>
 
+#include "file_names.h"
 #include "vml/append.h"
 #include "vml/crop_detect.h"
 #include "vml/ffprobe.h"
@@ -53,7 +54,9 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--segments CONDITIONS] [--segments-all]
                                    [--segment-min-frames N]
                                    [--segment-merge-frames N]
-                                   [--segments-dir FOLDER] [-q] [-v]
+                                   [--segments-dir FOLDER] [--run-dir FOLDER]
+                                   [--log-file FILE] [--name TEMPLATE] [-q]
+                                   [-v]
                                    [REFERENCE] [TEST ...]
 )";
 
@@ -297,6 +300,24 @@ options:
   --segments-dir FOLDER
                         write each video's segments to FOLDER as
                         <video>.segments.json and <video>.segments.csv
+  --run-dir FOLDER      write each video's result to FOLDER as
+                        <video>.metrics.json, the file the app's Save
+                        analysis results writes and Metric Graphs' Add saved
+                        run opens (further --cvvdp-display results as
+                        <video>_<display>.metrics.json)
+  --log-file FILE       write the app's log to FILE as well, as the app writes
+                        its own: the run in full, whatever -v says (added to
+                        if FILE is there; {version}, {date} and {time} are
+                        replaced in its path, and with one test video {test}
+                        and {reference})
+  --name TEMPLATE       name each test video's files (--csv, --segments-dir,
+                        --run-dir) after TEMPLATE in place of <video>, with
+                        {test} and {reference} (the files' names without
+                        extension), {version} (the app's), {date} and {time}
+                        (the run's start, YYYYMMDD and HHMMSS), and
+                        {sequence} (--batch's); {{ and }} are braces. The same
+                        fields are replaced in --json's and --scores-csv's
+                        paths
   -q, --quiet           no progress, only the results
   -v, --verbose         the app's log as well
 
@@ -1127,6 +1148,9 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--segment-merge-frames"},
                [&parsed](const std::string& value) { parsed.segment_merge_frames = int_from_zero(value); }),
         option({"--segments-dir"}, [&parsed](const std::string& value) { parsed.segments_dir = value; }),
+        option({"--run-dir"}, [&parsed](const std::string& value) { parsed.run_dir = value; }),
+        option({"--log-file"}, [&parsed](const std::string& value) { parsed.log_file = value; }),
+        option({"--name"}, [&parsed](const std::string& value) { parsed.name = value; }),
         flag({"-q", "--quiet"}, parsed.quiet),
         flag({"-v", "--verbose"}, parsed.verbose),
     };
@@ -1264,6 +1288,12 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
                  if (const std::optional<std::string> option = segment_option_alone(parsed.compare)) {
                      throw UsageError(std::string(compare_usage) + prog + ": error: argument " + *option +
                                       ": only with --segments, whose segments it shapes");
+                 }
+                 if (parsed.compare.name) {
+                     if (const std::optional<std::string> wrong =
+                             name_template_error(*parsed.compare.name, parsed.compare.batch.has_value())) {
+                         throw UsageError(std::string(compare_usage) + prog + ": error: argument --name: " + *wrong);
+                     }
                  }
              } else if (command == "bitrate") {
                  parsed.command = Command::bitrate;

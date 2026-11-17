@@ -12,6 +12,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 #include "vml/results_summary.h"
+#include "vml/run_file.h"
 #include "vml/time_format.h"
 
 namespace vml::cli {
@@ -68,6 +69,9 @@ Json display_entry(const TestVideo& target) {
     // display's; the first display's are the video's own, on its entry.
     if (target.for_display_only && target.csv_file) {
         entry["csv"] = platform::path_text(*target.csv_file);
+    }
+    if (target.for_display_only && target.run_file) {
+        entry["run_file"] = platform::path_text(*target.run_file);
     }
     if (target.for_display_only && !target.notes.empty()) {
         entry["notes"] = target.notes;
@@ -215,6 +219,8 @@ std::string TestVideo::name() const { return name_of(path); }
 
 std::string TestVideo::label() const { return for_display_only ? name() + " (CVVDP on " + display + ")" : name(); }
 
+std::string TestVideo::file_stem() const { return file_name.empty() ? platform::path_text(path.stem()) : file_name; }
+
 std::vector<Summaries> summarize(const std::vector<TestVideo>& videos) {
     std::vector<Summaries> all;
     for (const TestVideo& video : videos) {
@@ -354,6 +360,16 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
         if (video.csv_file) {
             entry["csv"] = platform::path_text(*video.csv_file);
         }
+        if (video.run_file) {
+            entry["run_file"] = platform::path_text(*video.run_file);
+        }
+        if (!video.segment_files.empty()) {
+            Json files = Json::array();
+            for (const std::filesystem::path& file : video.segment_files) {
+                files.push_back(platform::path_text(file));
+            }
+            entry["segment_files"] = files;
+        }
         if (!video.failures.empty()) {
             Json failed = Json::object();
             for (const auto& [key, reason] : video.failures) {
@@ -435,13 +451,64 @@ bool write_csvs(std::vector<TestVideo>& videos, const std::filesystem::path& fol
     bool written = true;
     std::set<std::filesystem::path> reserved;
     for (TestVideo& video : videos) {
-        const std::string name = platform::path_text(video.path.stem());
+        const std::string name = video.file_stem();
         if (video.result) {
             written = write_csv_of(video, name, folder, reserved, message, failed) && written;
         }
         for (TestVideo& other : video.other_displays) {
             if (other.result) {
                 written = write_csv_of(other, name + "_" + other.display, folder, reserved, message, failed) && written;
+            }
+        }
+    }
+    return written;
+}
+
+namespace {
+
+// One video's (or one further display's) result in `folder` as a saved run,
+// under a name no other file has, labelled `name`. False, and said, when the
+// file cannot be written.
+bool write_run_of(TestVideo& video, const std::string& name, const std::filesystem::path& folder,
+                  std::set<std::filesystem::path>& reserved, const std::function<void(const std::string&)>& message,
+                  const std::function<void(const std::string&)>& failed) {
+    const std::string suffix(result_suffix);
+    const std::filesystem::path path = unique_output_path(folder, name, suffix, reserved);
+    try {
+        save_run(*video.result, path, name);
+    } catch (const std::exception& failure) {
+        failed(video.label() + ": the run file could not be written (" + failure.what() + ")");
+        return false;
+    }
+    video.run_file = path;
+    message(video.label() + ": its result in " + platform::path_text(path));
+    if (const std::optional<std::string> note = name_taken_note(path, name, suffix)) {
+        failed(*note);
+    }
+    return true;
+}
+
+}  // namespace
+
+bool write_run_files(std::vector<TestVideo>& videos, const std::filesystem::path& folder,
+                     const std::function<void(const std::string&)>& message,
+                     const std::function<void(const std::string&)>& failed) {
+    std::error_code error;
+    std::filesystem::create_directories(folder, error);
+    if (error) {
+        failed("The run folder could not be made: " + python_os_error(error, folder));
+        return false;
+    }
+    bool written = true;
+    std::set<std::filesystem::path> reserved;
+    for (TestVideo& video : videos) {
+        const std::string name = video.file_stem();
+        if (video.result) {
+            written = write_run_of(video, name, folder, reserved, message, failed) && written;
+        }
+        for (TestVideo& other : video.other_displays) {
+            if (other.result) {
+                written = write_run_of(other, name + "_" + other.display, folder, reserved, message, failed) && written;
             }
         }
     }
@@ -456,10 +523,8 @@ bool write_difference_csv(const std::vector<TestVideo>& videos, const std::files
     }
     // write_csvs has made the folder, or said why it could not.
     std::set<std::filesystem::path> reserved;
-    const std::filesystem::path path = unique_output_path(
-        folder,
-        difference_label(platform::path_text(videos[0].path.stem()), platform::path_text(videos[1].path.stem())),
-        ".csv", reserved);
+    const std::filesystem::path path =
+        unique_output_path(folder, difference_label(videos[0].file_stem(), videos[1].file_stem()), ".csv", reserved);
     const std::string names = videos[0].name() + " minus " + videos[1].name();
     try {
         export_difference_csv(*videos[0].result, *videos[1].result, path);

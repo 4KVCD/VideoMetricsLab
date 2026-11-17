@@ -85,6 +85,24 @@ TEST(AppLog, TheLogsAreExportedAsOneZip) {
     EXPECT_FALSE(std::filesystem::exists(empty / "none.zip"));
 }
 
+// --log-file: the log in a file the command line names, its folder made,
+// added to when it is there already.
+TEST(AppLog, TheLogGoesToTheFileNamed) {
+    const test::Folder folder;
+    const std::filesystem::path file = folder / "logs of runs" / "AB-2024 run.log";
+    ASSERT_EQ(app_log::start_logging_to(file), file);
+    app_log::Logger("vml.test").info("first run");
+    app_log::stop_logging();
+    ASSERT_EQ(app_log::start_logging_to(file), file);
+    app_log::Logger("vml.test").info("second run");
+    app_log::stop_logging();
+    const std::string log = platform::read_file(file).value_or("");
+    const std::size_t first = log.find("INFO    [MainThread] vml.test: first run");
+    ASSERT_NE(first, std::string::npos);
+    EXPECT_NE(log.find("vml.test: second run", first), std::string::npos);
+    EXPECT_FALSE(std::filesystem::exists(folder / "logs of runs" / app_log::log_file_name));
+}
+
 // The run's lanes name their threads for the log, and end as soon as the
 // run does: threads named, writing a line and ending, many at once, leave
 // the heap whole (MinGW's thread-local storage corrupted it when a name was

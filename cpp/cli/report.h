@@ -61,6 +61,13 @@ nlohmann::ordered_json results_document(const VideoInfo& source, const std::vect
 bool write_csvs(std::vector<TestVideo>& videos, const std::filesystem::path& folder,
                 const std::function<void(const std::string&)>& message,
                 const std::function<void(const std::string&)>& failed);
+// --run-dir: each result as a saved run (run_file.h), the file Save analysis
+// results writes, in `folder` as <video>.metrics.json (a further display's
+// as <video>_<display>.metrics.json), labelled with that name; reported as
+// write_csvs reports. Each video's run_file says where it went.
+bool write_run_files(std::vector<TestVideo>& videos, const std::filesystem::path& folder,
+                     const std::function<void(const std::string&)>& message,
+                     const std::function<void(const std::string&)>& failed);
 // --difference with --csv: the first video's per-frame scores minus the
 // second's (export_difference_csv) in `folder` as <first>_minus_<second>.csv,
 // when both have a result; reported as write_csvs reports. False if it could

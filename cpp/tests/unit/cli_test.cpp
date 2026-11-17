@@ -20,11 +20,14 @@
 #include "bitrate.h"
 #include "compare.h"
 #include "devices.h"
+#include "file_names.h"
 #include "reference.h"
 #include "report.h"
 #include "test_videos.h"
 #include "vml/model_select.h"
 #include "vml/platform/system.h"
+#include "vml/run_file.h"
+#include "weak_report.h"
 
 namespace vml::cli {
 namespace {
@@ -80,11 +83,13 @@ Json values_of(const Arguments& parsed) {
     };
 }
 
-// Python's text, with the C++ app's name and version for its own.
+// Python's text, with the C++ app's name and version for its own
+// ({app_version}: --name's help has a {version} of its own).
 std::string with_version(std::string text) {
+    const std::string placeholder = "{app_version}";
     const std::string version = std::string("VideoMetricsLab ") + VML_VERSION;
-    for (std::size_t at = text.find("{version}"); at != std::string::npos; at = text.find("{version}", at)) {
-        text.replace(at, 9, version);
+    for (std::size_t at = text.find(placeholder); at != std::string::npos; at = text.find(placeholder, at)) {
+        text.replace(at, placeholder.size(), version);
     }
     return text;
 }
@@ -635,6 +640,90 @@ TEST(CommandLine, ReadsBatchAndScoresCsv) {
         SCOPED_TRACE(wrong.back());
         EXPECT_THROW(parse_arguments(wrong), UsageError);
     }
+}
+
+// --name (issue #33): a template's fields filled in for each test video, a
+// field that is none refused, and every file of the video named after it,
+// --run-dir's saved run too, which opens again under that name; the --json
+// says where each went. A path's own braces are kept.
+TEST(CommandLine, NamesEachVideosFilesAfterTheTemplate) {
+    const CompareArguments read = parse_arguments({"compare", "ref.mkv", "a.mkv", "--name", "{test}-VML-{version}",
+                                                   "--run-dir", "runs", "--log-file", "run.log"})
+                                      .compare;
+    EXPECT_EQ(read.name, "{test}-VML-{version}");
+    EXPECT_EQ(read.run_dir, "runs");
+    EXPECT_EQ(read.log_file, "run.log");
+    const auto error_of = [](const std::vector<std::string>& arguments) {
+        try {
+            parse_arguments(arguments);
+        } catch (const UsageError& error) {
+            const std::string text = error.what();
+            return text.substr(text.find("error: "));
+        }
+        return std::string("no error");
+    };
+    EXPECT_EQ(error_of({"compare", "ref.mkv", "a.mkv", "--name", "{tset}"}),
+              "error: argument --name: {tset} is not a field: use {test}, {reference}, {version}, {date}, {time} or "
+              "{sequence}");
+    EXPECT_EQ(error_of({"compare", "ref.mkv", "a.mkv", "--name", "{test"}),
+              "error: argument --name: a { with no } after it (write {{ for a brace)");
+    EXPECT_EQ(error_of({"compare", "ref.mkv", "a.mkv", "--name", "{sequence}"}),
+              "error: argument --name: {sequence} is a --batch row's sequence: only with --batch");
+    EXPECT_EQ(error_of({"compare", "--batch", "list.csv", "--name", "{sequence}-{test}"}), "no error");
+    EXPECT_TRUE(error_of({"compare", "ref.mkv", "a.mkv", "--name", "runs/{test}"}).starts_with(
+        "error: argument --name: it names files, not folders"));
+
+    std::tm started{};
+    started.tm_year = 2026 - 1900;
+    started.tm_mon = 10;
+    started.tm_mday = 7;
+    started.tm_hour = 9;
+    started.tm_min = 5;
+    started.tm_sec = 3;
+    NameFields fields = run_fields(started);
+    fields.test = "AB-2024-hdr";
+    fields.reference = "AB-2024";
+    EXPECT_EQ(expand_names("{test}-VML-{version}-{date}-{time}-{{x}}", fields),
+              "AB-2024-hdr-VML-" VML_VERSION "-20261107-090503-{x}");
+    // A path's braces that make no field stay; a field with no text stays too.
+    EXPECT_EQ(expand_names("out{1}/{reference}-{sequence}.json", fields), "out{1}/AB-2024-{sequence}.json");
+    EXPECT_EQ(video_field_in("{date}/{reference}.json"), "{reference}");
+    EXPECT_EQ(video_field_in("{date}/{x}.json"), std::nullopt);
+
+    const test::Folder temporary;
+    std::vector<TestVideo> videos(1);
+    TestVideo& video = videos[0];
+    video.path = "AB-2024-hdr.mkv";
+    video.file_name = expand_names("{test}-VML-{version}", fields);
+    video.metrics = {"vmaf"};
+    video.result.emplace().metric_results.add(FrameMetricResult{"vmaf", {0, 1}, {0.0, 0.04}, {96.0F, 80.0F}, {}});
+    const std::string stem = "AB-2024-hdr-VML-" VML_VERSION;
+    std::filesystem::create_directories(temporary / "runs");
+    std::ofstream(temporary / "runs" / (stem + ".metrics.json")) << "an earlier run's";
+    std::vector<std::string> said;
+    const auto ignore = [](const std::string&) {};
+    const auto say = [&said](const std::string& text) { said.push_back(text); };
+
+    ASSERT_TRUE(write_csvs(videos, temporary / "scores", ignore, say));
+    ASSERT_TRUE(write_run_files(videos, temporary / "runs", ignore, say));
+    const SegmentRules rules =
+        segment_rules(parse_arguments({"compare", "r.mkv", "a.mkv", "--segments", "vmaf<90"}).compare);
+    ASSERT_TRUE(write_segment_files(videos, rules, temporary / "segments", ignore, say));
+
+    EXPECT_EQ(said, std::vector<std::string>{"note: " + stem + ".metrics.json is there already, so this is written as " +
+                                             stem + "_2.metrics.json"});
+    EXPECT_TRUE(std::filesystem::exists(temporary / "scores" / (stem + ".csv")));
+    const std::filesystem::path run_file = temporary / "runs" / (stem + "_2.metrics.json");
+    const auto [loaded, label] = load_run(run_file);
+    EXPECT_EQ(label, stem);
+    EXPECT_EQ(loaded.metric_results.frame("vmaf")->values, (std::vector<float>{96.0F, 80.0F}));
+    const std::filesystem::path segments = temporary / "segments" / (stem + ".segments.json");
+    EXPECT_TRUE(std::filesystem::exists(segments));
+
+    const nlohmann::ordered_json entry = results_document(VideoInfo{}, videos, summarize(videos), false)["videos"][0];
+    EXPECT_EQ(entry["run_file"], platform::path_text(run_file));
+    EXPECT_EQ(entry["segment_files"][0], platform::path_text(segments));
+    EXPECT_EQ(entry["segment_files"][1], platform::path_text(temporary / "segments" / (stem + ".segments.csv")));
 }
 
 }  // namespace

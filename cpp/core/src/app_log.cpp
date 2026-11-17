@@ -236,15 +236,20 @@ std::string compiler() {
 std::filesystem::path log_dir() { return platform::home_directory() / ".videometricslab" / "logs"; }
 
 std::optional<std::filesystem::path> start_logging(const std::optional<std::filesystem::path>& directory) {
+    return start_logging_to(directory.value_or(log_dir()) / log_file_name);
+}
+
+std::optional<std::filesystem::path> start_logging_to(const std::filesystem::path& file) {
     State& log = state();
     const std::lock_guard lock(log.mutex);
     if (log.file.is_open()) {
         return log.path;
     }
-    const std::filesystem::path folder = directory.value_or(log_dir());
     std::error_code error;
-    std::filesystem::create_directories(folder, error);
-    log.path = folder / log_file_name;
+    if (file.has_parent_path()) {
+        std::filesystem::create_directories(file.parent_path(), error);
+    }
+    log.path = file;
     log.file.open(log.path, std::ios::binary | std::ios::app);
     if (!log.file.is_open()) {
         return std::nullopt;

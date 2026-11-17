@@ -295,6 +295,10 @@ More examples:
 # A 1080p encode against a 4K reference, compared at 4K
 .\VideoMetricsLab-cli.exe compare reference_4k.mkv encode_1080p.mkv --scale-to reference
 
+# For a pipeline: each encode's result, per-frame scores, JSON and log under its own names,
+# such as runs\encode-VML-2.6.metrics.json and logs\encode-20261117-180912.log
+.\VideoMetricsLab-cli.exe compare reference.mkv encode.mkv --name "{test}-VML-{version}" --run-dir runs --csv scores --json "{test}-VML-{version}-Score-Results.json" --log-file "logs\{test}-{date}-{time}.log"
+
 # In a script: read the score from JSON
 $run = .\VideoMetricsLab-cli.exe compare reference.mkv encode.mkv -m vmaf --json - -q | ConvertFrom-Json
 $run.videos[0].metrics.vmaf.score
@@ -346,6 +350,9 @@ $run.videos[0].metrics.vmaf.score
 | `--segments-all` | A frame is weak only where every `--segments` condition holds. |
 | `--segment-min-frames N`, `--segment-merge-frames N` | Leave out segments shorter than N frames (default 1); join segments at most N frames apart (default 0). |
 | `--segments-dir FOLDER` | Write each video's segments to FOLDER as `<video>.segments.json` and `<video>.segments.csv`. |
+| `--run-dir FOLDER` | Write each video's result to FOLDER as `<video>.metrics.json`, the file **Save analysis results** writes: Metric Graphs' **Add saved run** opens it on any PC, without its saved scores. |
+| `--log-file FILE` | Also write the app's log to FILE, as the window writes its own: the whole run, whatever `-v` says, added to the end when FILE is there. |
+| `--name TEMPLATE` | Name each test video's files (`--csv`, `--segments-dir`, `--run-dir`) after TEMPLATE in place of `<video>`. Its fields: `{test}` and `{reference}` (the files' names without extension), `{version}` (the app's: `2.6`), `{date}` and `{time}` (the run's start: `20261117`, `180912`) and with `--batch` `{sequence}` (the row's, else the reference's name); `{{` and `}}` are braces. In the names, characters other than letters, digits, `-`, `_` and `.` become `_`, as in `<video>`. The same fields, but `{sequence}`, are filled in in `--json`'s, `--scores-csv`'s and `--log-file`'s paths, `{test}` and `{reference}` only when one video is compared. A name already taken gets a number, which the JSON's `csv`, `run_file` and `segment_files` give. |
 | `-q`, `--quiet` | No progress, only the results. |
 | `-v`, `--verbose` | The app's log as well. |
 

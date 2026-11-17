@@ -38,8 +38,9 @@ void add_segments_json(nlohmann::ordered_json& document, const std::vector<TestV
                        const SegmentRules& rules);
 
 // --segments-dir: each video's <video>.segments.json and .segments.csv in
-// `folder`, under names no file there has. Whether every one was written.
-bool write_segment_files(const std::vector<TestVideo>& videos, const SegmentRules& rules,
+// `folder`, under names no file there has (each video's segment_files says
+// where they went). Whether every one was written.
+bool write_segment_files(std::vector<TestVideo>& videos, const SegmentRules& rules,
                          const std::filesystem::path& folder,
                          const std::function<void(const std::string&)>& message,
                          const std::function<void(const std::string&)>& failed);

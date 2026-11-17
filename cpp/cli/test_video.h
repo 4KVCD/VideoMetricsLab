@@ -41,6 +41,11 @@ struct TestVideo {
     std::vector<std::pair<std::string, std::string>> failures;
     bool from_cache = false;  // nothing had to be calculated
     std::optional<std::filesystem::path> csv_file;  // where --csv wrote its scores
+    std::optional<std::filesystem::path> run_file;  // where --run-dir wrote its result
+    std::vector<std::filesystem::path> segment_files;  // where --segments-dir wrote its segments
+    // What its files are named after (--name's template, filled in), when not
+    // its file's name.
+    std::string file_name;
     std::string display;      // the preset CVVDP models, when CVVDP is asked for
     // CVVDP on each further --cvvdp-display: a TestVideo of its own for each,
     // with CVVDP alone, run as a comparison of its own.
@@ -55,6 +60,9 @@ struct TestVideo {
     // Its name as progress lines give it: with the display, for one of
     // another video's other displays.
     std::string label() const;
+    // What its files are named after: file_name, else its file's name
+    // without the extension.
+    std::string file_stem() const;
 };
 
 }  // namespace vml::cli

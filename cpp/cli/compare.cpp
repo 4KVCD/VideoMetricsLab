@@ -21,6 +21,7 @@
 
 #include "batch_file.h"
 #include "common.h"
+#include "file_names.h"
 #include "report.h"
 #include "weak_report.h"
 #include "vml/app_log.h"
@@ -1528,7 +1529,7 @@ Comparisons comparisons_asked(const CompareArguments& arguments, std::vector<Bat
 // compared (it is written after the run), or nothing.
 std::optional<std::string> output_names_a_video(const CompareArguments& arguments, const Comparisons& comparisons) {
     const std::pair<const std::optional<std::string>*, const char*> outputs[] = {
-        {&arguments.json_path, "--json"}, {&arguments.scores_csv, "--scores-csv"}};
+        {&arguments.json_path, "--json"}, {&arguments.scores_csv, "--scores-csv"}, {&arguments.log_file, "--log-file"}};
     for (const auto& [output, option] : outputs) {
         if (!*output || **output == "-") {
             continue;
@@ -1667,12 +1668,27 @@ bool write_scores_csv(const std::filesystem::path& file, const Comparisons& comp
     return true;
 }
 
-// One comparison's results: its CSV and segment files written (`written`
-// false where one could not be), its tables added to `tables` and its JSON
-// returned.
+// --name: each test video's files named after `name`, its fields those of
+// the run (`fields`), the video, its reference and its --batch row (whose
+// sequence, where the list gives none, is the reference's name, as
+// --scores-csv's is).
+void name_files(std::vector<TestVideo>& videos, const Comparison& comparison, const std::string& name,
+                NameFields fields) {
+    fields.reference = platform::path_text(comparison.reference.stem());
+    for (std::size_t index = 0; index < videos.size(); ++index) {
+        fields.test = platform::path_text(videos[index].path.stem());
+        const BatchRow* row = comparison.rows.empty() ? nullptr : comparison.rows[index];
+        fields.sequence = row != nullptr && !row->sequence.empty() ? row->sequence : *fields.reference;
+        videos[index].file_name = expand_names(name, fields);
+    }
+}
+
+// One comparison's results: its run, CSV and segment files written
+// (`written` false where one could not be), its tables added to `tables`
+// and its JSON returned.
 nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Comparison& comparison, bool cancelled,
-                                          const RunRecord& record, std::string& tables, bool& written,
-                                          Progress& progress) {
+                                          const RunRecord& record, const NameFields& fields, std::string& tables,
+                                          bool& written, Progress& progress) {
     std::vector<TestVideo>& videos = comparison.planner->videos;
     const std::vector<Summaries> summaries = summarize(videos);
     const std::optional<nlohmann::ordered_json> difference =
@@ -1684,6 +1700,12 @@ nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Com
     }
     const auto message = [&progress](const std::string& text) { progress.message(text); };
     const auto failed = [&progress](const std::string& text) { progress.problem(text); };
+    if (arguments.name) {
+        name_files(videos, comparison, *arguments.name, fields);
+    }
+    if (arguments.run_dir) {
+        written = write_run_files(videos, python_path(*arguments.run_dir), message, failed) && written;
+    }
     if (arguments.csv) {
         const std::filesystem::path folder = python_path(*arguments.csv);
         written = write_csvs(videos, folder, message, failed) && written;
@@ -1700,6 +1722,9 @@ nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Com
         results_document(comparison.source, videos, summaries, cancelled, difference, &record);
     if (!rules.conditions.empty()) {
         add_segments_json(document, videos, rules);
+    }
+    if (arguments.log_file) {
+        document["log_file"] = platform::path_text(python_path(*arguments.log_file));
     }
     tables += (tables.empty() ? "" : "\n") +
               results_table(comparison.source, videos, summaries, cancelled, difference);
@@ -1718,7 +1743,7 @@ nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Com
 // With --batch, each reference's in turn, and the JSON a list of them. False
 // when a file could not be written.
 bool write_results(const CompareArguments& arguments, const Comparisons& comparisons, bool cancelled,
-                   const RunRecord& record, Progress& progress) {
+                   const RunRecord& record, const NameFields& fields, Progress& progress) {
     bool written = true;
     std::string tables;
     nlohmann::ordered_json batch = nlohmann::ordered_json::array();
@@ -1730,7 +1755,7 @@ bool write_results(const CompareArguments& arguments, const Comparisons& compari
             batch.push_back({{"reference", reference}, {"error", comparison->error}});
             continue;
         }
-        document = comparison_results(arguments, *comparison, cancelled, record, tables, written, progress);
+        document = comparison_results(arguments, *comparison, cancelled, record, fields, tables, written, progress);
         batch.push_back(document);
     }
     if (arguments.batch) {
@@ -1753,6 +1778,62 @@ bool write_results(const CompareArguments& arguments, const Comparisons& compari
         progress.message("Results as JSON in " + platform::path_text(*json_file));
     }
     return written;
+}
+
+// The fields of --json's, --scores-csv's and --log-file's paths replaced
+// (file_names.h): the run's, and with one test video its own and its
+// reference's. Why one cannot be (a video's field with several test videos,
+// or {sequence}), or nothing.
+std::optional<std::string> name_paths(CompareArguments& arguments, const Comparisons& comparisons,
+                                      NameFields fields) {
+    const bool one_video = comparisons.size() == 1 && comparisons.front()->tests.size() == 1;
+    if (one_video) {
+        fields.reference = platform::path_text(comparisons.front()->reference.stem());
+        fields.test = platform::path_text(comparisons.front()->tests.front().stem());
+    }
+    const std::pair<std::optional<std::string>*, const char*> paths[] = {
+        {&arguments.json_path, "--json"}, {&arguments.scores_csv, "--scores-csv"}, {&arguments.log_file, "--log-file"}};
+    for (const auto& [path, option] : paths) {
+        if (!*path || **path == "-") {
+            continue;
+        }
+        if (const std::optional<std::string> field = video_field_in(**path)) {
+            if (*field == "{sequence}") {
+                return std::string(option) + " " + **path + ": {sequence} names a test video's files (--name), not "
+                                                            "the run's";
+            }
+            if (!one_video) {
+                return std::string(option) + " " + **path + ": " + *field +
+                       " is a test video's, and this run compares more than one";
+            }
+        }
+        **path = expand_names(**path, fields);
+    }
+    return std::nullopt;
+}
+
+// --log-file: the app's log written to `file` as the window writes its own,
+// headed as each of its sessions is, with the command line, and where it
+// goes said. False, said, when the file cannot be opened.
+bool start_log_file(const std::filesystem::path& file, const std::vector<std::string>& command_line,
+                    Progress& progress) {
+    if (!app_log::start_logging_to(file)) {
+        print_error("--log-file: " + platform::path_text(file) + " could not be opened");
+        return false;
+    }
+    progress.message("The log in " + platform::path_text(file));
+    const app_log::Logger log("vml.cli");
+    log.info("==== VideoMetricsLab-cli" + std::string(app_log::session_start));
+    for (const std::string& line : app_log::environment_lines(VML_VERSION)) {
+        log.info(line);
+    }
+    std::string words;
+    for (const std::string& word : command_line) {
+        const bool quoted = word.empty() || word.find(' ') != std::string::npos;
+        words += (words.empty() ? "" : " ") + (quoted ? "\"" + word + "\"" : word);
+    }
+    log.info("Command line: " + words);
+    return true;
 }
 
 // Takes `comparison`'s reference as read (reads, the comparison's `index`)
@@ -1810,12 +1891,14 @@ std::optional<int> plan_comparison(Comparison& comparison, std::size_t index, Vi
 
 }  // namespace
 
-int compare(const CompareArguments& arguments) {
-    // The command's start, for the results' record
-    const std::string started_utc = utc_text(std::chrono::system_clock::now());
+int compare(const CompareArguments& given) {
+    // The command's start, for the results' record and the files' names
+    const std::chrono::system_clock::time_point start = std::chrono::system_clock::now();
+    const std::string started_utc = utc_text(start);
+    const NameFields fields = run_fields(platform::local_time(std::chrono::system_clock::to_time_t(start)));
     const Clock::time_point began = Clock::now();
     CancelToken cancel;
-    const auto progress = std::make_shared<Progress>(arguments.quiet);
+    const auto progress = std::make_shared<Progress>(given.quiet);
     const auto running = std::make_shared<std::atomic<bool>>(false);
     cancel_on_interrupt(cancel, progress, running);
     // The test videos, found first (it reads only the file system), so that
@@ -1823,9 +1906,14 @@ int compare(const CompareArguments& arguments) {
     std::vector<BatchGroup> groups;  // --batch's rows, which the comparisons point to
     Comparisons comparisons;
     try {
-        comparisons = comparisons_asked(arguments, groups);
+        comparisons = comparisons_asked(given, groups);
     } catch (const std::runtime_error& error) {
         print_error("--batch: " + std::string(error.what()));
+        return exit_usage;
+    }
+    CompareArguments arguments = given;  // with the fields in its paths replaced
+    if (const std::optional<std::string> wrong = name_paths(arguments, comparisons, fields)) {
+        print_error(*wrong);
         return exit_usage;
     }
     if (const std::optional<std::string> wrong = output_names_a_video(arguments, comparisons)) {
@@ -1885,6 +1973,9 @@ int compare(const CompareArguments& arguments) {
     }
     if (const std::optional<std::string> missing = not_yet(arguments, settings, asked)) {
         print_error("The C++ command line cannot do this yet: " + *missing + ".");
+        return exit_usage;
+    }
+    if (arguments.log_file && !start_log_file(python_path(*arguments.log_file), arguments.command_line, *progress)) {
         return exit_usage;
     }
     VideoReads reads(comparisons, arguments, settings, tools);  // all started now, taken in order below
@@ -1964,11 +2055,10 @@ int compare(const CompareArguments& arguments) {
                      0.0,
                      1,
                      this_machine(tools.ffmpeg.path, format_version(tools.ffmpeg.version))};
-    const bool written = write_results(arguments, comparisons, cancelled, record, *progress);
-    if (cancelled) {
-        return exit_cancelled;
-    }
-    return every_ok && written ? exit_ok : exit_failed;
+    const bool written = write_results(arguments, comparisons, cancelled, record, fields, *progress);
+    const int exit_code = cancelled ? exit_cancelled : every_ok && written ? exit_ok : exit_failed;
+    app_log::Logger("vml.cli").info("Command line finished: exit code " + std::to_string(exit_code));
+    return exit_code;
 }
 
 }  // namespace vml::cli

@@ -74,6 +74,12 @@ struct CompareArguments {
     std::optional<int> segment_min_frames;
     std::optional<int> segment_merge_frames;
     std::optional<std::string> segments_dir;  // the folder for each video's segment files
+    // --run-dir: the folder for each video's saved run (<name>.metrics.json), as Save analysis results writes it.
+    std::optional<std::string> run_dir;
+    // --log-file: the file the app's log is written to as well, as the window's log (file_names.h's fields in it).
+    std::optional<std::string> log_file;
+    // --name: the template each test video's files are named after, in place of its file's name (file_names.h).
+    std::optional<std::string> name;
     bool quiet = false;
     bool verbose = false;
 };
