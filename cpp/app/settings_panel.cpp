@@ -254,6 +254,8 @@ QGroupBox* SettingsPanel::build_gpu_box() {
         vship_build_default = new QComboBox;
         add_vship_choices(*vship_build_default, bundled_vship_builds());
         show_vship_choice(*vship_build_default, default_vship_build(settings_.default_vship_build));
+        // Settings has the room the Options panel lacks: the whole text, not add_vship_choices' short box.
+        vship_build_default->setSizeAdjustPolicy(QComboBox::AdjustToContents);
         vship_build_default->setToolTip(app::tr(
             "The Vship that calculates SSIMULACRA2, Butteraugli and CVVDP for newly added videos, and on the command "
             "line without --vship. Each video's own is set in the Options panel (Vship compute)."));
