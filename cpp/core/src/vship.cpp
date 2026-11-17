@@ -18,6 +18,7 @@
 #include "vml/app_log.h"
 #include "vml/colour.h"
 #include "vml/geometry.h"
+#include "vml/gpu_checks.h"
 #include "vml/gpu_decoders.h"
 #include "vml/hardware_decoding.h"
 #include "vml/isolated.h"
@@ -479,7 +480,7 @@ std::pair<std::optional<VshipDevice>, std::string> probe_isolated(VshipBuild bui
     try {
         const std::string what = std::string(vship_build_label(build)) + "'s GPU probe";
         const nlohmann::json result =
-            run_isolated("vship-probe", what, {{"vship_build", std::string(vship_build_value(build))}}, {}, cancel);
+            run_gpu_check("vship-probe", what, {{"vship_build", std::string(vship_build_value(build))}}, cancel);
         return {vship_device_from(result.at("device")), result.at("reason").get<std::string>()};
     } catch (const IsolatedCrashError& error) {
         failed = true;

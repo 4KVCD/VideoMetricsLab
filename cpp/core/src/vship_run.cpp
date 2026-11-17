@@ -27,6 +27,7 @@
 #include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
+#include "vml/gpu_checks.h"
 #include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/grain_feed.h"
@@ -2538,6 +2539,7 @@ private:
     // 5.1.2, then on the CPU what that fails too (after_gpu); or, where Vship
     // 5.1.2 cannot take them or fails them all, on the CPU.
     PerceptualTaskOutput after_vship_fast_failure(const std::exception& error, const CropPair& crops) {
+        forget_gpu_checks();  // the saved check said this GPU works: check it again next start
         const std::vector<std::string> keys = for_vship51(gpu_, crops);
         if (keys.empty()) {
             return after_gpu_failure(error, crops);
@@ -2582,6 +2584,7 @@ private:
     // Calculates every metric that can be on the CPU after the GPU task
     // failed.
     PerceptualTaskOutput after_gpu_failure(const std::exception& error, const CropPair& crops) {
+        forget_gpu_checks();  // the saved check said this GPU works: check it again next start
         const auto* passes = dynamic_cast<const VshipPassesFailedError*>(&error);
         const PerceptualFailures failures =
             gpu_only_.empty() ? PerceptualFailures{}
@@ -2661,6 +2664,11 @@ private:
     // that failed on the GPU (after Vship 5.1.2 too, with `vship51_next`),
     // and combines the two.
     PerceptualTaskOutput after_gpu(PerceptualTaskOutput gpu_output, const CropPair& crops, bool vship51_next) {
+        if (std::any_of(gpu_.begin(), gpu_.end(), [&](const std::string& key) {
+                return failure_of(gpu_output.failures, key) != nullptr && !refused_.contains(key);
+            })) {
+            forget_gpu_checks();  // a metric failed on the GPU: check it again next start
+        }
         if (vship51_next) {
             retry_with_vship51(gpu_output, crops);
         }

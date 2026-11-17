@@ -11,6 +11,7 @@
 
 #include "vml/app_log.h"
 #include "vml/frame_sync.h"
+#include "vml/gpu_checks.h"
 #include "vml/gpu_frames.h"
 #include "vml/host_frames.h"
 #include "vml/isolated.h"
@@ -107,7 +108,7 @@ VulkanProbe probe_vulkan_apart(bool& crashed, const CancelToken& cancel) {
     }
     try {
         const nlohmann::json result =
-            run_isolated("vulkan-probe", "the Vulkan VMAF probe", nlohmann::json::object(), {}, cancel);
+            run_gpu_check("vulkan-probe", "the Vulkan VMAF probe", nlohmann::json::object(), cancel);
         VulkanProbe probe;
         result.at("available").get_to(probe.available);
         if (!result.at("device").is_null()) {
@@ -130,7 +131,7 @@ CudaProbe probe_cuda_apart(bool& crashed, const CancelToken& cancel) {
     }
     try {
         const nlohmann::json result =
-            run_isolated("cuda-probe", "libvmaf's GPU probe", nlohmann::json::object(), {}, cancel);
+            run_gpu_check("cuda-probe", "libvmaf's GPU probe", nlohmann::json::object(), cancel);
         return {result.at("available").get<bool>(), result.at("text").get<std::string>()};
     } catch (const IsolatedCrashError& error) {
         crashed = true;

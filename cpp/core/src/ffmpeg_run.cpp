@@ -23,6 +23,7 @@
 #include "vml/film_grain_scoring.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
+#include "vml/gpu_checks.h"
 #include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/grain_feed.h"
@@ -1135,6 +1136,7 @@ std::optional<ParsedScores> run_on_gpu(const RunEnvironment& environment, const 
         throw;  // final: the CPU's FFmpeg gets its pictures from the same decoder (grain_feed.h)
     } catch (const std::exception& error) {
         logger.error(std::string("VMAF on the GPU failed; calculating it on the CPU: ") + error.what());
+        forget_gpu_checks();  // the saved check said this GPU works: check it again next start
         if (on_status) {
             on_status({std::string(vmaf_gpu_failed) + " (" + error.what() + "); calculating it on the CPU…",
                        StatusKind::gpu_vmaf_failed});

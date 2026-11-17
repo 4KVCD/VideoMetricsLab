@@ -7,6 +7,7 @@
 
 #include "arguments.h"
 #include "vml/ffmpeg_run.h"
+#include "vml/gpu_checks.h"
 #include "vml/isolated.h"
 #include "vml/libvmaf.h"
 #include "vml/metrics.h"
@@ -65,6 +66,9 @@ int devices() {
     // app's KeyboardInterrupt ends it; a check under way ends with it.
     platform::on_interrupt([] { platform::end_process_now(exit_cancelled); });
     const Settings settings = Settings::load();
+    // Checked anew, not answered by an earlier start: a user asks to know
+    // how the GPU does now. What passes is saved again.
+    forget_gpu_checks();
     // The GPU checks together rather than one after another: each starts a
     // process of its own (Vship's takes 1.8 s, VMAF's and VMAF v1's 0.5 s).
     // The metrics' lines are for the app's Vship build; the other bundled

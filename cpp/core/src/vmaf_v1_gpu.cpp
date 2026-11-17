@@ -14,6 +14,7 @@
 #include <set>
 
 #include "vml/app_log.h"
+#include "vml/gpu_checks.h"
 #include "vml/gpu_frames.h"
 #include "vml/host_frames.h"
 #include "vml/isolated.h"
@@ -1402,7 +1403,7 @@ V1Probe v1_available(const CancelToken& cancel) {
                 probed = probe_v1();
             } else {
                 const nlohmann::json result =
-                    run_isolated("vmaf-v1-probe", "the GPU VMAF v1 probe", nlohmann::json::object(), {}, cancel);
+                    run_gpu_check("vmaf-v1-probe", "the GPU VMAF v1 probe", nlohmann::json::object(), cancel);
                 probed = V1Probe{result.at("available").get<bool>(), result.at("text").get<std::string>(),
                                  result.value("failed", false)};
             }

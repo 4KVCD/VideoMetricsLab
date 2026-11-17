@@ -54,6 +54,10 @@ void close_native_handle(void* handle);
 // An environment variable's value, or nothing when it is not set.
 std::optional<std::string> environment_variable(std::string_view name);
 
+// The environment's variables whose names start with `prefix` (on Windows in
+// any case), as NAME=value, sorted.
+std::vector<std::string> environment_starting_with(std::string_view prefix);
+
 // A program's file name on this system: "ffmpeg.exe" on Windows, "ffmpeg"
 // elsewhere.
 std::string executable_name(std::string_view name);
@@ -172,6 +176,24 @@ std::optional<unsigned> first_gpu_adapter();
 // FFmpeg decodes on when no -hwaccel_device is given. Nothing where that
 // cannot be known: other systems, or no D3D11 video device.
 std::optional<std::set<std::string>> d3d11va_codecs();
+
+// What tells this PC's GPUs and their drivers apart, read without loading
+// Vulkan or CUDA, for the GPU checks whose passes are kept between starts
+// (gpu_checks.h): any change to them makes the checks run again.
+struct GpuDriverFacts {
+    // One line for each hardware GPU, in the system's order: its name, PCI
+    // IDs and driver version (macOS: the system's build, whose drivers it is).
+    std::vector<std::string> gpus;
+    // The JSON manifests the Vulkan loader reads, of its drivers and of the
+    // layers it loads unasked; each names a library (gpu_checks.cpp).
+    std::vector<std::filesystem::path> vulkan_manifests;
+    // Other driver files the checks load, where present: the Vulkan loader,
+    // NVIDIA's CUDA driver.
+    std::vector<std::filesystem::path> driver_files;
+};
+// Nothing where they cannot be told (Linux, or no hardware GPU listed, as in
+// a remote session): the checks then run at every start.
+std::optional<GpuDriverFacts> gpu_driver_facts();
 
 // When a file was last written, in nanoseconds since 1970 (Python's
 // st_mtime_ns), or nothing when it cannot be read.

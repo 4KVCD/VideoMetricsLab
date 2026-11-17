@@ -14,6 +14,7 @@
 
 #include "vml/cancel.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/gpu_checks.h"
 #include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/isolated.h"
@@ -206,6 +207,9 @@ void check_isolation(SelfTestReport& report) {
 
 // Vship's metrics (with each bundled build), VMAF and VMAF v1 on the GPU.
 void check_gpu_metrics(SelfTestReport& report) {
+    // Checked anew, not answered by an earlier start: a user runs the
+    // self-test to know how the GPU does now. What passes is saved again.
+    forget_gpu_checks();
     // HIP's and CUDA's only on their makers' GPUs: elsewhere they cannot load.
     std::optional<GpuVendor> maker;
     for (const VshipBuild build : bundled_vship_builds()) {

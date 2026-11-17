@@ -18,6 +18,7 @@
 #include <sys/sysctl.h>
 #endif
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
@@ -25,6 +26,8 @@
 #include <fstream>
 #include <mutex>
 #include <thread>
+
+extern char** environ;  // the process's environment (POSIX; macOS's headers do not declare it)
 
 namespace vml::platform {
 
@@ -34,6 +37,17 @@ std::optional<std::string> environment_variable(std::string_view name) {
         return std::nullopt;
     }
     return std::string(value);
+}
+
+std::vector<std::string> environment_starting_with(std::string_view prefix) {
+    std::vector<std::string> found;
+    for (char** entry = environ; *entry != nullptr; ++entry) {
+        if (std::string_view(*entry).starts_with(prefix)) {
+            found.emplace_back(*entry);
+        }
+    }
+    std::sort(found.begin(), found.end());
+    return found;
 }
 
 std::filesystem::path home_directory() { return environment_variable("HOME").value_or("/"); }
@@ -219,6 +233,34 @@ bool lists_gpus() { return false; }
 std::optional<unsigned> first_gpu_adapter() { return 0; }
 
 std::optional<std::set<std::string>> d3d11va_codecs() { return std::nullopt; }
+
+#ifdef __APPLE__
+namespace {
+
+// A sysctl text value, or "" where there is none.
+std::string sysctl_text(const char* name) {
+    char text[256] = {};
+    std::size_t size = sizeof text;
+    if (sysctlbyname(name, text, &size, nullptr, 0) != 0) {
+        return {};
+    }
+    return std::string(text, strnlen(text, sizeof text));
+}
+
+}  // namespace
+
+std::optional<GpuDriverFacts> gpu_driver_facts() {
+    // The GPU drivers come with macOS, and MoltenVK with the app: the
+    // system's build and the Mac's model tell them apart.
+    const std::string build = sysctl_text("kern.osversion");
+    if (build.empty()) {
+        return std::nullopt;
+    }
+    return GpuDriverFacts{{"macOS " + build + " on " + sysctl_text("hw.model")}, {}, {}};
+}
+#else
+std::optional<GpuDriverFacts> gpu_driver_facts() { return std::nullopt; }
+#endif
 
 std::optional<long long> modified_ns(const std::filesystem::path& file) {
     struct stat status {};

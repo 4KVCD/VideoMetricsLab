@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwchar>
 #include <cwctype>
 #include <thread>
 #include <utility>
@@ -32,6 +33,30 @@ std::optional<std::string> environment_variable(std::string_view name) {
     const DWORD written = GetEnvironmentVariableW(wide_name.c_str(), value.data(), length);
     value.resize(written);
     return narrow(value);
+}
+
+std::vector<std::string> environment_starting_with(std::string_view prefix) {
+    std::vector<std::string> found;
+    wchar_t* const block = GetEnvironmentStringsW();
+    if (block == nullptr) {
+        return found;
+    }
+    // NAME=value strings one after another, ended by an empty one. Windows
+    // ignores the case of a name, so the prefix's case is ignored too.
+    for (const wchar_t* entry = block; *entry != L'\0'; entry += std::wcslen(entry) + 1) {
+        std::string text = narrow(entry);
+        const bool matches = text.size() > prefix.size() &&
+                             std::equal(prefix.begin(), prefix.end(), text.begin(), [](char wanted, char letter) {
+                                 return std::toupper(static_cast<unsigned char>(wanted)) ==
+                                        std::toupper(static_cast<unsigned char>(letter));
+                             });
+        if (matches) {
+            found.push_back(std::move(text));
+        }
+    }
+    FreeEnvironmentStringsW(block);
+    std::sort(found.begin(), found.end());
+    return found;
 }
 
 std::filesystem::path home_directory() {
@@ -321,6 +346,152 @@ std::vector<unsigned> gpu_vendor_ids() {
 }
 
 bool lists_gpus() { return true; }
+
+namespace {
+
+// A driver version as Windows shows it ("32.0.15.9692"), from the four
+// 16-bit parts DirectX gives.
+std::string driver_version_text(const LARGE_INTEGER& version) {
+    const auto high = static_cast<unsigned long>(version.HighPart);
+    const auto low = static_cast<unsigned long>(version.LowPart);
+    return std::to_string(high >> 16) + "." + std::to_string(high & 0xFFFF) + "." + std::to_string(low >> 16) + "." +
+           std::to_string(low & 0xFFFF);
+}
+
+// Every hardware GPU DirectX lists, whatever VML_GPU_VENDOR names (it is
+// part of a check's key of its own), as one line of facts, in its order.
+std::vector<std::string> gpu_lines() {
+    std::vector<std::string> lines;
+    IDXGIFactory1* factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) {
+        return lines;
+    }
+    IDXGIAdapter1* adapter = nullptr;
+    for (UINT index = 0; factory->EnumAdapters1(index, &adapter) != DXGI_ERROR_NOT_FOUND; ++index) {
+        DXGI_ADAPTER_DESC1 description{};
+        if (SUCCEEDED(adapter->GetDesc1(&description)) && !(description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
+            char ids[64];
+            std::snprintf(ids, sizeof ids, "%04X:%04X:%08X:%02X", description.VendorId, description.DeviceId,
+                          description.SubSysId, description.Revision);
+            // The user-mode driver's version, which the Vulkan and CUDA
+            // drivers of the same package share.
+            LARGE_INTEGER version{};
+            const std::string driver = SUCCEEDED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &version))
+                                           ? driver_version_text(version)
+                                           : "unknown";
+            lines.push_back(narrow(description.Description) + " " + ids + " driver " + driver);
+        }
+        adapter->Release();
+    }
+    factory->Release();
+    return lines;
+}
+
+// The names of the values under HKEY `root`'s `path`: the Khronos keys list
+// each manifest as a value named by its path.
+std::vector<std::filesystem::path> manifests_named_in(HKEY root, const wchar_t* path) {
+    std::vector<std::filesystem::path> manifests;
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(root, path, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
+        return manifests;
+    }
+    for (DWORD index = 0;; ++index) {
+        wchar_t name[2048];
+        DWORD length = static_cast<DWORD>(std::size(name));
+        const LSTATUS status = RegEnumValueW(key, index, name, &length, nullptr, nullptr, nullptr, nullptr);
+        if (status == ERROR_NO_MORE_ITEMS) {
+            break;
+        }
+        if (status == ERROR_SUCCESS) {
+            manifests.emplace_back(std::wstring(name, length));
+        }
+    }
+    RegCloseKey(key);
+    return manifests;
+}
+
+// The manifests a value of a device's key names: one path (REG_SZ) or
+// several (REG_MULTI_SZ).
+void add_manifests_of(HKEY device, const wchar_t* value, std::vector<std::filesystem::path>& manifests) {
+    DWORD bytes = 0;
+    if (RegGetValueW(device, nullptr, value, RRF_RT_REG_SZ | RRF_RT_REG_MULTI_SZ, nullptr, nullptr, &bytes) !=
+            ERROR_SUCCESS ||
+        bytes == 0) {
+        return;
+    }
+    std::wstring text(bytes / sizeof(wchar_t), L'\0');
+    if (RegGetValueW(device, nullptr, value, RRF_RT_REG_SZ | RRF_RT_REG_MULTI_SZ, nullptr, text.data(), &bytes) !=
+        ERROR_SUCCESS) {
+        return;
+    }
+    for (std::size_t start = 0; start < text.size();) {
+        const std::size_t end = text.find(L'\0', start);
+        const std::size_t stop = end == std::wstring::npos ? text.size() : end;
+        if (stop > start) {
+            manifests.emplace_back(text.substr(start, stop - start));
+        }
+        start = stop + 1;
+    }
+}
+
+// The Vulkan manifests the drivers of a device class name ("0000", "0001",
+// ... under its class key), as the Vulkan loader finds a GPU's driver and
+// the layers it brings.
+void add_class_manifests(const wchar_t* class_key, std::vector<std::filesystem::path>& manifests) {
+    HKEY devices = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, class_key, 0, KEY_ENUMERATE_SUB_KEYS, &devices) != ERROR_SUCCESS) {
+        return;
+    }
+    for (DWORD index = 0;; ++index) {
+        wchar_t name[256];
+        DWORD length = static_cast<DWORD>(std::size(name));
+        const LSTATUS status = RegEnumKeyExW(devices, index, name, &length, nullptr, nullptr, nullptr, nullptr);
+        if (status == ERROR_NO_MORE_ITEMS) {
+            break;
+        }
+        HKEY device = nullptr;
+        if (status != ERROR_SUCCESS || RegOpenKeyExW(devices, name, 0, KEY_QUERY_VALUE, &device) != ERROR_SUCCESS) {
+            continue;  // "Properties", which only administrators may read
+        }
+        add_manifests_of(device, L"VulkanDriverName", manifests);
+        add_manifests_of(device, L"VulkanImplicitLayers", manifests);
+        RegCloseKey(device);
+    }
+    RegCloseKey(devices);
+}
+
+// A file in Windows' system folder (System32).
+std::filesystem::path system_file(const wchar_t* name) {
+    wchar_t folder[MAX_PATH];
+    const UINT length = GetSystemDirectoryW(folder, MAX_PATH);
+    return std::filesystem::path(std::wstring(folder, length < MAX_PATH ? length : 0)) / name;
+}
+
+}  // namespace
+
+std::optional<GpuDriverFacts> gpu_driver_facts() {
+    GpuDriverFacts facts;
+    facts.gpus = gpu_lines();
+    if (facts.gpus.empty()) {
+        return std::nullopt;  // only Microsoft's software GPU: nothing that a check's pass could be about
+    }
+    // Where the Vulkan loader finds drivers and the layers it loads unasked
+    // (Khronos' loader documentation, "Windows" sections): the Khronos keys,
+    // and the keys of the display adapters and of their software components.
+    for (const HKEY root : {HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER}) {
+        for (const wchar_t* path : {L"SOFTWARE\\Khronos\\Vulkan\\Drivers", L"SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers"}) {
+            for (std::filesystem::path& manifest : manifests_named_in(root, path)) {
+                facts.vulkan_manifests.push_back(std::move(manifest));
+            }
+        }
+    }
+    add_class_manifests(L"SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}",
+                        facts.vulkan_manifests);
+    add_class_manifests(L"SYSTEM\\CurrentControlSet\\Control\\Class\\{5c4c3332-344d-483c-8739-259e934c9cc8}",
+                        facts.vulkan_manifests);
+    facts.driver_files = {system_file(L"vulkan-1.dll"), system_file(L"nvcuda.dll")};
+    return facts;
+}
 
 std::optional<unsigned> first_gpu_adapter() {
     if (!named_vendor_ids()) {
