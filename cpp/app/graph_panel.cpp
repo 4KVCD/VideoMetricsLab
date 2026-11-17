@@ -10,7 +10,6 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QMenu>
-#include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
 #include <QScrollBar>
@@ -28,6 +27,7 @@
 #include <tuple>
 
 #include "chart.h"
+#include "export_image.h"
 #include "file_writes.h"
 #include "frame_controls.h"
 #include "i18n.h"
@@ -51,15 +51,6 @@ namespace vml::app {
 
 namespace {
 
-// The statistics' cells, the readout and the exported table: a monospaced
-// face, so that digits share a width; the system's own (asking Qt for one
-// the system lacks costs 100 ms the first time, finding a substitute).
-#ifdef __APPLE__
-constexpr const char* number_font_family = "Menlo";
-#else
-constexpr const char* number_font_family = "Consolas";
-#endif
-
 // How many lines the table at the top shows before it scrolls: any more
 // would crowd out the graph it describes.
 constexpr int visible_series_rows = 4;
@@ -67,12 +58,6 @@ constexpr int visible_series_rows = 4;
 // How many steps either side of the pointer the readout looks for a point to
 // snap to.
 constexpr double hover_search_steps = 5;
-
-// Layout of the exported PNG (render_export_image).
-constexpr int export_margin = 16;
-constexpr int export_gap = 8;
-constexpr int export_swatch = 12;
-constexpr int export_row_padding = 6;
 
 // Stands in for a value when sizing a readout column: digits at their
 // widest, so that a column's width never depends on the value under the
@@ -1933,25 +1918,8 @@ GraphPanel::export_table() {
 }
 
 QPixmap GraphPanel::render_export_image() {
-    // The bare chart is a set of unlabelled lines, which says nothing once
-    // the file leaves the app: the title, a legend keyed by the lines'
-    // colours, and the statistics go around it.
+    // The chart with its title, and the lines' statistics keyed by colour.
     const MetricDefinition& metric = current_metric();
-    // The chart comes in the screen's pixels (twice its size on a Retina
-    // display); the title, legend and table are drawn at the same scale, in
-    // the same units, or their text would be half the size of its labels.
-    const ChartWidget& chart_widget = pages_.at(std::string(metric.key))->chart();
-    QPixmap chart = chart_widget.render_to_pixmap();
-    const double ratio = std::max(1.0, chart_widget.devicePixelRatioF());
-    chart.setDevicePixelRatio(ratio);
-    const int chart_width = static_cast<int>(std::lround(chart.width() / ratio));
-    const int chart_height = static_cast<int>(std::lround(chart.height() / ratio));
-    const auto [headers, rows] = export_table();
-
-    QFont title_font(font());
-    title_font.setBold(true);
-    title_font.setPointSize(std::max(10, title_font.pointSize() + 3));
-    const QFontMetrics title_metrics(title_font);
     QString title = app::tr("{label} vs time", {{"label", qt_text(metric.label)}});
     if (metric.key == "xpsnr") {
         title += app::tr(" — ∞ plotted at {db:g} dB (display only)", {{"db", xpsnr_infinity_plot_db}});
@@ -1959,74 +1927,7 @@ QPixmap GraphPanel::render_export_image() {
     if (const std::optional<std::pair<int, int>> frames = selected_frames()) {
         title += app::tr(" — frames {first} to {last}", {{"first", frames->first}, {"last", frames->second}});
     }
-    QFont cell_font(QString::fromLatin1(number_font_family));
-    cell_font.setStyleHint(QFont::Monospace);
-    const QFontMetrics cell_metrics(cell_font);
-    const int row_height = cell_metrics.lineSpacing() + export_row_padding;
-
-    // The first column carries the colour square too.
-    std::vector<int> widths;
-    for (std::size_t column = 0; column < headers.size(); ++column) {
-        int width = cell_metrics.horizontalAdvance(headers[column]);
-        for (const auto& [label, color, cells] : rows) {
-            width = std::max(width, cell_metrics.horizontalAdvance(column == 0 ? label : cells[column - 1]));
-        }
-        if (column == 0) {
-            width += export_swatch + export_gap;
-        }
-        widths.push_back(width + 2 * export_gap);
-    }
-    int table_width = 0;
-    for (const int width : widths) {
-        table_width += width;
-    }
-    const int table_height = rows.empty() ? 0 : static_cast<int>(rows.size() + 1) * row_height;
-    const int content_width = std::max(chart_width, table_width);
-    const int height = export_margin + title_metrics.height() + export_gap + chart_height +
-                       (rows.empty() ? 0 : export_gap + table_height) + export_margin;
-
-    QPixmap image(static_cast<int>(std::lround((content_width + 2 * export_margin) * ratio)),
-                  static_cast<int>(std::lround(height * ratio)));
-    image.setDevicePixelRatio(ratio);
-    image.fill(Qt::white);
-    QPainter painter(&image);
-    painter.setPen(QColor(QStringLiteral("#111111")));
-    painter.setFont(title_font);
-    painter.drawText(export_margin, export_margin + title_metrics.ascent(), title);
-    int y = export_margin + title_metrics.height() + export_gap;
-    painter.drawPixmap(export_margin, y, chart);
-    y += chart_height + export_gap;
-    if (!rows.empty()) {
-        QFont header_font(cell_font);
-        header_font.setBold(true);
-        int baseline = y + cell_metrics.ascent() + export_row_padding / 2;
-        painter.setFont(header_font);
-        painter.setPen(QColor(QStringLiteral("#111111")));
-        int x = export_margin;
-        for (std::size_t column = 0; column < headers.size(); ++column) {
-            painter.drawText(x + export_gap, baseline, headers[column]);
-            x += widths[column];
-        }
-        // The plain cell font again, not the headings' bold.
-        painter.setFont(cell_font);
-        int index = 1;
-        for (const auto& [label, color, cells] : rows) {
-            baseline = y + index * row_height + cell_metrics.ascent() + export_row_padding / 2;
-            x = export_margin;
-            // The square ties the row to its line on the chart above.
-            painter.fillRect(x + export_gap, baseline - export_swatch, export_swatch, export_swatch, color);
-            painter.setPen(QColor(QStringLiteral("#111111")));
-            painter.drawText(x + export_gap + export_swatch + export_gap, baseline, label);
-            x += widths[0];
-            for (std::size_t column = 0; column < cells.size(); ++column) {
-                painter.drawText(x + export_gap, baseline, cells[column]);
-                x += widths[column + 1];
-            }
-            ++index;
-        }
-    }
-    painter.end();
-    return image;
+    return export_image(pages_.at(std::string(metric.key))->chart(), title, export_table(), font());
 }
 
 void GraphPanel::on_add_saved_run() {

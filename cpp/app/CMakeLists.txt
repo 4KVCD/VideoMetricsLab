@@ -17,6 +17,7 @@ add_library(vml_app STATIC
     cvvdp_display_dialog.cpp
     frame_drag.cpp
     dialogs.cpp
+    export_image.cpp
     ffmpeg_download_dialog.cpp
     file_writes.cpp
     formatting.cpp

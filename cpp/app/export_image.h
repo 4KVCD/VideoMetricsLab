@@ -1,0 +1,39 @@
+// The image Metric Graphs' Export PNG saves, in a function of its own so that
+// other graphs can save theirs the same way: the bare chart is a set of
+// unlabelled lines, which says nothing once the file leaves the app, so a
+// title, a table keyed by the lines' colours, and the table's figures go
+// around it.
+#pragma once
+
+#include <QColor>
+#include <QFont>
+#include <QPixmap>
+#include <QString>
+
+#include <tuple>
+#include <utility>
+#include <vector>
+
+namespace vml::app {
+
+class ChartWidget;
+
+// The statistics' cells, the readout and the exported table: a monospaced
+// face, so that digits share a width; the system's own (asking Qt for one
+// the system lacks costs 100 ms the first time, finding a substitute).
+#ifdef __APPLE__
+inline constexpr const char* number_font_family = "Menlo";
+#else
+inline constexpr const char* number_font_family = "Consolas";
+#endif
+
+// The table under the chart: its headings, and (label, colour, cells) for
+// each line drawn, the cells one per heading after the first.
+using ExportTable = std::pair<std::vector<QString>, std::vector<std::tuple<QString, QColor, std::vector<QString>>>>;
+
+// `chart` as shown, with `title` above it and `table` under it (none
+// without rows), in `font` for the title. At the chart's pixel ratio, so
+// that the text is the size of its labels.
+QPixmap export_image(const ChartWidget& chart, const QString& title, const ExportTable& table, const QFont& font);
+
+}  // namespace vml::app
