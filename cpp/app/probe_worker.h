@@ -47,12 +47,11 @@ struct SavedScoresQuery {
     std::set<std::string> not_from_other_recipes;
 };
 
-// The saved scores found for a row, with the result's label and the token
-// of the request they were found for (metric_cache.h's lookup_token).
+// The saved scores found for a row, with the token of the request they were
+// found for (metric_cache.h's lookup_token).
 struct SavedScoresFound {
     QString path;
     ComparisonResult result;
-    QString label;
     std::string token;
 };
 

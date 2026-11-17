@@ -172,7 +172,11 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     const std::shared_ptr<CompletedRun> previous = row_data.completed_run;
     auto run = std::make_shared<CompletedRun>();
     run->result = found.result;
-    run->label = found.label;
+    // Named after the row, as a run calculated now is: the label saved with
+    // the scores is that of the file they were saved for, which a companion
+    // row (a film grain twin, another display's CVVDP, the other scale
+    // direction) shares with the video's own row.
+    run->label = text_of(row_data.path.stem());
     // They answer the row's request as it is now (its token): its videos'
     // film grain as read and chosen now, which a result saved before either
     // was known lacks. A resolution test's test video is the reference.
