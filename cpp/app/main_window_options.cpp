@@ -228,11 +228,13 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         return !(target == before);
     };
     // New rows start with the choices last made here, so that several similar
-    // files need not each be set up from scratch; but not black bars: they
-    // describe one pair's pictures, and another video added later, even for
-    // another reference, would be cut by them unseen (issue #22).
+    // files need not each be set up from scratch; but not black bars or the
+    // range: they describe one pair's pictures and timing, and another video
+    // added later, even for another reference, would be cut by them unseen
+    // (issue #22).
     const bool black_bars = field == "crop_mode" || manual_crop_box_of(field).has_value();
-    if (!black_bars) {
+    const bool range = field == "range_in_frames" || field == "range_start" || field == "range_end";
+    if (!black_bars && !range) {
         apply(default_options_);
     }
     if (field == "vmaf_on_gpu") {
