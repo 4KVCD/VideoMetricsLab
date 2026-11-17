@@ -27,6 +27,13 @@ public:
 // export the grain, it adds none, and what ffprobe reports is otherwise the same.
 std::vector<std::string> ffprobe_command_start(const std::string& ffprobe);
 
+// Input options for an ffprobe or FFmpeg that lists or copies packets: the
+// file opened with no stream analysis, the decoding of its first frames for
+// details the packets do not need. The same packets, 0.25 to 0.35 s sooner
+// for a 1080p H.264 Matroska file. Never for the details (probe_video):
+// without the analysis Matroska files lose their start times.
+std::vector<std::string> no_stream_analysis();
+
 // Whether ffprobe's listing of frames (frame=width,height, csv=p=0) has one of
 // another size than this.
 bool listed_sizes_differ(std::string_view listed, int width, int height);

@@ -43,8 +43,11 @@ unsigned film_grain_in_annex_b(std::string_view stream, std::string_view codec);
 std::optional<unsigned> film_grain_in_av1(std::string_view obus);
 
 // The FFmpeg command that copies the first frames of `info`'s video out of
-// its file as the stream itself, for the functions above.
-std::vector<std::string> film_grain_scan_command(const std::string& ffmpeg, const VideoInfo& info);
+// its file as the stream itself, for the functions above: without FFmpeg's
+// stream analysis (no_stream_analysis), or with it (`analysed`) for a file
+// that fails without.
+std::vector<std::string> film_grain_scan_command(const std::string& ffmpeg, const VideoInfo& info,
+                                                 bool analysed = false);
 
 // Whether an H.264 Annex B stream is monochrome: its first sequence parameter
 // set's chroma_format_idc is 0 (only the High profiles code it; the others
@@ -52,7 +55,7 @@ std::vector<std::string> film_grain_scan_command(const std::string& ffmpeg, cons
 // giving it grey chroma (128) and NVIDIA's leaving the chroma unset.
 bool h264_monochrome_in_annex_b(std::string_view stream);
 
-// What a video's first 3 frames say, read from its stream in one FFmpeg run.
+// What a video's first 3 frames say, read from its stream by FFmpeg.
 struct StreamStart {
     // The film grain it describes (FilmGrainKind bits, 0 for none); 0
     // without reading for a codec with no film grain. Nothing when it cannot

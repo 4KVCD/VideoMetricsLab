@@ -14,6 +14,7 @@
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
+#include "vml/gpu_checks.h"
 #include "vml/gpu_decoders.h"
 #include "vml/isolated.h"
 #include "vml/platform/process.h"
@@ -169,8 +170,9 @@ std::optional<bool> ask_nvidia_decodes_10bit_h264() {
         return answer;
     }
     try {
-        answer = run_isolated("nvdec-probe", "NVIDIA's decoder probe", nlohmann::json::object(), {},
-                              gpu_probes_token())
+        // A yes is saved with the GPU checks (gpu_check_passed), as it holds
+        // until the GPU or driver changes; a no is asked again each run.
+        answer = run_gpu_check("nvdec-probe", "NVIDIA's decoder probe", nlohmann::json::object(), gpu_probes_token())
                      .at("h264_10bit")
                      .get<bool>();
         logger.info(*answer ? "NVIDIA's decoder decodes H.264 at 10 bits (the RTX 50 series): it takes H.264 deeper "
@@ -258,19 +260,17 @@ DecodingCapabilities DecodingCapabilities::detect(const std::string& ffmpeg) {
 DecodingCapabilities DecodingCapabilities::remembered(const std::string& ffmpeg) {
     static std::mutex mutex;
     static std::map<std::string, DecodingCapabilities> known;
-    {
-        const std::lock_guard lock(mutex);
-        if (const auto found = known.find(ffmpeg); found != known.end()) {
-            return found->second;
-        }
+    // Asked under the lock: a thread that asks while another does waits for
+    // its answer rather than starting the same processes again (the command
+    // line asks ahead, start_gpu_checks, while its videos are read).
+    const std::lock_guard lock(mutex);
+    if (const auto found = known.find(ffmpeg); found != known.end()) {
+        return found->second;
     }
-    // Asked outside the lock: two threads may both ask the first time, and
-    // give the same answer.
     DecodingCapabilities capabilities = detect(ffmpeg);
     if (!capabilities.hwaccels_said) {
         return capabilities;  // asked again next time
     }
-    const std::lock_guard lock(mutex);
     return known.try_emplace(ffmpeg, std::move(capabilities)).first->second;
 }
 

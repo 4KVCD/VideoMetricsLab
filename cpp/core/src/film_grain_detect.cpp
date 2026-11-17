@@ -9,6 +9,7 @@
 
 #include "vml/app_log.h"
 #include "vml/append.h"
+#include "vml/ffprobe.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
@@ -405,10 +406,13 @@ std::optional<unsigned> film_grain_in_av1(std::string_view obus) {
     return std::nullopt;
 }
 
-std::vector<std::string> film_grain_scan_command(const std::string& ffmpeg, const VideoInfo& info) {
+std::vector<std::string> film_grain_scan_command(const std::string& ffmpeg, const VideoInfo& info, bool analysed) {
     std::vector<std::string> command{ffmpeg, "-nostdin", "-v", "error"};
     const std::vector<std::string> input = info.input_options();
     append(command, input);
+    if (!analysed) {
+        append(command, no_stream_analysis());
+    }
     // The first video stream (V: not a cover picture), copied from its first
     // key frame on.
     command.insert(command.end(), {"-i", platform::path_text(info.path), "-map", "0:V:0", "-c:v", "copy",
@@ -432,18 +436,25 @@ StreamStart scan_stream_start(const VideoInfo& info, const std::string& ffmpeg, 
         return {0u, false};
     }
     platform::ProcessOutput output;
-    try {
-        // Seconds even for 4K from a slow disk, more on a busy PC; a file whose
-        // packets are never marked as key frames would be read to its end,
-        // which the limit stops.
-        output = platform::run_program(film_grain_scan_command(ffmpeg, info), std::chrono::seconds(30), {},
-                                       [&cancel] { return cancel.cancelled(); });
-    } catch (const platform::ProcessError& error) {
-        logger.warning("Looking for film grain in " + platform::path_text(info.path.filename()) + ": " + error.what());
-        return {};  // no FFmpeg to run: unknown, as for a failed reading
-    }
-    if (output.stopped) {
-        throw Cancelled();
+    // Without the stream analysis first; with it where FFmpeg fails without
+    for (const bool analysed : {false, true}) {
+        try {
+            // Seconds even for 4K from a slow disk, more on a busy PC; a file whose
+            // packets are never marked as key frames would be read to its end,
+            // which the limit stops.
+            output = platform::run_program(film_grain_scan_command(ffmpeg, info, analysed), std::chrono::seconds(30),
+                                           {}, [&cancel] { return cancel.cancelled(); });
+        } catch (const platform::ProcessError& error) {
+            logger.warning("Looking for film grain in " + platform::path_text(info.path.filename()) + ": " +
+                           error.what());
+            return {};  // no FFmpeg to run: unknown, as for a failed reading
+        }
+        if (output.stopped) {
+            throw Cancelled();
+        }
+        if (output.timed_out || output.exit_code == 0) {
+            break;
+        }
     }
     // Only the exit code: FFmpeg's VVC parser logs errors for --fga 3's
     // messages while the copy itself is fine.

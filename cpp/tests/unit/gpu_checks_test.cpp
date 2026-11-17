@@ -28,6 +28,8 @@ TEST(GpuChecks, OnlyPassesAreSavedAndEachIsFoundOnlyUnderItsKey) {
     EXPECT_FALSE(gpu_check_passed("cuda-probe", {{"available", false}, {"text", "no CUDA"}}));
     EXPECT_TRUE(gpu_check_passed("vship-probe", {{"device", {{"name", "RTX"}}}, {"reason", ""}}));
     EXPECT_FALSE(gpu_check_passed("vship-probe", {{"device", nullptr}, {"reason", "no GPU"}}));
+    EXPECT_TRUE(gpu_check_passed("nvdec-probe", {{"h264_10bit", true}}));
+    EXPECT_FALSE(gpu_check_passed("nvdec-probe", {{"h264_10bit", false}}));  // may be a failure to ask: asked again
 
     const nlohmann::json key = {{"gpus", {"RTX 10DE:2B85 driver 32.0.15.9692"}}, {"check", "vulkan-probe"}};
     EXPECT_FALSE(saved_gpu_check(file, key));  // no file yet

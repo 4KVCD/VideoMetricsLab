@@ -20,8 +20,8 @@ namespace vml {
 // gpu_checks.json, beside the settings file.
 std::filesystem::path gpu_checks_file();
 
-// Runs GPU check `task` ("vulkan-probe", "cuda-probe", "vmaf-v1-probe" or
-// "vship-probe") with `request` in a process of its own, as run_isolated
+// Runs GPU check `task` ("vulkan-probe", "cuda-probe", "vmaf-v1-probe",
+// "vship-probe" or "nvdec-probe") with `request` in a process of its own, as run_isolated
 // does, unless an answer saved at an earlier start on this PC as it is now
 // answers it; a pass is saved. Throws what run_isolated throws, and Cancelled
 // before anything when `cancel` is set.

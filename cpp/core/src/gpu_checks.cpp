@@ -174,6 +174,11 @@ bool gpu_check_passed(std::string_view task, const nlohmann::json& answer) {
     if (task == "vship-probe") {
         return answer.contains("device") && answer["device"].is_object();
     }
+    if (task == "nvdec-probe") {
+        // Its decoder takes 10-bit H.264; a no may be a failure to ask
+        const nlohmann::json& h264_10bit = answer.value("h264_10bit", nlohmann::json());
+        return h264_10bit.is_boolean() && h264_10bit.get<bool>();
+    }
     return answer.value("available", false) && !answer.value("failed", false);
 }
 

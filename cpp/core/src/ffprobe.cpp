@@ -582,25 +582,35 @@ std::string run_ffprobe(const std::vector<std::string>& command, const std::file
 std::optional<PacketSample> sampled_packets(const std::filesystem::path& path, long long bits_per_second,
                                             const std::string& ffprobe, const CancelToken& cancel) {
     const int seconds = packet_sample_seconds(bits_per_second);
-    std::vector<std::string> command = ffprobe_command_start(ffprobe);
-    command.insert(command.end(), {"-read_intervals", "%+" + std::to_string(seconds), "-show_entries",
-                                   "packet=stream_index,size,pos", "-of", "csv=p=0", text(path)});
-    try {
-        PacketSample sample =
-            packet_sample_from_csv(run_ffprobe(command, path, std::chrono::seconds(60), cancel), seconds);
-        if (sample.bytes.empty()) {
-            return std::nullopt;
+    // Without the stream analysis first; with it where that reads nothing
+    for (const bool analysed : {false, true}) {
+        std::vector<std::string> command = ffprobe_command_start(ffprobe);
+        if (!analysed) {
+            append(command, no_stream_analysis());
         }
-        return sample;
-    } catch (const ProbeError&) {
-        return std::nullopt;  // the rate stays as without the sample
+        command.insert(command.end(), {"-read_intervals", "%+" + std::to_string(seconds), "-show_entries",
+                                       "packet=stream_index,size,pos", "-of", "csv=p=0", text(path)});
+        try {
+            PacketSample sample =
+                packet_sample_from_csv(run_ffprobe(command, path, std::chrono::seconds(60), cancel), seconds);
+            if (!sample.bytes.empty()) {
+                return sample;
+            }
+        } catch (const ProbeError&) {
+            // tried again with the analysis; after that, the rate stays as without the sample
+        }
     }
+    return std::nullopt;
 }
 
 }  // namespace
 
 std::vector<std::string> ffprobe_command_start(const std::string& ffprobe) {
     return {ffprobe, "-v", "error", "-export_side_data", "film_grain"};
+}
+
+std::vector<std::string> no_stream_analysis() {
+    return {"-probesize", "32", "-analyzeduration", "0"};  // 32: FFmpeg's least
 }
 
 bool listed_sizes_differ(std::string_view listed, int width, int height) {

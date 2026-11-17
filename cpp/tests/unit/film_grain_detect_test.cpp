@@ -232,11 +232,15 @@ TEST(FilmGrainDetect, TheScanCopiesTheFirstFramesAsTheirStream) {
     info.path = "clip.mkv";
     info.codec_name = "hevc";
     info.format_name = "matroska,webm";
-    const std::vector<std::string> mkv = film_grain_scan_command("ffmpeg", info);
+    const std::vector<std::string> mkv = film_grain_scan_command("ffmpeg", info, true);
     const std::vector<std::string> expected{"ffmpeg", "-nostdin", "-v", "error", "-i", "clip.mkv", "-map", "0:V:0",
                                             "-c:v", "copy", "-frames:v", "3", "-bsf:v", "hevc_mp4toannexb",
                                             "-f", "data", "pipe:1"};
     EXPECT_EQ(mkv, expected);
+    // First without the stream analysis, which a copy does not need
+    std::vector<std::string> quick = expected;
+    quick.insert(quick.begin() + 4, {"-probesize", "32", "-analyzeduration", "0"});
+    EXPECT_EQ(film_grain_scan_command("ffmpeg", info), quick);
     info.codec_name = "vvc";
     info.format_name = "vvc";  // a raw stream has its start codes
     const std::vector<std::string> raw = film_grain_scan_command("ffmpeg", info);

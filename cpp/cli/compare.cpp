@@ -6,6 +6,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <fstream>
+#include <functional>
 #include <future>
 #include <iterator>
 #include <map>
@@ -51,6 +52,7 @@
 #include "vml/python_text.h"
 #include "vml/run_line.h"
 #include "vml/settings.h"
+#include "vml/tasks_ahead.h"
 #include "vml/temp_files.h"
 #include "vml/time_format.h"
 #include "vml/vship.h"
@@ -316,10 +318,12 @@ std::string taken_colour_note(const VideoInfo& info, const std::string& which, c
 // as `with_film_grain` says
 // (film_grain_choice). Nothing, with `wrong` saying why, when the command
 // does not give what it needs (`which` names the video). Throws ProbeError
-// when it cannot be read.
+// when it cannot be read. With RateSample::later the rate of a video that
+// states none stays the estimate probe_video gives (marked as one).
 std::optional<VideoInfo> read_video(const std::filesystem::path& path, const CompareArguments& arguments,
                                     std::optional<bool> with_film_grain, const std::string& ffprobe,
-                                    const std::string& ffmpeg, const std::string& which, std::string& wrong) {
+                                    const std::string& ffmpeg, const std::string& which, RateSample rate_sample,
+                                    std::string& wrong) {
     if (is_raw_yuv(path)) {
         if (!arguments.size || !arguments.pix_fmt || !arguments.fps) {
             wrong = which + " is a raw YUV file, which records no picture size, pixel format or frame rate: give "
@@ -331,7 +335,7 @@ std::optional<VideoInfo> read_video(const std::filesystem::path& path, const Com
         info.film_grain = 0u;  // raw pictures carry no film grain message
         return info;
     }
-    VideoInfo info = probe_video(path, ffprobe);
+    VideoInfo info = probe_video(path, ffprobe, CancelToken(), rate_sample);
     const StreamStart start = scan_stream_start(info, ffmpeg, CancelToken());
     info.film_grain = start.film_grain;
     info.monochrome_h264 = start.monochrome_h264;
@@ -347,6 +351,12 @@ std::optional<VideoInfo> read_video(const std::filesystem::path& path, const Com
     }
     return timed_raw_stream(std::move(info), *fps, ffprobe);
 }
+
+// A video as read_video read it, or why the command does not say how to read it (`wrong`)
+struct VideoRead {
+    std::optional<VideoInfo> info;
+    std::string wrong;
+};
 
 // ------------------------------------------------------------------- options
 
@@ -485,11 +495,12 @@ PerceptualBackends perceptual_backends(const CompareArguments& arguments) {
 // Starts the GPU checks a run of `metrics` needs, together and in the
 // background, rather than one after another as the videos are set up: each
 // starts a process of its own (Vship's takes 1.8 s, VMAF's and VMAF v1's
-// 0.5 s each). Their answers are kept, and a caller that asks while one
-// runs waits for it. The checks still running when the futures go are
-// waited for.
+// 0.5 s each), and where the videos may be decoded on the GPU, which
+// decoders `ffmpeg` and the GPUs have. Their answers are kept, and a caller
+// that asks while one runs waits for it. The checks still running when the
+// futures go are waited for.
 std::vector<std::future<void>> start_gpu_checks(const CompareArguments& arguments, const Settings& settings,
-                                                const std::vector<std::string>& metrics) {
+                                                const std::vector<std::string>& metrics, const std::string& ffmpeg) {
     const auto asked = [&metrics](std::string_view key) {
         return std::find(metrics.begin(), metrics.end(), key) != metrics.end();
     };
@@ -505,6 +516,11 @@ std::vector<std::future<void>> start_gpu_checks(const CompareArguments& argument
     }
     if (vmaf_on_gpu && asked("vmaf_v1")) {
         checks.push_back(std::async(std::launch::async, [] { v1_available(gpu_probes_token()); }));
+    }
+    if (row_options(arguments, settings, metrics).gpu_decode) {
+        // The GPUs' decoders and FFmpeg's (0.05 to 0.25 s), asked while the
+        // videos are read, not as the first video is planned
+        checks.push_back(std::async(std::launch::async, [ffmpeg] { DecodingCapabilities::remembered(ffmpeg); }));
     }
     return checks;
 }
@@ -1028,10 +1044,11 @@ public:
         note_argument_use(source);
     }
 
-    // Plans the comparison of the video at `path` (read with `ffprobe`), kept
-    // in `videos` with why it is not compared, if it is not. Returns what the
-    // command line cannot do yet of it, or nothing.
-    std::optional<std::string> plan(const std::filesystem::path& path, const std::string& ffprobe,
+    // Plans the comparison of the video at `path` (as `read` gives it: it
+    // throws ProbeError where the video cannot be read), kept in `videos`
+    // with why it is not compared, if it is not. Returns what the command
+    // line cannot do yet of it, or nothing.
+    std::optional<std::string> plan(const std::filesystem::path& path, const std::function<VideoRead()>& read,
                                     const std::string& ffmpeg);
     // Each job's video, once every video is planned (the lists no longer grow).
     std::vector<TestVideo*> job_targets();
@@ -1102,7 +1119,8 @@ std::string different_durations_hint(const VideoInfo& source, const VideoInfo& t
     return " Here: " + to_the_end + " compares to the shorter video's end; --range START-END compares a part of both.";
 }
 
-std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& path, const std::string& ffprobe,
+std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& path,
+                                                   const std::function<VideoRead()>& read,
                                                    const std::string& ffmpeg) {
     TestVideo& video = videos.emplace_back();
     video.path = path;
@@ -1111,15 +1129,13 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
         return std::nullopt;
     }
     try {
-        std::string wrong;
-        std::optional<VideoInfo> read = read_video(path, arguments_, film_grain_choice(arguments_, settings_), ffprobe,
-                                                   ffmpeg, platform::path_text(path.filename()), wrong);
-        if (!read) {
+        VideoRead found = read();
+        if (!found.info) {
             video.error = "the command does not say how to read it";
-            command_wrong = wrong;
+            command_wrong = std::move(found.wrong);
             return std::nullopt;
         }
-        video.info = with_assumed_colour(std::move(*read), arguments_.colour);
+        video.info = with_assumed_colour(std::move(*found.info), arguments_.colour);
     } catch (const ProbeError& error) {
         video.error = std::string("it could not be read: ") + error.what();
         return std::nullopt;
@@ -1358,11 +1374,12 @@ void report_plans(const std::vector<TestVideo>& videos, Progress& progress) {
 }
 
 // What the jobs run with. Which decoders this FFmpeg and these GPUs have is
-// only asked when a video may be decoded on the GPU.
+// only asked when a video may be decoded on the GPU (start_gpu_checks asked
+// it already).
 RunEnvironment run_environment(const ToolsStatus& tools, const std::vector<VmafJob>& jobs) {
     const bool gpu_decode = std::any_of(jobs.begin(), jobs.end(), [](const VmafJob& job) { return job.options.gpu_decode; });
     return RunEnvironment{tools.ffmpeg.path, format_version(tools.ffmpeg.version), tools.ffprobe.path,
-                          gpu_decode ? DecodingCapabilities::detect(tools.ffmpeg.path) : DecodingCapabilities{},
+                          gpu_decode ? DecodingCapabilities::remembered(tools.ffmpeg.path) : DecodingCapabilities{},
                           platform::logical_cores()};
 }
 
@@ -1397,6 +1414,78 @@ struct Comparison {
 };
 
 using Comparisons = std::vector<std::unique_ptr<Comparison>>;
+
+// Every comparison's reference and test videos, read ahead on several
+// threads at once (TasksAhead) rather than one after another as each is
+// reached: a read mostly waits for ffprobe and FFmpeg runs, 0.05 to 0.5 s
+// each. They are taken in the command's order (plan_comparison,
+// ComparisonPlanner::plan), so its messages, errors and exit codes are those
+// of reading each as it is reached. A reference's rate is not sampled
+// (RateSample::later): the command shows only the test videos' rates.
+class VideoReads {
+public:
+    VideoReads(const Comparisons& comparisons, const CompareArguments& arguments, const Settings& settings,
+               const ToolsStatus& tools)
+        : videos_(videos_of(comparisons)),
+          firsts_(firsts_of(comparisons)),
+          tasks_(videos_.size(), read_threads(),
+                 [this, &arguments, &tools, grain = film_grain_choice(arguments, settings)](std::size_t index) {
+                     return read(videos_[index], arguments, grain, tools);
+                 }) {}
+
+    // Comparison `comparison`'s reference, and its test video `test`, as
+    // read_video read them; ProbeError thrown where they could not be read.
+    VideoRead reference(std::size_t comparison) { return tasks_.get(firsts_[comparison]); }
+    VideoRead test(std::size_t comparison, std::size_t test) { return tasks_.get(firsts_[comparison] + 1 + test); }
+
+private:
+    struct Video {
+        std::filesystem::path path;
+        bool reference = false;
+    };
+
+    // Each comparison's reference, then its test videos
+    static std::vector<Video> videos_of(const Comparisons& comparisons) {
+        std::vector<Video> videos;
+        for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+            videos.push_back({comparison->reference, true});
+            for (const std::filesystem::path& test : comparison->tests) {
+                videos.push_back({test, false});
+            }
+        }
+        return videos;
+    }
+    // Where each comparison's videos start in videos_of's list
+    static std::vector<std::size_t> firsts_of(const Comparisons& comparisons) {
+        std::vector<std::size_t> firsts;
+        std::size_t first = 0;
+        for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+            firsts.push_back(first);
+            first += 1 + comparison->tests.size();
+        }
+        return firsts;
+    }
+    // A few at once: more only slow each other down reading the disk
+    static std::size_t read_threads() { return std::clamp(std::thread::hardware_concurrency(), 1u, 8u); }
+
+    static VideoRead read(const Video& video, const CompareArguments& arguments, std::optional<bool> grain,
+                          const ToolsStatus& tools) {
+        VideoRead found;
+        if (video.reference) {
+            found.info = read_video(video.path, arguments, grain, tools.ffprobe.path, tools.ffmpeg.path,
+                                    "The reference, " + platform::path_text(video.path.filename()) + ",",
+                                    RateSample::later, found.wrong);
+        } else if (!found_nothing(video.path)) {  // (ComparisonPlanner::plan says what was found)
+            found.info = read_video(video.path, arguments, grain, tools.ffprobe.path, tools.ffmpeg.path,
+                                    platform::path_text(video.path.filename()), RateSample::now, found.wrong);
+        }
+        return found;
+    }
+
+    std::vector<Video> videos_;
+    std::vector<std::size_t> firsts_;
+    TasksAhead<VideoRead> tasks_;  // last: its threads read videos_
+};
 
 // A --batch group's test videos, each with its row: each row's pattern found
 // as TEST's are (expand_tests), a file found twice taken once.
@@ -1666,24 +1755,22 @@ bool write_results(const CompareArguments& arguments, const Comparisons& compari
     return written;
 }
 
-// Reads `comparison`'s reference and plans its test videos. Returns the
-// exit code of a wrong command, or nothing. A reference that cannot be read
-// is the command's error, or with --batch the comparison's: the others are
-// still made.
-std::optional<int> plan_comparison(Comparison& comparison, const CompareArguments& arguments, const Settings& settings,
+// Takes `comparison`'s reference as read (reads, the comparison's `index`)
+// and plans its test videos. Returns the exit code of a wrong command, or
+// nothing. A reference that cannot be read is the command's error, or with
+// --batch the comparison's: the others are still made.
+std::optional<int> plan_comparison(Comparison& comparison, std::size_t index, VideoReads& reads,
+                                   const CompareArguments& arguments, const Settings& settings,
                                    const ToolsStatus& tools, const std::vector<CvvdpDisplayChoice>& displays,
                                    const std::vector<std::string>& asked, const std::filesystem::path& cache_folder,
                                    Progress& progress) {
     try {
-        std::string wrong;
-        std::optional<VideoInfo> read = read_video(
-            comparison.reference, arguments, film_grain_choice(arguments, settings), tools.ffprobe.path,
-            tools.ffmpeg.path, "The reference, " + platform::path_text(comparison.reference.filename()) + ",", wrong);
-        if (!read) {
-            print_error(wrong);
+        VideoRead read = reads.reference(index);
+        if (!read.info) {
+            print_error(read.wrong);
             return exit_usage;
         }
-        comparison.source = with_assumed_colour(std::move(*read), arguments.colour);
+        comparison.source = with_assumed_colour(std::move(*read.info), arguments.colour);
     } catch (const ProbeError& error) {
         const std::string why = std::string("The reference could not be read: ") + error.what();
         if (!arguments.batch) {
@@ -1696,8 +1783,9 @@ std::optional<int> plan_comparison(Comparison& comparison, const CompareArgument
     }
     ComparisonPlanner& planner =
         comparison.planner.emplace(arguments, settings, comparison.source, displays, asked, cache_folder);
-    for (const std::filesystem::path& path : comparison.tests) {
-        if (const std::optional<std::string> missing = planner.plan(path, tools.ffprobe.path, tools.ffmpeg.path)) {
+    for (std::size_t test = 0; test < comparison.tests.size(); ++test) {
+        const auto read = [&reads, index, test] { return reads.test(index, test); };
+        if (const std::optional<std::string> missing = planner.plan(comparison.tests[test], read, tools.ffmpeg.path)) {
             print_error("The C++ command line cannot do this yet: " + *missing + ".");
             return exit_usage;
         }
@@ -1799,11 +1887,12 @@ int compare(const CompareArguments& arguments) {
         print_error("The C++ command line cannot do this yet: " + *missing + ".");
         return exit_usage;
     }
-    const std::vector<std::future<void>> gpu_checks = start_gpu_checks(arguments, settings, asked);
+    VideoReads reads(comparisons, arguments, settings, tools);  // all started now, taken in order below
+    const std::vector<std::future<void>> gpu_checks = start_gpu_checks(arguments, settings, asked, tools.ffmpeg.path);
 
-    for (const std::unique_ptr<Comparison>& comparison : comparisons) {
-        if (const std::optional<int> wrong = plan_comparison(*comparison, arguments, settings, tools, displays, asked,
-                                                             cache_folder, *progress)) {
+    for (std::size_t index = 0; index < comparisons.size(); ++index) {
+        if (const std::optional<int> wrong = plan_comparison(*comparisons[index], index, reads, arguments, settings,
+                                                             tools, displays, asked, cache_folder, *progress)) {
             return *wrong;
         }
     }
