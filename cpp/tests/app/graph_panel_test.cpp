@@ -8,6 +8,7 @@
 #include "graph_panel.h"
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QImage>
 #include <QLabel>
@@ -799,6 +800,34 @@ TEST_F(GraphPanelTest, WorstFramesListsTheDipsAndOpensThemInVideoCompare) {
     EXPECT_EQ(dialog->segments()[0].first_frame, 9);
     EXPECT_EQ(dialog->segments()[0].last_frame, 10);
     EXPECT_EQ(dialog->segments()[1].first_frame, 70);
+}
+
+TEST_F(GraphPanelTest, WorstFramesKeepsTheChosenVideoWhileItIsRecalculated) {
+    // Recalculating a video takes its line away until its new scores come;
+    // the list shows another video meanwhile, then the chosen one again
+    // (it stayed on the other video before).
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    panel.add_run({shared(vmaf_result("a.mkv", {95, 40, 95})), "a", "row:a", true});
+    panel.add_run({shared(vmaf_result("b.mkv", {95, 50, 95})), "b", "row:b", true});
+    page(panel, "vmaf");
+    worst_button(panel).click();
+    WorstFramesPanel& worst = worst_panel(panel);
+    QComboBox* videos = nullptr;
+    for (QComboBox* combo : worst.findChildren<QComboBox*>()) {
+        if (combo->count() > 0 && combo->itemText(0) == "a") {
+            videos = combo;
+        }
+    }
+    ASSERT_NE(videos, nullptr);
+    videos->setCurrentIndex(1);
+    ASSERT_EQ(worst.chosen_video()->identity, "row:b");
+
+    panel.remove_by_identity("row:b");
+    EXPECT_EQ(worst.chosen_video()->identity, "row:a");
+    panel.add_run({shared(vmaf_result("b.mkv", {95, 55, 95})), "b", "row:b", false});
+    EXPECT_EQ(worst.chosen_video()->identity, "row:b");
+    EXPECT_EQ(worst.table()->item(0, 2)->text(), "55.00");
 }
 }  // namespace
 }  // namespace vml::app

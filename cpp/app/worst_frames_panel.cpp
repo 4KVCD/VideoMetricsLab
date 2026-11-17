@@ -152,7 +152,12 @@ void WorstFramesPanel::set_view(const MetricDefinition& metric, std::vector<Weak
         }
         video_combo_->setCurrentIndex(index);
     }
-    chosen_identity_ = index >= 0 ? videos_[static_cast<std::size_t>(index)].identity : std::string();
+    // The video chosen stays chosen while it is not shown (its scores are
+    // cleared to be calculated again), and is shown again once it is back;
+    // meanwhile the first video is shown.
+    if (chosen_identity_.empty() && index >= 0) {
+        chosen_identity_ = videos_[static_cast<std::size_t>(index)].identity;
+    }
     refresh();
 }
 

@@ -46,8 +46,9 @@ class WorstFramesPanel : public QWidget {
 public:
     explicit WorstFramesPanel(QWidget* parent = nullptr);
 
-    // What to list: `metric`'s dips in one of `videos` (the one chosen
-    // before, while it is among them), within frames `range` (nothing: all).
+    // What to list: `metric`'s dips in one of `videos` (the one chosen,
+    // whenever it is among them; else the first), within frames `range`
+    // (nothing: all).
     void set_view(const MetricDefinition& metric, std::vector<WeakFramesVideo> videos,
                   std::optional<std::pair<int, int>> range);
     // 10, 25 or 50 (another count is taken as 10).
