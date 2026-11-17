@@ -37,6 +37,11 @@ struct RateTable {
 // what is wrong, `name` naming the file.
 RateTable read_rate_table(std::string_view text, const std::string& name);
 
+// `table` as a CSV file read_rate_table reads back as it is: its columns in
+// their order, numbers in full, an empty cell for a score not had. A UTF-8
+// byte order mark and CR LF line ends, as the app's other CSV files.
+std::string rate_table_csv(const RateTable& table);
+
 // A scored comparison as an encode of its test video: the sequence is the
 // reference's file name without its extension, the rate the test video's
 // bitrate (VideoInfo::bit_rate, in kb/s), and each metric's score the one the

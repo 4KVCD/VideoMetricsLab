@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "vml/bd_rate.h"
+#include "vml/csv_rows.h"
 #include "vml/metrics.h"
 #include "vml/number_format.h"
 #include "vml/platform/system.h"
@@ -22,71 +23,6 @@ namespace {
 constexpr std::size_t enough_encodes = 4;
 
 // ------------------------------------------------------------- the CSV files
-
-struct CsvRow {
-    std::size_t line = 0;  // where it starts in the file, from 1
-    std::vector<std::string> fields;
-};
-
-// The rows of a CSV file's text: fields between commas; a field in double
-// quotes may hold commas, line ends and "" for a quote. Blank lines, and
-// rows of empty fields (",,,", as a spreadsheet leaves after its data), are
-// skipped. Throws std::runtime_error for a quote not closed.
-std::vector<CsvRow> csv_rows(std::string_view text) {
-    if (text.starts_with("\xEF\xBB\xBF")) {
-        text.remove_prefix(3);
-    }
-    std::vector<CsvRow> rows;
-    CsvRow row{1, {}};
-    std::string field;
-    std::size_t line = 1;
-    bool quoted = false;
-    const auto end_row = [&] {
-        row.fields.push_back(std::move(field));
-        field.clear();
-        const bool blank = std::ranges::all_of(row.fields, [](const std::string& one) {
-            return python_strip(one).empty();
-        });
-        if (!blank) {
-            rows.push_back(std::move(row));
-        }
-        row = CsvRow{line, {}};
-    };
-    for (std::size_t index = 0; index < text.size(); ++index) {
-        const char c = text[index];
-        if (quoted) {
-            if (c == '"' && index + 1 < text.size() && text[index + 1] == '"') {
-                field += '"';
-                ++index;
-            } else if (c == '"') {
-                quoted = false;
-            } else {
-                line += c == '\n' ? 1 : 0;
-                field += c;
-            }
-        } else if (c == '"') {
-            quoted = true;
-        } else if (c == ',') {
-            row.fields.push_back(std::move(field));
-            field.clear();
-        } else if (c == '\r' || c == '\n') {
-            if (c == '\r' && index + 1 < text.size() && text[index + 1] == '\n') {
-                ++index;
-            }
-            ++line;
-            end_row();
-        } else {
-            field += c;
-        }
-    }
-    if (quoted) {
-        throw std::runtime_error("line " + std::to_string(row.line) + ": a quote is not closed");
-    }
-    if (!field.empty() || !row.fields.empty()) {
-        end_row();
-    }
-    return rows;
-}
 
 // A cell's number, or why it is not one.
 double number_in(const std::string& cell, const std::string& column, std::size_t line) {
@@ -325,6 +261,33 @@ RateTable read_rate_table(std::string_view text, const std::string& name) {
     } catch (const std::runtime_error& error) {
         throw std::runtime_error(name + ": " + error.what());
     }
+}
+
+std::string rate_table_csv(const RateTable& table) {
+    const auto row = [&table](const auto& cell_of) {
+        std::string line;
+        for (std::size_t index = 0; index < table.columns.size(); ++index) {
+            line += (index == 0 ? "" : ",") + cell_of(table.columns[index]);
+        }
+        return line + "\r\n";
+    };
+    std::string text = "\xEF\xBB\xBF" + row([](const std::string& column) { return csv_cell(column); });
+    for (const RateTable::Encode& encode : table.encodes) {
+        text += row([&encode](const std::string& column) {
+            if (column == "sequence") {
+                return csv_cell(encode.sequence);
+            }
+            if (column == "kbps") {
+                return python_repr(encode.kbps);
+            }
+            if (const auto score = encode.scores.find(column); score != encode.scores.end()) {
+                return score->second ? python_repr(*score->second) : std::string();
+            }
+            const auto cell = encode.text.find(column);
+            return cell != encode.text.end() ? csv_cell(cell->second) : std::string();
+        });
+    }
+    return text;
 }
 
 long long rate_of_scores(const ComparisonResult& result) {

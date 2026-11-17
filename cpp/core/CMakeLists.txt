@@ -13,6 +13,7 @@ add_library(vml_core
     src/cancel.cpp
     src/colour.cpp
     src/crop_detect.cpp
+    src/csv_rows.cpp
     src/cvvdp.cpp
     src/difference.cpp
     src/export_csv.cpp

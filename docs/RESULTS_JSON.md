@@ -26,6 +26,10 @@ seconds, sizes are in bytes and bitrates are in bits per second.
 | `videos` | One entry for each test video (below). |
 | `difference` | Command line with `--difference` only: the first video minus the second. |
 
+With `--batch`, the command line's `--json` is `{"batch": [...]}`: this document
+for each reference in turn, or `{"reference": path, "error": why}` for a
+reference that could not be read.
+
 ### `run`
 
 | Key | Meaning |

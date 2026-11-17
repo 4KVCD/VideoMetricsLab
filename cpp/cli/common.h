@@ -40,6 +40,12 @@ std::string text_file(std::string text);
 // writes it. Why it could not be written, as the Python app's OSError says
 // it (the path alone left a user guessing), or nothing.
 std::optional<std::string> write_json_file(const std::filesystem::path& path, const nlohmann::ordered_json& document);
+// write_json_file for any file: `bytes` as they are.
+std::optional<std::string> write_bytes_file(const std::filesystem::path& path, const std::string& bytes);
+
+// A file's bytes. Throws std::runtime_error saying why it could not be read,
+// as the Python app's OSError says it.
+std::string read_whole_file(const std::filesystem::path& path);
 
 // A whole number with commas between thousands ("28,800").
 std::string with_thousands(long long number);

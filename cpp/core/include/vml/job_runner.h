@@ -139,6 +139,13 @@ struct VmafJob {
 void calculate_saved_scores_of_other_bars(std::vector<VmafJob>& jobs, const std::string& ffmpeg,
                                           const CancelToken& cancel);
 
+// The crops `job`'s run cuts, found as its tasks find them, with `ffmpeg`
+// (resolve_crops; source_own_crop for a resolution test), which keeps the
+// bars detected for its tasks: they then take that answer, or wait for it
+// while it is being found, rather than detect the bars again. Throws what
+// those throw.
+CropPair job_crops(const VmafJob& job, const std::string& ffmpeg, const CancelToken& cancel);
+
 // The state of one of a video's tasks, for its run line (run_line.h).
 struct TaskSnapshot {
     std::string backend;

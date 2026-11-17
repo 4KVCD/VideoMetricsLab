@@ -1,12 +1,8 @@
 #include "bdrate.h"
 
-#include <cerrno>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <stdexcept>
-#include <system_error>
 
 #include "common.h"
 #include "compare.h"
@@ -25,18 +21,6 @@ using Json = nlohmann::ordered_json;
 // What the JSON is: its own format, not compare's results (results_format).
 constexpr const char* bdrate_format = "bdrate-1";
 
-// A file's text. Throws std::runtime_error saying why it could not be read,
-// as the Python app's OSError.
-std::string read_file(const std::filesystem::path& path) {
-    errno = 0;
-    std::ifstream file(path, std::ios::binary);
-    if (!file) {
-        const int code = errno != 0 ? errno : ENOENT;
-        throw std::runtime_error(python_os_error(std::error_code(code, std::generic_category()), path));
-    }
-    return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
-}
-
 // A number in the JSON, in full, or null for none.
 Json number_or_null(const std::optional<double>& value) { return value ? Json(*value) : Json(nullptr); }
 
@@ -53,7 +37,7 @@ Json row_json(const BdRateRow& row, const BdRateReport& report) {
 std::optional<RateTable> read_table_file(const std::string& text_path) {
     const std::filesystem::path path = python_path(text_path);
     try {
-        return read_rate_table(read_file(path), platform::path_text(path));
+        return read_rate_table(read_whole_file(path), platform::path_text(path));
     } catch (const std::exception& error) {
         print_error(error.what());
         return std::nullopt;

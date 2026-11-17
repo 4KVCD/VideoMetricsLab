@@ -48,12 +48,13 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    --gpu-decode {auto,nvidia,intel,amd}]
                                    [--vvc-decoder {gpu,cpu}] [--parallel N]
                                    [--recalculate] [--difference]
-                                   [--csv FOLDER] [--json FILE] [--worst N]
+                                   [--csv FOLDER] [--json FILE] [--batch CSV]
+                                   [--scores-csv FILE] [--worst N]
                                    [--segments CONDITIONS] [--segments-all]
                                    [--segment-min-frames N]
                                    [--segment-merge-frames N]
                                    [--segments-dir FOLDER] [-q] [-v]
-                                   REFERENCE TEST [TEST ...]
+                                   [REFERENCE] [TEST ...]
 )";
 
 const char* const devices_usage = "usage: VideoMetricsLab-cli devices [-h]\n";
@@ -91,6 +92,8 @@ const char* const examples = R"(examples:
       a raw YUV reference, 1080p 10-bit 4:2:0, and a raw VVC stream
   VideoMetricsLab-cli compare reference.mkv encode.mkv -m cvvdp --cvvdp-display "30-inch 4K HDR monitor, dim room"
       CVVDP on a display other than the app's default (repeat it for several)
+  VideoMetricsLab-cli compare --batch clips.csv -m vmaf --scores-csv x264.csv
+      every clip's encodes in one run, their rates and scores for bdrate
   VideoMetricsLab-cli bitrate encodes\*.mkv
       each encode's length, frames and bitrate, as the Bitrate Viewer tab
   VideoMetricsLab-cli bitrate encode.266 --csv bitrate
@@ -123,9 +126,10 @@ const char* const compare_sections = R"(
 Calculates metrics for each TEST video against REFERENCE. Options left out take the app's saved settings; scores already saved by the app or an earlier run are not calculated again.
 
 positional arguments:
-  REFERENCE
+  REFERENCE             the reference video (not with --batch)
   TEST                  a test video, or a pattern such as encodes\*.mkv (the
-                        reference is left out of what a pattern finds)
+                        reference is left out of what a pattern finds); not
+                        with --batch
 
 options:
   -h, --help            show this help message and exit
@@ -261,6 +265,17 @@ options:
                         said, and is in the --json
   --json FILE           also write the results as JSON to FILE; - prints the
                         JSON instead of the tables
+  --batch CSV           compare the videos a CSV file lists, in place of
+                        REFERENCE and TEST, in one run: a row per test video,
+                        with the columns reference and test (a file or a
+                        pattern), and if wanted sequence and any others
+                        (kept for --scores-csv). Paths are relative to the
+                        CSV file's folder. The tables come per reference;
+                        --json writes {"batch": [the results of each
+                        reference]}
+  --scores-csv FILE     write each test video's bitrate (kbps) and scores to
+                        FILE, a row per video, as bdrate's --anchor and
+                        --test read them
   --worst N             after the tables, each metric's N worst dips: the
                         worst frame of each (a frame within 1 s of a worse
                         one is part of its dip), with every metric's score
@@ -1033,9 +1048,10 @@ Parser compare_parser(CompareArguments& parsed) {
     Parser parser;
     parser.actions = {
         help(help_text),
-        {{}, "REFERENCE", Nargs::one, true,
+        // Required unless --batch gives them: checked once read (batch_misuse).
+        {{}, "REFERENCE", Nargs::one, false,
          [&parsed](const std::vector<std::string>& values) { parsed.reference = values.front(); }},
-        {{}, "TEST", Nargs::one_or_more, true,
+        {{}, "TEST", Nargs::one_or_more, false,
          [&parsed](const std::vector<std::string>& values) { parsed.tests = values; }},
         option({"-m", "--metrics"}, [&parsed](const std::string& value) { parsed.metrics = metric_list(value); }),
         option({"--model"}, [&parsed](const std::string& value) { parsed.model = value; }),
@@ -1099,6 +1115,8 @@ Parser compare_parser(CompareArguments& parsed) {
         flag({"--difference"}, parsed.difference),
         option({"--csv"}, [&parsed](const std::string& value) { parsed.csv = value; }),
         option({"--json"}, [&parsed](const std::string& value) { parsed.json_path = value; }),
+        option({"--batch"}, [&parsed](const std::string& value) { parsed.batch = value; }),
+        option({"--scores-csv"}, [&parsed](const std::string& value) { parsed.scores_csv = value; }),
         option({"--worst"}, [&parsed](const std::string& value) { parsed.worst = int_up_to(value, 1000); }),
         option({"--segments"}, [&parsed](const std::string& value) { parsed.segments = weak_conditions(value); }),
         flag({"--segments-all"}, parsed.segments_all),
@@ -1196,6 +1214,25 @@ std::optional<std::string> segment_option_alone(const CompareArguments& argument
     return std::nullopt;
 }
 
+// What is wrong with the videos given: REFERENCE and TEST, or --batch's list
+// in their place (as argparse words a missing argument, or a conflict).
+std::optional<std::string> batch_misuse(const CompareArguments& arguments) {
+    if (!arguments.batch) {
+        const std::string missing = !arguments.reference       ? "REFERENCE, TEST"
+                                    : arguments.tests.empty() ? "TEST"
+                                                              : "";
+        return missing.empty() ? std::nullopt
+                               : std::optional("the following arguments are required: " + missing);
+    }
+    if (arguments.reference) {
+        return "argument --batch: not allowed with REFERENCE and TEST: its list gives the videos";
+    }
+    if (arguments.difference) {
+        return "argument --difference: not allowed with argument --batch";
+    }
+    return std::nullopt;
+}
+
 }  // namespace
 
 Arguments parse_arguments(const std::vector<std::string>& arguments) {
@@ -1221,6 +1258,9 @@ Arguments parse_arguments(const std::vector<std::string>& arguments) {
                  const Parser parser = compare_parser(parsed.compare);
                  const std::string prog = std::string(program) + " compare";
                  command_extras = parse_command(parser, compare_usage, prog, rest);
+                 if (const std::optional<std::string> misuse = batch_misuse(parsed.compare)) {
+                     throw UsageError(std::string(compare_usage) + prog + ": error: " + *misuse);
+                 }
                  if (const std::optional<std::string> option = segment_option_alone(parsed.compare)) {
                      throw UsageError(std::string(compare_usage) + prog + ": error: argument " + *option +
                                       ": only with --segments, whose segments it shapes");

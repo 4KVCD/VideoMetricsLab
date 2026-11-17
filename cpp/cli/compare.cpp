@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <fstream>
 #include <future>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -17,11 +18,13 @@
 #include <tuple>
 #include <utility>
 
+#include "batch_file.h"
 #include "common.h"
 #include "report.h"
 #include "weak_report.h"
 #include "vml/app_log.h"
 #include "vml/append.h"
+#include "vml/bd_rate_report.h"
 #include "vml/cancel.h"
 #include "vml/colour.h"
 #include "vml/crop_detect.h"
@@ -223,9 +226,11 @@ std::filesystem::path resolved_path(const std::filesystem::path& path) {
     return error ? absolute : resolved;
 }
 
-// Two paths name the same file when these are equal, as Python compares
-// path.resolve() with another.
+}  // namespace
+
 std::string resolved(const std::filesystem::path& path) { return comparable(resolved_path(path)); }
+
+namespace {
 
 // ------------------------------------------------------------------- colours
 
@@ -1365,12 +1370,209 @@ std::optional<std::string> model_file_wrong(const CompareArguments& arguments, c
            " (give auto, standard, 4k, or a model .json file)";
 }
 
-// Gives the results: printed as tables, or as JSON alone for "--json -",
-// which is for a program to read; and written to the CSV files and the JSON
-// file asked for (the tables are printed as well then). False when a file
-// could not be written.
-bool write_results(const CompareArguments& arguments, const VideoInfo& source, std::vector<TestVideo>& videos,
-                   bool cancelled, const RunRecord& record, Progress& progress) {
+// One reference's comparisons: the command's REFERENCE and TESTs, or the
+// rows of one reference in a --batch list. It does not move once made: its
+// planner keeps a reference to `source`.
+struct Comparison {
+    std::filesystem::path reference;
+    std::vector<std::filesystem::path> tests;
+    // Each test video's row in the --batch list, by its index in `tests`
+    // (and in the planner's videos); empty without --batch.
+    std::vector<const BatchRow*> rows;
+    VideoInfo source;
+    std::optional<ComparisonPlanner> planner;  // once the reference is read
+    std::string error;  // why it is not compared (--batch: the others still are)
+};
+
+using Comparisons = std::vector<std::unique_ptr<Comparison>>;
+
+// A --batch group's test videos, each with its row: each row's pattern found
+// as TEST's are (expand_tests), a file found twice taken once.
+std::unique_ptr<Comparison> batch_comparison(const BatchGroup& group) {
+    auto comparison = std::make_unique<Comparison>();
+    comparison->reference = group.reference;
+    std::set<std::string> files;  // each test video's, resolved()
+    for (const BatchRow& row : group.rows) {
+        for (std::filesystem::path& path : expand_tests({row.test}, group.reference)) {
+            if (files.insert(resolved(path)).second) {
+                comparison->tests.push_back(std::move(path));
+                comparison->rows.push_back(&row);
+            }
+        }
+    }
+    return comparison;
+}
+
+// The comparisons the command asks for, their test videos found (which reads
+// only the file system): those of --batch's list (`groups` keeps its rows),
+// or REFERENCE's. Throws std::runtime_error for a list that cannot be read.
+Comparisons comparisons_asked(const CompareArguments& arguments, std::vector<BatchGroup>& groups) {
+    Comparisons comparisons;
+    if (!arguments.batch) {
+        auto comparison = std::make_unique<Comparison>();
+        comparison->reference = python_path(*arguments.reference);
+        comparison->tests = expand_tests(arguments.tests, comparison->reference);
+        comparisons.push_back(std::move(comparison));
+        return comparisons;
+    }
+    const std::filesystem::path list = python_path(*arguments.batch);
+    groups = read_batch_file(read_whole_file(list), list.parent_path(), platform::path_text(list));
+    for (const BatchGroup& group : groups) {
+        comparisons.push_back(batch_comparison(group));
+    }
+    return comparisons;
+}
+
+// Why an output file the command names would replace one of the videos
+// compared (it is written after the run), or nothing.
+std::optional<std::string> output_names_a_video(const CompareArguments& arguments, const Comparisons& comparisons) {
+    const std::pair<const std::optional<std::string>*, const char*> outputs[] = {
+        {&arguments.json_path, "--json"}, {&arguments.scores_csv, "--scores-csv"}};
+    for (const auto& [output, option] : outputs) {
+        if (!*output || **output == "-") {
+            continue;
+        }
+        const std::string file = resolved(python_path(**output));
+        const auto is_it = [&file](const std::filesystem::path& video) { return resolved(video) == file; };
+        for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+            if (is_it(comparison->reference) || std::ranges::any_of(comparison->tests, is_it)) {
+                return std::string(option) + " names one of the videos: " + **output;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+// What the command asked for that no comparison used (unused_argument_notes),
+// of those that read a test video.
+std::vector<std::string> unused_argument_notes(const Comparisons& comparisons) {
+    std::optional<std::vector<std::string>> unused;
+    for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+        const auto was_read = [](const TestVideo& video) { return video.info.has_value(); };
+        if (!comparison->planner || std::ranges::none_of(comparison->planner->videos, was_read)) {
+            continue;
+        }
+        std::vector<std::string> notes = comparison->planner->unused_argument_notes();
+        if (!unused) {
+            unused = std::move(notes);
+        } else {
+            std::erase_if(*unused, [&notes](const std::string& note) { return std::ranges::count(notes, note) == 0; });
+        }
+    }
+    return unused.value_or(std::vector<std::string>{});
+}
+
+// Finds each job's black bars ahead of the run, in the run's order, while it
+// runs: a video's detection then goes on while the GPU scores the video
+// before it, rather than hold up its own job. A job whose bars are being
+// found waits for that answer, and takes it (job_crops), so the crops, and
+// the scores, are those it would find itself. What fails is left for the job,
+// which meets it again and says why. Stops, ending a detection under way, as
+// it goes.
+class BlackBarsAhead {
+public:
+    BlackBarsAhead(const std::vector<VmafJob>& jobs, std::string ffmpeg)
+        : thread_([this, &jobs, ffmpeg = std::move(ffmpeg)] {
+              for (const VmafJob& job : jobs) {
+                  if (stop_.cancelled()) {
+                      return;
+                  }
+                  if (!detects_black_bars(job.options.crop_mode)) {
+                      continue;
+                  }
+                  try {
+                      job_crops(job, ffmpeg, stop_);
+                  } catch (const std::exception&) {  // Cancelled too
+                  }
+              }
+          }) {}
+    BlackBarsAhead(const BlackBarsAhead&) = delete;
+    BlackBarsAhead& operator=(const BlackBarsAhead&) = delete;
+    ~BlackBarsAhead() {
+        stop_.cancel();
+        thread_.join();
+    }
+
+private:
+    CancelToken stop_;  // before thread_, which uses it
+    std::thread thread_;
+};
+
+// --scores-csv: a row for each test video with a result, in the columns
+// bdrate reads (rate_encode: its sequence, its rate in kb/s and each metric's
+// score), then the test video, its reference and its --batch row's other
+// cells; the row's sequence is its list's where the list gives one. A video
+// whose scores have no rate (rate_of_scores) is left out, said. False, said,
+// when the file cannot be written.
+bool write_scores_csv(const std::filesystem::path& file, const Comparisons& comparisons, Progress& progress) {
+    RateTable table;
+    std::vector<std::string> list_columns;  // the --batch list's other columns, in the order first met
+    const auto is_scores_column = [](const std::string& column) {
+        return column == "kbps" || find_metric(column) != nullptr;
+    };
+    for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+        if (!comparison->planner) {
+            continue;
+        }
+        const std::vector<TestVideo>& videos = comparison->planner->videos;
+        for (std::size_t index = 0; index < videos.size(); ++index) {
+            const TestVideo& video = videos[index];
+            if (!video.result) {
+                continue;  // the tables say why
+            }
+            std::optional<RateTable::Encode> encode = rate_encode(*video.result);
+            if (!encode) {
+                progress.problem(video.name() + ": not in the scores file: its bitrate is not known, or only a part"
+                                                " of it was compared");
+                continue;
+            }
+            std::erase_if(encode->scores,
+                          [&video](const auto& score) { return std::ranges::count(video.metrics, score.first) == 0; });
+            encode->text["test"] = platform::path_text(video.path);
+            encode->text["reference"] = encode->reference;
+            if (const BatchRow* row = comparison->rows.empty() ? nullptr : comparison->rows[index]) {
+                if (!row->sequence.empty()) {
+                    encode->sequence = row->sequence;
+                }
+                for (const auto& [column, cell] : row->text) {
+                    if (is_scores_column(column)) {
+                        continue;  // the scores' own
+                    }
+                    encode->text[column] = cell;
+                    if (std::ranges::count(list_columns, column) == 0) {
+                        list_columns.push_back(column);
+                    }
+                }
+            }
+            table.encodes.push_back(std::move(*encode));
+        }
+    }
+    for (const MetricDefinition& metric : metrics()) {
+        const std::string key(metric.key);
+        const auto has_it = [&key](const RateTable::Encode& encode) { return encode.scores.contains(key); };
+        if (std::ranges::any_of(table.encodes, has_it)) {
+            table.metric_keys.push_back(key);
+        }
+    }
+    table.columns = {"sequence", "kbps"};
+    append(table.columns, table.metric_keys);
+    append(table.columns, std::vector<std::string>{"test", "reference"});
+    append(table.columns, list_columns);
+    if (const std::optional<std::string> failure = write_bytes_file(file, rate_table_csv(table))) {
+        print_error("The scores file could not be written: " + *failure);
+        return false;
+    }
+    progress.message("Rates and scores for bdrate in " + platform::path_text(file));
+    return true;
+}
+
+// One comparison's results: its CSV and segment files written (`written`
+// false where one could not be), its tables added to `tables` and its JSON
+// returned.
+nlohmann::ordered_json comparison_results(const CompareArguments& arguments, Comparison& comparison, bool cancelled,
+                                          const RunRecord& record, std::string& tables, bool& written,
+                                          Progress& progress) {
+    std::vector<TestVideo>& videos = comparison.planner->videos;
     const std::vector<Summaries> summaries = summarize(videos);
     const std::optional<nlohmann::ordered_json> difference =
         arguments.difference ? difference_metrics(videos, summaries) : std::nullopt;
@@ -1379,38 +1581,67 @@ bool write_results(const CompareArguments& arguments, const VideoInfo& source, s
         progress.problem("No difference: " + (missing != videos.end() ? missing->name() : "a video") +
                          " has no result.");
     }
-    bool written = true;
+    const auto message = [&progress](const std::string& text) { progress.message(text); };
+    const auto failed = [&progress](const std::string& text) { progress.problem(text); };
     if (arguments.csv) {
-        const auto message = [&progress](const std::string& text) { progress.message(text); };
-        const auto failed = [&progress](const std::string& text) { progress.problem(text); };
         const std::filesystem::path folder = python_path(*arguments.csv);
-        written = write_csvs(videos, folder, message, failed);
+        written = write_csvs(videos, folder, message, failed) && written;
         if (arguments.difference) {
             written = write_difference_csv(videos, folder, message, failed) && written;
         }
     }
     const SegmentRules rules = segment_rules(arguments);
     if (!rules.conditions.empty() && arguments.segments_dir) {
-        const auto message = [&progress](const std::string& text) { progress.message(text); };
-        const auto failed = [&progress](const std::string& text) { progress.problem(text); };
         written = write_segment_files(videos, rules, python_path(*arguments.segments_dir), message, failed) && written;
     }
     // After the CSV files: it says where each one went.
-    nlohmann::ordered_json document = results_document(source, videos, summaries, cancelled, difference, &record);
+    nlohmann::ordered_json document =
+        results_document(comparison.source, videos, summaries, cancelled, difference, &record);
     if (!rules.conditions.empty()) {
         add_segments_json(document, videos, rules);
     }
-    const std::optional<std::filesystem::path> json_file =
-        arguments.json_path ? std::optional(python_path(*arguments.json_path)) : std::nullopt;
-    if (json_file && platform::path_text(*json_file) == "-") {
-        return print_results(python_json_dumps(document) + "\n") && written;
-    }
-    std::string tables = results_table(source, videos, summaries, cancelled, difference);
+    tables += (tables.empty() ? "" : "\n") +
+              results_table(comparison.source, videos, summaries, cancelled, difference);
     if (arguments.worst) {
         tables += "\n" + worst_text(videos, static_cast<std::size_t>(*arguments.worst));
     }
     if (!rules.conditions.empty()) {
         tables += "\n" + segments_text(videos, rules, shown_segments);
+    }
+    return document;
+}
+
+// Gives the results: printed as tables, or as JSON alone for "--json -",
+// which is for a program to read; and written to the CSV files, the scores
+// file and the JSON file asked for (the tables are printed as well then).
+// With --batch, each reference's in turn, and the JSON a list of them. False
+// when a file could not be written.
+bool write_results(const CompareArguments& arguments, const Comparisons& comparisons, bool cancelled,
+                   const RunRecord& record, Progress& progress) {
+    bool written = true;
+    std::string tables;
+    nlohmann::ordered_json batch = nlohmann::ordered_json::array();
+    nlohmann::ordered_json document;
+    for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+        if (!comparison->error.empty()) {
+            const std::string reference = platform::path_text(comparison->reference);
+            tables += (tables.empty() ? "" : "\n") + reference + ": not compared: " + comparison->error + "\n";
+            batch.push_back({{"reference", reference}, {"error", comparison->error}});
+            continue;
+        }
+        document = comparison_results(arguments, *comparison, cancelled, record, tables, written, progress);
+        batch.push_back(document);
+    }
+    if (arguments.batch) {
+        document = {{"batch", std::move(batch)}};
+    }
+    if (arguments.scores_csv) {
+        written = write_scores_csv(python_path(*arguments.scores_csv), comparisons, progress) && written;
+    }
+    const std::optional<std::filesystem::path> json_file =
+        arguments.json_path ? std::optional(python_path(*arguments.json_path)) : std::nullopt;
+    if (json_file && platform::path_text(*json_file) == "-") {
+        return print_results(python_json_dumps(document) + "\n") && written;
     }
     written = print_results(tables + "\n") && written;
     if (json_file) {
@@ -1421,6 +1652,60 @@ bool write_results(const CompareArguments& arguments, const VideoInfo& source, s
         progress.message("Results as JSON in " + platform::path_text(*json_file));
     }
     return written;
+}
+
+// Reads `comparison`'s reference and plans its test videos. Returns the
+// exit code of a wrong command, or nothing. A reference that cannot be read
+// is the command's error, or with --batch the comparison's: the others are
+// still made.
+std::optional<int> plan_comparison(Comparison& comparison, const CompareArguments& arguments, const Settings& settings,
+                                   const ToolsStatus& tools, const std::vector<CvvdpDisplayChoice>& displays,
+                                   const std::vector<std::string>& asked, const std::filesystem::path& cache_folder,
+                                   Progress& progress) {
+    try {
+        std::string wrong;
+        std::optional<VideoInfo> read = read_video(
+            comparison.reference, arguments, film_grain_choice(arguments, settings), tools.ffprobe.path,
+            tools.ffmpeg.path, "The reference, " + platform::path_text(comparison.reference.filename()) + ",", wrong);
+        if (!read) {
+            print_error(wrong);
+            return exit_usage;
+        }
+        comparison.source = with_assumed_colour(std::move(*read), arguments.colour);
+    } catch (const ProbeError& error) {
+        const std::string why = std::string("The reference could not be read: ") + error.what();
+        if (!arguments.batch) {
+            print_error(why);
+            return exit_usage;
+        }
+        comparison.error = why;
+        progress.problem(platform::path_text(comparison.reference) + ": not compared: " + why);
+        return std::nullopt;
+    }
+    ComparisonPlanner& planner =
+        comparison.planner.emplace(arguments, settings, comparison.source, displays, asked, cache_folder);
+    for (const std::filesystem::path& path : comparison.tests) {
+        if (const std::optional<std::string> missing = planner.plan(path, tools.ffprobe.path, tools.ffmpeg.path)) {
+            print_error("The C++ command line cannot do this yet: " + *missing + ".");
+            return exit_usage;
+        }
+        if (planner.command_wrong) {
+            print_error(*planner.command_wrong);
+            return exit_usage;
+        }
+    }
+    if (planner.videos.empty()) {
+        if (!arguments.batch) {
+            print_error("No test videos: the patterns find only the reference.");
+            return exit_usage;
+        }
+        comparison.error = "its rows find only the reference";
+        comparison.planner.reset();
+        progress.problem(platform::path_text(comparison.reference) + ": not compared: " + comparison.error);
+        return std::nullopt;
+    }
+    report_plans(planner.videos, progress);
+    return std::nullopt;
 }
 
 }  // namespace
@@ -1435,18 +1720,20 @@ int compare(const CompareArguments& arguments) {
     cancel_on_interrupt(cancel, progress, running);
     // The test videos, found first (it reads only the file system), so that
     // a wrong command is said before any work.
-    const std::vector<std::filesystem::path> tests = expand_tests(arguments.tests, python_path(arguments.reference));
-    if (arguments.json_path && *arguments.json_path != "-") {
-        // Written after the run, it would replace the video.
-        const std::string json_file = resolved(python_path(*arguments.json_path));
-        const auto is_it = [&json_file](const std::filesystem::path& video) { return resolved(video) == json_file; };
-        if (is_it(python_path(arguments.reference)) || std::any_of(tests.begin(), tests.end(), is_it)) {
-            print_error("--json names one of the videos: " + *arguments.json_path);
-            return exit_usage;
-        }
+    std::vector<BatchGroup> groups;  // --batch's rows, which the comparisons point to
+    Comparisons comparisons;
+    try {
+        comparisons = comparisons_asked(arguments, groups);
+    } catch (const std::runtime_error& error) {
+        print_error("--batch: " + std::string(error.what()));
+        return exit_usage;
+    }
+    if (const std::optional<std::string> wrong = output_names_a_video(arguments, comparisons)) {
+        print_error(*wrong);
+        return exit_usage;
     }
     if (arguments.difference) {
-        if (const std::optional<std::string> refused = difference_refusal(tests.size())) {
+        if (const std::optional<std::string> refused = difference_refusal(comparisons.front()->tests.size())) {
             print_error(*refused);
             return exit_usage;
         }
@@ -1502,44 +1789,29 @@ int compare(const CompareArguments& arguments) {
     }
     const std::vector<std::future<void>> gpu_checks = start_gpu_checks(arguments, settings, asked);
 
-    VideoInfo source;
-    try {
-        const std::filesystem::path reference = python_path(arguments.reference);
-        std::string wrong;
-        std::optional<VideoInfo> read =
-            read_video(reference, arguments, film_grain_choice(arguments, settings), tools.ffprobe.path,
-                       tools.ffmpeg.path, "The reference, " + platform::path_text(reference.filename()) + ",", wrong);
-        if (!read) {
-            print_error(wrong);
-            return exit_usage;
-        }
-        source = with_assumed_colour(std::move(*read), arguments.colour);
-    } catch (const ProbeError& error) {
-        print_error(std::string("The reference could not be read: ") + error.what());
-        return exit_usage;
-    }
-    ComparisonPlanner planner(arguments, settings, source, displays, asked, cache_folder);
-    for (const std::filesystem::path& path : tests) {
-        if (const std::optional<std::string> missing = planner.plan(path, tools.ffprobe.path, tools.ffmpeg.path)) {
-            print_error("The C++ command line cannot do this yet: " + *missing + ".");
-            return exit_usage;
-        }
-        if (planner.command_wrong) {
-            print_error(*planner.command_wrong);
-            return exit_usage;
+    for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+        if (const std::optional<int> wrong = plan_comparison(*comparison, arguments, settings, tools, displays, asked,
+                                                             cache_folder, *progress)) {
+            return *wrong;
         }
     }
-    if (planner.videos.empty()) {
-        print_error("No test videos: the patterns find only the reference.");
-        return exit_usage;
-    }
-    report_plans(planner.videos, *progress);
-    for (const std::string& note : planner.unused_argument_notes()) {
+    for (const std::string& note : unused_argument_notes(comparisons)) {
         progress->message(note);
+    }
+    // Every comparison's jobs in one run: one start of the GPU's work for all.
+    std::vector<VmafJob> jobs;
+    std::vector<TestVideo*> targets;
+    for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+        if (comparison->planner) {
+            append(targets, comparison->planner->job_targets());
+            std::vector<VmafJob>& planned = comparison->planner->jobs;
+            jobs.insert(jobs.end(), std::make_move_iterator(planned.begin()), std::make_move_iterator(planned.end()));
+            planned.clear();
+        }
     }
 
     bool cancelled = false;
-    if (!planner.jobs.empty()) {
+    if (!jobs.empty()) {
         const Clock::time_point started = Clock::now();
         *running = true;
         // What runs ended outright (End task, a crash) left in the temporary
@@ -1552,20 +1824,34 @@ int compare(const CompareArguments& arguments) {
             }
         });
         trust_gpu_decoding();  // a run of its own (distrust_gpu_decoding)
-        calculate_saved_scores_of_other_bars(planner.jobs, tools.ffmpeg.path, cancel);
-        run(run_environment(tools, planner.jobs), planner.job_targets(), planner.jobs,
-            arguments.parallel.value_or(settings.parallel_jobs),
-            arguments.vship_pass ? *arguments.vship_pass == "one" : settings.gpu_metrics_together, cache_folder,
-            *progress, cancel);
+        calculate_saved_scores_of_other_bars(jobs, tools.ffmpeg.path, cancel);
+        {
+            const BlackBarsAhead bars_ahead(jobs, tools.ffmpeg.path);
+            run(run_environment(tools, jobs), targets, jobs, arguments.parallel.value_or(settings.parallel_jobs),
+                arguments.vship_pass ? *arguments.vship_pass == "one" : settings.gpu_metrics_together, cache_folder,
+                *progress, cancel);
+        }
         cancelled = cancel.cancelled();
         *running = false;
         const double seconds = std::chrono::duration<double>(Clock::now() - started).count();
         progress->message(std::string(cancelled ? "Cancelled" : "Finished") + " after " + format_hms(seconds));
+    } else {
+        // Nothing to calculate: the GPU checks started with the command
+        // would only be waited for as it ends.
+        stop_gpu_probes();
     }
 
-    for (TestVideo& video : planner.videos) {
-        if (const std::optional<std::string> note = near_miss_note(video)) {
-            video.notes.push_back(*note);
+    bool every_ok = true;
+    for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+        every_ok = every_ok && comparison->error.empty();
+        if (!comparison->planner) {
+            continue;
+        }
+        for (TestVideo& video : comparison->planner->videos) {
+            if (const std::optional<std::string> note = near_miss_note(video)) {
+                video.notes.push_back(*note);
+            }
+            every_ok = every_ok && video_status(video, false) == "ok";
         }
     }
     // The command line cannot pause: no paused time
@@ -1577,12 +1863,10 @@ int compare(const CompareArguments& arguments) {
                      0.0,
                      1,
                      this_machine(tools.ffmpeg.path, format_version(tools.ffmpeg.version))};
-    const bool written = write_results(arguments, source, planner.videos, cancelled, record, *progress);
+    const bool written = write_results(arguments, comparisons, cancelled, record, *progress);
     if (cancelled) {
         return exit_cancelled;
     }
-    const bool every_ok = std::all_of(planner.videos.begin(), planner.videos.end(),
-                                      [](const TestVideo& video) { return video_status(video, false) == "ok"; });
     return every_ok && written ? exit_ok : exit_failed;
 }
 

@@ -75,6 +75,11 @@ CvvdpDisplayChoice display_for(const std::vector<CvvdpDisplayChoice>& displays, 
 // separators and "." parts dropped, no separator at the end.
 std::filesystem::path python_path(const std::string& text);
 
+// A path resolved (links followed, made absolute) as text that is equal for
+// two paths of the same file, as Python compares path.resolve() with another:
+// on Windows ignoring case.
+std::string resolved(const std::filesystem::path& path);
+
 // The test videos named: each file as given, and what each pattern finds,
 // in name order; the reference and files already listed are left out of
 // what patterns find. A pattern that finds nothing is kept, to be reported

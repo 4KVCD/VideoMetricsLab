@@ -125,5 +125,23 @@ TEST(BdRate, AveragesSequences) {
     EXPECT_FALSE(mean_of({std::nullopt}));
 }
 
+// --scores-csv's table, read back by bdrate as it was written.
+TEST(BdRate, AScoresTableReadsBackAsWritten) {
+    RateTable table;
+    table.metric_keys = {"vmaf", "psnr"};
+    table.columns = {"sequence", "kbps", "vmaf", "psnr", "test", "class"};
+    RateTable::Encode encode;
+    encode.sequence = "clip, one";
+    encode.kbps = 1311.154;
+    encode.scores = {{"vmaf", 93.123456789}, {"psnr", std::nullopt}};
+    encode.text = {{"test", "C:\\a \"b\".mkv"}, {"class", ""}};
+    table.encodes = {encode, encode};
+    table.encodes[1].kbps = 0.5;
+    const RateTable read = read_rate_table(rate_table_csv(table), "scores.csv");
+    EXPECT_EQ(read.metric_keys, table.metric_keys);
+    EXPECT_EQ(read.columns, table.columns);
+    EXPECT_EQ(read.encodes, table.encodes);
+}
+
 }  // namespace
 }  // namespace vml

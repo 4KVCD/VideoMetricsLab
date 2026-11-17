@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "batch_file.h"
 #include "bdrate.h"
 #include "bitrate.h"
 #include "compare.h"
@@ -43,7 +44,7 @@ Json values_of(const Arguments& parsed) {
     };
     return Json{
         {"command", "compare"},
-        {"reference", platform::path_text(python_path(a.reference))},
+        {"reference", platform::path_text(python_path(a.reference.value_or("")))},
         {"tests", a.tests},
         {"metrics", either(a.metrics)},
         {"model", a.model},
@@ -586,6 +587,52 @@ TEST(CommandLine, AMacRefusesAGpuMaker) {
     EXPECT_FALSE(mac_gpu_decode_refusal(std::nullopt));
 }
 #endif
+
+// --batch's list: the groups by reference (the same file however written), in the order their references come;
+// paths relative to the list's folder; the sequence and other cells kept; what is wrong said with the file's name.
+TEST(CommandLine, ReadsABatchList) {
+    const std::filesystem::path folder = std::filesystem::path("C:") / "clips";
+    const std::vector<BatchGroup> groups = read_batch_file("\xEF\xBB\xBFReference,Test,Sequence,Class\r\n"
+                                                           "a/ref.mkv,a/crf20.mkv,A,\"film, dark\"\r\n"
+                                                           "b/ref.mkv,b/*.mkv,,game\r\n"
+                                                           "./a/ref.mkv,a/crf30.mkv,A,\"film, dark\"\r\n",
+                                                           folder, "list.csv");
+    ASSERT_EQ(groups.size(), 2u);
+    EXPECT_EQ(groups[0].reference, folder / "a" / "ref.mkv");
+    ASSERT_EQ(groups[0].rows.size(), 2u);
+    EXPECT_EQ(groups[0].rows[0].test, platform::path_text(folder / "a" / "crf20.mkv"));
+    EXPECT_EQ(groups[0].rows[1].test, platform::path_text(folder / "a" / "crf30.mkv"));
+    EXPECT_EQ(groups[0].rows[1].line, 4u);
+    EXPECT_EQ(groups[0].rows[0].sequence, "A");
+    EXPECT_EQ(groups[0].rows[0].text.at("class"), "film, dark");
+    ASSERT_EQ(groups[1].rows.size(), 1u);
+    EXPECT_EQ(groups[1].rows[0].test, platform::path_text(folder / "b" / "*.mkv"));
+    EXPECT_EQ(groups[1].rows[0].sequence, "");
+    try {
+        read_batch_file("reference,video\nref.mkv,a.mkv\n", folder, "list.csv");
+        FAIL();
+    } catch (const std::runtime_error& error) {
+        EXPECT_EQ(std::string(error.what()), "list.csv: no test column");
+    }
+    EXPECT_THROW(read_batch_file("reference,test\nref.mkv,\n", folder, "list.csv"), std::runtime_error);
+    EXPECT_THROW(read_batch_file("reference,test\n", folder, "list.csv"), std::runtime_error);
+}
+
+// --batch takes the place of REFERENCE and TEST, and cannot give --difference's two videos.
+TEST(CommandLine, ReadsBatchAndScoresCsv) {
+    const Arguments parsed = parse_arguments({"compare", "--batch", "list.csv", "--scores-csv", "scores.csv"});
+    EXPECT_EQ(parsed.compare.batch, "list.csv");
+    EXPECT_EQ(parsed.compare.scores_csv, "scores.csv");
+    EXPECT_FALSE(parsed.compare.reference);
+    for (const std::vector<std::string>& wrong : std::vector<std::vector<std::string>>{
+             {"compare", "--batch", "list.csv", "ref.mkv", "a.mkv"},
+             {"compare", "--batch", "list.csv", "--difference"},
+             {"compare", "ref.mkv"},
+         }) {
+        SCOPED_TRACE(wrong.back());
+        EXPECT_THROW(parse_arguments(wrong), UsageError);
+    }
+}
 
 }  // namespace
 }  // namespace vml::cli

@@ -333,6 +333,8 @@ $run.videos[0].metrics.vmaf.score
 | `--difference` | With exactly two test videos: the first minus the second as well, frame by frame (CVVDP second by second), paired as **Difference** in Metric Graphs pairs them. The tables end with a difference table (Score: the two scores subtracted; Mean, Min, Max: of the frames' differences; Paired: the frames, or seconds, both have), the JSON gets a `difference` section, and with `--csv` it is written as `<first>_minus_<second>.csv` (the files' names). |
 | `--csv FOLDER` | Write each video's per-frame scores as `<video>.csv`, as **Export CSV** does. |
 | `--json FILE` | Also write the results as JSON. `--json -` prints the JSON instead of the tables, for a script to read. |
+| `--batch CSV` | Compare the videos a CSV file lists, in place of REFERENCE and TEST, all in one run (the start-up and the GPU checks once, not once per reference). A row per test video, with the columns `reference` and `test` (a file or a pattern) and, if wanted, `sequence` and any others, which `--scores-csv` keeps; paths are relative to the CSV file's folder. The tables come per reference, and `--json` writes `{"batch": [...]}`, each reference's results as without `--batch`. A reference that cannot be read is said and the others are still compared (exit code 1). Not with `--difference`. |
+| `--scores-csv FILE` | Write each test video's bitrate (`kbps`) and scores to FILE, a row per video, with its `sequence` (the `--batch` row's, else the reference's file name), `test`, `reference` and the `--batch` row's other columns: the file `bdrate --anchor` and `--test` read. A video whose bitrate is not known, or with only a part compared (`--range`, `--duration`), is left out, said. |
 | `--worst N` | After the tables, each metric's N worst dips: the worst frame of each (a frame within 1 s of a worse one is part of its dip), with every metric's score there. |
 | `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. |
 | `--segments-all` | A frame is weak only where every `--segments` condition holds. |
@@ -477,6 +479,25 @@ code is 0 when both files were read, n/a cells or not; 1 when the JSON file
 could not be written; 2 for a wrong command or a file that cannot be read
 (no `sequence` or `kbps` column, a cell that is not a number, no sequence in
 both files).
+
+`compare --scores-csv` writes these files. For many clips, list each
+encoder's encodes in a `--batch` file and score them in one run:
+
+```
+reference,test,class
+clips\crowd_run.mkv,x264\crowd_run_crf*.mkv,natural
+clips\sintel.mkv,x264\sintel_crf*.mkv,animation
+```
+
+```powershell
+.\VideoMetricsLab-cli.exe compare --batch x264.csv -m vmaf,psnr --scores-csv x264_scores.csv
+.\VideoMetricsLab-cli.exe compare --batch x265.csv -m vmaf,psnr --scores-csv x265_scores.csv
+.\VideoMetricsLab-cli.exe bdrate --anchor x264_scores.csv --test x265_scores.csv --group-by class
+```
+
+The rate is each test video's bitrate as the Videos table shows it: where the
+file does not record the video's own, an estimate (the file's bitrate less
+its other streams and the container's bytes, marked ≈).
 
 ## Saved results and caches
 

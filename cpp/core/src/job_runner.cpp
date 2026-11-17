@@ -1470,6 +1470,17 @@ void run_jobs(const std::vector<VmafJob>& jobs, int parallel_jobs, const RunEven
     run_jobs(jobs, parallel_jobs, events, runner, PerceptualRunner(), false, cores, cancel);
 }
 
+CropPair job_crops(const VmafJob& job, const std::string& ffmpeg, const CancelToken& cancel) {
+    const VmafOptions& options = job.options;
+    if (options.resample_test) {  // both of its sides are the source's, cut by its own box
+        const std::optional<CropBox> own = source_own_crop(options.crop_choice(), ffmpeg, job.source_info, cancel,
+                                                           std::nullopt, options.scale_algorithm);
+        return {own, own};
+    }
+    return resolve_crops(ffmpeg, job.source_info, job.distorted_info, options.crop_choice(), options.scale_algorithm,
+                         cancel, {});
+}
+
 void calculate_saved_scores_of_other_bars(std::vector<VmafJob>& jobs, const std::string& ffmpeg,
                                           const CancelToken& cancel) {
     for (VmafJob& job : jobs) {
@@ -1479,14 +1490,7 @@ void calculate_saved_scores_of_other_bars(std::vector<VmafJob>& jobs, const std:
         const VmafOptions& options = job.options;
         CropPair now;
         try {
-            if (options.resample_test) {  // both of its sides are the source's, cut by its own box
-                const std::optional<CropBox> own = source_own_crop(options.crop_choice(), ffmpeg, job.source_info,
-                                                                   cancel, std::nullopt, options.scale_algorithm);
-                now = {own, own};
-            } else {
-                now = resolve_crops(ffmpeg, job.source_info, job.distorted_info, options.crop_choice(),
-                                    options.scale_algorithm, cancel, {});
-            }
+            now = job_crops(job, ffmpeg, cancel);
         } catch (const Cancelled&) {
             return;
         } catch (const std::exception&) {

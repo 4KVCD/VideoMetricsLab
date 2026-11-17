@@ -23,8 +23,13 @@ inline constexpr int exit_cancelled = 130;
 // The compare command's arguments.
 struct CompareArguments {
     std::vector<std::string> command_line;  // every word given, for the results' record
-    std::string reference;
-    std::vector<std::string> tests;  // files, or patterns such as encodes\*.mkv
+    std::optional<std::string> reference;  // none with --batch
+    std::vector<std::string> tests;  // files, or patterns such as encodes\*.mkv; none with --batch
+    // --batch: a CSV file listing the references and test videos (batch_file.h), in place of
+    // REFERENCE and TEST, so that one process compares them all.
+    std::optional<std::string> batch;
+    // --scores-csv: a CSV file of each test video's bitrate and scores, as bdrate reads them.
+    std::optional<std::string> scores_csv;
     std::optional<std::vector<std::string>> metrics;  // keys, in the registry's order
     std::string model = "auto";
     std::string model_v1 = "auto";  // a word of v1_model_choices (model_select.h)

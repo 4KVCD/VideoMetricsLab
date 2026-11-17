@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <cerrno>
 #include <fstream>
+#include <iterator>
+#include <stdexcept>
+#include <system_error>
 
 #include "vml/export_csv.h"
 #include "vml/geometry.h"
@@ -54,6 +57,10 @@ std::string text_file(std::string text) {
 }
 
 std::optional<std::string> write_json_file(const std::filesystem::path& path, const nlohmann::ordered_json& document) {
+    return write_bytes_file(path, text_file(python_json_dumps(document) + "\n"));
+}
+
+std::optional<std::string> write_bytes_file(const std::filesystem::path& path, const std::string& bytes) {
     if (path.has_parent_path()) {
         std::error_code error;
         std::filesystem::create_directories(path.parent_path(), error);
@@ -64,13 +71,23 @@ std::optional<std::string> write_json_file(const std::filesystem::path& path, co
     errno = 0;
     std::ofstream file(path, std::ios::binary);
     const int opened = errno;
-    file << text_file(python_json_dumps(document) + "\n");
+    file << bytes;
     file.close();
     if (!file) {
         const int code = opened != 0 ? opened : (errno != 0 ? errno : EIO);
         return python_os_error(std::error_code(code, std::generic_category()), path);
     }
     return std::nullopt;
+}
+
+std::string read_whole_file(const std::filesystem::path& path) {
+    errno = 0;
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        const int code = errno != 0 ? errno : ENOENT;
+        throw std::runtime_error(python_os_error(std::error_code(code, std::generic_category()), path));
+    }
+    return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
 }
 
 std::string with_thousands(long long number) {
