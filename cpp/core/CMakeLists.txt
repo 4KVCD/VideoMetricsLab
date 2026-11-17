@@ -50,6 +50,7 @@ add_library(vml_core
     src/options.cpp
     src/perceptual.cpp
     src/perceptual_cpu.cpp
+    src/picture_placement.cpp
     src/python_json.cpp
     src/python_text.cpp
     src/range_seek.cpp

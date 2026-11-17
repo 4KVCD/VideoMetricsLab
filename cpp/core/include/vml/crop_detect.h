@@ -140,8 +140,9 @@ struct CropEntryError : std::invalid_argument {
 };
 
 // The two videos' crops as `choice` asks: none for CropMode::none; for automatic, both videos' boxes (detect_pair)
-// made to cover the same picture (common_picture); for source_only, the source's box (detect_crop) and the test
-// video's full frame, as an encode cropped when it was made shows the source's picture without its bars; for
+// made to cover the same picture (crops_placed); for source_only, the source's box (detect_crop) and the test
+// video's full frame, as an encode cropped when it was made shows the source's picture without its bars (placed
+// where it kept a thin edge or was cut into the picture: crops_placed); for
 // manual, each video's box from the crop entered for it (box_from_edges), nothing detected and the two boxes kept
 // as asked.
 std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_for(const CropChoice& choice, const std::string& ffmpeg,
@@ -161,5 +162,22 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_from_detected(Cr
                                                                               const VideoInfo& test,
                                                                               const CropBox& source_box,
                                                                               const std::optional<CropBox>& test_box);
+
+// Whether crops_placed decodes pictures of the two videos for this pair: its boxes leave the test video's picture
+// more than one place in the source's frame (picture_placement.h).
+bool placed_by_content(CropMode mode, const VideoInfo& source, const VideoInfo& test, const CropBox& source_box,
+                       const std::optional<CropBox>& test_box);
+
+// crops_from_detected's crops (not for a resolution test), but where the test video's frame is the source's cut
+// smaller when it was made (it kept a thin dark edge the source's box cut, or was cut into the picture) or scaled
+// with such an edge or bars thinner than a sample: there the test's picture is placed in the source's frame, by
+// pictures of both videos where the boxes leave several places (placed_by_content; decided once per pair in a
+// process), and the two compared where they meet. Where the pictures cannot say, crops_from_detected's crops, with
+// a warning in the log. Throws Cancelled.
+std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_placed(
+    CropMode mode, const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& test,
+    const CropBox& source_box, const std::optional<CropBox>& test_box, const CancelToken& cancel,
+    const std::optional<std::string>& source_hwaccel, const std::optional<std::string>& test_hwaccel,
+    const std::string& scale_algorithm);
 
 }  // namespace vml

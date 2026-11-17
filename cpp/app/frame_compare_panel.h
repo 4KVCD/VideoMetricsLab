@@ -166,18 +166,20 @@ struct DetectedCrops {
 
 // Detects the black bars of a pair's two files on a thread of its own, each
 // file's own bars: those not known yet (`known_source`, `known_distorted`),
-// both at once.
+// both at once; then the boxes the pair compares (`test_full_frame`: Source
+// only's), which may need pictures of both videos decoded (crops_placed).
 class CropDetectWorker : public QThread {
     Q_OBJECT
 
 public:
     using Known = std::optional<std::optional<CropBox>>;  // nothing: not known yet
     CropDetectWorker(std::string ffmpeg, VideoInfo source, VideoInfo distorted, Known known_source,
-                     Known known_distorted, QObject* parent = nullptr);
+                     Known known_distorted, bool test_full_frame, QObject* parent = nullptr);
     void cancel() { cancel_.cancel(); }
 
 signals:
-    void ready(const vml::app::DetectedCrops& crops);
+    // Each file's own boxes, and the boxes the pair compares.
+    void ready(const vml::app::DetectedCrops& files, const vml::app::DetectedCrops& compared);
 
 protected:
     void run() override;
@@ -190,6 +192,7 @@ private:
     VideoInfo distorted_;
     Known known_source_;
     Known known_distorted_;
+    bool test_full_frame_;
     CancelToken cancel_;
 };
 
@@ -392,8 +395,10 @@ private:
     void show_chosen_video();
     FrameComparisonEntry apply_auto_crop(const FrameComparisonEntry& entry) const;
     void ensure_auto_crop(const FrameComparisonEntry* entry);
+    // `compared`: the pair's compared boxes as the worker found them; none:
+    // from the files' boxes alone.
     void on_auto_crop_ready(const PairKey& key, const VideoInfo& source, const VideoInfo& distorted,
-                            const DetectedCrops& files);
+                            const DetectedCrops& files, const std::optional<DetectedCrops>& compared = std::nullopt);
     void on_frame_ready(int generation, int side, const QImage& image);
     void on_frame_failed(int generation, int side, const QString& error);
     void cancel_workers();

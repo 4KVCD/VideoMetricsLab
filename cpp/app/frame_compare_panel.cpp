@@ -86,16 +86,40 @@ bool is_file(const std::filesystem::path& path) {
     return std::filesystem::is_regular_file(path, error);
 }
 
+// Whether a pair's compared boxes need pictures of its two videos decoded
+// (placed_by_content): then they are found on a worker's thread.
+bool needs_pictures(const VideoInfo& source, const VideoInfo& distorted, const DetectedCrops& files,
+                    bool test_full_frame) {
+    if (distorted.path == source.path || !files.source || (!test_full_frame && !files.distorted)) {
+        return false;
+    }
+    return placed_by_content(test_full_frame ? CropMode::source_only : CropMode::automatic, source, distorted,
+                             *files.source, test_full_frame ? std::nullopt : files.distorted);
+}
+
 // The boxes a run compares for a pair, from its two files' own black bars:
 // the picture both files show (common_picture), unless the pair is one file
 // against itself (a resolution test: both sides are the source's, cut alike);
 // with `test_full_frame` (black bars in the source only), the source's box
 // and the test video's full frame (but its odd line: test_crop_beside_source_box),
-// as crops_for gives the run.
+// as crops_for gives the run: with the test's picture placed in the source's
+// frame where it was cut smaller when it was made (crops_placed). Where that
+// needs pictures decoded (needs_pictures), only with a `ffmpeg` (a worker's
+// thread); without, the boxes alone.
 DetectedCrops compared_crops(const VideoInfo& source, const VideoInfo& distorted, const DetectedCrops& files,
-                             bool test_full_frame) {
+                             bool test_full_frame, const std::string* ffmpeg = nullptr,
+                             const CancelToken* cancel = nullptr) {
     if (distorted.path == source.path) {
         return files;
+    }
+    const bool placeable = files.source && (test_full_frame || files.distorted);
+    if (placeable && (ffmpeg != nullptr || !needs_pictures(source, distorted, files, test_full_frame))) {
+        const CancelToken none;
+        const auto [source_crop, distorted_crop] =
+            crops_placed(test_full_frame ? CropMode::source_only : CropMode::automatic, ffmpeg ? *ffmpeg : "", source,
+                         distorted, *files.source, test_full_frame ? std::nullopt : files.distorted,
+                         cancel ? *cancel : none, std::nullopt, std::nullopt, "");
+        return {source_crop, distorted_crop};
     }
     if (test_full_frame) {
         return {files.source, files.source ? test_crop_beside_source_box(*files.source, distorted) : std::nullopt};
@@ -303,13 +327,14 @@ void FrameExtractWorker::run() {
 }
 
 CropDetectWorker::CropDetectWorker(std::string ffmpeg, VideoInfo source, VideoInfo distorted, Known known_source,
-                                   Known known_distorted, QObject* parent)
+                                   Known known_distorted, bool test_full_frame, QObject* parent)
     : QThread(parent),
       ffmpeg_(std::move(ffmpeg)),
       source_(std::move(source)),
       distorted_(std::move(distorted)),
       known_source_(std::move(known_source)),
-      known_distorted_(std::move(known_distorted)) {}
+      known_distorted_(std::move(known_distorted)),
+      test_full_frame_(test_full_frame) {}
 
 std::optional<CropBox> CropDetectWorker::detect(const VideoInfo& info) {
     try {
@@ -351,8 +376,10 @@ void CropDetectWorker::run() {
             crops.source = known_source_ ? *known_source_ : detect(source_);
             crops.distorted = same_file ? crops.source : known_distorted_ ? *known_distorted_ : detect(distorted_);
         }
+        const DetectedCrops compared =
+            compared_crops(source_, distorted_, crops, test_full_frame_, &ffmpeg_, &cancel_);
         if (!cancel_.cancelled()) {
-            emit ready(crops);
+            emit ready(crops, compared);
         }
     } catch (const Cancelled&) {
     }
@@ -1662,7 +1689,10 @@ void FrameComparePanel::ensure_auto_crop(const FrameComparisonEntry* entry) {
     };
     const CropDetectWorker::Known source_crop = known(key.source_file);
     const CropDetectWorker::Known distorted_crop = known(key.distorted_file);
-    if (source_crop && distorted_crop) {
+    // Both files' boxes known: the compared boxes at once, unless they need
+    // pictures decoded (then on the worker's thread, which detects nothing).
+    if (source_crop && distorted_crop &&
+        !needs_pictures(source, distorted, {*source_crop, *distorted_crop}, key.test_full_frame)) {
         auto_crops_[key] = compared_crops(source, distorted, {*source_crop, *distorted_crop}, key.test_full_frame);
         for (FrameComparisonEntry& current : entries_) {
             current = apply_auto_crop(current);
@@ -1670,10 +1700,12 @@ void FrameComparePanel::ensure_auto_crop(const FrameComparisonEntry* entry) {
         update_labels();
         return;
     }
-    auto* worker = new CropDetectWorker(ffmpeg_(), source, distorted, source_crop, distorted_crop, this);
-    connect(worker, &CropDetectWorker::ready, this, [this, key, source, distorted](const DetectedCrops& files) {
-        on_auto_crop_ready(key, source, distorted, files);
-    });
+    auto* worker =
+        new CropDetectWorker(ffmpeg_(), source, distorted, source_crop, distorted_crop, key.test_full_frame, this);
+    connect(worker, &CropDetectWorker::ready, this,
+            [this, key, source, distorted](const DetectedCrops& files, const DetectedCrops& compared) {
+                on_auto_crop_ready(key, source, distorted, files, compared);
+            });
     connect(worker, &QThread::finished, this, [this, worker] {
         for (auto active = crop_workers_.begin(); active != crop_workers_.end(); ++active) {
             if (active->second == worker) {
@@ -1695,12 +1727,12 @@ FrameComparePanel::PairKey FrameComparePanel::pair_key(const FrameComparisonEntr
 }
 
 void FrameComparePanel::on_auto_crop_ready(const PairKey& key, const VideoInfo& source, const VideoInfo& distorted,
-                                           const DetectedCrops& files) {
+                                           const DetectedCrops& files, const std::optional<DetectedCrops>& compared) {
     // Keeps each file's own black bars and the pair's compared boxes, and
     // shows the pair cropped if it is still that pair.
     auto_crop_files_[key.source_file] = files.source;
     auto_crop_files_[key.distorted_file] = files.distorted;
-    auto_crops_[key] = compared_crops(source, distorted, files, key.test_full_frame);
+    auto_crops_[key] = compared ? *compared : compared_crops(source, distorted, files, key.test_full_frame);
     std::optional<FrameComparison> previous;
     for (FrameComparisonEntry& entry : entries_) {
         if (pair_key(entry) == key) {

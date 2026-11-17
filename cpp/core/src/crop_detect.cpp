@@ -37,6 +37,7 @@
 #include "vml/hardware_decoding.h"
 #include "vml/hevc.h"
 #include "vml/number_format.h"
+#include "vml/picture_placement.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
@@ -619,12 +620,18 @@ std::vector<std::string> raw_previews_command(const std::string& ffmpeg, const V
 }
 
 // The pictures a detection command decoded, judged as they came
-// (picture_edges: nothing for one too dark to say), and their size.
+// (picture_edges: nothing for one too dark to say), and their size; their
+// luma too where it is asked for (Keep::luma).
 struct Pictures {
     int width = 0;
     int height = 0;
     std::vector<std::optional<BarEdges>> edges;
+    std::vector<LumaPicture> lumas;
 };
+
+// Whether a command's pictures are kept whole (for place_by_content), or
+// only judged.
+enum class Keep { edges, luma };
 
 // What a detection command gave: its exit code, the end of its error output
 // (for a failure's message), the lines of it the detection reads (FFmpeg's
@@ -660,14 +667,17 @@ public:
 // Reads `process`'s pictures (Y4M luma, luma_output) into `pictures` until
 // its output ends; a stream it cannot read is drained, so that FFmpeg never
 // waits for room in the pipe, and why goes to `error`.
-void read_pictures(platform::ChildProcess& process, Pictures& pictures, std::string& error) {
+void read_pictures(platform::ChildProcess& process, Pictures& pictures, std::string& error, Keep keep) {
     const auto read = [&process](void* into, std::size_t bytes) { return process.read(into, bytes); };
     try {
         Y4mLumaReader reader(read);
-        while (const std::optional<LumaPicture> picture = reader.next()) {
+        while (std::optional<LumaPicture> picture = reader.next()) {
             pictures.width = picture->width;
             pictures.height = picture->height;
             pictures.edges.push_back(picture_edges(*picture));
+            if (keep == Keep::luma) {
+                pictures.lumas.push_back(std::move(*picture));
+            }
         }
     } catch (const std::exception& failure) {
         error = failure.what();
@@ -681,7 +691,7 @@ void read_pictures(platform::ChildProcess& process, Pictures& pictures, std::str
 // at most `limit` of running (paused time not counted), its pictures read
 // on a thread of their own while it runs.
 DetectionOutput run_ffmpeg(const std::vector<std::string>& command, const CancelToken& cancel,
-                           std::chrono::seconds limit) {
+                           std::chrono::seconds limit, Keep keep = Keep::edges) {
     logger.info("FFmpeg: " + python_list2cmdline(command));
     struct Kept {
         std::mutex mutex;
@@ -701,7 +711,8 @@ DetectionOutput run_ffmpeg(const std::vector<std::string>& command, const Cancel
         {
             // Joined before `ffmpeg_process` goes: the program has ended or been
             // ended by then, so its output has too
-            const JoiningThread reader([&] { read_pictures(ffmpeg_process, output.pictures, output.read_error); });
+            const JoiningThread reader(
+                [&] { read_pictures(ffmpeg_process, output.pictures, output.read_error, keep); });
             const CancelToken::Attached attached = cancel.attach(ffmpeg_process);
             auto running = std::chrono::steady_clock::duration::zero();  // paused time not counted
             while (!ffmpeg_process.wait_for(200ms)) {
@@ -758,13 +769,13 @@ std::string failure_of(const DetectionOutput& output) {
 // it fails, and VideoSizeChanged when FFmpeg rebuilt its filters partway.
 Pictures run_detection(const std::function<std::vector<std::string>(const std::optional<std::string>&)>& command,
                        const std::string& path, const CancelToken& cancel, std::optional<std::string>& hwaccel,
-                       std::chrono::seconds limit) {
+                       std::chrono::seconds limit, Keep keep = Keep::edges) {
     cancel.throw_if_cancelled();
     DetectionOutput output;
     while (true) {
         std::string failure;
         try {
-            output = run_ffmpeg(command(hwaccel), cancel, limit);
+            output = run_ffmpeg(command(hwaccel), cancel, limit, keep);
             if ((output.code == 0 && output.read_error.empty()) || !hwaccel) {
                 break;
             }
@@ -794,13 +805,14 @@ Pictures run_detection(const std::function<std::vector<std::string>(const std::o
 // One preview decoded by FFmpeg from the file: `frames` pictures from
 // `start`.
 Pictures run_preview(const std::string& ffmpeg, const VideoInfo& info, double start, int frames,
-                     const CancelToken& cancel, std::optional<std::string>& hwaccel, const BeforeSampling& before) {
+                     const CancelToken& cancel, std::optional<std::string>& hwaccel, const BeforeSampling& before,
+                     Keep keep = Keep::edges) {
     const std::string path = platform::path_text(info.path);
     return run_detection(
         [&](const std::optional<std::string>& attempt) {
             return preview_command(ffmpeg, path, info.input_options(), start, frames, attempt, before);
         },
-        path, cancel, hwaccel, 60s);
+        path, cancel, hwaccel, 60s, keep);
 }
 
 // One preview decoded by the app's decoder (samples_through_the_app): the
@@ -808,7 +820,7 @@ Pictures run_preview(const std::string& ffmpeg, const VideoInfo& info, double st
 // preview_command does. Throws FilmGrainRefusal when the app could not feed
 // the window, CropDetectError when FFmpeg failed, and Cancelled.
 Pictures run_fed_preview(const std::string& ffmpeg, const VideoInfo& info, const FeedWindow& window,
-                         const CancelToken& cancel) {
+                         const CancelToken& cancel, Keep keep) {
     // The coded pictures, without their grain, as FFmpeg's vvc gives a video
     // deeper than 8 bits (it adds H.274's grain at 8 bits only). VVC's
     // decoder asks ffprobe nothing (gpu_frames.cpp's configuration).
@@ -819,7 +831,7 @@ Pictures run_fed_preview(const std::string& ffmpeg, const VideoInfo& info, const
     append(command, feed.input_arguments());
     command.insert(command.end(), {"-map", "0:" + std::string(video_stream), "-vf", BeforeSampling{}.luma({})});
     append(command, luma_output);
-    DetectionOutput output = run_ffmpeg(command, cancel, 60s);
+    DetectionOutput output = run_ffmpeg(command, cancel, 60s, keep);
     feed.finish();  // a window fed in part gives no pictures
     if (output.code != 0 || !output.read_error.empty()) {
         throw CropDetectError("Crop detection failed for " + platform::path_text(info.path) + ": " +
@@ -833,7 +845,7 @@ Pictures run_fed_preview(const std::string& ffmpeg, const VideoInfo& info, const
 // (app_decoders.h); else it fails.
 Pictures run_preview_through_the_app(const std::string& ffmpeg, const VideoInfo& info, double start, int frames,
                                      const CancelToken& cancel, std::optional<std::string>& hwaccel,
-                                     const BeforeSampling& before) {
+                                     const BeforeSampling& before, Keep keep = Keep::edges) {
     try {
         // From the millisecond preview_command's -ss gives FFmpeg (its text,
         // so that a start on a half millisecond is rounded as that text
@@ -841,7 +853,7 @@ Pictures run_preview_through_the_app(const std::string& ffmpeg, const VideoInfo&
         // wanted, so that it ends with that one (WindowCut)
         const double start_ms = python_round(start, 3);
         const double frame = info.fps > 0 ? 1.0 / info.fps : 1.0 / 24;
-        return run_fed_preview(ffmpeg, info, FeedWindow{start_ms, frame * (frames - 1)}, cancel);
+        return run_fed_preview(ffmpeg, info, FeedWindow{start_ms, frame * (frames - 1)}, cancel, keep);
     } catch (const FilmGrainRefusal& refusal) {
         if (const std::optional<std::string> failure = unfed_failure(info, refusal)) {
             throw CropDetectError("Crop detection failed for " + platform::path_text(info.path) + ": " + *failure);
@@ -849,7 +861,7 @@ Pictures run_preview_through_the_app(const std::string& ffmpeg, const VideoInfo&
         logger.info("Black bars in " + platform::path_text(info.path.filename()) + ": a preview decoded by FFmpeg, " +
                     "as the app's decoder could not feed it (" + refusal.what() + ")");
     }
-    return run_preview(ffmpeg, info, start, frames, cancel, hwaccel, before);
+    return run_preview(ffmpeg, info, start, frames, cancel, hwaccel, before, keep);
 }
 
 // The previews of a raw stream, each started from a byte partway through,
@@ -1156,15 +1168,6 @@ bool cropped_when_encoded(int source_width, int source_height, int test_width, i
            cut_top <= source_height - test_height;
 }
 
-// How far, in the test video's samples, its frame is from a picture of
-// `width` x `height` scaled to it: the least, over every scale factor k, of
-// the larger of |test_width - width k| and |test_height - height k| (which
-// is where the two are equal). A picture scaled with its size rounded to even
-// samples, each side off by at most one, is at most 1.
-double shape_error(double width, double height, int test_width, int test_height) {
-    return std::abs(test_width * height - test_height * width) / (width + height);
-}
-
 // The source's box grown by the thin edges an encode cut to the bars kept,
 // where the test's frame is that box at the same size (issue #20: a 1-column
 // dark edge at the source's right, found on most previews and so cut 2
@@ -1176,7 +1179,6 @@ double shape_error(double width, double height, int test_width, int test_height)
 // either way (a box between bars on both sides).
 std::optional<CropBox> box_grown_to_the_test(int source_width, int source_height, int test_width, int test_height,
                                              const CropBox& source_box) {
-    constexpr int thin_edge = 2;  // a 1-sample dark edge, rounded up to even
     struct Span {
         int start, size;
     };
@@ -1278,6 +1280,238 @@ std::pair<CropBox, CropBox> shared_by_rounding(int source_width, int source_heig
     const auto [source_y, test_y] = axis(source_height, test_height, top, bottom);
     return {CropBox{source_x.end - source_x.start, source_y.end - source_y.start, source_x.start, source_y.start},
             CropBox{test_x.end - test_x.start, test_y.end - test_y.start, test_x.start, test_y.start}};
+}
+
+// The picture both videos show, as one box in each, where the test video's
+// frame shows the part `shown` of the source's frame (its whole frame, or
+// the part it was cut to when it was made, then scaled or not): the
+// source's box (`source_crop`) and the test's (`test_crop`) met in that
+// part. Nothing where they do not meet.
+std::optional<std::pair<CropBox, CropBox>> shared_within(const CropBox& source_crop, const CropBox& test_crop,
+                                                         int test_width, int test_height, const CropBox& shown) {
+    // Each box's edges as fractions of what its video shows: the source's
+    // within the part the test's frame shows, the test's within its frame.
+    struct Edges {
+        double left, top, right, bottom;
+    };
+    const auto edges = [](const CropBox& box, const CropBox& within) {
+        return Edges{static_cast<double>(box.x - within.x) / within.w, static_cast<double>(box.y - within.y) / within.h,
+                     static_cast<double>(box.x - within.x + box.w) / within.w,
+                     static_cast<double>(box.y - within.y + box.h) / within.h};
+    };
+    const Edges s = edges(source_crop, shown);
+    const Edges d = edges(test_crop, CropBox{test_width, test_height, 0, 0});
+    const double left = std::max(s.left, d.left);
+    const double top = std::max(s.top, d.top);
+    const double right = std::min(s.right, d.right);
+    const double bottom = std::min(s.bottom, d.bottom);
+    if (right <= left || bottom <= top) {
+        return std::nullopt;
+    }
+    // The shared picture in each video's samples, never a row of the other's
+    // bars, its edges on even samples (4:2:0); the source's within the part
+    // shown, then moved to its place in the source's frame.
+    const auto positive = [](const CropBox& box) { return box.w > 0 && box.h > 0; };
+    const std::optional<std::pair<CropBox, CropBox>> on_grid =
+        shared_on_one_grid(shown.w, shown.h, test_width, test_height, left, top, right, bottom);
+    auto [shared_source, shared_test] =
+        on_grid && positive(on_grid->first) && positive(on_grid->second)
+            ? *on_grid
+            : shared_by_rounding(shown.w, shown.h, test_width, test_height, left, top, right, bottom);
+    if (!positive(shared_source) || !positive(shared_test)) {
+        return std::nullopt;
+    }
+    shared_source.x += shown.x;
+    shared_source.y += shown.y;
+    return std::pair(shared_source, shared_test);
+}
+
+// Where a pair's detected boxes leave the test video's picture
+// (`test_picture`: its box, or for Source only its frame but an odd line)
+// more than one place in the source's frame, or one the boxes alone do not
+// find (picture_placement.h); `test_crop` what the run cuts from the test.
+struct Placing {
+    CropBox test_picture;
+    std::optional<CropBox> test_crop;
+    std::vector<CropBox> places;  // empty: the boxes decide alone
+};
+
+Placing placing_of(CropMode mode, const VideoInfo& source, const VideoInfo& test, const CropBox& source_box,
+                   const std::optional<CropBox>& test_box) {
+    const auto [source_width, source_height] = source.frame_size();
+    const auto [test_width, test_height] = test.frame_size();
+    Placing placing;
+    if (std::min({source_width, source_height, test_width, test_height}) <= 0) {
+        return placing;
+    }
+    if (mode == CropMode::source_only) {
+        placing.test_picture = CropBox{test_width & ~1, test_height & ~1, 0, 0};
+        if (!placing.test_picture.is_noop(test_width, test_height)) {
+            placing.test_crop = placing.test_picture;
+        }
+    } else if (mode == CropMode::automatic && test_box) {
+        placing.test_picture = *test_box;
+        placing.test_crop = *test_box;
+    } else {
+        return placing;
+    }
+    placing.places = unscaled_places(source_width, source_height, test_width, test_height, source_box,
+                                     placing.test_picture);
+    if (placing.places.empty() && mode == CropMode::automatic && test_box->is_noop(test_width, test_height)) {
+        placing.places = scaled_places(source_width, source_height, test_width, test_height, source_box);
+    }
+    return placing;
+}
+
+// The part of the source's frame the test's frame shows where its picture
+// is `place`: unscaled, the test's frame around it; scaled, the place itself
+// (the test's whole frame its picture).
+CropBox shown_by_the_test(const CropBox& place, const CropBox& test_picture, int test_width, int test_height) {
+    if (place.w == test_picture.w && place.h == test_picture.h) {
+        return CropBox{test_width, test_height, place.x - test_picture.x, place.y - test_picture.y};
+    }
+    return place;
+}
+
+// Pictures of a video for place_by_content, one at each of `times`: the
+// second of a two-picture preview (a stream's first may be a dummy), decoded
+// as its black bars are (detect_uncached). Nothing where one cannot be had.
+std::vector<LumaPicture> content_pictures(const std::string& ffmpeg, const VideoInfo& info,
+                                          const std::vector<double>& times, const CancelToken& cancel,
+                                          const std::optional<std::string>& gpu_decoder,
+                                          const std::string& scale_algorithm) {
+    const BeforeSampling before{hw_native_format(info.pix_fmt), size_change_scale(info, scale_algorithm)};
+    std::optional<std::string> hwaccel = preview_decoder(gpu_decoder, info);
+    const bool through_the_app = samples_through_the_app(info);
+    const DecoderSlot slot(cancel);
+    std::vector<LumaPicture> pictures;
+    for (const double time : times) {
+        Pictures preview =
+            through_the_app
+                ? run_preview_through_the_app(ffmpeg, info, time, 2, cancel, hwaccel, before, Keep::luma)
+                : run_preview(ffmpeg, info, time, 2, cancel, hwaccel, before, Keep::luma);
+        if (preview.lumas.empty()) {
+            return {};
+        }
+        pictures.push_back(std::move(preview.lumas.back()));
+    }
+    return pictures;
+}
+
+// The decisions place_by_content made in this process, by the two files and
+// the places weighed: each pair's pictures are decoded once.
+class PlacementsMade {
+public:
+    // Nothing where the pair was not decided yet; else the decision, which
+    // may be that the pictures could not say.
+    std::optional<std::optional<std::size_t>> find(const std::string& key) {
+        const std::lock_guard lock(mutex_);
+        const auto found = made_.find(key);
+        if (found == made_.end()) {
+            return std::nullopt;
+        }
+        return std::optional<std::optional<std::size_t>>(std::in_place, found->second);
+    }
+    void keep(const std::string& key, std::optional<std::size_t> chosen) {
+        const std::lock_guard lock(mutex_);
+        made_[key] = chosen;
+    }
+
+private:
+    std::mutex mutex_;
+    std::map<std::string, std::optional<std::size_t>> made_;
+};
+
+PlacementsMade& placements_made() {
+    static PlacementsMade made;
+    return made;
+}
+
+std::string placement_key(const VideoInfo& source, const VideoInfo& test, const Placing& placing) {
+    const std::optional<AnswerKey> source_key = answer_key(source, source.duration);
+    const std::optional<AnswerKey> test_key = answer_key(test, test.duration);
+    if (!source_key || !test_key) {
+        return {};
+    }
+    const auto file = [](const AnswerKey& key) {
+        return key.path + "|" + std::to_string(key.size) + "|" + std::to_string(key.modified_ns);
+    };
+    std::string key = file(*source_key) + "|" + file(*test_key) + "|" + box_text(placing.test_picture);
+    for (const CropBox& place : placing.places) {
+        key += "|" + box_text(place);
+    }
+    return key;
+}
+
+// Which of the places the test's picture shows, from pictures of both videos
+// at a quarter, half and three quarters of the shorter one (the same frames
+// of each, as -ss counts from each file's start): place_shown. Nothing where
+// the pictures do not say, or none can be had (a raw stream without times,
+// a video of unknown duration).
+std::optional<std::size_t> place_by_content(const std::string& ffmpeg, const VideoInfo& source,
+                                            const VideoInfo& test, const Placing& placing,
+                                            const CancelToken& cancel,
+                                            const std::optional<std::string>& source_hwaccel,
+                                            const std::optional<std::string>& test_hwaccel,
+                                            const std::string& scale_algorithm) {
+    const auto seekable = [](const VideoInfo& info) {
+        return info.duration > 0 && !(info.timed_raw && info.format_name != "rawvideo" && !samples_through_the_app(info));
+    };
+    if (!seekable(source) || !seekable(test)) {
+        return std::nullopt;
+    }
+    const std::string key = placement_key(source, test, placing);
+    if (!key.empty()) {
+        if (const std::optional<std::optional<std::size_t>> made = placements_made().find(key)) {
+            return *made;
+        }
+    }
+    const double duration = std::min(source.duration, test.duration);
+    const std::vector<double> times{duration / 4, duration / 2, duration * 3 / 4};
+    // Both videos' pictures at once, as detect_pair's previews: two decoders,
+    // in about half the time. Both are waited for before a cancel is thrown.
+    std::vector<LumaPicture> pictures[2];
+    std::exception_ptr errors[2];
+    const auto decode = [&](int index, const VideoInfo& info, const std::optional<std::string>& hwaccel) {
+        try {
+            pictures[index] = content_pictures(ffmpeg, info, times, cancel, hwaccel, scale_algorithm);
+        } catch (...) {
+            errors[index] = std::current_exception();
+        }
+    };
+    std::thread reference([&] {
+        app_log::set_thread_name("crop-reference");
+        decode(0, source, source_hwaccel);
+    });
+    decode(1, test, test_hwaccel);
+    reference.join();
+    cancel.throw_if_cancelled();
+    for (const std::exception_ptr& error : errors) {
+        if (!error) {
+            continue;
+        }
+        try {
+            std::rethrow_exception(error);
+        } catch (const Cancelled&) {
+            throw;
+        } catch (const std::exception& failure) {
+            logger.info(std::string("Black bars: the pictures to place the test video by could not be decoded: ") +
+                        failure.what());
+        } catch (...) {
+            logger.info("Black bars: the pictures to place the test video by could not be decoded");
+        }
+        return std::nullopt;  // not kept: another try may decode them
+    }
+    if (pictures[0].empty() || pictures[1].empty()) {
+        logger.info("Black bars: the pictures to place the test video by could not be decoded");
+        return std::nullopt;  // not kept either: a preview that came back empty may decode on another try
+    }
+    const std::optional<std::size_t> chosen =
+        place_shown(pictures[0], pictures[1], placing.test_picture, placing.places);
+    if (!key.empty()) {
+        placements_made().keep(key, chosen);
+    }
+    return chosen;
 }
 
 }  // namespace
@@ -1415,44 +1649,11 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> common_picture(const V
             return kept;
         }
     }
-    const CropBox shown = box_shown.value_or(CropBox{source_width, source_height, 0, 0});
-    // Each box's edges as fractions of what its video shows: the source's
-    // within the part the test's frame shows, the test's within its frame.
-    struct Edges {
-        double left, top, right, bottom;
-    };
-    const auto edges = [](const CropBox& box, const CropBox& within) {
-        return Edges{static_cast<double>(box.x - within.x) / within.w, static_cast<double>(box.y - within.y) / within.h,
-                     static_cast<double>(box.x - within.x + box.w) / within.w,
-                     static_cast<double>(box.y - within.y + box.h) / within.h};
-    };
-    const Edges s = edges(*source_crop, shown);
-    const Edges d = edges(*distorted_crop, CropBox{distorted_width, distorted_height, 0, 0});
-    const double left = std::max(s.left, d.left);
-    const double top = std::max(s.top, d.top);
-    const double right = std::min(s.right, d.right);
-    const double bottom = std::min(s.bottom, d.bottom);
-    if (right <= left || bottom <= top) {
-        return kept;
-    }
-    // The shared picture in each video's samples, never a row of the other's
-    // bars, its edges on even samples (4:2:0); the source's within the part
-    // shown, then moved to its place in the source's frame.
-    const auto positive = [](const CropBox& box) { return box.w > 0 && box.h > 0; };
-    const std::optional<std::pair<CropBox, CropBox>> on_grid =
-        shared_on_one_grid(shown.w, shown.h, distorted_width, distorted_height, left, top, right, bottom);
-    auto [shared_source, shared_distorted] =
-        on_grid && positive(on_grid->first) && positive(on_grid->second)
-            ? *on_grid
-            : shared_by_rounding(shown.w, shown.h, distorted_width, distorted_height, left, top, right, bottom);
-    if (!positive(shared_source) || !positive(shared_distorted)) {
-        return kept;
-    }
-    shared_source.x += shown.x;
-    shared_source.y += shown.y;
-    return {shared_source, shared_distorted};
+    const std::optional<std::pair<CropBox, CropBox>> shared =
+        shared_within(*source_crop, *distorted_crop, distorted_width, distorted_height,
+                      box_shown.value_or(CropBox{source_width, source_height, 0, 0}));
+    return shared ? std::pair(std::optional(shared->first), std::optional(shared->second)) : kept;
 }
-
 
 std::optional<CropBox> test_crop_beside_source_box(const CropBox& source_box, const VideoInfo& test) {
     const auto [width, height] = test.frame_size();
@@ -1550,14 +1751,16 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_for(const CropCh
                 box_from_edges(choice.test, distorted, "the test video")};
     case CropMode::source_only: {  // (the run's settings line says so: "black bars source")
         const CropBox source_box = detect_crop(ffmpeg, source, cancel, source_hwaccel, scale_algorithm);
-        return crops_from_detected(choice.mode, false, source, distorted, source_box, std::nullopt);
+        return crops_placed(choice.mode, ffmpeg, source, distorted, source_box, std::nullopt, cancel, source_hwaccel,
+                            distorted_hwaccel, scale_algorithm);
     }
     case CropMode::automatic:
         break;
     }
     const auto [source_box, distorted_box] =
         detect_pair(ffmpeg, source, distorted, cancel, source_hwaccel, distorted_hwaccel, scale_algorithm);
-    const auto crops = crops_from_detected(choice.mode, false, source, distorted, source_box, distorted_box);
+    const auto crops = crops_placed(choice.mode, ffmpeg, source, distorted, source_box, distorted_box, cancel,
+                                    source_hwaccel, distorted_hwaccel, scale_algorithm);
     if (crops.first != source_box || crops.second != distorted_box) {
         logger.info("Black bars: the picture both videos show is " + box_text(*crops.first) + " of the source and " +
                     box_text(*crops.second) + " of the test video (detected: " + box_text(source_box) + " and " +
@@ -1578,6 +1781,57 @@ std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_from_detected(Cr
         return {source_box, test_crop_beside_source_box(source_box, test)};
     }
     return common_picture(source, test, source_box, test_box);
+}
+
+bool placed_by_content(CropMode mode, const VideoInfo& source, const VideoInfo& test, const CropBox& source_box,
+                       const std::optional<CropBox>& test_box) {
+    return placing_of(mode, source, test, source_box, test_box).places.size() > 1;
+}
+
+std::pair<std::optional<CropBox>, std::optional<CropBox>> crops_placed(
+    CropMode mode, const std::string& ffmpeg, const VideoInfo& source, const VideoInfo& test,
+    const CropBox& source_box, const std::optional<CropBox>& test_box, const CancelToken& cancel,
+    const std::optional<std::string>& source_hwaccel, const std::optional<std::string>& test_hwaccel,
+    const std::string& scale_algorithm) {
+    const auto by_the_boxes = crops_from_detected(mode, false, source, test, source_box, test_box);
+    const Placing placing = placing_of(mode, source, test, source_box, test_box);
+    if (placing.places.empty()) {
+        return by_the_boxes;
+    }
+    const std::optional<std::size_t> chosen =
+        placing.places.size() == 1 ? std::optional<std::size_t>(0)
+                                   : place_by_content(ffmpeg, source, test, placing, cancel, source_hwaccel,
+                                                      test_hwaccel, scale_algorithm);
+    const auto [source_width, source_height] = source.frame_size();
+    const auto [test_width, test_height] = test.frame_size();
+    if (!chosen) {
+        logger.warning("Black bars: where the test video's picture (" + box_text(placing.test_picture) +
+                       ") sits in the source's frame could not be told from the two videos' pictures (" +
+                       std::to_string(placing.places.size()) + " places fit its black bars); comparing " +
+                       (by_the_boxes.first ? box_text(*by_the_boxes.first) : std::string("the whole frame")) +
+                       " of the source. If that is wrong, set the crops with " +
+                       "--source-crop and --test-crop, or Black bars > Manual.");
+        return by_the_boxes;
+    }
+    const CropBox& place = placing.places[*chosen];
+    if (place.is_noop(source_width, source_height)) {
+        return by_the_boxes;  // the whole frame, scaled: what the boxes alone give
+    }
+    const CropBox shown = shown_by_the_test(place, placing.test_picture, test_width, test_height);
+    const std::optional<std::pair<CropBox, CropBox>> shared =
+        shared_within(source_box, placing.test_picture, test_width, test_height, shown);
+    if (!shared) {
+        return by_the_boxes;
+    }
+    const std::pair<std::optional<CropBox>, std::optional<CropBox>> placed{
+        shared->first, shared->second.is_noop(test_width, test_height) && !placing.test_crop
+                           ? std::nullopt
+                           : std::optional(shared->second)};
+    if (placing.places.size() > 1) {
+        logger.info("Black bars: the test video's picture sits at " + box_text(place) + " of the source's frame, " +
+                    "as its pictures show (" + std::to_string(placing.places.size()) + " places fit its black bars)");
+    }
+    return placed;
 }
 
 }  // namespace vml
