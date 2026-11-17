@@ -23,7 +23,6 @@
 class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
-class QLineEdit;
 class QPushButton;
 class QSpinBox;
 class QTableWidget;
@@ -89,8 +88,8 @@ private:
 };
 
 // The stretches of one video where its scores fall past thresholds, as a
-// list that follows the settings, and exported as JSON, CSV or an x265
-// --zones value (weak_frames.h).
+// list that follows the settings, and exported as JSON or CSV
+// (weak_frames.h).
 class WeakSegmentsDialog : public QDialog {
     Q_OBJECT
 
@@ -124,7 +123,7 @@ private:
     void remove_condition(QWidget* row);
     void refresh();
     void fill_table();
-    enum class ExportKind { json, csv, zones };
+    enum class ExportKind { json, csv };
     void export_segments(ExportKind kind);
 
     WeakFramesVideo video_;
@@ -137,7 +136,6 @@ private:
     QComboBox* combine_combo_ = nullptr;
     QSpinBox* min_frames_spin_ = nullptr;
     QSpinBox* merge_frames_spin_ = nullptr;
-    QLineEdit* zones_edit_ = nullptr;
     QLabel* summary_ = nullptr;
     QTableWidget* table_ = nullptr;
 };

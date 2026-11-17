@@ -126,7 +126,7 @@ TEST(CommandLine, ReadsWorstFramesAndSegments) {
     const CompareArguments read =
         parse_arguments({"compare", "ref.mkv", "a.mkv", "--worst", "5", "--segments", " VMAF<90, butteraugli>2.5",
                          "--segments-all", "--segment-min-frames", "3", "--segment-merge-frames", "0",
-                         "--zones-option", "q=20", "--segments-dir", "out"})
+                         "--segments-dir", "out"})
             .compare;
     EXPECT_EQ(read.worst, 5);
     ASSERT_EQ(read.segments.size(), 2U);
@@ -135,7 +135,6 @@ TEST(CommandLine, ReadsWorstFramesAndSegments) {
     EXPECT_TRUE(read.segments_all);
     EXPECT_EQ(read.segment_min_frames, 3);
     EXPECT_EQ(read.segment_merge_frames, 0);
-    EXPECT_EQ(read.zones_option, "q=20");
     EXPECT_EQ(read.segments_dir, "out");
     const auto error_of = [](const std::vector<std::string>& arguments) {
         try {

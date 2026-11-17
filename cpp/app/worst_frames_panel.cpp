@@ -8,7 +8,6 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
-#include <QLineEdit>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
@@ -32,9 +31,6 @@ namespace {
 
 // How many segments the dialog lists; its exports have them all.
 constexpr int listed_segments = 1000;
-
-// The x265 zone setting a blank box stands for: 1.5 times the bitrate.
-constexpr const char* default_zones_option = "b=1.5";
 
 QTableWidgetItem* cell(const QString& text, bool number = true) {
     auto* item = new QTableWidgetItem(text);
@@ -311,12 +307,6 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
     merge_frames_spin_->setRange(0, 1'000'000);
     connect(merge_frames_spin_, &QSpinBox::valueChanged, this, [this] { refresh(); });
     form->addRow(app::tr("Join segments up to this many frames apart:"), merge_frames_spin_);
-    zones_edit_ = new QLineEdit;
-    zones_edit_->setPlaceholderText(QString::fromLatin1(default_zones_option));
-    zones_edit_->setToolTip(app::tr("Written after each zone's frames in the x265 zones file: b=1.5 gives the zone "
-                                    "1.5 times the bitrate, q=20 a fixed QP of 20. x265 applies it as its rate "
-                                    "control allows."));
-    form->addRow(app::tr("x265 zone setting:"), zones_edit_);
     layout->addLayout(form);
 
     summary_ = new QLabel;
@@ -338,7 +328,6 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
     };
     add_export(app::tr("Export JSON..."), ExportKind::json);
     add_export(app::tr("Export CSV..."), ExportKind::csv);
-    add_export(app::tr("Export x265 zones..."), ExportKind::zones);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     layout->addWidget(buttons);
 
@@ -503,20 +492,6 @@ void WeakSegmentsDialog::export_segments(ExportKind kind) {
         filter = app::tr("CSV file (*.csv)");
         text = segments_csv(segments_, current);
         break;
-    case ExportKind::zones: {
-        suffix = QStringLiteral(".zones.txt");
-        filter = app::tr("Text file (*.txt)");
-        const QString typed = zones_edit_->text().trimmed();
-        const std::string option = typed.isEmpty() ? std::string(default_zones_option) : typed.toStdString();
-        if (!valid_zones_option(option)) {
-            dialogs_.alert(app::tr("Invalid zone setting"),
-                           app::tr("x265 takes b= with a factor (b=1.5: 1.5 times the bitrate) or q= with a QP "
-                                   "from 0 to 69 (q=20)."));
-            return;
-        }
-        text = x265_zones(segments_, option) + "\n";
-        break;
-    }
     }
     const QString path =
         dialogs_.save_file(app::tr("Export weak segments"), suggested_file_name(video_.label, suffix), filter);

@@ -68,7 +68,6 @@ struct CompareArguments {
     bool segments_all = false;
     std::optional<int> segment_min_frames;
     std::optional<int> segment_merge_frames;
-    std::optional<std::string> zones_option;  // each x265 zone's setting (default b=1.5)
     std::optional<std::string> segments_dir;  // the folder for each video's segment files
     bool quiet = false;
     bool verbose = false;

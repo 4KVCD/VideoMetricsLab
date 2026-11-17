@@ -328,32 +328,4 @@ std::string segments_csv(const std::vector<WeakSegment>& segments, const Segment
     return text;
 }
 
-std::string x265_zones(const std::vector<WeakSegment>& segments, const std::string& option) {
-    std::string zones;
-    for (const WeakSegment& segment : segments) {
-        zones += (zones.empty() ? "" : "/") + std::to_string(segment.first_frame) + "," +
-                 std::to_string(segment.last_frame) + "," + option;
-    }
-    return zones;
-}
-
-bool valid_zones_option(std::string_view option) {
-    if (option.size() < 3 || option[1] != '=') {
-        return false;
-    }
-    const char* first = option.data() + 2;
-    const char* last = option.data() + option.size();
-    if (option[0] == 'q') {
-        int qp = -1;
-        const auto [end, error] = std::from_chars(first, last, qp);
-        return error == std::errc() && end == last && qp >= 0 && qp <= 69;
-    }
-    if (option[0] == 'b') {
-        double factor = 0.0;
-        const auto [end, error] = std::from_chars(first, last, factor, std::chars_format::fixed);
-        return error == std::errc() && end == last && std::isfinite(factor) && factor > 0.0;
-    }
-    return false;
-}
-
 }  // namespace vml

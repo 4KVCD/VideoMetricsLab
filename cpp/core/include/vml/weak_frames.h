@@ -1,6 +1,6 @@
 // Where a video's scores drop (issue #24): its worst frames, one per dip,
 // and the stretches where scores fall past a threshold ("weak segments"),
-// with the JSON, CSV and x265 --zones texts they are exported as.
+// with the JSON and CSV texts they are exported as.
 //
 // Frame numbers are the run's: counted from each video's first frame, also
 // for a run over a range, so they are the encode's own.
@@ -130,13 +130,5 @@ nlohmann::ordered_json segments_json(const std::vector<WeakSegment>& segments, c
 // The segments as CSV, a row per segment: first_frame, last_frame,
 // start_time, end_time, frames, then <metric>_min, _max and _mean.
 std::string segments_csv(const std::vector<WeakSegment>& segments, const SegmentRules& rules);
-
-// x265's --zones value for the segments: "first,last,option" per segment
-// ("120,240,b=1.5"), joined by '/'; empty when there are none.
-std::string x265_zones(const std::vector<WeakSegment>& segments, const std::string& option);
-
-// Whether `option` is a setting x265's --zones takes for a zone: b=<factor>
-// (its bitrate times a positive factor) or q=<QP> (a fixed QP, 0 to 69).
-bool valid_zones_option(std::string_view option);
 
 }  // namespace vml

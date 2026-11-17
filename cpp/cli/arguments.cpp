@@ -52,7 +52,6 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--segments CONDITIONS] [--segments-all]
                                    [--segment-min-frames N]
                                    [--segment-merge-frames N]
-                                   [--zones-option TEXT]
                                    [--segments-dir FOLDER] [-q] [-v]
                                    REFERENCE TEST [TEST ...]
 )";
@@ -280,13 +279,9 @@ options:
                         leave out segments shorter than N frames (default 1)
   --segment-merge-frames N
                         join segments at most N frames apart (default 0)
-  --zones-option TEXT   each x265 zone's setting in the .zones.txt file
-                        (default b=1.5, 1.5 times the bitrate; q=N sets the
-                        QP); x265 applies it as its rate control allows
   --segments-dir FOLDER
                         write each video's segments to FOLDER as
-                        <video>.segments.json, <video>.segments.csv and
-                        <video>.zones.txt (a value for x265's --zones)
+                        <video>.segments.json and <video>.segments.csv
   -q, --quiet           no progress, only the results
   -v, --verbose         the app's log as well
 
@@ -1113,14 +1108,6 @@ Parser compare_parser(CompareArguments& parsed) {
                }),
         option({"--segment-merge-frames"},
                [&parsed](const std::string& value) { parsed.segment_merge_frames = int_from_zero(value); }),
-        option({"--zones-option"},
-               [&parsed](const std::string& value) {
-                   if (!valid_zones_option(value)) {
-                       throw ArgumentError{"invalid zone setting " + python_string_repr(value) +
-                                           ": write b=FACTOR or q=QP, such as b=1.5 or q=20"};
-                   }
-                   parsed.zones_option = value;
-               }),
         option({"--segments-dir"}, [&parsed](const std::string& value) { parsed.segments_dir = value; }),
         flag({"-q", "--quiet"}, parsed.quiet),
         flag({"-v", "--verbose"}, parsed.verbose),
@@ -1202,9 +1189,6 @@ std::optional<std::string> segment_option_alone(const CompareArguments& argument
     }
     if (arguments.segment_merge_frames) {
         return "--segment-merge-frames";
-    }
-    if (arguments.zones_option) {
-        return "--zones-option";
     }
     if (arguments.segments_dir) {
         return "--segments-dir";

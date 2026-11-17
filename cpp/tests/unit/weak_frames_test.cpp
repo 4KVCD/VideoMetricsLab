@@ -128,20 +128,12 @@ TEST(WeakFrames, WeakSegmentsFollowTheRules) {
     EXPECT_EQ(spans(segments_for(ranged)), (std::vector<std::pair<int, int>>{{15, 19}, {50, 52}}));
 }
 
-// The three exports, and the conditions they are read from.
+// The two exports, and the conditions they are read from.
 TEST(WeakFrames, ExportsAndConditionsRead) {
     SegmentRules rules{{*parse_weak_condition("vmaf<90")}};
     rules.min_frames = 2;
     const std::vector<WeakSegment> segments{{10, 14, 1.0, 1.5, {{"vmaf", 40.0, 80.0, 72.0}}},
                                             {30, 31, 3.0, 3.2, {{"vmaf", 85.5, 86.0, std::nullopt}}}};
-    EXPECT_EQ(x265_zones(segments, "b=1.5"), "10,14,b=1.5/30,31,b=1.5");
-    EXPECT_EQ(x265_zones({}, "q=20"), "");
-    for (const char* good : {"b=1.5", "b=2", "q=0", "q=69"}) {
-        EXPECT_TRUE(valid_zones_option(good)) << good;
-    }
-    for (const char* wrong : {"", "b=", "b=0", "b=-1", "b=1.5/0", "q=70", "q=2.5", "q=20,", "x=1", "B=1.5", "b=inf"}) {
-        EXPECT_FALSE(valid_zones_option(wrong)) << wrong;
-    }
     EXPECT_EQ(segments_csv(segments, rules),
               "first_frame,last_frame,start_time,end_time,frames,vmaf_min,vmaf_max,vmaf_mean\n"
               "10,14,1.0,1.5,5,40.0,80.0,72.0\n"

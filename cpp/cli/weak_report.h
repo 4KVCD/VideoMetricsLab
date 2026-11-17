@@ -17,10 +17,6 @@
 
 namespace vml::cli {
 
-// Each x265 zone's setting where --zones-option gives none: 1.5 times the
-// bitrate.
-inline constexpr const char* default_zones_option = "b=1.5";
-
 // The rules --segments and its options give.
 SegmentRules segment_rules(const CompareArguments& arguments);
 
@@ -41,11 +37,10 @@ std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRul
 void add_segments_json(nlohmann::ordered_json& document, const std::vector<TestVideo>& videos,
                        const SegmentRules& rules);
 
-// --segments-dir: each video's <video>.segments.json, .segments.csv and
-// .zones.txt in `folder`, under names no file there has. Whether every one
-// was written.
+// --segments-dir: each video's <video>.segments.json and .segments.csv in
+// `folder`, under names no file there has. Whether every one was written.
 bool write_segment_files(const std::vector<TestVideo>& videos, const SegmentRules& rules,
-                         const std::string& zones_option, const std::filesystem::path& folder,
+                         const std::filesystem::path& folder,
                          const std::function<void(const std::string&)>& message,
                          const std::function<void(const std::string&)>& failed);
 

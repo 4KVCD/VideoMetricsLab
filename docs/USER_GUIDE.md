@@ -48,9 +48,7 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
    graph; double-click it, or **Open in Video Compare**, to see it there.
    **Weak segments...** lists the stretches where the video's scores fall
    past thresholds you set (any or every condition, the shortest segment,
-   the gap to join across) and exports them as JSON, CSV or a value for
-   x265's `--zones`, each zone's setting typed in (`b=1.5`, 1.5 times the
-   bitrate, by default; `q=N` for a QP).
+   the gap to join across) and exports them as JSON or CSV.
 
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one.
@@ -339,8 +337,7 @@ $run.videos[0].metrics.vmaf.score
 | `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. |
 | `--segments-all` | A frame is weak only where every `--segments` condition holds. |
 | `--segment-min-frames N`, `--segment-merge-frames N` | Leave out segments shorter than N frames (default 1); join segments at most N frames apart (default 0). |
-| `--segments-dir FOLDER` | Write each video's segments to FOLDER as `<video>.segments.json`, `<video>.segments.csv` and `<video>.zones.txt`, a value for x265's `--zones`. |
-| `--zones-option TEXT` | Each x265 zone's setting in the `.zones.txt` file: `b=1.5` (the default) for 1.5 times the bitrate, or `q=N` for a QP from 0 to 69. x265 applies it as its rate control allows. |
+| `--segments-dir FOLDER` | Write each video's segments to FOLDER as `<video>.segments.json` and `<video>.segments.csv`. |
 | `-q`, `--quiet` | No progress, only the results. |
 | `-v`, `--verbose` | The app's log as well. |
 

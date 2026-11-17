@@ -1388,9 +1388,7 @@ bool write_results(const CompareArguments& arguments, const VideoInfo& source, s
     if (!rules.conditions.empty() && arguments.segments_dir) {
         const auto message = [&progress](const std::string& text) { progress.message(text); };
         const auto failed = [&progress](const std::string& text) { progress.problem(text); };
-        written = write_segment_files(videos, rules, arguments.zones_option.value_or(default_zones_option),
-                                      python_path(*arguments.segments_dir), message, failed) &&
-                  written;
+        written = write_segment_files(videos, rules, python_path(*arguments.segments_dir), message, failed) && written;
     }
     // After the CSV files: it says where each one went.
     nlohmann::ordered_json document = results_document(source, videos, summaries, cancelled, difference, &record);
