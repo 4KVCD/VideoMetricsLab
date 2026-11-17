@@ -167,7 +167,7 @@ For the reference and each test video:
 | `width`, `height`, `fps`, `codec`, `pixel_format`, `duration` | As FFmpeg reads the video stream. |
 | `file_size` | The file's size. |
 | `container` | FFmpeg's name for the container (`matroska,webm`). |
-| `bit_rate`, `bit_rate_of` | The bitrate, and whether it is the `video` stream's or the whole `file`'s (when the stream gives none). |
+| `bit_rate`, `bit_rate_of` | The bitrate, and where it comes from: the `video` stream's own; `file minus audio`, an estimate where the file does not record the video's (the file's rate minus its audio tracks', subtitles and the container's own bytes included); or the whole `file`'s, where an audio track's rate is not known either. |
 | `stream_bytes` | The video stream's size, where the container records it. |
 | `profile`, `level` | The stream's profile and level (`40`: level 4.0). |
 | `bit_depth`, `chroma_subsampling` | From the pixel format (`4:2:0`). |

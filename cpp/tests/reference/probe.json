@@ -313,6 +313,7 @@
     "pix_fmt": "yuv420p10le",
     "bit_rate": 5999004,
     "bit_rate_whole_file": false,
+    "bit_rate_estimated": true,
     "nominal_fps": "0x1.7f9dcb5112287p+4",
     "average_fps": "0x1.7f9dcb5112287p+4",
     "color_range": "",

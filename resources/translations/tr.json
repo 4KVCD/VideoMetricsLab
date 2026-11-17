@@ -698,6 +698,7 @@
   "Calculate the rest?": "Geri kalanlar hesaplansın mı?",
   "It could not be read. Remove it or add the file again to retry.": "Okunamadı. Kaldırın veya yeniden denemek için dosyayı tekrar ekleyin.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Ses parçası dahil tüm dosyanın bit hızı: dosya videonun kendi bit hızını kaydetmiyor.",
+  "An estimate: the file's bitrate minus its audio's, as the file does not record the video's own. Subtitles and the container's own bytes are counted in it.": "Bir tahmin: dosya kendi videosunun bit hızını kaydetmediği için dosyanın bit hızından sesinkinin çıkarılmasıyla bulunur. Altyazılar ve kapsayıcının kendi baytları buna dahildir.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} zaten listede. Onun yerine kayıtlı çalıştırmanın puanları gösterilsin mi?",
   "Drop a video here, paste its path, or click Browse...": "Bir videoyu buraya bırakın, yolunu yapıştırın veya Gözat... düğmesine tıklayın",
   "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Eklemek için video dosyalarını buraya bırakın, yeniden sıralamak için satırları sürükleyin ve sıralamak için bir sütun başlığına tıklayın.",

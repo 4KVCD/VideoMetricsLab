@@ -2,6 +2,7 @@
 #pragma once
 
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -105,9 +106,21 @@ long long count_video_packets(const std::filesystem::path& path, const std::stri
 VideoInfo probe_raw_yuv(const std::filesystem::path& path, const std::string& size, const std::string& pix_fmt,
                         double fps, const std::string& ffprobe, const CancelToken& cancel = CancelToken());
 
+// Audio streams' bitrates measured from their packets, by their index in the
+// file (ffprobe's "index"), for streams that state none.
+using AudioRates = std::map<int, long long>;
+
 // The video's details in ffprobe's JSON output for `path`
-// (-print_format json -show_format -show_streams). Throws ProbeError when
-// the output cannot be read or has no video stream.
-VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_view probe_json);
+// (-print_format json -show_format -show_streams). Where the video's own
+// bitrate is not recorded, it is estimated as the file's minus its audio's,
+// a track that states none taking its rate from `sampled_audio`. Throws
+// ProbeError when the output cannot be read or has no video stream.
+VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_view probe_json,
+                                const AudioRates& sampled_audio = {});
+
+// Each audio stream's rate in ffprobe's lines of packets (-show_entries
+// packet=stream_index,duration_time,size -of csv=p=0): its bytes over its
+// packets' durations. A stream with under a second of packets is left out.
+AudioRates audio_rates_from_packets(std::string_view packets);
 
 }  // namespace vml

@@ -102,8 +102,12 @@ struct VideoInfo {
     std::string pix_fmt;
     long long bit_rate = 0;  // bits per second, 0 if unknown
     // The file's bitrate, soundtrack included, where the video's own is not
-    // recorded (a Matroska file without statistics tags).
+    // recorded and an audio track's rate is not known either.
     bool bit_rate_whole_file = false;
+    // An estimate: the file's bitrate minus its audio tracks', where the
+    // video's own is not recorded (a Matroska file without statistics tags
+    // it can trust). Subtitles and the container's own bytes are in it.
+    bool bit_rate_estimated = false;
     // The video stream's own size in bytes, from Matroska's statistics tags
     // where they are the file's (as bit_rate trusts them); 0 if unknown.
     long long stream_bytes = 0;
@@ -185,6 +189,10 @@ struct VideoInfo {
     // A raw stream's rate is not known: FFmpeg's guess at 25 frames a second,
     // and the length and bitrate worked out from it, are forgotten.
     void forget_frame_rate();
+    // Takes the bitrate `from` gives (with where it comes from), the same file
+    // read again: a saved result's copy of a video read since, which an
+    // older rule gave another rate.
+    void take_bit_rate(const VideoInfo& from);
     // A bare elementary stream (a .hevc or .264 file) or raw pictures (a
     // .yuv file), not a container: it has no timestamps, so its frame rate
     // cannot be known.

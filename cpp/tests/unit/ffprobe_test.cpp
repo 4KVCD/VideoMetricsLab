@@ -47,6 +47,7 @@ TEST(Ffprobe, ReadsTheVideosDetailsAsThePythonAppDoes) {
         EXPECT_EQ(info.pix_fmt, expected["pix_fmt"].get<std::string>());
         EXPECT_EQ(info.bit_rate, expected["bit_rate"].get<long long>());
         EXPECT_EQ(info.bit_rate_whole_file, expected["bit_rate_whole_file"].get<bool>());
+        EXPECT_EQ(info.bit_rate_estimated, expected.value("bit_rate_estimated", false));
         EXPECT_EQ(info.nominal_fps, *test::reference_number(expected["nominal_fps"]));
         EXPECT_EQ(info.average_fps, *test::reference_number(expected["average_fps"]));
         EXPECT_EQ(info.color_range, expected["color_range"].get<std::string>());
@@ -123,6 +124,51 @@ TEST(Ffprobe, StatisticsTagsCountUnlessFfmpegCopiedThem) {
     };
     EXPECT_EQ(rate_when_written_by("libebml v1.4.5 + libmatroska v1.7.1"), 100000);
     EXPECT_EQ(rate_when_written_by("Lavf63.1.101"), 631200);
+}
+
+// A file FFmpeg wrote, of 1,000,000 bytes over 10 s (800 kb/s), with a video
+// and an Opus track whose sizes the tags give as `video_bytes` and
+// `audio_bytes` ("" for no tags).
+VideoInfo ffmpeg_written(const std::string& video_bytes, const std::string& audio_bytes,
+                         const AudioRates& sampled_audio = {}) {
+    const auto tags = [](const std::string& bytes) {
+        return bytes.empty() ? std::string() : R"(,"tags":{"NUMBER_OF_BYTES":")" + bytes + R"("})";
+    };
+    const std::string probe = R"({"streams":[{"index":0,"codec_type":"video","codec_name":"hevc","width":1280,)"
+                              R"("height":720,"pix_fmt":"yuv420p","r_frame_rate":"24/1","avg_frame_rate":"24/1")" +
+                              tags(video_bytes) + R"(},{"index":1,"codec_type":"audio","codec_name":"opus")" +
+                              tags(audio_bytes) +
+                              R"(}],"format":{"duration":"10.0","size":"1000000","bit_rate":"800000",)"
+                              R"("format_name":"matroska,webm","tags":{"ENCODER":"Lavf63.1.101"}}})";
+    return video_info_from_probe("a.mkv", probe, sampled_audio);
+}
+
+// In a file FFmpeg wrote, the tags count where they add up to the file;
+// otherwise the video's rate is the file's minus the audio's (an estimate),
+// or the whole file's where the audio's is not known either.
+TEST(Ffprobe, TheVideosRateIsItsOwnOrTheFilesMinusTheAudios) {
+    const VideoInfo tagged = ffmpeg_written("900000", "97000");  // 99.7 % of the file
+    EXPECT_EQ(tagged.bit_rate, 720000);
+    EXPECT_FALSE(tagged.bit_rate_estimated || tagged.bit_rate_whole_file);
+    EXPECT_EQ(tagged.stream_bytes, 900000);
+
+    const VideoInfo stale = ffmpeg_written("900000", "50000");  // 95 %: the tags are not trusted
+    EXPECT_EQ(stale.bit_rate, 800000);
+    EXPECT_TRUE(stale.bit_rate_whole_file);
+    EXPECT_EQ(stale.stream_bytes, 0);
+
+    const VideoInfo sampled = ffmpeg_written("", "", {{1, 77600}});
+    EXPECT_EQ(sampled.bit_rate, 800000 - 77600);
+    EXPECT_TRUE(sampled.bit_rate_estimated);
+    EXPECT_FALSE(sampled.bit_rate_whole_file);
+}
+
+// ffprobe lists a packet's duration before its size, whatever order it is
+// asked for; a stream with under a second of packets gives no rate.
+TEST(Ffprobe, AnAudioRateIsItsPacketsBytesOverTheirDurations) {
+    const AudioRates rates = audio_rates_from_packets("1,0.500000,4000\r\n1,0.500000,6000\n2,0.020000,300\n"
+                                                      "1,N/A,999\n3,0.6,100\n3,0.6,50\n");
+    EXPECT_EQ(rates, (AudioRates{{1, 80000}, {3, 1000}}));
 }
 
 // As measured on streams made at known rates: what ffprobe reports of a raw

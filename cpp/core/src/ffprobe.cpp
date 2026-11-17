@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <optional>
 #include <regex>
 #include <string>
@@ -199,7 +200,7 @@ double stream_duration(const Json& stream, double container) {
 // One stream's own bitrate, from what the container records: its bit_rate,
 // or Matroska's statistics tags (BPS, or NUMBER_OF_BYTES over its length).
 // 0 when there is none. The statistics are used only if they are the file's
-// (see statistics_are_the_files) and fit in it.
+// (see statistics_are_true) and fit in it.
 long long stream_bit_rate(const Json& stream, double duration, long long file_size, bool statistics_are_true) {
     const long long rate = whole(member(stream, "bit_rate"));
     if (rate > 0) {
@@ -224,11 +225,37 @@ long long stream_bit_rate(const Json& stream, double duration, long long file_si
 
 // Whether a file's statistics tags describe it. FFmpeg writes none of its own,
 // and copies its input's into what it writes, even through a re-encode, where
-// they can be far from the truth and still fit in the file. So in a file it
-// wrote they cannot be told from stale ones, and are not used.
-bool statistics_are_the_files(const Json& format) {
+// they can be far from the truth. So in a file it wrote they are used only
+// where they add up: every stream but the attachments has its size, together
+// they are the file but for its container's own bytes (at least 99.5 % of it:
+// a 2-hour Matroska film's are 0.3 %), and the video is at least half of it.
+// A stale set passes only where the new video is at most 0.5 % of the file
+// larger than the old: its rate is then at most about 1 % off.
+bool statistics_are_true(const Json& streams, const Json& format, const Json& video) {
     const Json* encoder = tag(format, "ENCODER");
-    return encoder == nullptr || !encoder->is_string() || !encoder->get<std::string>().starts_with("Lavf");
+    if (encoder == nullptr || !encoder->is_string() || !encoder->get<std::string>().starts_with("Lavf")) {
+        return true;
+    }
+    const long long file_size = whole(member(format, "size"));
+    if (file_size <= 0 || !streams.is_array()) {
+        return false;
+    }
+    long long streams_bytes = 0;
+    long long video_bytes = 0;
+    for (const Json& stream : streams) {
+        if (string_member(stream, "codec_type") == "attachment") {
+            continue;  // fonts and covers: Matroska keeps no statistics of them
+        }
+        const Json* bytes = tag(stream, "NUMBER_OF_BYTES");
+        if (bytes == nullptr) {
+            return false;
+        }
+        streams_bytes += std::max(0LL, whole(bytes));
+        if (&stream == &video) {
+            video_bytes = whole(bytes);
+        }
+    }
+    return streams_bytes <= file_size && streams_bytes * 1000 >= file_size * 995 && video_bytes * 2 >= file_size;
 }
 
 // What the video's display matrix says a player turns it by: 0, 90, 180 or 270
@@ -247,19 +274,29 @@ int display_rotation(const Json& video) {
     return 0;
 }
 
-// The video stream's bitrate, and whether it is the whole file's instead.
-// Without the video's own, the audio tracks' rates are taken from the
-// file's when every one is known; otherwise the file's rate is all there is.
-std::pair<long long, bool> video_bit_rate(const Json& video, const Json& streams, const Json& format,
-                                          double duration) {
+// The video stream's bitrate, and where it comes from.
+struct VideoRate {
+    long long bits_per_second = 0;
+    bool whole_file = false;  // the file's, soundtrack included
+    bool estimated = false;   // the file's minus its audio's
+};
+
+// The video stream's own rate where the file records it. Otherwise the
+// file's minus every audio track's (as recorded, or as `sampled_audio`
+// measured it, by stream index), an estimate, when every one is known; else
+// the file's rate is all there is. A file with no audio gives the file's
+// rate as the video's (only the container's own bytes are in it), not an
+// estimate.
+VideoRate video_bit_rate(const Json& video, const Json& streams, const Json& format, double duration,
+                         const AudioRates& sampled_audio) {
     const long long file_size = whole(member(format, "size"));
-    const bool statistics_are_true = statistics_are_the_files(format);
-    if (const long long own = stream_bit_rate(video, duration, file_size, statistics_are_true); own != 0) {
-        return {own, false};
+    const bool statistics = statistics_are_true(streams, format, video);
+    if (const long long own = stream_bit_rate(video, duration, file_size, statistics); own != 0) {
+        return {own};
     }
     const long long total = whole(member(format, "bit_rate"));
     if (total <= 0) {
-        return {0, false};
+        return {};
     }
     double container = duration;
     const Json* format_duration = member(format, "duration");
@@ -268,21 +305,26 @@ std::pair<long long, bool> video_bit_rate(const Json& video, const Json& streams
     }
     long long audio_rates = 0;
     bool every_rate_known = true;
+    bool has_audio = false;
     if (streams.is_array()) {
         for (const Json& stream : streams) {
             if (string_member(stream, "codec_type") != "audio") {
                 continue;
             }
-            const long long rate =
-                stream_bit_rate(stream, stream_duration(stream, container), file_size, statistics_are_true);
+            has_audio = true;
+            long long rate = stream_bit_rate(stream, stream_duration(stream, container), file_size, statistics);
+            if (const auto sampled = sampled_audio.find(static_cast<int>(whole(member(stream, "index"))));
+                rate == 0 && sampled != sampled_audio.end()) {
+                rate = sampled->second;
+            }
             every_rate_known = every_rate_known && rate != 0;
             audio_rates += rate;
         }
     }
     if (every_rate_known && total > audio_rates) {
-        return {total - audio_rates, false};
+        return {total - audio_rates, false, has_audio};
     }
-    return {total, true};
+    return {total, true, false};
 }
 
 // How long after the file's start the video's first frame comes; 0 where
@@ -309,7 +351,8 @@ int integer_member(const Json& object, const char* key) {
 
 }  // namespace
 
-VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_view probe_json) {
+VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_view probe_json,
+                                const AudioRates& sampled_audio) {
     Json data;
     try {
         data = Json::parse(replace_invalid_utf8(probe_json));
@@ -345,9 +388,10 @@ VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_v
         info.nb_frames = frames->is_string() ? python_int(frames->get_ref<const std::string&>()).value_or(0)
                                              : static_cast<long long>(frames->get<double>());
     }
-    const auto [rate, whole_file] = video_bit_rate(*video, streams, format, info.duration);
-    info.bit_rate = rate;
-    info.bit_rate_whole_file = whole_file;
+    const VideoRate rate = video_bit_rate(*video, streams, format, info.duration, sampled_audio);
+    info.bit_rate = rate.bits_per_second;
+    info.bit_rate_whole_file = rate.whole_file;
+    info.bit_rate_estimated = rate.estimated;
 
     info.rotation = display_rotation(*video);
     info.width = integer_member(*video, "width");
@@ -355,7 +399,7 @@ VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_v
     info.codec_name = string_member(*video, "codec_name", "unknown");
     info.profile = string_member(*video, "profile");
     info.level = integer_member(*video, "level");
-    if (statistics_are_the_files(format)) {
+    if (statistics_are_true(streams, format, *video)) {
         info.stream_bytes = std::max(0LL, whole(tag(*video, "NUMBER_OF_BYTES")));
     }
     info.writing_library = tag_text(format, "ENCODER");
@@ -377,6 +421,34 @@ VideoInfo video_info_from_probe(const std::filesystem::path& path, std::string_v
     info.format_name = string_member(format, "format_name");
     info.start_offset = start_offset(*video, format);
     return info;
+}
+
+AudioRates audio_rates_from_packets(std::string_view packets) {
+    std::map<int, std::pair<long long, double>> read;  // each stream's bytes and seconds
+    for (const std::string_view line : python_splitlines(packets)) {
+        // ffprobe's order, not the one asked for: the stream's index, the
+        // packet's duration in seconds ("N/A" where it has none), its size.
+        const std::size_t first = line.find(',');
+        const std::size_t second = first == line.npos ? line.npos : line.find(',', first + 1);
+        if (second == line.npos) {
+            continue;
+        }
+        const std::optional<long long> index = python_int(line.substr(0, first));
+        const std::optional<double> seconds = python_float(line.substr(first + 1, second - first - 1));
+        const std::optional<long long> bytes = python_int(python_strip(line.substr(second + 1)));
+        if (index && seconds && bytes && std::isfinite(*seconds) && *seconds > 0 && *bytes >= 0) {
+            auto& [stream_bytes, stream_seconds] = read[static_cast<int>(*index)];
+            stream_bytes += *bytes;
+            stream_seconds += *seconds;
+        }
+    }
+    AudioRates rates;
+    for (const auto& [index, sums] : read) {
+        if (sums.second >= 1.0 && sums.first > 0) {
+            rates[index] = std::llround(static_cast<double>(sums.first) * 8 / sums.second);
+        }
+    }
+    return rates;
 }
 
 VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffprobe) {
@@ -420,6 +492,25 @@ std::string run_ffprobe(const std::vector<std::string>& command, const std::file
         throw ProbeError("ffprobe failed for " + text(path) + ":\n" + said);
     }
     return output.standard_output;
+}
+
+// The audio streams' rates measured from their packets in the file's first
+// two minutes, for streams that state none (Opus in Matroska): the whole
+// file is not read (a 2-hour film's first two minutes, 7 to 13 MB, took 0.2
+// to 0.6 s; seeking to other points in an FFmpeg-written Matroska file read
+// most of it). A start that is not typical of the film is a few percent off
+// its average (108.7 against 112.9 kb/s), under 1 % of the video's rate. None
+// where they cannot be read.
+AudioRates sampled_audio_rates(const std::filesystem::path& path, const std::string& ffprobe,
+                               const CancelToken& cancel) {
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
+    command.insert(command.end(), {"-select_streams", "a", "-read_intervals", "%+120", "-show_entries",
+                                   "packet=stream_index,duration_time,size", "-of", "csv=p=0", text(path)});
+    try {
+        return audio_rates_from_packets(run_ffprobe(command, path, std::chrono::seconds(60), cancel));
+    } catch (const ProbeError&) {
+        return {};  // the rate stays the whole file's, as without the sample
+    }
 }
 
 }  // namespace
@@ -543,6 +634,13 @@ VideoInfo probe_video(const std::filesystem::path& path, const std::string& ffpr
     command.insert(command.end(), {"-print_format", "json", "-show_format", "-show_streams", text(path)});
     const std::string probe = run_ffprobe(command, path, std::chrono::seconds(60), cancel);
     VideoInfo info = video_info_from_probe(path, probe);
+    if (info.bit_rate_whole_file) {
+        // An audio track states no rate: a short stretch of its packets
+        // gives one, and the video's rate is the file's minus it.
+        if (const AudioRates sampled = sampled_audio_rates(path, ffprobe, cancel); !sampled.empty()) {
+            info = video_info_from_probe(path, probe, sampled);
+        }
+    }
     if (stamped_in_decoding_order(info, probe, ffprobe, cancel)) {
         throw ProbeError(text(path) +
                          " has its timestamps in decoding order, not in the order its pictures are shown (a raw "

@@ -58,7 +58,8 @@ QString bitrate_string(const VideoInfo& info) {
     if (info.bit_rate == 0) {
         return not_computed;
     }
-    const QString approximate = info.bit_rate_whole_file ? QStringLiteral("≈") : QString();
+    const QString approximate =
+        info.bit_rate_whole_file || info.bit_rate_estimated ? QStringLiteral("≈") : QString();
     if (info.bit_rate >= 1'000'000) {
         return approximate + tr("{rate:.1f} Mb/s", {{"rate", static_cast<double>(info.bit_rate) / 1'000'000.0}});
     }
@@ -69,6 +70,10 @@ QString bitrate_string(const VideoInfo& info) {
 QString bitrate_note(const VideoInfo& info) {
     if (info.bit_rate != 0 && info.bit_rate_whole_file) {
         return tr("The whole file's bitrate, soundtrack included: the file does not record the video's own.");
+    }
+    if (info.bit_rate != 0 && info.bit_rate_estimated) {
+        return tr("An estimate: the file's bitrate minus its audio's, as the file does not record the video's own. "
+                  "Subtitles and the container's own bytes are counted in it.");
     }
     return {};
 }

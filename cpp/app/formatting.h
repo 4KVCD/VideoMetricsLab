@@ -27,7 +27,8 @@ QString length_string(const VideoInfo& info);
 QString film_grain_note(const VideoInfo& info);
 
 // Bitrate at a human scale: Mb/s once it is over a megabit, else kb/s; "≈"
-// when it is the whole file's, the soundtrack included (bitrate_note).
+// when it is not the video's own: the file's minus its audio's, or the whole
+// file's, the soundtrack included (bitrate_note).
 QString bitrate_string(const VideoInfo& info);
 
 // The Bitrate cell's tooltip: what the figure is when it is not the video's

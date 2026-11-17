@@ -698,6 +698,7 @@
   "Calculate the rest?": "计算其余的视频？",
   "It could not be read. Remove it or add the file again to retry.": "无法读取。请将其移除，或重新添加该文件后重试。",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "整个文件的码率，包括音轨：文件中没有记录视频本身的码率。",
+  "An estimate: the file's bitrate minus its audio's, as the file does not record the video's own. Subtitles and the container's own bytes are counted in it.": "估计值：文件的码率减去音频的码率，因为文件没有记录视频本身的码率。其中包含字幕和容器本身的字节。",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} 已在列表中。改为显示已保存运行的分数吗？",
   "Drop a video here, paste its path, or click Browse...": "将视频拖放到此处、粘贴其路径，或点击“浏览...”",
   "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "将视频文件拖放到此处以添加，拖动行以调整顺序，点击列标题以排序。",

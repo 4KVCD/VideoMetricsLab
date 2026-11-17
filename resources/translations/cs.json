@@ -698,6 +698,7 @@
   "Calculate the rest?": "Spočítat ostatní?",
   "It could not be read. Remove it or add the file again to retry.": "Nelze jej přečíst. Odeberte jej nebo přidejte soubor znovu a zkuste to znovu.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Datový tok celého souboru včetně zvuku: soubor neuvádí datový tok samotného videa.",
+  "An estimate: the file's bitrate minus its audio's, as the file does not record the video's own. Subtitles and the container's own bytes are counted in it.": "Odhad: datový tok souboru minus tok zvuku, protože soubor neuvádí tok samotného videa. Titulky a vlastní bajty kontejneru jsou v něm započteny.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} už je v seznamu. Zobrazit místo toho skóre uloženého běhu?",
   "Drop a video here, paste its path, or click Browse...": "Přetáhněte sem video, vložte jeho cestu nebo klikněte na Procházet...",
   "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Přetažením videosouborů sem je přidáte, přetažením řádků změníte jejich pořadí a kliknutím na záhlaví sloupce je seřadíte.",

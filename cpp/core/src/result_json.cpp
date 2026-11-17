@@ -58,6 +58,9 @@ nlohmann::ordered_json video_info_to_dict(const VideoInfo& info) {
     if (!info.profile.empty()) {
         dict["profile"] = info.profile;
     }
+    if (info.bit_rate_estimated) {
+        dict["bit_rate_estimated"] = true;
+    }
     if (info.scaled_to) {
         dict["scaled_to"] = {info.scaled_to->first, info.scaled_to->second};
     }
@@ -83,6 +86,7 @@ VideoInfo video_info_from_dict(const nlohmann::json& data) {
     info.pix_fmt = data.value("pix_fmt", std::string());
     info.bit_rate = data.value("bit_rate", 0LL);
     info.bit_rate_whole_file = python_truthy(data.value("bit_rate_whole_file", nlohmann::json(false)));
+    info.bit_rate_estimated = python_truthy(data.value("bit_rate_estimated", nlohmann::json(false)));  // from 2.6
     info.nominal_fps = data.value("nominal_fps", 0.0);
     info.average_fps = data.value("average_fps", 0.0);
     info.color_range = data.value("color_range", std::string());

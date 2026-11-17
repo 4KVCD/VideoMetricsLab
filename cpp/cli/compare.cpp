@@ -789,6 +789,11 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
         if (auto found = load_result(cache_folder, source.path, video.path, video.request.recipe,
                                      video.request.metrics, video.request.perceptual_backends)) {
             saved = std::move(found->first);
+            // The bitrates as read now, as the window takes them
+            // (on_saved_found): an older version may have taken the whole
+            // file's.
+            saved->source_info.take_bit_rate(source);
+            saved->distorted_info.take_bit_rate(*video.info);
         }
     }
     // The saved scores the run keeps, by the window's rule.

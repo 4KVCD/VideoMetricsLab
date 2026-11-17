@@ -179,12 +179,17 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     run->label = text_of(row_data.path.stem());
     // They answer the row's request as it is now (its token): its videos'
     // film grain as read and chosen now, which a result saved before either
-    // was known lacks. A resolution test's test video is the reference.
+    // was known lacks, and their bitrates as read now, which an older
+    // version may have taken from the whole file (the BD-rate tab reads
+    // them). A resolution test's test video is the reference.
     take_film_grain(run->result.source_info, *source_info_);
+    run->result.source_info.take_bit_rate(*source_info_);
     if (row_data.options.resample_test) {
         take_film_grain(run->result.distorted_info, *source_info_);
+        run->result.distorted_info.take_bit_rate(*source_info_);
     } else if (row_data.video_info) {
         take_film_grain(run->result.distorted_info, *row_data.video_info);
+        run->result.distorted_info.take_bit_rate(*row_data.video_info);
     }
     if (previous) {
         // The row's line updated in place: its colour, and whether it is

@@ -220,7 +220,10 @@ void add_file_context(Json& entry, const VideoInfo& info) {
     entry["file_size"] = error ? Json(nullptr) : Json(size);
     entry["container"] = text_or_null(info.format_name);
     entry["bit_rate"] = info.bit_rate > 0 ? Json(info.bit_rate) : Json(nullptr);
-    entry["bit_rate_of"] = info.bit_rate <= 0 ? Json(nullptr) : Json(info.bit_rate_whole_file ? "file" : "video");
+    entry["bit_rate_of"] = info.bit_rate <= 0          ? Json(nullptr)
+                           : info.bit_rate_whole_file ? Json("file")
+                           : info.bit_rate_estimated  ? Json("file minus audio")
+                                                      : Json("video");
     entry["stream_bytes"] = info.stream_bytes > 0 ? Json(info.stream_bytes) : Json(nullptr);
     entry["profile"] = text_or_null(info.profile);
     entry["level"] = info.level > 0 ? Json(info.level) : Json(nullptr);

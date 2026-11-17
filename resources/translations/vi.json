@@ -698,6 +698,7 @@
   "Calculate the rest?": "Tính các video còn lại?",
   "It could not be read. Remove it or add the file again to retry.": "Không đọc được. Hãy xóa nó, hoặc thêm lại tệp để thử lại.",
   "The whole file's bitrate, soundtrack included: the file does not record the video's own.": "Bitrate của cả tệp, gồm cả âm thanh: tệp không ghi bitrate riêng của video.",
+  "An estimate: the file's bitrate minus its audio's, as the file does not record the video's own. Subtitles and the container's own bytes are counted in it.": "Ước tính: tốc độ bit của tệp trừ đi tốc độ bit của âm thanh, vì tệp không ghi tốc độ bit của chính video. Phụ đề và các byte của chính vùng chứa được tính vào.",
   "{name} is already in the list. Show the saved run's scores in its place?": "{name} đã có trong danh sách. Hiển thị điểm của lần chạy đã lưu thay thế?",
   "Drop a video here, paste its path, or click Browse...": "Thả video vào đây, dán đường dẫn của nó hoặc bấm Duyệt...",
   "Drop video files here to add them, drag rows to reorder them, and click a column heading to sort.": "Thả tệp video vào đây để thêm, kéo các hàng để sắp xếp lại và bấm vào tiêu đề cột để sắp xếp.",

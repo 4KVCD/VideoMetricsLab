@@ -86,6 +86,7 @@ void VideoInfo::set_frame_rate(double frames_per_second) {
     const std::uintmax_t bytes = std::filesystem::file_size(path, unknown);
     bit_rate = unknown || duration <= 0 ? 0 : std::llround(static_cast<double>(bytes) * 8 / duration);
     bit_rate_whole_file = false;
+    bit_rate_estimated = false;
 }
 
 void VideoInfo::forget_frame_rate() {
@@ -93,6 +94,14 @@ void VideoInfo::forget_frame_rate() {
     fps = nominal_fps = average_fps = duration = 0.0;
     bit_rate = 0;
     bit_rate_whole_file = false;
+    bit_rate_estimated = false;
+}
+
+void VideoInfo::take_bit_rate(const VideoInfo& from) {
+    bit_rate = from.bit_rate;
+    bit_rate_whole_file = from.bit_rate_whole_file;
+    bit_rate_estimated = from.bit_rate_estimated;
+    stream_bytes = from.stream_bytes;
 }
 
 bool VideoInfo::is_raw_stream() const {

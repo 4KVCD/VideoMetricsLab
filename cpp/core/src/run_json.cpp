@@ -28,6 +28,9 @@ nlohmann::json video_json(const VideoInfo& info) {
             {"format_name", info.format_name},
             {"start_offset", info.start_offset},
             {"timed_raw", info.timed_raw}};
+    if (info.bit_rate_estimated) {  // likewise
+        text["bit_rate_estimated"] = true;
+    }
     if (info.rotation != 0) {  // likewise
         text["rotation"] = info.rotation;
     }
@@ -66,6 +69,7 @@ VideoInfo video_from(const nlohmann::json& text) {
     text.at("pix_fmt").get_to(info.pix_fmt);
     text.at("bit_rate").get_to(info.bit_rate);
     text.at("bit_rate_whole_file").get_to(info.bit_rate_whole_file);
+    info.bit_rate_estimated = text.value("bit_rate_estimated", false);
     text.at("nominal_fps").get_to(info.nominal_fps);
     text.at("average_fps").get_to(info.average_fps);
     text.at("color_range").get_to(info.color_range);
