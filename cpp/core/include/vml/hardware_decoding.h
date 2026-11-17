@@ -36,7 +36,7 @@ struct HardwareDecoding {
     std::optional<std::string> distorted;
 
     bool uses_gpu() const { return source.has_value() || distorted.has_value(); }
-    // The plan as a status line says it ("source cuda, distorted cpu", or
+    // The plan as a status line says it ("source NVIDIA GPU, test CPU", or
     // "off").
     std::string describe() const;
     bool operator==(const HardwareDecoding&) const = default;

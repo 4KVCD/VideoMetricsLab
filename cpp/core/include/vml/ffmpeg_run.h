@@ -106,8 +106,8 @@ struct RunStatus {
 using StatusCallback = std::function<void(const RunStatus&)>;
 
 // The status of a step that decodes: `brief`, then the decode plan, then
-// `ending`, as in "Running ffmpeg (GPU decode: source cuda, distorted
-// cpu)...".
+// `ending`, as in "Running ffmpeg (GPU decode: source NVIDIA GPU, test
+// CPU)...".
 RunStatus decoding_status(const std::string& brief, const HardwareDecoding& decoding,
                           StatusKind kind = StatusKind::step, std::string_view ending = "...");
 

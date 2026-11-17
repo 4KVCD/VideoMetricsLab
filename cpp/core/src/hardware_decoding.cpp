@@ -148,11 +148,38 @@ std::string analysis_pix_fmt(const std::vector<std::string>& pix_fmts) {
 
 std::string hw_native_format(const std::string& pix_fmt) { return bit_depth(pix_fmt) > 8 ? "p010le" : "nv12"; }
 
+namespace {
+
+// What decodes one video, as a person reads it: the maker of the GPU whose
+// -hwaccel it is, "CPU" for software decoding, and a -hwaccel the decoder
+// table does not know (one a helper process was handed) as it is.
+std::string decoder_label(const std::optional<std::string>& hwaccel) {
+    if (!hwaccel) {
+        return "CPU";
+    }
+    const GpuDecoder* decoder = decoder_of_hwaccel(*hwaccel);
+    if (decoder == nullptr) {
+        return *hwaccel;
+    }
+    switch (decoder->vendor) {
+    case GpuVendor::nvidia:
+        return "NVIDIA GPU";
+    case GpuVendor::intel:
+        return "Intel GPU";
+    case GpuVendor::amd:
+        return "AMD GPU";
+    default:  // Apple's row has no GpuVendor (gpu_decoders.h)
+        return decoder->name == apple_decoder ? "Apple GPU" : *hwaccel;
+    }
+}
+
+}  // namespace
+
 std::string HardwareDecoding::describe() const {
     if (!uses_gpu()) {
         return "off";
     }
-    return "source " + source.value_or("cpu") + ", distorted " + distorted.value_or("cpu");
+    return "source " + decoder_label(source) + ", test " + decoder_label(distorted);
 }
 
 namespace {

@@ -284,6 +284,16 @@ TEST(FfmpegRun, TellsARefusedFrameWriteFromOtherFailures) {
                                           "'auto_scale_0'\n"));
 }
 
+// The decode plan in a status line names each video's decoder by its GPU's
+// maker, not by FFmpeg's -hwaccel ("d3d11va" read as nothing to AMD's users).
+TEST(FfmpegRun, TheDecodePlanNamesTheGpusMaker) {
+    EXPECT_EQ(decoding_status("Running ffmpeg", HardwareDecoding{"d3d11va", std::nullopt}).text,
+              "Running ffmpeg (GPU decode: source AMD GPU, test CPU)...");
+    EXPECT_EQ((HardwareDecoding{"videotoolbox", "cuda"}.describe()), "source Apple GPU, test NVIDIA GPU");
+    EXPECT_EQ((HardwareDecoding{std::nullopt, "some_hwaccel"}.describe()), "source CPU, test some_hwaccel");
+    EXPECT_EQ(HardwareDecoding{}.describe(), "off");
+}
+
 // A test video FFmpeg rebuilt its filters for at its own size (its colour tags
 // flipped) stays at that size, in this run and this process's later runs; one
 // rebuilt at another size goes to the source's width.
