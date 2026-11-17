@@ -458,6 +458,15 @@ void ChildProcess::resume() {
     state_->suspended.clear();
 }
 
+void ChildProcess::end_at_normal_priority() {
+    // CreateProcess's handle has every right, PROCESS_SET_INFORMATION too.
+    // A program already gone fails both calls, which is fine: it has ended.
+    const DWORD priority = GetPriorityClass(state_->process.get());
+    if (priority == IDLE_PRIORITY_CLASS || priority == BELOW_NORMAL_PRIORITY_CLASS) {
+        SetPriorityClass(state_->process.get(), NORMAL_PRIORITY_CLASS);
+    }
+}
+
 std::string ChildProcess::standard_error() {
     std::unique_lock lock(state_->error_mutex);
     // Once the program has ended its error output ends with it, unless a

@@ -230,6 +230,13 @@ void ChildConversation::read() {
 // on_message (not once Cancel stopped it).
 void ChildConversation::take(const std::string& text) {
     const nlohmann::json message = nlohmann::json::parse(text, nullptr, false);
+    const bool answer = message.is_object() && (message.contains("result") || message.contains("error"));
+    if (answer) {
+        // Its work is done and the run waits for it to end: an Idle run's
+        // child (the command line's, under nice) would otherwise end behind
+        // every busier program, 2.5 to 19 s a child on a loaded PC.
+        child_.end_at_normal_priority();
+    }
     if (message.is_object() && message.contains("result")) {
         result = message["result"];
     } else if (message.is_object() && message.contains("error")) {

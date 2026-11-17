@@ -162,6 +162,14 @@ public:
     // process group is sent SIGCONT.
     void resume();
 
+    // Raises a program running below Normal priority to Normal, for its end:
+    // an Idle program's exit (each of its threads runs its own) otherwise
+    // waits for the CPU behind every busier program, seconds on a loaded PC,
+    // while whoever waits for it to end waits too. Never lowers a priority;
+    // a program already gone is ignored. Only on Windows: elsewhere raising
+    // a priority needs privileges, and it does nothing.
+    void end_at_normal_priority();
+
     // The end of what the program wrote to standard error (error_tail), its
     // lines ended with "\n" (universal_newlines), complete once it has ended
     // (after wait()).

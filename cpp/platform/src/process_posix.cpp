@@ -570,6 +570,10 @@ void ChildProcess::resume() {
     state_->stopped = false;
 }
 
+// Lowering a program's niceness needs privileges here, so it ends at the
+// niceness it was given.
+void ChildProcess::end_at_normal_priority() {}
+
 std::string ChildProcess::standard_error() {
     std::unique_lock lock(state_->error_mutex);
     state_->error_ended_signal.wait_for(lock, std::chrono::seconds(5), [this] { return state_->error_ended; });
