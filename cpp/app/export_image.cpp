@@ -21,7 +21,7 @@ constexpr int export_row_padding = 6;
 }  // namespace
 
 QPixmap export_image(const ChartWidget& chart_widget, const QString& title, const ExportTable& table,
-                     const QFont& font) {
+                     const QFont& font, std::span<const ExportKey> keys) {
     // The chart comes in the screen's pixels (twice its size on a Retina
     // display); the title, legend and table are drawn at the same scale, in
     // the same units, or their text would be half the size of its labels.
@@ -69,7 +69,15 @@ QPixmap export_image(const ChartWidget& chart_widget, const QString& title, cons
     QPainter painter(&image);
     painter.setPen(QColor(QStringLiteral("#111111")));
     painter.setFont(title_font);
-    painter.drawText(export_margin, export_margin + title_metrics.ascent(), title);
+    const int title_baseline = export_margin + title_metrics.ascent();
+    painter.drawText(export_margin, title_baseline, title);
+    // The keys after the title, each in its own colour.
+    int key_x = export_margin + title_metrics.horizontalAdvance(title) + 2 * export_gap;
+    for (const ExportKey& key : keys) {
+        painter.setPen(key.color);
+        painter.drawText(key_x, title_baseline, key.text);
+        key_x += title_metrics.horizontalAdvance(key.text) + export_gap;
+    }
     int y = export_margin + title_metrics.height() + export_gap;
     painter.drawPixmap(export_margin, y, chart);
     y += chart_height + export_gap;

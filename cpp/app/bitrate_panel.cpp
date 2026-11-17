@@ -27,6 +27,7 @@
 #include <span>
 
 #include "chart.h"
+#include "export_image.h"
 #include "formatting.h"
 #include "frame_controls.h"
 #include "frame_types.h"
@@ -833,12 +834,7 @@ void BitratePanel::set_table_row(int row, const BitrateEntry& entry) {
                        QString(),
                        QString(),
                        status_text(entry)};
-    // The frame range's figures while one is chosen (blank for a video with
-    // none of its frames), else the whole video's.
-    const std::optional<BitrateSummary> summary = !entry.data                          ? std::nullopt
-                                                  : frame_controls->selected_frames() ? entry.range_summary
-                                                                                       : entry.data->summary;
-    if (summary) {
+    if (const std::optional<BitrateSummary> summary = shown_summary(entry)) {
         values[4] = rate_text(summary->average_kbps);
         values[5] = rate_text(summary->minimum_kbps);
         values[6] = rate_text(summary->maximum_kbps);
@@ -850,6 +846,14 @@ void BitratePanel::set_table_row(int row, const BitrateEntry& entry) {
     // Why the file failed, on its own row: kept with the file, so that a row
     // that moves up as another is removed shows its own.
     cell(row, col_status)->setToolTip(entry.state == BitrateState::failed ? entry.error : QString());
+}
+
+std::optional<BitrateSummary> BitratePanel::shown_summary(const BitrateEntry& entry) const {
+    // The frame range's figures while one is chosen (none for a video with
+    // none of its frames), else the whole video's.
+    return !entry.data                          ? std::nullopt
+           : frame_controls->selected_frames() ? entry.range_summary
+                                                : std::optional<BitrateSummary>(entry.data->summary);
 }
 
 void BitratePanel::on_table_item_changed(QTableWidgetItem* item) {
@@ -1195,6 +1199,55 @@ void BitratePanel::on_hover_left() {
     hover_label->set_text(app::tr(hover_hint));
 }
 
+QString BitratePanel::export_title() const {
+    // The graph chosen (the axis gives only the unit), then the range the
+    // table's figures are of.
+    const QRadioButton* view = frame_radio->isChecked() ? frame_radio : gop_radio->isChecked() ? gop_radio : second_radio;
+    QString title = app::tr("{label} vs time", {{"label", app::tr("Video bitrate")}}) + QStringLiteral(" — ") +
+                    view->text();
+    if (const std::optional<std::pair<int, int>> frames = frame_controls->selected_frames()) {
+        title += app::tr(" — frames {first} to {last}", {{"first", frames->first}, {"last", frames->second}});
+    }
+    return title;
+}
+
+ExportTable BitratePanel::export_table() const {
+    // The lines drawn (refresh_plot's), in the table's order, with its
+    // columns' figures.
+    ExportTable exported{{app::tr("Series"), app::tr("Duration"), app::tr("Frames"), app::tr("Average"),
+                          app::tr("Minimum"), app::tr("Maximum")},
+                         {}};
+    for (const auto& [key, entry] : entries_) {
+        if (!entry.enabled || !entry.data) {
+            continue;
+        }
+        const std::optional<BitrateSummary> summary = shown_summary(entry);
+        const QString name = name_of(entry.path);
+        exported.second.emplace_back(
+            entry.reference ? app::tr("{name} (the reference)", {{"name", name}}) : name, entry.color,
+            std::vector<QString>{qt_text(format_hms(entry.data->duration(), 2)),
+                                 python_format("{count:,}", {{"count", entry.data->frame_count()}}),
+                                 summary ? rate_text(summary->average_kbps) : QString(),
+                                 summary ? rate_text(summary->minimum_kbps) : QString(),
+                                 summary ? rate_text(summary->maximum_kbps) : QString()});
+    }
+    return exported;
+}
+
+QPixmap BitratePanel::render_export_image() {
+    // As Metric Graphs' image: the bare chart's lines say nothing once the
+    // file leaves the app. The frame types' dots are keyed after the title,
+    // as beside their box: the table keys only the lines.
+    std::vector<ExportKey> keys;
+    if (frame_radio->isChecked() && frame_types_box->isChecked()) {
+        const std::span<const QColor> colors = frame_type_colors();
+        keys = {{QStringLiteral("I"), colors[frame_type_i]},
+                {QStringLiteral("P"), colors[frame_type_p]},
+                {QStringLiteral("B"), colors[frame_type_b]}};
+    }
+    return export_image(*chart, export_title(), export_table(), font(), keys);
+}
+
 void BitratePanel::on_export_png() {
     if (!chart->has_data()) {
         dialogs.inform(app::tr("No bitrate data"), app::tr("Analyze at least one video first."));
@@ -1222,7 +1275,7 @@ void BitratePanel::on_export_png() {
     const QString suggested =
         named ? suggested_file_name(text_of(named->path.stem()) + "_bitrate", ".png") : QStringLiteral("bitrate_plot.png");
     const QString path = dialogs.save_file(app::tr("Export bitrate plot"), suggested, app::tr("PNG image (*.png)"));
-    if (!path.isEmpty() && !chart->render_to_pixmap().save(path)) {
+    if (!path.isEmpty() && !render_export_image().save(path)) {
         dialogs.alert(app::tr("Export failed"), app::tr("Could not write {path}", {{"path", path}}));
     }
 }

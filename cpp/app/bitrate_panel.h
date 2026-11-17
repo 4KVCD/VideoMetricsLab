@@ -7,6 +7,7 @@
 
 #include <QColor>
 #include <QMetaType>
+#include <QPixmap>
 #include <QString>
 #include <QThread>
 #include <QWidget>
@@ -23,6 +24,7 @@
 #include <vector>
 
 #include "dialogs.h"
+#include "export_image.h"
 #include "vml/bitrate.h"
 #include "vml/cancel.h"
 #include "vml/video.h"
@@ -128,6 +130,10 @@ public:
     std::vector<QThread*> live_workers() const;
     // Stops the analysis, keeping finished results.
     void cancel();
+    // What Export PNG saves: the graph with its title (the graph chosen, the
+    // frame range, the frame types' colours while marked) and a table of
+    // the lines drawn, keyed by their colours, with the table's figures.
+    QPixmap render_export_image();
 
     // Its questions and messages; the tests answer them.
     Dialogs dialogs;
@@ -190,6 +196,12 @@ private:
     void refresh_table_values();
     QTableWidgetItem* cell(int row, int column);
     void set_table_row(int row, const BitrateEntry& entry);
+    // The figures the table shows for `entry`: the frame range's while one
+    // is chosen, else the whole video's; none before it is read.
+    std::optional<BitrateSummary> shown_summary(const BitrateEntry& entry) const;
+    // The exported image's title and table (render_export_image).
+    QString export_title() const;
+    ExportTable export_table() const;
     void on_table_item_changed(QTableWidgetItem* item);
     void choose_video_color(int row);
     void on_video_color_changed(const QString& path_key, const QColor& color);

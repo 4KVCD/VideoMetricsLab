@@ -22,6 +22,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "chart.h"
@@ -79,6 +80,9 @@ protected:
         return panel.chart->series_.at(entry(panel, row).series).marks.size();
     }
     static QCheckBox* frame_types_box(const BitratePanel& panel) { return panel.frame_types_box; }
+    static void mark_reference(BitratePanel& panel, std::size_t row) { panel.entries_.at(row).second.reference = true; }
+    static QString export_title(const BitratePanel& panel) { return panel.export_title(); }
+    static ExportTable export_table(const BitratePanel& panel) { return panel.export_table(); }
 };
 
 namespace {
@@ -245,6 +249,53 @@ TEST_F(BitratePanelTest, FrameTypesInTheFrameGraph) {
     panel->second_radio->click();
     EXPECT_FALSE(box->isEnabled());
     EXPECT_EQ(marks_drawn(*panel, 0), 0u);
+}
+
+// The exported image says what its lines are, as Metric Graphs' does: the
+// graph and the frame range in its title, and each line drawn named (the
+// reference marked) beside its colour, with the table's figures. It was the
+// bare chart.
+TEST_F(BitratePanelTest, TheExportedImageNamesItsGraphAndLines) {
+    VideoColors colors;
+    const auto panel = make_panel(colors);
+    const test::Folder folder;
+    const std::filesystem::path source = folder / "source.mkv";
+    const std::filesystem::path encode = folder / "encode.mkv";
+    panel->add_files({source, encode});
+    analyzed(*panel, source, two_seconds(source));
+    analyzed(*panel, encode, two_seconds(encode));
+    mark_reference(*panel, 0);
+
+    EXPECT_EQ(export_title(*panel).toStdString(), "Video bitrate vs time — Second based");
+    {
+        const auto [headers, rows] = export_table(*panel);
+        ASSERT_EQ(headers.size(), 6u);
+        ASSERT_EQ(rows.size(), 2u);
+        EXPECT_EQ(std::get<0>(rows[0]).toStdString(), "source.mkv (the reference)");
+        const auto& [label, color, cells] = rows[1];
+        EXPECT_EQ(label.toStdString(), "encode.mkv");
+        EXPECT_EQ(color, entry(*panel, 1).color);
+        ASSERT_EQ(cells.size(), 5u);
+        EXPECT_EQ(cells[0].toStdString(), "0:00:02.00");
+        EXPECT_EQ(cells[1].toStdString(), "4");
+        EXPECT_EQ(cells[2].toStdString(), "16 kb/s");
+        EXPECT_EQ(cells[3].toStdString(), "12 kb/s");
+        EXPECT_EQ(cells[4].toStdString(), "20 kb/s");
+    }
+    // Around the chart, not instead of it.
+    EXPECT_GT(panel->render_export_image().height(), panel->chart->render_to_pixmap().height());
+
+    // A frame range: in the title, and the figures are of it; a line not
+    // drawn is not listed.
+    panel->gop_radio->click();
+    panel->frame_controls->range_start_spin->setValue(1);
+    panel->frame_controls->range_end_spin->setValue(2);
+    panel->table->item(0, col_use)->setCheckState(Qt::Unchecked);
+    EXPECT_EQ(export_title(*panel).toStdString(), "Video bitrate vs time — GOP based — frames 1 to 2");
+    const auto rows = export_table(*panel).second;
+    ASSERT_EQ(rows.size(), 1u);
+    EXPECT_EQ(std::get<0>(rows[0]).toStdString(), "encode.mkv");
+    EXPECT_EQ(std::get<2>(rows[0])[2].toStdString(), "20 kb/s");  // 2,500 bytes from 0.5 to 1.5 s
 }
 
 // Why a file failed is on its own row: once a row above it is removed, the
