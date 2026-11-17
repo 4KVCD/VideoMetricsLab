@@ -193,17 +193,25 @@ bool MainWindow::wait_for_saved_scores() {
 
 bool MainWindow::settle_film_grain(const std::vector<int>& checked) {
     std::vector<std::filesystem::path> changed = apply_film_grain_default();
-    // Asked about (Settings: Ask): the checked videos with a choice to make
-    // and none made, and the reference; a resolution test's video is the
-    // reference.
+    // Asked about (Settings: Ask): the checked videos to be calculated with a
+    // choice to make and none made, and the reference while any video is to
+    // be calculated; a resolution test's video is the reference. A video with
+    // every requested metric already is not calculated (on_run_clicked), so
+    // it is not asked about.
+    std::vector<int> to_calculate;
+    for (const int row : checked) {
+        if (!has_requested_results(*rows_[static_cast<std::size_t>(row)])) {
+            to_calculate.push_back(row);
+        }
+    }
     const auto unchosen = [](const VideoInfo& info) { return film_grain_choosable(info) && !info.with_film_grain; };
-    const bool reference = unchosen(*source_info_);
+    const bool reference = !to_calculate.empty() && unchosen(*source_info_);
     QStringList names;
     if (reference) {
         names.append(app::tr("{name} (the reference)", {{"name", name_of(source_info_->path)}}));
     }
     std::vector<int> rows;
-    for (const int row : checked) {
+    for (const int row : to_calculate) {
         const RowData& row_data = *rows_[static_cast<std::size_t>(row)];
         if (!row_data.options.resample_test && row_data.video_info && unchosen(*row_data.video_info)) {
             rows.push_back(row);
