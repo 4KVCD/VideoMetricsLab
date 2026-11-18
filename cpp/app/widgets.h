@@ -76,6 +76,11 @@ public:
     // Whether drops are taken (not during a run).
     bool drops_allowed = true;
 
+    // Selects `row` when no row is selected, as new rows are added: so that
+    // what is shown for the selection (the Options panel) is there without a
+    // click first. A selection the user made is left as it is.
+    void select_row_if_none_is(int row);
+
 signals:
     // Files dropped on the table from outside it: their paths.
     void filesDropped(const QStringList& paths);

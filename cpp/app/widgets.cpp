@@ -7,6 +7,7 @@
 #include <QDropEvent>
 #include <QFileInfo>
 #include <QFrame>
+#include <QItemSelectionModel>
 #include <QKeyEvent>
 #include <QMimeData>
 #include <QMouseEvent>
@@ -106,6 +107,19 @@ FillColumnTable::FillColumnTable(int rows, int columns, int fill_column, std::ve
                                  QWidget* parent)
     : QTableWidget(rows, columns, parent), fill_column_(fill_column), other_columns_(std::move(other_columns)) {
     connect(horizontalHeader(), &QHeaderView::sectionResized, this, &FillColumnTable::on_section_resized);
+}
+
+void FillColumnTable::select_row_if_none_is(int row) {
+    if (row < 0 || row >= rowCount() || selectionModel()->hasSelection()) {
+        return;
+    }
+    // The current cell in the first column shown, where the keyboard goes on.
+    int column = 0;
+    while (column < columnCount() - 1 && isColumnHidden(column)) {
+        ++column;
+    }
+    selectionModel()->setCurrentIndex(model()->index(row, column),
+                                      QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 }
 
 void FillColumnTable::setHorizontalHeader(QHeaderView* header) {

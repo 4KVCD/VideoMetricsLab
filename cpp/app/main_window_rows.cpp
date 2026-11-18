@@ -736,11 +736,15 @@ void MainWindow::add_test_videos(const std::vector<std::filesystem::path>& paths
         }
         added.push_back(path);
     }
+    const int first_added = distorted_table_->rowCount();  // rows are added at the end
     for (const std::filesystem::path& path : added) {
         const int row = add_table_row(path);
         set_row_status(row, RowState::reading);
     }
     if (!added.empty()) {
+        // With no row selected, the first new one is, so the Options panel
+        // shows its settings without a click on it first.
+        distorted_table_->select_row_if_none_is(first_added);
         start_media_probe(added);
         start_cache_lookup(added);
     }
@@ -789,6 +793,7 @@ void MainWindow::add_resample_test(const ResampleTarget& target) {
     row_data.video_info = *source_info_;
     set_resample_row_info(row, target);
     set_row_metrics(row);  // drawn again now it has its video
+    distorted_table_->select_row_if_none_is(row);  // as add_test_videos does
     start_cache_lookup({path});
 }
 
