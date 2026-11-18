@@ -1,4 +1,4 @@
-// A results JSON's frame_pairing (frame_pairing.h): every result says how its
+// A results JSON's frame_sync (frame_pairing.h): every result says how its
 // frames were paired, in a status and a note in plain words.
 #include "vml/frame_pairing.h"
 
@@ -43,13 +43,13 @@ TEST(FramePairing, EveryResultSaysHowItsFramesWerePairedAndWhatThatMeans) {
 
     ComparisonResult short_of = scored(235);
     short_of.frames_short = FramesShort{235, 240};
-    EXPECT_EQ(status(short_of), "may_be_out_of_step");
+    EXPECT_EQ(status(short_of), "may_be_out_of_sync");
     EXPECT_NE(note(short_of).find("--frame-counts check"), std::string::npos);  // how to tell
     short_of.frames_short = FramesShort{235, 240, 235, 240};
-    EXPECT_EQ(status(short_of), "out_of_step");
+    EXPECT_EQ(status(short_of), "out_of_sync");
     EXPECT_EQ(frame_pairing_json(short_of).at("test_frames"), 240);
     short_of.frames_short = FramesShort{235, 240, 235, 235};
-    EXPECT_EQ(status(short_of), "in_step");
+    EXPECT_EQ(status(short_of), "in_sync");
     EXPECT_EQ(frames_short_text(*short_of.frames_short), "");  // no command-line note
 }
 

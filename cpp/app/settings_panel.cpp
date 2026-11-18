@@ -25,6 +25,7 @@
 #include <QSizePolicy>
 #include <QStyle>
 #include <QStyleOptionComboBox>
+#include <QTextDocument>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
@@ -212,18 +213,34 @@ QGroupBox* SettingsPanel::build_storage_box() {
     use_cache->setChecked(settings_.use_cache);
     connect(use_cache, &QCheckBox::toggled, this, [this] { on_edited(); });
     storage_form->addRow("", use_cache);
-    check_frame_counts = new QCheckBox(app::tr("Read whole files to count frames when they may not line up"));
-    check_frame_counts->setToolTip(app::tr(
-        "When fewer frames were compared than the two videos' length holds, the reference and the test video may "
-        "not line up frame for frame -- usually because frames were repeated or dropped as the test video was "
-        "encoded -- and every score after that point would be wrong. Both videos' frames are then counted to tell "
-        "for sure, at once where their files state their frame counts (MP4 files, and MKV files mkvmerge wrote). "
-        "Ticked, a file that states none is read through to count them, which can take minutes for a film on a "
-        "network drive. Unticked, such a video only says its frames may not line up.\n\nApplies from the next "
-        "run."));
+    check_frame_counts = new QCheckBox(app::tr("Read entire files to check frame counts when needed (can be slow)"));
+    // As rich text, which Qt wraps (a plain tooltip is one line however long)
+    check_frame_counts->setToolTip(Qt::convertFromPlainText(app::tr(
+        "Sometimes a test video ends up with a few more or fewer frames than the reference, for example when an "
+        "encoder duplicates frames to keep a constant frame rate. Frames are then compared with the wrong "
+        "reference frames, and every score from that point on is wrong.\n\nThe app notices when this may have "
+        "happened and checks the frame counts that MP4 files, and MKV files made by mkvmerge, store. Many other "
+        "files, including those made by FFmpeg and HandBrake, don't store one.\n\nWhen this is on, such a file is "
+        "read from start to finish to count its frames. This happens only for a video that looks out of sync, "
+        "after it has been scored, but it can add several minutes per video for a film on a network drive. When "
+        "it's off, the video is only marked as possibly out of sync.\n\nTakes effect from the next run."),
+        Qt::WhiteSpaceNormal));
     check_frame_counts->setChecked(settings_.check_frame_counts);
     connect(check_frame_counts, &QCheckBox::toggled, this, [this] { on_edited(); });
-    storage_form->addRow("", check_frame_counts);
+    // Said where it is seen, right under it: the time it can add comes after a video's scores
+    auto* frame_count_note = new QLabel(app::tr(
+        "When on, a video that looks out of sync can take several extra minutes to finish after it's scored, "
+        "while its files are read to count their frames."));
+    frame_count_note->setWordWrap(true);
+    // At the top of the height a wrapping label is given, not in its middle
+    frame_count_note->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    theme::style(frame_count_note, "color: {muted};");
+    auto* frame_count_column = new QVBoxLayout;
+    frame_count_column->setContentsMargins(0, 0, 0, 0);
+    frame_count_column->setSpacing(2);
+    frame_count_column->addWidget(check_frame_counts);
+    frame_count_column->addWidget(frame_count_note);
+    storage_form->addRow("", frame_count_column);
 
     // Where each session's log goes: runs, steps and every failure in full,
     // kept after the window that showed them is closed.

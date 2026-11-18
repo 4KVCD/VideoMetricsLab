@@ -102,28 +102,26 @@ std::string frames_short_text(const FramesShort& short_of) {
 }
 
 std::string frames_short_note(const FramesShort& short_of) {
-    const std::string compared = "Fewer frames were compared (" + with_thousands(short_of.scored_pairs) +
-                                 ") than the videos' length holds (" + with_thousands(short_of.length_frames) + ")";
     if (short_of.in_step()) {
-        return compared + ", but both videos have " + with_thousands(*short_of.source_frames) +
-               " frames: their frames line up.";
+        return "Only " + with_thousands(short_of.scored_pairs) + " frames were compared, while videos of this " +
+               "length should have " + with_thousands(short_of.length_frames) + ", but both videos have " +
+               with_thousands(*short_of.source_frames) + " frames, so they are in sync.";
     }
     if (short_of.counted()) {
-        return "The reference has " + with_thousands(*short_of.source_frames) + " frames and the test video " +
-               with_thousands(*short_of.test_frames) +
-               " in the same length, so from where they part their frames are compared out of step and the scores "
-               "from there on are wrong. Frames repeated or dropped as the test video was encoded do this (an "
-               "encode at a constant frame rate of a source with gaps in its timing, say); encoding at a variable "
-               "frame rate, as the source has it, keeps its frames as they are.";
+        return "This video has " + with_thousands(*short_of.test_frames) + " frames, but the reference has " +
+               with_thousands(*short_of.source_frames) +
+               ", even though both are the same length. From the first point where they differ, each frame is "
+               "compared with the wrong reference frame, so every score after that point is wrong. This usually "
+               "happens when frames are duplicated or dropped during encoding; encoding with a variable frame rate "
+               "that matches the source avoids it.";
     }
-    return compared +
-           ": if the scores drop suddenly partway through and stay low, the two may not line up frame for frame. "
-           "Not both videos state their frame count, so to tell for sure their frames must be counted by reading "
-           "the whole files: --frame-counts check, or in the window Settings > Storage > Read whole files to count "
-           "frames when they may not line up, then calculate the video again (in the window: right-click it > "
-           "Recalculate selected metrics).";
+    return "This video may be out of sync with the reference: only " + with_thousands(short_of.scored_pairs) +
+           " frames were compared, but videos of this length should have " + with_thousands(short_of.length_frames) +
+           ". If the scores drop suddenly partway through and stay low, this is the likely cause. At least one of "
+           "the files doesn't store its frame count, so to find out for sure it has to be read from start to "
+           "finish: use --frame-counts check, or in the app turn on Settings > Storage > Read entire files to check "
+           "frame counts when needed, then recalculate the video (right-click it > Recalculate selected metrics).";
 }
-
 nlohmann::ordered_json frame_pairing_json(const ComparisonResult& result) {
     const auto count = [](const std::optional<long long>& value) {
         return value ? nlohmann::ordered_json(*value) : nlohmann::ordered_json(nullptr);
@@ -135,7 +133,7 @@ nlohmann::ordered_json frame_pairing_json(const ComparisonResult& result) {
     std::string status;
     std::string note;
     if (const std::optional<FramesShort>& short_of = result.frames_short) {
-        status = !short_of->counted() ? "may_be_out_of_step" : short_of->in_step() ? "in_step" : "out_of_step";
+        status = !short_of->counted() ? "may_be_out_of_sync" : short_of->in_step() ? "in_sync" : "out_of_sync";
         note = frames_short_note(*short_of);
         return {{"status", status},
                 {"note", note},
@@ -146,20 +144,20 @@ nlohmann::ordered_json frame_pairing_json(const ComparisonResult& result) {
     }
     if (result.resample_target) {
         status = "not_checked";
-        note = "Not checked: the test video is made from the reference, frame for frame.";
+        note = "Not checked: the test video is made from the reference, frame by frame.";
     } else if (pairs <= 0) {
         status = "not_checked";
-        note = "Not checked: no metric scored single frames.";
+        note = "Not checked: none of the metrics scores individual frames.";
     } else if (shorter <= 0) {
         status = "not_checked";
-        note = "Not checked: a video's length is not known.";
+        note = "Not checked: the length of one of the videos isn't known.";
     } else if (shorter - pairs >= 2) {
         status = "not_checked";
-        note = "Not checked: only a part of the videos was compared.";
+        note = "Not checked: only part of the videos was compared.";
     } else {
         status = "no_mismatch_seen";
-        note = "As many frames were compared (" + with_thousands(pairs) + ") as the videos' length holds (" +
-               with_thousands(shorter) + "): nothing suggests their frames are out of step.";
+        note = "The number of frames compared (" + with_thousands(pairs) +
+               ") matches the length of the videos, so nothing suggests they are out of sync.";
     }
     return {{"status", status},
             {"note", note},

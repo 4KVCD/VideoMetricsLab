@@ -382,7 +382,7 @@ Json results_document(const VideoInfo& source, const std::vector<TestVideo>& vid
             const ComparisonResult& result = *video.result;
             entry["from_saved_scores"] = video.from_cache;
             entry["compared_frames"] = result.compared_frame_count;
-            entry["frame_pairing"] = frame_pairing_json(result);
+            entry["frame_sync"] = frame_pairing_json(result);
             entry["vmaf_model"] = result.model;
             entry["reference_crop"] = summary_crop_json(result.source_crop);
             entry["test_crop"] = summary_crop_json(result.distorted_crop);

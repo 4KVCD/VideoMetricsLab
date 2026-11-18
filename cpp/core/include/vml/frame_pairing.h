@@ -64,9 +64,9 @@ std::string frames_short_note(const FramesShort& short_of);
 // no full stop); empty when the frames line up.
 std::string frames_short_text(const FramesShort& short_of);
 
-// A video's "frame_pairing" in a results JSON (the window's export and the
-// command line's --json), for every result: "status" "may_be_out_of_step"
-// (uncounted), "out_of_step" or "in_step" (counted), "no_mismatch_seen" (as
+// A video's "frame_sync" in a results JSON (the window's export and the
+// command line's --json), for every result: "status" "may_be_out_of_sync"
+// (uncounted), "out_of_sync" or "in_sync" (counted), "no_mismatch_seen" (as
 // many pairs as the lengths hold) or "not_checked" (a range, a resolution
 // test, a length not known, no frame scores); a "note" in plain words that
 // says what it means and, where it may be out of step, how to tell; the pairs

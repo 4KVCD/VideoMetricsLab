@@ -263,11 +263,13 @@ options:
   --parallel N          videos calculated at once on the CPU, 1-2 (default:
                         the app's)
   --frame-counts {check,skip}
-                        when fewer frames were compared than the videos'
-                        length holds, both videos' frames are counted where
-                        their files state them; check: also read through a
-                        file that states none to count them, which can take
-                        minutes; skip: do not (default: the app's)
+                        when a video may be out of sync with the reference
+                        (fewer frames were compared than its length should
+                        have), the frame counts stored in the files are
+                        checked. check: also read a file that doesn't store
+                        one from start to finish to count its frames, which
+                        can add minutes per video; skip: don't (default: the
+                        app's)
   --recalculate         calculate every metric again instead of using saved
                         scores
   --difference          with two test videos: the first minus the second as
