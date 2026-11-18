@@ -54,6 +54,7 @@
 #include "vml/python_text.h"
 #include "vml/platform/system.h"
 #include "vml/score_identity.h"
+#include "vml/segment_profiles.h"
 #include "vml/vship.h"
 #include "widgets.h"
 #include "window_helpers.h"
@@ -559,20 +560,17 @@ void MainWindow::build_ui() {
     connect(graph_panel_, &GraphPanel::results_export_requested, this,
             [this](ResultsFormat format) { export_results(format); });
     graph_panel_->set_worst_count(settings_.graph_worst_frames);
-    graph_panel_->set_weak_segment_rules(saved_segment_rules(settings_.weak_segment_conditions,
-                                                             settings_.weak_segments_all,
-                                                             settings_.weak_segment_min_frames,
-                                                             settings_.weak_segment_merge_frames));
+    graph_panel_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
     connect(graph_panel_, &GraphPanel::segments_report_requested, this,
             [this](const SegmentRules& rules) { export_segments_report(rules); });
-    connect(graph_panel_, &GraphPanel::weak_segment_rules_saved, this, [this](const SegmentRules& rules) {
-        settings_.weak_segment_conditions = condition_texts(rules.conditions);
-        settings_.weak_segments_all = rules.all;
-        settings_.weak_segment_min_frames = rules.min_frames;
-        settings_.weak_segment_merge_frames = rules.merge_frames;
-        save_settings();
-        settings_panel_->show_weak_segment_rules();
-    });
+    connect(graph_panel_, &GraphPanel::weak_segment_rules_saved, this,
+            [this](const std::string& profile, const SegmentRules& rules) {
+                store_segment_profile(settings_, profile, rules);
+                save_settings();
+                graph_panel_->set_segment_profiles(segment_profiles(settings_),
+                                                   segment_profile_in_use(settings_).name);
+                settings_panel_->show_weak_segment_rules();
+            });
     connect(graph_panel_, &GraphPanel::worst_count_changed, this, [this](int count) {
         settings_.graph_worst_frames = count;
         save_settings();
@@ -629,9 +627,7 @@ void MainWindow::build_ui() {
     connect(settings_panel_, &SettingsPanel::ffmpeg_folder_changed, this, [this] { check_ffmpeg(false); });
     connect(settings_panel_, &SettingsPanel::saved_results_cleared, this, [this] { on_saved_results_cleared(); });
     connect(settings_panel_, &SettingsPanel::weak_segment_rules_changed, this, [this] {
-        graph_panel_->set_weak_segment_rules(saved_segment_rules(
-            settings_.weak_segment_conditions, settings_.weak_segments_all, settings_.weak_segment_min_frames,
-            settings_.weak_segment_merge_frames));
+        graph_panel_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
     });
     tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });

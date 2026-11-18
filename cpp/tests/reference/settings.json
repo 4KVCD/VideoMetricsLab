@@ -2,7 +2,7 @@
  "cases": [
   {
    "name": "good",
-   "file": "{\"ffmpeg_dir\": \"D:/tools/ffmpeg\", \"default_compute_xpsnr\": false, \"default_vship_build\": \"vship\", \"film_grain_default\": \"without\", \"parallel_jobs\": 2, \"gpu_backend\": \"vulkan\", \"hidden_metrics\": [\"psnr\", \"ssim\"], \"cvvdp_presets\": [{\"name\": \"Mine\", \"settings\": {\"display\": {\"z\": 1, \"a\": 2}}}], \"cvvdp_default_preset\": \"Mine\", \"window_width\": 1600, \"remembered_reference\": \"D:/vid\\u00e9os/r\\u00e9f\\u00e9rence \\u52d5\\u753b.mkv\", \"remembered_tests\": [\"a.mkv\", \"b.mkv\"], \"weak_segment_conditions\": [\"vmaf<90\", \"butteraugli>2.5\"], \"weak_segments_all\": true, \"weak_segment_min_frames\": 3, \"weak_segment_merge_frames\": 2, \"auto_export_segments\": \"folder\"}",
+   "file": "{\"ffmpeg_dir\": \"D:/tools/ffmpeg\", \"default_compute_xpsnr\": false, \"default_vship_build\": \"vship\", \"film_grain_default\": \"without\", \"parallel_jobs\": 2, \"gpu_backend\": \"vulkan\", \"hidden_metrics\": [\"psnr\", \"ssim\"], \"cvvdp_presets\": [{\"name\": \"Mine\", \"settings\": {\"display\": {\"z\": 1, \"a\": 2}}}], \"cvvdp_default_preset\": \"Mine\", \"window_width\": 1600, \"remembered_reference\": \"D:/vid\\u00e9os/r\\u00e9f\\u00e9rence \\u52d5\\u753b.mkv\", \"remembered_tests\": [\"a.mkv\", \"b.mkv\"], \"weak_segment_conditions\": [\"vmaf<90\", \"butteraugli>2.5\"], \"weak_segments_all\": true, \"weak_segment_min_frames\": 3, \"weak_segment_merge_frames\": 2, \"auto_export_segments\": \"folder\", \"weak_segment_profiles\": [{\"name\": \"Animation\", \"conditions\": [\"vmaf<93\"], \"all\": false, \"min_frames\": 2, \"merge_frames\": 4}], \"weak_segment_profile\": \"Animation\"}",
    "expected": {
     "ffmpeg_dir": "D:/tools/ffmpeg",
     "cache_dir": "",
@@ -30,6 +30,8 @@
     "weak_segments_all": true,
     "weak_segment_min_frames": 3,
     "weak_segment_merge_frames": 2,
+    "weak_segment_profiles": "[{\"name\":\"Animation\",\"conditions\":[\"vmaf<93\"],\"all\":false,\"min_frames\":2,\"merge_frames\":4}]",
+    "weak_segment_profile": "Animation",
     "parallel_jobs": 2,
     "gpu_metrics_together": false,
     "vvc_decode_on_gpu": false,
@@ -60,11 +62,11 @@
     "cvvdp_presets": "[{\"name\":\"Mine\",\"settings\":{\"display\":{\"z\":1,\"a\":2}}}]",
     "cvvdp_default_preset": "Mine"
    },
-   "saved": "{\n  \"ffmpeg_dir\": \"D:/tools/ffmpeg\",\n  \"cache_dir\": \"\",\n  \"export_dir\": \"\",\n  \"auto_export\": \"\",\n  \"auto_export_segments\": \"folder\",\n  \"default_gpu_decode\": true,\n  \"default_compute_psnr\": true,\n  \"default_compute_ssim\": true,\n  \"default_compute_xpsnr\": false,\n  \"default_compute_vmaf\": true,\n  \"default_compute_vmaf_neg\": true,\n  \"default_compute_vmaf_v1\": true,\n  \"default_compute_ssimulacra2\": true,\n  \"default_compute_butteraugli\": true,\n  \"default_compute_cvvdp\": true,\n  \"default_vmaf_on_gpu\": true,\n  \"default_vship_build\": \"vship\",\n  \"film_grain_default\": \"without\",\n  \"graph_metric\": \"vmaf\",\n  \"graph_worst_frames\": 10,\n  \"weak_segment_conditions\": [\n    \"vmaf<90\",\n    \"butteraugli>2.5\"\n  ],\n  \"weak_segments_all\": true,\n  \"weak_segment_min_frames\": 3,\n  \"weak_segment_merge_frames\": 2,\n  \"parallel_jobs\": 2,\n  \"gpu_metrics_together\": false,\n  \"gpu\": \"\",\n  \"vvc_decode_on_gpu\": false,\n  \"use_cache\": true,\n  \"check_frame_counts\": false,\n  \"check_for_updates\": true,\n  \"skipped_update_version\": \"\",\n  \"language\": \"\",\n  \"theme\": \"\",\n  \"remember_window_size\": true,\n  \"window_width\": 1600,\n  \"window_height\": 800,\n  \"window_geometry\": \"\",\n  \"last_reference_dir\": \"\",\n  \"last_test_dir\": \"\",\n  \"remember_videos\": false,\n  \"remembered_reference\": \"D:/vid\\u00e9os/r\\u00e9f\\u00e9rence \\u52d5\\u753b.mkv\",\n  \"remembered_tests\": [\n    \"a.mkv\",\n    \"b.mkv\"\n  ],\n  \"highlight_best_worst\": false,\n  \"frame_preview_color_mode\": \"display_aware\",\n  \"compare_decoded_videos\": 3,\n  \"compare_loop_before_ms\": 1000,\n  \"compare_loop_after_ms\": 1000,\n  \"export_graph_theme\": \"light\",\n  \"export_graph_background\": \"\",\n  \"export_graph_text\": \"\",\n  \"hidden_metrics\": [\n    \"psnr\",\n    \"ssim\"\n  ],\n  \"cvvdp_presets\": [\n    {\n      \"name\": \"Mine\",\n      \"settings\": {\n        \"display\": {\n          \"z\": 1,\n          \"a\": 2\n        }\n      }\n    }\n  ],\n  \"cvvdp_default_preset\": \"Mine\"\n}"
+   "saved": "{\n  \"ffmpeg_dir\": \"D:/tools/ffmpeg\",\n  \"cache_dir\": \"\",\n  \"export_dir\": \"\",\n  \"auto_export\": \"\",\n  \"auto_export_segments\": \"folder\",\n  \"default_gpu_decode\": true,\n  \"default_compute_psnr\": true,\n  \"default_compute_ssim\": true,\n  \"default_compute_xpsnr\": false,\n  \"default_compute_vmaf\": true,\n  \"default_compute_vmaf_neg\": true,\n  \"default_compute_vmaf_v1\": true,\n  \"default_compute_ssimulacra2\": true,\n  \"default_compute_butteraugli\": true,\n  \"default_compute_cvvdp\": true,\n  \"default_vmaf_on_gpu\": true,\n  \"default_vship_build\": \"vship\",\n  \"film_grain_default\": \"without\",\n  \"graph_metric\": \"vmaf\",\n  \"graph_worst_frames\": 10,\n  \"weak_segment_conditions\": [\n    \"vmaf<90\",\n    \"butteraugli>2.5\"\n  ],\n  \"weak_segments_all\": true,\n  \"weak_segment_min_frames\": 3,\n  \"weak_segment_merge_frames\": 2,\n  \"weak_segment_profiles\": [\n    {\n      \"name\": \"Animation\",\n      \"conditions\": [\n        \"vmaf<93\"\n      ],\n      \"all\": false,\n      \"min_frames\": 2,\n      \"merge_frames\": 4\n    }\n  ],\n  \"weak_segment_profile\": \"Animation\",\n  \"parallel_jobs\": 2,\n  \"gpu_metrics_together\": false,\n  \"gpu\": \"\",\n  \"vvc_decode_on_gpu\": false,\n  \"use_cache\": true,\n  \"check_frame_counts\": false,\n  \"check_for_updates\": true,\n  \"skipped_update_version\": \"\",\n  \"language\": \"\",\n  \"theme\": \"\",\n  \"remember_window_size\": true,\n  \"window_width\": 1600,\n  \"window_height\": 800,\n  \"window_geometry\": \"\",\n  \"last_reference_dir\": \"\",\n  \"last_test_dir\": \"\",\n  \"remember_videos\": false,\n  \"remembered_reference\": \"D:/vid\\u00e9os/r\\u00e9f\\u00e9rence \\u52d5\\u753b.mkv\",\n  \"remembered_tests\": [\n    \"a.mkv\",\n    \"b.mkv\"\n  ],\n  \"highlight_best_worst\": false,\n  \"frame_preview_color_mode\": \"display_aware\",\n  \"compare_decoded_videos\": 3,\n  \"compare_loop_before_ms\": 1000,\n  \"compare_loop_after_ms\": 1000,\n  \"export_graph_theme\": \"light\",\n  \"export_graph_background\": \"\",\n  \"export_graph_text\": \"\",\n  \"hidden_metrics\": [\n    \"psnr\",\n    \"ssim\"\n  ],\n  \"cvvdp_presets\": [\n    {\n      \"name\": \"Mine\",\n      \"settings\": {\n        \"display\": {\n          \"z\": 1,\n          \"a\": 2\n        }\n      }\n    }\n  ],\n  \"cvvdp_default_preset\": \"Mine\"\n}"
   },
   {
    "name": "wrong types",
-   "file": "{\"parallel_jobs\": \"2\", \"hidden_metrics\": \"psnr\", \"use_cache\": 1, \"window_width\": 1600.0, \"default_vmaf_on_gpu\": false, \"language\": 5, \"cvvdp_presets\": [\"not an object\"], \"remembered_tests\": [\"a.mkv\", 3], \"weak_segment_conditions\": \"vmaf<90\", \"weak_segment_min_frames\": \"3\"}",
+   "file": "{\"parallel_jobs\": \"2\", \"hidden_metrics\": \"psnr\", \"use_cache\": 1, \"window_width\": 1600.0, \"default_vmaf_on_gpu\": false, \"language\": 5, \"cvvdp_presets\": [\"not an object\"], \"remembered_tests\": [\"a.mkv\", 3], \"weak_segment_conditions\": \"vmaf<90\", \"weak_segment_min_frames\": \"3\", \"weak_segment_profiles\": \"Animation\"}",
    "expected": {
     "ffmpeg_dir": "",
     "cache_dir": "",
@@ -89,6 +91,8 @@
     "weak_segments_all": false,
     "weak_segment_min_frames": 1,
     "weak_segment_merge_frames": 0,
+    "weak_segment_profiles": "[]",
+    "weak_segment_profile": "",
     "parallel_jobs": null,
     "gpu_metrics_together": false,
     "vvc_decode_on_gpu": false,
@@ -142,6 +146,8 @@
     "weak_segments_all": false,
     "weak_segment_min_frames": 1,
     "weak_segment_merge_frames": 0,
+    "weak_segment_profiles": "[]",
+    "weak_segment_profile": "",
     "parallel_jobs": null,
     "gpu_metrics_together": false,
     "vvc_decode_on_gpu": false,
@@ -195,6 +201,8 @@
     "weak_segments_all": false,
     "weak_segment_min_frames": 1,
     "weak_segment_merge_frames": 0,
+    "weak_segment_profiles": "[]",
+    "weak_segment_profile": "",
     "parallel_jobs": null,
     "gpu_metrics_together": false,
     "vvc_decode_on_gpu": false,
@@ -248,6 +256,8 @@
     "weak_segments_all": false,
     "weak_segment_min_frames": 1,
     "weak_segment_merge_frames": 0,
+    "weak_segment_profiles": "[]",
+    "weak_segment_profile": "",
     "parallel_jobs": null,
     "gpu_metrics_together": false,
     "vvc_decode_on_gpu": false,
@@ -301,6 +311,8 @@
     "weak_segments_all": false,
     "weak_segment_min_frames": 1,
     "weak_segment_merge_frames": 0,
+    "weak_segment_profiles": "[]",
+    "weak_segment_profile": "",
     "parallel_jobs": null,
     "gpu_metrics_together": false,
     "vvc_decode_on_gpu": false,

@@ -51,6 +51,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"weak_segments_all", &Settings::weak_segments_all},
         {"weak_segment_min_frames", &Settings::weak_segment_min_frames},
         {"weak_segment_merge_frames", &Settings::weak_segment_merge_frames},
+        {"weak_segment_profile", &Settings::weak_segment_profile},
         {"parallel_jobs", &Settings::parallel_jobs},
         {"gpu_metrics_together", &Settings::gpu_metrics_together},
         {"gpu", &Settings::gpu},
@@ -158,6 +159,16 @@ Settings Settings::load_from(const std::filesystem::path& path) {
         return settings;
     }
     for (auto item = data.begin(); item != data.end(); ++item) {
+        if (item.key() == "weak_segment_profiles") {
+            // A list of objects; kept as JSON, as the CVVDP presets are.
+            if (item.value().is_array() &&
+                std::all_of(item.value().begin(), item.value().end(), [](const Json& v) { return v.is_object(); })) {
+                settings.weak_segment_profiles_json = item.value().dump();
+            } else {
+                log_unfit(item.key(), item.value(), "list[dict]");
+            }
+            continue;
+        }
         if (item.key() == "cvvdp_presets") {
             // A list of objects; kept as JSON for the CVVDP presets to read.
             if (item.value().is_array() &&
@@ -248,6 +259,9 @@ std::string Settings::text() const {
     data["weak_segments_all"] = weak_segments_all;
     data["weak_segment_min_frames"] = weak_segment_min_frames;
     data["weak_segment_merge_frames"] = weak_segment_merge_frames;
+    Json profiles = Json::parse(weak_segment_profiles_json, nullptr, false);
+    data["weak_segment_profiles"] = profiles.is_array() ? profiles : Json::array();
+    data["weak_segment_profile"] = weak_segment_profile;
     data["parallel_jobs"] = parallel_jobs;
     data["gpu_metrics_together"] = gpu_metrics_together;
     data["gpu"] = gpu;

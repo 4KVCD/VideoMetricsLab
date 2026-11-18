@@ -21,6 +21,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
+#include <QScopedValueRollback>
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QStyle>
@@ -32,6 +33,8 @@
 
 #include <algorithm>
 #include <exception>
+#include <iterator>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 
@@ -46,6 +49,8 @@
 #include "vml/gpu_frames.h"
 #include "vml/metric_cache.h"
 #include "vml/platform/system.h"
+#include "vml/python_text.h"
+#include "vml/segment_profiles.h"
 #include "vml/vship.h"
 #include "vship_names.h"
 #include "window_helpers.h"
@@ -296,26 +301,46 @@ QGroupBox* SettingsPanel::build_storage_box() {
 QGroupBox* SettingsPanel::build_weak_segments_box() {
     auto* box = new QGroupBox(app::tr("Weak segments"));
     auto* layout = new QVBoxLayout(box);
-    auto* note = new QLabel(app::tr("Where a video's scores count as weak. Metric Graphs > Worst frames > Weak "
-                                    "segments starts from these, and its Save as default changes them here."));
+    auto* note = new QLabel(app::tr("Where a video's scores count as weak, in named profiles for different kinds "
+                                    "of video. The profile picked here is the one in use: Metric Graphs > Worst "
+                                    "frames > Weak segments starts from it, and the weak segments report, the "
+                                    "exports after each run and the command line's --segments saved follow it."));
     note->setWordWrap(true);
     theme::style(note, "color: {muted};");
     layout->addWidget(note);
-    auto* used = new QLabel(app::tr("The weak segments report, the exports after each run and the command line's "
-                                    "--segments saved use them too."));
-    used->setWordWrap(true);
-    theme::style(used, "color: {muted};");
-    layout->addWidget(used);
+    auto* profile_row = new QHBoxLayout;
+    profile_row->addWidget(new QLabel(app::tr("Profile:")));
+    weak_profile = new QComboBox;
+    weak_profile->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    profile_row->addWidget(weak_profile);
+    auto* new_profile = new QPushButton(app::tr("New..."));
+    new_profile->setToolTip(app::tr("A new profile, starting from this one's rules."));
+    connect(new_profile, &QPushButton::clicked, this, [this] { new_weak_profile(); });
+    profile_row->addWidget(new_profile);
+    weak_profile_rename = new QPushButton(app::tr("Rename..."));
+    connect(weak_profile_rename, &QPushButton::clicked, this, [this] { rename_weak_profile(); });
+    profile_row->addWidget(weak_profile_rename);
+    weak_profile_delete = new QPushButton(app::tr("Delete"));
+    connect(weak_profile_delete, &QPushButton::clicked, this, [this] { delete_weak_profile(); });
+    profile_row->addWidget(weak_profile_delete);
+    profile_row->addStretch(1);
+    layout->addLayout(profile_row);
     std::vector<std::string> keys;
     for (const MetricDefinition& definition : metrics()) {
         keys.emplace_back(definition.key);
     }
     weak_segments = new SegmentRulesEditor(std::move(keys), false);
-    const SegmentRules saved =
-        saved_segment_rules(settings_.weak_segment_conditions, settings_.weak_segments_all,
-                            settings_.weak_segment_min_frames, settings_.weak_segment_merge_frames);
-    weak_segments->set_remembered(saved.conditions);
-    weak_segments->set_rules(saved);
+    fill_weak_profiles();
+    connect(weak_profile, &QComboBox::currentIndexChanged, this, [this] {
+        if (filling_profiles_) {
+            return;
+        }
+        // The profile picked is the one in use; its rules are shown.
+        settings_.weak_segment_profile = weak_profile->currentData().toString().toStdString();
+        fill_weak_profiles();
+        on_edited();
+        emit weak_segment_rules_changed();  // changed before on_edited looked
+    });
     connect(weak_segments, &SegmentRulesEditor::changed, this, [this] { on_edited(); });
     layout->addWidget(weak_segments);
 
@@ -341,12 +366,92 @@ QGroupBox* SettingsPanel::build_weak_segments_box() {
     return box;
 }
 
-void SettingsPanel::show_weak_segment_rules() {
-    const SegmentRules saved =
-        saved_segment_rules(settings_.weak_segment_conditions, settings_.weak_segments_all,
-                            settings_.weak_segment_min_frames, settings_.weak_segment_merge_frames);
-    weak_segments->set_remembered(saved.conditions);
-    weak_segments->set_rules(saved);
+void SettingsPanel::show_weak_segment_rules() { fill_weak_profiles(); }
+
+void SettingsPanel::fill_weak_profiles() {
+    const QScopedValueRollback filling(filling_profiles_, true);
+    const SegmentProfile in_use = segment_profile_in_use(settings_);
+    weak_profile->clear();
+    for (const SegmentProfile& profile : segment_profiles(settings_)) {
+        weak_profile->addItem(profile.name.empty() ? app::tr("Default") : text_of(profile.name),
+                              text_of(profile.name));
+    }
+    weak_profile->setCurrentIndex(std::max(weak_profile->findData(text_of(in_use.name)), 0));
+    weak_profile_rename->setEnabled(!in_use.name.empty());  // Default keeps its name
+    weak_profile_delete->setEnabled(!in_use.name.empty());  // and is always there
+    weak_segments->set_remembered(in_use.rules.conditions);
+    weak_segments->set_rules(in_use.rules);
+}
+
+void SettingsPanel::new_weak_profile() {
+    const std::optional<QString> name =
+        dialogs_.ask_text(app::tr("New weak segment profile"), app::tr("Profile name:"), QString());
+    if (!name) {
+        return;
+    }
+    const std::string text = std::string(python_strip(name->toStdString()));
+    if (!segment_profile_name_free(segment_profiles(settings_), text)) {
+        dialogs_.alert(app::tr("Profile not saved"),
+                       app::tr("A profile needs a name of its own, not Default or another profile's."));
+        return;
+    }
+    store_segment_profile(settings_, text, weak_segments->rules());
+    settings_.weak_segment_profile = text;
+    fill_weak_profiles();
+    on_edited();
+    // The settings changed before on_edited looked: told here.
+    emit weak_segment_rules_changed();
+}
+
+void SettingsPanel::rename_weak_profile() {
+    std::vector<SegmentProfile> profiles = segment_profiles(settings_);
+    const std::string current = segment_profile_in_use(settings_).name;
+    if (current.empty()) {
+        return;
+    }
+    const std::optional<QString> name =
+        dialogs_.ask_text(app::tr("Rename weak segment profile"), app::tr("Profile name:"), text_of(current));
+    if (!name) {
+        return;
+    }
+    const std::string text = std::string(python_strip(name->toStdString()));
+    std::vector<SegmentProfile> others;
+    std::copy_if(profiles.begin(), profiles.end(), std::back_inserter(others),
+                 [&current](const SegmentProfile& profile) { return profile.name != current; });
+    if (!segment_profile_name_free(others, text)) {
+        dialogs_.alert(app::tr("Profile not renamed"),
+                       app::tr("A profile needs a name of its own, not Default or another profile's."));
+        return;
+    }
+    for (SegmentProfile& profile : profiles) {
+        if (profile.name == current) {
+            profile.name = text;
+        }
+    }
+    store_segment_profiles(settings_, profiles);
+    settings_.weak_segment_profile = text;
+    fill_weak_profiles();
+    on_edited();
+    // The settings changed before on_edited looked: told here.
+    emit weak_segment_rules_changed();
+}
+
+void SettingsPanel::delete_weak_profile() {
+    std::vector<SegmentProfile> profiles = segment_profiles(settings_);
+    const std::string current = segment_profile_in_use(settings_).name;
+    if (current.empty() ||
+        !dialogs_.ask_no_default(app::tr("Delete profile"),
+                                 app::tr("Delete the weak segment profile {name}? Default is used in its place.",
+                                         {{"name", text_of(current)}}))) {
+        return;
+    }
+    std::erase_if(profiles, [&current](const SegmentProfile& profile) { return profile.name == current; });
+    store_segment_profiles(settings_, profiles);
+    settings_.weak_segment_profile.clear();
+    fill_weak_profiles();
+    on_edited();
+    // The settings changed before on_edited looked: told here.
+    emit weak_segment_rules_changed();
 }
 
 QGroupBox* SettingsPanel::build_defaults_box() {
@@ -755,7 +860,9 @@ void SettingsPanel::on_edited() {
     if (settings_.weak_segment_conditions != before.weak_segment_conditions ||
         settings_.weak_segments_all != before.weak_segments_all ||
         settings_.weak_segment_min_frames != before.weak_segment_min_frames ||
-        settings_.weak_segment_merge_frames != before.weak_segment_merge_frames) {
+        settings_.weak_segment_merge_frames != before.weak_segment_merge_frames ||
+        settings_.weak_segment_profiles_json != before.weak_segment_profiles_json ||
+        settings_.weak_segment_profile != before.weak_segment_profile) {
         emit weak_segment_rules_changed();
     }
     if (settings_.ffmpeg_dir != before.ffmpeg_dir) {
@@ -775,11 +882,8 @@ void SettingsPanel::read_controls() {
     settings_.cache_dir = cache_edit->text().toStdString();
     settings_.export_dir = export_edit->text().toStdString();
     settings_.auto_export = auto_export->currentData().toString().toStdString();
-    const SegmentRules weak = weak_segments->rules();
-    settings_.weak_segment_conditions = condition_texts(weak.conditions);
-    settings_.weak_segments_all = weak.all;
-    settings_.weak_segment_min_frames = weak.min_frames;
-    settings_.weak_segment_merge_frames = weak.merge_frames;
+    // The editor shows the profile in use.
+    store_segment_profile(settings_, segment_profile_in_use(settings_).name, weak_segments->rules());
     settings_.auto_export_segments = auto_export_segments->currentData().toString().toStdString();
     settings_.export_graph_theme = export_graph_theme->currentData().toString().toStdString();
     settings_.export_graph_background = export_background_button->property("chosen").toString().toStdString();

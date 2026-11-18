@@ -307,9 +307,10 @@ options:
                         first, as its encoder numbers them; a subsample's
                         frames between two weak ones are weak, and CVVDP is
                         judged second by second. "saved" takes the
-                        conditions saved in the app's Settings > Weak
-                        segments (those on metrics not compared left out),
-                        and its options where none are given here
+                        conditions of the weak segment profile in use in the
+                        app's Settings > Weak segments, "profile:NAME" those
+                        of profile NAME (those on metrics not compared left
+                        out), and its options where none are given here
   --segments-all        a frame is weak only where every condition holds
   --segment-min-frames N
                         leave out segments shorter than N frames (default 1)
@@ -1169,7 +1170,11 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--worst"}, [&parsed](const std::string& value) { parsed.worst = int_up_to(value, 1000); }),
         option({"--segments"},
                [&parsed](const std::string& value) {
-                   parsed.segments_saved = ascii_lower(python_strip(value)) == "saved";
+                   const std::string given(python_strip(value));
+                   const bool profile = ascii_lower(given).starts_with("profile:");
+                   parsed.segments_saved = profile || ascii_lower(given) == "saved";
+                   parsed.segments_profile =
+                       profile ? std::optional(std::string(python_strip(given.substr(8)))) : std::nullopt;
                    parsed.segments = parsed.segments_saved ? std::vector<WeakCondition>() : weak_conditions(value);
                }),
         flag({"--segments-all"}, parsed.segments_all),

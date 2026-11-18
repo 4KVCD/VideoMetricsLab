@@ -196,9 +196,28 @@ TEST(CommandLine, SegmentsSavedTakesTheWindowsRulesAndReportsEveryVideo) {
         return std::string("taken");
     };
     EXPECT_EQ(refusal({"psnr"}),
-              "--segments saved: none of the saved conditions (vmaf<80, ssimulacra2<60) is on a metric compared (-m)");
+              "--segments saved: none of the profile's conditions (vmaf<80, ssimulacra2<60) is on a metric compared "
+              "(-m)");
     settings.weak_segment_conditions.clear();
-    EXPECT_TRUE(refusal({"vmaf"}).starts_with("--segments saved: no conditions are saved"));
+    EXPECT_TRUE(refusal({"vmaf"}).starts_with("--segments saved: the profile has no conditions"));
+
+    // profile:NAME: that profile's (any case), not the one in use; a name no
+    // profile has is refused with the app's profiles.
+    settings.weak_segment_profiles_json = R"([{"name": "Anime", "conditions": ["vmaf<93", "psnr<38"]}])";
+    CompareArguments named =
+        parse_arguments({"compare", "ref.mkv", "a.mkv", "--segments", "profile: anime"}).compare;
+    EXPECT_TRUE(named.segments_saved);
+    EXPECT_EQ(named.segments_profile, "anime");
+    EXPECT_EQ(take_saved_segments(named, settings, {"vmaf"}), std::vector<std::string>{"psnr<38"});
+    EXPECT_EQ(named.segments[0].text(), "vmaf<93");
+    CompareArguments unknown = parse_arguments({"compare", "ref.mkv", "a.mkv", "--segments", "profile:CGI"}).compare;
+    try {
+        take_saved_segments(unknown, settings, {"vmaf"});
+        ADD_FAILURE() << "taken";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_EQ(std::string(error.what()),
+                  "--segments profile:CGI: no weak segment profile has that name; the app's: Default, Anime");
+    }
 
     const test::Folder temporary;
     std::vector<TestVideo> videos(2);

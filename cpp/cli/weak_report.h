@@ -14,6 +14,7 @@
 
 #include "arguments.h"
 #include "test_video.h"
+#include "vml/segment_profiles.h"
 #include "vml/settings.h"
 #include "vml/weak_frames.h"
 
@@ -22,7 +23,8 @@ namespace vml::cli {
 // The rules --segments and its options give.
 SegmentRules segment_rules(const CompareArguments& arguments);
 
-// --segments saved: the conditions saved in the window's Settings > Weak segments
+// --segments saved (or profile:NAME): the conditions of the weak segment
+// profile in use (or NAME) in the window's Settings > Weak segments
 // (`settings`) on the metrics compared (`asked`) put in `arguments`, and
 // its any/every choice, shortest segment and gap where the command gave
 // none (--segments-all can only add "every"). The saved conditions left

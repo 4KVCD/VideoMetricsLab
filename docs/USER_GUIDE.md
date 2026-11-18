@@ -51,12 +51,13 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
    past thresholds you set (any or every condition, the shortest segment,
    the gap to join across) and exports them as JSON or CSV, named after the
    metrics they cover (`<video>.vmaf.segments.json`,
-   `<video>.vmaf+ssimulacra2.segments.csv`). It opens with the rules saved
-   in **Settings > Weak segments**: their conditions on the metrics the video
-   has (else one on the metric shown). What you change in the dialog holds
-   for it alone, until **Save as default** keeps it in Settings for the next
-   time; a saved condition on a metric the video doesn't have is kept for
-   videos that do. The rules can also be set in Settings directly.
+   `<video>.vmaf+ssimulacra2.segments.csv`). It opens with the weak segment
+   profile in use (see [Weak segment profiles](#weak-segment-profiles)): its
+   conditions on the metrics the video has (else one on the metric shown);
+   **Profile** picks another to start from. What you change in the dialog
+   holds for it alone, until **Save to profile** keeps it in the profile
+   picked, or **Save as new profile...** in a new one; a profile's condition
+   on a metric the video doesn't have is kept for videos that do.
    **Export all videos...** saves every scored test video's segments by the
    dialog's conditions in one file (see
    [Exporting weak segments](#exporting-weak-segments)).
@@ -404,7 +405,7 @@ $run.videos[0].metrics.vmaf.score
 | `--batch CSV` | Compare the videos a CSV file lists, in place of REFERENCE and TEST, all in one run (the start-up and the GPU checks once, not once per reference). A row per test video, with the columns `reference` and `test` (a file or a pattern) and, if wanted, `sequence` and any others, which `--scores-csv` keeps; paths are relative to the CSV file's folder. The tables come per reference, and `--json` writes `{"batch": [...]}`, each reference's results as without `--batch`. A reference that cannot be read is said and the others are still compared (exit code 1). Not with `--difference`. |
 | `--scores-csv FILE` | Write each test video's bitrate (`kbps`) and scores to FILE, a row per video, with its `sequence` (the `--batch` row's, else the reference's file name), `test`, `reference` and the `--batch` row's other columns: the file `bdrate --anchor` and `--test` read. A video whose bitrate is not known, or with only a part compared (`--range`, `--duration`), is left out, said. |
 | `--worst N` | After the tables, each metric's N worst dips: the worst frame of each (a frame within 1 s of a worse one is part of its dip), with every metric's score there. |
-| `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. `--segments saved` takes the conditions saved in the app's Settings > Weak segments (those on metrics not compared are left out, and said), and its any/every choice, shortest segment and gap where the command gives none. |
+| `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. `--segments saved` takes the conditions of the weak segment profile in use in the app's Settings > Weak segments, and `--segments profile:NAME` those of profile NAME (any case; `Default` too); those on metrics not compared are left out, and said; the profile's any/every choice, shortest segment and gap apply where the command gives none. |
 | `--segments-all` | A frame is weak only where every `--segments` condition holds. |
 | `--segment-min-frames N`, `--segment-merge-frames N` | Leave out segments shorter than N frames (default 1); join segments at most N frames apart (default 0). |
 | `--segments-dir FOLDER` | Write each video's segments to FOLDER as `<video>.<metrics>.segments.json` and `.csv`, `<metrics>` the conditions' metrics joined by `+` (`<video>.vmaf+ssimulacra2.segments.json`), as the app names them. |
@@ -617,15 +618,26 @@ and graphs as `<video> - VideoMetricsLab.zip` once its run ends and its
 bitrate is read: next to the test video, or in the export folder (next to the
 video while none is set). A file of the same name is replaced.
 
+### Weak segment profiles
+
+What counts as a weak segment depends on the video: animation, grainy film
+and HDR call for different metrics and thresholds. **Settings > Weak
+segments** keeps them as named profiles. **Profile** picks the one in use,
+which the rules below it edit; **New...** starts a profile from the one
+shown, **Rename...** and **Delete** work on the one in use (**Default**, the
+rules kept before there were profiles, has neither). The profile in use is
+where Metric Graphs' **Weak segments...** starts, and what the weak segments
+report, the exports after each run and the command line's `--segments saved`
+follow; `--segments profile:NAME` takes another.
+
 ### Exporting weak segments
 
-The weak segments exports follow the rules saved in **Settings > Weak
-segments** (set there, or with **Save as default** in Metric Graphs >
-Worst frames > **Weak segments...**), and are named after the metrics their
+The weak segments exports follow the profile in use (or, from the Weak
+segments dialog, the dialog's rules), and are named after the metrics their
 conditions cover.
 
 - **Export weak segments report...** in the Videos table's right-click menu
-  saves every test video scored against the reference, by the saved rules,
+  saves every test video scored against the reference, by the profile in use,
   in one file, JSON or CSV as its name says. **Export all videos...** in the
   Weak segments dialog does the same by the dialog's conditions, saved or
   not (over the whole videos, without a highlighted range).

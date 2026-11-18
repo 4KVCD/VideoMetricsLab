@@ -22,6 +22,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 #include "vml/results_summary.h"
+#include "vml/segment_profiles.h"
 #include "vml/weak_frames.h"
 #include "vml/zip_archive.h"
 #include "window_helpers.h"
@@ -157,8 +158,7 @@ void MainWindow::export_video(int row, ResultsFormat format, bool with_graphs) {
 }
 
 SegmentRules MainWindow::saved_weak_rules() const {
-    return saved_segment_rules(settings_.weak_segment_conditions, settings_.weak_segments_all,
-                               settings_.weak_segment_min_frames, settings_.weak_segment_merge_frames);
+    return segment_profile_in_use(settings_).rules;
 }
 
 void MainWindow::export_segments_report(const SegmentRules& rules) {

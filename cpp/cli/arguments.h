@@ -77,6 +77,9 @@ struct CompareArguments {
     // Settings > Weak segments (weak_segment_*), taken once the settings are
     // read (take_saved_segments); `segments` is empty until then.
     bool segments_saved = false;
+    // --segments profile:NAME: that profile's rather than the one in use
+    // (segments_saved set too).
+    std::optional<std::string> segments_profile;
     bool segments_all = false;
     std::optional<int> segment_min_frames;
     std::optional<int> segment_merge_frames;
