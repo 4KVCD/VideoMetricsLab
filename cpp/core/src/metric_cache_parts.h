@@ -98,4 +98,10 @@ void with_profiles_read_now(nlohmann::json& context, const ComparisonRecipe& rec
 std::optional<LoadedMetric> load_metric(const std::filesystem::path& directory, const MetricRequestSpec& spec,
                                         const std::string& backend, const nlohmann::json& context);
 
+// A result's FramesShort as context.json keeps it (null without one), and
+// read back (nothing from null, a missing key or anything malformed): a run
+// that loads the scores then need not count the frames again.
+nlohmann::json frames_short_json(const std::optional<FramesShort>& short_of);
+std::optional<FramesShort> frames_short_from_json(const nlohmann::json& saved);
+
 }  // namespace vml::cache_parts

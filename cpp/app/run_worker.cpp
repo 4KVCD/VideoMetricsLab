@@ -50,6 +50,11 @@ RunWorker::RunWorker(std::vector<VmafJob> jobs, int parallel_jobs, bool gpu_metr
         emit job_facts(static_cast<int>(index), facts);
     };
     events.cancelled = [this] { emit cancelled(); };
+    // The counts files state, always (they cost nothing); whole files read
+    // only when asked. ffprobe as the run found it (environment_, set as it starts).
+    events.count_frames = [this, read = settings_.check_frame_counts](const VideoInfo& video) {
+        return container_frame_counter(environment_.ffprobe, cancel_, read)(video);
+    };
     scheduler_ = std::make_unique<JobScheduler>(
         std::move(jobs), parallel_jobs, std::move(events),
         [this](const VmafJob& job, const VmafOptions& options, const ProgressCallback& on_progress,

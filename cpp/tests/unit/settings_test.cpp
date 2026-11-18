@@ -42,6 +42,7 @@ const std::map<std::string, std::function<Json(const Settings&)>>& settings_by_k
         {"gpu_metrics_together", [](const Settings& s) { return Json(s.gpu_metrics_together); }},
         {"vvc_decode_on_gpu", [](const Settings& s) { return Json(s.vvc_decode_on_gpu); }},
         {"use_cache", [](const Settings& s) { return Json(s.use_cache); }},
+        {"check_frame_counts", [](const Settings& s) { return Json(s.check_frame_counts); }},
         {"check_for_updates", [](const Settings& s) { return Json(s.check_for_updates); }},
         {"skipped_update_version", [](const Settings& s) { return Json(s.skipped_update_version); }},
         {"language", [](const Settings& s) { return Json(s.language); }},

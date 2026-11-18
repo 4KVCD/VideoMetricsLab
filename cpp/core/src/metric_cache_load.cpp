@@ -481,6 +481,7 @@ std::optional<std::pair<ComparisonResult, std::string>> comparison_from(
             return std::nullopt;
         }
         result.compared_frame_count = context.value("compared_frame_count", 0LL);
+        result.frames_short = frames_short_from_json(context.value("frames_short", nlohmann::json()));
         const auto optional_string = [&context](const char* name) -> std::optional<std::string> {
             const nlohmann::json value = context.value(name, nlohmann::json());
             if (!value.is_string()) {
@@ -652,6 +653,7 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
     }
     if (found && !automatic) {
         found->first.compared_frame_count = range_frame_count(found->first, recipe);
+        found->first.frames_short.reset();  // the whole videos' (frame_pairing.h), not a range's
     }
     return found;
 }

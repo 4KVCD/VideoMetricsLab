@@ -48,7 +48,7 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--no-gpu-decode |
                                    --gpu-decode {auto,nvidia,intel,amd}]
                                    [--vvc-decoder {gpu,cpu}] [--gpu NAME]
-                                   [--parallel N]
+                                   [--parallel N] [--frame-counts {check,skip}]
                                    [--recalculate] [--difference]
                                    [--csv FOLDER] [--json FILE] [--batch CSV]
                                    [--scores-csv FILE] [--worst N]
@@ -262,6 +262,14 @@ options:
                         (default: the app's)
   --parallel N          videos calculated at once on the CPU, 1-2 (default:
                         the app's)
+  --frame-counts {check,skip}
+                        when a video may be out of sync with the reference
+                        (fewer frames were compared than its length should
+                        have), the frame counts stored in the files are
+                        checked. check: also read a file that doesn't store
+                        one from start to finish to count its frames, which
+                        can add minutes per video; skip: don't (default: the
+                        app's)
   --recalculate         calculate every metric again instead of using saved
                         scores
   --difference          with two test videos: the first minus the second as
@@ -1139,6 +1147,8 @@ Parser compare_parser(CompareArguments& parsed) {
                    }
                    parsed.parallel = static_cast<int>(std::stoi(choice(std::to_string(*number), {"1", "2"})));
                }),
+        option({"--frame-counts"},
+               [&parsed](const std::string& value) { parsed.frame_counts = choice(value, {"check", "skip"}); }),
         flag({"--recalculate"}, parsed.recalculate),
         flag({"--difference"}, parsed.difference),
         option({"--csv"}, [&parsed](const std::string& value) { parsed.csv = value; }),
