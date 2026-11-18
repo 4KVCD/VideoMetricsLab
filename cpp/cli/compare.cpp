@@ -36,6 +36,7 @@
 #include "vml/ffprobe.h"
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
+#include "vml/frame_pairing.h"
 #include "vml/frame_range.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
@@ -670,11 +671,14 @@ std::optional<std::string> gpu_not_yet(const std::vector<MetricTask>& tasks) {
 // Runs the jobs (job_runner.h), keeping each video's result, or why it or
 // some of its metrics failed, in its TestVideo (`targets` holds each job's),
 // saving it in the saved scores under `cache_folder` unless the video's
-// save_scores is false, and showing the run's progress (Progress). A port of
-// the Python app's command line's cli.run.
+// save_scores is false, and showing the run's progress (Progress). A video
+// whose run scored fewer frame pairs than its length holds has both videos'
+// frames counted (frame_pairing.h): where they state them, and with
+// `read_whole_files` by reading those that do not. A port of the Python
+// app's command line's cli.run.
 void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targets, const std::vector<VmafJob>& jobs,
-         int parallel, bool gpu_metrics_together, const std::filesystem::path& cache_folder, Progress& progress,
-         const CancelToken& cancel) {
+         int parallel, bool gpu_metrics_together, bool read_whole_files, const std::filesystem::path& cache_folder,
+         Progress& progress, const CancelToken& cancel) {
     // The line being redrawn is drawn with new figures once a second while
     // the run lasts, and ends with the run, however the run ends.
     progress.start();
@@ -751,6 +755,8 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
         progress.finished(index, video(index).label() + (whole || !cancel.cancelled() ? ": done" : ": cancelled"));
     };
     events.job_facts = [&](std::size_t index, const RunFacts& facts) { video(index).facts = facts; };
+    // The counts files state, always (they cost nothing); whole files read only when asked
+    events.count_frames = container_frame_counter(environment.ffprobe, cancel, read_whole_files);
     events.job_failed = [&](std::size_t index, const std::string& message, const std::string& /*stderr_tail*/) {
         video(index).error = message;
         progress.finished(index, video(index).label() + ": FAILED: " + message);
@@ -2044,8 +2050,9 @@ int compare(const CompareArguments& given) {
         {
             const BlackBarsAhead bars_ahead(jobs, tools.ffmpeg.path);
             run(run_environment(tools, jobs), targets, jobs, arguments.parallel.value_or(settings.parallel_jobs),
-                arguments.vship_pass ? *arguments.vship_pass == "one" : settings.gpu_metrics_together, cache_folder,
-                *progress, cancel);
+                arguments.vship_pass ? *arguments.vship_pass == "one" : settings.gpu_metrics_together,
+                arguments.frame_counts ? *arguments.frame_counts == "check" : settings.check_frame_counts,
+                cache_folder, *progress, cancel);
         }
         cancelled = cancel.cancelled();
         *running = false;
@@ -2057,6 +2064,23 @@ int compare(const CompareArguments& given) {
         stop_gpu_probes();
     }
 
+    // A video answered by its saved scores alone had no job to count its
+    // frames in (frame_pairing.h): counted here, and saved with its scores.
+    const bool read_whole_files =
+        arguments.frame_counts ? *arguments.frame_counts == "check" : settings.check_frame_counts;
+    const auto count_saved = [&](TestVideo& video) {
+        std::optional<FramesShort>& frames_short = video.result->frames_short;
+        frames_short = count_frames_short(*frames_short, video.result->source_info, video.result->distorted_info,
+                                          container_frame_counter(tools.ffprobe.path, cancel, read_whole_files));
+        if (video.save_scores && frames_short->counted()) {
+            try {
+                store_result(cache_folder, video.result->source, video.path, video.request.recipe, *video.result,
+                             platform::path_text(video.path.stem()), video.request.metrics);
+            } catch (const std::exception&) {
+                // the counts are still this run's; the next counts again
+            }
+        }
+    };
     bool every_ok = true;
     for (const std::unique_ptr<Comparison>& comparison : comparisons) {
         every_ok = every_ok && comparison->error.empty();
@@ -2066,6 +2090,17 @@ int compare(const CompareArguments& given) {
         for (TestVideo& video : comparison->planner->videos) {
             if (const std::optional<std::string> note = near_miss_note(video)) {
                 video.notes.push_back(*note);
+            }
+            if (!cancelled && video.from_cache && video.result && video.result->frames_short &&
+                !video.result->frames_short->counted()) {
+                try {
+                    count_saved(video);
+                } catch (const Cancelled&) {
+                    cancelled = true;
+                }
+            }
+            if (video.result && video.result->frames_short && !video.result->frames_short->in_step()) {
+                video.notes.push_back(frames_short_text(*video.result->frames_short));
             }
             every_ok = every_ok && video_status(video, false) == "ok";
         }

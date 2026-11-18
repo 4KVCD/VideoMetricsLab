@@ -75,6 +75,7 @@ the `low` or `high` ones, and its `bands`.
 | `width` ... `encoder_settings` | The test video's details (see [File details](#file-details)). |
 | `film_grain` | Where the stream carries film grain: its `kinds` and whether it was `scored` `with` or `without` it (and `why_without`). |
 | `compared_frames` | How many frame pairs were compared. |
+| `frame_pairing` | Whether the video's frames line up with the reference's, frame for frame (see the user guide's "Frames are paired by number"). `status`: `no_mismatch_seen` (as many frame pairs were compared as the videos' length holds); `may_be_out_of_step` (at least 2 fewer, and the frames could not be counted: a file states no count, and Settings > Storage > Read whole files to count frames when they may not line up, or `--frame-counts check`, was off); `out_of_step` (counted: the two have different numbers of frames, and the scores from where they part are wrong); `in_step` (counted, the same: the frames line up); or `not_checked` (a part of the videos, a resolution test, a length not known, or no per-frame metric). `note`: what it means in plain words, and for `may_be_out_of_step` how to tell. `compared_pairs`, `length_frames` (the frames the shorter video's length holds), and `reference_frames` and `test_frames` (`null` when not counted). |
 | `vmaf_model` | The VMAF model the result records. |
 | `reference_crop`, `test_crop` | The picture compared in each video (`x`, `y`, `width`, `height`), or `null` for the whole frame. |
 | `metrics` | Each metric's score and statistics (below). |

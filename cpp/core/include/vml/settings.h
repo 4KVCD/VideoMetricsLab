@@ -64,6 +64,12 @@ struct Settings {
     bool vvc_decode_on_gpu = false;
     // Use a saved result instead of calculating again.
     bool use_cache = true;
+    // When a run of two videos scored fewer frame pairs than their lengths
+    // hold, their frames are counted to tell whether they were paired out of
+    // step (frame_pairing.h): the counts their files state, always; with
+    // this, a file that states none is read through to count them. Off by
+    // default: minutes for a film on a network drive.
+    bool check_frame_counts = false;
 
     bool check_for_updates = true;
     std::string skipped_update_version;

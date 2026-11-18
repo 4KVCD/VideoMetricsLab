@@ -64,6 +64,7 @@ struct CompareArguments {
     // --gpu: the GPU to score on, by name (gpu_choice.h); "auto" for a discrete one first (Settings::gpu)
     std::optional<std::string> gpu;
     std::optional<int> parallel;
+    std::optional<std::string> frame_counts;  // "check" or "skip" (Settings::check_frame_counts)
     bool recalculate = false;
     bool difference = false;  // the first test video minus the second, too
     std::optional<std::string> csv;

@@ -405,8 +405,10 @@ nlohmann::json optional_text(const std::optional<std::string>& text) {
 }
 
 // The comparison's context.json: its files, crops, frame rate and recipe.
+// With frames_short (frame_pairing.h) only where the result has one, which
+// the Python app did not write.
 nlohmann::json context_json(const ComparisonResult& result, const std::string& label, const ComparisonRecipe& recipe) {
-    return {{"format_version", metric_cache_format_version},
+    nlohmann::json context = {{"format_version", metric_cache_format_version},
             {"label", label},
             {"source", python_path_text(result.source)},
             {"distorted", python_path_text(result.distorted)},
@@ -426,6 +428,10 @@ nlohmann::json context_json(const ComparisonResult& result, const std::string& l
             {"recipe", recipe.identity()},
             {"black_bars_rule", black_bars_rule_version},
             {"saved_by", build_stamp()}};
+    if (result.frames_short) {
+        context["frames_short"] = frames_short_json(result.frames_short);
+    }
+    return context;
 }
 
 // The two videos' colour tags as a comparison's context.json has them.
@@ -890,6 +896,32 @@ std::optional<nlohmann::json> parameter(const MetricProvenance& provenance, cons
         return std::nullopt;
     }
     return nlohmann::json::parse(python_json_readable(found->second), nullptr, false);
+}
+
+nlohmann::json frames_short_json(const std::optional<FramesShort>& short_of) {
+    if (!short_of) {
+        return nullptr;
+    }
+    const auto count = [](const std::optional<long long>& value) {
+        return value ? nlohmann::json(*value) : nlohmann::json(nullptr);
+    };
+    return {{"scored_pairs", short_of->scored_pairs},
+            {"length_frames", short_of->length_frames},
+            {"source_frames", count(short_of->source_frames)},
+            {"test_frames", count(short_of->test_frames)}};
+}
+
+std::optional<FramesShort> frames_short_from_json(const nlohmann::json& saved) {
+    if (!saved.is_object() || !saved.value("scored_pairs", nlohmann::json()).is_number_integer() ||
+        !saved.value("length_frames", nlohmann::json()).is_number_integer()) {
+        return std::nullopt;
+    }
+    const auto count = [&saved](const char* key) -> std::optional<long long> {
+        const nlohmann::json value = saved.value(key, nlohmann::json());
+        return value.is_number_integer() ? std::optional(value.get<long long>()) : std::nullopt;
+    };
+    return FramesShort{saved["scored_pairs"].get<long long>(), saved["length_frames"].get<long long>(),
+                       count("source_frames"), count("test_frames")};
 }
 
 void loaded_model(const MetricResultSet& results, const std::vector<MetricRequestSpec>& specs, const std::string& key,

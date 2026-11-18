@@ -12,6 +12,7 @@
 #include <condition_variable>
 #include <map>
 #include <mutex>
+#include <numeric>
 #include <string>
 #include <thread>
 #include <utility>
@@ -592,6 +593,66 @@ TEST(JobRunner, VshipsPassesAreKeptAsTheyFinish) {
     EXPECT_EQ(planned[0].metric_keys, (std::vector<std::string>{"butteraugli", "cvvdp"}));
     EXPECT_EQ(planned[1].backend, perceptual_cpu_task);
     EXPECT_EQ(planned[1].metric_keys, std::vector<std::string>{"ssimulacra2"});
+}
+
+// A run of two 10 s videos at 24 fps (240 frames each by their length) that
+// scored 235 pairs: one of them has fewer frames, or both have gaps
+// (frame_pairing.h). Without a frame counter its result says the frames may
+// be out of step; with one, counted, whether they are; with a range, it
+// says nothing and counts nothing. A metric scored every 2nd frame up to its
+// last reaches the end. The counts come from the run's videos, by path.
+TEST(JobRunner, AResultShortOfTheVideosLengthsSaysTheirFramesMayBeOutOfStep) {
+    const auto job_scoring = [](std::vector<int> frames, long long range_end = 0) {
+        VmafJob job = job_of({{"ffmpeg", {"psnr"}}});
+        job.source_info.path = "reference.mkv";
+        job.distorted_info.path = "encode.mkv";
+        for (VideoInfo* video : {&job.source_info, &job.distorted_info}) {
+            video->duration = 10.0;
+            video->fps = 24.0;
+        }
+        job.options.range_end = range_end;
+        return std::pair{job, frames};
+    };
+    std::vector<int> short_frames(235);
+    std::iota(short_frames.begin(), short_frames.end(), 0);
+    std::vector<int> every_second;
+    for (int frame = 0; frame < 240; frame += 2) {
+        every_second.push_back(frame);
+    }
+    const auto finished = [](const std::pair<VmafJob, std::vector<int>>& run, const FrameCounter& count) {
+        Reported reported;
+        RunEvents events = reported.events();
+        events.count_frames = count;
+        run_jobs(
+            {run.first}, 1, events,
+            [&run](const VmafJob& job, const VmafOptions&, const ProgressCallback&, const StatusCallback&,
+                   const CancelToken&) {
+                ComparisonResult result = result_with({{"psnr", run.second}});
+                result.source_info = job.source_info;
+                result.distorted_info = job.distorted_info;
+                return result;
+            },
+            24, CancelToken());
+        return reported.finished.at(0).frames_short;
+    };
+    int counted = 0;
+    const auto counts = [&counted](long long reference, long long encode) -> FrameCounter {
+        return [&counted, reference, encode](const VideoInfo& video) -> std::optional<long long> {
+            ++counted;
+            return video.path == "reference.mkv" ? reference : encode;
+        };
+    };
+
+    EXPECT_EQ(finished(job_scoring(short_frames), nullptr), (FramesShort{235, 240}));
+    EXPECT_EQ(finished(job_scoring(short_frames), counts(235, 240)),
+              (FramesShort{235, 240, 235, 240}));  // out of step
+    EXPECT_TRUE(finished(job_scoring(short_frames), counts(235, 235))->in_step());
+    // A count far from what the length holds (an interlaced video's fields)
+    EXPECT_EQ(finished(job_scoring(short_frames), counts(470, 240)), (FramesShort{235, 240}));
+    EXPECT_EQ(counted, 6);
+    EXPECT_EQ(finished(job_scoring(short_frames, 5), counts(235, 240)), std::nullopt);
+    EXPECT_EQ(finished(job_scoring(every_second), counts(235, 240)), std::nullopt);
+    EXPECT_EQ(counted, 6);  // neither counted
 }
 
 // A video with perceptual metrics alone has a result made from its job, with

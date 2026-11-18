@@ -11,6 +11,7 @@
 #include "i18n.h"
 #include "window_helpers.h"
 #include "vml/build_info.h"
+#include "vml/frame_pairing.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
@@ -38,6 +39,7 @@ Json run_entry(const ExportedRun& run) {
         entry["failed_metrics"] = failed;
     }
     entry["compared_frames"] = result.compared_frame_count;
+    entry["frame_pairing"] = frame_pairing_json(result);
     entry["vmaf_model"] = result.model;
     entry["reference_crop"] = summary_crop_json(result.source_crop);
     entry["test_crop"] = summary_crop_json(result.distorted_crop);

@@ -251,6 +251,11 @@ private:
 
     // A task's name in the log: "GPU metrics (SSIMULACRA2, CVVDP)".
     std::string task_name(std::size_t task) const;
+    // Whether the video's frames may have been paired out of step
+    // (frame_pairing.h), as it ends: seen from its result at no cost, and
+    // counted (RunEvents::count_frames, which may read whole files) without
+    // mutex_ held. Nothing for a cancelled run.
+    std::optional<FramesShort> check_frame_pairing();
     ComparisonResult execute_task(std::size_t task);
     PerceptualTaskOutput execute_perceptual(std::size_t task);
     void report_progress(std::size_t task, long long current, long long total, double fps);
@@ -734,7 +739,45 @@ bool JobRun::run_task(std::size_t task) {
     return last;
 }
 
+std::optional<FramesShort> JobRun::check_frame_pairing() {
+    FramesShort short_of;
+    {
+        const std::lock_guard lock(mutex_);
+        if (scheduler_.cancel.cancelled()) {
+            return std::nullopt;
+        }
+        const std::optional<ComparisonResult> result = merged();
+        if (!result) {
+            return std::nullopt;
+        }
+        const std::optional<FramesShort> seen =
+            frames_short_of_lengths(*result, options_.range_start == 0 && options_.range_end == 0);
+        if (!seen) {
+            return std::nullopt;
+        }
+        short_of = *seen;
+        // Counted before, for the same pairs: the counts saved with the scores.
+        if (job_.cached_result) {
+            const std::optional<FramesShort>& saved = job_.cached_result->frames_short;
+            if (saved && saved->counted() && saved->scored_pairs == short_of.scored_pairs) {
+                return saved;
+            }
+        }
+    }
+    if (!scheduler_.events.count_frames) {
+        return short_of;
+    }
+    logger.info(name() + ": " + std::to_string(short_of.scored_pairs) + " frame pairs scored where the videos' " +
+                "lengths hold " + std::to_string(short_of.length_frames) + "; counting each video's frames");
+    try {
+        return count_frames_short(short_of, job_.source_info, job_.distorted_info, scheduler_.events.count_frames);
+    } catch (const Cancelled&) {
+        return short_of;
+    }
+}
+
 void JobRun::finish() {
+    const std::optional<FramesShort> frames_short = check_frame_pairing();
     const std::lock_guard lock(mutex_);
     finalized_ = true;
     const RunEvents& events = scheduler_.events;
@@ -773,6 +816,15 @@ void JobRun::finish() {
     std::optional<ComparisonResult> result;
     if (!cancelled || calculated) {
         result = merged();
+    }
+    if (result) {
+        result->frames_short = frames_short;  // a saved result's own replaced
+        if (frames_short && !frames_short->in_step()) {
+            logger.warning(name() + ": " + frames_short_text(*frames_short));
+        } else if (frames_short) {
+            logger.info(name() + ": the two videos have the same number of frames (" +
+                        std::to_string(*frames_short->source_frames) + "): their frames are paired in step");
+        }
     }
     PerceptualFailures why_failed = metric_failures;  // each metric once, as the events say it
     for (const std::size_t task : failed) {

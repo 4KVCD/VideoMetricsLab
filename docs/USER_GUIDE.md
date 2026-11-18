@@ -159,6 +159,34 @@ The files must describe corresponding frames. The app rejects several timing
 and geometry mismatches; this is not automatic content alignment. A source with
 a different cut, opening sequence or frame offset must be aligned first.
 
+Frames are paired by number: frame 1,000 of the test video with frame 1,000
+of the reference. If one of the two has a few frames more than the other in
+the same length, their frames drift apart from that point, and every score
+after it falls, though the two play in step. A common cause: a Blu-ray remux
+can have small gaps in its timing where clips were joined, and an encode at a
+constant frame rate fills each gap with a repeated frame. Encoding at a
+variable frame rate, as the source has it, keeps the frames as they are.
+
+When a run compares fewer frames than the two videos' length holds, it is a
+sign the frames may not line up, though only a sign: two videos with the same
+gaps have the same frames. Both videos' frames are then counted, at once
+where their files state their frame counts (MP4 files, and MKV files mkvmerge
+wrote; not those FFmpeg or HandBrake wrote). Different counts put a **⚠**
+before the test video's name, with both counts in its tooltip; the same
+counts mean the frames line up, and nothing is shown.
+
+Where a file states no count, a **⚠** says the frames *may* not line up, and
+its tooltip says how to tell: **Settings > Storage > Read whole files to
+count frames when they may not line up** counts such a file's frames by
+reading it through, which can take minutes for a film on a network drive. It
+is off by default; the command line's `--frame-counts check` does the same
+for one run. Ticked after a video was calculated, it applies when the video
+is calculated again (right-click it: **Recalculate selected metrics**).
+
+Every video in a results JSON says how its frames were paired
+(`frame_pairing`, with a note in plain words: see
+[RESULTS_JSON.md](RESULTS_JSON.md)).
+
 ### AV2 videos
 
 AV2, AOM's codec after AV1 (not yet final), is decoded by dav2d, VideoLAN's
@@ -353,6 +381,7 @@ $run.videos[0].metrics.vmaf.score
 | `--vvc-decoder gpu\|cpu` | Decode a VVC video on the GPU (vvdec-vulkan, experimental) or on the CPU (VVdeC). The scores are the same. Left out: as Settings > GPU metrics sets it (the CPU unless changed). |
 | `--threads N` | libvmaf threads. Left out: automatic. |
 | `--parallel 1\|2` | Videos calculated at once on the CPU. |
+| `--frame-counts check\|skip` | When fewer frames were compared than the videos' length holds, both videos' frames are counted where their files state them; check: also read through a file that states none to count them (minutes for a film on a network drive); skip: do not. Default: Settings > Storage. |
 | `--recalculate` | Ignore saved scores. |
 | `--difference` | With exactly two test videos: the first minus the second as well, frame by frame (CVVDP second by second), paired as **Difference** in Metric Graphs pairs them. The tables end with a difference table (Score: the two scores subtracted; Mean, Min, Max: of the frames' differences; Paired: the frames, or seconds, both have), the JSON gets a `difference` section, and with `--csv` it is written as `<first>_minus_<second>.csv` (the files' names). |
 | `--csv FOLDER` | Write each video's per-frame scores as `<video>.csv`, as **Export CSV** does. |

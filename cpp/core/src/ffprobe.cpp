@@ -826,6 +826,114 @@ long long count_video_packets(const std::filesystem::path& path, const std::stri
 
 namespace {
 
+// In ffprobe's "pts,flags" listing of packets (csv=p=0), how many are shown
+// (with a presentation time, not flagged to be discarded) and how many are
+// not. A stream cut by copying can begin with pictures that refer to ones
+// before the cut (an open GOP's leading pictures): Matroska gives them no
+// time, MP4 a time before the start and the discard flag, and no decoder
+// delivers them.
+std::pair<long long, long long> shown_and_unshown(const std::string& listed) {
+    long long shown = 0;
+    long long unshown = 0;
+    std::size_t start = 0;
+    while (start < listed.size()) {
+        std::size_t end = listed.find('\n', start);
+        end = end == std::string::npos ? listed.size() : end;
+        std::string_view line(listed.data() + start, end - start);
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
+            line.remove_suffix(1);
+        }
+        start = end + 1;
+        if (line.empty()) {
+            continue;
+        }
+        const std::size_t comma = line.find(',');
+        const std::string_view pts = line.substr(0, comma);
+        const std::string_view flags = comma == std::string_view::npos ? std::string_view() : line.substr(comma + 1);
+        if (pts.empty() || pts == "N/A" || flags.find('D') != std::string_view::npos) {
+            ++unshown;
+        } else {
+            ++shown;
+        }
+    }
+    return {shown, unshown};
+}
+
+// The packets' "pts,flags" listing of `path`'s first video stream, the
+// first `first_packets` of them when above 0, otherwise all.
+std::string listed_packets(const std::filesystem::path& path, const std::string& ffprobe, int first_packets,
+                           const CancelToken& cancel) {
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
+    command.insert(command.end(), {"-select_streams", "v:0"});
+    if (first_packets > 0) {
+        command.insert(command.end(), {"-read_intervals", "%+#" + std::to_string(first_packets)});
+    }
+    command.insert(command.end(), {"-show_entries", "packet=pts,flags", "-print_format", "csv=p=0", text(path)});
+    // A film on a network drive is read through: minutes, not seconds
+    return run_ffprobe(command, path, first_packets > 0 ? std::chrono::seconds(60) : std::chrono::minutes(30),
+                       cancel);
+}
+
+}  // namespace
+
+std::optional<long long> trusted_frame_count(const std::filesystem::path& path, const std::string& ffprobe,
+                                             const CancelToken& cancel) {
+    std::vector<std::string> command = ffprobe_command_start(ffprobe);
+    command.insert(command.end(), {"-select_streams", "v:0", "-print_format", "json", "-show_entries",
+                                   "stream=nb_frames:stream_tags=NUMBER_OF_FRAMES,NUMBER_OF_FRAMES-eng:"
+                                   "format_tags=encoder,ENCODER",
+                                   text(path)});
+    const Json probe = Json::parse(run_ffprobe(command, path, std::chrono::seconds(60), cancel));
+    const Json* streams = member(probe, "streams");
+    if (streams == nullptr || streams->empty()) {
+        return std::nullopt;
+    }
+    const auto count_in = [](const Json& holder, const char* key) -> std::optional<long long> {
+        const Json* value = member(holder, key);
+        return value != nullptr && value->is_string() ? python_int(value->get_ref<const std::string&>())
+                                                      : std::optional<long long>();
+    };
+    const Json& stream = streams->at(0);
+    std::optional<long long> stated = count_in(stream, "nb_frames");
+    if (!stated || *stated <= 0) {
+        stated.reset();
+        // FFmpeg copies a stream's tags into what it writes as they were
+        const Json* format = member(probe, "format");
+        const Json* format_tags = format != nullptr ? member(*format, "tags") : nullptr;
+        if (format_tags != nullptr) {
+            for (const char* key : {"encoder", "ENCODER"}) {
+                const Json* encoder = member(*format_tags, key);
+                if (encoder != nullptr && encoder->is_string() &&
+                    encoder->get_ref<const std::string&>().starts_with("Lavf")) {
+                    return std::nullopt;
+                }
+            }
+        }
+        if (const Json* tags = member(stream, "tags")) {
+            for (const char* key : {"NUMBER_OF_FRAMES", "NUMBER_OF_FRAMES-eng"}) {
+                if (const std::optional<long long> count = count_in(*tags, key); count && *count > 0) {
+                    stated = count;
+                    break;
+                }
+            }
+        }
+    }
+    if (!stated) {
+        return std::nullopt;
+    }
+    // A count states every picture stored: less the leading pictures a cut
+    // left, which are only at the start, read from its first packets.
+    const long long unshown = shown_and_unshown(listed_packets(path, ffprobe, 64, cancel)).second;
+    return *stated - unshown;
+}
+
+long long count_shown_video_packets(const std::filesystem::path& path, const std::string& ffprobe,
+                                    const CancelToken& cancel) {
+    return shown_and_unshown(listed_packets(path, ffprobe, 0, cancel)).first;
+}
+
+namespace {
+
 // Each codec whose raw streams' stored rate FFmpeg reports, and how many of
 // what it reports make a frame a second. Measured on streams made at known
 // rates, 24000/1001 among them: H.264's and MPEG-1's are reported doubled, as

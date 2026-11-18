@@ -48,7 +48,7 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--no-gpu-decode |
                                    --gpu-decode {auto,nvidia,intel,amd}]
                                    [--vvc-decoder {gpu,cpu}] [--gpu NAME]
-                                   [--parallel N]
+                                   [--parallel N] [--frame-counts {check,skip}]
                                    [--recalculate] [--difference]
                                    [--csv FOLDER] [--json FILE] [--batch CSV]
                                    [--scores-csv FILE] [--worst N]
@@ -262,6 +262,12 @@ options:
                         (default: the app's)
   --parallel N          videos calculated at once on the CPU, 1-2 (default:
                         the app's)
+  --frame-counts {check,skip}
+                        when fewer frames were compared than the videos'
+                        length holds, both videos' frames are counted where
+                        their files state them; check: also read through a
+                        file that states none to count them, which can take
+                        minutes; skip: do not (default: the app's)
   --recalculate         calculate every metric again instead of using saved
                         scores
   --difference          with two test videos: the first minus the second as
@@ -1139,6 +1145,8 @@ Parser compare_parser(CompareArguments& parsed) {
                    }
                    parsed.parallel = static_cast<int>(std::stoi(choice(std::to_string(*number), {"1", "2"})));
                }),
+        option({"--frame-counts"},
+               [&parsed](const std::string& value) { parsed.frame_counts = choice(value, {"check", "skip"}); }),
         flag({"--recalculate"}, parsed.recalculate),
         flag({"--difference"}, parsed.difference),
         option({"--csv"}, [&parsed](const std::string& value) { parsed.csv = value; }),

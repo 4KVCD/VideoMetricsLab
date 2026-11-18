@@ -130,6 +130,25 @@ std::optional<long long> stated_frame_count(const std::filesystem::path& path, c
 long long count_video_packets(const std::filesystem::path& path, const std::string& ffprobe,
                               const CancelToken& cancel);
 
+// The frames a decoder delivers from a file, from the count it states, where
+// that can be trusted: its stream's own (an MP4's samples), or Matroska's
+// NUMBER_OF_FRAMES tag unless FFmpeg wrote the file (its encoder tag is
+// "Lavf..."; FFmpeg copies a stream's tags as they were: an encode it made
+// of a Blu-ray remux states the remux's count). Less the pictures among its
+// first 64 packets that are not shown (count_shown_video_packets), which a
+// count of stored pictures includes. Nothing where it states none.
+std::optional<long long> trusted_frame_count(const std::filesystem::path& path, const std::string& ffprobe,
+                                             const CancelToken& cancel);
+
+// The packets of the file's first video stream that are shown, read through
+// without decoding: those with a presentation time and not flagged to be
+// discarded. A stream cut by copying can begin with pictures that refer to
+// ones before the cut (an open GOP's leading pictures), which Matroska gives
+// no time and MP4 the discard flag, and which no decoder delivers; they are
+// left out, so the count is of the frames a decoder delivers.
+long long count_shown_video_packets(const std::filesystem::path& path, const std::string& ffprobe,
+                                    const CancelToken& cancel);
+
 VideoInfo probe_raw_yuv(const std::filesystem::path& path, const std::string& size, const std::string& pix_fmt,
                         double fps, const std::string& ffprobe, const CancelToken& cancel = CancelToken());
 

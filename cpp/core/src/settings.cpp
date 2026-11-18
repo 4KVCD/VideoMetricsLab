@@ -50,6 +50,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"gpu", &Settings::gpu},
         {"vvc_decode_on_gpu", &Settings::vvc_decode_on_gpu},
         {"use_cache", &Settings::use_cache},
+        {"check_frame_counts", &Settings::check_frame_counts},
         {"check_for_updates", &Settings::check_for_updates},
         {"skipped_update_version", &Settings::skipped_update_version},
         {"language", &Settings::language},
@@ -240,6 +241,7 @@ std::string Settings::text() const {
     data["gpu"] = gpu;
     data["vvc_decode_on_gpu"] = vvc_decode_on_gpu;
     data["use_cache"] = use_cache;
+    data["check_frame_counts"] = check_frame_counts;
     data["check_for_updates"] = check_for_updates;
     data["skipped_update_version"] = skipped_update_version;
     data["language"] = language;

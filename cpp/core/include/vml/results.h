@@ -105,6 +105,23 @@ struct FrameScores {
 };
 FrameScores frame_scores_from_results(const MetricResultSet& results);
 
+// A run of two whole videos that scored fewer frame pairs than their lengths
+// hold (frame_pairing.h): one of them may have fewer frames than the other
+// in the same time, and frames are paired by number, so from where they
+// part every pair would be of two different pictures. With the two videos'
+// frame counts once they were counted: the same, and the frames were paired
+// in step after all; different, and they were not.
+struct FramesShort {
+    long long scored_pairs = 0;   // the frame pairs scored
+    long long length_frames = 0;  // the frames the shorter video's length holds
+    std::optional<long long> source_frames;
+    std::optional<long long> test_frames;
+
+    bool counted() const { return source_frames.has_value() && test_frames.has_value(); }
+    bool in_step() const { return counted() && *source_frames == *test_frames; }
+    bool operator==(const FramesShort&) const = default;
+};
+
 // One comparison's result: the two videos, how they were compared, and
 // every metric's scores.
 struct ComparisonResult {
@@ -128,6 +145,9 @@ struct ComparisonResult {
     // Metrics asked for that the run could not score, with why, while the
     // others stand (reported as failed; never saved).
     std::map<std::string, std::string> metric_failures;
+    // Set when the run scored fewer pairs than the videos' lengths hold and
+    // they were not counted, or counted and found to differ (frame_pairing.h).
+    std::optional<FramesShort> frames_short;
 
     bool has_metric(const std::string& key) const { return metric_results.has(key); }
 };

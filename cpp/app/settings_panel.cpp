@@ -212,6 +212,18 @@ QGroupBox* SettingsPanel::build_storage_box() {
     use_cache->setChecked(settings_.use_cache);
     connect(use_cache, &QCheckBox::toggled, this, [this] { on_edited(); });
     storage_form->addRow("", use_cache);
+    check_frame_counts = new QCheckBox(app::tr("Read whole files to count frames when they may not line up"));
+    check_frame_counts->setToolTip(app::tr(
+        "When fewer frames were compared than the two videos' length holds, the reference and the test video may "
+        "not line up frame for frame -- usually because frames were repeated or dropped as the test video was "
+        "encoded -- and every score after that point would be wrong. Both videos' frames are then counted to tell "
+        "for sure, at once where their files state their frame counts (MP4 files, and MKV files mkvmerge wrote). "
+        "Ticked, a file that states none is read through to count them, which can take minutes for a film on a "
+        "network drive. Unticked, such a video only says its frames may not line up.\n\nApplies from the next "
+        "run."));
+    check_frame_counts->setChecked(settings_.check_frame_counts);
+    connect(check_frame_counts, &QCheckBox::toggled, this, [this] { on_edited(); });
+    storage_form->addRow("", check_frame_counts);
 
     // Where each session's log goes: runs, steps and every failure in full,
     // kept after the window that showed them is closed.
@@ -667,6 +679,7 @@ void SettingsPanel::read_controls() {
     settings_.export_graph_background = export_background_button->property("chosen").toString().toStdString();
     settings_.export_graph_text = export_text_button->property("chosen").toString().toStdString();
     settings_.use_cache = use_cache->isChecked();
+    settings_.check_frame_counts = check_frame_counts->isChecked();
     settings_.default_gpu_decode = default_gpu->isChecked();
     for (const auto& [key, box] : default_metrics) {
         *settings_.default_compute(key) = box->isChecked();

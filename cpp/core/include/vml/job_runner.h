@@ -31,6 +31,7 @@
 
 #include "vml/cancel.h"
 #include "vml/ffmpeg_run.h"
+#include "vml/frame_pairing.h"
 #include "vml/options.h"
 #include "vml/results.h"
 #include "vml/run_record.h"
@@ -206,6 +207,12 @@ struct RunEvents {
     // video, just before its result or failure, and for a video a cancel
     // stopped before it had any result, which gets no other event.
     std::function<void(std::size_t index, const RunFacts& facts)> job_facts;
+    // Not an event: counts a video's frames (frame_pairing.h), asked as a
+    // video ends only when its run of the whole videos scored fewer frame
+    // pairs than their lengths hold, to tell whether their frames were paired
+    // out of step. Left empty, the result says only that they may have been
+    // (FramesShort, uncounted).
+    FrameCounter count_frames;
 };
 
 // Calculates one task: `options` are the job's, with only the task's

@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QScopedValueRollback>
 #include <QTableWidgetItem>
+#include <QTextDocument>
 #include <QTimer>
 
 #include <algorithm>
@@ -120,6 +121,32 @@ bool sort_less(const SortKey& a, const SortKey& b) {
         return QString::compare(*x, std::get<QString>(b)) < 0;
     }
     return a < b;
+}
+
+// What a row's FramesShort (frame_pairing.h) means, for its name's tooltip:
+// that its frames may not line up with the reference's, or (counted) that
+// they do not. Calculate metrics leaves a finished video as it is, so the
+// note names the menu's command that calculates it again, in its own words.
+QString row_frames_short_note(const FramesShort& short_of) {
+    const QString mark = QString::fromUtf8("\xE2\x9A\xA0 ");
+    if (short_of.counted()) {
+        return mark + app::tr("The reference has {source:,} frames and this video {test:,} in the same length, "
+                       "so from where they part their frames are compared out of step, and the scores from there on "
+                       "are wrong. Frames repeated or dropped as this video was encoded usually do this: encoding at "
+                       "a variable frame rate, as the source has it, keeps its frames as they are.",
+                       {{"source", *short_of.source_frames}, {"test", *short_of.test_frames}});
+    }
+    // The setting by the names the window shows it under
+    const QString setting = app::tr("Settings") + " > " + app::tr("Storage") + " > " +
+                            app::tr("Read whole files to count frames when they may not line up");
+    return mark + app::tr("This video and the reference may not line up frame for frame: fewer frames were "
+                          "compared ({compared:,}) than their length holds ({length:,}). If the scores drop suddenly "
+                          "partway through and stay low, this is the likely cause. To check, tick {setting} and "
+                          "calculate its metrics again.",
+                          {{"compared", short_of.scored_pairs}, {"length", short_of.length_frames}, {"setting", setting}}) +
+           " " +
+           app::tr("To calculate them again, right-click it and choose {recalculate}.",
+                   {{"recalculate", app::tr("Recalculate selected metrics (ignore cached/previous results)")}});
 }
 
 }  // namespace
@@ -363,7 +390,19 @@ void MainWindow::refresh_row_state(int row) {
     if (!row_data.status_detail.isEmpty()) {
         lines.append(tr_message(row_data.status_detail));
     }
-    item->setToolTip(lines.join("\n\n"));
+    // Frames that may be compared out of step (frame_pairing.h): marked on
+    // the name, where it is seen without hovering, as every score is affected.
+    const std::optional<FramesShort>& frames_short =
+        row_data.completed_run ? row_data.completed_run->result.frames_short : std::optional<FramesShort>();
+    const bool out_of_step = frames_short && !frames_short->in_step();
+    if (out_of_step) {
+        lines.append(row_frames_short_note(*frames_short));
+    }
+    item->setText((out_of_step ? QString::fromUtf8("\xE2\x9A\xA0 ") : QString()) + name_of(row_data.path));
+    // As rich text with the note, which Qt wraps (a plain tooltip is one line
+    // however long: the note's would run across the screen).
+    item->setToolTip(out_of_step ? Qt::convertFromPlainText(lines.join("\n\n"), Qt::WhiteSpaceNormal)
+                                 : lines.join("\n\n"));
     if (state == RowState::failed) {
         item->setForeground(theme::color("failed"));
     } else if (finished_not_shown(state)) {
