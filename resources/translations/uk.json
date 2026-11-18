@@ -1041,7 +1041,21 @@
   "Rename...": "Перейменувати...",
   "Save as new profile...": "Зберегти як новий профіль...",
   "Save to profile": "Зберегти в профіль",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Де оцінки відео вважаються слабкими, в іменованих профілях для різних видів відео. Вибраний тут профіль — той, що використовується: Графіки метрик > Найгірші кадри > Слабкі ділянки починається з нього, а звіт про слабкі ділянки, експорт після кожного запуску та --segments saved у командному рядку дотримуються його."
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Де оцінки відео вважаються слабкими, в іменованих профілях для різних видів відео. Вибраний тут профіль — той, що використовується: Графіки метрик > Найгірші кадри > Слабкі ділянки починається з нього, а звіт про слабкі ділянки, експорт після кожного запуску та --segments saved у командному рядку дотримуються його.",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "Новий профіль із вихідної точки для певного виду відео, з налаштуванням за потреби.",
+  "Animation": "Анімація",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP, що моделює HDR-дисплеї (моделі VMAF розраховані на SDR-відео): CVVDP має бути оцінено.",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "Чиста жива зйомка з цифрових камер: звичайні пороги якісного кодування.",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "Чиста відрендерена деталізація та плавні градієнти: високі пороги VMAF і SSIMULACRA2 виявляють втрату деталей і бандинг.",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "Плівкове зерно знижує оцінки кадрів, вигляд яких збережено: нижчі пороги, і лише відрізки від шести кадрів, щоб саме зерно не вважалося слабким.",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "Пласкі кольори й чіткі лінії, які добре кодуються й отримують високі оцінки: високі пороги VMAF і SSIMULACRA2 виявляють бандинг і пошкоджені лінії.",
+  "From preset...": "З пресета...",
+  "Grain-free digital": "Цифрове без зерна",
+  "Grainy film": "Зерниста плівка",
+  "HDR": "HDR",
+  "Low-bitrate preview": "Попередній перегляд з низьким бітрейтом",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Лише серйозні збої тривалістю від дванадцяти кадрів, для кодувань, які не мають виглядати як джерело."
  },
  "plurals": {
   "about {count} day": [

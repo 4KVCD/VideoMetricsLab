@@ -23,8 +23,13 @@ namespace vml::cli {
 // The rules --segments and its options give.
 SegmentRules segment_rules(const CompareArguments& arguments);
 
-// --segments saved (or profile:NAME): the conditions of the weak segment
-// profile in use (or NAME) in the window's Settings > Weak segments
+// What --segments named in place of conditions: "saved", "profile:NAME" or
+// "preset:KEY".
+std::string segments_source(const CompareArguments& arguments);
+
+// --segments saved (or profile:NAME, or preset:KEY): the conditions of the
+// weak segment profile in use (or NAME) in the window's Settings > Weak
+// segments, or of the preset
 // (`settings`) on the metrics compared (`asked`) put in `arguments`, and
 // its any/every choice, shortest segment and gap where the command gave
 // none (--segments-all can only add "every"). The saved conditions left

@@ -1041,7 +1041,21 @@
   "Rename...": "Renommer...",
   "Save as new profile...": "Enregistrer comme nouveau profil...",
   "Save to profile": "Enregistrer dans le profil",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Où les scores d'une vidéo comptent comme faibles, dans des profils nommés pour différents types de vidéo. Le profil choisi ici est celui en usage : Graphiques des métriques > Pires images > Segments faibles part de celui-ci, et le rapport des segments faibles, les exports après chaque exécution et --segments saved de la ligne de commande le suivent."
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Où les scores d'une vidéo comptent comme faibles, dans des profils nommés pour différents types de vidéo. Le profil choisi ici est celui en usage : Graphiques des métriques > Pires images > Segments faibles part de celui-ci, et le rapport des segments faibles, les exports après chaque exécution et --segments saved de la ligne de commande le suivent.",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "Un nouveau profil à partir d'un point de départ pour un type de vidéo, à ajuster selon les besoins.",
+  "Animation": "Animation",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP, qui modélise les écrans HDR (les modèles de VMAF sont pour la vidéo SDR) : CVVDP doit avoir été noté.",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "Prises de vues réelles propres issues de caméras numériques : les seuils habituels d'un encodage de haute qualité.",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "Détails rendus nets et dégradés lisses : des seuils VMAF et SSIMULACRA2 élevés repèrent la perte de détails et le banding.",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "Le grain de film abaisse les scores d'images dont l'aspect est conservé : seuils plus bas, et seulement des passages de six images ou plus, pour que le grain seul ne soit pas faible.",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "Aplats de couleur et lignes nettes, qui s'encodent bien et obtiennent des scores élevés : des seuils VMAF et SSIMULACRA2 élevés repèrent le banding et les lignes abîmées.",
+  "From preset...": "À partir d'un préréglage...",
+  "Grain-free digital": "Numérique sans grain",
+  "Grainy film": "Film granuleux",
+  "HDR": "HDR",
+  "Low-bitrate preview": "Aperçu à faible débit",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Seulement les dégradations graves de douze images ou plus, pour les encodages qui ne sont pas censés ressembler à la source."
  },
  "plurals": {
   "about {count} day": [

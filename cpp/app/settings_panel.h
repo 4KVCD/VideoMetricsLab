@@ -17,6 +17,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "dialogs.h"
@@ -87,6 +88,9 @@ public:
     // Settings > Weak segments' New..., Rename... and Delete (the tests call
     // them, with the dialogs answered).
     void new_weak_profile();
+    // A new profile from preset `key` (segment_presets.h), named after it,
+    // put in use (From preset...).
+    void new_weak_profile_from_preset(std::string_view key);
     void rename_weak_profile();
     void delete_weak_profile();
 

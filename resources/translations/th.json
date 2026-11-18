@@ -1041,7 +1041,21 @@
   "Rename...": "เปลี่ยนชื่อ...",
   "Save as new profile...": "บันทึกเป็นโปรไฟล์ใหม่...",
   "Save to profile": "บันทึกลงโปรไฟล์",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "กำหนดว่าคะแนนของวิดีโอถือว่าอ่อนเมื่อใด ในโปรไฟล์ที่ตั้งชื่อไว้สำหรับวิดีโอแต่ละประเภท โปรไฟล์ที่เลือกที่นี่คือโปรไฟล์ที่ใช้อยู่: กราฟเมตริก > เฟรมที่แย่ที่สุด > ช่วงที่อ่อน จะเริ่มจากโปรไฟล์นี้ และรายงานช่วงที่อ่อน การส่งออกหลังการรันแต่ละครั้ง และ --segments saved ของบรรทัดคำสั่งก็ทำตามโปรไฟล์นี้"
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "กำหนดว่าคะแนนของวิดีโอถือว่าอ่อนเมื่อใด ในโปรไฟล์ที่ตั้งชื่อไว้สำหรับวิดีโอแต่ละประเภท โปรไฟล์ที่เลือกที่นี่คือโปรไฟล์ที่ใช้อยู่: กราฟเมตริก > เฟรมที่แย่ที่สุด > ช่วงที่อ่อน จะเริ่มจากโปรไฟล์นี้ และรายงานช่วงที่อ่อน การส่งออกหลังการรันแต่ละครั้ง และ --segments saved ของบรรทัดคำสั่งก็ทำตามโปรไฟล์นี้",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "โปรไฟล์ใหม่จากจุดเริ่มต้นสำหรับวิดีโอประเภทหนึ่ง เพื่อปรับตามต้องการ",
+  "Animation": "แอนิเมชัน",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP ซึ่งจำลองจอแสดงผล HDR (โมเดลของ VMAF มีไว้สำหรับวิดีโอ SDR): ต้องให้คะแนน CVVDP แล้ว",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "ภาพคนแสดงจริงที่สะอาดจากกล้องดิจิทัล: เกณฑ์ปกติของการเข้ารหัสคุณภาพสูง",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "รายละเอียดที่เรนเดอร์อย่างสะอาดและการไล่เฉดสีที่เรียบ: เกณฑ์ VMAF และ SSIMULACRA2 ที่สูงจับรายละเอียดที่หายไปและแถบสี (banding)",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "เกรนฟิล์มทำให้คะแนนของเฟรมที่ยังคงลักษณะเดิมลดลง: จึงใช้เกณฑ์ที่ต่ำกว่า และนับเฉพาะช่วงที่ยาวตั้งแต่หกเฟรมขึ้นไป เพื่อไม่ให้เกรนเพียงอย่างเดียวถือว่าอ่อน",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "สีเรียบและเส้นคม ซึ่งเข้ารหัสได้ดีและได้คะแนนสูง: เกณฑ์ VMAF และ SSIMULACRA2 ที่สูงจับแถบสีและเส้นที่เสียหาย",
+  "From preset...": "จากพรีเซ็ต...",
+  "Grain-free digital": "ดิจิทัลไร้เกรน",
+  "Grainy film": "ฟิล์มมีเกรน",
+  "HDR": "HDR",
+  "Low-bitrate preview": "พรีวิวบิตเรตต่ำ",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "เฉพาะความเสียหายรุนแรงที่ยาวตั้งแต่สิบสองเฟรมขึ้นไป สำหรับการเข้ารหัสที่ไม่ได้ตั้งใจให้ดูเหมือนต้นฉบับ"
  },
  "plurals": {
   "about {count} day": [

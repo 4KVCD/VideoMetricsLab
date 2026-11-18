@@ -1041,7 +1041,21 @@
   "Rename...": "إعادة تسمية...",
   "Save as new profile...": "حفظ كملف تعريف جديد...",
   "Save to profile": "حفظ في ملف التعريف",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "متى تُعدّ نتائج الفيديو ضعيفة، في ملفات تعريف مسمّاة لأنواع مختلفة من الفيديو. ملف التعريف المختار هنا هو المستخدم: تبدأ رسوم المقاييس > أسوأ الإطارات > المقاطع الضعيفة منه، ويتبعه تقرير المقاطع الضعيفة والتصديرات بعد كل تشغيل و--segments saved في سطر الأوامر."
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "متى تُعدّ نتائج الفيديو ضعيفة، في ملفات تعريف مسمّاة لأنواع مختلفة من الفيديو. ملف التعريف المختار هنا هو المستخدم: تبدأ رسوم المقاييس > أسوأ الإطارات > المقاطع الضعيفة منه، ويتبعه تقرير المقاطع الضعيفة والتصديرات بعد كل تشغيل و--segments saved في سطر الأوامر.",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "ملف تعريف جديد من نقطة بداية لنوع من الفيديو، لتعديله حسب الحاجة.",
+  "Animation": "رسوم متحركة",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP، الذي يحاكي شاشات HDR (نماذج VMAF مخصّصة لفيديو SDR): يجب أن يكون CVVDP مُقيَّمًا.",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "تصوير حي نظيف من كاميرات رقمية: العتبات المعتادة لترميز عالي الجودة.",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "تفاصيل مُصيَّرة نظيفة وتدرّجات ناعمة: عتبات VMAF وSSIMULACRA2 المرتفعة تكشف فقدان التفاصيل والتخطّط اللوني (banding).",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "حبيبات الفيلم تخفض نتائج إطارات يُحافَظ على مظهرها: عتبات أدنى، وفقط امتدادات من ستة إطارات أو أكثر، حتى لا تُعدّ الحبيبات وحدها ضعيفة.",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "ألوان مسطّحة وخطوط حادّة، تُرمَّز جيدًا وتنال نتائج عالية: عتبات VMAF وSSIMULACRA2 المرتفعة تكشف التخطّط اللوني والخطوط المتضرّرة.",
+  "From preset...": "من إعداد مسبق...",
+  "Grain-free digital": "رقمي بلا حبيبات",
+  "Grainy film": "فيلم محبّب",
+  "HDR": "HDR",
+  "Low-bitrate preview": "معاينة بمعدل بت منخفض",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "فقط الانهيارات الشديدة التي تدوم اثني عشر إطارًا أو أكثر، لترميزات لا يُقصد أن تشبه المصدر."
  },
  "plurals": {
   "about {count} day": [

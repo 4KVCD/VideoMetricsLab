@@ -210,6 +210,30 @@ TEST(CommandLine, SegmentsSavedTakesTheWindowsRulesAndReportsEveryVideo) {
     EXPECT_EQ(named.segments_profile, "anime");
     EXPECT_EQ(take_saved_segments(named, settings, {"vmaf"}), std::vector<std::string>{"psnr<38"});
     EXPECT_EQ(named.segments[0].text(), "vmaf<93");
+    // preset:KEY: the preset's, whatever the app's profiles.
+    CompareArguments preset =
+        parse_arguments({"compare", "ref.mkv", "a.mkv", "--segments", "preset:Grainy-Film"}).compare;
+    EXPECT_EQ(preset.segments_preset, "Grainy-Film");
+    EXPECT_EQ(take_saved_segments(preset, settings, {"vmaf"}), std::vector<std::string>{"ssimulacra2<55"});
+    EXPECT_EQ(preset.segments[0].text(), "vmaf<85");
+    EXPECT_EQ(preset.segment_min_frames, 6);
+    CompareArguments no_preset =
+        parse_arguments({"compare", "ref.mkv", "a.mkv", "--segments", "preset:anime"}).compare;
+    try {
+        take_saved_segments(no_preset, settings, {"vmaf"});
+        ADD_FAILURE() << "taken";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_EQ(std::string(error.what()), "--segments preset:anime: no weak segment preset has that name; choose "
+                                             "from: animation, cgi, digital, grainy-film, hdr, preview");
+    }
+    CompareArguments hdr = parse_arguments({"compare", "ref.mkv", "a.mkv", "--segments", "preset:hdr"}).compare;
+    try {
+        take_saved_segments(hdr, settings, {"vmaf"});
+        ADD_FAILURE() << "taken";
+    } catch (const std::invalid_argument& error) {
+        EXPECT_EQ(std::string(error.what()),
+                  "--segments preset:hdr: none of the preset's conditions (cvvdp<9) is on a metric compared (-m)");
+    }
     CompareArguments unknown = parse_arguments({"compare", "ref.mkv", "a.mkv", "--segments", "profile:CGI"}).compare;
     try {
         take_saved_segments(unknown, settings, {"vmaf"});

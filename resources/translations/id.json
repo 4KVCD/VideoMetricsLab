@@ -1041,7 +1041,21 @@
   "Rename...": "Ganti nama...",
   "Save as new profile...": "Simpan sebagai profil baru...",
   "Save to profile": "Simpan ke profil",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Kapan skor video dianggap lemah, dalam profil bernama untuk berbagai jenis video. Profil yang dipilih di sini adalah yang dipakai: Grafik metrik > Bingkai terburuk > Segmen lemah dimulai darinya, dan laporan segmen lemah, ekspor setelah setiap proses, serta --segments saved di baris perintah mengikutinya."
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Kapan skor video dianggap lemah, dalam profil bernama untuk berbagai jenis video. Profil yang dipilih di sini adalah yang dipakai: Grafik metrik > Bingkai terburuk > Segmen lemah dimulai darinya, dan laporan segmen lemah, ekspor setelah setiap proses, serta --segments saved di baris perintah mengikutinya.",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "Profil baru dari titik awal untuk suatu jenis video, untuk disesuaikan seperlunya.",
+  "Animation": "Animasi",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP, yang memodelkan layar HDR (model VMAF untuk video SDR): CVVDP harus sudah dinilai.",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "Live action bersih dari kamera digital: ambang biasa untuk enkode berkualitas tinggi.",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "Detail render yang bersih dan gradasi halus: ambang VMAF dan SSIMULACRA2 yang tinggi menangkap detail yang hilang dan banding.",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "Butiran film menurunkan skor bingkai yang tampilannya tetap terjaga: ambang lebih rendah, dan hanya rentang enam bingkai atau lebih, agar butiran saja tidak dianggap lemah.",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "Warna datar dan garis tajam, yang mudah dienkode dan mendapat skor tinggi: ambang VMAF dan SSIMULACRA2 yang tinggi menangkap banding dan garis yang rusak.",
+  "From preset...": "Dari preset...",
+  "Grain-free digital": "Digital tanpa butiran",
+  "Grainy film": "Film berbutir",
+  "HDR": "HDR",
+  "Low-bitrate preview": "Pratinjau bitrate rendah",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Hanya kerusakan parah yang berlangsung dua belas bingkai atau lebih, untuk enkode yang tidak dimaksudkan mirip dengan sumbernya."
  },
  "plurals": {
   "about {count} day": [

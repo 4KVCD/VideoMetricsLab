@@ -1041,7 +1041,21 @@
   "Rename...": "重命名...",
   "Save as new profile...": "另存为新方案...",
   "Save to profile": "保存到方案",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "视频的分数在哪些情况下算作弱，按不同类型的视频保存在命名方案中。此处选择的方案就是正在使用的方案：指标图表 > 最差帧 > 弱片段 从它开始，弱片段报告、每次运行后的导出以及命令行的 --segments saved 也遵循它。"
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "视频的分数在哪些情况下算作弱，按不同类型的视频保存在命名方案中。此处选择的方案就是正在使用的方案：指标图表 > 最差帧 > 弱片段 从它开始，弱片段报告、每次运行后的导出以及命令行的 --segments saved 也遵循它。",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "从适合某类视频的起点创建新方案，可按需调整。",
+  "Animation": "动画",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "使用可模拟 HDR 显示器的 CVVDP（VMAF 的模型适用于 SDR 视频）：必须已对 CVVDP 评分。",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "数码摄影机拍摄的干净实拍画面：高质量编码的常用阈值。",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "干净的渲染细节和平滑渐变：较高的 VMAF 和 SSIMULACRA2 阈值可发现细节丢失和色带。",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "胶片颗粒会降低外观已保留的帧的分数：阈值较低，且只计六帧及以上的连续段，使颗粒本身不会被视为弱。",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "平涂色彩和锐利线条易于编码、得分较高：较高的 VMAF 和 SSIMULACRA2 阈值可发现色带和受损线条。",
+  "From preset...": "从预设...",
+  "Grain-free digital": "无颗粒数字",
+  "Grainy film": "颗粒感胶片",
+  "HDR": "HDR",
+  "Low-bitrate preview": "低码率预览",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "仅计持续十二帧及以上的严重崩坏，适用于不追求与源相似的编码。"
  },
  "plurals": {
   "about {count} day": [

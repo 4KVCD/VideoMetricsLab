@@ -2054,9 +2054,8 @@ int compare(const CompareArguments& given) {
         progress->message(note);
     }
     for (const std::string& condition : saved_left_out) {
-        progress->message("note: --segments " +
-                          (arguments.segments_profile ? "profile:" + *arguments.segments_profile : std::string("saved")) +
-                          ": " + condition + " is left out: its metric is not compared (-m)");
+        progress->message("note: --segments " + segments_source(arguments) + ": " + condition +
+                          " is left out: its metric is not compared (-m)");
     }
     // Every comparison's jobs in one run: one start of the GPU's work for all.
     std::vector<VmafJob> jobs;

@@ -1041,7 +1041,21 @@
   "Rename...": "重新命名...",
   "Save as new profile...": "另存為新方案...",
   "Save to profile": "儲存到方案",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "影片的分數在哪些情況下算作弱，依不同類型的影片儲存在具名方案中。此處選擇的方案就是正在使用的方案：指標圖表 > 最差影格 > 弱片段 從它開始，弱片段報告、每次執行後的匯出以及命令列的 --segments saved 也遵循它。"
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "影片的分數在哪些情況下算作弱，依不同類型的影片儲存在具名方案中。此處選擇的方案就是正在使用的方案：指標圖表 > 最差影格 > 弱片段 從它開始，弱片段報告、每次執行後的匯出以及命令列的 --segments saved 也遵循它。",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "從適合某類影片的起點建立新方案，可視需要調整。",
+  "Animation": "動畫",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "使用可模擬 HDR 顯示器的 CVVDP（VMAF 的模型適用於 SDR 影片）：必須已對 CVVDP 評分。",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "數位攝影機拍攝的乾淨實拍畫面：高品質編碼的常用門檻。",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "乾淨的算繪細節與平滑漸層：較高的 VMAF 和 SSIMULACRA2 門檻可找出細節流失與色帶。",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "底片顆粒會降低外觀已保留之影格的分數：門檻較低，且只計六個影格以上的連續段，使顆粒本身不會被視為弱。",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "平塗色彩與銳利線條易於編碼、分數較高：較高的 VMAF 和 SSIMULACRA2 門檻可找出色帶與受損線條。",
+  "From preset...": "從預設集...",
+  "Grain-free digital": "無顆粒數位",
+  "Grainy film": "顆粒感底片",
+  "HDR": "HDR",
+  "Low-bitrate preview": "低位元速率預覽",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "只計持續十二個影格以上的嚴重崩壞，適用於不求與來源相似的編碼。"
  },
  "plurals": {
   "about {count} day": [

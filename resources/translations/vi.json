@@ -1041,7 +1041,21 @@
   "Rename...": "Đổi tên...",
   "Save as new profile...": "Lưu thành hồ sơ mới...",
   "Save to profile": "Lưu vào hồ sơ",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Khi nào điểm của một video được coi là yếu, trong các hồ sơ có tên cho từng loại video. Hồ sơ chọn ở đây là hồ sơ đang dùng: Biểu đồ chỉ số > Khung tệ nhất > Đoạn yếu bắt đầu từ nó, và báo cáo đoạn yếu, các lần xuất sau mỗi lần chạy và --segments saved của dòng lệnh đều theo nó."
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Khi nào điểm của một video được coi là yếu, trong các hồ sơ có tên cho từng loại video. Hồ sơ chọn ở đây là hồ sơ đang dùng: Biểu đồ chỉ số > Khung tệ nhất > Đoạn yếu bắt đầu từ nó, và báo cáo đoạn yếu, các lần xuất sau mỗi lần chạy và --segments saved của dòng lệnh đều theo nó.",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "Một hồ sơ mới từ điểm khởi đầu cho một loại video, để điều chỉnh khi cần.",
+  "Animation": "Hoạt hình",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP, mô phỏng màn hình HDR (các mô hình của VMAF dành cho video SDR): CVVDP phải được chấm điểm.",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "Cảnh quay người thật sạch từ máy quay kỹ thuật số: các ngưỡng thông thường của một bản mã hóa chất lượng cao.",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "Chi tiết kết xuất sạch và chuyển màu mượt: ngưỡng VMAF và SSIMULACRA2 cao phát hiện chi tiết bị mất và hiện tượng dải màu.",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "Hạt phim làm giảm điểm của các khung có diện mạo vẫn được giữ: ngưỡng thấp hơn, và chỉ các đoạn dài từ sáu khung trở lên, để riêng hạt phim không bị coi là yếu.",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "Màu phẳng và nét sắc, vốn mã hóa tốt và đạt điểm cao: ngưỡng VMAF và SSIMULACRA2 cao phát hiện dải màu và nét bị hỏng.",
+  "From preset...": "Từ cài đặt sẵn...",
+  "Grain-free digital": "Kỹ thuật số không hạt",
+  "Grainy film": "Phim nhiều hạt",
+  "HDR": "HDR",
+  "Low-bitrate preview": "Bản xem trước bitrate thấp",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Chỉ các lỗi nghiêm trọng kéo dài từ mười hai khung trở lên, cho các bản mã hóa không nhằm trông giống nguồn."
  },
  "plurals": {
   "about {count} day": [

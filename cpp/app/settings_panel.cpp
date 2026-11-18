@@ -1,6 +1,7 @@
 #include "settings_panel.h"
 
 #include <QAbstractButton>
+#include <QAction>
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
@@ -18,6 +19,7 @@
 #include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
@@ -50,6 +52,7 @@
 #include "vml/metric_cache.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
+#include "vml/segment_presets.h"
 #include "vml/segment_profiles.h"
 #include "vml/vship.h"
 #include "vship_names.h"
@@ -317,6 +320,18 @@ QGroupBox* SettingsPanel::build_weak_segments_box() {
     new_profile->setToolTip(app::tr("A new profile, starting from this one's rules."));
     connect(new_profile, &QPushButton::clicked, this, [this] { new_weak_profile(); });
     profile_row->addWidget(new_profile);
+    auto* from_preset = new QPushButton(app::tr("From preset..."));
+    from_preset->setToolTip(app::tr("A new profile from a starting point for a kind of video, to adjust as needed."));
+    auto* presets_menu = new QMenu(from_preset);
+    presets_menu->setToolTipsVisible(true);
+    for (const SegmentPreset& preset : segment_presets()) {
+        QAction* action = presets_menu->addAction(app::tr(preset.name));
+        action->setToolTip(app::tr(preset.about));
+        connect(action, &QAction::triggered, this,
+                [this, key = preset.key] { new_weak_profile_from_preset(key); });
+    }
+    from_preset->setMenu(presets_menu);
+    profile_row->addWidget(from_preset);
     weak_profile_rename = new QPushButton(app::tr("Rename..."));
     connect(weak_profile_rename, &QPushButton::clicked, this, [this] { rename_weak_profile(); });
     profile_row->addWidget(weak_profile_rename);
@@ -397,6 +412,27 @@ void SettingsPanel::new_weak_profile() {
     }
     store_segment_profile(settings_, text, weak_segments->rules());
     settings_.weak_segment_profile = text;
+    fill_weak_profiles();
+    on_edited();
+    // The settings changed before on_edited looked: told here.
+    emit weak_segment_rules_changed();
+}
+
+void SettingsPanel::new_weak_profile_from_preset(std::string_view key) {
+    const SegmentPreset* preset = segment_preset(key);
+    if (preset == nullptr) {
+        return;
+    }
+    // Named after the preset, in the window's language; "Animation 2" where
+    // that name is taken.
+    const std::vector<SegmentProfile> profiles = segment_profiles(settings_);
+    const std::string base = app::tr(preset->name).toStdString();
+    std::string name = base;
+    for (int number = 2; !segment_profile_name_free(profiles, name); ++number) {
+        name = base + " " + std::to_string(number);
+    }
+    store_segment_profile(settings_, name, preset->rules);
+    settings_.weak_segment_profile = name;
     fill_weak_profiles();
     on_edited();
     // The settings changed before on_edited looked: told here.
