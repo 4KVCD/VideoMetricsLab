@@ -84,6 +84,16 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     connect(counting_, &QFutureWatcher<CacheSummary>::finished, this, [this] { show_cache_summary(); });
     connect(&file_writes_, &FileWrites::became_idle, this, [this] { on_file_writes_idle(); });
     auto* layout = new QVBoxLayout(this);
+    // Shown while metrics are calculated (set_run_active).
+    run_lock_note = new QLabel(QStringLiteral("\U0001F512 ") +
+                               app::tr("Metrics are being calculated: the ffmpeg folder, the saved results' folder and "
+                                       "Clear saved results are locked until the run ends, because the run uses them. "
+                                       "Everything else can be changed now."));
+    run_lock_note->setObjectName("runLockNote");
+    run_lock_note->setWordWrap(true);
+    theme::style(run_lock_note, "color: {muted};");
+    run_lock_note->hide();
+    layout->addWidget(run_lock_note);
     for (QGroupBox* box : {build_ffmpeg_box(), build_storage_box(), build_defaults_box(), build_gpu_box(),
                            build_compare_box(), build_window_box()}) {
         layout->addWidget(box);
@@ -111,6 +121,8 @@ QGroupBox* SettingsPanel::build_ffmpeg_box() {
     ffmpeg_row->addWidget(ffmpeg_edit, 1);
     ffmpeg_row->addWidget(browse_ffmpeg);
     tools_form->addRow(app::tr("ffmpeg folder:"), ffmpeg_row);
+    ffmpeg_edit->setObjectName("ffmpegFolder");
+    run_locked_.insert(run_locked_.end(), {ffmpeg_edit, browse_ffmpeg});
     ffmpeg_status = new QLabel;
     tools_form->addRow("", ffmpeg_status);
     return tools_box;
@@ -137,6 +149,8 @@ QGroupBox* SettingsPanel::build_storage_box() {
     cache_row->addWidget(browse_cache);
     cache_row->addWidget(open_cache);
     storage_form->addRow(app::tr("Saved results:"), cache_row);
+    cache_edit->setObjectName("savedResultsFolder");
+    run_locked_.insert(run_locked_.end(), {cache_edit, browse_cache});
 
     cache_summary = new QLabel;
     auto* clear_cache = new QPushButton(app::tr("Clear saved results"));
@@ -145,6 +159,8 @@ QGroupBox* SettingsPanel::build_storage_box() {
     summary_row->addWidget(cache_summary, 1);
     summary_row->addWidget(clear_cache);
     storage_form->addRow("", summary_row);
+    clear_cache->setObjectName("clearSavedResults");
+    run_locked_.push_back(clear_cache);
 
     export_edit = new QLineEdit(text_of(settings_.export_dir));
     export_edit->setPlaceholderText(app::tr("blank = ask each time"));
@@ -678,6 +694,26 @@ void SettingsPanel::read_controls() {
         settings_.default_vship_build = vship_build_default->currentData().toString().toStdString();
     }
     settings_.film_grain_default = film_grain_default->currentData().toString().toStdString();
+}
+
+void SettingsPanel::set_run_active(bool active) {
+    // The running jobs hold a copy of the settings taken as the run started,
+    // but these reach them anyway: the tools are looked for in the ffmpeg
+    // folder, and saved scores and black bars are written to the saved
+    // results' folder as each job ends. Every other setting takes effect for
+    // new videos, the next run or the next start.
+    const QString why = active ? app::tr("Locked while metrics are calculated: the run uses it.") : QString();
+    for (QWidget* widget : run_locked_) {
+        widget->setEnabled(!active);
+        // Kept as a property: the widgets' own tooltips, if any, come back.
+        if (active) {
+            widget->setProperty("unlockedToolTip", widget->toolTip());
+            widget->setToolTip(why);
+        } else if (widget->property("unlockedToolTip").isValid()) {
+            widget->setToolTip(widget->property("unlockedToolTip").toString());
+        }
+    }
+    run_lock_note->setVisible(active);
 }
 
 void SettingsPanel::apply_global_changes(const Settings& before) {

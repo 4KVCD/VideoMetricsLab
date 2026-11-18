@@ -17,6 +17,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "dialogs.h"
 #include "vml/ffmpeg_tools.h"
@@ -59,6 +60,11 @@ public:
     // cleared. The saved results are counted on a thread of their own: a
     // thousand take 0.3 s, which would hold the window.
     void refresh_status();
+    // While metrics are calculated (`active`), locks what a running
+    // calculation uses (the ffmpeg folder, the saved results' folder, Clear
+    // saved results) and says so at the top of the panel; the rest stays
+    // editable. The window calls it as a run starts and ends.
+    void set_run_active(bool active);
     // Lists every CVVDP preset in Settings, the default selected. The window
     // calls it again when a preset is saved or deleted.
     void fill_cvvdp_default_combo();
@@ -77,6 +83,10 @@ public:
 
     // The controls, for the window's tests.
     QLineEdit* ffmpeg_edit = nullptr;
+    // What a running calculation uses, locked while it runs (set_run_active),
+    // and the note that says so.
+    std::vector<QWidget*> run_locked_;
+    QLabel* run_lock_note = nullptr;
     QLabel* ffmpeg_status = nullptr;
     QLineEdit* cache_edit = nullptr;
     QLabel* cache_summary = nullptr;

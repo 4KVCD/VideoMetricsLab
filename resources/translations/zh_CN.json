@@ -978,7 +978,9 @@
   "GPU:": "GPU：",
   "Automatic (a discrete GPU first)": "自动（优先独立 GPU）",
   "{name} (not found)": "{name}（未找到）",
-  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "在有多个 GPU 的电脑上计算 VMAF、VMAF v1、SSIMULACRA2、Butteraugli 和 CVVDP 的 GPU；GPU 解码为自动时，会先尝试该 GPU 厂商的解码器。该 GPU 无法计算的指标改在 CPU 上计算，而不是在其他 GPU 上。自动会优先使用独立 GPU。\n\n下次启动应用时生效；命令行的 --gpu 为单次运行选择。"
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "在有多个 GPU 的电脑上计算 VMAF、VMAF v1、SSIMULACRA2、Butteraugli 和 CVVDP 的 GPU；GPU 解码为自动时，会先尝试该 GPU 厂商的解码器。该 GPU 无法计算的指标改在 CPU 上计算，而不是在其他 GPU 上。自动会优先使用独立 GPU。\n\n下次启动应用时生效；命令行的 --gpu 为单次运行选择。",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "正在计算指标：ffmpeg 文件夹、已保存结果的文件夹和“清除已保存的结果”在运行结束前被锁定，因为运行正在使用它们。其他设置现在都可以更改。",
+  "Locked while metrics are calculated: the run uses it.": "计算指标期间锁定：运行正在使用。"
  },
  "plurals": {
   "about {count} day": [

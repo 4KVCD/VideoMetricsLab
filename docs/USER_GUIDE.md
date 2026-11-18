@@ -65,6 +65,11 @@ other metrics are not calculated again). Repeat it for more displays.
 whether the app reopens the videos it had open when it was last closed (off by
 default).
 
+While metrics are calculated, Settings stays open, but the ffmpeg folder, the
+saved results' folder and **Clear saved results** are locked until the run
+ends, as a note at the top of the tab says: the run uses them. Everything else
+can be changed; the GPU metrics' choices apply from the next run.
+
 **Settings > Storage > Exported graphs** chooses the colours of the PNGs that
 Metric Graphs and the Bitrate Viewer export: Light (the default), Dark, or the
 same as the window, and, if you like, a **Background** and a **Text** colour of
