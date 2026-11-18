@@ -309,6 +309,14 @@ Json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules&
                 {"segments", std::move(list)}};
 }
 
+std::string segments_file_suffix(const SegmentRules& rules) {
+    std::string name;
+    for (const std::string& key : condition_keys(rules)) {
+        name += (name.empty() ? "" : "+") + key;
+    }
+    return name + ".segments";
+}
+
 std::string segments_csv(const std::vector<WeakSegment>& segments, const SegmentRules& rules) {
     std::string text = "first_frame,last_frame,start_time,end_time,frames";
     for (const std::string& key : condition_keys(rules)) {

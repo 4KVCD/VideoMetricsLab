@@ -483,17 +483,19 @@ void WeakSegmentsDialog::fill_table() {
 
 void WeakSegmentsDialog::export_segments(ExportKind kind) {
     const SegmentRules current = rules();
-    QString suffix;
+    // Named after the metrics it covers: an export by another metric does not
+    // take the last one's name.
+    QString suffix = "." + qt_text(segments_file_suffix(current));
     QString filter;
     std::string text;
     switch (kind) {
     case ExportKind::json:
-        suffix = QStringLiteral(".segments.json");
+        suffix += QStringLiteral(".json");
         filter = app::tr("JSON file (*.json)");
         text = python_json_dumps(segments_json(segments_, current)) + "\n";
         break;
     case ExportKind::csv:
-        suffix = QStringLiteral(".segments.csv");
+        suffix += QStringLiteral(".csv");
         filter = app::tr("CSV file (*.csv)");
         text = segments_csv(segments_, current);
         break;

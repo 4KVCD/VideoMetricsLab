@@ -49,7 +49,9 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
    graph; double-click it, or **Open in Video Compare**, to see it there.
    **Weak segments...** lists the stretches where the video's scores fall
    past thresholds you set (any or every condition, the shortest segment,
-   the gap to join across) and exports them as JSON or CSV.
+   the gap to join across) and exports them as JSON or CSV, named after the
+   metrics they cover (`<video>.vmaf.segments.json`,
+   `<video>.vmaf+ssimulacra2.segments.csv`).
 
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one.

@@ -127,6 +127,12 @@ std::vector<WeakSegment> weak_segments(const ComparisonResult& result, const Seg
 // min, max and mean.
 nlohmann::ordered_json segments_json(const std::vector<WeakSegment>& segments, const SegmentRules& rules);
 
+// What an export of segments by `rules` is named after, before ".json" or
+// ".csv": its conditions' metrics, each once, in the conditions' order,
+// joined by "+", then ".segments" ("vmaf+ssimulacra2.segments"). So exports
+// of one video by different metrics have names of their own.
+std::string segments_file_suffix(const SegmentRules& rules);
+
 // The segments as CSV, a row per segment: first_frame, last_frame,
 // start_time, end_time, frames, then <metric>_min, _max and _mean.
 std::string segments_csv(const std::vector<WeakSegment>& segments, const SegmentRules& rules);

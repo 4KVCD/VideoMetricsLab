@@ -145,6 +145,12 @@ TEST(WeakFrames, ExportsAndConditionsRead) {
               R"({"first_frame":30,"last_frame":31,"start_time":3.0,"end_time":3.2,"frames":2,)"
               R"("metrics":{"vmaf":{"min":85.5,"max":86.0,"mean":null}}}]})");
 
+    // Their names: the conditions' metrics, each once, in their order.
+    EXPECT_EQ(segments_file_suffix(rules), "vmaf.segments");
+    const SegmentRules several{{*parse_weak_condition("ssimulacra2<70"), *parse_weak_condition("vmaf<90"),
+                                *parse_weak_condition("ssimulacra2<50"), *parse_weak_condition("vmaf_neg<88")}};
+    EXPECT_EQ(segments_file_suffix(several), "ssimulacra2+vmaf+vmaf_neg.segments");
+
     const std::optional<WeakCondition> above = parse_weak_condition("butteraugli>2.5");
     ASSERT_TRUE(above);
     EXPECT_EQ(above->key, "butteraugli");
