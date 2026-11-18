@@ -40,6 +40,8 @@ FFmpeg on Windows that doesn't have ffmpeg, finds a video's worst moments and we
   (Settings > Storage > Exported graphs) (#31; #32, by @jakejackson).
 - The Bitrate tab's Export PNG adds a title and a table saying which coloured line is which video, with its figures, as
   Metric Graphs' export does (#29; #30, by @jakejackson).
+- Settings stays open while metrics are calculated: only the ffmpeg folder, the saved results' folder and Clear
+  saved results are locked until the run ends, and a note says why (#37; #38, by @jakejackson).
 - The results JSON says why each video was decoded on the CPU rather than the GPU.
 - The window reopens where it was closed, maximized if it was (#25).
 
