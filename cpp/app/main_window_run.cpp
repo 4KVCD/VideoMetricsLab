@@ -597,7 +597,9 @@ void MainWindow::set_run_ui_active(bool active) {
     distorted_table_->setDragEnabled(!active);
     source_edit_->setReadOnly(active);
     options_panel_->setEnabled(!active && !panel_target_rows_.empty());
-    tabs_->setTabEnabled(tab_settings, !active);
+    // Settings stays open: only what the run uses is locked there, and the
+    // panel says so.
+    settings_panel_->set_run_active(active);
     run_button_->setEnabled(!active);
     pause_button_->setEnabled(active);
     cancel_button_->setEnabled(active);

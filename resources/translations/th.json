@@ -978,7 +978,9 @@
   "GPU:": "GPU:",
   "Automatic (a discrete GPU first)": "อัตโนมัติ (ใช้ GPU แยกก่อน)",
   "{name} (not found)": "{name} (ไม่พบ)",
-  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU ที่คำนวณ VMAF, VMAF v1, SSIMULACRA2, Butteraugli และ CVVDP บนพีซีที่มีมากกว่าหนึ่งตัว และจะลองใช้ตัวถอดรหัสของผู้ผลิต GPU นี้ก่อนเมื่อการถอดรหัสบน GPU เป็นแบบอัตโนมัติ เมตริกที่ GPU นี้คำนวณไม่ได้จะคำนวณบน CPU แทนที่จะใช้ GPU ตัวอื่น โหมดอัตโนมัติจะใช้ GPU แยกก่อน\n\nมีผลเมื่อเปิดแอปครั้งถัดไป ตัวเลือก --gpu ในบรรทัดคำสั่งใช้เลือกสำหรับการรันครั้งเดียว"
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU ที่คำนวณ VMAF, VMAF v1, SSIMULACRA2, Butteraugli และ CVVDP บนพีซีที่มีมากกว่าหนึ่งตัว และจะลองใช้ตัวถอดรหัสของผู้ผลิต GPU นี้ก่อนเมื่อการถอดรหัสบน GPU เป็นแบบอัตโนมัติ เมตริกที่ GPU นี้คำนวณไม่ได้จะคำนวณบน CPU แทนที่จะใช้ GPU ตัวอื่น โหมดอัตโนมัติจะใช้ GPU แยกก่อน\n\nมีผลเมื่อเปิดแอปครั้งถัดไป ตัวเลือก --gpu ในบรรทัดคำสั่งใช้เลือกสำหรับการรันครั้งเดียว",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "กำลังคำนวณเมตริก: โฟลเดอร์ ffmpeg โฟลเดอร์ผลลัพธ์ที่บันทึก และปุ่มล้างผลลัพธ์ที่บันทึกจะถูกล็อกจนกว่าการรันจะจบ เพราะการรันใช้งานอยู่ ส่วนอื่นเปลี่ยนได้ตอนนี้",
+  "Locked while metrics are calculated: the run uses it.": "ล็อกระหว่างคำนวณเมตริก: การรันใช้งานอยู่"
  },
  "plurals": {
   "about {count} day": [

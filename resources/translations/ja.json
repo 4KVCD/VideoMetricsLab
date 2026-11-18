@@ -978,7 +978,9 @@
   "GPU:": "GPU:",
   "Automatic (a discrete GPU first)": "自動 (単体 GPU を優先)",
   "{name} (not found)": "{name} (見つかりません)",
-  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU が複数ある PC で VMAF、VMAF v1、SSIMULACRA2、Butteraugli、CVVDP を計算する GPU です。GPU デコードが自動のときは、この GPU のメーカーのデコーダーが最初に試されます。この GPU で計算できない指標は、別の GPU ではなく CPU で計算されます。自動では単体 GPU が優先されます。\n\n次回アプリを起動したときに反映されます。コマンドラインの --gpu は 1 回の実行に対して選びます。"
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU が複数ある PC で VMAF、VMAF v1、SSIMULACRA2、Butteraugli、CVVDP を計算する GPU です。GPU デコードが自動のときは、この GPU のメーカーのデコーダーが最初に試されます。この GPU で計算できない指標は、別の GPU ではなく CPU で計算されます。自動では単体 GPU が優先されます。\n\n次回アプリを起動したときに反映されます。コマンドラインの --gpu は 1 回の実行に対して選びます。",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "指標を計算中です。ffmpeg のフォルダー、保存済み結果のフォルダー、「保存済みの結果を消去」は実行が使うため、実行が終わるまでロックされます。それ以外はいま変更できます。",
+  "Locked while metrics are calculated: the run uses it.": "指標の計算中はロックされます。実行がこれを使います。"
  },
  "plurals": {
   "about {count} day": [

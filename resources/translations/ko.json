@@ -978,7 +978,9 @@
   "GPU:": "GPU:",
   "Automatic (a discrete GPU first)": "자동 (외장 GPU 우선)",
   "{name} (not found)": "{name} (찾을 수 없음)",
-  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU가 여러 개인 PC에서 VMAF, VMAF v1, SSIMULACRA2, Butteraugli, CVVDP를 계산하는 GPU이며, GPU 디코딩이 자동일 때 이 GPU 제조사의 디코더를 먼저 시도합니다. 이 GPU가 계산할 수 없는 지표는 다른 GPU가 아닌 CPU에서 계산합니다. 자동은 외장 GPU를 먼저 사용합니다.\n\n다음에 앱을 시작할 때 적용됩니다. 명령줄의 --gpu는 한 번의 실행에 대해 선택합니다."
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU가 여러 개인 PC에서 VMAF, VMAF v1, SSIMULACRA2, Butteraugli, CVVDP를 계산하는 GPU이며, GPU 디코딩이 자동일 때 이 GPU 제조사의 디코더를 먼저 시도합니다. 이 GPU가 계산할 수 없는 지표는 다른 GPU가 아닌 CPU에서 계산합니다. 자동은 외장 GPU를 먼저 사용합니다.\n\n다음에 앱을 시작할 때 적용됩니다. 명령줄의 --gpu는 한 번의 실행에 대해 선택합니다.",
+  "Metrics are being calculated: the ffmpeg folder, the saved results' folder and Clear saved results are locked until the run ends, because the run uses them. Everything else can be changed now.": "지표를 계산하는 중입니다. ffmpeg 폴더, 저장된 결과 폴더, 저장된 결과 지우기는 실행이 사용하므로 실행이 끝날 때까지 잠깁니다. 나머지는 지금 바꿀 수 있습니다.",
+  "Locked while metrics are calculated: the run uses it.": "지표를 계산하는 동안 잠김: 실행이 사용합니다."
  },
  "plurals": {
   "about {count} day": [
