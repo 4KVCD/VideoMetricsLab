@@ -53,6 +53,9 @@ void close_native_handle(void* handle);
 
 // An environment variable's value, or nothing when it is not set.
 std::optional<std::string> environment_variable(std::string_view name);
+// Sets an environment variable for this process and the programs it starts
+// from now on; an empty value removes it.
+void set_environment_variable(std::string_view name, const std::string& value);
 
 // The environment's variables whose names start with `prefix` (on Windows in
 // any case), as NAME=value, sorted.
@@ -170,19 +173,23 @@ bool lists_gpus();
 // the first, unless VML_GPU_VENDOR names another maker's; nothing when it
 // names a maker with no GPU here (as with no GPU, none to draw on).
 std::optional<unsigned> first_gpu_adapter();
-// DirectX's number for the GPU that FFmpeg's D3D11VA decoding is to use, the
-// app's decoding on AMD's GPUs: the first AMD GPU DirectX lists (of those
-// gpu_vendor_ids lists). FFmpeg given no -hwaccel_device decodes on D3D11's
-// default adapter, which on a PC with an NVIDIA card and an AMD iGPU is
-// NVIDIA's. Nothing where there is no AMD GPU, or on other systems: D3D11's
-// default adapter, then.
-std::optional<unsigned> d3d11va_adapter();
+// A hardware GPU as DirectX lists it: its adapter number, its maker's PCI
+// vendor ID and its name ("AMD Radeon(TM) Graphics").
+struct GpuAdapter {
+    unsigned index = 0;
+    unsigned vendor_id = 0;
+    std::string name;
+};
+// The hardware GPUs DirectX lists, in its order, as gpu_vendor_ids lists them
+// (only VML_GPU_VENDOR's maker's when it is set), but for Windows' Basic
+// Render Driver. None on other systems.
+std::vector<GpuAdapter> gpu_adapters();
 // The codecs, as FFmpeg names them (h264, hevc, vp9, av1, vc1, mpeg2video),
-// for which the GPU that FFmpeg's D3D11VA decoding uses (d3d11va_adapter, or
-// D3D11's default adapter) offers one of the decoder profiles FFmpeg decodes
-// them with. Nothing where that cannot be known: other systems, or no D3D11
-// video device.
-std::optional<std::set<std::string>> d3d11va_codecs();
+// for which the GPU that FFmpeg's D3D11VA decoding uses (adapter `adapter`,
+// or D3D11's default adapter, which FFmpeg takes when given none) offers one
+// of the decoder profiles FFmpeg decodes them with. Nothing where that cannot
+// be known: other systems, or no D3D11 video device.
+std::optional<std::set<std::string>> d3d11va_codecs(std::optional<unsigned> adapter);
 
 // What tells this PC's GPUs and their drivers apart, read without loading
 // Vulkan or CUDA, for the GPU checks whose passes are kept between starts

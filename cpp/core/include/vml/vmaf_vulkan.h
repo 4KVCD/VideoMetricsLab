@@ -138,6 +138,12 @@ std::vector<VulkanDevice> vulkan_devices();
 // The GPU to score on: a discrete one before an integrated one, each the
 // first Vulkan lists; nothing when no GPU can.
 std::optional<VulkanDevice> best_vulkan_device(const std::vector<VulkanDevice>& found);
+// The GPU VMAF and VMAF v1 run on: Vulkan's GPU numbered
+// VML_VMAF_VULKAN_DEVICE (for testing), else the chosen GPU (gpu_choice.h)
+// where Vulkan lists it, else best_vulkan_device's. A chosen GPU that Vulkan
+// does not list is said in the log, and the GPU is picked as if none were
+// chosen. Nothing when no GPU can score.
+std::optional<VulkanDevice> chosen_vulkan_device(const std::vector<VulkanDevice>& found);
 
 // The buffers that a context made with vulkan_shared_flag reads each pair's
 // planes from: GPU memory that a decoder on the same GPU imports and copies

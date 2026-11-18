@@ -974,7 +974,11 @@
   "Text": "Chữ",
   "Exported graphs' background": "Nền của biểu đồ xuất",
   "Exported graphs' text": "Chữ của biểu đồ xuất",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Màu của ảnh PNG mà Biểu đồ chỉ số và Xem bitrate xuất ra. Màu nền hoặc màu chữ, khi được chọn, thay cho màu của giao diện; Đặt lại màu trong hộp thoại sẽ trở về màu đó. Các đường giữ màu riêng."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Màu của ảnh PNG mà Biểu đồ chỉ số và Xem bitrate xuất ra. Màu nền hoặc màu chữ, khi được chọn, thay cho màu của giao diện; Đặt lại màu trong hộp thoại sẽ trở về màu đó. Các đường giữ màu riêng.",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "Tự động (ưu tiên GPU rời)",
+  "{name} (not found)": "{name} (không tìm thấy)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU tính VMAF, VMAF v1, SSIMULACRA2, Butteraugli và CVVDP trên máy có nhiều GPU, và bộ giải mã của hãng GPU này được thử trước khi giải mã bằng GPU ở chế độ tự động. Chỉ số mà GPU này không tính được sẽ được tính trên CPU chứ không trên GPU khác. Tự động sẽ dùng GPU rời trước.\n\nÁp dụng khi ứng dụng khởi động lần sau; --gpu trên dòng lệnh chọn cho một lần chạy."
  },
  "plurals": {
   "about {count} day": [

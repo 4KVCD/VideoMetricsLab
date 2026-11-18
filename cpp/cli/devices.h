@@ -16,6 +16,7 @@ namespace vml::cli {
 
 // What the command finds on this PC.
 struct DeviceFindings {
+    std::optional<std::string> chosen_gpu;  // the GPU chosen to score on (gpu_choice.h), if any
     ToolsStatus tools;
     std::optional<VshipDevice> vship;  // the GPU the app's Vship build uses, if there is one
     std::string no_vship;              // why there is none

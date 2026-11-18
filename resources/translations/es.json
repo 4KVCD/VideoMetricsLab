@@ -974,7 +974,11 @@
   "Text": "Texto",
   "Exported graphs' background": "Fondo de los gráficos exportados",
   "Exported graphs' text": "Texto de los gráficos exportados",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Los colores de las imágenes PNG que exportan Gráficos de métricas y el Visor de tasa de bits. Un color de fondo o de texto, si se elige, sustituye al del tema; Restablecer color en su diálogo vuelve a él. Las líneas conservan sus colores."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Los colores de las imágenes PNG que exportan Gráficos de métricas y el Visor de tasa de bits. Un color de fondo o de texto, si se elige, sustituye al del tema; Restablecer color en su diálogo vuelve a él. Las líneas conservan sus colores.",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "Automático (primero una GPU dedicada)",
+  "{name} (not found)": "{name} (no encontrada)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "La GPU que calcula VMAF, VMAF v1, SSIMULACRA2, Butteraugli y CVVDP en un equipo con más de una, y cuyo decodificador del fabricante se prueba primero cuando la decodificación en GPU es automática. Una métrica que su GPU no puede calcular se calcula en la CPU, no en otra GPU. Automático usa primero una GPU dedicada.\n\nSe aplica la próxima vez que se inicie la aplicación; --gpu en la línea de comandos elige para una ejecución."
  },
  "plurals": {
   "about {count} day": [

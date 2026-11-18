@@ -71,6 +71,39 @@ TEST(Isolated, VshipsProbeChecksTheGpusInTurnSkippingOneThatCrashed) {
     EXPECT_EQ(device->name, "Integrated");
 }
 
+// With a GPU chosen (gpu_choice.h), Vship's probe checks that one alone, here
+// an integrated one where a discrete one would come first: a GPU it cannot use
+// leaves the build no GPU rather than taking another.
+TEST(Isolated, VshipsProbeChecksOnlyTheGpuChosen) {
+#ifndef _WIN32
+    GTEST_SKIP() << "the stand-in is laid out as Windows' HIP build";
+#endif
+    const test::Folder folder;
+    const std::filesystem::path hip = folder / "resources" / "tools" / "vship" / "hip";
+    std::filesystem::create_directories(hip);
+    const std::filesystem::path fake(VML_FAKE_VSHIP);
+    std::filesystem::copy_file(fake, hip / fake.filename());
+    set_variable("VML_RESOURCES", platform::path_text(folder / "resources"));
+    set_variable("VML_FAKE_VSHIP_GPUS", "Integrated|1;Discrete|0;Spare|1");
+    set_variable("VK_DRIVER_FILES", platform::path_text(folder / "none.json"));
+    set_variable("VML_GPU", "spare");
+    set_isolation_program(std::filesystem::path(VML_CLI));
+    std::vector<int> checked;
+    const nlohmann::json result = run_isolated(
+        "vship-probe", "the test", {{"vship_build", "vship-hip"}},
+        [&checked](const nlohmann::json& message) { checked.push_back(message.at("checking").at(0).get<int>()); },
+        CancelToken());
+    set_isolation_program(std::nullopt);
+    set_variable("VML_GPU", "");
+    set_variable("VK_DRIVER_FILES", "");
+    set_variable("VML_FAKE_VSHIP_GPUS", "");
+    set_variable("VML_RESOURCES", "");
+    EXPECT_EQ(checked, std::vector<int>{2});
+    const std::optional<VshipDevice> device = vship_device_from(result.at("device"));
+    ASSERT_TRUE(device.has_value()) << result.dump();
+    EXPECT_EQ(device->name, "Spare");
+}
+
 // The child's messages come back in order, then its result and the file it
 // left; an error the child reports is thrown here as that error, not as a
 // crash.

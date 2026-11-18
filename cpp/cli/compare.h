@@ -24,6 +24,7 @@
 #include "arguments.h"
 #include "vml/cvvdp.h"
 #include "vml/options.h"
+#include "vml/platform/system.h"
 #include "vml/settings.h"
 #include "vml/video.h"
 
@@ -94,6 +95,13 @@ std::vector<std::filesystem::path> expand_videos(const std::vector<std::string>&
 // because the pattern found no file: ffprobe would only call it an invalid
 // argument.
 std::optional<std::string> found_nothing(const std::filesystem::path& path);
+
+// Why --gpu cannot be used: it names none of `adapters`, the GPUs DirectX
+// lists (gpu_choice.h's chosen_among: a whole name or a part of one). Nothing
+// when it can, for auto, and where the system lists no GPUs (Vulkan's names
+// are then matched as the metrics start).
+std::optional<std::string> gpu_refusal(const std::optional<std::string>& gpu,
+                                       const std::vector<platform::GpuAdapter>& adapters);
 
 // Why --difference cannot be used with `test_count` test videos (as
 // expand_tests finds them): it needs exactly two. Nothing when it can.

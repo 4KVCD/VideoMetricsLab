@@ -974,7 +974,11 @@
   "Text": "文字",
   "Exported graphs' background": "导出图表的背景",
   "Exported graphs' text": "导出图表的文字",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "指标图表和码率查看器导出的 PNG 图片的颜色。选定的背景色或文字色会取代主题的颜色；在其对话框中点“重置颜色”即可恢复。曲线保持各自的颜色。"
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "指标图表和码率查看器导出的 PNG 图片的颜色。选定的背景色或文字色会取代主题的颜色；在其对话框中点“重置颜色”即可恢复。曲线保持各自的颜色。",
+  "GPU:": "GPU：",
+  "Automatic (a discrete GPU first)": "自动（优先独立 GPU）",
+  "{name} (not found)": "{name}（未找到）",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "在有多个 GPU 的电脑上计算 VMAF、VMAF v1、SSIMULACRA2、Butteraugli 和 CVVDP 的 GPU；GPU 解码为自动时，会先尝试该 GPU 厂商的解码器。该 GPU 无法计算的指标改在 CPU 上计算，而不是在其他 GPU 上。自动会优先使用独立 GPU。\n\n下次启动应用时生效；命令行的 --gpu 为单次运行选择。"
  },
  "plurals": {
   "about {count} day": [

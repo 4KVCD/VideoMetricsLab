@@ -974,7 +974,11 @@
   "Text": "Text",
   "Exported graphs' background": "Pozadí exportovaných grafů",
   "Exported graphs' text": "Text exportovaných grafů",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Barvy obrázků PNG, které exportují Grafy metrik a Prohlížeč bitrate. Zvolená barva pozadí nebo textu nahradí barvu motivu; Obnovit barvu v jejím dialogu ji vrátí. Čáry si ponechají své barvy."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Barvy obrázků PNG, které exportují Grafy metrik a Prohlížeč bitrate. Zvolená barva pozadí nebo textu nahradí barvu motivu; Obnovit barvu v jejím dialogu ji vrátí. Čáry si ponechají své barvy.",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "Automaticky (nejprve samostatná GPU)",
+  "{name} (not found)": "{name} (nenalezeno)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU, která počítá VMAF, VMAF v1, SSIMULACRA2, Butteraugli a CVVDP na počítači s více GPU, a jejíhož výrobce dekodér se zkouší jako první, když je dekódování na GPU automatické. Metrika, kterou její GPU spočítat nedokáže, se počítá na CPU, ne na jiné GPU. Automaticky se nejprve použije samostatná GPU.\n\nProjeví se při příštím spuštění aplikace; volba --gpu v příkazovém řádku vybírá pro jedno spuštění."
  },
  "plurals": {
   "about {count} day": [

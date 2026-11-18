@@ -31,6 +31,7 @@ add_library(vml_core
     src/gpu_decoders.cpp
     src/gpu_frames.cpp
     src/gpu_checks.cpp
+    src/gpu_choice.cpp
     src/gpu_vmaf.cpp
     src/grain_feed.cpp
     src/hardware_decoding.cpp

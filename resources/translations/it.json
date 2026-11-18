@@ -974,7 +974,11 @@
   "Text": "Testo",
   "Exported graphs' background": "Sfondo dei grafici esportati",
   "Exported graphs' text": "Testo dei grafici esportati",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "I colori delle immagini PNG esportate da Grafici metriche e Visualizzatore bitrate. Un colore di sfondo o di testo, se scelto, sostituisce quello del tema; Ripristina colore nella sua finestra di dialogo torna a esso. Le linee mantengono i loro colori."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "I colori delle immagini PNG esportate da Grafici metriche e Visualizzatore bitrate. Un colore di sfondo o di testo, se scelto, sostituisce quello del tema; Ripristina colore nella sua finestra di dialogo torna a esso. Le linee mantengono i loro colori.",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "Automatica (prima una GPU dedicata)",
+  "{name} (not found)": "{name} (non trovata)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "La GPU che calcola VMAF, VMAF v1, SSIMULACRA2, Butteraugli e CVVDP su un PC che ne ha più di una, e il cui decodificatore del produttore viene provato per primo quando la decodifica su GPU è automatica. Una metrica che la sua GPU non può calcolare viene calcolata sulla CPU anziché su un'altra GPU. Automatica usa prima una GPU dedicata.\n\nHa effetto al prossimo avvio dell'app; --gpu dalla riga di comando sceglie per un'esecuzione."
  },
  "plurals": {
   "about {count} day": [

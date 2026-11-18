@@ -974,7 +974,11 @@
   "Text": "Metin",
   "Exported graphs' background": "Dışa aktarılan grafiklerin arka planı",
   "Exported graphs' text": "Dışa aktarılan grafiklerin metni",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Metrik grafikleri ve Bit hızı görüntüleyicinin dışa aktardığı PNG görüntülerinin renkleri. Seçilen arka plan veya metin rengi temanın renginin yerini alır; iletişim kutusundaki Rengi sıfırla ona geri döner. Çizgiler kendi renklerini korur."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Metrik grafikleri ve Bit hızı görüntüleyicinin dışa aktardığı PNG görüntülerinin renkleri. Seçilen arka plan veya metin rengi temanın renginin yerini alır; iletişim kutusundaki Rengi sıfırla ona geri döner. Çizgiler kendi renklerini korur.",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "Otomatik (önce harici GPU)",
+  "{name} (not found)": "{name} (bulunamadı)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "Birden fazla GPU'su olan bir bilgisayarda VMAF, VMAF v1, SSIMULACRA2, Butteraugli ve CVVDP'yi hesaplayan GPU; GPU ile kod çözme otomatikken önce bu GPU'nun üreticisinin kod çözücüsü denenir. Bu GPU'nun hesaplayamadığı bir metrik başka bir GPU'da değil, CPU'da hesaplanır. Otomatik seçenek önce harici bir GPU kullanır.\n\nUygulama bir sonraki başlatılışında geçerli olur; komut satırındaki --gpu tek bir çalıştırma için seçer."
  },
  "plurals": {
   "about {count} day": [

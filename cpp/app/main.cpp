@@ -34,6 +34,7 @@
 #include "self_test.h"
 #include "theme.h"
 #include "vml/app_log.h"
+#include "vml/gpu_choice.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
 #include "vml/isolated.h"
@@ -176,9 +177,15 @@ private:
 int main(int argc, char** argv) {
     using namespace vml;
     const std::vector<std::string> words = platform::utf8_arguments(argc, argv);
-    // FFmpeg's D3D11VA decoding on the AMD GPU, not D3D11's default adapter
-    // (another maker's on a PC with two), here and in the isolated tasks.
-    use_d3d11va_adapter(platform::d3d11va_adapter());
+    // The GPU to score on (Settings' GPU, unless the environment names one),
+    // which the processes this one starts inherit; and FFmpeg's D3D11VA
+    // decoding on the AMD GPU, not D3D11's default adapter (another maker's
+    // on a PC with two), here and in the isolated tasks.
+    if (!chosen_gpu()) {
+        const Settings settings = Settings::load();
+        choose_gpu(settings.gpu.empty() ? std::nullopt : std::optional(settings.gpu));
+    }
+    use_d3d11va_adapter(d3d11va_adapter());
     if (words.size() == 3 && words[0] == isolated_argument) {
         return run_isolated_task(words[1], platform::path_from_text(words[2]));
     }

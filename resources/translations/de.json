@@ -974,7 +974,11 @@
   "Text": "Text",
   "Exported graphs' background": "Hintergrund exportierter Diagramme",
   "Exported graphs' text": "Text exportierter Diagramme",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Die Farben der PNG-Bilder, die Metrik-Diagramme und die Bitraten-Anzeige exportieren. Eine gewählte Hintergrund- oder Textfarbe ersetzt die des Designs; „Farbe zurücksetzen“ in ihrem Dialog stellt diese wieder her. Die Linien behalten ihre Farben."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Die Farben der PNG-Bilder, die Metrik-Diagramme und die Bitraten-Anzeige exportieren. Eine gewählte Hintergrund- oder Textfarbe ersetzt die des Designs; „Farbe zurücksetzen“ in ihrem Dialog stellt diese wieder her. Die Linien behalten ihre Farben.",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "Automatisch (zuerst eine dedizierte GPU)",
+  "{name} (not found)": "{name} (nicht gefunden)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "Die GPU, die auf einem PC mit mehreren GPUs VMAF, VMAF v1, SSIMULACRA2, Butteraugli und CVVDP berechnet und deren Hersteller-Decoder zuerst versucht wird, wenn die GPU-Dekodierung automatisch ist. Eine Metrik, die ihre GPU nicht berechnen kann, wird auf der CPU berechnet, nicht auf einer anderen GPU. Automatisch verwendet zuerst eine dedizierte GPU.\n\nWird beim nächsten Start der App wirksam; --gpu auf der Kommandozeile wählt für einen Lauf."
  },
  "plurals": {
   "about {count} day": [

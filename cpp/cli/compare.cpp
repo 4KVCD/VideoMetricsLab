@@ -38,6 +38,7 @@
 #include "vml/frame_range.h"
 #include "vml/frame_sync.h"
 #include "vml/geometry.h"
+#include "vml/gpu_choice.h"
 #include "vml/gpu_frames.h"
 #include "vml/gpu_vmaf.h"
 #include "vml/hardware_decoding.h"
@@ -924,6 +925,25 @@ std::filesystem::path python_path(const std::string& text) {
 std::vector<std::filesystem::path> expand_tests(const std::vector<std::string>& patterns,
                                                 const std::filesystem::path& reference) {
     return expand_videos(patterns, reference);
+}
+
+std::optional<std::string> gpu_refusal(const std::optional<std::string>& gpu,
+                                       const std::vector<platform::GpuAdapter>& adapters) {
+    if (!gpu || *gpu == "auto" || adapters.empty()) {
+        return std::nullopt;
+    }
+    std::vector<std::string> names;
+    for (const platform::GpuAdapter& adapter : adapters) {
+        names.push_back(adapter.name);
+    }
+    if (chosen_among(names, *gpu)) {
+        return std::nullopt;
+    }
+    std::string listed;
+    for (const std::string& name : names) {
+        listed += (listed.empty() ? "" : ", ") + name;
+    }
+    return "--gpu " + *gpu + ": no GPU here has that name. The GPUs here: " + listed + "; or auto.";
 }
 
 std::optional<std::string> difference_refusal(std::size_t test_count) {
@@ -1837,6 +1857,10 @@ int compare(const CompareArguments& arguments) {
             print_error(*refused);
             return exit_usage;
         }
+    }
+    if (const std::optional<std::string> refused = gpu_refusal(arguments.gpu, platform::gpu_adapters())) {
+        print_error(*refused);
+        return exit_usage;
     }
     if (arguments.black_bars_given && (arguments.source_crop || arguments.test_crop)) {
         print_error("--black-bars cannot be given with --source-crop or --test-crop: the crops given are cut, and no "

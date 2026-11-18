@@ -35,6 +35,11 @@ std::optional<std::string> environment_variable(std::string_view name) {
     return narrow(value);
 }
 
+void set_environment_variable(std::string_view name, const std::string& value) {
+    const std::wstring wide_name = widen(name);
+    SetEnvironmentVariableW(wide_name.c_str(), value.empty() ? nullptr : widen(value).c_str());
+}
+
 std::vector<std::string> environment_starting_with(std::string_view prefix) {
     std::vector<std::string> found;
     wchar_t* const block = GetEnvironmentStringsW();
@@ -501,16 +506,33 @@ std::optional<unsigned> first_gpu_adapter() {
     return gpus.empty() ? std::nullopt : std::optional<unsigned>(gpus.front().first);
 }
 
-std::optional<unsigned> d3d11va_adapter() {
-    for (const auto& [index, vendor] : listed_gpus()) {
-        if (std::find(std::begin(amd_pci_vendors), std::end(amd_pci_vendors), vendor) != std::end(amd_pci_vendors)) {
-            return index;
-        }
+// Microsoft's PCI vendor ID: its Basic Render Driver, which DirectX lists as
+// hardware on some PCs.
+constexpr unsigned microsoft_pci_vendor = 0x1414;
+
+std::vector<GpuAdapter> gpu_adapters() {
+    std::vector<GpuAdapter> adapters;
+    IDXGIFactory1* factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) {
+        return adapters;
     }
-    return std::nullopt;
+    for (const auto& [index, vendor] : listed_gpus()) {
+        if (vendor == microsoft_pci_vendor) {
+            continue;  // Windows' Basic Render Driver, which no GPU work runs on
+        }
+        IDXGIAdapter1* adapter = nullptr;
+        DXGI_ADAPTER_DESC1 description{};
+        if (SUCCEEDED(factory->EnumAdapters1(index, &adapter))) {
+            adapter->GetDesc1(&description);
+            adapter->Release();
+        }
+        adapters.push_back({index, vendor, narrow(description.Description)});
+    }
+    factory->Release();
+    return adapters;
 }
 
-std::optional<std::set<std::string>> d3d11va_codecs() {
+std::optional<std::set<std::string>> d3d11va_codecs(std::optional<unsigned> adapter_index) {
     // The decoder profiles FFmpeg's D3D11VA decoders take for each codec
     // (dxva_modes in libavcodec/dxva2.c), Intel's own H.264 one among them.
     static constexpr GUID intel_h264 = {0x604f8e68, 0x4951, 0x4c54, {0x88, 0xfe, 0xab, 0xd2, 0x5c, 0x15, 0xb3, 0xd6}};
@@ -531,10 +553,10 @@ std::optional<std::set<std::string>> d3d11va_codecs() {
     // A device with video support on the adapter FFmpeg decodes on, as FFmpeg
     // makes its own.
     IDXGIAdapter1* adapter = nullptr;
-    if (const std::optional<unsigned> index = d3d11va_adapter()) {
+    if (adapter_index) {
         IDXGIFactory1* factory = nullptr;
         if (SUCCEEDED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) {
-            if (FAILED(factory->EnumAdapters1(*index, &adapter))) {
+            if (FAILED(factory->EnumAdapters1(*adapter_index, &adapter))) {
                 adapter = nullptr;
             }
             factory->Release();

@@ -100,6 +100,14 @@ are stock Vship's, kept and reused as its own. A video set to stock Vship
 never uses the app's own Vship: where stock Vship fails, SSIMULACRA2 and
 Butteraugli are calculated on the CPU, and CVVDP is not.
 
+On a PC with more than one GPU (Windows), Settings > GPU metrics > GPU chooses
+the one that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP; with
+GPU decoding automatic, its maker's decoder is tried first. Automatic, the
+default, uses a discrete GPU first. A metric the chosen GPU cannot calculate
+is calculated on the CPU, not on another GPU, so a GPU kept free (one that is
+encoding, say) stays free. The choice takes effect when the app is next
+started; the command line's `--gpu` chooses for one run.
+
 Settings > GPU metrics > VVC decoder chooses how a VVC video is decoded for
 every metric (Windows). CPU, the default, decodes it with VVdeC; GPU, which is
 experimental, decodes it on the GPU, which frees the CPU but can be slower than
@@ -332,6 +340,7 @@ $run.videos[0].metrics.vmaf.score
 | `--vship-pass one\|each` | SSIMULACRA2, Butteraugli and CVVDP in one pass per video, which decodes it once (faster only on a very powerful GPU, and needs much GPU memory), or a pass for each. The scores are the same. Left out: as Settings > GPU metrics sets it. |
 | `--no-gpu-decode` | Decode the videos on the CPU, VVC too. |
 | `--gpu-decode auto\|nvidia\|intel\|amd` | Decode the videos on the GPU, as the Options panel's **GPU decode**: `auto`, the first GPU whose decoder takes each video (NVIDIA, Intel, then AMD), or that maker's, which the PC must have. A Mac uses its own. Left out: on or off as the app's Options panel was last set, the maker automatic. |
+| `--gpu NAME` | The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP, on a PC with more than one: its name as Windows gives it, or a part of it (`radeon`, `"rtx 5090"`); its maker's decoder is tried first. `auto`: a discrete GPU first. A name no GPU has is refused, with the GPUs there are. Left out: as Settings > GPU metrics sets it. |
 | `--vvc-decoder gpu\|cpu` | Decode a VVC video on the GPU (vvdec-vulkan, experimental) or on the CPU (VVdeC). The scores are the same. Left out: as Settings > GPU metrics sets it (the CPU unless changed). |
 | `--threads N` | libvmaf threads. Left out: automatic. |
 | `--parallel 1\|2` | Videos calculated at once on the CPU. |

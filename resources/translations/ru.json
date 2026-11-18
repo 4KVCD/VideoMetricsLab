@@ -974,7 +974,11 @@
   "Text": "Текст",
   "Exported graphs' background": "Фон экспортируемых графиков",
   "Exported graphs' text": "Текст экспортируемых графиков",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Цвета PNG-изображений, которые экспортируют Графики метрик и Просмотр битрейта. Выбранный цвет фона или текста заменяет цвет темы; «Сбросить цвет» в его диалоге возвращает цвет темы. Линии сохраняют свои цвета."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Цвета PNG-изображений, которые экспортируют Графики метрик и Просмотр битрейта. Выбранный цвет фона или текста заменяет цвет темы; «Сбросить цвет» в его диалоге возвращает цвет темы. Линии сохраняют свои цвета.",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "Автоматически (сначала дискретный GPU)",
+  "{name} (not found)": "{name} (не найден)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU, который вычисляет VMAF, VMAF v1, SSIMULACRA2, Butteraugli и CVVDP на ПК с несколькими GPU и декодер производителя которого пробуется первым, когда декодирование на GPU автоматическое. Метрика, которую этот GPU вычислить не может, вычисляется на CPU, а не на другом GPU. Автоматический выбор сначала берёт дискретный GPU.\n\nПрименяется при следующем запуске приложения; --gpu в командной строке выбирает для одного запуска."
  },
  "plurals": {
   "about {count} day": [

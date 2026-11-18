@@ -55,6 +55,10 @@ struct Settings {
     // Calculate a video's GPU metrics in one Vship pass; otherwise one at a
     // time.
     bool gpu_metrics_together = false;
+    // The GPU the app scores on (gpu_choice.h), by the name DirectX gives it;
+    // empty for automatic, a discrete GPU first. Applies from the app's next
+    // start.
+    std::string gpu;
     // Decode a VVC video on the GPU (vvdec-vulkan, its pictures handed over to the GPU metrics) where the GPU
     // metrics can take them; otherwise, and by default, the app's VVdeC on the CPU. The scores are the same.
     bool vvc_decode_on_gpu = false;

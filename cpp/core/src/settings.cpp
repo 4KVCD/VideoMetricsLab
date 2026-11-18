@@ -47,6 +47,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"graph_worst_frames", &Settings::graph_worst_frames},
         {"parallel_jobs", &Settings::parallel_jobs},
         {"gpu_metrics_together", &Settings::gpu_metrics_together},
+        {"gpu", &Settings::gpu},
         {"vvc_decode_on_gpu", &Settings::vvc_decode_on_gpu},
         {"use_cache", &Settings::use_cache},
         {"check_for_updates", &Settings::check_for_updates},
@@ -236,6 +237,7 @@ std::string Settings::text() const {
     data["graph_worst_frames"] = graph_worst_frames;
     data["parallel_jobs"] = parallel_jobs;
     data["gpu_metrics_together"] = gpu_metrics_together;
+    data["gpu"] = gpu;
     data["vvc_decode_on_gpu"] = vvc_decode_on_gpu;
     data["use_cache"] = use_cache;
     data["check_for_updates"] = check_for_updates;

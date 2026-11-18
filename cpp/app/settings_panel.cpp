@@ -288,6 +288,36 @@ QGroupBox* SettingsPanel::build_defaults_box() {
 QGroupBox* SettingsPanel::build_gpu_box() {
     auto* gpu_box = new QGroupBox(app::tr("GPU metrics"));
     auto* gpu_layout = new QVBoxLayout(gpu_box);
+    // The GPU to score on, where there is a choice (Settings::gpu): the
+    // entries' data is the name saved, empty for automatic.
+    const std::vector<platform::GpuAdapter> adapters = platform::gpu_adapters();
+    if (adapters.size() > 1 || !settings_.gpu.empty()) {
+        auto* choice_row = new QHBoxLayout;
+        choice_row->addWidget(new QLabel(app::tr("GPU:")));
+        gpu_choice = new QComboBox;
+        gpu_choice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        gpu_choice->addItem(app::tr("Automatic (a discrete GPU first)"), QString());
+        for (const platform::GpuAdapter& adapter : adapters) {
+            const QString name = QString::fromStdString(adapter.name);
+            gpu_choice->addItem(name, name);
+        }
+        const QString saved = QString::fromStdString(settings_.gpu);
+        int shown = saved.isEmpty() ? 0 : gpu_choice->findData(saved);
+        if (shown < 0) {
+            gpu_choice->addItem(app::tr("{name} (not found)", {{"name", saved}}), saved);
+            shown = gpu_choice->count() - 1;
+        }
+        gpu_choice->setCurrentIndex(shown);
+        gpu_choice->setToolTip(app::tr(
+            "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, "
+            "and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot "
+            "calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\n"
+            "Takes effect when the app is next started; the command line's --gpu chooses for one run."));
+        connect(gpu_choice, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
+        choice_row->addWidget(gpu_choice);
+        choice_row->addStretch(1);
+        gpu_layout->addLayout(choice_row);
+    }
     if (vship_build_bundled(VshipBuild::stock)) {
         // The entries' data: Settings' default_vship_build values.
         auto* build_row = new QHBoxLayout;
@@ -638,6 +668,9 @@ void SettingsPanel::read_controls() {
     settings_.language = language->currentData().toString().toStdString();
     settings_.theme = theme->currentData().toString().toStdString();
     settings_.gpu_metrics_together = gpu_together->isChecked();
+    if (gpu_choice != nullptr) {
+        settings_.gpu = gpu_choice->currentData().toString().toStdString();
+    }
     if (vvc_decoder != nullptr) {
         settings_.vvc_decode_on_gpu = vvc_decoder->currentData().toBool();
     }

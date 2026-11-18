@@ -724,7 +724,7 @@ V1Scorer::V1Scorer(int width, int height, int bit_depth, const std::filesystem::
     }
     s.names = &feature_names(model);
     if (!device) {
-        const std::optional<VulkanDevice> chosen = best_vulkan_device(vulkan_devices());
+        const std::optional<VulkanDevice> chosen = chosen_vulkan_device(vulkan_devices());
         if (!chosen) {
             throw VmafV1Error("no GPU that Vulkan can calculate VMAF on");
         }

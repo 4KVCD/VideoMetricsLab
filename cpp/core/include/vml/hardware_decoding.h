@@ -78,8 +78,15 @@ struct DecodingCapabilities {
 };
 
 // The makers of the GPUs DirectX lists (none on other systems so far): NVIDIA
-// first, then Intel, then AMD (the Python app's detected_gpu_vendors).
+// first, then Intel, then AMD (the Python app's detected_gpu_vendors); the
+// chosen GPU's maker (gpu_choice.h) before them, so that automatic decoding
+// tries its decoder first.
 std::vector<GpuVendor> detected_gpu_vendors();
+// DirectX's number for the GPU FFmpeg's D3D11VA decoding (the app's decoding
+// on AMD's GPUs) is to use: the chosen GPU (gpu_choice.h) where it is an AMD
+// one, else the first AMD GPU DirectX lists. Nothing where there is none, or
+// on other systems.
+std::optional<unsigned> d3d11va_adapter();
 
 // Whether FFmpeg's hardware decoding, as the app runs it, gives a video of
 // this pixel format and size the same pictures its software decoding does:
@@ -201,10 +208,10 @@ std::vector<std::string> hwaccel_args(const std::optional<std::string>& hwaccel)
 // adapter, which can be another maker's GPU. None for the others, which pick
 // their maker's GPU themselves.
 std::vector<std::string> hwaccel_device_args(const std::string& hwaccel);
-// Names the adapter D3D11VA decodes on in this process (platform::
-// d3d11va_adapter, the AMD GPU's): set once as the app, the command line and
-// the processes they start begin, before any FFmpeg command is made. Not set
-// (tests), FFmpeg's default adapter is used.
+// Names the adapter D3D11VA decodes on in this process (d3d11va_adapter, the
+// AMD GPU's): set as the app, the command line and the processes they start
+// begin, before any FFmpeg command is made, and again by the command line once
+// it knows its --gpu. Not set (tests), FFmpeg's default adapter is used.
 void use_d3d11va_adapter(std::optional<unsigned> adapter);
 
 }  // namespace vml

@@ -19,6 +19,7 @@
 #include "vml/colour.h"
 #include "vml/geometry.h"
 #include "vml/gpu_checks.h"
+#include "vml/gpu_choice.h"
 #include "vml/gpu_decoders.h"
 #include "vml/hardware_decoding.h"
 #include "vml/isolated.h"
@@ -721,9 +722,6 @@ std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(
         failures.push_back(why);
     }
     for (int gpu_id = 0; gpu_id < count; ++gpu_id) {
-        if (std::any_of(skipped.begin(), skipped.end(), [gpu_id](const auto& skip) { return skip.first == gpu_id; })) {
-            continue;
-        }
         vship_api::DeviceInfo info;
         if (const int error = library->get_device_info(&info, gpu_id); error != 0) {
             failures.push_back(api + " GPU " + std::to_string(gpu_id) + ": " + library->message(error));
@@ -734,6 +732,27 @@ std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(
                                 name.empty() ? api + " GPU " + std::to_string(gpu_id) : name);
     }
     std::sort(candidates.begin(), candidates.end());
+    // A chosen GPU (gpu_choice.h) is the only one checked: one that fails its
+    // check leaves this build no GPU rather than taking another (the one the
+    // choice keeps free, say).
+    if (const std::optional<std::string> chosen = chosen_gpu(); chosen && !candidates.empty()) {
+        std::vector<std::string> names;
+        for (const auto& [integrated, gpu_id, name] : candidates) {
+            names.push_back(name);
+        }
+        if (const std::optional<std::size_t> index = chosen_among(names, *chosen)) {
+            candidates = {candidates[*index]};
+        } else {
+            failures.push_back("the GPU chosen, " + *chosen + ", is not one of " + api + "'s");
+            candidates.clear();
+        }
+    }
+    // A GPU whose check crashed an earlier probe is not checked again (its
+    // reason is among the failures already).
+    std::erase_if(candidates, [&skipped](const auto& candidate) {
+        return std::any_of(skipped.begin(), skipped.end(),
+                           [&candidate](const auto& skip) { return skip.first == std::get<1>(candidate); });
+    });
     std::vector<std::tuple<bool, int, std::string>> usable;
     for (const auto& candidate : candidates) {
         const auto& [integrated, gpu_id, name] = candidate;

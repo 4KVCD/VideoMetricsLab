@@ -87,7 +87,7 @@ nlohmann::json steering_environment() {
             values.push_back(std::move(variable));
         }
     }
-    for (const char* name : {"VML_GPU_VENDOR", "VML_VMAF_VULKAN_DEVICE", "CUDA_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES",
+    for (const char* name : {"VML_GPU", "VML_GPU_VENDOR", "VML_VMAF_VULKAN_DEVICE", "CUDA_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES",
                              "ROCR_VISIBLE_DEVICES", "ONEAPI_DEVICE_SELECTOR"}) {
         if (const std::optional<std::string> value = platform::environment_variable(name)) {
             values.push_back(std::string(name) + "=" + *value);

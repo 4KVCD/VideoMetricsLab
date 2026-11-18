@@ -974,7 +974,11 @@
   "Text": "Tekst",
   "Exported graphs' background": "Achtergrond van geëxporteerde grafieken",
   "Exported graphs' text": "Tekst van geëxporteerde grafieken",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "De kleuren van de PNG-afbeeldingen die Metriekgrafieken en Bitrateweergave exporteren. Een gekozen achtergrond- of tekstkleur vervangt die van het thema; Kleur herstellen in het dialoogvenster gaat daarnaar terug. De lijnen houden hun eigen kleuren."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "De kleuren van de PNG-afbeeldingen die Metriekgrafieken en Bitrateweergave exporteren. Een gekozen achtergrond- of tekstkleur vervangt die van het thema; Kleur herstellen in het dialoogvenster gaat daarnaar terug. De lijnen houden hun eigen kleuren.",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "Automatisch (eerst een losse GPU)",
+  "{name} (not found)": "{name} (niet gevonden)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "De GPU die op een pc met meer dan één GPU VMAF, VMAF v1, SSIMULACRA2, Butteraugli en CVVDP berekent, en waarvan de decoder van de fabrikant eerst wordt geprobeerd als GPU-decodering automatisch is. Een metriek die de GPU niet kan berekenen, wordt op de CPU berekend en niet op een andere GPU. Automatisch gebruikt eerst een losse GPU.\n\nGeldt bij de volgende start van de app; --gpu op de opdrachtregel kiest voor één run."
  },
  "plurals": {
   "about {count} day": [

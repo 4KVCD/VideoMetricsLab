@@ -974,7 +974,11 @@
   "Text": "Текст",
   "Exported graphs' background": "Тло експортованих графіків",
   "Exported graphs' text": "Текст експортованих графіків",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Кольори PNG-зображень, які експортують Графіки метрик і Перегляд бітрейту. Вибраний колір тла або тексту замінює колір теми; «Скинути колір» у його діалозі повертає колір теми. Лінії зберігають свої кольори."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Кольори PNG-зображень, які експортують Графіки метрик і Перегляд бітрейту. Вибраний колір тла або тексту замінює колір теми; «Скинути колір» у його діалозі повертає колір теми. Лінії зберігають свої кольори.",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "Автоматично (спершу дискретний GPU)",
+  "{name} (not found)": "{name} (не знайдено)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU, який обчислює VMAF, VMAF v1, SSIMULACRA2, Butteraugli і CVVDP на ПК з кількома GPU і декодер виробника якого пробується першим, коли декодування на GPU автоматичне. Метрика, яку цей GPU обчислити не може, обчислюється на CPU, а не на іншому GPU. Автоматичний вибір спершу бере дискретний GPU.\n\nДіє з наступного запуску застосунку; --gpu у командному рядку вибирає для одного запуску."
  },
  "plurals": {
   "about {count} day": [

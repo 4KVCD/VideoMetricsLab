@@ -19,6 +19,7 @@
 #include "vml/isolated.h"
 #include "vml/platform/process.h"
 #include "vml/append.h"
+#include "vml/gpu_choice.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 
@@ -193,6 +194,32 @@ std::optional<bool> ask_nvidia_decodes_10bit_h264() {
 
 }  // namespace
 
+namespace {
+
+// use_d3d11va_adapter's, written before any thread reads it.
+std::optional<unsigned> d3d11va_device;
+
+bool is_amd(unsigned vendor_id) {
+    return std::find(std::begin(platform::amd_pci_vendors), std::end(platform::amd_pci_vendors), vendor_id) !=
+           std::end(platform::amd_pci_vendors);
+}
+
+// The DirectX GPU the chosen GPU (gpu_choice.h) names, if any.
+std::optional<platform::GpuAdapter> chosen_adapter(const std::vector<platform::GpuAdapter>& adapters) {
+    const std::optional<std::string> chosen = chosen_gpu();
+    if (!chosen) {
+        return std::nullopt;
+    }
+    std::vector<std::string> names;
+    for (const platform::GpuAdapter& adapter : adapters) {
+        names.push_back(adapter.name);
+    }
+    const std::optional<std::size_t> found = chosen_among(names, *chosen);
+    return found ? std::optional(adapters[*found]) : std::nullopt;
+}
+
+}  // namespace
+
 DecodingCapabilities DecodingCapabilities::detect(const std::string& ffmpeg) {
     DecodingCapabilities capabilities;
     capabilities.vendors = detected_gpu_vendors();
@@ -214,7 +241,7 @@ DecodingCapabilities DecodingCapabilities::detect(const std::string& ffmpeg) {
     if (std::find(capabilities.vendors.begin(), capabilities.vendors.end(), GpuVendor::amd) !=
         capabilities.vendors.end()) {
         try {
-            d3d11va = std::async(std::launch::async, platform::d3d11va_codecs);
+            d3d11va = std::async(std::launch::async, [] { return platform::d3d11va_codecs(d3d11va_device); });
         } catch (const std::system_error&) {
             // No thread for it: the profiles stay unknown.
         }
@@ -286,7 +313,26 @@ std::vector<GpuVendor> detected_gpu_vendors() {
             vendors.push_back(vendor);
         }
     }
+    if (const std::optional<platform::GpuAdapter> chosen = chosen_adapter(platform::gpu_adapters())) {
+        const auto found = std::find(vendors.begin(), vendors.end(), vendor_of_pci_id(chosen->vendor_id));
+        if (found != vendors.end()) {
+            std::rotate(vendors.begin(), found, found + 1);
+        }
+    }
     return vendors;
+}
+
+std::optional<unsigned> d3d11va_adapter() {
+    const std::vector<platform::GpuAdapter> adapters = platform::gpu_adapters();
+    if (const std::optional<platform::GpuAdapter> chosen = chosen_adapter(adapters); chosen && is_amd(chosen->vendor_id)) {
+        return chosen->index;
+    }
+    for (const platform::GpuAdapter& adapter : adapters) {
+        if (is_amd(adapter.vendor_id)) {
+            return adapter.index;
+        }
+    }
+    return std::nullopt;
 }
 
 bool downloads_from_gpu(const std::string& pix_fmt, int width, int height) {
@@ -529,13 +575,6 @@ std::vector<std::string> hwaccel_args(const std::optional<std::string>& hwaccel)
     append(args, hwaccel_device_args(*hwaccel));
     return args;
 }
-
-namespace {
-
-// use_d3d11va_adapter's, written before any thread reads it.
-std::optional<unsigned> d3d11va_device;
-
-}  // namespace
 
 void use_d3d11va_adapter(std::optional<unsigned> adapter) { d3d11va_device = adapter; }
 
