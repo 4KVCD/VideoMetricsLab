@@ -47,46 +47,44 @@ FFmpeg on Windows that doesn't have ffmpeg, finds a video's worst moments and we
 
 ### Bug fixes
 
-Wrong scores:
-
 - Fixed H.264 Blu-ray remuxes whose keyframes do not all carry their own picture settings being decoded wrongly on
   Intel's and AMD's GPU decoders, with no error (lowest frame PSNR 12.7 instead of 50.9 on the reported film) (#23).
 - Fixed a test video cut from a letterboxed source when it was encoded being scored against a picture shifted by a
   row or column, or refused as "different shapes", when the source keeps a thin dark edge inside its bars or the
   encode was cut into the picture (#18, #20).
 - Fixed a row's Manual black bars carrying over to every test video added afterwards, even for another reference (#22).
-- Fixed a video whose colour range changes partway through (limited, then full) scoring differently when decoded on
-  the CPU than on the GPU: the later frames' levels were converted.
-
-Other:
-
+- Fixed the Video bitrate column showing the whole file's bitrate, audio, subtitles and fonts included, for files
+  that do not record the video's own: it now shows an estimate of the video's, marked ≈.
 - Fixed SSIMULACRA2, Butteraugli and CVVDP being calculated on the CPU on PCs where one GPU's driver crashes their
   GPU check (AMD integrated GPUs), even when another GPU works (#35; #36, by @jakejackson).
 - Fixed decoding on AMD GPUs running on another maker's GPU on PCs that have both (#35; #36, by @jakejackson).
+
+### Minor bug fixes
+
+- Fixed a video whose colour range changes partway through (limited, then full) scoring differently when decoded on
+  the CPU than on the GPU: the later frames' levels were converted.
+- Fixed choosing another scaling algorithm or resolution-mismatch direction recalculating saved scores of videos of
+  the same size, which nothing scales.
+- Fixed saved scores of H.264 test videos from the older Python app not loading, so they were calculated again.
 - Fixed the GPU VVC decoder compiling all its shaders again (about 45 s on an RTX 5090) after a first run that was
   cancelled or closed while it compiled them.
 - Fixed the GPU VVC decoder taking up to 11 s to close on Intel GPUs whose driver had not cached its shaders yet.
-- Fixed saved scores of H.264 test videos from the older Python app not loading, so they were calculated again.
-- Fixed choosing another scaling algorithm or resolution-mismatch direction recalculating saved scores of videos of
-  the same size, which nothing scales.
-- Fixed the Video bitrate column showing the whole file's bitrate, audio, subtitles and fonts included, for files
-  that do not record the video's own: it now shows an estimate of the video's, marked ≈.
+- Fixed Export graph and the bitrate plot's export suggesting the same file name for every video: they are now named
+  after the test video shown, or the reference when several are (#26).
 - Fixed Calculate metrics asking about the film grain of a video whose saved scores were already in and which was
   not calculated again.
 - Fixed the progress line showing a speed of 0.0 fps and over an hour left while a run was still starting (such as
   the GPU VVC decoder's first run).
 - Fixed the command line reporting a test-video pattern that matches no file as an ffprobe error ("Invalid argument");
   it now says no file matches it.
-- Fixed Export graph and the bitrate plot's export suggesting the same file name for every video: they are now named
-  after the test video shown, or the reference when several are (#26).
+- Fixed a held arrow of the frame-range boxes moving one frame and stopping (#28).
 - Fixed Metric Graphs' time axis showing a single label ("0:00:00") under the graph of a run shorter than a few
   seconds, or of a graph zoomed in that far: its labels now show tenths or hundredths of a second.
-- Fixed a held arrow of the frame-range boxes moving one frame and stopping (#28).
 - Fixed status lines and logs naming the GPU decoder by FFmpeg's name ("d3d11va", "cuda", "qsv") and calling the
   test video "distorted": they now say "AMD GPU", "NVIDIA GPU", "Intel GPU" or "CPU".
+- Fixed Settings' "New videos use" box cutting off its choice ("GPU (fastest" for "GPU (fastest and most accurate)").
 - Fixed the command line's `bitrate` writing each video's "packets read" line twice when its output goes to a file or
   pipe.
-- Fixed Settings' "New videos use" box cutting off its choice ("GPU (fastest" for "GPU (fastest and most accurate)").
 
 ## v2.5.1
 
@@ -100,27 +98,25 @@ redone, along with some bug fixes.
 
 ### Bug fixes
 
-Wrong scores:
-
 - Fixed an encode cropped a few lines when it was made (such as HandBrake's 1920x1078 from a 1920x1080 source) being
   cut again and the source scaled to it, which lowered every score (PSNR 25.3 instead of 34.8 on a test clip) (#18).
+- Fixed an encode cut to the black bars that kept a thin dark edge the detection cut from the source (1920x800 against
+  a 1918x800 picture) being scaled to the source's picture, which lowered every score (PSNR 24.1 instead of 34.4 on a
+  test clip) (#20).
 - Fixed an encode cropped and scaled when it was made (such as 1920x1078 scaled to 1280x718) being stretched by a few
   rows against the source (PSNR 23.7 instead of 33.6 on a test clip).
 - Fixed test videos whose size is not an exact fraction of the source's (such as 854x480 or 1366x768 against
   1920x1080) with black bars being compared a few rows off, or refused as "different shapes after cropping".
-- Fixed an encode cut to the black bars that kept a thin dark edge the detection cut from the source (1920x800 against
-  a 1918x800 picture) being scaled to the source's picture, which lowered every score (PSNR 24.1 instead of 34.4 on a
-  test clip) (#20).
-- Fixed Black bars > Manual keeping the odd line of an odd-sized video given no crop (0:0:0:0), such as 1920x1079,
-  so it was scaled by a row against the other video (PSNR 30.7 instead of 38.6 on a test clip).
-- Fixed Video Compare showing a test video's extra line with Black bars > Source only, where the scores leave it out.
-
-Other:
-
 - Fixed Export results, Save selected results, Export graph, Export CSV, BD-rate's Export CSV and the bitrate plot's
   export opening in the program's own folder: they now open in Settings' Export folder, or Documents (#19).
+
+### Minor bug fixes
+
+- Fixed Black bars > Manual keeping the odd line of an odd-sized video given no crop (0:0:0:0), such as 1920x1079,
+  so it was scaled by a row against the other video (PSNR 30.7 instead of 38.6 on a test clip).
 - Fixed saved resolution tests of a letterboxed video being calculated again after v2.5's black-bar change, though
   their black bars had not changed.
+- Fixed Video Compare showing a test video's extra line with Black bars > Source only, where the scores leave it out.
 - "Calculate CPU metrics for 2 videos in parallel" now says that it does not apply to PSNR, SSIM and XPSNR when VMAF
   runs on the GPU, as they are then calculated in VMAF's GPU pass (#21).
 - Fixed the log saying an NVIDIA decoder is why a monochrome H.264 video is decoded on the CPU on AMD and Intel GPUs.
@@ -158,38 +154,33 @@ streams near instant, along with various bug fixes.
 
 ### Bug fixes
 
-Wrong scores:
-
 - Fixed black bars with an odd number of lines being rounded down where HandBrake rounds them up, so an encode cropped
   with HandBrake's values was 2-4 lines shorter than the source's crop and scored lower (#12).
 - Fixed a test video at another resolution being cropped 1 line off the source with Auto black bars, which lowered
   every score.
+- Fixed test videos that were still being read when Video Compare was opened not appearing in it.
+- Fixed Video Compare saying "detecting black bars..." forever when the tab was hidden and shown again during the
+  detection.
+
+### Minor bug fixes
+
 - Fixed wrong scores for an AV1 video whose resolution changes after its first 8 frames, on NVIDIA and AMD GPUs.
 - Fixed wrong scores for a monochrome (grayscale) H.264 video decoded on the GPU.
-
-Videos that could not be scored or played:
-
+- Fixed a possible crash on macOS when Video Compare's window was covered, minimised or restored as playback stopped.
 - Fixed a VVC video whose resolution changes partway through failing with "the decoder failed: Generic error in an
   external library".
 - Fixed a file whose timestamps are in decoding order (such as a raw stream copied into MP4 without timestamps) failing
   in every decoder: it is now refused with the reason.
+- Fixed the first run of the GPU VVC decoder after a driver update taking minutes on a busy CPU, a rare crash in
+  NVIDIA's driver during that run, and a slow close on Intel's GPUs.
 - Fixed Video Compare playing nothing for a raw stream shorter than the source; videos of a different length are now
   warned about as soon as they are added.
-
-Other:
-
-- Fixed Video Compare saying "detecting black bars..." forever when the tab was hidden and shown again during the
-  detection.
-- Fixed test videos that were still being read when Video Compare was opened not appearing in it.
 - Fixed ColorVideo VDP, SSIMULACRA2 and Butteraugli scores made with stock Vship of a full-range gray video being
   calculated again on every run instead of loaded.
 - Fixed Cancel not responding while a run waited for another run's GPU check.
 - Fixed a missing FFmpeg being reported as "could not be run ([WinError 2] ...)" instead of "not found".
-- Fixed a possible crash on macOS when Video Compare's window was covered, minimised or restored as playback stopped.
 - Fixed the frame line in Metric Graphs moving off its frame when the window was resized.
 - Fixed a graph drag that went on after the mouse button was released, when the window missed the release.
-- Fixed the first run of the GPU VVC decoder after a driver update taking minutes on a busy CPU, a rare crash in
-  NVIDIA's driver during that run, and a slow close on Intel's GPUs.
 
 ## v2.4
 
@@ -232,54 +223,49 @@ that's already been scored, a difference graph for 2 videos' scores and bitrate 
 
 ### Bug fixes
 
-Wrong scores:
-
 - Fixed wrong XPSNR for some videos above 8 bits, such as cropped 10-bit films (16.8 dB for identical pictures).
 - Fixed changing a video's scaling algorithm, such as to Lanczos, keeping the scores saved with bicubic.
+- Fixed a duration limit scoring one frame more than asked, with a wrong VMAF on that frame, which moved the average
+  slightly (`--duration`).
+- Fixed one video a GPU decoder cannot take, such as an interlaced one, moving every later video in the list to the CPU.
+- Fixed Video Compare's playback through FFmpeg often not stopping at the end of the video.
+- Fixed Video Compare showing one frame under another frame's label after going to still frames and back, and every
+  still of a raw video file being its first frame.
+- Fixed Metric Graphs' lines changing shape slightly while dragged, dragging moving the data out of view, and a zoom
+  showing nothing after its line was removed.
+- Fixed Bitrate Viewer keeping the old graph for a video encoded again under the same name, resetting the zoom when a
+  video was ticked on or off, and showing a raw video file's bitrate from a guessed frame rate.
+
+### Minor bug fixes
+
 - Fixed wrong scores in the window for an HLG source against an encode with no color tags: the encode was read as PQ.
 - Fixed wrong scores for AV1 videos whose pictures are smaller than their header says, such as SVT-AV1 resize encodes.
 - Fixed videos with a rotation tag scoring differently depending on how they were decoded. A source and encode stored
   at different rotations now give an error instead of a meaningless score.
 - Fixed wrong scores for videos whose color tags change partway through.
-- Fixed partial scores being saved as the whole video's after loading a run that had a duration limit.
-- Fixed a resolution test of a video cut short saying all its frames were compared, and saving its partial scores.
-- Fixed Save results during a run saving unfinished scores that later loaded as complete.
-- Fixed raw video files being scored at FFmpeg's guess of 25 fps, which changes ColorVideo VDP and XPSNR.
 - Fixed videos above 8 bits in the p210, y210, p410 and rgb48 formats being compared at 8 bits.
 - Fixed full-range (yuvj) videos whose range reads "unknown" being scored as limited range by SSIMULACRA2, Butteraugli
   and ColorVideo VDP.
-- Fixed XPSNR's average covering only part of the video, with no warning, when XPSNR stopped early.
-- Fixed `--film-grain without` scoring a video with its grain, and saying it had none, when the scan for grain failed.
 - Fixed a number in a warning from the CPU SSIMULACRA2 or Butteraugli tool being taken as the score.
-- Fixed a duration limit scoring one frame more than asked, with a wrong VMAF on that frame, which moved the average
-  slightly (`--duration`).
-- Fixed a raw .yuv file read again at another `--size` using the black bars found at the first size.
-- Fixed Windows' H.264 decoder on AMD GPUs cutting or padding a first picture of a different size than the video.
-- Fixed `--csv` run a second time writing a new file name without saying so, leaving scripts reading the old scores.
-
-Crashes and lost scores:
-
-- Fixed a failure in XPSNR losing the finished PSNR and SSIM scores, and a failure in a CPU metric losing the finished
-  GPU VMAF score.
-- Fixed one video a GPU decoder cannot take, such as an interlaced one, moving every later video in the list to the CPU.
+- Fixed `--film-grain without` scoring a video with its grain, and saying it had none, when the scan for grain failed.
+- Fixed raw video files being scored at FFmpeg's guess of 25 fps, which changes ColorVideo VDP and XPSNR.
+- Fixed XPSNR's average covering only part of the video, with no warning, when XPSNR stopped early.
 - Fixed `--json` overwriting a video when given that video's name.
-- Fixed a full disk or crash leaving a cut-off results or CSV file under its real name.
 - Fixed crashes when decoding, opening in Video Compare, or reading the details of grayscale (4:0:0) VVC videos with
   AFGS1 film grain.
+- Fixed partial scores being saved as the whole video's after loading a run that had a duration limit.
+- Fixed Save results during a run saving unfinished scores that later loaded as complete.
+- Fixed a resolution test of a video cut short saying all its frames were compared, and saving its partial scores.
+- Fixed a value still being typed when a run started being applied during the run, throwing away finished scores.
+- Fixed a failure in XPSNR losing the finished PSNR and SSIM scores, and a failure in a CPU metric losing the finished
+  GPU VMAF score.
+- Fixed a full disk or crash leaving a cut-off results or CSV file under its real name.
+- Fixed Windows' H.264 decoder on AMD GPUs cutting or padding a first picture of a different size than the video.
+- Fixed a raw .yuv file read again at another `--size` using the black bars found at the first size.
 - Fixed a video that changes picture size partway through failing when compared against itself.
 - Fixed a custom VMAF model with a bracket in its file name failing every run.
-
-Window and command line:
-
-- Fixed a value still being typed when a run started being applied during the run, throwing away finished scores.
+- Fixed `--csv` run a second time writing a new file name without saying so, leaving scripts reading the old scores.
 - Fixed Video Compare's picture freezing after a seek across a frame the GPU decoder cannot decode.
-- Fixed Video Compare showing one frame under another frame's label after going to still frames and back, and every
-  still of a raw video file being its first frame.
-- Fixed Video Compare's playback through FFmpeg often not stopping at the end of the video.
-- Fixed Metric Graphs' lines changing shape slightly while dragged, dragging moving the data out of view, and a zoom
-  showing nothing after its line was removed.
-- Fixed Bitrate Viewer keeping the old graph for a video encoded again under the same name, resetting the zoom when a
-  video was ticked on or off, and showing a raw video file's bitrate from a guessed frame rate.
 - Fixed command-line faults: file patterns with accented letters or under a folder with brackets in its name finding
   nothing, `--fps 1e9` being accepted, an `ffmpeg.exe` in the current folder being used before the one on PATH, and
   ColorVideo VDP being left out without an error when it could not run.
@@ -334,28 +320,31 @@ The Mac version now has the same features as the Windows version:
 
 - Fixed wrong scores, with no warning, when another program loaded the GPU heavily: once the GPU's video decoder
   fails, the video is decoded again on the CPU, with a note.
+- Fixed CPU SSIMULACRA2 and Butteraugli scoring an 8-bit source against a 10-bit encode 15-20% worse.
 - Fixed wrong scores against lossless H.264 references (x264 `-qp 0`) on Intel and AMD GPUs and NVIDIA GPUs before
   the RTX 50 series.
-- Fixed wrong scores for MPEG-2 and MPEG-4 Part 2 videos with GPU decoding.
-- Fixed 10-bit VVenC `--fga 3` encodes scoring far too low without their grain.
 - Fixed metrics with saved scores being calculated again when another metric was added.
-- Fixed CPU SSIMULACRA2 and Butteraugli scoring an 8-bit source against a 10-bit encode 15-20% worse.
-- Fixed videos whose picture size changes partway through failing or scoring wrongly.
 - Fixed Video Compare showing the wrong frame in some MP4 videos, such as VVenC encodes.
-- Fixed Video Compare's VVC film grain darkening the picture.
 - Fixed GPU runs on a busy PC failing or falling back to slower decoding.
 - Fixed a busy PC stopping a comparison with "ffprobe could not be run".
-- Fixed SSIMULACRA2, Butteraugli and CVVDP switching to stock Vship after one failed read of a video.
-- Fixed SSIMULACRA2, Butteraugli and CVVDP of scaled 8-bit videos changing slightly with GPU decoding.
-- Fixed VMAF v1 on AMD GPUs decoding some videos twice, and VC-1 retrying GPU decoding six times.
-- Fixed 10-bit H.264 failing on the first try with GPU decoding on NVIDIA GPUs before the RTX 50 series.
-- Fixed HEVC stream copies cut at an open-GOP frame falling back to slower decoding.
-- Fixed Video Compare showing the Videos tab at the first switch after black bars change the crop.
-- Fixed results from saved scores not naming the version that made each score.
-- Fixed Cancel and closing the window waiting for a GPU check, and the app staying open 5 seconds when closed right
-  after it starts.
+
+### Minor bug fixes
+
+- Fixed wrong scores for MPEG-2 and MPEG-4 Part 2 videos with GPU decoding.
+- Fixed 10-bit VVenC `--fga 3` encodes scoring far too low without their grain.
+- Fixed videos whose picture size changes partway through failing or scoring wrongly.
 - Command line: fixed closing the console window losing the `--json` and `--csv` files, and a cancelled video being
   reported as done.
+- Fixed 10-bit H.264 failing on the first try with GPU decoding on NVIDIA GPUs before the RTX 50 series.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP switching to stock Vship after one failed read of a video.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP of scaled 8-bit videos changing slightly with GPU decoding.
+- Fixed Video Compare's VVC film grain darkening the picture.
+- Fixed HEVC stream copies cut at an open-GOP frame falling back to slower decoding.
+- Fixed VMAF v1 on AMD GPUs decoding some videos twice, and VC-1 retrying GPU decoding six times.
+- Fixed Cancel and closing the window waiting for a GPU check, and the app staying open 5 seconds when closed right
+  after it starts.
+- Fixed Video Compare showing the Videos tab at the first switch after black bars change the crop.
+- Fixed results from saved scores not naming the version that made each score.
 
 ## v2.2.1
 
@@ -427,25 +416,28 @@ libjxl and pycvvdp.
 
 - Fixed wrong VMAF, PSNR, SSIM and XPSNR scores when the test video's colour
   range or colour matrix differs from the reference's.
-- Fixed scores of a test video at another resolution than the reference
-  (such as a 1080p encode of a 4K source) changing slightly with Use GPU
-  decoding.
 - Fixed SSIMULACRA2, Butteraugli and CVVDP reading the two videos with
   different colour matrices when one or both had no colour tags, such as a
   540p encode of an untagged 720p source.
-- Fixed VMAF, PSNR, SSIM and XPSNR scores of a full-range 8-bit video against
-  a 10-bit one changing with Use GPU decoding.
+- Fixed changing a VMAF model removing the video's other scores too.
+- Command line: fixed CVVDP failing, and VMAF, SSIMULACRA2 and Butteraugli
+  falling back to the CPU, when the videos were given as relative paths.
+
+### Minor bug fixes
+
 - Fixed SSIMULACRA2, Butteraugli and CVVDP scoring a test video of another
   shape than the reference (such as a 1440x1080 encode of a 4K source)
   stretched, instead of refusing it as VMAF does.
+- Fixed VMAF, PSNR, SSIM and XPSNR scores of a full-range 8-bit video against
+  a 10-bit one changing with Use GPU decoding.
 - Fixed SSIMULACRA2, Butteraugli and CVVDP on the GPU reading the two videos'
   colours half a pixel apart when only one gave its chroma siting, such as a
   .y4m reference made from an .mkv.
 - Fixed SSIMULACRA2, Butteraugli and CVVDP on the GPU reading full-range
   greyscale videos with too little contrast.
-- Command line: fixed CVVDP failing, and VMAF, SSIMULACRA2 and Butteraugli
-  falling back to the CPU, when the videos were given as relative paths.
-- Fixed changing a VMAF model removing the video's other scores too.
+- Fixed scores of a test video at another resolution than the reference
+  (such as a 1080p encode of a 4K source) changing slightly with Use GPU
+  decoding.
 - Fixed cancelling the custom VMAF model file dialog switching the video to
   the Auto model and removing its scores.
 - Fixed videos still showing scores after Clear saved results being skipped by
@@ -506,41 +498,44 @@ port](docs/CPP_PORT.md) has the details and measurements.
 ### Bug fixes
 
 - Fixed a saved VMAF score being shown with the wrong model.
-- Fixed the CVVDP display editor changing values that were not edited.
 - Fixed the command line sometimes losing a video's metrics from its table
   and JSON.
 - Fixed long runs using too much memory: up to 2.1 GB with VMAF on the CPU and
   770 MB with VMAF on the GPU over 3 hours at 60 fps.
+- Fixed Video Compare cropping a second test video with the first one's black
+  bars.
+- Fixed Video Compare keeping old black bars and still frames after the
+  reference or the scaling changed.
+- Fixed Video Compare jumping to the first test video when scores arrived.
+- Fixed the Settings tab's rows overlapping on high-DPI screens or in a small
+  window; tabs now scroll instead (#6).
+- Fixed texts that stayed in English in Video Compare, Metric Graphs, Bitrate
+  Viewer, the run line and the CVVDP display editor.
+
+### Minor bug fixes
+
+- Fixed the CVVDP display editor changing values that were not edited.
 - Fixed a crash when closing the window with a path typed in the reference
   box.
 - Fixed a possible crash of VMAF v1 on the GPU when libvmaf failed to start.
 - Fixed SSIMULACRA2 and Butteraugli on the CPU sometimes failing to read a
   frame.
 - Fixed "frames compared" being one frame short with some duration limits.
-- Fixed runs that crashed or were ended in Task Manager leaving temporary
-  files behind, up to 1.4 GB for a 4K run.
 - Fixed loading a saved run keeping the old reference's resolution tests, and
   a loaded resolution test showing the reference's details.
-- Fixed Video Compare keeping old black bars and still frames after the
-  reference or the scaling changed.
-- Fixed Video Compare cropping a second test video with the first one's black
-  bars.
 - Fixed Video Compare playing no frames of a test video decoded in the
   background that had fallen behind.
+- Fixed runs that crashed or were ended in Task Manager leaving temporary
+  files behind, up to 1.4 GB for a 4K run.
 - Fixed Video Compare keeping each finished test video's decoder until the
   window closed.
-- Fixed Video Compare jumping to the first test video when scores arrived.
+- Fixed a failed graph export or settings save not being reported.
 - Fixed Video Compare showing the Videos tab for seconds at the first switch
   after black bars were found.
-- Fixed the Settings tab's rows overlapping on high-DPI screens or in a small
-  window; tabs now scroll instead (#6).
-- Fixed a failed graph export or settings save not being reported.
-- Fixed FFmpeg showing as not usable when its folder held a folder named
-  ffmpeg.exe.
 - Fixed a video's colour changing between Metric Graphs and Bitrate Viewer, or
   after it was removed and added again.
-- Fixed texts that stayed in English in Video Compare, Metric Graphs, Bitrate
-  Viewer, the run line and the CVVDP display editor.
+- Fixed FFmpeg showing as not usable when its folder held a folder named
+  ffmpeg.exe.
 
 ## v2.0
 
@@ -596,29 +591,32 @@ app uses far less memory.
 - Fixed XPSNR being weighted by the test video's detail and motion instead of
   the reference's, as XPSNR is defined: scores are 0.9-1.8 dB higher, and
   XPSNR saved by v1.4 is recalculated.
-- Fixed wrong scores, or a run that never ended, for 10-bit H.264 decoded on
-  AMD GPUs.
-- CVVDP is no longer calculated on Intel GPUs above 1080p, where it hangs the
-  GPU and blacks out the screen.
-- Fixed partly green frames in Video Compare on some NVIDIA GPUs.
 - Fixed the reference showing a few frames behind the test video after a seek,
   for some MP4 references.
-- Fixed FFmpeg running on after the app crashed or was ended in Task Manager.
-- Fixed SSIMULACRA2 and Butteraugli starting again on the CPU, for hours, for a
-  test video cut short.
-- Fixed GPU memory growing each time Video Compare moved between an HDR and an
-  SDR display.
-- Fixed Video Compare staying blank for a test video added again.
-- Fixed 10-bit H.264 on Intel and AMD GPUs failing first with FFmpeg's GPU
-  decoding.
-- A raw .hevc or .264 stream is now refused with how to fix it, not as
-  variable-frame-rate video, in Video Compare too.
+- Fixed partly green frames in Video Compare on some NVIDIA GPUs.
 - Fixed Video Compare sometimes playing without sound, or with a test video's
   sound instead of the reference's.
 - Fixed choppy sound and slow playback in Video Compare when decoding couldn't
   keep up.
-- Fixed the window freezing on a seek while a video's file was slow to read.
 - Fixed a pause in Video Compare playback when black-bar detection finished.
+
+### Minor bug fixes
+
+- Fixed wrong scores, or a run that never ended, for 10-bit H.264 decoded on
+  AMD GPUs.
+- CVVDP is no longer calculated on Intel GPUs above 1080p, where it hangs the
+  GPU and blacks out the screen.
+- Fixed SSIMULACRA2 and Butteraugli starting again on the CPU, for hours, for a
+  test video cut short.
+- Fixed 10-bit H.264 on Intel and AMD GPUs failing first with FFmpeg's GPU
+  decoding.
+- Fixed GPU memory growing each time Video Compare moved between an HDR and an
+  SDR display.
+- Fixed FFmpeg running on after the app crashed or was ended in Task Manager.
+- Fixed the window freezing on a seek while a video's file was slow to read.
+- Fixed Video Compare staying blank for a test video added again.
+- A raw .hevc or .264 stream is now refused with how to fix it, not as
+  variable-frame-rate video, in Video Compare too.
 - Fixed Video Compare saying it was playing or buffering while paused.
 
 ### How GPU VMAF works
@@ -665,32 +663,35 @@ equals libvmaf's CPU code in 73 cases, at 8 and 10 bits, up to 8K.
   longer closes the app.
 - Reworked the progress line, with each metric's progress and time remaining.
 - VMAF NEG now sits beside VMAF v0.6.1.
-- Fixed wrong scores for videos with an odd width or height when decoded on
-  NVIDIA GPUs.
-- Fixed SSIMULACRA2, Butteraugli and CVVDP comparing mismatched frames when a
-  video has dropped or extra frames.
+
+### Bug fixes
+
 - Fixed CPU SSIMULACRA2 and Butteraugli scores being far from the GPU's on SDR
   video. Saved CPU scores are recalculated once.
-- Fixed 24 fps videos being accepted against 23.976 fps ones (and 30 against
-  29.97, 60 against 59.94).
 - Fixed GPU metrics on PCs whose only GPU is Intel's.
+- Fixed the Video bitrate column including the soundtrack for MKV files (marked
+  ≈ where it can't be separated).
 - Fixed FFmpeg's GPU decoding not being used on AMD GPUs.
 
 ### Minor bug fixes
 
+- Fixed wrong scores for videos with an odd width or height when decoded on
+  NVIDIA GPUs.
+- Fixed SSIMULACRA2, Butteraugli and CVVDP comparing mismatched frames when a
+  video has dropped or extra frames.
+- Fixed 24 fps videos being accepted against 23.976 fps ones (and 30 against
+  29.97, 60 against 59.94).
 - A video whose pictures end long before its stated length now fails instead
   of being scored.
-- Fixed XPSNR missing from the table and CSV with frame subsampling and VMAF on
-  the GPU.
 - Fixed MKV videos with a soundtrack longer than the picture failing with
   "Durations do not match".
+- Fixed XPSNR missing from the table and CSV with frame subsampling and VMAF on
+  the GPU.
 - Fixed MP4 files whose cover art comes before the video comparing or playing
   the cover.
-- Fixed a crash on exit on PCs with a Vulkan loader but no Vulkan driver.
 - Fixed adding videos whose name or title contains curly quotes, some accented
   letters, or Chinese, Japanese or Korean text.
-- Fixed the Video bitrate column including the soundtrack for MKV files (marked
-  ≈ where it can't be separated).
+- Fixed a crash on exit on PCs with a Vulkan loader but no Vulkan driver.
 - Fixed loading a saved run of a listed video adding a second row.
 - Fixed the window opening wider than its default size in Spanish and
   Portuguese with some system fonts.
@@ -789,11 +790,6 @@ everyone gets accurate VMAF on the GPU.
 - Each metric's score now appears and is saved as soon as it is done, instead
   of when the whole video is finished. Stopping a run or closing the app loses
   at most the metric in progress.
-- Fixed test frames stamped slightly earlier than the source's being compared
-  with the previous source frame, which gave clusters of near-zero VMAF NEG
-  and XPSNR scores. Each test frame is now compared with the source frame
-  nearest in time. Saved scores of affected videos are kept until they are
-  recalculated.
 - Hovering a red Failed cell now says why that metric failed.
 - Added a session log under Settings > Storage > Log files, with Export log...
   (the log files as one .zip) and Copy log (the latest run) buttons.
@@ -801,6 +797,17 @@ everyone gets accurate VMAF on the GPU.
   only if there is one. Turn it off in Settings > Window.
 - Windows no longer goes to sleep while metrics are being calculated. The
   screen can still turn off.
+
+### Bug fixes
+
+- Fixed test frames stamped slightly earlier than the source's being compared
+  with the previous source frame, which gave clusters of near-zero VMAF NEG
+  and XPSNR scores. Each test frame is now compared with the source frame
+  nearest in time. Saved scores of affected videos are kept until they are
+  recalculated.
+
+### Minor bug fixes
+
 - Included various small bug fixes and reliability improvements.
 
 ### Known issues
@@ -828,9 +835,15 @@ everyone gets accurate VMAF on the GPU.
   Metric Graphs tab.
 - Video Compare no longer re-checks the reference each time a different test
   video is picked.
+
+### Bug fixes
+
 - Fixed saved VMAF scores not loading on rows set to VMAF model Auto.
 - Fixed the metrics ticked in the Videos tab column headers being unticked
   after a restart.
+
+### Minor bug fixes
+
 - Included various small bug fixes and reliability improvements.
 
 ## v1.2
@@ -843,13 +856,19 @@ everyone gets accurate VMAF on the GPU.
 - Added an Add/remove metrics control to the Videos tab so metric columns can
   be shown or hidden, and new metrics can be added to completed analyses
   without recalculating existing results.
+
+### Minor bug fixes
+
 - Included various small under-the-hood bug fixes and reliability improvements.
 
 ## v1.1.1
 
-- Fixed the metric graph clipping VMAF v1 scores above 100.
 - Show the application version in the window title: VideoMetricsLab 1.1.1.
 - Omit calculation-library version metadata from non-VMAF cache entries
+
+### Bug fixes
+
+- Fixed the metric graph clipping VMAF v1 scores above 100.
 
 ## v1.1
 
