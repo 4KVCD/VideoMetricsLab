@@ -73,7 +73,10 @@ fetch() {  # url sha256 file
 }
 
 checkout https://github.com/4KVCD/Vship-fast.git "$vship_commit" "$work/Vship"
-checkout https://codeberg.org/Line-fr/Vship.git "$vship51_commit" "$work/Vship51"
+# Vship-fast's history holds stock v5.1.2 (its perf-metrics branch grew from
+# it), so both come from GitHub: codeberg.org, Vship's own home, can be gone
+# from DNS (2026-11-18), which stopped the package build.
+checkout https://github.com/4KVCD/Vship-fast.git "$vship51_commit" "$work/Vship51"
 checkout https://github.com/KhronosGroup/Vulkan-Headers.git "$vulkan_headers_commit" "$work/Vulkan-Headers"
 checkout https://github.com/KhronosGroup/Vulkan-Loader.git "$vulkan_loader_commit" "$work/Vulkan-Loader"
 fetch "https://github.com/KhronosGroup/MoltenVK/releases/download/$moltenvk_version/MoltenVK-macos.tar" \
