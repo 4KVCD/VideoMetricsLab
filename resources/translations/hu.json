@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "Még egyetlen tesztvideó sincs a referenciához pontozva.",
   "Nothing to export": "Nincs mit exportálni",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "A referenciához pontozott összes tesztvideó grafikonjait egyetlen .zip-fájlba menti: minden videó grafikonját minden metrikához, mindet együtt, és a bitrátájukat a referenciáéval. A lapok saját grafikonjai változatlanok maradnak. Ha a bitráta beolvasása még tart, a fájlt annak végeztével menti.",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "A bitrátagrafikonok még készülnek; a grafikonok exportálása ide: {path}, amint elkészülnek."
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "A bitrátagrafikonok még készülnek; a grafikonok exportálása ide: {path}, amint elkészülnek.",
+  "As saved in Settings > Weak segments.": "Ahogy a Beállítások > Gyenge szakaszok pontban mentve van.",
+  "Changed here only: Save as default keeps these for the next time.": "Csak itt módosítva: a Mentés alapértelmezettként megtartja ezeket a következő alkalomra.",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "Ezeket a feltételeket és beállításokat teszi a mentettekké, a Beállítások > Gyenge szakaszok pontban.",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Még nincs feltétel: a Metrikagrafikonok Gyenge szakaszok ablaka a megjelenített metrikából indul.",
+  "Save as default": "Mentés alapértelmezettként",
+  "Weak segments": "Gyenge szakaszok",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Hol számítanak egy videó pontszámai gyengének. A Metrikagrafikonok > Legrosszabb képkockák > Gyenge szakaszok ezekből indul, és a Mentés alapértelmezettként gombja itt módosítja őket."
  },
  "plurals": {
   "about {count} day": [

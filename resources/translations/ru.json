@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "Пока ни одно тестовое видео не оценено относительно эталона.",
   "Nothing to export": "Нечего экспортировать",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "Сохраняет графики всех тестовых видео, оценённых относительно эталона, в один файл .zip: график каждого видео для каждой метрики, все вместе и их битрейт рядом с битрейтом эталона. Графики на вкладках остаются как есть. Если битрейт ещё читается, файл будет сохранён, как только это закончится.",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Графики битрейта ещё строятся; графики будут экспортированы в {path}, как только будут готовы."
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Графики битрейта ещё строятся; графики будут экспортированы в {path}, как только будут готовы.",
+  "As saved in Settings > Weak segments.": "Как сохранено в Настройки > Слабые участки.",
+  "Changed here only: Save as default keeps these for the next time.": "Изменено только здесь: «Сохранить по умолчанию» сохранит их на следующий раз.",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "Делает эти условия и параметры сохранёнными, в Настройки > Слабые участки.",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Условий пока нет: «Слабые участки» в «Графики метрик» начинаются с показанной метрики.",
+  "Save as default": "Сохранить по умолчанию",
+  "Weak segments": "Слабые участки",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Где оценки видео считаются слабыми. Графики метрик > Худшие кадры > Слабые участки начинается с них, а его кнопка «Сохранить по умолчанию» меняет их здесь."
  },
  "plurals": {
   "about {count} day": [

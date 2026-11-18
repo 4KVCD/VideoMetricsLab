@@ -205,6 +205,29 @@ std::optional<WeakCondition> parse_weak_condition(std::string_view text) {
     return WeakCondition{std::string(text.substr(0, at)), text[at], *threshold};
 }
 
+SegmentRules saved_segment_rules(const std::vector<std::string>& conditions, bool all, int min_frames,
+                                 int merge_frames) {
+    SegmentRules rules;
+    for (const std::string& text : conditions) {
+        if (const std::optional<WeakCondition> condition = parse_weak_condition(text);
+            condition && find_metric(condition->key) != nullptr) {
+            rules.conditions.push_back(*condition);
+        }
+    }
+    rules.all = all;
+    rules.min_frames = std::max(min_frames, 1);
+    rules.merge_frames = std::max(merge_frames, 0);
+    return rules;
+}
+
+std::vector<std::string> condition_texts(const std::vector<WeakCondition>& conditions) {
+    std::vector<std::string> texts;
+    for (const WeakCondition& condition : conditions) {
+        texts.push_back(condition.text());
+    }
+    return texts;
+}
+
 WeakCondition default_weak_condition(const MetricDefinition& metric) {
     const std::string key(metric.key);
     for (const Threshold& band : metric.thresholds) {

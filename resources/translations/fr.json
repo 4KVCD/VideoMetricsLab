@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "Aucune vidéo testée n'a encore été évaluée par rapport à la référence.",
   "Nothing to export": "Rien à exporter",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "Enregistre les graphiques de toutes les vidéos testées évaluées par rapport à la référence dans un seul fichier .zip : le graphique de chaque vidéo pour chaque métrique, tous ensemble, et leur débit avec celui de la référence. Les graphiques des onglets restent tels quels. Si le débit est encore en cours de lecture, le fichier est enregistré dès que c'est terminé.",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Les graphiques de débit sont encore en cours de création ; les graphiques seront exportés vers {path} dès qu'ils seront prêts."
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Les graphiques de débit sont encore en cours de création ; les graphiques seront exportés vers {path} dès qu'ils seront prêts.",
+  "As saved in Settings > Weak segments.": "Tel qu'enregistré dans Paramètres > Segments faibles.",
+  "Changed here only: Save as default keeps these for the next time.": "Modifié ici seulement : Enregistrer par défaut les garde pour la prochaine fois.",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "Garde ces conditions et options comme celles enregistrées, dans Paramètres > Segments faibles.",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Aucune condition pour l'instant : Segments faibles des Graphiques des métriques part de la métrique affichée.",
+  "Save as default": "Enregistrer par défaut",
+  "Weak segments": "Segments faibles",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Où les scores d'une vidéo comptent comme faibles. Graphiques des métriques > Pires images > Segments faibles part de celles-ci, et son bouton Enregistrer par défaut les modifie ici."
  },
  "plurals": {
   "about {count} day": [

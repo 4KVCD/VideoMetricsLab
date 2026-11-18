@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "لم تُحسب نتائج أي فيديو مختبَر مقابل المرجع بعد.",
   "Nothing to export": "لا شيء للتصدير",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "يحفظ الرسوم البيانية لكل فيديو مختبَر حُسبت نتائجه مقابل المرجع في ملف ‎.zip‎ واحد: رسم كل فيديو لكل مقياس، وكلها معًا، ومعدل بياناتها مع معدل المرجع. تبقى رسوم الألسنة نفسها كما هي. إذا كان معدل البيانات لا يزال قيد القراءة، يُحفظ الملف فور انتهائه.",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "لا تزال رسوم معدل البيانات قيد الإنشاء؛ ستُصدَّر الرسوم البيانية إلى {path} فور انتهائها."
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "لا تزال رسوم معدل البيانات قيد الإنشاء؛ ستُصدَّر الرسوم البيانية إلى {path} فور انتهائها.",
+  "As saved in Settings > Weak segments.": "كما هو محفوظ في الإعدادات > المقاطع الضعيفة.",
+  "Changed here only: Save as default keeps these for the next time.": "تغيّر هنا فقط: «حفظ كافتراضي» يُبقي هذه الشروط للمرة القادمة.",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "يحفظ هذه الشروط والخيارات بوصفها المحفوظة، في الإعدادات > المقاطع الضعيفة.",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "لا شرط بعد: تبدأ المقاطع الضعيفة في رسوم المقاييس من المقياس المعروض.",
+  "Save as default": "حفظ كافتراضي",
+  "Weak segments": "المقاطع الضعيفة",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "متى تُعدّ نتائج الفيديو ضعيفة. تبدأ رسوم المقاييس > أسوأ الإطارات > المقاطع الضعيفة من هذه الشروط، وزر «حفظ كافتراضي» فيها يغيّرها هنا."
  },
  "plurals": {
   "about {count} day": [

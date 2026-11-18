@@ -151,6 +151,16 @@ TEST(WeakFrames, ExportsAndConditionsRead) {
                                 *parse_weak_condition("ssimulacra2<50"), *parse_weak_condition("vmaf_neg<88")}};
     EXPECT_EQ(segments_file_suffix(several), "ssimulacra2+vmaf+vmaf_neg.segments");
 
+    // The rules Settings keeps: an unreadable condition, or one on a metric
+    // the app does not have, left out; a shortest segment below 1 and a gap
+    // below 0 taken as 1 and 0.
+    const SegmentRules saved =
+        saved_segment_rules({"vmaf<90", "vmaf<", "nometric<5", "butteraugli>2.5"}, true, 0, -4);
+    EXPECT_EQ(condition_texts(saved.conditions), (std::vector<std::string>{"vmaf<90", "butteraugli>2.5"}));
+    EXPECT_TRUE(saved.all);
+    EXPECT_EQ(saved.min_frames, 1);
+    EXPECT_EQ(saved.merge_frames, 0);
+
     const std::optional<WeakCondition> above = parse_weak_condition("butteraugli>2.5");
     ASSERT_TRUE(above);
     EXPECT_EQ(above->key, "butteraugli");

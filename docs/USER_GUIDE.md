@@ -51,7 +51,12 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
    past thresholds you set (any or every condition, the shortest segment,
    the gap to join across) and exports them as JSON or CSV, named after the
    metrics they cover (`<video>.vmaf.segments.json`,
-   `<video>.vmaf+ssimulacra2.segments.csv`).
+   `<video>.vmaf+ssimulacra2.segments.csv`). It opens with the rules saved
+   in **Settings > Weak segments**: their conditions on the metrics the video
+   has (else one on the metric shown). What you change in the dialog holds
+   for it alone, until **Save as default** keeps it in Settings for the next
+   time; a saved condition on a metric the video doesn't have is kept for
+   videos that do. The rules can also be set in Settings directly.
 
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one.

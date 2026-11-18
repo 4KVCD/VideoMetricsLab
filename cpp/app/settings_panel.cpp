@@ -38,6 +38,7 @@
 #include "file_writes.h"
 #include "formatting.h"
 #include "i18n.h"
+#include "segment_rules_editor.h"
 #include "theme.h"
 #include "vml/app_log.h"
 #include "vml/crop_detect.h"
@@ -95,8 +96,8 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     theme::style(run_lock_note, "color: {muted};");
     run_lock_note->hide();
     layout->addWidget(run_lock_note);
-    for (QGroupBox* box : {build_ffmpeg_box(), build_storage_box(), build_defaults_box(), build_gpu_box(),
-                           build_compare_box(), build_window_box()}) {
+    for (QGroupBox* box : {build_ffmpeg_box(), build_storage_box(), build_weak_segments_box(), build_defaults_box(),
+                           build_gpu_box(), build_compare_box(), build_window_box()}) {
         layout->addWidget(box);
     }
     layout->addStretch(1);
@@ -289,6 +290,37 @@ QGroupBox* SettingsPanel::build_storage_box() {
     log_row->addWidget(export_log_button);
     storage_form->addRow(app::tr("Log files:"), log_row);
     return storage_box;
+}
+
+QGroupBox* SettingsPanel::build_weak_segments_box() {
+    auto* box = new QGroupBox(app::tr("Weak segments"));
+    auto* layout = new QVBoxLayout(box);
+    auto* note = new QLabel(app::tr("Where a video's scores count as weak. Metric Graphs > Worst frames > Weak "
+                                    "segments starts from these, and its Save as default changes them here."));
+    note->setWordWrap(true);
+    theme::style(note, "color: {muted};");
+    layout->addWidget(note);
+    std::vector<std::string> keys;
+    for (const MetricDefinition& definition : metrics()) {
+        keys.emplace_back(definition.key);
+    }
+    weak_segments = new SegmentRulesEditor(std::move(keys), false);
+    const SegmentRules saved =
+        saved_segment_rules(settings_.weak_segment_conditions, settings_.weak_segments_all,
+                            settings_.weak_segment_min_frames, settings_.weak_segment_merge_frames);
+    weak_segments->set_remembered(saved.conditions);
+    weak_segments->set_rules(saved);
+    connect(weak_segments, &SegmentRulesEditor::changed, this, [this] { on_edited(); });
+    layout->addWidget(weak_segments);
+    return box;
+}
+
+void SettingsPanel::show_weak_segment_rules() {
+    const SegmentRules saved =
+        saved_segment_rules(settings_.weak_segment_conditions, settings_.weak_segments_all,
+                            settings_.weak_segment_min_frames, settings_.weak_segment_merge_frames);
+    weak_segments->set_remembered(saved.conditions);
+    weak_segments->set_rules(saved);
 }
 
 QGroupBox* SettingsPanel::build_defaults_box() {
@@ -694,6 +726,12 @@ void SettingsPanel::on_edited() {
     // what they were given.
     emit defaults_changed();
     const std::optional<std::string> error = settings_.save();
+    if (settings_.weak_segment_conditions != before.weak_segment_conditions ||
+        settings_.weak_segments_all != before.weak_segments_all ||
+        settings_.weak_segment_min_frames != before.weak_segment_min_frames ||
+        settings_.weak_segment_merge_frames != before.weak_segment_merge_frames) {
+        emit weak_segment_rules_changed();
+    }
     if (settings_.ffmpeg_dir != before.ffmpeg_dir) {
         emit ffmpeg_folder_changed();  // after the save: the tools are looked for in the folder saved
     }
@@ -711,6 +749,11 @@ void SettingsPanel::read_controls() {
     settings_.cache_dir = cache_edit->text().toStdString();
     settings_.export_dir = export_edit->text().toStdString();
     settings_.auto_export = auto_export->currentData().toString().toStdString();
+    const SegmentRules weak = weak_segments->rules();
+    settings_.weak_segment_conditions = condition_texts(weak.conditions);
+    settings_.weak_segments_all = weak.all;
+    settings_.weak_segment_min_frames = weak.min_frames;
+    settings_.weak_segment_merge_frames = weak.merge_frames;
     settings_.export_graph_theme = export_graph_theme->currentData().toString().toStdString();
     settings_.export_graph_background = export_background_button->property("chosen").toString().toStdString();
     settings_.export_graph_text = export_text_button->property("chosen").toString().toStdString();

@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "还没有针对参考视频评分的测试视频。",
   "Nothing to export": "没有可导出的内容",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "将所有针对参考视频评分的测试视频的图表保存为一个 .zip 文件：每个视频每个指标的图表、全部视频合在一起的图表，以及与参考视频一同显示的码率图。选项卡中的图表保持不变。如果码率仍在读取，文件会在读取完成后立即保存。",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "码率图仍在生成；完成后图表将立即导出到 {path}。"
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "码率图仍在生成；完成后图表将立即导出到 {path}。",
+  "As saved in Settings > Weak segments.": "与 设置 > 弱片段 中保存的相同。",
+  "Changed here only: Save as default keeps these for the next time.": "仅在此处更改：保存为默认值 会保留这些条件供下次使用。",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "将这些条件和选项保留为 设置 > 弱片段 中保存的条件。",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "尚无条件：指标图表 的 弱片段 从当前显示的指标开始。",
+  "Save as default": "保存为默认值",
+  "Weak segments": "弱片段",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "视频的分数在哪些情况下算作弱。指标图表 > 最差帧 > 弱片段 从这些条件开始，其 保存为默认值 会在此处更改它们。"
  },
  "plurals": {
   "about {count} day": [

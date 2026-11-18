@@ -53,6 +53,15 @@ struct Settings {
     std::string graph_metric = "vmaf";
     // How many dips Metric Graphs' Worst frames list shows (10, 25 or 50).
     int graph_worst_frames = 10;
+    // Metric Graphs' Weak segments, as last set there (saved_segment_rules,
+    // weak_frames.h): its conditions as the command line's --segments writes
+    // them ("vmaf<90"; none: the metric shown, from its first band of worse
+    // frames), whether every one must hold rather than any, the shortest
+    // segment and the gap joined across, in frames.
+    std::vector<std::string> weak_segment_conditions;
+    bool weak_segments_all = false;
+    int weak_segment_min_frames = 1;
+    int weak_segment_merge_frames = 0;
 
     // How many videos to score at once (1 or 2).
     int parallel_jobs = 1;

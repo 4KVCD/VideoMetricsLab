@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "Es wurde noch kein Testvideo gegen die Referenz bewertet.",
   "Nothing to export": "Nichts zu exportieren",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "Speichert die Diagramme aller gegen die Referenz bewerteten Testvideos als eine .zip-Datei: das Diagramm jedes Videos für jede Metrik, alle zusammen und ihre Bitrate mit der der Referenz. Die Diagramme in den Tabs bleiben, wie sie sind. Wird die Bitrate noch gelesen, wird die Datei gespeichert, sobald das fertig ist.",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Die Bitrate-Diagramme werden noch erstellt; die Diagramme werden nach {path} exportiert, sobald sie fertig sind."
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Die Bitrate-Diagramme werden noch erstellt; die Diagramme werden nach {path} exportiert, sobald sie fertig sind.",
+  "As saved in Settings > Weak segments.": "Wie unter Einstellungen > Schwache Abschnitte gespeichert.",
+  "Changed here only: Save as default keeps these for the next time.": "Nur hier geändert: Als Standard speichern behält diese für das nächste Mal.",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "Übernimmt diese Bedingungen und Optionen als die gespeicherten, unter Einstellungen > Schwache Abschnitte.",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Noch keine Bedingung: Schwache Abschnitte in Metrik-Diagramme beginnt mit der angezeigten Metrik.",
+  "Save as default": "Als Standard speichern",
+  "Weak segments": "Schwache Abschnitte",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Wo die Werte eines Videos als schwach gelten. Metrik-Diagramme > Schlechteste Bilder > Schwache Abschnitte beginnt mit diesen, und sein Als Standard speichern ändert sie hier."
  },
  "plurals": {
   "about {count} day": [

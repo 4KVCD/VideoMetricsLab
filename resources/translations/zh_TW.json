@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "還沒有針對參考影片評分的測試影片。",
   "Nothing to export": "沒有可匯出的內容",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "將所有針對參考影片評分的測試影片圖表儲存為一個 .zip 檔案：每部影片每個指標的圖表、所有影片合在一起的圖表，以及與參考影片一同顯示的位元率圖。分頁中的圖表保持不變。如果位元率仍在讀取，檔案會在讀取完成後立即儲存。",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "位元率圖仍在產生；完成後圖表將立即匯出到 {path}。"
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "位元率圖仍在產生；完成後圖表將立即匯出到 {path}。",
+  "As saved in Settings > Weak segments.": "與 設定 > 弱片段 中儲存的相同。",
+  "Changed here only: Save as default keeps these for the next time.": "僅在此處變更：儲存為預設值 會保留這些條件供下次使用。",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "將這些條件和選項保留為 設定 > 弱片段 中儲存的條件。",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "尚無條件：指標圖表 的 弱片段 從目前顯示的指標開始。",
+  "Save as default": "儲存為預設值",
+  "Weak segments": "弱片段",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "影片的分數在哪些情況下算作弱。指標圖表 > 最差影格 > 弱片段 從這些條件開始，其 儲存為預設值 會在此處變更它們。"
  },
  "plurals": {
   "about {count} day": [

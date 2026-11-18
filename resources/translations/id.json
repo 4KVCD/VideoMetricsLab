@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "Belum ada video uji yang diberi skor terhadap referensi.",
   "Nothing to export": "Tidak ada yang diekspor",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "Menyimpan grafik semua video uji yang diberi skor terhadap referensi sebagai satu file .zip: grafik setiap video untuk setiap metrik, semuanya bersama, dan bitratenya bersama bitrate referensi. Grafik di tab tetap seperti adanya. Jika bitrate masih dibaca, file disimpan begitu selesai.",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Grafik bitrate masih dibuat; grafik akan diekspor ke {path} begitu selesai."
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Grafik bitrate masih dibuat; grafik akan diekspor ke {path} begitu selesai.",
+  "As saved in Settings > Weak segments.": "Sesuai yang disimpan di Pengaturan > Segmen lemah.",
+  "Changed here only: Save as default keeps these for the next time.": "Hanya diubah di sini: Simpan sebagai bawaan menyimpannya untuk lain kali.",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "Menyimpan syarat dan opsi ini sebagai yang tersimpan, di Pengaturan > Segmen lemah.",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Belum ada syarat: Segmen lemah di Grafik metrik dimulai dari metrik yang ditampilkan.",
+  "Save as default": "Simpan sebagai bawaan",
+  "Weak segments": "Segmen lemah",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Kapan skor video dianggap lemah. Grafik metrik > Bingkai terburuk > Segmen lemah dimulai dari ini, dan tombol Simpan sebagai bawaan di sana mengubahnya di sini."
  },
  "plurals": {
   "about {count} day": [

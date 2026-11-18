@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "Nenhum vídeo de teste foi pontuado em relação à referência ainda.",
   "Nothing to export": "Nada para exportar",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "Salva os gráficos de todos os vídeos de teste pontuados em relação à referência como um único arquivo .zip: o gráfico de cada vídeo para cada métrica, todos juntos, e a taxa de bits deles com a da referência. Os gráficos das abas ficam como estão. Se a taxa de bits ainda estiver sendo lida, o arquivo é salvo assim que terminar.",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Os gráficos de taxa de bits ainda estão sendo criados; os gráficos serão exportados para {path} assim que estiverem prontos."
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Os gráficos de taxa de bits ainda estão sendo criados; os gráficos serão exportados para {path} assim que estiverem prontos.",
+  "As saved in Settings > Weak segments.": "Como salvo em Configurações > Segmentos fracos.",
+  "Changed here only: Save as default keeps these for the next time.": "Alterado só aqui: Salvar como padrão as mantém para a próxima vez.",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "Mantém estas condições e opções como as salvas, em Configurações > Segmentos fracos.",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Nenhuma condição ainda: Segmentos fracos de Gráficos de métricas começa pela métrica exibida.",
+  "Save as default": "Salvar como padrão",
+  "Weak segments": "Segmentos fracos",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Onde as pontuações de um vídeo contam como fracas. Gráficos de métricas > Piores quadros > Segmentos fracos parte destas, e o seu Salvar como padrão as altera aqui."
  },
  "plurals": {
   "about {count} day": [

@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "ยังไม่มีวิดีโอทดสอบที่ให้คะแนนเทียบกับวิดีโออ้างอิง",
   "Nothing to export": "ไม่มีอะไรให้ส่งออก",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "บันทึกกราฟของวิดีโอทดสอบทุกรายการที่ให้คะแนนเทียบกับวิดีโออ้างอิงเป็นไฟล์ .zip ไฟล์เดียว ได้แก่ กราฟของแต่ละวิดีโอสำหรับทุกเมตริก กราฟรวมทุกวิดีโอ และบิตเรตเทียบกับของวิดีโออ้างอิง กราฟในแท็บจะยังเหมือนเดิม หากยังอ่านบิตเรตอยู่ จะบันทึกไฟล์ทันทีที่อ่านเสร็จ",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "ยังสร้างกราฟบิตเรตอยู่ จะส่งออกกราฟไปที่ {path} ทันทีที่เสร็จ"
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "ยังสร้างกราฟบิตเรตอยู่ จะส่งออกกราฟไปที่ {path} ทันทีที่เสร็จ",
+  "As saved in Settings > Weak segments.": "ตามที่บันทึกไว้ใน การตั้งค่า > ช่วงที่อ่อน",
+  "Changed here only: Save as default keeps these for the next time.": "เปลี่ยนเฉพาะที่นี่: บันทึกเป็นค่าเริ่มต้น จะเก็บค่าเหล่านี้ไว้ใช้ครั้งถัดไป",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "เก็บเงื่อนไขและตัวเลือกเหล่านี้เป็นค่าที่บันทึกไว้ ใน การตั้งค่า > ช่วงที่อ่อน",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "ยังไม่มีเงื่อนไข: ช่วงที่อ่อน ของ กราฟเมตริก จะเริ่มจากเมตริกที่แสดงอยู่",
+  "Save as default": "บันทึกเป็นค่าเริ่มต้น",
+  "Weak segments": "ช่วงที่อ่อน",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "กำหนดว่าคะแนนของวิดีโอถือว่าอ่อนเมื่อใด กราฟเมตริก > เฟรมที่แย่ที่สุด > ช่วงที่อ่อน จะเริ่มจากค่าเหล่านี้ และปุ่ม บันทึกเป็นค่าเริ่มต้น ที่นั่นจะเปลี่ยนค่าเหล่านี้ที่นี่"
  },
  "plurals": {
   "about {count} day": [
