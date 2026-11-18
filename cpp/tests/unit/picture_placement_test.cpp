@@ -91,6 +91,9 @@ TEST(PicturePlacement, AScaledEncodeMayShowTheBoxGrownByAThinEdge) {
     // Bars a scale cannot hide, and a box the test frame's shape does not fit: the boxes decide.
     EXPECT_TRUE(scaled_places(1920, 1080, 1280, 720, CropBox{1920, 800, 0, 140}).empty());
     EXPECT_TRUE(scaled_places(1920, 1080, 960, 400, CropBox{1920, 800, 0, 140}).empty());
+    // Source only takes the test's whole frame as its picture, as Auto does when it finds no bars in the test.
+    EXPECT_TRUE(placed_by_content(CropMode::source_only, frame(1920, 1080), frame(960, 400), CropBox{1918, 800, 0, 140},
+                                  std::nullopt));
 }
 
 // The pictures choose the place the test's picture was cut from, scaled or not, and say nothing where they

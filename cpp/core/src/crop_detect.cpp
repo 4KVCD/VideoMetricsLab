@@ -1357,7 +1357,10 @@ Placing placing_of(CropMode mode, const VideoInfo& source, const VideoInfo& test
     }
     placing.places = unscaled_places(source_width, source_height, test_width, test_height, source_box,
                                      placing.test_picture);
-    if (placing.places.empty() && mode == CropMode::automatic && test_box->is_noop(test_width, test_height)) {
+    // A scaled encode's whole frame is its picture: Source only's test picture
+    // always, Auto's when no bars were found in the test.
+    if (placing.places.empty() &&
+        (mode == CropMode::source_only || test_box->is_noop(test_width, test_height))) {
         placing.places = scaled_places(source_width, source_height, test_width, test_height, source_box);
     }
     return placing;
