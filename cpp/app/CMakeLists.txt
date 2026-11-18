@@ -24,11 +24,13 @@ add_library(vml_app STATIC
     frame_compare_inspect.cpp
     frame_compare_panel.cpp
     frame_controls.cpp
+    graph_bundle.cpp
     graph_panel.cpp
     i18n.cpp
     key_guide.cpp
     main_window.cpp
     main_window_compare.cpp
+    main_window_exports.cpp
     main_window_graph.cpp
     main_window_metrics.cpp
     main_window_options.cpp

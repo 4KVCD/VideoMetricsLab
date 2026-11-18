@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "dialogs.h"
+#include "graph_bundle.h"
 #include "probe_worker.h"
 #include "results_export.h"
 #include "row_state.h"
@@ -492,6 +493,34 @@ private:
     std::vector<ExportedRun> exported_runs() const;
     void export_results(ResultsFormat format);
 
+    // ------------------------------------- graph exports (main_window_exports.cpp)
+    // Graphs to save as one .zip file (graph_bundle.h) once the bitrate they
+    // need is read: of `videos`, compared with `reference`, with `extra`
+    // files (a video's results); `together`: the videos' graphs together as
+    // well; `automatic`: Settings' export after a run, which says less.
+    struct PendingBundle {
+        std::vector<BundleVideo> videos;
+        std::filesystem::path reference;
+        std::filesystem::path destination;
+        std::vector<BundleFile> extra;
+        bool together = true;
+        bool automatic = false;
+    };
+    // The scored test videos of the reference the Videos tab compares with,
+    // in its order; a row's, when it is one of them.
+    std::vector<BundleVideo> scored_videos() const;
+    std::optional<BundleVideo> scored_video(const RowData& row_data) const;
+    void on_export_all_graphs();
+    // One video's results as `format`, or with its graphs as a .zip file.
+    void export_video(int row, ResultsFormat format, bool with_graphs);
+    // Settings' export of a video's results and graphs after its run.
+    void export_automatically(const RowData& row_data);
+    // The results file of `row_data`'s video, as `format`: its name and bytes.
+    std::optional<BundleFile> results_file(const RowData& row_data, ResultsFormat format) const;
+    // Saves `bundle` when its bitrate is read, starting to read what is not.
+    void queue_bundle(PendingBundle bundle);
+    void write_ready_bundles();
+
     // ------------------------------------------------------------ the scores
     std::vector<std::string> reusable_metric_keys(const RowData& row_data) const;
     MetricResultSet reusable_results(const RowData& row_data) const;
@@ -743,6 +772,11 @@ private:
     std::vector<std::shared_ptr<RowData>> checked_rows_for_run_;
     QPushButton* save_button_ = nullptr;
     QPushButton* show_graph_button_ = nullptr;
+    QPushButton* export_graphs_button_ = nullptr;
+    // Graph exports waiting for their bitrate (queue_bundle), and the timer
+    // that looks whether it is read.
+    std::vector<PendingBundle> pending_bundles_;
+    QTimer* bundle_timer_ = nullptr;
     QLabel* status_label_ = nullptr;
     std::vector<ElidedLabel*> job_progress_labels_;
 };

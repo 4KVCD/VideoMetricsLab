@@ -30,6 +30,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"ffmpeg_dir", &Settings::ffmpeg_dir},
         {"cache_dir", &Settings::cache_dir},
         {"export_dir", &Settings::export_dir},
+        {"auto_export", &Settings::auto_export},
         {"default_gpu_decode", &Settings::default_gpu_decode},
         {"default_compute_psnr", &Settings::default_compute_psnr},
         {"default_compute_ssim", &Settings::default_compute_ssim},
@@ -221,6 +222,7 @@ std::string Settings::text() const {
     data["ffmpeg_dir"] = ffmpeg_dir;
     data["cache_dir"] = cache_dir;
     data["export_dir"] = export_dir;
+    data["auto_export"] = auto_export;
     data["default_gpu_decode"] = default_gpu_decode;
     data["default_compute_psnr"] = default_compute_psnr;
     data["default_compute_ssim"] = default_compute_ssim;

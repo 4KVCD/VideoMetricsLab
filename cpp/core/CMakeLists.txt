@@ -80,6 +80,7 @@ add_library(vml_core
     src/vmaf_cuda.cpp
     src/vmaf_v1_gpu.cpp
     src/vmaf_vulkan.cpp
+    src/zip_archive.cpp
 )
 target_include_directories(vml_core PUBLIC include)
 # The app's version, for every part of it: shown, compared by the update
