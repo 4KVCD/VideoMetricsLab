@@ -73,10 +73,16 @@ struct CompareArguments {
     // --segments: where scores fall past these (weak_frames.h), with the
     // options that shape the segments; unset ones take SegmentRules' defaults.
     std::vector<WeakCondition> segments;
+    // --segments saved: the conditions and options saved in the window's
+    // Settings > Weak segments (weak_segment_*), taken once the settings are
+    // read (take_saved_segments); `segments` is empty until then.
+    bool segments_saved = false;
     bool segments_all = false;
     std::optional<int> segment_min_frames;
     std::optional<int> segment_merge_frames;
     std::optional<std::string> segments_dir;  // the folder for each video's segment files
+    // --segments-report: one file of every test video's segments (JSON, or CSV for a .csv name).
+    std::optional<std::string> segments_report;
     // --run-dir: the folder for each video's saved run (<name>.metrics.json), as Save analysis results writes it.
     std::optional<std::string> run_dir;
     // --log-file: the file the app's log is written to as well, as the window's log (file_names.h's fields in it).

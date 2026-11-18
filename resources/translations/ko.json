@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "아직 조건이 없습니다. 지표 그래프의 약한 구간은 표시된 지표에서 시작합니다.",
   "Save as default": "기본값으로 저장",
   "Weak segments": "약한 구간",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "동영상의 점수를 약하다고 보는 조건입니다. 지표 그래프 > 가장 나쁜 프레임 > 약한 구간은 이 조건에서 시작하며, 그곳의 기본값으로 저장으로 여기 조건이 바뀝니다."
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "동영상의 점수를 약하다고 보는 조건입니다. 지표 그래프 > 가장 나쁜 프레임 > 약한 구간은 이 조건에서 시작하며, 그곳의 기본값으로 저장으로 여기 조건이 바뀝니다.",
+  "Don't export weak segments automatically": "약한 구간을 자동으로 내보내지 않음",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "점수를 계산한 모든 테스트 동영상의 이 조건에 따른 약한 구간을 하나의 JSON 또는 CSV 파일로 내보냅니다.",
+  "Export all videos...": "모든 동영상 내보내기...",
+  "Export each video's weak segments next to it": "각 동영상의 약한 구간을 동영상 옆에 내보내기",
+  "Export each video's weak segments to the export folder": "각 동영상의 약한 구간을 내보내기 폴더로 내보내기",
+  "Export weak segments report": "약한 구간 보고서 내보내기",
+  "Export weak segments report...": "약한 구간 보고서 내보내기...",
+  "JSON file (*.json);;CSV file (*.csv)": "JSON 파일 (*.json);;CSV 파일 (*.csv)",
+  "No weak segment conditions": "약한 구간 조건 없음",
+  "Weak segments report exported to {path}": "약한 구간 보고서를 {path}에 내보냈습니다",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "각 동영상의 점수를 계산한 뒤 위 규칙에 따른 약한 구간을 JSON과 CSV로 저장합니다. 동영상과 포함된 지표의 이름으로 저장합니다 (<video>.vmaf.segments.json). 조건이 설정되지 않은 동안에는 아무것도 저장되지 않습니다. 내보내기 폴더로: 내보내기 폴더가 설정되지 않은 동안에는 동영상 옆에 저장합니다. 같은 이름의 기존 파일은 바뀝니다.",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "먼저 설정 > 약한 구간에서 조건을 설정하세요. 보고서는 저장된 조건을 따릅니다.",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "{name}의 약한 구간을 내보내지 않았습니다. 설정 > 약한 구간에 설정된 조건이 없습니다.",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "약한 구간 보고서, 실행할 때마다의 내보내기, 명령줄의 --segments saved도 이 조건을 사용합니다."
  },
  "plurals": {
   "about {count} day": [

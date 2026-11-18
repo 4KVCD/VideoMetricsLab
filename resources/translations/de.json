@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Noch keine Bedingung: Schwache Abschnitte in Metrik-Diagramme beginnt mit der angezeigten Metrik.",
   "Save as default": "Als Standard speichern",
   "Weak segments": "Schwache Abschnitte",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Wo die Werte eines Videos als schwach gelten. Metrik-Diagramme > Schlechteste Bilder > Schwache Abschnitte beginnt mit diesen, und sein Als Standard speichern ändert sie hier."
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Wo die Werte eines Videos als schwach gelten. Metrik-Diagramme > Schlechteste Bilder > Schwache Abschnitte beginnt mit diesen, und sein Als Standard speichern ändert sie hier.",
+  "Don't export weak segments automatically": "Schwache Abschnitte nicht automatisch exportieren",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "Die schwachen Abschnitte jedes bewerteten Testvideos nach diesen Bedingungen, in einer JSON- oder CSV-Datei.",
+  "Export all videos...": "Alle Videos exportieren...",
+  "Export each video's weak segments next to it": "Schwache Abschnitte jedes Videos daneben exportieren",
+  "Export each video's weak segments to the export folder": "Schwache Abschnitte jedes Videos in den Exportordner exportieren",
+  "Export weak segments report": "Bericht der schwachen Abschnitte exportieren",
+  "Export weak segments report...": "Bericht der schwachen Abschnitte exportieren...",
+  "JSON file (*.json);;CSV file (*.csv)": "JSON-Datei (*.json);;CSV-Datei (*.csv)",
+  "No weak segment conditions": "Keine Bedingungen für schwache Abschnitte",
+  "Weak segments report exported to {path}": "Bericht der schwachen Abschnitte exportiert nach {path}",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "Speichert nach der Bewertung jedes Videos seine schwachen Abschnitte nach den obigen Regeln als JSON und CSV, benannt nach dem Video und den Metriken, die sie abdecken (<video>.vmaf.segments.json). Nichts wird gespeichert, solange keine Bedingung festgelegt ist. In den Exportordner: neben das Video, solange kein Exportordner festgelegt ist. Vorhandene Dateien gleichen Namens werden ersetzt.",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Legen Sie zuerst die Bedingungen unter Einstellungen > Schwache Abschnitte fest: Der Bericht folgt den gespeicherten.",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Die schwachen Abschnitte von {name} wurden nicht exportiert: Unter Einstellungen > Schwache Abschnitte ist keine Bedingung festgelegt.",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "Der Bericht der schwachen Abschnitte, die Exporte nach jedem Lauf und --segments saved der Befehlszeile verwenden sie ebenfalls."
  },
  "plurals": {
   "about {count} day": [

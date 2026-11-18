@@ -52,6 +52,7 @@
 #include "vml/settings.h"
 #include "vml/update_check.h"
 #include "vml/video.h"
+#include "vml/weak_frames.h"
 
 class QCheckBox;
 class QGroupBox;
@@ -510,11 +511,20 @@ private:
     // in its order; a row's, when it is one of them.
     std::vector<BundleVideo> scored_videos() const;
     std::optional<BundleVideo> scored_video(const RowData& row_data) const;
+    // Every scored test video's weak segments (scored_videos) by `rules`
+    // (the saved ones, or the Weak segments dialog's), in one JSON or CSV
+    // file the user names.
+    void export_segments_report(const SegmentRules& rules);
+    // The rules saved in Settings > Weak segments (weak_segment_*).
+    SegmentRules saved_weak_rules() const;
     void on_export_all_graphs();
     // One video's results as `format`, or with its graphs as a .zip file.
     void export_video(int row, ResultsFormat format, bool with_graphs);
     // Settings' export of a video's results and graphs after its run.
     void export_automatically(const RowData& row_data);
+    // Settings' Weak segments after each run: the video's segments by the
+    // saved rules as <video>.<metrics>.segments.json and .csv.
+    void export_segments_automatically(const RowData& row_data);
     // The results file of `row_data`'s video, as `format`: its name and bytes.
     std::optional<BundleFile> results_file(const RowData& row_data, ResultsFormat format) const;
     // Saves `bundle` when its bitrate is read, starting to read what is not.

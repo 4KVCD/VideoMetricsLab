@@ -82,6 +82,38 @@ SegmentRules segment_rules(const CompareArguments& arguments) {
     return rules;
 }
 
+std::vector<std::string> take_saved_segments(CompareArguments& arguments, const Settings& settings,
+                                             const std::vector<std::string>& asked) {
+    const SegmentRules saved =
+        saved_segment_rules(settings.weak_segment_conditions, settings.weak_segments_all,
+                            settings.weak_segment_min_frames, settings.weak_segment_merge_frames);
+    std::vector<std::string> left_out;
+    arguments.segments.clear();
+    for (const WeakCondition& condition : saved.conditions) {
+        if (std::find(asked.begin(), asked.end(), condition.key) != asked.end()) {
+            arguments.segments.push_back(condition);
+        } else {
+            left_out.push_back(condition.text());
+        }
+    }
+    if (saved.conditions.empty()) {
+        throw std::invalid_argument("--segments saved: no conditions are saved; set them in the app's Settings > "
+                                    "Weak segments, or give them here (such as \"vmaf<90\")");
+    }
+    if (arguments.segments.empty()) {
+        std::string texts;
+        for (const std::string& text : left_out) {
+            texts += (texts.empty() ? "" : ", ") + text;
+        }
+        throw std::invalid_argument("--segments saved: none of the saved conditions (" + texts +
+                                    ") is on a metric compared (-m)");
+    }
+    arguments.segments_all = arguments.segments_all || saved.all;
+    arguments.segment_min_frames = arguments.segment_min_frames.value_or(saved.min_frames);
+    arguments.segment_merge_frames = arguments.segment_merge_frames.value_or(saved.merge_frames);
+    return left_out;
+}
+
 std::optional<std::string> segments_refusal(const std::vector<WeakCondition>& conditions,
                                             const std::vector<std::string>& asked) {
     for (const WeakCondition& condition : conditions) {
@@ -182,8 +214,10 @@ bool write_segment_files(std::vector<TestVideo>& videos, const SegmentRules& rul
             continue;
         }
         const std::vector<WeakSegment> segments = weak_segments(*video.result, rules);
+        // Named after the conditions' metrics, as the window names them.
+        const std::string suffix = "." + segments_file_suffix(rules);
         const std::vector<std::filesystem::path> paths =
-            unique_output_paths(folder, video.file_stem(), {".segments.json", ".segments.csv"}, reserved);
+            unique_output_paths(folder, video.file_stem(), {suffix + ".json", suffix + ".csv"}, reserved);
         try {
             if (const std::optional<std::string> wrong = write_json_file(paths[0], segments_json(segments, rules))) {
                 throw std::runtime_error(*wrong);
@@ -195,9 +229,30 @@ bool write_segment_files(std::vector<TestVideo>& videos, const SegmentRules& rul
             continue;
         }
         video.segment_files = paths;
-        message(video.name() + ": its weak segments in " + platform::path_text(paths[0]) + " and .segments.csv");
+        message(video.name() + ": its weak segments in " + platform::path_text(paths[0]) + " and .csv");
     }
     return written;
+}
+
+std::optional<std::string> write_segments_report(
+    const std::vector<std::pair<const TestVideo*, std::filesystem::path>>& videos, const SegmentRules& rules,
+    const std::filesystem::path& file) {
+    std::vector<SegmentsReportVideo> report;
+    for (const auto& [video, reference] : videos) {
+        if (video->result) {
+            report.push_back({video->name(), platform::path_text(video->path), platform::path_text(reference),
+                              &*video->result});
+        }
+    }
+    if (ascii_lower(platform::path_text(file.extension())) == ".csv") {
+        try {
+            write_text(file, text_file(segments_report_csv(report, rules)));
+        } catch (const std::exception& failure) {
+            return failure.what();
+        }
+        return std::nullopt;
+    }
+    return write_json_file(file, segments_report_json(report, rules));
 }
 
 }  // namespace vml::cli

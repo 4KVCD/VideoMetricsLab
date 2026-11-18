@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Nog geen voorwaarde: Zwakke segmenten in Metriekgrafieken begint bij de getoonde metriek.",
   "Save as default": "Opslaan als standaard",
   "Weak segments": "Zwakke segmenten",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Waar de scores van een video als zwak gelden. Metriekgrafieken > Slechtste frames > Zwakke segmenten begint hiermee, en de knop Opslaan als standaard daar wijzigt ze hier."
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Waar de scores van een video als zwak gelden. Metriekgrafieken > Slechtste frames > Zwakke segmenten begint hiermee, en de knop Opslaan als standaard daar wijzigt ze hier.",
+  "Don't export weak segments automatically": "Zwakke segmenten niet automatisch exporteren",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "De zwakke segmenten van elke beoordeelde testvideo volgens deze voorwaarden, in één JSON- of CSV-bestand.",
+  "Export all videos...": "Alle video's exporteren...",
+  "Export each video's weak segments next to it": "Zwakke segmenten van elke video ernaast exporteren",
+  "Export each video's weak segments to the export folder": "Zwakke segmenten van elke video naar de exportmap exporteren",
+  "Export weak segments report": "Rapport zwakke segmenten exporteren",
+  "Export weak segments report...": "Rapport zwakke segmenten exporteren...",
+  "JSON file (*.json);;CSV file (*.csv)": "JSON-bestand (*.json);;CSV-bestand (*.csv)",
+  "No weak segment conditions": "Geen voorwaarden voor zwakke segmenten",
+  "Weak segments report exported to {path}": "Rapport zwakke segmenten geëxporteerd naar {path}",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "Slaat na het beoordelen van elke video de zwakke segmenten volgens de regels hierboven op als JSON en CSV, met de naam van de video en de metrieken die ze dekken (<video>.vmaf.segments.json). Er wordt niets opgeslagen zolang er geen voorwaarde is ingesteld. Naar de exportmap: naast de video zolang er geen exportmap is ingesteld. Bestaande bestanden met dezelfde namen worden vervangen.",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Stel eerst de voorwaarden in bij Instellingen > Zwakke segmenten: het rapport volgt de opgeslagen voorwaarden.",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "De zwakke segmenten van {name} zijn niet geëxporteerd: er is geen voorwaarde ingesteld in Instellingen > Zwakke segmenten.",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "Het rapport zwakke segmenten, de exports na elke run en --segments saved op de opdrachtregel gebruiken ze ook."
  },
  "plurals": {
   "about {count} day": [

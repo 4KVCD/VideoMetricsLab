@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "ยังไม่มีเงื่อนไข: ช่วงที่อ่อน ของ กราฟเมตริก จะเริ่มจากเมตริกที่แสดงอยู่",
   "Save as default": "บันทึกเป็นค่าเริ่มต้น",
   "Weak segments": "ช่วงที่อ่อน",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "กำหนดว่าคะแนนของวิดีโอถือว่าอ่อนเมื่อใด กราฟเมตริก > เฟรมที่แย่ที่สุด > ช่วงที่อ่อน จะเริ่มจากค่าเหล่านี้ และปุ่ม บันทึกเป็นค่าเริ่มต้น ที่นั่นจะเปลี่ยนค่าเหล่านี้ที่นี่"
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "กำหนดว่าคะแนนของวิดีโอถือว่าอ่อนเมื่อใด กราฟเมตริก > เฟรมที่แย่ที่สุด > ช่วงที่อ่อน จะเริ่มจากค่าเหล่านี้ และปุ่ม บันทึกเป็นค่าเริ่มต้น ที่นั่นจะเปลี่ยนค่าเหล่านี้ที่นี่",
+  "Don't export weak segments automatically": "ไม่ส่งออกช่วงที่อ่อนอัตโนมัติ",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "ช่วงที่อ่อนตามเงื่อนไขเหล่านี้ของวิดีโอทดสอบทุกรายการที่ให้คะแนนแล้ว ในไฟล์ JSON หรือ CSV ไฟล์เดียว",
+  "Export all videos...": "ส่งออกวิดีโอทั้งหมด...",
+  "Export each video's weak segments next to it": "ส่งออกช่วงที่อ่อนของวิดีโอแต่ละรายการไว้ข้างวิดีโอ",
+  "Export each video's weak segments to the export folder": "ส่งออกช่วงที่อ่อนของวิดีโอแต่ละรายการไปยังโฟลเดอร์ส่งออก",
+  "Export weak segments report": "ส่งออกรายงานช่วงที่อ่อน",
+  "Export weak segments report...": "ส่งออกรายงานช่วงที่อ่อน...",
+  "JSON file (*.json);;CSV file (*.csv)": "ไฟล์ JSON (*.json);;ไฟล์ CSV (*.csv)",
+  "No weak segment conditions": "ไม่มีเงื่อนไขช่วงที่อ่อน",
+  "Weak segments report exported to {path}": "ส่งออกรายงานช่วงที่อ่อนไปที่ {path} แล้ว",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "หลังให้คะแนนวิดีโอแต่ละรายการ จะบันทึกช่วงที่อ่อนของวิดีโอตามกฎข้างต้นเป็น JSON และ CSV โดยตั้งชื่อตามวิดีโอและเมตริกที่ครอบคลุม (<video>.vmaf.segments.json) จะไม่บันทึกสิ่งใดหากยังไม่ได้ตั้งเงื่อนไข ไปยังโฟลเดอร์ส่งออก: ไว้ข้างวิดีโอหากยังไม่ได้ตั้งโฟลเดอร์ส่งออก ไฟล์ที่มีชื่อเดียวกันจะถูกแทนที่",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "ตั้งเงื่อนไขใน การตั้งค่า > ช่วงที่อ่อน ก่อน: รายงานจะใช้เงื่อนไขที่บันทึกไว้",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "ไม่ได้ส่งออกช่วงที่อ่อนของ {name}: ยังไม่ได้ตั้งเงื่อนไขใน การตั้งค่า > ช่วงที่อ่อน",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "รายงานช่วงที่อ่อน การส่งออกหลังการรันแต่ละครั้ง และ --segments saved ของบรรทัดคำสั่งก็ใช้ค่าเหล่านี้ด้วย"
  },
  "plurals": {
   "about {count} day": [

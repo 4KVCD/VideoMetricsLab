@@ -100,6 +100,7 @@ public:
     // empty for the palette's own).
     QComboBox* export_graph_theme = nullptr;
     QComboBox* auto_export = nullptr;
+    QComboBox* auto_export_segments = nullptr;
     QPushButton* export_background_button = nullptr;
     QPushButton* export_text_button = nullptr;
     QCheckBox* use_cache = nullptr;

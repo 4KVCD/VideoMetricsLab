@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "لا شرط بعد: تبدأ المقاطع الضعيفة في رسوم المقاييس من المقياس المعروض.",
   "Save as default": "حفظ كافتراضي",
   "Weak segments": "المقاطع الضعيفة",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "متى تُعدّ نتائج الفيديو ضعيفة. تبدأ رسوم المقاييس > أسوأ الإطارات > المقاطع الضعيفة من هذه الشروط، وزر «حفظ كافتراضي» فيها يغيّرها هنا."
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "متى تُعدّ نتائج الفيديو ضعيفة. تبدأ رسوم المقاييس > أسوأ الإطارات > المقاطع الضعيفة من هذه الشروط، وزر «حفظ كافتراضي» فيها يغيّرها هنا.",
+  "Don't export weak segments automatically": "لا تصدّر المقاطع الضعيفة تلقائيًا",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "المقاطع الضعيفة لكل فيديو مختبَر حُسبت نتائجه، وفق هذه الشروط، في ملف JSON أو CSV واحد.",
+  "Export all videos...": "تصدير كل الفيديوهات...",
+  "Export each video's weak segments next to it": "صدّر المقاطع الضعيفة لكل فيديو بجواره",
+  "Export each video's weak segments to the export folder": "صدّر المقاطع الضعيفة لكل فيديو إلى مجلد التصدير",
+  "Export weak segments report": "تصدير تقرير المقاطع الضعيفة",
+  "Export weak segments report...": "تصدير تقرير المقاطع الضعيفة...",
+  "JSON file (*.json);;CSV file (*.csv)": "ملف JSON (*.json);;ملف CSV (*.csv)",
+  "No weak segment conditions": "لا شروط للمقاطع الضعيفة",
+  "Weak segments report exported to {path}": "صُدّر تقرير المقاطع الضعيفة إلى {path}",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "بعد حساب نتائج كل فيديو، يحفظ مقاطعه الضعيفة وفق القواعد أعلاه بصيغتي JSON وCSV، مسمّاة باسم الفيديو والمقاييس التي تغطيها (<video>.vmaf.segments.json). لا يُحفظ شيء ما دام لم يُضبط أي شرط. إلى مجلد التصدير: بجوار الفيديو ما دام لم يُحدَّد مجلد للتصدير. تُستبدل أي ملفات موجودة بالأسماء نفسها.",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "اضبط الشروط في الإعدادات > المقاطع الضعيفة أولًا: يتبع التقرير الشروط المحفوظة.",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "لم تُصدَّر المقاطع الضعيفة لـ {name}: لم يُضبط أي شرط في الإعدادات > المقاطع الضعيفة.",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "يستخدمها أيضًا تقرير المقاطع الضعيفة والتصديرات بعد كل تشغيل و--segments saved في سطر الأوامر."
  },
  "plurals": {
   "about {count} day": [

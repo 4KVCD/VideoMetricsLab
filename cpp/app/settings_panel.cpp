@@ -228,6 +228,7 @@ QGroupBox* SettingsPanel::build_storage_box() {
     connect(auto_export, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
     storage_form->addRow(app::tr("After each run:"), auto_export);
 
+
     use_cache = new QCheckBox(app::tr("Reuse a saved result when a video is added again"));
     use_cache->setChecked(settings_.use_cache);
     connect(use_cache, &QCheckBox::toggled, this, [this] { on_edited(); });
@@ -300,6 +301,11 @@ QGroupBox* SettingsPanel::build_weak_segments_box() {
     note->setWordWrap(true);
     theme::style(note, "color: {muted};");
     layout->addWidget(note);
+    auto* used = new QLabel(app::tr("The weak segments report, the exports after each run and the command line's "
+                                    "--segments saved use them too."));
+    used->setWordWrap(true);
+    theme::style(used, "color: {muted};");
+    layout->addWidget(used);
     std::vector<std::string> keys;
     for (const MetricDefinition& definition : metrics()) {
         keys.emplace_back(definition.key);
@@ -312,6 +318,26 @@ QGroupBox* SettingsPanel::build_weak_segments_box() {
     weak_segments->set_rules(saved);
     connect(weak_segments, &SegmentRulesEditor::changed, this, [this] { on_edited(); });
     layout->addWidget(weak_segments);
+
+    // The entries' data: Settings' auto_export_segments values.
+    auto_export_segments = new QComboBox;
+    auto_export_segments->addItem(app::tr("Don't export weak segments automatically"), QString());
+    auto_export_segments->addItem(app::tr("Export each video's weak segments next to it"), QStringLiteral("beside"));
+    auto_export_segments->addItem(app::tr("Export each video's weak segments to the export folder"),
+                                  QStringLiteral("folder"));
+    const int chosen_segments = auto_export_segments->findData(text_of(settings_.auto_export_segments));
+    auto_export_segments->setCurrentIndex(chosen_segments >= 0 ? chosen_segments : 0);
+    auto_export_segments->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    auto_export_segments->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    // As rich text, which Qt wraps (a plain tooltip is one line however long)
+    auto_export_segments->setToolTip(Qt::convertFromPlainText(app::tr(
+        "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the "
+        "video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. "
+        "To the export folder: next to the video while no export folder is set. Existing files of the same names "
+        "are replaced."),
+        Qt::WhiteSpaceNormal));
+    connect(auto_export_segments, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
+    weak_segments->add_option_row(app::tr("After each run:"), auto_export_segments);
     return box;
 }
 
@@ -754,6 +780,7 @@ void SettingsPanel::read_controls() {
     settings_.weak_segments_all = weak.all;
     settings_.weak_segment_min_frames = weak.min_frames;
     settings_.weak_segment_merge_frames = weak.merge_frames;
+    settings_.auto_export_segments = auto_export_segments->currentData().toString().toStdString();
     settings_.export_graph_theme = export_graph_theme->currentData().toString().toStdString();
     settings_.export_graph_background = export_background_button->property("chosen").toString().toStdString();
     settings_.export_graph_text = export_text_button->property("chosen").toString().toStdString();

@@ -94,6 +94,19 @@ SegmentMetric segment_metric(const ScoreSamples& samples, const std::string& key
 
 std::string csv_number(const std::optional<double>& value) { return value ? python_repr(*value) : std::string(); }
 
+// Text as a CSV cell: quoted, its quotes doubled, where it holds a comma, a
+// quote or a line break.
+std::string csv_text(const std::string& text) {
+    if (text.find_first_of(",\"\r\n") == std::string::npos) {
+        return text;
+    }
+    std::string quoted = "\"";
+    for (const char c : text) {
+        quoted += c == '"' ? std::string("\"\"") : std::string(1, c);
+    }
+    return quoted + "\"";
+}
+
 }  // namespace
 
 std::optional<ScoreSamples> score_samples(const MetricResultSet& results, const std::string& key) {
@@ -354,6 +367,48 @@ std::string segments_csv(const std::vector<WeakSegment>& segments, const Segment
             text += "," + csv_number(metric.min) + "," + csv_number(metric.max) + "," + csv_number(metric.mean);
         }
         text += "\n";
+    }
+    return text;
+}
+
+Json segments_report_json(const std::vector<SegmentsReportVideo>& videos, const SegmentRules& rules) {
+    SegmentRules without_ranges = rules;
+    without_ranges.ranges.clear();
+    Json report = segments_json({}, without_ranges);
+    report.erase("ranges");
+    report.erase("segments");
+    Json list = Json::array();
+    for (const SegmentsReportVideo& video : videos) {
+        const std::vector<WeakSegment> segments = weak_segments(*video.result, without_ranges);
+        long long frames = 0;
+        for (const WeakSegment& segment : segments) {
+            frames += segment.frames();
+        }
+        list.push_back(Json{{"name", video.name},
+                            {"path", video.path},
+                            {"reference", video.reference},
+                            {"segment_count", segments.size()},
+                            {"weak_frames", frames},
+                            {"segments", segments_json(segments, without_ranges).at("segments")}});
+    }
+    report["videos"] = std::move(list);
+    return report;
+}
+
+std::string segments_report_csv(const std::vector<SegmentsReportVideo>& videos, const SegmentRules& rules) {
+    SegmentRules without_ranges = rules;
+    without_ranges.ranges.clear();
+    // segments_csv's header and rows, each row led by the video's cells.
+    const std::string header = segments_csv({}, without_ranges);
+    std::string text = "video,reference," + header;
+    for (const SegmentsReportVideo& video : videos) {
+        const std::string rows = segments_csv(weak_segments(*video.result, without_ranges), without_ranges);
+        const std::string lead = csv_text(video.name) + "," + csv_text(video.reference) + ",";
+        for (std::size_t start = header.size(); start < rows.size();) {
+            const std::size_t end = rows.find('\n', start);
+            text += lead + rows.substr(start, end - start + 1);
+            start = end + 1;
+        }
     }
     return text;
 }

@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "尚无条件：指标图表 的 弱片段 从当前显示的指标开始。",
   "Save as default": "保存为默认值",
   "Weak segments": "弱片段",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "视频的分数在哪些情况下算作弱。指标图表 > 最差帧 > 弱片段 从这些条件开始，其 保存为默认值 会在此处更改它们。"
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "视频的分数在哪些情况下算作弱。指标图表 > 最差帧 > 弱片段 从这些条件开始，其 保存为默认值 会在此处更改它们。",
+  "Don't export weak segments automatically": "不自动导出弱片段",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "每个已评分测试视频按这些条件得到的弱片段，保存在一个 JSON 或 CSV 文件中。",
+  "Export all videos...": "导出所有视频...",
+  "Export each video's weak segments next to it": "将每个视频的弱片段导出到视频旁边",
+  "Export each video's weak segments to the export folder": "将每个视频的弱片段导出到导出文件夹",
+  "Export weak segments report": "导出弱片段报告",
+  "Export weak segments report...": "导出弱片段报告...",
+  "JSON file (*.json);;CSV file (*.csv)": "JSON 文件 (*.json);;CSV 文件 (*.csv)",
+  "No weak segment conditions": "没有弱片段条件",
+  "Weak segments report exported to {path}": "弱片段报告已导出到 {path}",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "每个视频评分后，按上述规则将其弱片段保存为 JSON 和 CSV，以视频名称及其涵盖的指标命名 (<video>.vmaf.segments.json)。未设置任何条件时不会保存任何内容。保存到导出文件夹：未设置导出文件夹时保存在视频旁边。同名的现有文件会被替换。",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "请先在 设置 > 弱片段 中设置条件：报告按照保存的条件生成。",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "{name} 的弱片段未导出：设置 > 弱片段 中未设置任何条件。",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "弱片段报告、每次运行后的导出以及命令行的 --segments saved 也使用这些条件。"
  },
  "plurals": {
   "about {count} day": [

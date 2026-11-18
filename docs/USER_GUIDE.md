@@ -57,6 +57,9 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
    for it alone, until **Save as default** keeps it in Settings for the next
    time; a saved condition on a metric the video doesn't have is kept for
    videos that do. The rules can also be set in Settings directly.
+   **Export all videos...** saves every scored test video's segments by the
+   dialog's conditions in one file (see
+   [Exporting weak segments](#exporting-weak-segments)).
 
 **Highlight best/worst results**, under the video table, colours each metric's
 best score green and its worst red among the test videos that have one.
@@ -401,13 +404,14 @@ $run.videos[0].metrics.vmaf.score
 | `--batch CSV` | Compare the videos a CSV file lists, in place of REFERENCE and TEST, all in one run (the start-up and the GPU checks once, not once per reference). A row per test video, with the columns `reference` and `test` (a file or a pattern) and, if wanted, `sequence` and any others, which `--scores-csv` keeps; paths are relative to the CSV file's folder. The tables come per reference, and `--json` writes `{"batch": [...]}`, each reference's results as without `--batch`. A reference that cannot be read is said and the others are still compared (exit code 1). Not with `--difference`. |
 | `--scores-csv FILE` | Write each test video's bitrate (`kbps`) and scores to FILE, a row per video, with its `sequence` (the `--batch` row's, else the reference's file name), `test`, `reference` and the `--batch` row's other columns: the file `bdrate --anchor` and `--test` read. A video whose bitrate is not known, or with only a part compared (`--range`, `--duration`), is left out, said. |
 | `--worst N` | After the tables, each metric's N worst dips: the worst frame of each (a frame within 1 s of a worse one is part of its dip), with every metric's score there. |
-| `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. |
+| `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. `--segments saved` takes the conditions saved in the app's Settings > Weak segments (those on metrics not compared are left out, and said), and its any/every choice, shortest segment and gap where the command gives none. |
 | `--segments-all` | A frame is weak only where every `--segments` condition holds. |
 | `--segment-min-frames N`, `--segment-merge-frames N` | Leave out segments shorter than N frames (default 1); join segments at most N frames apart (default 0). |
-| `--segments-dir FOLDER` | Write each video's segments to FOLDER as `<video>.segments.json` and `<video>.segments.csv`. |
+| `--segments-dir FOLDER` | Write each video's segments to FOLDER as `<video>.<metrics>.segments.json` and `.csv`, `<metrics>` the conditions' metrics joined by `+` (`<video>.vmaf+ssimulacra2.segments.json`), as the app names them. |
+| `--segments-report FILE` | Write every test video's segments (with `--batch`, every reference's) to FILE as one report, as the app's **Export weak segments report...**: JSON, or CSV when FILE ends in `.csv`. The fields of `--json`'s path are filled in in its path. |
 | `--run-dir FOLDER` | Write each video's result to FOLDER as `<video>.metrics.json`, the file **Save analysis results** writes: Metric Graphs' **Add saved run** opens it on any PC, without its saved scores. |
 | `--log-file FILE` | Also write the app's log to FILE, as the window writes its own: the whole run, whatever `-v` says, added to the end when FILE is there. |
-| `--name TEMPLATE` | Name each test video's files (`--csv`, `--segments-dir`, `--run-dir`) after TEMPLATE in place of `<video>`. Its fields: `{test}` and `{reference}` (the files' names without extension), `{version}` (the app's: `2.6`), `{date}` and `{time}` (the run's start: `20261117`, `180912`) and with `--batch` `{sequence}` (the row's, else the reference's name); `{{` and `}}` are braces. In the names, characters other than letters, digits, `-`, `_` and `.` become `_`, as in `<video>`. The same fields, but `{sequence}`, are filled in in `--json`'s, `--scores-csv`'s and `--log-file`'s paths, `{test}` and `{reference}` only when one video is compared. A name already taken gets a number, which the JSON's `csv`, `run_file` and `segment_files` give. |
+| `--name TEMPLATE` | Name each test video's files (`--csv`, `--segments-dir`, `--run-dir`) after TEMPLATE in place of `<video>`. Its fields: `{test}` and `{reference}` (the files' names without extension), `{version}` (the app's: `2.6`), `{date}` and `{time}` (the run's start: `20261117`, `180912`) and with `--batch` `{sequence}` (the row's, else the reference's name); `{{` and `}}` are braces. In the names, characters other than letters, digits, `-`, `_` and `.` become `_`, as in `<video>`. The same fields, but `{sequence}`, are filled in in `--json`'s, `--scores-csv`'s, `--segments-report`'s and `--log-file`'s paths, `{test}` and `{reference}` only when one video is compared. A name already taken gets a number, which the JSON's `csv`, `run_file` and `segment_files` give. |
 | `-q`, `--quiet` | No progress, only the results. |
 | `-v`, `--verbose` | The app's log as well. |
 
@@ -612,6 +616,32 @@ the video's graphs as a `.zip` file.
 and graphs as `<video> - VideoMetricsLab.zip` once its run ends and its
 bitrate is read: next to the test video, or in the export folder (next to the
 video while none is set). A file of the same name is replaced.
+
+### Exporting weak segments
+
+The weak segments exports follow the rules saved in **Settings > Weak
+segments** (set there, or with **Save as default** in Metric Graphs >
+Worst frames > **Weak segments...**), and are named after the metrics their
+conditions cover.
+
+- **Export weak segments report...** in the Videos table's right-click menu
+  saves every test video scored against the reference, by the saved rules,
+  in one file, JSON or CSV as its name says. **Export all videos...** in the
+  Weak segments dialog does the same by the dialog's conditions, saved or
+  not (over the whole videos, without a highlighted range).
+  The JSON gives the conditions and options, then each video's `name`,
+  `path`, `reference`, `segment_count`, `weak_frames` (the segments' frames
+  added up) and `segments`; the CSV is a row per segment, led by its video
+  and reference. With strict conditions it can be far smaller than the
+  results file; with loose ones, on a film, far larger.
+- **Settings > Weak segments > After each run** saves each video's
+  segments as `<video>.<metrics>.segments.json` and `.csv` once its run ends:
+  next to the test video, or in the export folder (next to the video while
+  none is set). Files of the same names are replaced. Nothing is saved while
+  no condition is set.
+
+The command line does the same with `--segments saved`, `--segments-dir`
+and `--segments-report` (see [Command line](#command-line)).
 
 Cached results are reused when files and relevant settings match. A
 compatible subset can load as partially calculated; request calculation to

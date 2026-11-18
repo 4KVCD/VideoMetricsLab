@@ -7,18 +7,29 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
 #include "arguments.h"
 #include "test_video.h"
+#include "vml/settings.h"
 #include "vml/weak_frames.h"
 
 namespace vml::cli {
 
 // The rules --segments and its options give.
 SegmentRules segment_rules(const CompareArguments& arguments);
+
+// --segments saved: the conditions saved in the window's Settings > Weak segments
+// (`settings`) on the metrics compared (`asked`) put in `arguments`, and
+// its any/every choice, shortest segment and gap where the command gave
+// none (--segments-all can only add "every"). The saved conditions left
+// out, on metrics not compared, are returned. Throws
+// std::invalid_argument when none is left.
+std::vector<std::string> take_saved_segments(CompareArguments& arguments, const Settings& settings,
+                                             const std::vector<std::string>& asked);
 
 // Why --segments cannot be answered with the metrics asked for: a
 // condition's metric that is not one of them. Nothing when it can.
@@ -37,7 +48,14 @@ std::string segments_text(const std::vector<TestVideo>& videos, const SegmentRul
 void add_segments_json(nlohmann::ordered_json& document, const std::vector<TestVideo>& videos,
                        const SegmentRules& rules);
 
-// --segments-dir: each video's <video>.segments.json and .segments.csv in
+// --segments-report: every video of `videos` (with its reference) in one
+// report at `file`, JSON or, for a .csv name, CSV (segments_report_json and
+// _csv). Nothing when written, else why not.
+std::optional<std::string> write_segments_report(
+    const std::vector<std::pair<const TestVideo*, std::filesystem::path>>& videos, const SegmentRules& rules,
+    const std::filesystem::path& file);
+
+// --segments-dir: each video's <video>.<metrics>.segments.json and .csv in
 // `folder`, under names no file there has (each video's segment_files says
 // where they went). Whether every one was written.
 bool write_segment_files(std::vector<TestVideo>& videos, const SegmentRules& rules,

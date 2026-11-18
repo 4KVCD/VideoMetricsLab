@@ -324,6 +324,9 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
     };
     add_export(app::tr("Export JSON..."), ExportKind::json);
     add_export(app::tr("Export CSV..."), ExportKind::csv);
+    QPushButton* report = buttons->addButton(app::tr("Export all videos..."), QDialogButtonBox::ActionRole);
+    report->setToolTip(app::tr("Every scored test video's weak segments by these conditions, in one JSON or CSV file."));
+    connect(report, &QPushButton::clicked, this, [this] { emit report_requested(editor_->rules()); });
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     layout->addWidget(buttons);
 

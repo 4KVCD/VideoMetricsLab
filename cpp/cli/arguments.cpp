@@ -55,7 +55,8 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--segments CONDITIONS] [--segments-all]
                                    [--segment-min-frames N]
                                    [--segment-merge-frames N]
-                                   [--segments-dir FOLDER] [--run-dir FOLDER]
+                                   [--segments-dir FOLDER]
+                                   [--segments-report FILE] [--run-dir FOLDER]
                                    [--log-file FILE] [--name TEMPLATE] [-q]
                                    [-v]
                                    [REFERENCE] [TEST ...]
@@ -305,7 +306,10 @@ options:
                         them holds. Frames are numbered from the video's
                         first, as its encoder numbers them; a subsample's
                         frames between two weak ones are weak, and CVVDP is
-                        judged second by second
+                        judged second by second. "saved" takes the
+                        conditions saved in the app's Settings > Weak
+                        segments (those on metrics not compared left out),
+                        and its options where none are given here
   --segments-all        a frame is weak only where every condition holds
   --segment-min-frames N
                         leave out segments shorter than N frames (default 1)
@@ -313,7 +317,14 @@ options:
                         join segments at most N frames apart (default 0)
   --segments-dir FOLDER
                         write each video's segments to FOLDER as
-                        <video>.segments.json and <video>.segments.csv
+                        <video>.<metrics>.segments.json and .csv, <metrics>
+                        the conditions' metrics joined by + (such as
+                        <video>.vmaf+ssimulacra2.segments.json)
+  --segments-report FILE
+                        write every test video's segments to FILE as one
+                        report: JSON, or CSV where FILE ends in .csv (a row
+                        per segment, led by its video and reference). The
+                        fields of --json's path are replaced in it
   --run-dir FOLDER      write each video's result to FOLDER as
                         <video>.metrics.json, the file the app's Save
                         analysis results writes and Metric Graphs' Add saved
@@ -1156,7 +1167,11 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--batch"}, [&parsed](const std::string& value) { parsed.batch = value; }),
         option({"--scores-csv"}, [&parsed](const std::string& value) { parsed.scores_csv = value; }),
         option({"--worst"}, [&parsed](const std::string& value) { parsed.worst = int_up_to(value, 1000); }),
-        option({"--segments"}, [&parsed](const std::string& value) { parsed.segments = weak_conditions(value); }),
+        option({"--segments"},
+               [&parsed](const std::string& value) {
+                   parsed.segments_saved = ascii_lower(python_strip(value)) == "saved";
+                   parsed.segments = parsed.segments_saved ? std::vector<WeakCondition>() : weak_conditions(value);
+               }),
         flag({"--segments-all"}, parsed.segments_all),
         option({"--segment-min-frames"},
                [&parsed](const std::string& value) {
@@ -1165,6 +1180,7 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--segment-merge-frames"},
                [&parsed](const std::string& value) { parsed.segment_merge_frames = int_from_zero(value); }),
         option({"--segments-dir"}, [&parsed](const std::string& value) { parsed.segments_dir = value; }),
+        option({"--segments-report"}, [&parsed](const std::string& value) { parsed.segments_report = value; }),
         option({"--run-dir"}, [&parsed](const std::string& value) { parsed.run_dir = value; }),
         option({"--log-file"}, [&parsed](const std::string& value) { parsed.log_file = value; }),
         option({"--name"}, [&parsed](const std::string& value) { parsed.name = value; }),
@@ -1237,7 +1253,7 @@ namespace {
 
 // An option given that only --segments uses, when --segments is not.
 std::optional<std::string> segment_option_alone(const CompareArguments& arguments) {
-    if (!arguments.segments.empty()) {
+    if (!arguments.segments.empty() || arguments.segments_saved) {
         return std::nullopt;
     }
     if (arguments.segments_all) {
@@ -1251,6 +1267,9 @@ std::optional<std::string> segment_option_alone(const CompareArguments& argument
     }
     if (arguments.segments_dir) {
         return "--segments-dir";
+    }
+    if (arguments.segments_report) {
+        return "--segments-report";
     }
     return std::nullopt;
 }

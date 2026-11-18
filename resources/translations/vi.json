@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Chưa có điều kiện: Đoạn yếu của Biểu đồ chỉ số bắt đầu từ chỉ số đang hiển thị.",
   "Save as default": "Lưu làm mặc định",
   "Weak segments": "Đoạn yếu",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Khi nào điểm của một video được coi là yếu. Biểu đồ chỉ số > Khung tệ nhất > Đoạn yếu bắt đầu từ các điều kiện này, và nút Lưu làm mặc định ở đó thay đổi chúng tại đây."
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Khi nào điểm của một video được coi là yếu. Biểu đồ chỉ số > Khung tệ nhất > Đoạn yếu bắt đầu từ các điều kiện này, và nút Lưu làm mặc định ở đó thay đổi chúng tại đây.",
+  "Don't export weak segments automatically": "Không tự động xuất đoạn yếu",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "Các đoạn yếu theo các điều kiện này của mọi video thử đã chấm điểm, trong một tệp JSON hoặc CSV.",
+  "Export all videos...": "Xuất tất cả video...",
+  "Export each video's weak segments next to it": "Xuất các đoạn yếu của mỗi video cạnh video đó",
+  "Export each video's weak segments to the export folder": "Xuất các đoạn yếu của mỗi video vào thư mục xuất",
+  "Export weak segments report": "Xuất báo cáo đoạn yếu",
+  "Export weak segments report...": "Xuất báo cáo đoạn yếu...",
+  "JSON file (*.json);;CSV file (*.csv)": "Tệp JSON (*.json);;Tệp CSV (*.csv)",
+  "No weak segment conditions": "Không có điều kiện đoạn yếu",
+  "Weak segments report exported to {path}": "Đã xuất báo cáo đoạn yếu vào {path}",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "Sau khi chấm điểm mỗi video, lưu các đoạn yếu của video theo các quy tắc ở trên dưới dạng JSON và CSV, đặt theo tên video và các chỉ số mà chúng bao gồm (<video>.vmaf.segments.json). Không lưu gì khi chưa đặt điều kiện nào. Vào thư mục xuất: cạnh video khi chưa đặt thư mục xuất. Các tệp cùng tên đã có sẽ bị thay thế.",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Hãy đặt điều kiện trong Cài đặt > Đoạn yếu trước: báo cáo theo các điều kiện đã lưu.",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Chưa xuất các đoạn yếu của {name}: chưa đặt điều kiện nào trong Cài đặt > Đoạn yếu.",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "Báo cáo đoạn yếu, các lần xuất sau mỗi lần chạy và --segments saved của dòng lệnh cũng dùng chúng."
  },
  "plurals": {
   "about {count} day": [

@@ -292,6 +292,9 @@ signals:
     void worst_count_changed(int count);
     // Weak segments' Save as default: the rules to keep in Settings.
     void weak_segment_rules_saved(const vml::SegmentRules& rules);
+    // Weak segments' Export all videos...: the window's report, by these
+    // rules (the dialog's).
+    void segments_report_requested(const vml::SegmentRules& rules);
 
 private:
     friend class GraphPanelTest;  // the graph's tests (tests/app)

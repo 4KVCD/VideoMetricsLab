@@ -1555,7 +1555,10 @@ Comparisons comparisons_asked(const CompareArguments& arguments, std::vector<Bat
 // compared (it is written after the run), or nothing.
 std::optional<std::string> output_names_a_video(const CompareArguments& arguments, const Comparisons& comparisons) {
     const std::pair<const std::optional<std::string>*, const char*> outputs[] = {
-        {&arguments.json_path, "--json"}, {&arguments.scores_csv, "--scores-csv"}, {&arguments.log_file, "--log-file"}};
+        {&arguments.json_path, "--json"},
+        {&arguments.scores_csv, "--scores-csv"},
+        {&arguments.segments_report, "--segments-report"},
+        {&arguments.log_file, "--log-file"}};
     for (const auto& [output, option] : outputs) {
         if (!*output || **output == "-") {
             continue;
@@ -1790,6 +1793,24 @@ bool write_results(const CompareArguments& arguments, const Comparisons& compari
     if (arguments.scores_csv) {
         written = write_scores_csv(python_path(*arguments.scores_csv), comparisons, progress) && written;
     }
+    if (arguments.segments_report) {
+        // Every reference's test videos, in one report.
+        std::vector<std::pair<const TestVideo*, std::filesystem::path>> videos;
+        for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+            if (comparison->error.empty() && comparison->planner) {
+                for (const TestVideo& video : comparison->planner->videos) {
+                    videos.emplace_back(&video, comparison->reference);
+                }
+            }
+        }
+        const std::filesystem::path file = python_path(*arguments.segments_report);
+        if (const std::optional<std::string> failure = write_segments_report(videos, segment_rules(arguments), file)) {
+            progress.problem("The weak segments report could not be written: " + *failure);
+            written = false;
+        } else {
+            progress.message("Weak segments of every test video in " + platform::path_text(file));
+        }
+    }
     const std::optional<std::filesystem::path> json_file =
         arguments.json_path ? std::optional(python_path(*arguments.json_path)) : std::nullopt;
     if (json_file && platform::path_text(*json_file) == "-") {
@@ -1818,7 +1839,10 @@ std::optional<std::string> name_paths(CompareArguments& arguments, const Compari
         fields.test = platform::path_text(comparisons.front()->tests.front().stem());
     }
     const std::pair<std::optional<std::string>*, const char*> paths[] = {
-        {&arguments.json_path, "--json"}, {&arguments.scores_csv, "--scores-csv"}, {&arguments.log_file, "--log-file"}};
+        {&arguments.json_path, "--json"},
+        {&arguments.scores_csv, "--scores-csv"},
+        {&arguments.segments_report, "--segments-report"},
+        {&arguments.log_file, "--log-file"}};
     for (const auto& [path, option] : paths) {
         if (!*path || **path == "-") {
             continue;
@@ -1980,6 +2004,15 @@ int compare(const CompareArguments& given) {
         print_error(*wrong);
         return exit_usage;
     }
+    std::vector<std::string> saved_left_out;  // --segments saved's conditions on metrics not compared
+    if (arguments.segments_saved) {
+        try {
+            saved_left_out = take_saved_segments(arguments, settings, asked);
+        } catch (const std::invalid_argument& error) {
+            print_error(error.what());
+            return exit_usage;
+        }
+    }
     if (const std::optional<std::string> refused = segments_refusal(arguments.segments, asked)) {
         print_error(*refused);
         return exit_usage;
@@ -2019,6 +2052,9 @@ int compare(const CompareArguments& given) {
     }
     for (const std::string& note : unused_argument_notes(comparisons)) {
         progress->message(note);
+    }
+    for (const std::string& condition : saved_left_out) {
+        progress->message("note: --segments saved: " + condition + " is left out: its metric is not compared (-m)");
     }
     // Every comparison's jobs in one run: one start of the GPU's work for all.
     std::vector<VmafJob> jobs;

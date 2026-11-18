@@ -120,6 +120,9 @@ signals:
     void open_requested(const std::string& identity, int frame);
     // Save as default: rules_to_save(), for Settings.
     void rules_saved(const vml::SegmentRules& rules);
+    // Export all videos...: the report of every scored test video, by the
+    // rules shown (without the range).
+    void report_requested(const vml::SegmentRules& rules);
 
 private:
     void refresh();

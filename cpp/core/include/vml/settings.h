@@ -28,6 +28,11 @@ struct Settings {
     // (the window's graph exports): "" not, "beside" next to the test video,
     // "folder" in export_dir (next to the test video while that is empty).
     std::string auto_export;
+    // After each video's run, its weak segments by the rules last set in
+    // Metric Graphs (weak_segment_* below) saved as JSON and CSV
+    // ("<video>.<metrics>.segments.json", .csv): "", "beside" or "folder",
+    // as auto_export. Nothing while no condition is set.
+    std::string auto_export_segments;
 
     // What a newly added video starts with (each row's own settings are
     // edited in the window's Options panel).

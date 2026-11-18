@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "まだ条件がありません。指標グラフ の 弱い区間 は表示中の指標から始まります。",
   "Save as default": "既定として保存",
   "Weak segments": "弱い区間",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "動画のスコアを弱いとみなす条件です。指標グラフ > 最悪のフレーム > 弱い区間 はこれらから始まり、そこの 既定として保存 でここが変わります。"
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "動画のスコアを弱いとみなす条件です。指標グラフ > 最悪のフレーム > 弱い区間 はこれらから始まり、そこの 既定として保存 でここが変わります。",
+  "Don't export weak segments automatically": "弱い区間を自動でエクスポートしない",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "スコアを計算した各テスト動画の、これらの条件による弱い区間を 1 つの JSON または CSV ファイルにまとめます。",
+  "Export all videos...": "すべての動画をエクスポート...",
+  "Export each video's weak segments next to it": "各動画の弱い区間を動画の隣にエクスポート",
+  "Export each video's weak segments to the export folder": "各動画の弱い区間をエクスポート先フォルダーにエクスポート",
+  "Export weak segments report": "弱い区間のレポートをエクスポート",
+  "Export weak segments report...": "弱い区間のレポートをエクスポート...",
+  "JSON file (*.json);;CSV file (*.csv)": "JSON ファイル (*.json);;CSV ファイル (*.csv)",
+  "No weak segment conditions": "弱い区間の条件がありません",
+  "Weak segments report exported to {path}": "弱い区間のレポートを {path} にエクスポートしました",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "各動画のスコア計算後に、上のルールによる弱い区間を JSON と CSV で保存します。動画の名前と対象の指標で名前を付けます (<video>.vmaf.segments.json)。条件が設定されていない間は何も保存されません。エクスポート先フォルダーへ：エクスポート先フォルダーが未設定の間は動画の隣に保存します。同じ名前の既存ファイルは置き換えられます。",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "先に 設定 > 弱い区間 で条件を設定してください。レポートは保存された条件に従います。",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "{name} の弱い区間はエクスポートされませんでした。設定 > 弱い区間 に条件が設定されていません。",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "弱い区間のレポート、実行のたびのエクスポート、コマンドラインの --segments saved もこれらを使います。"
  },
  "plurals": {
   "about {count} day": [

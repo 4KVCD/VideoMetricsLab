@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Még nincs feltétel: a Metrikagrafikonok Gyenge szakaszok ablaka a megjelenített metrikából indul.",
   "Save as default": "Mentés alapértelmezettként",
   "Weak segments": "Gyenge szakaszok",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Hol számítanak egy videó pontszámai gyengének. A Metrikagrafikonok > Legrosszabb képkockák > Gyenge szakaszok ezekből indul, és a Mentés alapértelmezettként gombja itt módosítja őket."
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Hol számítanak egy videó pontszámai gyengének. A Metrikagrafikonok > Legrosszabb képkockák > Gyenge szakaszok ezekből indul, és a Mentés alapértelmezettként gombja itt módosítja őket.",
+  "Don't export weak segments automatically": "Nincs automatikus exportálás a gyenge szakaszokhoz",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "Minden pontozott tesztvideó gyenge szakaszai e feltételek szerint, egyetlen JSON- vagy CSV-fájlban.",
+  "Export all videos...": "Minden videó exportálása...",
+  "Export each video's weak segments next to it": "Minden videó gyenge szakaszainak exportálása mellé",
+  "Export each video's weak segments to the export folder": "Minden videó gyenge szakaszainak exportálása az exportmappába",
+  "Export weak segments report": "Gyenge szakaszok jelentésének exportálása",
+  "Export weak segments report...": "Gyenge szakaszok jelentésének exportálása...",
+  "JSON file (*.json);;CSV file (*.csv)": "JSON-fájl (*.json);;CSV-fájl (*.csv)",
+  "No weak segment conditions": "Nincsenek feltételek a gyenge szakaszokhoz",
+  "Weak segments report exported to {path}": "Gyenge szakaszok jelentése exportálva ide: {path}",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "Minden videó pontozása után elmenti a gyenge szakaszait a fenti szabályok szerint JSON- és CSV-fájlként, a videóról és az általuk lefedett metrikákról elnevezve (<video>.vmaf.segments.json). Semmi sem mentődik, amíg nincs feltétel megadva. Az exportmappába: a videó mellé, amíg nincs exportmappa megadva. Az azonos nevű meglévő fájlok felülíródnak.",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Előbb adja meg a feltételeket a Beállítások > Gyenge szakaszok pontban: a jelentés a mentetteket követi.",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "{name} gyenge szakaszai nem lettek exportálva: a Beállítások > Gyenge szakaszok pontban nincs feltétel megadva.",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "A gyenge szakaszok jelentése, a minden futás utáni exportok és a parancssor --segments saved kapcsolója is ezeket használja."
  },
  "plurals": {
   "about {count} day": [

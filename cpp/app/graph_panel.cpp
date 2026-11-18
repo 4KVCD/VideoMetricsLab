@@ -1329,6 +1329,8 @@ void GraphPanel::open_weak_segments() {
         weak_rules_ = rules;
         emit weak_segment_rules_saved(rules);
     });
+    connect(dialog, &WeakSegmentsDialog::report_requested, this,
+            [this](const SegmentRules& rules) { emit segments_report_requested(rules); });
     connect(dialog, &WeakSegmentsDialog::open_requested, this,
             [this](const std::string& identity, int frame) { emit video_compare_requested(identity, frame, {}); });
     dialog->show();

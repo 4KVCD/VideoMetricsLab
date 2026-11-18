@@ -563,6 +563,8 @@ void MainWindow::build_ui() {
                                                              settings_.weak_segments_all,
                                                              settings_.weak_segment_min_frames,
                                                              settings_.weak_segment_merge_frames));
+    connect(graph_panel_, &GraphPanel::segments_report_requested, this,
+            [this](const SegmentRules& rules) { export_segments_report(rules); });
     connect(graph_panel_, &GraphPanel::weak_segment_rules_saved, this, [this](const SegmentRules& rules) {
         settings_.weak_segment_conditions = condition_texts(rules.conditions);
         settings_.weak_segments_all = rules.all;
