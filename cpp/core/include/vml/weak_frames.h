@@ -110,6 +110,14 @@ struct WeakSegment {
     int frames() const { return last_frame - first_frame + 1; }
 };
 
+// The rules Settings keeps (weak_segment_*): each condition as its text
+// ("vmaf<90"), leaving out one unreadable or of a metric the app does not
+// have; a shortest segment below 1 frame taken as 1, a gap below 0 as 0.
+SegmentRules saved_segment_rules(const std::vector<std::string>& conditions, bool all, int min_frames,
+                                 int merge_frames);
+// The conditions' texts, for Settings.
+std::vector<std::string> condition_texts(const std::vector<WeakCondition>& conditions);
+
 // The stretches of `results` where the rules' conditions hold, in frame
 // order. A frame sample is weak on its own frame, and the frames between
 // two weak samples of a subsample are weak too; a per-second sample (CVVDP)

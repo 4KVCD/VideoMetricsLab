@@ -15,16 +15,15 @@
 #include <vector>
 
 #include "dialogs.h"
+#include "segment_rules_editor.h"
 #include "worst_frame_list.h"
 #include "vml/metrics.h"
 #include "vml/results.h"
 #include "vml/weak_frames.h"
 
 class QComboBox;
-class QDoubleSpinBox;
 class QLabel;
 class QPushButton;
-class QSpinBox;
 class QTableWidget;
 class QVBoxLayout;
 
@@ -95,34 +94,38 @@ class WeakSegmentsDialog : public QDialog {
     Q_OBJECT
 
 public:
-    // Starts with one condition, on `metric`; only frames within `range`
-    // (nothing: all). `dialogs` asks where to export.
+    // Starts with the `saved` rules (Settings > Weak segments): the saved
+    // conditions on the metrics the video has, else one on `metric`, from
+    // its first band of worse frames. What is changed here holds for this
+    // dialog until Save as default. Only frames within `range` (nothing:
+    // all). `dialogs` asks where to export.
     WeakSegmentsDialog(WeakFramesVideo video, const MetricDefinition& metric,
-                       std::optional<std::pair<int, int>> range, Dialogs dialogs, QWidget* parent = nullptr);
+                       std::optional<std::pair<int, int>> range, const SegmentRules& saved, Dialogs dialogs,
+                       QWidget* parent = nullptr);
 
+    // The rules shown, with the range.
     SegmentRules rules() const;
+    // What Save as default saves: rules() without the range, and the saved
+    // conditions on metrics this video has none of, left as they were.
+    SegmentRules rules_to_save() const;
     const std::vector<WeakSegment>& segments() const { return segments_; }
 
-    // For the tests: adds a condition, as Add condition does.
-    void add_condition(const WeakCondition& condition);
+    // For the tests.
+    SegmentRulesEditor* editor() const { return editor_; }
+    QPushButton* save_button() const { return save_button_; }
     QTableWidget* table() const { return table_; }
 
 signals:
     // A segment double-clicked: its first frame, in Video Compare.
     void open_requested(const std::string& identity, int frame);
+    // Save as default: rules_to_save(), for Settings.
+    void rules_saved(const vml::SegmentRules& rules);
 
 private:
-    // A condition's row: the metric, "below" or "above" (its direction),
-    // the threshold and its Remove button.
-    struct ConditionRow {
-        QWidget* row = nullptr;
-        QComboBox* metric = nullptr;
-        QLabel* comparison = nullptr;
-        QDoubleSpinBox* threshold = nullptr;
-    };
-    void set_condition_metric(ConditionRow& row, const WeakCondition& condition);
-    void remove_condition(QWidget* row);
     void refresh();
+    // Save as default enabled, and the note beside it, as the rules shown
+    // differ from those saved or not.
+    void show_saved_state();
     void fill_table();
     enum class ExportKind { json, csv };
     void export_segments(ExportKind kind);
@@ -131,12 +134,11 @@ private:
     std::optional<std::pair<int, int>> range_;
     Dialogs dialogs_;
     std::vector<std::string> keys_;  // the metrics the video has scores of, in the app's order
-    std::vector<ConditionRow> conditions_;
+    SegmentRules saved_;  // as saved in Settings (since the dialog opened, or last saved here)
     std::vector<WeakSegment> segments_;
-    QVBoxLayout* condition_layout_ = nullptr;
-    QComboBox* combine_combo_ = nullptr;
-    QSpinBox* min_frames_spin_ = nullptr;
-    QSpinBox* merge_frames_spin_ = nullptr;
+    SegmentRulesEditor* editor_ = nullptr;
+    QLabel* saved_note_ = nullptr;
+    QPushButton* save_button_ = nullptr;
     QLabel* summary_ = nullptr;
     QTableWidget* table_ = nullptr;
 };

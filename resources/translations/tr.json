@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "Henüz referansa göre puanlanmış test videosu yok.",
   "Nothing to export": "Dışa aktarılacak bir şey yok",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "Referansa göre puanlanan tüm test videolarının grafiklerini tek bir .zip dosyası olarak kaydeder: her videonun her metrik için grafiği, hepsi bir arada ve referansınkiyle birlikte bit hızları. Sekmelerdeki grafikler olduğu gibi kalır. Bit hızı hâlâ okunuyorsa dosya, bu biter bitmez kaydedilir.",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Bit hızı grafikleri hâlâ oluşturuluyor; grafikler hazır olur olmaz {path} konumuna aktarılacak."
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Bit hızı grafikleri hâlâ oluşturuluyor; grafikler hazır olur olmaz {path} konumuna aktarılacak.",
+  "As saved in Settings > Weak segments.": "Ayarlar > Zayıf bölümler içinde kaydedildiği gibi.",
+  "Changed here only: Save as default keeps these for the next time.": "Yalnızca burada değiştirildi: Varsayılan olarak kaydet bunları bir sonraki sefer için saklar.",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "Bu koşulları ve seçenekleri kaydedilmiş olanlar olarak Ayarlar > Zayıf bölümler içinde saklar.",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Henüz koşul yok: Metrik grafikleri'ndeki Zayıf bölümler gösterilen metrikten başlar.",
+  "Save as default": "Varsayılan olarak kaydet",
+  "Weak segments": "Zayıf bölümler",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Bir videonun puanlarının zayıf sayıldığı yerler. Metrik grafikleri > En kötü kareler > Zayıf bölümler bunlardan başlar ve oradaki Varsayılan olarak kaydet bunları burada değiştirir."
  },
  "plurals": {
   "about {count} day": [

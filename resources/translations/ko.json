@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "아직 기준 동영상과 비교해 점수를 계산한 테스트 동영상이 없습니다.",
   "Nothing to export": "내보낼 것이 없습니다",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "기준 동영상과 비교해 점수를 계산한 모든 테스트 동영상의 그래프를 하나의 .zip 파일로 저장합니다. 각 동영상의 모든 지표 그래프, 이를 모두 합친 그래프, 기준 동영상과 함께 표시한 비트레이트 그래프입니다. 탭에 표시된 그래프는 그대로 둡니다. 비트레이트를 아직 읽는 중이면 끝나는 대로 파일을 저장합니다.",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "비트레이트 그래프를 아직 만드는 중입니다. 완료되는 대로 그래프를 {path}에 내보냅니다."
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "비트레이트 그래프를 아직 만드는 중입니다. 완료되는 대로 그래프를 {path}에 내보냅니다.",
+  "As saved in Settings > Weak segments.": "설정 > 약한 구간에 저장된 그대로입니다.",
+  "Changed here only: Save as default keeps these for the next time.": "여기서만 변경됨: 기본값으로 저장을 누르면 다음에도 이 조건을 사용합니다.",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "이 조건과 옵션을 설정 > 약한 구간에 저장된 조건으로 유지합니다.",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "아직 조건이 없습니다. 지표 그래프의 약한 구간은 표시된 지표에서 시작합니다.",
+  "Save as default": "기본값으로 저장",
+  "Weak segments": "약한 구간",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "동영상의 점수를 약하다고 보는 조건입니다. 지표 그래프 > 가장 나쁜 프레임 > 약한 구간은 이 조건에서 시작하며, 그곳의 기본값으로 저장으로 여기 조건이 바뀝니다."
  },
  "plurals": {
   "about {count} day": [

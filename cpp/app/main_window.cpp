@@ -559,6 +559,18 @@ void MainWindow::build_ui() {
     connect(graph_panel_, &GraphPanel::results_export_requested, this,
             [this](ResultsFormat format) { export_results(format); });
     graph_panel_->set_worst_count(settings_.graph_worst_frames);
+    graph_panel_->set_weak_segment_rules(saved_segment_rules(settings_.weak_segment_conditions,
+                                                             settings_.weak_segments_all,
+                                                             settings_.weak_segment_min_frames,
+                                                             settings_.weak_segment_merge_frames));
+    connect(graph_panel_, &GraphPanel::weak_segment_rules_saved, this, [this](const SegmentRules& rules) {
+        settings_.weak_segment_conditions = condition_texts(rules.conditions);
+        settings_.weak_segments_all = rules.all;
+        settings_.weak_segment_min_frames = rules.min_frames;
+        settings_.weak_segment_merge_frames = rules.merge_frames;
+        save_settings();
+        settings_panel_->show_weak_segment_rules();
+    });
     connect(graph_panel_, &GraphPanel::worst_count_changed, this, [this](int count) {
         settings_.graph_worst_frames = count;
         save_settings();
@@ -614,6 +626,11 @@ void MainWindow::build_ui() {
             &FrameComparePanel::set_decoded_videos);
     connect(settings_panel_, &SettingsPanel::ffmpeg_folder_changed, this, [this] { check_ffmpeg(false); });
     connect(settings_panel_, &SettingsPanel::saved_results_cleared, this, [this] { on_saved_results_cleared(); });
+    connect(settings_panel_, &SettingsPanel::weak_segment_rules_changed, this, [this] {
+        graph_panel_->set_weak_segment_rules(saved_segment_rules(
+            settings_.weak_segment_conditions, settings_.weak_segments_all, settings_.weak_segment_min_frames,
+            settings_.weak_segment_merge_frames));
+    });
     tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
 }

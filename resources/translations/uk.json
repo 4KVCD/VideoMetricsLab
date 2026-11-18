@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "Поки що жодне тестове відео не оцінено відносно еталона.",
   "Nothing to export": "Нічого експортувати",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "Зберігає графіки всіх тестових відео, оцінених відносно еталона, в один файл .zip: графік кожного відео для кожної метрики, усі разом і їхній бітрейт поруч із бітрейтом еталона. Графіки на вкладках лишаються як є. Якщо бітрейт ще читається, файл буде збережено, щойно це завершиться.",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Графіки бітрейту ще будуються; графіки буде експортовано в {path}, щойно вони будуть готові."
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Графіки бітрейту ще будуються; графіки буде експортовано в {path}, щойно вони будуть готові.",
+  "As saved in Settings > Weak segments.": "Як збережено в Налаштування > Слабкі ділянки.",
+  "Changed here only: Save as default keeps these for the next time.": "Змінено лише тут: «Зберегти як типові» збереже їх на наступний раз.",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "Робить ці умови й параметри збереженими, у Налаштування > Слабкі ділянки.",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Умов ще немає: «Слабкі ділянки» в «Графіки метрик» починаються з показаної метрики.",
+  "Save as default": "Зберегти як типові",
+  "Weak segments": "Слабкі ділянки",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Де оцінки відео вважаються слабкими. Графіки метрик > Найгірші кадри > Слабкі ділянки починається з них, а його кнопка «Зберегти як типові» змінює їх тут."
  },
  "plurals": {
   "about {count} day": [

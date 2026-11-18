@@ -13,6 +13,7 @@
 #include <QImage>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QDoubleSpinBox>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -814,6 +815,56 @@ TEST_F(GraphPanelTest, WorstFramesListsTheDipsAndOpensThemInVideoCompare) {
         }
     }
     EXPECT_EQ(suggested, (QStringList{"a.vmaf.segments.json", "a.vmaf.segments.csv"}));
+}
+
+TEST_F(GraphPanelTest, WeakSegmentsStartsFromTheSavedRulesAndSavesOnlyWhenAsked) {
+    // The rules saved (Settings > Weak segments) are where the dialog
+    // starts. What is changed there holds for the dialog alone until Save as
+    // default, which hands the rules on, with the saved conditions on
+    // metrics this video has none of left as they were.
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    std::vector<float> values(90, 95.0F);
+    values[20] = 75.0F;
+    values[40] = 60.0F;
+    panel.add_run({shared(vmaf_result("a.mkv", values)), "a", "row:a", true});
+    panel.set_weak_segment_rules(saved_segment_rules({"ssimulacra2<60", "vmaf<70"}, true, 1, 3));
+    std::vector<SegmentRules> saved;
+    QObject::connect(&panel, &GraphPanel::weak_segment_rules_saved,
+                     [&saved](const SegmentRules& rules) { saved.push_back(rules); });
+    page(panel, "vmaf");
+    worst_button(panel).click();
+    worst_panel(panel).segments_button()->click();
+    auto* dialog = panel.findChild<WeakSegmentsDialog*>();
+    ASSERT_NE(dialog, nullptr);
+    const SegmentRules shown = dialog->rules();
+    EXPECT_EQ(condition_texts(shown.conditions), std::vector<std::string>{"vmaf<70"});
+    EXPECT_TRUE(shown.all);
+    EXPECT_EQ(shown.merge_frames, 3);
+    ASSERT_EQ(dialog->segments().size(), 1U);  // frame 40
+    EXPECT_FALSE(dialog->save_button()->isEnabled());  // as saved
+
+    QDoubleSpinBox* threshold = dialog->findChild<QDoubleSpinBox*>();
+    ASSERT_NE(threshold, nullptr);
+    threshold->setValue(80.0);
+    EXPECT_EQ(dialog->segments().size(), 2U);  // frames 20 and 40, at once
+    EXPECT_TRUE(saved.empty());  // not saved by changing it
+    ASSERT_TRUE(dialog->save_button()->isEnabled());
+    dialog->save_button()->click();
+    ASSERT_EQ(saved.size(), 1U);
+    EXPECT_EQ(condition_texts(saved[0].conditions), (std::vector<std::string>{"vmaf<80", "ssimulacra2<60"}));
+    EXPECT_TRUE(saved[0].ranges.empty());
+    EXPECT_FALSE(dialog->save_button()->isEnabled());
+
+    // Changed again and closed without saving: opened again as saved.
+    threshold->setValue(90.0);
+    delete dialog;
+    worst_panel(panel).segments_button()->click();
+    dialog = panel.findChild<WeakSegmentsDialog*>();
+    ASSERT_NE(dialog, nullptr);
+    EXPECT_EQ(condition_texts(dialog->rules().conditions), std::vector<std::string>{"vmaf<80"});
+    EXPECT_EQ(dialog->rules().merge_frames, 3);
+    EXPECT_EQ(saved.size(), 1U);
 }
 
 TEST_F(GraphPanelTest, WorstFramesKeepsTheChosenVideoWhileItIsRecalculated) {

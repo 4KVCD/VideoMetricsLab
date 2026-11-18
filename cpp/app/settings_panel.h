@@ -40,6 +40,7 @@ struct CacheSummary;
 namespace vml::app {
 
 class FileWrites;
+class SegmentRulesEditor;
 
 class SettingsPanel : public QWidget {
     Q_OBJECT
@@ -80,6 +81,9 @@ public:
     void show_film_grain_default();
     // Deletes the saved results, after asking.
     void clear_saved_results();
+    // Shows the weak segment rules the window has already saved (Weak
+    // segments' Save as default), without treating it as an edit.
+    void show_weak_segment_rules();
 
     // The controls, for the window's tests.
     QLineEdit* ffmpeg_edit = nullptr;
@@ -111,6 +115,7 @@ public:
     QCheckBox* gpu_together = nullptr;
     QComboBox* gpu_choice = nullptr;  // none on a PC with one GPU and none chosen
     QComboBox* vvc_decoder = nullptr;  // none where vvdec-vulkan is not bundled (a Mac)
+    SegmentRulesEditor* weak_segments = nullptr;  // Settings' weak_segment_*
     QComboBox* decoded_videos = nullptr;
     QComboBox* language = nullptr;
     QComboBox* theme = nullptr;
@@ -129,11 +134,15 @@ signals:
     // Clear saved results has deleted them: the window's rows are to be
     // calculated again.
     void saved_results_cleared();
+    // The weak segment rules were edited and saved: Metric Graphs' Weak
+    // segments starts from them.
+    void weak_segment_rules_changed();
 
 private:
     QGroupBox* build_ffmpeg_box();
     QGroupBox* build_storage_box();
     QGroupBox* build_defaults_box();
+    QGroupBox* build_weak_segments_box();
     QGroupBox* build_gpu_box();
     QHBoxLayout* build_vvc_decoder_row();
     QGroupBox* build_compare_box();

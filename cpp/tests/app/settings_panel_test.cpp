@@ -4,10 +4,16 @@
 #include <QLineEdit>
 #include <QPushButton>
 
+#include <QSignalSpy>
+
 #include <gtest/gtest.h>
+
+#include <string>
+#include <vector>
 
 #include "dialogs.h"
 #include "file_writes.h"
+#include "segment_rules_editor.h"
 #include "settings_panel.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/settings.h"
@@ -52,6 +58,32 @@ TEST(SettingsPanel, ARunLocksOnlyWhatItUsesAndSaysSo) {
     EXPECT_TRUE(clear->isEnabled());
     EXPECT_EQ(clear->toolTip(), "its own tip");
     EXPECT_FALSE(note->isVisibleTo(&panel));
+}
+
+// Settings > Weak segments shows the saved rules; an edit there is saved and
+// told to the window (for Metric Graphs' Weak segments); rules the window
+// saved (Weak segments' Save as default) are shown without counting as an
+// edit.
+TEST(SettingsPanel, WeakSegmentsEditsTheSavedRules) {
+    Settings settings;
+    settings.weak_segment_conditions = {"vmaf<90", "butteraugli>2.5"};
+    settings.weak_segment_merge_frames = 4;
+    FileWrites writes;
+    const Dialogs dialogs = standard_dialogs(nullptr);
+    SettingsPanel panel(settings, writes, [] { return ToolsStatus{}; }, dialogs);
+    QSignalSpy changed(&panel, &SettingsPanel::weak_segment_rules_changed);
+    const SegmentRules shown = panel.weak_segments->rules();
+    EXPECT_EQ(condition_texts(shown.conditions), (std::vector<std::string>{"vmaf<90", "butteraugli>2.5"}));
+    EXPECT_EQ(shown.merge_frames, 4);
+
+    panel.weak_segments->add_condition({"psnr", '<', 30.0});
+    EXPECT_EQ(settings.weak_segment_conditions, (std::vector<std::string>{"vmaf<90", "butteraugli>2.5", "psnr<30"}));
+    EXPECT_EQ(changed.count(), 1);
+
+    settings.weak_segment_conditions = {"ssimulacra2<70"};
+    panel.show_weak_segment_rules();
+    EXPECT_EQ(condition_texts(panel.weak_segments->rules().conditions), std::vector<std::string>{"ssimulacra2<70"});
+    EXPECT_EQ(changed.count(), 1);
 }
 
 }  // namespace

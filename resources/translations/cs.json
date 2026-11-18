@@ -1006,7 +1006,14 @@
   "No test video has been scored against the reference yet.": "Zatím nebylo vyhodnoceno žádné testované video oproti referenčnímu.",
   "Nothing to export": "Není co exportovat",
   "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are left as they are. If the bitrate is still being read, the file is saved as soon as it's done.": "Uloží grafy všech testovaných videí vyhodnocených oproti referenčnímu do jednoho souboru .zip: graf každého videa pro každou metriku, všechna společně a jejich datový tok spolu s tokem referenčního videa. Grafy na kartách zůstanou beze změny. Pokud se datový tok ještě načítá, soubor se uloží, jakmile bude hotovo.",
-  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Grafy datového toku se ještě vytvářejí; grafy se exportují do {path}, jakmile budou hotové."
+  "The bitrate graphs are still being built; the graphs will be exported to {path} as soon as they're done.": "Grafy datového toku se ještě vytvářejí; grafy se exportují do {path}, jakmile budou hotové.",
+  "As saved in Settings > Weak segments.": "Jak je uloženo v Nastavení > Slabé úseky.",
+  "Changed here only: Save as default keeps these for the next time.": "Změněno jen zde: Uložit jako výchozí je ponechá pro příště.",
+  "Keeps these conditions and options as the saved ones, in Settings > Weak segments.": "Ponechá tyto podmínky a možnosti jako uložené, v Nastavení > Slabé úseky.",
+  "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Zatím žádná podmínka: Slabé úseky v Grafy metrik začínají zobrazenou metrikou.",
+  "Save as default": "Uložit jako výchozí",
+  "Weak segments": "Slabé úseky",
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Kdy se skóre videa považuje za slabé. Grafy metrik > Nejhorší snímky > Slabé úseky z nich vycházejí a jejich tlačítko Uložit jako výchozí je mění zde."
  },
  "plurals": {
   "about {count} day": [

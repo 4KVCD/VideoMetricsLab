@@ -3,14 +3,11 @@
 #include <QAbstractItemView>
 #include <QComboBox>
 #include <QDialogButtonBox>
-#include <QDoubleSpinBox>
-#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
 #include <QSignalBlocker>
-#include <QSpinBox>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
@@ -267,8 +264,10 @@ void WorstFramesPanel::refresh() {
 // ---------------------------------------------------------- the dialog
 
 WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefinition& metric,
-                                       std::optional<std::pair<int, int>> range, Dialogs dialogs, QWidget* parent)
-    : QDialog(parent), video_(std::move(video)), range_(range), dialogs_(std::move(dialogs)) {
+                                       std::optional<std::pair<int, int>> range, const SegmentRules& saved,
+                                       Dialogs dialogs, QWidget* parent)
+    : QDialog(parent), video_(std::move(video)), range_(range), dialogs_(std::move(dialogs)), saved_(saved) {
+    saved_.ranges.clear();
     setWindowTitle(app::tr("Weak segments: {name}", {{"name", video_.label}}));
     for (const MetricDefinition& definition : metrics()) {
         if (score_samples(video_.result->metric_results, std::string(definition.key))) {
@@ -276,43 +275,35 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
         }
     }
     auto* layout = new QVBoxLayout(this);
-    layout->addWidget(new QLabel(app::tr("A frame is weak where:")));
-    condition_layout_ = new QVBoxLayout;
-    layout->addLayout(condition_layout_);
-    auto* add_button = new QPushButton(app::tr("Add condition"));
-    connect(add_button, &QPushButton::clicked, this, [this] {
-        // The first metric no condition names yet, or the first.
-        std::string key = keys_.front();
-        for (const std::string& candidate : keys_) {
-            if (std::none_of(conditions_.begin(), conditions_.end(), [&candidate](const ConditionRow& row) {
-                    return row.metric->currentData().toString().toStdString() == candidate;
-                })) {
-                key = candidate;
-                break;
-            }
-        }
-        add_condition(default_weak_condition(metric_definition(key)));
-    });
-    auto* add_row = new QHBoxLayout;
-    add_row->addWidget(add_button);
-    add_row->addStretch(1);
-    layout->addLayout(add_row);
+    editor_ = new SegmentRulesEditor(keys_, true);
+    editor_->set_remembered(saved_.conditions);
+    editor_->set_rules(saved_);
+    if (editor_->condition_count() == 0) {
+        // None saved on this video's metrics: one on the metric shown.
+        SegmentRules start = saved_;
+        start.conditions = {default_weak_condition(metric)};
+        editor_->set_rules(start);
+    }
+    connect(editor_, &SegmentRulesEditor::changed, this, [this] { refresh(); });
+    layout->addWidget(editor_);
 
-    auto* form = new QFormLayout;
-    combine_combo_ = new QComboBox;
-    combine_combo_->addItem(app::tr("any condition holds"));
-    combine_combo_->addItem(app::tr("every condition holds"));
-    connect(combine_combo_, &QComboBox::currentIndexChanged, this, [this] { refresh(); });
-    form->addRow(app::tr("Weak where:"), combine_combo_);
-    min_frames_spin_ = new QSpinBox;
-    min_frames_spin_->setRange(1, 1'000'000);
-    connect(min_frames_spin_, &QSpinBox::valueChanged, this, [this] { refresh(); });
-    form->addRow(app::tr("Shortest segment (frames):"), min_frames_spin_);
-    merge_frames_spin_ = new QSpinBox;
-    merge_frames_spin_->setRange(0, 1'000'000);
-    connect(merge_frames_spin_, &QSpinBox::valueChanged, this, [this] { refresh(); });
-    form->addRow(app::tr("Join segments up to this many frames apart:"), merge_frames_spin_);
-    layout->addLayout(form);
+    // What is changed here holds for this dialog; Save as default keeps it
+    // in Settings.
+    auto* save_row = new QHBoxLayout;
+    saved_note_ = new QLabel;
+    saved_note_->setWordWrap(true);
+    theme::style(saved_note_, "color: {muted};");
+    save_row->addWidget(saved_note_, 1);
+    save_button_ = new QPushButton(app::tr("Save as default"));
+    save_button_->setToolTip(app::tr("Keeps these conditions and options as the saved ones, in Settings > Weak "
+                                     "segments."));
+    connect(save_button_, &QPushButton::clicked, this, [this] {
+        saved_ = rules_to_save();
+        emit rules_saved(saved_);
+        show_saved_state();
+    });
+    save_row->addWidget(save_button_);
+    layout->addLayout(save_row);
 
     summary_ = new QLabel;
     summary_->setWordWrap(true);
@@ -336,91 +327,46 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     layout->addWidget(buttons);
 
-    add_condition(default_weak_condition(metric));
-    resize(720, 560);
-}
-
-void WeakSegmentsDialog::add_condition(const WeakCondition& condition) {
-    ConditionRow entry;
-    entry.row = new QWidget;
-    auto* row_layout = new QHBoxLayout(entry.row);
-    row_layout->setContentsMargins(0, 0, 0, 0);
-    entry.metric = new QComboBox;
-    for (const std::string& key : keys_) {
-        entry.metric->addItem(qt_text(metric_definition(key).label), QString::fromStdString(key));
-    }
-    row_layout->addWidget(entry.metric);
-    entry.comparison = new QLabel;
-    row_layout->addWidget(entry.comparison);
-    entry.threshold = new QDoubleSpinBox;
-    entry.threshold->setRange(-1'000'000.0, 1'000'000.0);
-    row_layout->addWidget(entry.threshold);
-    auto* remove = new QPushButton(app::tr("Remove"));
-    row_layout->addWidget(remove);
-    row_layout->addStretch(1);
-    condition_layout_->addWidget(entry.row);
-
-    QWidget* row = entry.row;
-    connect(remove, &QPushButton::clicked, this, [this, row] { remove_condition(row); });
-    connect(entry.metric, &QComboBox::currentIndexChanged, this, [this, row] {
-        for (ConditionRow& found : conditions_) {
-            if (found.row == row) {
-                const std::string key = found.metric->currentData().toString().toStdString();
-                set_condition_metric(found, default_weak_condition(metric_definition(key)));
-            }
-        }
-        refresh();
-    });
-    connect(entry.threshold, &QDoubleSpinBox::valueChanged, this, [this] { refresh(); });
-    set_condition_metric(entry, condition);
-    conditions_.push_back(entry);
     refresh();
-}
-
-void WeakSegmentsDialog::set_condition_metric(ConditionRow& row, const WeakCondition& condition) {
-    const MetricDefinition& definition = metric_definition(condition.key);
-    {
-        const QSignalBlocker blocker(row.metric);
-        row.metric->setCurrentIndex(row.metric->findData(QString::fromStdString(condition.key)));
-    }
-    row.comparison->setText(condition.comparison == '>' ? app::tr("is above") : app::tr("is below"));
-    const QSignalBlocker blocker(row.threshold);
-    row.threshold->setDecimals(definition.decimals);
-    // A step of about a hundredth of the scale: 1 for VMAF's 0-100, 0.01
-    // for SSIM's 0-1.
-    const double magnitude = std::abs(condition.threshold);
-    row.threshold->setSingleStep(magnitude >= 10.0 ? 1.0 : magnitude >= 1.0 ? 0.1 : 0.01);
-    row.threshold->setValue(condition.threshold);
-}
-
-void WeakSegmentsDialog::remove_condition(QWidget* row) {
-    if (conditions_.size() <= 1) {
-        return;  // one condition at least: without, nothing is weak
-    }
-    std::erase_if(conditions_, [row](const ConditionRow& entry) { return entry.row == row; });
-    row->deleteLater();
-    refresh();
+    resize(720, 600);
 }
 
 SegmentRules WeakSegmentsDialog::rules() const {
-    SegmentRules rules;
-    for (const ConditionRow& row : conditions_) {
-        const std::string key = row.metric->currentData().toString().toStdString();
-        const MetricDefinition& definition = metric_definition(key);
-        rules.conditions.push_back(
-            {key, definition.direction == MetricDirection::lower_is_better ? '>' : '<', row.threshold->value()});
-    }
-    rules.all = combine_combo_->currentIndex() == 1;
-    rules.min_frames = min_frames_spin_->value();
-    rules.merge_frames = merge_frames_spin_->value();
+    SegmentRules rules = editor_->rules();
     if (range_) {
         rules.ranges.push_back({range_->first, range_->second});
     }
     return rules;
 }
 
+SegmentRules WeakSegmentsDialog::rules_to_save() const {
+    SegmentRules saving = editor_->rules();
+    for (const WeakCondition& condition : saved_.conditions) {
+        if (std::find(keys_.begin(), keys_.end(), condition.key) == keys_.end()) {
+            saving.conditions.push_back(condition);
+        }
+    }
+    return saving;
+}
+
+void WeakSegmentsDialog::show_saved_state() {
+    const SegmentRules shown = rules_to_save();
+    // The same conditions in another order are the same rules: the saved ones
+    // this video has no metric for come last here, wherever they were.
+    std::vector<std::string> shown_texts = condition_texts(shown.conditions);
+    std::vector<std::string> saved_texts = condition_texts(saved_.conditions);
+    std::ranges::sort(shown_texts);
+    std::ranges::sort(saved_texts);
+    const bool differ = shown_texts != saved_texts ||
+                        shown.all != saved_.all || shown.min_frames != saved_.min_frames ||
+                        shown.merge_frames != saved_.merge_frames;
+    save_button_->setEnabled(differ);
+    saved_note_->setText(differ ? app::tr("Changed here only: Save as default keeps these for the next time.")
+                                : app::tr("As saved in Settings > Weak segments."));
+}
+
 void WeakSegmentsDialog::refresh() {
-    if (combine_combo_ == nullptr || min_frames_spin_ == nullptr || merge_frames_spin_ == nullptr) {
+    if (summary_ == nullptr || table_ == nullptr || save_button_ == nullptr) {
         return;  // still being built
     }
     segments_ = weak_segments(*video_.result, rules());
@@ -443,6 +389,7 @@ void WeakSegmentsDialog::refresh() {
     }
     summary_->setText(summary);
     fill_table();
+    show_saved_state();
 }
 
 void WeakSegmentsDialog::fill_table() {

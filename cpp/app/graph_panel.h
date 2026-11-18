@@ -33,6 +33,7 @@
 #include "vml/metrics.h"
 #include "vml/results.h"
 #include "vml/stats.h"
+#include "vml/weak_frames.h"
 #include "widgets.h"
 #include "worst_frame_list.h"
 
@@ -248,6 +249,9 @@ public:
     void set_preferred_metric(const std::string& key);
     // How many dips Worst frames lists (Settings.graph_worst_frames).
     void set_worst_count(int count);
+    // The rules Weak segments starts from (Settings > Weak segments).
+    void set_weak_segment_rules(SegmentRules rules) { weak_rules_ = std::move(rules); }
+    const SegmentRules& weak_segment_rules() const { return weak_rules_; }
     // Whether any run is shown.
     bool empty() const { return entries_.empty(); }
 
@@ -286,6 +290,8 @@ signals:
     void video_compare_requested(const std::string& identity, int frame, const vml::app::WorstFrameList& list);
     // The number of dips Worst frames lists, chosen there.
     void worst_count_changed(int count);
+    // Weak segments' Save as default: the rules to keep in Settings.
+    void weak_segment_rules_saved(const vml::SegmentRules& rules);
 
 private:
     friend class GraphPanelTest;  // the graph's tests (tests/app)
@@ -361,6 +367,7 @@ private:
     QCheckBox* difference_box_ = nullptr;
     // Worst frames (issue #24), beside the pages, shown by its button.
     WorstFramesPanel* worst_panel_ = nullptr;
+    SegmentRules weak_rules_;  // what Weak segments starts from
     QPushButton* worst_button_ = nullptr;
     QLabel* status_label_ = nullptr;
     QLabel* metric_hint_ = nullptr;

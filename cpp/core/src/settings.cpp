@@ -46,6 +46,10 @@ const std::unordered_map<std::string, Field>& fields() {
         {"film_grain_default", &Settings::film_grain_default},
         {"graph_metric", &Settings::graph_metric},
         {"graph_worst_frames", &Settings::graph_worst_frames},
+        {"weak_segment_conditions", &Settings::weak_segment_conditions},
+        {"weak_segments_all", &Settings::weak_segments_all},
+        {"weak_segment_min_frames", &Settings::weak_segment_min_frames},
+        {"weak_segment_merge_frames", &Settings::weak_segment_merge_frames},
         {"parallel_jobs", &Settings::parallel_jobs},
         {"gpu_metrics_together", &Settings::gpu_metrics_together},
         {"gpu", &Settings::gpu},
@@ -238,6 +242,10 @@ std::string Settings::text() const {
     data["film_grain_default"] = film_grain_default;
     data["graph_metric"] = graph_metric;
     data["graph_worst_frames"] = graph_worst_frames;
+    data["weak_segment_conditions"] = weak_segment_conditions;
+    data["weak_segments_all"] = weak_segments_all;
+    data["weak_segment_min_frames"] = weak_segment_min_frames;
+    data["weak_segment_merge_frames"] = weak_segment_merge_frames;
     data["parallel_jobs"] = parallel_jobs;
     data["gpu_metrics_together"] = gpu_metrics_together;
     data["gpu"] = gpu;
