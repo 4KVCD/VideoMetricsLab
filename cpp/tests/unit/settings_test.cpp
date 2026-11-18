@@ -44,6 +44,8 @@ const std::map<std::string, std::function<Json(const Settings&)>>& settings_by_k
         {"weak_segments_all", [](const Settings& s) { return Json(s.weak_segments_all); }},
         {"weak_segment_min_frames", [](const Settings& s) { return Json(s.weak_segment_min_frames); }},
         {"weak_segment_merge_frames", [](const Settings& s) { return Json(s.weak_segment_merge_frames); }},
+        {"weak_segment_profiles", [](const Settings& s) { return Json(s.weak_segment_profiles_json); }},
+        {"weak_segment_profile", [](const Settings& s) { return Json(s.weak_segment_profile); }},
         {"parallel_jobs", [](const Settings& s) { return Json(s.parallel_jobs); }},
         {"gpu_metrics_together", [](const Settings& s) { return Json(s.gpu_metrics_together); }},
         {"vvc_decode_on_gpu", [](const Settings& s) { return Json(s.vvc_decode_on_gpu); }},

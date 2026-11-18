@@ -84,9 +84,19 @@ SegmentRules segment_rules(const CompareArguments& arguments) {
 
 std::vector<std::string> take_saved_segments(CompareArguments& arguments, const Settings& settings,
                                              const std::vector<std::string>& asked) {
-    const SegmentRules saved =
-        saved_segment_rules(settings.weak_segment_conditions, settings.weak_segments_all,
-                            settings.weak_segment_min_frames, settings.weak_segment_merge_frames);
+    const std::string option =
+        "--segments " + (arguments.segments_profile ? "profile:" + *arguments.segments_profile : std::string("saved"));
+    const std::optional<SegmentProfile> profile = arguments.segments_profile
+                                                      ? segment_profile_named(settings, *arguments.segments_profile)
+                                                      : segment_profile_in_use(settings);
+    if (!profile) {
+        std::string names;
+        for (const SegmentProfile& other : segment_profiles(settings)) {
+            names += (names.empty() ? "" : ", ") + (other.name.empty() ? std::string("Default") : other.name);
+        }
+        throw std::invalid_argument(option + ": no weak segment profile has that name; the app's: " + names);
+    }
+    const SegmentRules& saved = profile->rules;
     std::vector<std::string> left_out;
     arguments.segments.clear();
     for (const WeakCondition& condition : saved.conditions) {
@@ -97,7 +107,7 @@ std::vector<std::string> take_saved_segments(CompareArguments& arguments, const 
         }
     }
     if (saved.conditions.empty()) {
-        throw std::invalid_argument("--segments saved: no conditions are saved; set them in the app's Settings > "
+        throw std::invalid_argument(option + ": the profile has no conditions; set them in the app's Settings > "
                                     "Weak segments, or give them here (such as \"vmaf<90\")");
     }
     if (arguments.segments.empty()) {
@@ -105,7 +115,7 @@ std::vector<std::string> take_saved_segments(CompareArguments& arguments, const 
         for (const std::string& text : left_out) {
             texts += (texts.empty() ? "" : ", ") + text;
         }
-        throw std::invalid_argument("--segments saved: none of the saved conditions (" + texts +
+        throw std::invalid_argument(option + ": none of the profile's conditions (" + texts +
                                     ") is on a metric compared (-m)");
     }
     arguments.segments_all = arguments.segments_all || saved.all;

@@ -515,7 +515,7 @@ private:
     // (the saved ones, or the Weak segments dialog's), in one JSON or CSV
     // file the user names.
     void export_segments_report(const SegmentRules& rules);
-    // The rules saved in Settings > Weak segments (weak_segment_*).
+    // The rules of the weak segment profile in use (Settings > Weak segments).
     SegmentRules saved_weak_rules() const;
     void on_export_all_graphs();
     // One video's results as `format`, or with its graphs as a .zip file.

@@ -1322,13 +1322,14 @@ void GraphPanel::open_weak_segments() {
     if (video == nullptr) {
         return;
     }
-    auto* dialog = new WeakSegmentsDialog(*video, current_metric(), selected_frames(), weak_rules_, dialogs, this);
+    auto* dialog = new WeakSegmentsDialog(*video, current_metric(), selected_frames(), segment_profiles_,
+                                          segment_profile_, dialogs, this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     // Save as default: kept for the next time, here and in Settings.
-    connect(dialog, &WeakSegmentsDialog::rules_saved, this, [this](const SegmentRules& rules) {
-        weak_rules_ = rules;
-        emit weak_segment_rules_saved(rules);
-    });
+    connect(dialog, &WeakSegmentsDialog::rules_saved, this,
+            [this](const std::string& profile, const SegmentRules& rules) {
+                emit weak_segment_rules_saved(profile, rules);  // the window hands the profiles back
+            });
     connect(dialog, &WeakSegmentsDialog::report_requested, this,
             [this](const SegmentRules& rules) { emit segments_report_requested(rules); });
     connect(dialog, &WeakSegmentsDialog::open_requested, this,

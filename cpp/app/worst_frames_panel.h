@@ -19,6 +19,7 @@
 #include "worst_frame_list.h"
 #include "vml/metrics.h"
 #include "vml/results.h"
+#include "vml/segment_profiles.h"
 #include "vml/weak_frames.h"
 
 class QComboBox;
@@ -94,40 +95,49 @@ class WeakSegmentsDialog : public QDialog {
     Q_OBJECT
 
 public:
-    // Starts with the `saved` rules (Settings > Weak segments): the saved
-    // conditions on the metrics the video has, else one on `metric`, from
-    // its first band of worse frames. What is changed here holds for this
-    // dialog until Save as default. Only frames within `range` (nothing:
-    // all). `dialogs` asks where to export.
+    // Starts with profile `in_use` of `profiles` (Settings > Weak
+    // segments): its conditions on the metrics the video has, else one on
+    // `metric`, from its first band of worse frames. Another profile can be
+    // picked to start from. What is changed here holds for this dialog until
+    // Save to profile (the profile picked) or Save as new profile. Only
+    // frames within `range` (nothing: all). `dialogs` asks where to export
+    // and a new profile's name.
     WeakSegmentsDialog(WeakFramesVideo video, const MetricDefinition& metric,
-                       std::optional<std::pair<int, int>> range, const SegmentRules& saved, Dialogs dialogs,
-                       QWidget* parent = nullptr);
+                       std::optional<std::pair<int, int>> range, std::vector<SegmentProfile> profiles,
+                       const std::string& in_use, Dialogs dialogs, QWidget* parent = nullptr);
 
     // The rules shown, with the range.
     SegmentRules rules() const;
-    // What Save as default saves: rules() without the range, and the saved
-    // conditions on metrics this video has none of, left as they were.
+    // What Save to profile saves: rules() without the range, and the
+    // profile's conditions on metrics this video has none of, left as they
+    // were.
     SegmentRules rules_to_save() const;
     const std::vector<WeakSegment>& segments() const { return segments_; }
 
     // For the tests.
     SegmentRulesEditor* editor() const { return editor_; }
     QPushButton* save_button() const { return save_button_; }
+    QPushButton* save_new_button() const { return save_new_button_; }
+    QComboBox* profile_combo() const { return profile_combo_; }
     QTableWidget* table() const { return table_; }
 
 signals:
     // A segment double-clicked: its first frame, in Video Compare.
     void open_requested(const std::string& identity, int frame);
-    // Save as default: rules_to_save(), for Settings.
-    void rules_saved(const vml::SegmentRules& rules);
+    // Save to profile, or Save as new profile: the profile's name ("" for
+    // Default) and rules_to_save(), for Settings.
+    void rules_saved(const std::string& profile, const vml::SegmentRules& rules);
     // Export all videos...: the report of every scored test video, by the
     // rules shown (without the range).
     void report_requested(const vml::SegmentRules& rules);
 
 private:
     void refresh();
-    // Save as default enabled, and the note beside it, as the rules shown
-    // differ from those saved or not.
+    // Shows the profile picked: its rules, as saved.
+    void start_from_profile(const MetricDefinition& metric);
+    std::string profile_name() const;
+    // Save to profile enabled, and the note beside it, as the rules shown
+    // differ from the profile's or not.
     void show_saved_state();
     void fill_table();
     enum class ExportKind { json, csv };
@@ -137,11 +147,14 @@ private:
     std::optional<std::pair<int, int>> range_;
     Dialogs dialogs_;
     std::vector<std::string> keys_;  // the metrics the video has scores of, in the app's order
-    SegmentRules saved_;  // as saved in Settings (since the dialog opened, or last saved here)
+    std::vector<SegmentProfile> profiles_;  // as saved in Settings (since the dialog opened, or saved here)
+    SegmentRules saved_;  // the profile picked's rules, as saved
     std::vector<WeakSegment> segments_;
     SegmentRulesEditor* editor_ = nullptr;
     QLabel* saved_note_ = nullptr;
     QPushButton* save_button_ = nullptr;
+    QPushButton* save_new_button_ = nullptr;
+    QComboBox* profile_combo_ = nullptr;
     QLabel* summary_ = nullptr;
     QTableWidget* table_ = nullptr;
 };

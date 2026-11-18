@@ -4,6 +4,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFileDialog>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -141,6 +142,11 @@ Dialogs standard_dialogs(QWidget* parent, std::function<std::string()> export_di
             return ask_frame_rate(parent, video, reference_fps, others);
         },
         export_folder,
+        [parent](const QString& title, const QString& label, const QString& text) -> std::optional<QString> {
+            bool ok = false;
+            const QString answer = QInputDialog::getText(parent, title, label, QLineEdit::Normal, text, &ok);
+            return ok ? std::optional(answer) : std::nullopt;
+        },
     };
 }
 

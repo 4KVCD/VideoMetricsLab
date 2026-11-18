@@ -20,6 +20,7 @@
 #include "theme.h"
 #include "window_helpers.h"
 #include "vml/python_json.h"
+#include "vml/python_text.h"
 #include "vml/time_format.h"
 
 namespace vml::app {
@@ -264,10 +265,14 @@ void WorstFramesPanel::refresh() {
 // ---------------------------------------------------------- the dialog
 
 WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefinition& metric,
-                                       std::optional<std::pair<int, int>> range, const SegmentRules& saved,
+                                       std::optional<std::pair<int, int>> range,
+                                       std::vector<SegmentProfile> profiles, const std::string& in_use,
                                        Dialogs dialogs, QWidget* parent)
-    : QDialog(parent), video_(std::move(video)), range_(range), dialogs_(std::move(dialogs)), saved_(saved) {
-    saved_.ranges.clear();
+    : QDialog(parent), video_(std::move(video)), range_(range), dialogs_(std::move(dialogs)),
+      profiles_(std::move(profiles)) {
+    if (profiles_.empty()) {
+        profiles_.push_back({"", SegmentRules{}});
+    }
     setWindowTitle(app::tr("Weak segments: {name}", {{"name", video_.label}}));
     for (const MetricDefinition& definition : metrics()) {
         if (score_samples(video_.result->metric_results, std::string(definition.key))) {
@@ -275,34 +280,73 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
         }
     }
     auto* layout = new QVBoxLayout(this);
-    editor_ = new SegmentRulesEditor(keys_, true);
-    editor_->set_remembered(saved_.conditions);
-    editor_->set_rules(saved_);
-    if (editor_->condition_count() == 0) {
-        // None saved on this video's metrics: one on the metric shown.
-        SegmentRules start = saved_;
-        start.conditions = {default_weak_condition(metric)};
-        editor_->set_rules(start);
+    auto* profile_row = new QHBoxLayout;
+    profile_row->addWidget(new QLabel(app::tr("Profile:")));
+    profile_combo_ = new QComboBox;
+    for (const SegmentProfile& profile : profiles_) {
+        profile_combo_->addItem(profile.name.empty() ? app::tr("Default") : qt_text(profile.name),
+                                qt_text(profile.name));
     }
+    const int start = profile_combo_->findData(qt_text(in_use));
+    profile_combo_->setCurrentIndex(start >= 0 ? start : 0);
+    profile_row->addWidget(profile_combo_);
+    profile_row->addStretch(1);
+    layout->addLayout(profile_row);
+
+    editor_ = new SegmentRulesEditor(keys_, true);
     connect(editor_, &SegmentRulesEditor::changed, this, [this] { refresh(); });
     layout->addWidget(editor_);
+    connect(profile_combo_, &QComboBox::currentIndexChanged, this, [this, definition = &metric] {
+        // The registry's: it outlives the dialog.
+        start_from_profile(*definition);
+        refresh();
+    });
 
-    // What is changed here holds for this dialog; Save as default keeps it
-    // in Settings.
+    // What is changed here holds for this dialog; Save to profile keeps it
+    // in the profile picked, in Settings.
     auto* save_row = new QHBoxLayout;
     saved_note_ = new QLabel;
     saved_note_->setWordWrap(true);
     theme::style(saved_note_, "color: {muted};");
     save_row->addWidget(saved_note_, 1);
-    save_button_ = new QPushButton(app::tr("Save as default"));
-    save_button_->setToolTip(app::tr("Keeps these conditions and options as the saved ones, in Settings > Weak "
-                                     "segments."));
+    save_button_ = new QPushButton(app::tr("Save to profile"));
+    save_button_->setToolTip(app::tr("Keeps these conditions and options in the profile picked above, in Settings "
+                                     "> Weak segments."));
     connect(save_button_, &QPushButton::clicked, this, [this] {
         saved_ = rules_to_save();
-        emit rules_saved(saved_);
+        const auto profile = std::find_if(profiles_.begin(), profiles_.end(),
+                                          [name = profile_name()](const SegmentProfile& p) { return p.name == name; });
+        if (profile != profiles_.end()) {
+            profile->rules = saved_;
+        }
+        emit rules_saved(profile_name(), saved_);
         show_saved_state();
     });
     save_row->addWidget(save_button_);
+    save_new_button_ = new QPushButton(app::tr("Save as new profile..."));
+    connect(save_new_button_, &QPushButton::clicked, this, [this] {
+        const std::optional<QString> name =
+            dialogs_.ask_text(app::tr("New weak segment profile"), app::tr("Profile name:"), QString());
+        if (!name) {
+            return;
+        }
+        const std::string text = std::string(python_strip(name->toStdString()));
+        if (!segment_profile_name_free(profiles_, text)) {
+            dialogs_.alert(app::tr("Profile not saved"),
+                           app::tr("A profile needs a name of its own, not Default or another profile's."));
+            return;
+        }
+        saved_ = rules_to_save();
+        profiles_.push_back({text, saved_});
+        emit rules_saved(text, saved_);
+        {
+            const QSignalBlocker blocker(profile_combo_);  // shown as it is, not started again
+            profile_combo_->addItem(qt_text(text), qt_text(text));
+            profile_combo_->setCurrentIndex(profile_combo_->count() - 1);
+        }
+        show_saved_state();
+    });
+    save_row->addWidget(save_new_button_);
     layout->addLayout(save_row);
 
     summary_ = new QLabel;
@@ -330,8 +374,26 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     layout->addWidget(buttons);
 
+    start_from_profile(metric);
     refresh();
-    resize(720, 600);
+    resize(760, 620);
+}
+
+std::string WeakSegmentsDialog::profile_name() const { return profile_combo_->currentData().toString().toStdString(); }
+
+void WeakSegmentsDialog::start_from_profile(const MetricDefinition& metric) {
+    const auto profile = std::find_if(profiles_.begin(), profiles_.end(),
+                                      [name = profile_name()](const SegmentProfile& p) { return p.name == name; });
+    saved_ = profile != profiles_.end() ? profile->rules : SegmentRules{};
+    saved_.ranges.clear();
+    editor_->set_remembered(saved_.conditions);
+    editor_->set_rules(saved_);
+    if (editor_->condition_count() == 0) {
+        // None in the profile on this video's metrics: one on the metric shown.
+        SegmentRules start = saved_;
+        start.conditions = {default_weak_condition(metric)};
+        editor_->set_rules(start);
+    }
 }
 
 SegmentRules WeakSegmentsDialog::rules() const {
@@ -364,8 +426,10 @@ void WeakSegmentsDialog::show_saved_state() {
                         shown.all != saved_.all || shown.min_frames != saved_.min_frames ||
                         shown.merge_frames != saved_.merge_frames;
     save_button_->setEnabled(differ);
-    saved_note_->setText(differ ? app::tr("Changed here only: Save as default keeps these for the next time.")
-                                : app::tr("As saved in Settings > Weak segments."));
+    const QString name = profile_combo_->currentText();
+    saved_note_->setText(differ ? app::tr("Changed here only: Save to profile keeps these in {profile}.",
+                                          {{"profile", name}})
+                                : app::tr("As saved in profile {profile}.", {{"profile", name}}));
 }
 
 void WeakSegmentsDialog::refresh() {

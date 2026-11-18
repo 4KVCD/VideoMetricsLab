@@ -40,6 +40,7 @@
 #include "test_videos.h"
 #include "vml/platform/system.h"
 #include "window_helpers.h"
+#include "vml/segment_profiles.h"
 #include "worst_frames_panel.h"
 
 namespace vml::app {
@@ -817,26 +818,44 @@ TEST_F(GraphPanelTest, WorstFramesListsTheDipsAndOpensThemInVideoCompare) {
     EXPECT_EQ(suggested, (QStringList{"a.vmaf.segments.json", "a.vmaf.segments.csv"}));
 }
 
-TEST_F(GraphPanelTest, WeakSegmentsStartsFromTheSavedRulesAndSavesOnlyWhenAsked) {
-    // The rules saved (Settings > Weak segments) are where the dialog
-    // starts. What is changed there holds for the dialog alone until Save as
-    // default, which hands the rules on, with the saved conditions on
-    // metrics this video has none of left as they were.
+TEST_F(GraphPanelTest, WeakSegmentsStartsFromAProfileAndSavesOnlyWhenAsked) {
+    // The profile in use (Settings > Weak segments) is where the dialog
+    // starts; another can be picked. What is changed there holds for the
+    // dialog alone until Save to profile (the profile picked: its conditions
+    // on metrics this video has none of left as they were) or Save as new
+    // profile.
     VideoColors colors;
     GraphPanel panel(&colors);
     std::vector<float> values(90, 95.0F);
     values[20] = 75.0F;
     values[40] = 60.0F;
     panel.add_run({shared(vmaf_result("a.mkv", values)), "a", "row:a", true});
-    panel.set_weak_segment_rules(saved_segment_rules({"ssimulacra2<60", "vmaf<70"}, true, 1, 3));
-    std::vector<SegmentRules> saved;
+    Settings settings;  // as the window keeps them, handing them back after each save
+    settings.weak_segment_conditions = {"ssimulacra2<60", "vmaf<70"};
+    settings.weak_segments_all = true;
+    settings.weak_segment_merge_frames = 3;
+    settings.weak_segment_profiles_json = R"([{"name": "Strict", "conditions": ["vmaf<92"]}])";
+    const auto hand_back = [&] { panel.set_segment_profiles(segment_profiles(settings), segment_profile_in_use(settings).name); };
+    hand_back();
+    std::vector<std::pair<std::string, SegmentRules>> saved;
     QObject::connect(&panel, &GraphPanel::weak_segment_rules_saved,
-                     [&saved](const SegmentRules& rules) { saved.push_back(rules); });
+                     [&](const std::string& profile, const SegmentRules& rules) {
+                         saved.emplace_back(profile, rules);
+                         store_segment_profile(settings, profile, rules);
+                         hand_back();
+                     });
+    QStringList names{"Mine", "strict"};
+    QString alerted;
+    panel.dialogs.ask_text = [&names](const QString&, const QString&, const QString&) -> std::optional<QString> {
+        return names.takeFirst();
+    };
+    panel.dialogs.alert = [&alerted](const QString& title, const QString&) { alerted = title; };
     page(panel, "vmaf");
     worst_button(panel).click();
     worst_panel(panel).segments_button()->click();
     auto* dialog = panel.findChild<WeakSegmentsDialog*>();
     ASSERT_NE(dialog, nullptr);
+    EXPECT_EQ(dialog->profile_combo()->currentText(), "Default");
     const SegmentRules shown = dialog->rules();
     EXPECT_EQ(condition_texts(shown.conditions), std::vector<std::string>{"vmaf<70"});
     EXPECT_TRUE(shown.all);
@@ -852,19 +871,39 @@ TEST_F(GraphPanelTest, WeakSegmentsStartsFromTheSavedRulesAndSavesOnlyWhenAsked)
     ASSERT_TRUE(dialog->save_button()->isEnabled());
     dialog->save_button()->click();
     ASSERT_EQ(saved.size(), 1U);
-    EXPECT_EQ(condition_texts(saved[0].conditions), (std::vector<std::string>{"vmaf<80", "ssimulacra2<60"}));
-    EXPECT_TRUE(saved[0].ranges.empty());
+    EXPECT_EQ(saved[0].first, "");
+    EXPECT_EQ(condition_texts(saved[0].second.conditions), (std::vector<std::string>{"vmaf<80", "ssimulacra2<60"}));
+    EXPECT_TRUE(saved[0].second.ranges.empty());
     EXPECT_FALSE(dialog->save_button()->isEnabled());
 
-    // Changed again and closed without saving: opened again as saved.
+    // Another profile picked: its rules, as saved.
+    dialog->profile_combo()->setCurrentIndex(dialog->profile_combo()->findText("Strict"));
+    EXPECT_EQ(condition_texts(dialog->rules().conditions), std::vector<std::string>{"vmaf<92"});
+    EXPECT_FALSE(dialog->rules().all);
+    EXPECT_FALSE(dialog->save_button()->isEnabled());
+    // Saved as a new profile, which is then the one picked; a name taken
+    // (any case) is refused.
+    dialog->save_new_button()->click();
+    ASSERT_EQ(saved.size(), 2U);
+    EXPECT_EQ(saved[1].first, "Mine");
+    EXPECT_EQ(dialog->profile_combo()->currentText(), "Mine");
+    EXPECT_EQ(condition_texts(segment_profile_named(settings, "Mine")->rules.conditions),
+              std::vector<std::string>{"vmaf<92"});
+    dialog->save_new_button()->click();
+    EXPECT_EQ(saved.size(), 2U);
+    EXPECT_EQ(alerted, "Profile not saved");
+
+    // Changed and closed without saving: opened again from the profile in
+    // use (still Default), as saved.
+    threshold = dialog->findChild<QDoubleSpinBox*>();
     threshold->setValue(90.0);
     delete dialog;
     worst_panel(panel).segments_button()->click();
     dialog = panel.findChild<WeakSegmentsDialog*>();
     ASSERT_NE(dialog, nullptr);
+    EXPECT_EQ(dialog->profile_combo()->currentText(), "Default");
     EXPECT_EQ(condition_texts(dialog->rules().conditions), std::vector<std::string>{"vmaf<80"});
     EXPECT_EQ(dialog->rules().merge_frames, 3);
-    EXPECT_EQ(saved.size(), 1U);
 
     // Export all videos... asks the window for its report of every video, by
     // the rules shown: unsaved ones too.

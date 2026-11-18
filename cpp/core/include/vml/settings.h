@@ -67,6 +67,12 @@ struct Settings {
     bool weak_segments_all = false;
     int weak_segment_min_frames = 1;
     int weak_segment_merge_frames = 0;
+    // Further weak segment profiles (segment_profiles.h), as JSON text of
+    // their list ([{"name", "conditions", "all", "min_frames",
+    // "merge_frames"}]); the rules above are the Default profile. The one in
+    // use: a name of theirs, or "" (or a name none has) for Default.
+    std::string weak_segment_profiles_json = "[]";
+    std::string weak_segment_profile;
 
     // How many videos to score at once (1 or 2).
     int parallel_jobs = 1;

@@ -33,6 +33,7 @@
 #include "vml/metrics.h"
 #include "vml/results.h"
 #include "vml/stats.h"
+#include "vml/segment_profiles.h"
 #include "vml/weak_frames.h"
 #include "widgets.h"
 #include "worst_frame_list.h"
@@ -249,9 +250,12 @@ public:
     void set_preferred_metric(const std::string& key);
     // How many dips Worst frames lists (Settings.graph_worst_frames).
     void set_worst_count(int count);
-    // The rules Weak segments starts from (Settings > Weak segments).
-    void set_weak_segment_rules(SegmentRules rules) { weak_rules_ = std::move(rules); }
-    const SegmentRules& weak_segment_rules() const { return weak_rules_; }
+    // The weak segment profiles (Settings > Weak segments) and the one in
+    // use, which Weak segments starts from.
+    void set_segment_profiles(std::vector<SegmentProfile> profiles, std::string in_use) {
+        segment_profiles_ = std::move(profiles);
+        segment_profile_ = std::move(in_use);
+    }
     // Whether any run is shown.
     bool empty() const { return entries_.empty(); }
 
@@ -290,8 +294,9 @@ signals:
     void video_compare_requested(const std::string& identity, int frame, const vml::app::WorstFrameList& list);
     // The number of dips Worst frames lists, chosen there.
     void worst_count_changed(int count);
-    // Weak segments' Save as default: the rules to keep in Settings.
-    void weak_segment_rules_saved(const vml::SegmentRules& rules);
+    // Weak segments' Save to profile or Save as new profile: the rules to
+    // keep in Settings as that profile's ("" for Default).
+    void weak_segment_rules_saved(const std::string& profile, const vml::SegmentRules& rules);
     // Weak segments' Export all videos...: the window's report, by these
     // rules (the dialog's).
     void segments_report_requested(const vml::SegmentRules& rules);
@@ -370,7 +375,8 @@ private:
     QCheckBox* difference_box_ = nullptr;
     // Worst frames (issue #24), beside the pages, shown by its button.
     WorstFramesPanel* worst_panel_ = nullptr;
-    SegmentRules weak_rules_;  // what Weak segments starts from
+    std::vector<SegmentProfile> segment_profiles_;  // Weak segments' profiles
+    std::string segment_profile_;  // the one in use, which Weak segments starts from
     QPushButton* worst_button_ = nullptr;
     QLabel* status_label_ = nullptr;
     QLabel* metric_hint_ = nullptr;

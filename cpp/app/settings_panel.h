@@ -81,9 +81,14 @@ public:
     void show_film_grain_default();
     // Deletes the saved results, after asking.
     void clear_saved_results();
-    // Shows the weak segment rules the window has already saved (Weak
-    // segments' Save as default), without treating it as an edit.
+    // Shows the weak segment profiles the window has already saved (Weak
+    // segments' Save to profile), without treating it as an edit.
     void show_weak_segment_rules();
+    // Settings > Weak segments' New..., Rename... and Delete (the tests call
+    // them, with the dialogs answered).
+    void new_weak_profile();
+    void rename_weak_profile();
+    void delete_weak_profile();
 
     // The controls, for the window's tests.
     QLineEdit* ffmpeg_edit = nullptr;
@@ -116,7 +121,12 @@ public:
     QCheckBox* gpu_together = nullptr;
     QComboBox* gpu_choice = nullptr;  // none on a PC with one GPU and none chosen
     QComboBox* vvc_decoder = nullptr;  // none where vvdec-vulkan is not bundled (a Mac)
-    SegmentRulesEditor* weak_segments = nullptr;  // Settings' weak_segment_*
+    // Weak segments: the profile in use (its name the data, "" for Default),
+    // its New, Rename and Delete, and the editor of its rules.
+    QComboBox* weak_profile = nullptr;
+    QPushButton* weak_profile_rename = nullptr;
+    QPushButton* weak_profile_delete = nullptr;
+    SegmentRulesEditor* weak_segments = nullptr;
     QComboBox* decoded_videos = nullptr;
     QComboBox* language = nullptr;
     QComboBox* theme = nullptr;
@@ -135,8 +145,8 @@ signals:
     // Clear saved results has deleted them: the window's rows are to be
     // calculated again.
     void saved_results_cleared();
-    // The weak segment rules were edited and saved: Metric Graphs' Weak
-    // segments starts from them.
+    // The weak segment profiles, or the one in use, were edited and saved:
+    // Metric Graphs' Weak segments starts from them.
     void weak_segment_rules_changed();
 
 private:
@@ -168,6 +178,9 @@ private:
     // Lets the user choose a colour for `button` (or go back to the
     // palette's, with Reset color), and saves it.
     void choose_export_color(QPushButton* button, const QString& title);
+    // Fills the profile list from Settings, the one in use picked, and
+    // shows its rules; no edit.
+    void fill_weak_profiles();
     void on_copy_log();
     void on_export_log();
 
@@ -181,6 +194,7 @@ private:
     std::filesystem::path counted_folder_;
     // How many saved results clearing them removed, while it is under way.
     std::shared_ptr<int> cleared_;
+    bool filling_profiles_ = false;  // fill_weak_profiles: not an edit
 };
 
 }  // namespace vml::app

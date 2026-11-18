@@ -1,5 +1,7 @@
 #include "vml/weak_frames.h"
 
+#include "vml/segment_profiles.h"
+
 #include <gtest/gtest.h>
 
 #include <cmath>
@@ -206,6 +208,50 @@ TEST(WeakFrames, ReportHoldsEveryVideosSegments) {
               "video,reference,first_frame,last_frame,start_time,end_time,frames,vmaf_min,vmaf_max,vmaf_mean\n"
               "\"a, b\",D:/ref.mkv,3,4,0.3,0.5,2,70.0,80.0,75.0\n"
               "\"a, b\",D:/ref.mkv,12,12,1.2,1.3,1,85.0,85.0,85.0\n");
+}
+
+// Weak segment profiles: Default from the weak_segment_* settings, then the
+// others in their saved order (one without a name, or with Default's or
+// another's in any case, left out); looked up in any case; the one in use
+// Default where its name is none's; kept back in the same places.
+TEST(WeakFrames, ProfilesAreKeptInSettings) {
+    Settings settings;
+    settings.weak_segment_conditions = {"vmaf<90"};
+    settings.weak_segment_profiles_json =
+        R"([{"name": " Animation ", "conditions": ["vmaf<93", "ssimulacra2<75"], "min_frames": 2},)"
+        R"( {"name": "default", "conditions": ["psnr<30"]}, {"conditions": ["psnr<30"]},)"
+        R"( {"name": "ANIMATION", "conditions": ["psnr<30"]}, {"name": "Film", "all": true, "merge_frames": -3}])";
+    std::vector<std::string> names;
+    for (const SegmentProfile& profile : segment_profiles(settings)) {
+        names.push_back(profile.name);
+    }
+    EXPECT_EQ(names, (std::vector<std::string>{"", "Animation", "Film"}));
+    const std::optional<SegmentProfile> animation = segment_profile_named(settings, "animation");
+    ASSERT_TRUE(animation);
+    EXPECT_EQ(condition_texts(animation->rules.conditions), (std::vector<std::string>{"vmaf<93", "ssimulacra2<75"}));
+    EXPECT_EQ(animation->rules.min_frames, 2);
+    EXPECT_EQ(segment_profile_named(settings, "Film")->rules.merge_frames, 0);
+    EXPECT_FALSE(segment_profile_named(settings, "Anime"));
+    EXPECT_EQ(segment_profile_named(settings, "Default")->name, "");
+
+    EXPECT_EQ(segment_profile_in_use(settings).name, "");
+    settings.weak_segment_profile = "film";
+    EXPECT_EQ(segment_profile_in_use(settings).name, "Film");
+    settings.weak_segment_profile = "gone";
+    EXPECT_EQ(segment_profile_in_use(settings).name, "");
+
+    store_segment_profile(settings, "Film", SegmentRules{{*parse_weak_condition("ssimulacra2<60")}});
+    store_segment_profile(settings, "HDR", SegmentRules{{*parse_weak_condition("cvvdp<9")}});
+    store_segment_profile(settings, "", SegmentRules{{*parse_weak_condition("vmaf<88")}});
+    EXPECT_EQ(settings.weak_segment_conditions, std::vector<std::string>{"vmaf<88"});
+    EXPECT_EQ(condition_texts(segment_profile_named(settings, "Film")->rules.conditions),
+              std::vector<std::string>{"ssimulacra2<60"});
+    EXPECT_EQ(segment_profiles(settings).size(), 4U);  // Default, Animation, Film, HDR
+
+    EXPECT_TRUE(segment_profile_name_free(segment_profiles(settings), "Grain"));
+    for (const char* taken : {"", "  ", "Default", "hdr", " Animation"}) {
+        EXPECT_FALSE(segment_profile_name_free(segment_profiles(settings), taken)) << taken;
+    }
 }
 
 // The window's helpers: a frame's score (a per-frame metric only at its

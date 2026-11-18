@@ -51,6 +51,9 @@ struct Dialogs {
     // The folder exports start in (issue #19): Settings' Export folder, or
     // Documents where it is blank. save_file starts a bare file name there.
     std::function<QString()> export_folder;
+    // A line of text (a name), the field starting at `text`: nothing for
+    // Cancel.
+    std::function<std::optional<QString>(const QString& title, const QString& label, const QString& text)> ask_text;
 };
 
 // Where a save dialog for `suggested` starts: a bare name (or relative path)
