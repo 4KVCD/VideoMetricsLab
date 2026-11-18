@@ -293,6 +293,8 @@ void MainWindow::show_table_menu(const QPoint& position) {
     const ExportActions exports = add_export_actions(menu, !exported_runs().empty());
     QAction* all_graphs = menu.addAction(app::tr("Export all graphs as ZIP..."));
     all_graphs->setEnabled(!scored_videos().empty());
+    QAction* segments_report = menu.addAction(app::tr("Export weak segments report..."));
+    segments_report->setEnabled(!scored_videos().empty());
     const QAction* chosen = menu.exec(distorted_table_->viewport()->mapToGlobal(position));
     if (chosen != nullptr && chosen == recalculate) {
         recompute_rows(std::vector<int>(selected.begin(), selected.end()));
@@ -300,6 +302,8 @@ void MainWindow::show_table_menu(const QPoint& position) {
         export_video(clicked, video_export->second.first, video_export->second.second);
     } else if (chosen != nullptr && chosen == all_graphs) {
         on_export_all_graphs();
+    } else if (chosen != nullptr && chosen == segments_report) {
+        export_segments_report(saved_weak_rules());
     } else if (const std::optional<ResultsFormat> format = chosen_format(exports, chosen)) {
         export_results(*format);
     }

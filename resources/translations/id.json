@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Belum ada syarat: Segmen lemah di Grafik metrik dimulai dari metrik yang ditampilkan.",
   "Save as default": "Simpan sebagai bawaan",
   "Weak segments": "Segmen lemah",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Kapan skor video dianggap lemah. Grafik metrik > Bingkai terburuk > Segmen lemah dimulai dari ini, dan tombol Simpan sebagai bawaan di sana mengubahnya di sini."
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Kapan skor video dianggap lemah. Grafik metrik > Bingkai terburuk > Segmen lemah dimulai dari ini, dan tombol Simpan sebagai bawaan di sana mengubahnya di sini.",
+  "Don't export weak segments automatically": "Jangan ekspor segmen lemah otomatis",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "Segmen lemah setiap video uji yang sudah diberi skor menurut syarat ini, dalam satu berkas JSON atau CSV.",
+  "Export all videos...": "Ekspor semua video...",
+  "Export each video's weak segments next to it": "Ekspor segmen lemah setiap video di sampingnya",
+  "Export each video's weak segments to the export folder": "Ekspor segmen lemah setiap video ke folder ekspor",
+  "Export weak segments report": "Ekspor laporan segmen lemah",
+  "Export weak segments report...": "Ekspor laporan segmen lemah...",
+  "JSON file (*.json);;CSV file (*.csv)": "Berkas JSON (*.json);;Berkas CSV (*.csv)",
+  "No weak segment conditions": "Tidak ada syarat segmen lemah",
+  "Weak segments report exported to {path}": "Laporan segmen lemah diekspor ke {path}",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "Setelah setiap video diberi skor, menyimpan segmen lemahnya menurut aturan di atas sebagai JSON dan CSV, diberi nama sesuai video dan metrik yang dicakupnya (<video>.vmaf.segments.json). Tidak ada yang disimpan selama belum ada syarat yang diatur. Ke folder ekspor: di samping video selama folder ekspor belum diatur. File yang sudah ada dengan nama sama akan diganti.",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Atur syaratnya di Pengaturan > Segmen lemah terlebih dahulu: laporan mengikuti syarat yang tersimpan.",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Segmen lemah {name} tidak diekspor: belum ada syarat yang diatur di Pengaturan > Segmen lemah.",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "Laporan segmen lemah, ekspor setelah setiap proses, dan --segments saved di baris perintah juga memakainya."
  },
  "plurals": {
   "about {count} day": [

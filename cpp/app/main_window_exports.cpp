@@ -1,7 +1,7 @@
 // The window's graph exports (graph_bundle.h): Export all graphs as ZIP, a
 // scored video's results with or without its graphs from its right-click
 // menu, and Settings' export of each video's results and graphs after its
-// run. The bitrate graphs need the files' bitrate, which the Bitrate tab reads
+// run; and the weak segments report, of every video or after each run. The bitrate graphs need the files' bitrate, which the Bitrate tab reads
 // after each run: an export made before it is read waits for it, and says so.
 #include "main_window.h"
 
@@ -22,6 +22,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 #include "vml/results_summary.h"
+#include "vml/weak_frames.h"
 #include "vml/zip_archive.h"
 #include "window_helpers.h"
 
@@ -33,6 +34,30 @@ const app_log::Logger logger("vml.graph_export");
 
 // How often a waiting export looks whether its bitrate is read.
 constexpr int bundle_poll_ms = 500;
+
+// Writes `bytes` to `out` whole, or throws.
+void write_bytes(const std::filesystem::path& out, const std::string& bytes) {
+    std::ofstream file(out, std::ios::binary | std::ios::trunc);
+    file << bytes;
+    file.close();
+    if (!file) {
+        throw std::runtime_error(platform::path_text(out) + " could not be written");
+    }
+}
+
+// CSV text as the command line writes it: CR LF on Windows.
+std::string text_lines(const std::string& text) {
+#ifdef _WIN32
+    std::string crlf;
+    crlf.reserve(text.size() + text.size() / 32);
+    for (const char c : text) {
+        crlf += c == '\n' ? std::string("\r\n") : std::string(1, c);
+    }
+    return crlf;
+#else
+    return text;
+#endif
+}
 
 // Whether the Bitrate tab is still reading `path` (or is about to).
 bool still_reading(const BitratePanel& panel, const std::filesystem::path& path) {
@@ -119,14 +144,7 @@ void MainWindow::export_video(int row, ResultsFormat format, bool with_graphs) {
                                                 csv ? app::tr("CSV file (*.csv)") : app::tr("JSON file (*.json)"));
         if (!path.isEmpty()) {
             file_writes_->submit(app::tr("export {name}", {{"name", name_of(path_of(path))}}),
-                                 [bytes = results->second, out = path_of(path)] {
-                                     std::ofstream file(out, std::ios::binary | std::ios::trunc);
-                                     file << bytes;
-                                     file.close();
-                                     if (!file) {
-                                         throw std::runtime_error(platform::path_text(out) + " could not be written");
-                                     }
-                                 });
+                                 [bytes = results->second, out = path_of(path)] { write_bytes(out, bytes); });
         }
         return;
     }
@@ -138,7 +156,47 @@ void MainWindow::export_video(int row, ResultsFormat format, bool with_graphs) {
     }
 }
 
+SegmentRules MainWindow::saved_weak_rules() const {
+    return saved_segment_rules(settings_.weak_segment_conditions, settings_.weak_segments_all,
+                               settings_.weak_segment_min_frames, settings_.weak_segment_merge_frames);
+}
+
+void MainWindow::export_segments_report(const SegmentRules& rules) {
+    const std::vector<BundleVideo> videos = scored_videos();
+    if (videos.empty()) {
+        dialogs_.inform(app::tr("Nothing to export"),
+                        app::tr("No test video has been scored against the reference yet."));
+        return;
+    }
+    if (rules.conditions.empty()) {
+        dialogs_.inform(app::tr("No weak segment conditions"),
+                        app::tr("Set the conditions in Settings > Weak segments first: the report follows the "
+                                "saved ones."));
+        return;
+    }
+    const QString suggested = file_safe(text_of(source_info_->path.stem()) + QStringLiteral(" - weak segments")) +
+                              "." + qt_text(segments_file_suffix(rules)) + ".json";
+    const QString path = dialogs_.save_file(app::tr("Export weak segments report"), suggested,
+                                            app::tr("JSON file (*.json);;CSV file (*.csv)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    std::vector<SegmentsReportVideo> report;
+    for (const BundleVideo& video : videos) {
+        report.push_back({video.label.toStdString(), platform::path_text(video.path),
+                          platform::path_text(source_info_->path), video.result.get()});
+    }
+    // Made now, while the results are the window's; written on the worker.
+    const bool csv = path.endsWith(QStringLiteral(".csv"), Qt::CaseInsensitive);
+    std::string bytes = csv ? text_lines(segments_report_csv(report, rules))
+                            : python_json_dumps(segments_report_json(report, rules)) + "\n";
+    file_writes_->submit(app::tr("export {name}", {{"name", name_of(path_of(path))}}),
+                         [bytes = std::move(bytes), out = path_of(path)] { write_bytes(out, bytes); });
+    show_status(app::tr("Weak segments report exported to {path}", {{"path", path}}));
+}
+
 void MainWindow::export_automatically(const RowData& row_data) {
+    export_segments_automatically(row_data);
     if (settings_.auto_export.empty()) {
         return;
     }
@@ -154,6 +212,39 @@ void MainWindow::export_automatically(const RowData& row_data) {
     const std::filesystem::path destination =
         folder / path_of(file_safe(video->label + QStringLiteral(" - VideoMetricsLab")) + ".zip");
     queue_bundle({{*video}, source_info_->path, destination, {*results}, false, true});
+}
+
+void MainWindow::export_segments_automatically(const RowData& row_data) {
+    if (settings_.auto_export_segments.empty()) {
+        return;
+    }
+    const std::optional<BundleVideo> video = scored_video(row_data);
+    if (!video) {
+        return;
+    }
+    const SegmentRules rules = saved_weak_rules();
+    if (rules.conditions.empty()) {
+        logger.info("No weak segments exported after the run of " + video->label.toStdString() +
+                    ": no condition is set in Settings > Weak segments");
+        show_status(app::tr("{name}'s weak segments weren't exported: no condition is set in Settings > Weak "
+                            "segments.",
+                            {{"name", video->label}}));
+        return;
+    }
+    // In the export folder where chosen and set; else beside the test video.
+    const std::filesystem::path folder = settings_.auto_export_segments == "folder" && !settings_.export_dir.empty()
+                                             ? platform::path_from_text(settings_.export_dir)
+                                             : row_data.path.parent_path();
+    const std::vector<WeakSegment> segments = weak_segments(*video->result, rules);
+    const QString stem = suggested_file_name(video->label, "." + qt_text(segments_file_suffix(rules)));
+    std::vector<std::pair<std::filesystem::path, std::string>> files{
+        {folder / path_of(stem + ".json"), python_json_dumps(segments_json(segments, rules)) + "\n"},
+        {folder / path_of(stem + ".csv"), text_lines(segments_csv(segments, rules))}};
+    file_writes_->submit(app::tr("export {name}", {{"name", stem}}), [files = std::move(files)] {
+        for (const auto& [out, bytes] : files) {
+            write_bytes(out, bytes);
+        }
+    });
 }
 
 void MainWindow::queue_bundle(PendingBundle bundle) {

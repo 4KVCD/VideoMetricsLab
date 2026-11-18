@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Brak warunku: Słabe odcinki w Wykresy metryk zaczynają od pokazanej metryki.",
   "Save as default": "Zapisz jako domyślne",
   "Weak segments": "Słabe odcinki",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Kiedy wyniki filmu uznaje się za słabe. Wykresy metryk > Najgorsze klatki > Słabe odcinki zaczynają od nich, a ich przycisk Zapisz jako domyślne zmienia je tutaj."
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Kiedy wyniki filmu uznaje się za słabe. Wykresy metryk > Najgorsze klatki > Słabe odcinki zaczynają od nich, a ich przycisk Zapisz jako domyślne zmienia je tutaj.",
+  "Don't export weak segments automatically": "Nie eksportuj słabych odcinków automatycznie",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "Słabe odcinki każdego ocenionego filmu testowego według tych warunków, w jednym pliku JSON lub CSV.",
+  "Export all videos...": "Eksportuj wszystkie filmy...",
+  "Export each video's weak segments next to it": "Eksportuj słabe odcinki każdego filmu obok niego",
+  "Export each video's weak segments to the export folder": "Eksportuj słabe odcinki każdego filmu do folderu eksportu",
+  "Export weak segments report": "Eksportuj raport słabych odcinków",
+  "Export weak segments report...": "Eksportuj raport słabych odcinków...",
+  "JSON file (*.json);;CSV file (*.csv)": "Plik JSON (*.json);;Plik CSV (*.csv)",
+  "No weak segment conditions": "Brak warunków słabych odcinków",
+  "Weak segments report exported to {path}": "Raport słabych odcinków wyeksportowano do {path}",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "Po ocenie każdego filmu zapisuje jego słabe odcinki według powyższych reguł jako JSON i CSV, nazwane od filmu i metryk, których dotyczą (<video>.vmaf.segments.json). Nic nie jest zapisywane, dopóki nie ustawiono żadnego warunku. Do folderu eksportu: obok filmu, dopóki folder eksportu nie jest ustawiony. Istniejące pliki o tych samych nazwach zostają zastąpione.",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Najpierw ustaw warunki w Ustawienia > Słabe odcinki: raport odpowiada zapisanym.",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Słabe odcinki filmu {name} nie zostały wyeksportowane: w Ustawienia > Słabe odcinki nie ustawiono żadnego warunku.",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "Używają ich też raport słabych odcinków, eksporty po każdym przebiegu i --segments saved w wierszu poleceń."
  },
  "plurals": {
   "about {count} day": [

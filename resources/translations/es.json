@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Aún no hay ninguna condición: Segmentos débiles de Gráficos de métricas empieza por la métrica mostrada.",
   "Save as default": "Guardar como predeterminado",
   "Weak segments": "Segmentos débiles",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Dónde las puntuaciones de un vídeo cuentan como débiles. Gráficos de métricas > Peores fotogramas > Segmentos débiles parte de estas, y su Guardar como predeterminado las cambia aquí."
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Dónde las puntuaciones de un vídeo cuentan como débiles. Gráficos de métricas > Peores fotogramas > Segmentos débiles parte de estas, y su Guardar como predeterminado las cambia aquí.",
+  "Don't export weak segments automatically": "No exportar segmentos débiles automáticamente",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "Los segmentos débiles de cada vídeo de prueba puntuado según estas condiciones, en un solo archivo JSON o CSV.",
+  "Export all videos...": "Exportar todos los vídeos...",
+  "Export each video's weak segments next to it": "Exportar los segmentos débiles de cada vídeo junto a él",
+  "Export each video's weak segments to the export folder": "Exportar los segmentos débiles de cada vídeo a la carpeta de exportación",
+  "Export weak segments report": "Exportar informe de segmentos débiles",
+  "Export weak segments report...": "Exportar informe de segmentos débiles...",
+  "JSON file (*.json);;CSV file (*.csv)": "Archivo JSON (*.json);;Archivo CSV (*.csv)",
+  "No weak segment conditions": "No hay condiciones de segmentos débiles",
+  "Weak segments report exported to {path}": "Informe de segmentos débiles exportado a {path}",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "Tras puntuar cada vídeo, guarda sus segmentos débiles según las reglas anteriores como JSON y CSV, con el nombre del vídeo y de las métricas que abarcan (<video>.vmaf.segments.json). No se guarda nada mientras no haya ninguna condición. En la carpeta de exportación: junto al vídeo mientras no haya carpeta de exportación. Los archivos existentes con los mismos nombres se reemplazan.",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Defina primero las condiciones en Configuración > Segmentos débiles: el informe sigue las guardadas.",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Los segmentos débiles de {name} no se exportaron: no hay ninguna condición en Configuración > Segmentos débiles.",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "El informe de segmentos débiles, las exportaciones después de cada ejecución y --segments saved de la línea de comandos también las usan."
  },
  "plurals": {
   "about {count} day": [

@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Zatím žádná podmínka: Slabé úseky v Grafy metrik začínají zobrazenou metrikou.",
   "Save as default": "Uložit jako výchozí",
   "Weak segments": "Slabé úseky",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Kdy se skóre videa považuje za slabé. Grafy metrik > Nejhorší snímky > Slabé úseky z nich vycházejí a jejich tlačítko Uložit jako výchozí je mění zde."
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Kdy se skóre videa považuje za slabé. Grafy metrik > Nejhorší snímky > Slabé úseky z nich vycházejí a jejich tlačítko Uložit jako výchozí je mění zde.",
+  "Don't export weak segments automatically": "Neexportovat slabé úseky automaticky",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "Slabé úseky každého vyhodnoceného testovaného videa podle těchto podmínek v jednom souboru JSON nebo CSV.",
+  "Export all videos...": "Exportovat všechna videa...",
+  "Export each video's weak segments next to it": "Exportovat slabé úseky každého videa vedle něj",
+  "Export each video's weak segments to the export folder": "Exportovat slabé úseky každého videa do složky pro export",
+  "Export weak segments report": "Exportovat přehled slabých úseků",
+  "Export weak segments report...": "Exportovat přehled slabých úseků...",
+  "JSON file (*.json);;CSV file (*.csv)": "Soubor JSON (*.json);;Soubor CSV (*.csv)",
+  "No weak segment conditions": "Žádné podmínky slabých úseků",
+  "Weak segments report exported to {path}": "Přehled slabých úseků exportován do {path}",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "Po vyhodnocení každého videa uloží jeho slabé úseky podle pravidel výše jako JSON a CSV, pojmenované podle videa a metrik, které pokrývají (<video>.vmaf.segments.json). Dokud není nastavena žádná podmínka, nic se neuloží. Do složky pro export: vedle videa, dokud není složka pro export nastavena. Existující soubory se stejnými názvy se nahradí.",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Nejprve nastavte podmínky v Nastavení > Slabé úseky: přehled se řídí uloženými.",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Slabé úseky videa {name} nebyly exportovány: v Nastavení > Slabé úseky není nastavena žádná podmínka.",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "Používají je i přehled slabých úseků, exporty po každém běhu a --segments saved v příkazovém řádku."
  },
  "plurals": {
   "about {count} day": [

@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Умов ще немає: «Слабкі ділянки» в «Графіки метрик» починаються з показаної метрики.",
   "Save as default": "Зберегти як типові",
   "Weak segments": "Слабкі ділянки",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Де оцінки відео вважаються слабкими. Графіки метрик > Найгірші кадри > Слабкі ділянки починається з них, а його кнопка «Зберегти як типові» змінює їх тут."
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Де оцінки відео вважаються слабкими. Графіки метрик > Найгірші кадри > Слабкі ділянки починається з них, а його кнопка «Зберегти як типові» змінює їх тут.",
+  "Don't export weak segments automatically": "Не експортувати слабкі ділянки автоматично",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "Слабкі ділянки кожного оціненого тестового відео за цими умовами в одному файлі JSON або CSV.",
+  "Export all videos...": "Експорт усіх відео...",
+  "Export each video's weak segments next to it": "Експортувати слабкі ділянки кожного відео поруч із ним",
+  "Export each video's weak segments to the export folder": "Експортувати слабкі ділянки кожного відео в папку експорту",
+  "Export weak segments report": "Експорт звіту про слабкі ділянки",
+  "Export weak segments report...": "Експорт звіту про слабкі ділянки...",
+  "JSON file (*.json);;CSV file (*.csv)": "Файл JSON (*.json);;Файл CSV (*.csv)",
+  "No weak segment conditions": "Немає умов слабких ділянок",
+  "Weak segments report exported to {path}": "Звіт про слабкі ділянки експортовано в {path}",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "Після оцінювання кожного відео зберігає його слабкі ділянки за правилами вище в JSON і CSV, з назвою відео та метрик, які вони охоплюють (<video>.vmaf.segments.json). Нічого не зберігається, доки не задано жодної умови. У папку експорту: поруч із відео, доки папку експорту не задано. Наявні файли з такими самими назвами замінюються.",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Спочатку задайте умови в Налаштування > Слабкі ділянки: звіт відповідає збереженим.",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Слабкі ділянки {name} не експортовано: у Налаштування > Слабкі ділянки не задано жодної умови.",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "Їх також використовують звіт про слабкі ділянки, експорт після кожного запуску та --segments saved у командному рядку."
  },
  "plurals": {
   "about {count} day": [

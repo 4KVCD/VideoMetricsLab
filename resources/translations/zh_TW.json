@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "尚無條件：指標圖表 的 弱片段 從目前顯示的指標開始。",
   "Save as default": "儲存為預設值",
   "Weak segments": "弱片段",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "影片的分數在哪些情況下算作弱。指標圖表 > 最差影格 > 弱片段 從這些條件開始，其 儲存為預設值 會在此處變更它們。"
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "影片的分數在哪些情況下算作弱。指標圖表 > 最差影格 > 弱片段 從這些條件開始，其 儲存為預設值 會在此處變更它們。",
+  "Don't export weak segments automatically": "不自動匯出弱片段",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "每部已評分測試影片依這些條件得到的弱片段，儲存在一個 JSON 或 CSV 檔案中。",
+  "Export all videos...": "匯出所有影片...",
+  "Export each video's weak segments next to it": "將每部影片的弱片段匯出到影片旁邊",
+  "Export each video's weak segments to the export folder": "將每部影片的弱片段匯出到匯出資料夾",
+  "Export weak segments report": "匯出弱片段報告",
+  "Export weak segments report...": "匯出弱片段報告...",
+  "JSON file (*.json);;CSV file (*.csv)": "JSON 檔案 (*.json);;CSV 檔案 (*.csv)",
+  "No weak segment conditions": "沒有弱片段條件",
+  "Weak segments report exported to {path}": "弱片段報告已匯出到 {path}",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "每部影片評分後，依上述規則將其弱片段儲存為 JSON 和 CSV，以影片名稱及其涵蓋的指標命名 (<video>.vmaf.segments.json)。未設定任何條件時不會儲存任何內容。儲存到匯出資料夾：未設定匯出資料夾時儲存在影片旁邊。同名的現有檔案會被取代。",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "請先在 設定 > 弱片段 中設定條件：報告依照儲存的條件產生。",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "{name} 的弱片段未匯出：設定 > 弱片段 中未設定任何條件。",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "弱片段報告、每次執行後的匯出以及命令列的 --segments saved 也使用這些條件。"
  },
  "plurals": {
   "about {count} day": [

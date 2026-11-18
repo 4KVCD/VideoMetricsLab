@@ -71,7 +71,7 @@ the `low` or `high` ones, and its `bands`.
 | `label` | Window only: the name the window gives it. |
 | `status` | `ok`, `partial` (some metrics failed: `failed_metrics` says why), and on the command line also `failed` (with `error`) or `cancelled`. |
 | `from_saved_scores` | Command line only: whether the scores came from saved scores. |
-| `csv`, `run_file`, `segment_files` | Command line only: where `--csv`, `--run-dir` and `--segments-dir` wrote this video's files (the `.segments.json`, then the `.segments.csv`), for a script to find them under the names they were given (`--name`, or a number after a name taken). A further CVVDP display's entry in `cvvdp_displays` has its own `csv` and `run_file`. |
+| `csv`, `run_file`, `segment_files` | Command line only: where `--csv`, `--run-dir` and `--segments-dir` wrote this video's files (the `.<metrics>.segments.json`, then the `.csv`), for a script to find them under the names they were given (`--name`, or a number after a name taken). A further CVVDP display's entry in `cvvdp_displays` has its own `csv` and `run_file`. |
 | `width` ... `encoder_settings` | The test video's details (see [File details](#file-details)). |
 | `film_grain` | Where the stream carries film grain: its `kinds` and whether it was `scored` `with` or `without` it (and `why_without`). |
 | `compared_frames` | How many frame pairs were compared. |

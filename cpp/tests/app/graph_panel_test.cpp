@@ -865,6 +865,22 @@ TEST_F(GraphPanelTest, WeakSegmentsStartsFromTheSavedRulesAndSavesOnlyWhenAsked)
     EXPECT_EQ(condition_texts(dialog->rules().conditions), std::vector<std::string>{"vmaf<80"});
     EXPECT_EQ(dialog->rules().merge_frames, 3);
     EXPECT_EQ(saved.size(), 1U);
+
+    // Export all videos... asks the window for its report of every video, by
+    // the rules shown: unsaved ones too.
+    threshold = dialog->findChild<QDoubleSpinBox*>();
+    threshold->setValue(85.0);
+    std::vector<SegmentRules> reports;
+    QObject::connect(&panel, &GraphPanel::segments_report_requested,
+                     [&reports](const SegmentRules& rules) { reports.push_back(rules); });
+    for (QPushButton* button : dialog->findChildren<QPushButton*>()) {
+        if (button->text() == "Export all videos...") {
+            button->click();
+        }
+    }
+    ASSERT_EQ(reports.size(), 1U);
+    EXPECT_EQ(condition_texts(reports[0].conditions), std::vector<std::string>{"vmaf<85"});
+    EXPECT_EQ(reports[0].merge_frames, 3);
 }
 
 TEST_F(GraphPanelTest, WorstFramesKeepsTheChosenVideoWhileItIsRecalculated) {

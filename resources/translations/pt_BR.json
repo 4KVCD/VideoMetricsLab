@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Nenhuma condição ainda: Segmentos fracos de Gráficos de métricas começa pela métrica exibida.",
   "Save as default": "Salvar como padrão",
   "Weak segments": "Segmentos fracos",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Onde as pontuações de um vídeo contam como fracas. Gráficos de métricas > Piores quadros > Segmentos fracos parte destas, e o seu Salvar como padrão as altera aqui."
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Onde as pontuações de um vídeo contam como fracas. Gráficos de métricas > Piores quadros > Segmentos fracos parte destas, e o seu Salvar como padrão as altera aqui.",
+  "Don't export weak segments automatically": "Não exportar segmentos fracos automaticamente",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "Os segmentos fracos de cada vídeo de teste pontuado por estas condições, em um único arquivo JSON ou CSV.",
+  "Export all videos...": "Exportar todos os vídeos...",
+  "Export each video's weak segments next to it": "Exportar os segmentos fracos de cada vídeo ao lado dele",
+  "Export each video's weak segments to the export folder": "Exportar os segmentos fracos de cada vídeo para a pasta de exportação",
+  "Export weak segments report": "Exportar relatório de segmentos fracos",
+  "Export weak segments report...": "Exportar relatório de segmentos fracos...",
+  "JSON file (*.json);;CSV file (*.csv)": "Arquivo JSON (*.json);;Arquivo CSV (*.csv)",
+  "No weak segment conditions": "Nenhuma condição de segmentos fracos",
+  "Weak segments report exported to {path}": "Relatório de segmentos fracos exportado para {path}",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "Depois que cada vídeo é pontuado, salva seus segmentos fracos pelas regras acima como JSON e CSV, com o nome do vídeo e das métricas que eles abrangem (<video>.vmaf.segments.json). Nada é salvo enquanto nenhuma condição estiver definida. Na pasta de exportação: ao lado do vídeo enquanto não houver pasta de exportação definida. Arquivos existentes com os mesmos nomes são substituídos.",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Defina primeiro as condições em Configurações > Segmentos fracos: o relatório segue as salvas.",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Os segmentos fracos de {name} não foram exportados: nenhuma condição está definida em Configurações > Segmentos fracos.",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "O relatório de segmentos fracos, as exportações após cada execução e o --segments saved da linha de comando também as usam."
  },
  "plurals": {
   "about {count} day": [

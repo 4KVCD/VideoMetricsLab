@@ -1013,7 +1013,21 @@
   "No condition yet: Metric Graphs' Weak segments starts from the metric shown.": "Henüz koşul yok: Metrik grafikleri'ndeki Zayıf bölümler gösterilen metrikten başlar.",
   "Save as default": "Varsayılan olarak kaydet",
   "Weak segments": "Zayıf bölümler",
-  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Bir videonun puanlarının zayıf sayıldığı yerler. Metrik grafikleri > En kötü kareler > Zayıf bölümler bunlardan başlar ve oradaki Varsayılan olarak kaydet bunları burada değiştirir."
+  "Where a video's scores count as weak. Metric Graphs > Worst frames > Weak segments starts from these, and its Save as default changes them here.": "Bir videonun puanlarının zayıf sayıldığı yerler. Metrik grafikleri > En kötü kareler > Zayıf bölümler bunlardan başlar ve oradaki Varsayılan olarak kaydet bunları burada değiştirir.",
+  "Don't export weak segments automatically": "Zayıf bölümleri otomatik dışa aktarma",
+  "Every scored test video's weak segments by these conditions, in one JSON or CSV file.": "Puanlanan her test videosunun bu koşullara göre zayıf bölümleri, tek bir JSON veya CSV dosyasında.",
+  "Export all videos...": "Tüm videoları dışa aktar...",
+  "Export each video's weak segments next to it": "Her videonun zayıf bölümlerini yanına aktar",
+  "Export each video's weak segments to the export folder": "Her videonun zayıf bölümlerini dışa aktarma klasörüne aktar",
+  "Export weak segments report": "Zayıf bölümler raporunu dışa aktar",
+  "Export weak segments report...": "Zayıf bölümler raporunu dışa aktar...",
+  "JSON file (*.json);;CSV file (*.csv)": "JSON dosyası (*.json);;CSV dosyası (*.csv)",
+  "No weak segment conditions": "Zayıf bölüm koşulu yok",
+  "Weak segments report exported to {path}": "Zayıf bölümler raporu {path} konumuna aktarıldı",
+  "After each video is scored, saves its weak segments by the rules above as JSON and CSV, named after the video and the metrics they cover (<video>.vmaf.segments.json). Nothing is saved while no condition is set. To the export folder: next to the video while no export folder is set. Existing files of the same names are replaced.": "Her video puanlandıktan sonra, zayıf bölümlerini yukarıdaki kurallara göre videonun ve kapsadıkları metriklerin adıyla JSON ve CSV olarak kaydeder (<video>.vmaf.segments.json). Hiçbir koşul ayarlanmadığı sürece hiçbir şey kaydedilmez. Dışa aktarma klasörüne: dışa aktarma klasörü ayarlanmadığı sürece videonun yanına. Aynı adlı mevcut dosyalar değiştirilir.",
+  "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Önce koşulları Ayarlar > Zayıf bölümler içinde ayarlayın: rapor kaydedilenleri izler.",
+  "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "{name} için zayıf bölümler dışa aktarılmadı: Ayarlar > Zayıf bölümler içinde hiçbir koşul ayarlanmamış.",
+  "The weak segments report, the exports after each run and the command line's --segments saved use them too.": "Zayıf bölümler raporu, her çalıştırmadan sonraki dışa aktarmalar ve komut satırındaki --segments saved da bunları kullanır."
  },
  "plurals": {
   "about {count} day": [

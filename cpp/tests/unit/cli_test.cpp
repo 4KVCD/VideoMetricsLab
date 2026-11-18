@@ -12,7 +12,9 @@
 #include <iterator>
 #include <random>
 #include <set>
+#include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "batch_file.h"
@@ -158,6 +160,65 @@ TEST(CommandLine, ReadsWorstFramesAndSegments) {
               "vmaf<90");
     EXPECT_TRUE(error_of({"compare", "ref.mkv", "a.mkv", "--segments", "vmav<90"})
                     .starts_with("error: argument --segments: unknown metric vmav; choose from: "));
+    EXPECT_EQ(error_of({"compare", "ref.mkv", "a.mkv", "--segments-report", "r.json"}),
+              "error: argument --segments-report: only with --segments, whose segments it shapes");
+}
+
+// --segments saved: the conditions last set in the window's Weak segments,
+// those on metrics not compared left out (and said), its options where the
+// command gives none; refused when none is left. --segments-report writes
+// every video's segments in one file, JSON or CSV by its name.
+TEST(CommandLine, SegmentsSavedTakesTheWindowsRulesAndReportsEveryVideo) {
+    CompareArguments arguments = parse_arguments({"compare", "ref.mkv", "a.mkv", "--segments", " Saved",
+                                                  "--segment-merge-frames", "1", "--segments-report", "r.csv"})
+                                     .compare;
+    EXPECT_TRUE(arguments.segments_saved);
+    EXPECT_TRUE(arguments.segments.empty());
+    EXPECT_EQ(arguments.segments_report, "r.csv");
+    Settings settings;
+    settings.weak_segment_conditions = {"vmaf<80", "ssimulacra2<60"};
+    settings.weak_segments_all = true;
+    settings.weak_segment_min_frames = 2;
+    settings.weak_segment_merge_frames = 5;
+    EXPECT_EQ(take_saved_segments(arguments, settings, {"vmaf", "psnr"}), std::vector<std::string>{"ssimulacra2<60"});
+    ASSERT_EQ(arguments.segments.size(), 1U);
+    EXPECT_EQ(arguments.segments[0].text(), "vmaf<80");
+    EXPECT_TRUE(arguments.segments_all);
+    EXPECT_EQ(arguments.segment_min_frames, 2);
+    EXPECT_EQ(arguments.segment_merge_frames, 1);  // given here
+    const auto refusal = [&settings](const std::vector<std::string>& asked) {
+        CompareArguments saved = parse_arguments({"compare", "ref.mkv", "a.mkv", "--segments", "saved"}).compare;
+        try {
+            take_saved_segments(saved, settings, asked);
+        } catch (const std::invalid_argument& error) {
+            return std::string(error.what());
+        }
+        return std::string("taken");
+    };
+    EXPECT_EQ(refusal({"psnr"}),
+              "--segments saved: none of the saved conditions (vmaf<80, ssimulacra2<60) is on a metric compared (-m)");
+    settings.weak_segment_conditions.clear();
+    EXPECT_TRUE(refusal({"vmaf"}).starts_with("--segments saved: no conditions are saved"));
+
+    const test::Folder temporary;
+    std::vector<TestVideo> videos(2);
+    videos[0].path = "a.mkv";
+    videos[0].result.emplace().metric_results.add(
+        FrameMetricResult{"vmaf", {0, 1, 2, 3}, {0.0, 0.04, 0.08, 0.12}, {96.0F, 70.0F, 70.0F, 96.0F}, {}});
+    videos[0].result->fps = 25.0;
+    videos[1].path = "b.mkv";  // not scored: left out
+    const std::vector<std::pair<const TestVideo*, std::filesystem::path>> report{{&videos[0], "ref.mkv"},
+                                                                               {&videos[1], "ref.mkv"}};
+    const SegmentRules rules = segment_rules(arguments);
+    ASSERT_EQ(write_segments_report(report, rules, temporary / "r.json"), std::nullopt);
+    const nlohmann::json json = nlohmann::json::parse(platform::read_file(temporary / "r.json").value_or(""));
+    ASSERT_EQ(json["videos"].size(), 1U);
+    EXPECT_EQ(json["videos"][0]["name"], "a.mkv");
+    EXPECT_EQ(json["videos"][0]["segment_count"], 1);
+    EXPECT_EQ(json["combine"], "all");
+    ASSERT_EQ(write_segments_report(report, rules, temporary / "r.CSV"), std::nullopt);
+    EXPECT_TRUE(platform::read_file(temporary / "r.CSV").value_or("").starts_with("video,reference,first_frame,"));
+
 }
 
 TEST(CommandLine, FindsTestVideosAsThePythonApp) {
@@ -717,13 +778,14 @@ TEST(CommandLine, NamesEachVideosFilesAfterTheTemplate) {
     const auto [loaded, label] = load_run(run_file);
     EXPECT_EQ(label, stem);
     EXPECT_EQ(loaded.metric_results.frame("vmaf")->values, (std::vector<float>{96.0F, 80.0F}));
-    const std::filesystem::path segments = temporary / "segments" / (stem + ".segments.json");
+    const std::filesystem::path segments = temporary / "segments" / (stem + ".vmaf.segments.json");
     EXPECT_TRUE(std::filesystem::exists(segments));
 
     const nlohmann::ordered_json entry = results_document(VideoInfo{}, videos, summarize(videos), false)["videos"][0];
     EXPECT_EQ(entry["run_file"], platform::path_text(run_file));
     EXPECT_EQ(entry["segment_files"][0], platform::path_text(segments));
-    EXPECT_EQ(entry["segment_files"][1], platform::path_text(temporary / "segments" / (stem + ".segments.csv")));
+    EXPECT_EQ(entry["segment_files"][1],
+              platform::path_text(temporary / "segments" / (stem + ".vmaf.segments.csv")));
 }
 
 // --gpu names a GPU DirectX lists, by its whole name or a part of one, or

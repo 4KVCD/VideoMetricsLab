@@ -145,4 +145,24 @@ std::string segments_file_suffix(const SegmentRules& rules);
 // start_time, end_time, frames, then <metric>_min, _max and _mean.
 std::string segments_csv(const std::vector<WeakSegment>& segments, const SegmentRules& rules);
 
+// A video in a weak segments report: its name and file, its reference's,
+// and its result.
+struct SegmentsReportVideo {
+    std::string name;
+    std::string path;
+    std::string reference;
+    const ComparisonResult* result = nullptr;
+};
+
+// Every video's segments by `rules`, as one JSON report: the rules (as
+// segments_json gives them, without ranges), then "videos", each with its
+// name, path, reference, segment_count, weak_frames (the segments' frames
+// added up) and segments (segments_json's).
+nlohmann::ordered_json segments_report_json(const std::vector<SegmentsReportVideo>& videos,
+                                            const SegmentRules& rules);
+
+// The same as CSV: segments_csv's rows, each led by its video's name and
+// reference ("video,reference,first_frame,..."), the videos in order.
+std::string segments_report_csv(const std::vector<SegmentsReportVideo>& videos, const SegmentRules& rules);
+
 }  // namespace vml
