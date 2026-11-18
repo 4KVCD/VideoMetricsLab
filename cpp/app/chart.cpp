@@ -38,8 +38,11 @@ constexpr int margin_right = 12;
 constexpr int margin_top = 10;
 constexpr int margin_bottom = 38;
 
-// Tick spacings that read naturally on a time axis, in seconds.
-constexpr std::array<double, 15> time_steps{1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400};
+// Tick spacings that read naturally on a time axis, in seconds. The steps
+// under a second label a short run, or a graph zoomed to a few seconds, with
+// more than the one or two whole seconds it spans.
+constexpr std::array<double, 21> time_steps{0.01, 0.02, 0.05, 0.1, 0.2, 0.5,
+                                            1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400};
 constexpr double target_ticks = 8;
 
 // A band (ChartWidget::set_band) takes this share of the plotting area's
@@ -48,7 +51,12 @@ constexpr double target_ticks = 8;
 constexpr double band_share = 0.3;
 constexpr int band_min_text_lines = 3;
 
-QString time_text(double seconds) { return QString::fromStdString(format_hms(seconds)); }
+// A time axis label, with the decimals that tell ticks `step` apart:
+// "0:00:02" a second or more apart, "0:00:00.2", "0:00:00.05".
+QString time_text(double seconds, double step) {
+    const int decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+    return QString::fromStdString(format_hms(seconds, decimals));
+}
 
 // A line's frames drawn point by point, a finite stretch at a time: joined
 // across a missing frame, it would invent a line through it, and an
@@ -480,8 +488,12 @@ std::vector<std::pair<int, QString>> ChartWidget::time_ticks() const {
     const auto [x0, x1] = x_range();
     const double step = nice_time_step(x1 - x0);
     std::vector<std::pair<int, QString>> ticks;
-    for (double tick = std::ceil(x0 / step) * step; tick <= x1; tick += step) {
-        ticks.emplace_back(pixel_for_time(tick), time_text(tick));
+    // Each tick from its index, not by adding steps up: 0.1 added ten times
+    // falls short of 1.0, which would lose a tick at the axis' end.
+    const double first = std::ceil(x0 / step - 1e-9);
+    for (double i = first; i * step <= x1 + step * 1e-9; ++i) {
+        const double tick = i * step;
+        ticks.emplace_back(pixel_for_time(tick), time_text(tick, step));
     }
     return ticks;
 }

@@ -1,6 +1,7 @@
 // The graph's chart, held to the Python app's own (reference/chart.json,
-// from its ChartWidget at 800x400), and to what drawing must keep: a narrow
-// dip in a long line, and one drawing per size the window settles on.
+// from its ChartWidget at 800x400; the time steps under a second and their
+// labels were added since), and to what drawing must keep: a narrow dip in a
+// long line, and one drawing per size the window settles on.
 #include "chart.h"
 
 #include <QColor>
@@ -81,7 +82,7 @@ std::vector<float> values_from(const nlohmann::json& data) {
     return test::floats_from(data);
 }
 
-TEST_F(ChartTest, DrawsItsAxesAsThePythonApp) {
+TEST_F(ChartTest, DrawsItsAxesAsItsReference) {
     const nlohmann::json reference = test::load_reference("chart.json");
     ASSERT_FALSE(reference.at("steps").empty());
     for (const nlohmann::json& step : reference.at("steps")) {
