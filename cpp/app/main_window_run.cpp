@@ -1229,6 +1229,9 @@ void MainWindow::on_all_finished() {
         // the same.
         open_or_update_graph(finished, !run_was_cancelled_);
     }
+    if (defaults_changed_in_run_) {
+        on_default_settings_changed();  // what Settings' defaults changed to during the run
+    }
 }
 
 void MainWindow::complete_run_record() {

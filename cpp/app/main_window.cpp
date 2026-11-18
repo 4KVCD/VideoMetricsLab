@@ -909,6 +909,9 @@ void MainWindow::on_default_settings_changed() {
     default_extra_metric_keys_ = extra_metrics_from_settings();
     // Unlike the other defaults, film grain's is for every video without a
     // choice of its own, not only new ones: until then it is to be asked.
+    // During a run (Settings stays open), the rows and the panel are left as
+    // they are until it ends (on_all_finished).
+    defaults_changed_in_run_ = run_active_;
     if (!run_active_) {
         start_cache_lookup(apply_film_grain_default());
         show_panel_film_grain();

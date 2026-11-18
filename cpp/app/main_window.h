@@ -600,6 +600,7 @@ private:
     QStringList reference_drop_;  // the files a drag over the reference box carries
     QString reading_text_;        // the status line's "Reading..." while it shows
     bool run_active_ = false;
+    bool defaults_changed_in_run_ = false;  // Settings' defaults changed during a run: applied as it ends
     bool closing_ = false;
     bool asking_frame_rates_ = false;           // a frame rate question is open
     bool reference_frame_rate_asked_ = false;   // RowData::frame_rate_asked, for the reference
