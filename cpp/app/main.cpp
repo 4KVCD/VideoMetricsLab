@@ -180,13 +180,17 @@ int main(int argc, char** argv) {
     // The GPU to score on (Settings' GPU, unless the environment names one),
     // which the processes this one starts inherit; and FFmpeg's D3D11VA
     // decoding on the AMD GPU, not D3D11's default adapter (another maker's
-    // on a PC with two), here and in the isolated tasks.
-    if (!chosen_gpu()) {
+    // on a PC with two), here and in the isolated tasks. An isolated task
+    // takes the window's choice as it started, never Settings' file: with
+    // Automatic (nothing inherited), a GPU chosen in Settings during a run
+    // would otherwise move the run's later passes to it.
+    const bool isolated_task = words.size() == 3 && words[0] == isolated_argument;
+    if (!isolated_task && !chosen_gpu()) {
         const Settings settings = Settings::load();
         choose_gpu(settings.gpu.empty() ? std::nullopt : std::optional(settings.gpu));
     }
     use_d3d11va_adapter(d3d11va_adapter());
-    if (words.size() == 3 && words[0] == isolated_argument) {
+    if (isolated_task) {
         return run_isolated_task(words[1], platform::path_from_text(words[2]));
     }
     set_isolation_program(platform::executable_path());
