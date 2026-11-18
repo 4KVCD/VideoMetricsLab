@@ -939,7 +939,7 @@ std::vector<Pictures> run_raw_previews(const std::string& ffmpeg, const VideoInf
     // missing: each preview's is its frame's
     std::vector<Pictures> previews;
     for (const long long frame : wanted) {
-        Pictures preview{picked.width, picked.height, {}};
+        Pictures preview{picked.width, picked.height, {}, {}};
         const auto found = std::lower_bound(frames.begin(), frames.end(), frame);
         const auto at = static_cast<std::size_t>(found - frames.begin());
         if (at < picked.edges.size()) {
@@ -955,7 +955,7 @@ std::vector<Pictures> run_raw_previews(const std::string& ffmpeg, const VideoInf
 std::vector<Pictures> as_previews(const Pictures& first) {
     std::vector<Pictures> previews;
     for (std::size_t at = 0; at < first.edges.size(); at += 2) {
-        Pictures preview{first.width, first.height, {}};
+        Pictures preview{first.width, first.height, {}, {}};
         preview.edges.assign(first.edges.begin() + static_cast<std::ptrdiff_t>(at),
                              first.edges.begin() + static_cast<std::ptrdiff_t>(std::min(at + 2, first.edges.size())));
         previews.push_back(std::move(preview));
