@@ -1023,7 +1023,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "ตั้งเงื่อนไขใน การตั้งค่า > ช่วงที่อ่อน ก่อน: รายงานจะใช้เงื่อนไขที่บันทึกไว้",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "ไม่ได้ส่งออกช่วงที่อ่อนของ {name}: ยังไม่ได้ตั้งเงื่อนไขใน การตั้งค่า > ช่วงที่อ่อน",
   "A new profile, starting from this one's rules.": "โปรไฟล์ใหม่ที่เริ่มจากกฎของโปรไฟล์นี้",
-  "A profile needs a name of its own, not Default or another profile's.": "โปรไฟล์ต้องมีชื่อของตัวเอง ไม่ใช่ ค่าเริ่มต้น หรือชื่อของโปรไฟล์อื่น",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "โปรไฟล์ต้องมีชื่อของตัวเองที่ไม่มีเครื่องหมายจุลภาค ไม่ใช่ ค่าเริ่มต้น หรือชื่อของโปรไฟล์อื่น",
   "As saved in profile {profile}.": "ตามที่บันทึกไว้ในโปรไฟล์ {profile}",
   "Changed here only: Save to profile keeps these in {profile}.": "เปลี่ยนเฉพาะที่นี่: บันทึกลงโปรไฟล์ จะเก็บค่าเหล่านี้ไว้ใน {profile}",
   "Default": "ค่าเริ่มต้น",

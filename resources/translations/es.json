@@ -1023,7 +1023,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Defina primero las condiciones en Configuración > Segmentos débiles: el informe sigue las guardadas.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Los segmentos débiles de {name} no se exportaron: no hay ninguna condición en Configuración > Segmentos débiles.",
   "A new profile, starting from this one's rules.": "Un perfil nuevo, a partir de las reglas de este.",
-  "A profile needs a name of its own, not Default or another profile's.": "Un perfil necesita un nombre propio, no Predeterminado ni el de otro perfil.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "Un perfil necesita un nombre propio, sin comas, y no Predeterminado ni el de otro perfil.",
   "As saved in profile {profile}.": "Como está guardado en el perfil {profile}.",
   "Changed here only: Save to profile keeps these in {profile}.": "Cambiado solo aquí: Guardar en el perfil las conserva en {profile}.",
   "Default": "Predeterminado",

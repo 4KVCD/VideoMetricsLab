@@ -1023,7 +1023,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "請先在 設定 > 弱片段 中設定條件：報告依照儲存的條件產生。",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "{name} 的弱片段未匯出：設定 > 弱片段 中未設定任何條件。",
   "A new profile, starting from this one's rules.": "一個從此方案的規則開始的新方案。",
-  "A profile needs a name of its own, not Default or another profile's.": "方案需要自己的名稱，不能是 預設 或其他方案的名稱。",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "方案需要自己的名稱，不能含逗號，也不能是 預設 或其他方案的名稱。",
   "As saved in profile {profile}.": "與方案 {profile} 中儲存的相同。",
   "Changed here only: Save to profile keeps these in {profile}.": "僅在此處變更：儲存到方案 會將這些條件保留在 {profile} 中。",
   "Default": "預設",

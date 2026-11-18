@@ -1023,7 +1023,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Önce koşulları Ayarlar > Zayıf bölümler içinde ayarlayın: rapor kaydedilenleri izler.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "{name} için zayıf bölümler dışa aktarılmadı: Ayarlar > Zayıf bölümler içinde hiçbir koşul ayarlanmamış.",
   "A new profile, starting from this one's rules.": "Bu profilin kurallarından başlayan yeni bir profil.",
-  "A profile needs a name of its own, not Default or another profile's.": "Bir profilin Varsayılan ya da başka bir profilin adı değil, kendine ait bir adı olmalıdır.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "Bir profilin virgül içermeyen, Varsayılan ya da başka bir profilin adı olmayan, kendine ait bir adı olmalıdır.",
   "As saved in profile {profile}.": "{profile} profilinde kaydedildiği gibi.",
   "Changed here only: Save to profile keeps these in {profile}.": "Yalnızca burada değiştirildi: Profile kaydet bunları {profile} içinde saklar.",
   "Default": "Varsayılan",

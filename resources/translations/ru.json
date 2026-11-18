@@ -1023,7 +1023,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Сначала задайте условия в Настройки > Слабые участки: отчёт следует сохранённым.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Слабые участки {name} не экспортированы: в Настройки > Слабые участки не задано ни одного условия.",
   "A new profile, starting from this one's rules.": "Новый профиль на основе правил этого профиля.",
-  "A profile needs a name of its own, not Default or another profile's.": "Профилю нужно собственное название, не «По умолчанию» и не название другого профиля.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "Профилю нужно собственное название без запятых, не «По умолчанию» и не название другого профиля.",
   "As saved in profile {profile}.": "Как сохранено в профиле {profile}.",
   "Changed here only: Save to profile keeps these in {profile}.": "Изменено только здесь: «Сохранить в профиль» сохранит их в {profile}.",
   "Default": "По умолчанию",

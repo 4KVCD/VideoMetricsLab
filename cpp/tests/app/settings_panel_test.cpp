@@ -74,7 +74,7 @@ TEST(SettingsPanel, WeakSegmentsEditsTheProfiles) {
     settings.weak_segment_merge_frames = 4;
     FileWrites writes;
     Dialogs dialogs = standard_dialogs(nullptr);
-    QStringList answers{"Film", "default", "Grain"};
+    QStringList answers{"Film", "default", "Film, 35mm", "Grain"};
     QString alerted;
     dialogs.ask_text = [&answers](const QString&, const QString&, const QString&) -> std::optional<QString> {
         return answers.takeFirst();
@@ -107,6 +107,10 @@ TEST(SettingsPanel, WeakSegmentsEditsTheProfiles) {
 
     panel.rename_weak_profile();  // "default": refused
     EXPECT_EQ(alerted, "Profile not renamed");
+    alerted.clear();
+    panel.rename_weak_profile();  // "Film, 35mm": a comma, refused
+    EXPECT_EQ(alerted, "Profile not renamed");
+    EXPECT_EQ(settings.weak_segment_profile, "Film");
     panel.rename_weak_profile();  // "Grain"
     EXPECT_EQ(settings.weak_segment_profile, "Grain");
     EXPECT_FALSE(segment_profile_named(settings, "Film"));

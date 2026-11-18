@@ -252,7 +252,7 @@ TEST(WeakFrames, ProfilesAreKeptInSettings) {
     EXPECT_EQ(segment_profiles(settings).size(), 4U);  // Default, Animation, Film, HDR
 
     EXPECT_TRUE(segment_profile_name_free(segment_profiles(settings), "Grain"));
-    for (const char* taken : {"", "  ", "Default", "hdr", " Animation"}) {
+    for (const char* taken : {"", "  ", "Default", "hdr", " Animation", "Film, 35mm"}) {
         EXPECT_FALSE(segment_profile_name_free(segment_profiles(settings), taken)) << taken;
     }
 }

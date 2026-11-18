@@ -1023,7 +1023,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Nejprve nastavte podmínky v Nastavení > Slabé úseky: přehled se řídí uloženými.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Slabé úseky videa {name} nebyly exportovány: v Nastavení > Slabé úseky není nastavena žádná podmínka.",
   "A new profile, starting from this one's rules.": "Nový profil vycházející z pravidel tohoto profilu.",
-  "A profile needs a name of its own, not Default or another profile's.": "Profil potřebuje vlastní název, ne Výchozí ani název jiného profilu.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "Profil potřebuje vlastní název bez čárek, ne Výchozí ani název jiného profilu.",
   "As saved in profile {profile}.": "Jak je uloženo v profilu {profile}.",
   "Changed here only: Save to profile keeps these in {profile}.": "Změněno jen zde: Uložit do profilu je ponechá v {profile}.",
   "Default": "Výchozí",

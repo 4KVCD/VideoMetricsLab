@@ -1023,7 +1023,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "اضبط الشروط في الإعدادات > المقاطع الضعيفة أولًا: يتبع التقرير الشروط المحفوظة.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "لم تُصدَّر المقاطع الضعيفة لـ {name}: لم يُضبط أي شرط في الإعدادات > المقاطع الضعيفة.",
   "A new profile, starting from this one's rules.": "ملف تعريف جديد يبدأ من قواعد هذا الملف.",
-  "A profile needs a name of its own, not Default or another profile's.": "يحتاج ملف التعريف إلى اسم خاص به، لا «الافتراضي» ولا اسم ملف تعريف آخر.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "يحتاج ملف التعريف إلى اسم خاص به، بلا فواصل، لا «الافتراضي» ولا اسم ملف تعريف آخر.",
   "As saved in profile {profile}.": "كما هو محفوظ في ملف التعريف {profile}.",
   "Changed here only: Save to profile keeps these in {profile}.": "تغيّر هنا فقط: «حفظ في ملف التعريف» يُبقي هذه الشروط في {profile}.",
   "Default": "الافتراضي",

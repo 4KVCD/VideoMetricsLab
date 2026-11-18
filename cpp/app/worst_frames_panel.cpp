@@ -333,7 +333,8 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
         const std::string text = std::string(python_strip(name->toStdString()));
         if (!segment_profile_name_free(profiles_, text)) {
             dialogs_.alert(app::tr("Profile not saved"),
-                           app::tr("A profile needs a name of its own, not Default or another profile's."));
+                           app::tr("A profile needs a name of its own, without commas, and not Default or another "
+                               "profile's."));
             return;
         }
         saved_ = rules_to_save();

@@ -1023,7 +1023,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Defina primeiro as condições em Configurações > Segmentos fracos: o relatório segue as salvas.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Os segmentos fracos de {name} não foram exportados: nenhuma condição está definida em Configurações > Segmentos fracos.",
   "A new profile, starting from this one's rules.": "Um novo perfil, a partir das regras deste.",
-  "A profile needs a name of its own, not Default or another profile's.": "Um perfil precisa de um nome próprio, não Padrão nem o de outro perfil.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "Um perfil precisa de um nome próprio, sem vírgulas, e não Padrão nem o de outro perfil.",
   "As saved in profile {profile}.": "Como salvo no perfil {profile}.",
   "Changed here only: Save to profile keeps these in {profile}.": "Alterado só aqui: Salvar no perfil as mantém em {profile}.",
   "Default": "Padrão",

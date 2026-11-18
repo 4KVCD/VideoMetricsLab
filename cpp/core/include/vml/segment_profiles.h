@@ -41,7 +41,10 @@ void store_segment_profiles(Settings& settings, const std::vector<SegmentProfile
 void store_segment_profile(Settings& settings, const std::string& name, const SegmentRules& rules);
 
 // Whether `name` can name a new profile beside `profiles`: not empty or
-// only spaces, not Default's, and no other profile's (any case).
+// only spaces, without a comma (the command line's --segments
+// "profile:NAME,vmaf<80" ends the name at one), not Default's, and no other
+// profile's (any case). A profile saved with a comma before this is still
+// read, and can be renamed.
 bool segment_profile_name_free(const std::vector<SegmentProfile>& profiles, std::string_view name);
 
 }  // namespace vml
