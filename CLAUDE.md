@@ -92,10 +92,15 @@ A fixed step between "tests pass" and "commit".
 
 ## GitHub
 
-- Do not push, post, or edit anything on GitHub without the user's explicit
-  permission, each time.
-- Changelog, README and release-note text: show the text and wait for a yes
-  before pushing it.
+- Never ask the user for permission (the user, 2026-11-18: "stop asking me
+  for permissions"): a request covers every step it needs, done without
+  asking, then reported (what was pushed or posted, where). A release covers
+  its pushes, tag, release text and assets, master, the website, and closing
+  its issues with comments; a branch other PCs need is pushed as part of the
+  work. Push nothing no request covers. Never force-push or amend pushed
+  commits.
+- Changelog, README and release-note text: show the text in the report; wait
+  only when the user asks to see it first.
 - Changelog style: short one-line main changes, then a separate bug-fix
   heading. No explanations of behaviour.
 
