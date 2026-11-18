@@ -136,7 +136,7 @@ previous build's output undeletable. The package therefore goes to
   MinGW-w64 g++ on the PATH; it stops without it.
 - **The GPU VVC decoder** (`resources/native/vvdecvk_frames.dll`): VVC
   decoded on the GPU by vvdec-vulkan (github.com/4KVCD/vvdec-vulkan, release
-  v1.2.2), its pictures handed over to the GPU metrics, where Settings' VVC
+  v1.2.3), its pictures handed over to the GPU metrics, where Settings' VVC
   decoder is the GPU (not the default). Built from a checkout of
   vvdec-vulkan by `scripts/build_vvdecvk_frames.ps1 -Source <checkout>
   -Slangc <slangc.exe> -VulkanHeaders <include folder>` (MinGW-w64 g++,
