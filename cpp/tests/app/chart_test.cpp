@@ -11,6 +11,7 @@
 #include <QPainter>
 #include <QStringList>
 #include <QTimer>
+#include <QWheelEvent>
 
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
@@ -325,6 +326,35 @@ TEST_F(ChartTest, AZoomedViewMovesToATimeOutOfView) {
     chart.reset_view();
     chart.bring_into_view(60.0);
     EXPECT_EQ(chart.x_range(), std::pair(0.0, 100.0));
+}
+
+// The wheel zooms in no further than 0.05 s, where the time axis still has
+// labels; a run shorter than that does not zoom at all.
+TEST_F(ChartTest, TheWheelZoomsInNoFurtherThanTheTimeAxisLabels) {
+    const auto wheel_in = [](ChartWidget& chart, int notches) {
+        for (int i = 0; i < notches; ++i) {
+            QWheelEvent event(QPointF(400, 200), QPointF(400, 200), QPoint(), QPoint(0, 120), Qt::NoButton,
+                              Qt::NoModifier, Qt::NoScrollPhase, false);
+            QCoreApplication::sendEvent(&chart, &event);
+        }
+    };
+    std::vector<double> times(600);
+    for (std::size_t i = 0; i < times.size(); ++i) {
+        times[i] = static_cast<double>(i) / 60.0;
+    }
+    ChartWidget chart(QStringLiteral("VMAF"), 100.0);
+    chart.resize(800, 400);
+    chart.set_series(0, line_of(times, std::vector<float>(times.size(), 90.0F)));
+    wheel_in(chart, 60);
+    const auto [x0, x1] = chart.x_range();
+    EXPECT_NEAR(x1 - x0, 0.05, 1e-9);
+    EXPECT_GE(chart.time_ticks().size(), 5U);
+
+    ChartWidget short_run(QStringLiteral("VMAF"), 100.0);
+    short_run.resize(800, 400);
+    short_run.set_series(0, line_of({0.0, 0.02, 0.04}, {90.0F, 80.0F, 95.0F}));
+    wheel_in(short_run, 5);
+    EXPECT_EQ(short_run.x_range(), short_run.data_x_range());
 }
 
 // The crosshair (the pointer's, or Go to frame's) stays on its time when the

@@ -1046,13 +1046,14 @@ void ChartWidget::wheelEvent(QWheelEvent* event) {
     const double factor = std::pow(0.8, steps);
     const View view = current_view();
     const double anchor = time_at(event->position().toPoint().x());
-    double new_span = view.span * factor;
+    // No narrower than five of the time axis' finest steps: zoomed past them,
+    // it would have one label or none.
+    const double new_span = std::max(view.span * factor, 5 * time_steps.front());
     const auto [data_lo, data_hi] = data_x_range();
     if (new_span >= data_hi - data_lo) {
         reset_view();
         return;
     }
-    new_span = std::max(new_span, seconds_per_pixel() * 8);  // not past a few pixels of data
     const double left_share = (anchor - view.start) / std::max(1e-9, view.span);
     double new_x0 = anchor - left_share * new_span;
     // Over the data, not drifting off its ends.
