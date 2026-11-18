@@ -12,6 +12,7 @@
 #include "vml/app_log.h"
 #include "vml/frame_sync.h"
 #include "vml/gpu_checks.h"
+#include "vml/gpu_choice.h"
 #include "vml/gpu_frames.h"
 #include "vml/host_frames.h"
 #include "vml/isolated.h"
@@ -139,6 +140,22 @@ CudaProbe probe_cuda_apart(bool& crashed, const CancelToken& cancel) {
     }
 }
 
+// The GPU chosen (gpu_choice.h), when DirectX lists it as another maker's
+// than NVIDIA: CUDA would score on an NVIDIA GPU the choice keeps free.
+std::optional<std::string> chosen_gpu_not_nvidia() {
+    const std::optional<std::string> chosen = chosen_gpu();
+    if (!chosen) {
+        return std::nullopt;
+    }
+    const std::vector<platform::GpuAdapter> adapters = platform::gpu_adapters();
+    std::vector<std::string> names;
+    for (const platform::GpuAdapter& adapter : adapters) {
+        names.push_back(adapter.name);
+    }
+    const std::optional<std::size_t> index = chosen_among(names, *chosen);
+    return index && adapters[*index].vendor_id != platform::nvidia_pci_vendor ? chosen : std::nullopt;
+}
+
 GpuVmafBackend probe_backends(const CancelToken& cancel) {
     std::string reasons;
     bool failed = false;  // a probe crashed, threw or scored wrongly
@@ -153,6 +170,10 @@ GpuVmafBackend probe_backends(const CancelToken& cancel) {
                 const std::vector<unsigned> vendors = platform::gpu_vendor_ids();
                 if (std::find(vendors.begin(), vendors.end(), platform::nvidia_pci_vendor) == vendors.end()) {
                     add_reason("no NVIDIA GPU");
+                    continue;
+                }
+                if (const std::optional<std::string> other = chosen_gpu_not_nvidia()) {
+                    add_reason("CUDA: the GPU chosen, " + *other + ", is not NVIDIA's");
                     continue;
                 }
                 const CudaProbe probe = probe_cuda_apart(failed, cancel);

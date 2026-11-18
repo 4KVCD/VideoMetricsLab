@@ -974,7 +974,11 @@
   "Text": "ข้อความ",
   "Exported graphs' background": "พื้นหลังของกราฟที่ส่งออก",
   "Exported graphs' text": "ข้อความของกราฟที่ส่งออก",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "สีของภาพ PNG ที่กราฟเมตริกและดูบิตเรตส่งออก สีพื้นหลังหรือสีข้อความที่เลือกจะใช้แทนสีของธีม และรีเซ็ตสีในกล่องโต้ตอบจะกลับไปใช้สีของธีม เส้นกราฟยังคงใช้สีของตัวเอง"
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "สีของภาพ PNG ที่กราฟเมตริกและดูบิตเรตส่งออก สีพื้นหลังหรือสีข้อความที่เลือกจะใช้แทนสีของธีม และรีเซ็ตสีในกล่องโต้ตอบจะกลับไปใช้สีของธีม เส้นกราฟยังคงใช้สีของตัวเอง",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "อัตโนมัติ (ใช้ GPU แยกก่อน)",
+  "{name} (not found)": "{name} (ไม่พบ)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU ที่คำนวณ VMAF, VMAF v1, SSIMULACRA2, Butteraugli และ CVVDP บนพีซีที่มีมากกว่าหนึ่งตัว และจะลองใช้ตัวถอดรหัสของผู้ผลิต GPU นี้ก่อนเมื่อการถอดรหัสบน GPU เป็นแบบอัตโนมัติ เมตริกที่ GPU นี้คำนวณไม่ได้จะคำนวณบน CPU แทนที่จะใช้ GPU ตัวอื่น โหมดอัตโนมัติจะใช้ GPU แยกก่อน\n\nมีผลเมื่อเปิดแอปครั้งถัดไป ตัวเลือก --gpu ในบรรทัดคำสั่งใช้เลือกสำหรับการรันครั้งเดียว"
  },
  "plurals": {
   "about {count} day": [

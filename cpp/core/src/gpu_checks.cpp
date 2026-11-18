@@ -87,7 +87,7 @@ nlohmann::json steering_environment() {
             values.push_back(std::move(variable));
         }
     }
-    for (const char* name : {"VML_GPU_VENDOR", "VML_VMAF_VULKAN_DEVICE", "CUDA_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES",
+    for (const char* name : {"VML_GPU", "VML_GPU_VENDOR", "VML_VMAF_VULKAN_DEVICE", "CUDA_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES",
                              "ROCR_VISIBLE_DEVICES", "ONEAPI_DEVICE_SELECTOR"}) {
         if (const std::optional<std::string> value = platform::environment_variable(name)) {
             values.push_back(std::string(name) + "=" + *value);
@@ -217,7 +217,7 @@ void save_gpu_check(const std::filesystem::path& file, const nlohmann::json& key
 }
 
 nlohmann::json run_gpu_check(std::string_view task, std::string_view what, const nlohmann::json& request,
-                             const CancelToken& cancel) {
+                             const CancelToken& cancel, const std::function<void(const nlohmann::json&)>& on_message) {
     cancel.throw_if_cancelled();
     std::optional<nlohmann::json> key;
     if (const std::optional<nlohmann::json>& pc = this_pc()) {
@@ -229,7 +229,7 @@ nlohmann::json run_gpu_check(std::string_view task, std::string_view what, const
             return std::move(*saved);
         }
     }
-    nlohmann::json answer = run_isolated(task, what, request, {}, cancel);
+    nlohmann::json answer = run_isolated(task, what, request, on_message, cancel);
     if (key && gpu_check_passed(task, answer)) {
         save_gpu_check(gpu_checks_file(), *key, answer);
     }

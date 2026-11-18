@@ -974,7 +974,11 @@
   "Text": "Tekst",
   "Exported graphs' background": "Tło eksportowanych wykresów",
   "Exported graphs' text": "Tekst eksportowanych wykresów",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Kolory obrazów PNG eksportowanych przez Wykresy metryk i Przeglądarkę bitrate. Wybrany kolor tła lub tekstu zastępuje kolor motywu; Przywróć kolor w jego oknie dialogowym wraca do niego. Linie zachowują swoje kolory."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Kolory obrazów PNG eksportowanych przez Wykresy metryk i Przeglądarkę bitrate. Wybrany kolor tła lub tekstu zastępuje kolor motywu; Przywróć kolor w jego oknie dialogowym wraca do niego. Linie zachowują swoje kolory.",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "Automatycznie (najpierw dedykowany GPU)",
+  "{name} (not found)": "{name} (nie znaleziono)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU, który na komputerze z więcej niż jednym GPU oblicza VMAF, VMAF v1, SSIMULACRA2, Butteraugli i CVVDP, i którego dekoder producenta jest próbowany jako pierwszy, gdy dekodowanie na GPU jest automatyczne. Metryka, której jego GPU nie potrafi obliczyć, jest obliczana na CPU, a nie na innym GPU. Tryb automatyczny najpierw używa dedykowanego GPU.\n\nObowiązuje od następnego uruchomienia aplikacji; opcja --gpu w wierszu poleceń wybiera dla jednego uruchomienia."
  },
  "plurals": {
   "about {count} day": [

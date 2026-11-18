@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <system_error>
 
+#include "vml/app_log.h"
 #include "vml/append.h"
+#include "vml/gpu_choice.h"
 #include "vml/gpu_frames.h"
 #include "vml/model_select.h"
 #include "vml/platform/system.h"
@@ -176,6 +178,32 @@ std::optional<VulkanDevice> best_vulkan_device(const std::vector<VulkanDevice>& 
     return best;
 }
 
+std::optional<VulkanDevice> chosen_vulkan_device(const std::vector<VulkanDevice>& found) {
+    const std::string numbered(python_strip(platform::environment_variable(device_variable).value_or("")));
+    if (!numbered.empty()) {
+        const auto named = std::find_if(found.begin(), found.end(),
+                                        [&](const VulkanDevice& d) { return std::to_string(d.index) == numbered; });
+        return named != found.end() && named->usable ? std::optional(*named) : std::nullopt;
+    }
+    if (const std::optional<std::string> chosen = chosen_gpu()) {
+        std::vector<VulkanDevice> usable;
+        std::vector<std::string> names;
+        for (const VulkanDevice& device : found) {
+            if (device.usable) {
+                usable.push_back(device);
+                names.push_back(device.name);
+            }
+        }
+        if (const std::optional<std::size_t> index = chosen_among(names, *chosen)) {
+            return usable[*index];
+        }
+        app_log::write(app_log::Level::warning, "vml.vmaf_gpu",
+                       "The GPU chosen, " + *chosen + ", is not one Vulkan can calculate VMAF on: the GPU is picked as "
+                                                      "if none were chosen");
+    }
+    return best_vulkan_device(found);
+}
+
 SharedSlots::SharedSlots(const VulkanEngine& engine, VulkanContext* context, GpuFrameStream& decoder)
     : engine_(engine), context_(context), decoder_(decoder) {
     try {
@@ -233,7 +261,7 @@ VulkanScorer::VulkanScorer(int width, int height, int bit_depth,
     : engine_(vulkan_engine()), models_(std::move(models)), step_(static_cast<unsigned>(std::max(1, n_subsample))) {
     libvmaf();  // it predicts the scores at the end: one that cannot load fails the run now
     if (!device) {
-        const std::optional<VulkanDevice> chosen = best_vulkan_device(vulkan_devices());
+        const std::optional<VulkanDevice> chosen = chosen_vulkan_device(vulkan_devices());
         if (!chosen) {
             throw VmafVulkanError("no GPU that Vulkan can calculate VMAF on");
         }
@@ -507,18 +535,7 @@ VulkanProbe probe_vulkan() {
         return {false, std::nullopt, "libvmaf, which predicts the score, is not bundled"};
     }
     try {
-        const std::vector<VulkanDevice> found = vulkan_devices();
-        const std::string chosen(python_strip(platform::environment_variable(device_variable).value_or("")));
-        std::optional<VulkanDevice> device;
-        if (chosen.empty()) {
-            device = best_vulkan_device(found);
-        } else {
-            const auto named = std::find_if(found.begin(), found.end(),
-                                            [&](const VulkanDevice& d) { return std::to_string(d.index) == chosen; });
-            if (named != found.end()) {
-                device = *named;
-            }
-        }
+        const std::optional<VulkanDevice> device = chosen_vulkan_device(vulkan_devices());
         if (!device || !device->usable) {
             return {false, std::nullopt, "no GPU that Vulkan can calculate VMAF on"};
         }

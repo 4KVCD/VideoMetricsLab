@@ -10,6 +10,7 @@
 #include <system_error>
 
 #include "reference.h"
+#include "vml/gpu_choice.h"
 #include "vml/sha256.h"
 
 namespace vml {
@@ -39,6 +40,34 @@ TEST(VmafVulkan, ProbeFramesAreThePythonApps) {
             EXPECT_EQ(sha256_of(frames.distorted[i]), expected["distorted"][i].get<std::string>()) << "frame " << i;
         }
     }
+}
+
+// The GPU chosen (gpu_choice.h) is found by its whole name or a part of one,
+// in any case, a whole name first; VMAF runs on it, and on the GPU it would
+// have had when Vulkan lists none of that name.
+TEST(VmafVulkan, VmafRunsOnTheGpuChosen) {
+    EXPECT_EQ(chosen_among({"AMD Radeon(TM) Graphics", "NVIDIA GeForce RTX 5090"}, "nvidia geforce rtx 5090"), 1u);
+    EXPECT_EQ(chosen_among({"AMD Radeon(TM) Graphics", "NVIDIA GeForce RTX 5090"}, " radeon "), 0u);
+    EXPECT_EQ(chosen_among({"Intel(R) Arc(TM) Graphics 2", "Intel(R) Arc(TM) Graphics"}, "Intel(R) Arc(TM) Graphics"),
+              1u);
+    EXPECT_EQ(chosen_among({"AMD Radeon(TM) Graphics"}, "titan"), std::nullopt);
+    EXPECT_EQ(chosen_among({"AMD Radeon(TM) Graphics"}, ""), std::nullopt);
+
+    const std::vector<VulkanDevice> found{{0, "NVIDIA GeForce RTX 5090", 0x10DE, 2, true, true},
+                                          {1, "AMD Radeon(TM) Graphics", 0x1002, 1, true, true},
+                                          {2, "llvmpipe", 0x10005, 4, true, true}};
+    const auto index_of = [&found] {
+        const std::optional<VulkanDevice> device = chosen_vulkan_device(found);
+        return device ? device->index : -1;
+    };
+    const std::optional<std::string> before = chosen_gpu();
+    choose_gpu(std::nullopt);
+    EXPECT_EQ(index_of(), 0);  // a discrete one first
+    choose_gpu("Radeon");
+    EXPECT_EQ(index_of(), 1);
+    choose_gpu("titan");
+    EXPECT_EQ(index_of(), 0);  // none of that name: as if none were chosen
+    choose_gpu(before);
 }
 
 }  // namespace

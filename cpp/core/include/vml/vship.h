@@ -295,10 +295,19 @@ const VshipLibrary& vship_library(VshipBuild build = VshipBuild::fast);
 std::optional<std::string> size_refusal(const VshipDevice& device, const std::string& key, std::pair<int, int> size,
                                         std::optional<std::pair<int, int>> computed = std::nullopt);
 
-// Loads a build in this process and returns the GPU it would use, a discrete
-// one first, or the reasons none was found. HIP's and CUDA's never touch the
-// Vulkan driver, which they may be chosen to stay clear of.
-std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(VshipBuild build = VshipBuild::fast);
+// Loads a build in this process and returns the GPU it would use, or the
+// reasons none was found. The GPUs are checked one at a time, a discrete one
+// first, and the first that passes is used: a GPU after it is never touched,
+// so a driver that crashes on its check (AMD's on some integrated GPUs) takes
+// nothing away from a GPU before it. GPUs numbered in `skipped` (each with
+// why) are not checked; `checking`, when given, is told each GPU's number and
+// name before its check, so that a process that crashes on one has said which.
+// HIP's and CUDA's never touch the Vulkan driver, which they may be chosen to
+// stay clear of.
+using SkippedGpus = std::vector<std::pair<int, std::string>>;
+std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(
+    VshipBuild build = VshipBuild::fast, const SkippedGpus& skipped = {},
+    const std::function<void(int gpu_id, const std::string& name)>& checking = {});
 
 // The probe's answer as the isolated "vship-probe" task sends it.
 nlohmann::json vship_probe_result(const std::pair<std::optional<VshipDevice>, std::string>& probed);

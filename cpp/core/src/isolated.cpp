@@ -395,7 +395,13 @@ int run_isolated_task(std::string_view task, const std::filesystem::path& reques
         } else if (task == "nvdec-probe") {
             result = {{"h264_10bit", nvidia_decodes_10bit_h264()}};
         } else if (task == "vship-probe") {
-            result = vship_probe_result(probe_vship_device(vship_build_from(request.value("vship_build", std::string()))));
+            SkippedGpus skipped;
+            for (const nlohmann::json& skip : request.value("skip", nlohmann::json::array())) {
+                skipped.emplace_back(skip.at(0).get<int>(), skip.at(1).get<std::string>());
+            }
+            result = vship_probe_result(probe_vship_device(
+                vship_build_from(request.value("vship_build", std::string())), skipped,
+                [](int gpu_id, const std::string& name) { send_isolated_message({{"checking", {gpu_id, name}}}); }));
         } else if (task == "gpu-run" || task == "cpu-metrics") {
             result = scoring_task(request, request_file.parent_path());
         } else if (task == "grain-feed") {

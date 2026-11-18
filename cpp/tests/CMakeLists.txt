@@ -61,6 +61,7 @@ target_compile_definitions(vml_tests PRIVATE
     VML_REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/reference"
     VML_TEST_CHILD="$<TARGET_FILE:vml_test_child>"
     VML_TEST_LIBRARY="$<TARGET_FILE:vml_test_library>"
+    VML_FAKE_VSHIP="$<TARGET_FILE:vml_fake_vship>"
     VML_CLI="$<TARGET_FILE:vml-cli>")  # the program isolated work runs in
 
 # A program for the process tests to start: it echoes, fails, or sleeps.
@@ -74,7 +75,15 @@ endif()
 # A library for the library test to load.
 add_library(vml_test_library SHARED unit/test_library.cpp)
 target_link_libraries(vml_test_library PRIVATE vml_compile_options)
-add_dependencies(vml_tests vml_test_child vml_test_library vml-cli)
+
+# A stand-in for Vship's library, for the probe's tests: named as Vship's is.
+add_library(vml_fake_vship SHARED unit/fake_vship.cpp)
+target_link_libraries(vml_fake_vship PRIVATE vml_compile_options)
+target_compile_definitions(vml_fake_vship PRIVATE _CRT_SECURE_NO_WARNINGS)  # getenv and strncpy, as Vship's C API needs
+set_target_properties(vml_fake_vship PROPERTIES PREFIX "" OUTPUT_NAME libvship
+                      RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fake_vship"
+                      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fake_vship")
+add_dependencies(vml_tests vml_test_child vml_test_library vml_fake_vship vml-cli)
 
 # Unit tests only, each at most 100 ms (gtest's own time, in a Release
 # build): the check before every commit. Real videos are scored by the

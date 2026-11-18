@@ -974,7 +974,11 @@
   "Text": "Texte",
   "Exported graphs' background": "Fond des graphiques exportés",
   "Exported graphs' text": "Texte des graphiques exportés",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Les couleurs des images PNG qu'exportent les Graphiques des métriques et la Visionneuse de débit. Une couleur de fond ou de texte choisie remplace celle du thème ; Réinitialiser la couleur, dans sa boîte de dialogue, y revient. Les courbes gardent leurs couleurs."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Les couleurs des images PNG qu'exportent les Graphiques des métriques et la Visionneuse de débit. Une couleur de fond ou de texte choisie remplace celle du thème ; Réinitialiser la couleur, dans sa boîte de dialogue, y revient. Les courbes gardent leurs couleurs.",
+  "GPU:": "GPU :",
+  "Automatic (a discrete GPU first)": "Automatique (d'abord un GPU dédié)",
+  "{name} (not found)": "{name} (introuvable)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "Le GPU qui calcule VMAF, VMAF v1, SSIMULACRA2, Butteraugli et CVVDP sur un PC qui en a plusieurs, et dont le décodeur du fabricant est essayé en premier quand le décodage GPU est automatique. Une métrique que son GPU ne peut pas calculer est calculée sur le CPU plutôt que sur un autre GPU. Automatique utilise d'abord un GPU dédié.\n\nS'applique au prochain démarrage de l'application ; --gpu en ligne de commande choisit pour une exécution."
  },
  "plurals": {
   "about {count} day": [

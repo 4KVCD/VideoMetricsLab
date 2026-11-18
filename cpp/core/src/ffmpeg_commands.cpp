@@ -113,7 +113,9 @@ bool decoder_downloads(const std::optional<std::string>& hwaccel) {
 // decoder can, it downloads each picture once and every graph gets that copy.
 std::vector<std::string> split_hwaccel_args(const std::optional<std::string>& hwaccel) {
     if (decoder_downloads(hwaccel)) {
-        return {"-hwaccel", *hwaccel};
+        std::vector<std::string> args{"-hwaccel", *hwaccel};
+        append(args, hwaccel_device_args(*hwaccel));
+        return args;
     }
     return hwaccel_args(hwaccel);
 }

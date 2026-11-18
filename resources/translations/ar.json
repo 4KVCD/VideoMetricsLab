@@ -974,7 +974,11 @@
   "Text": "النص",
   "Exported graphs' background": "خلفية الرسوم المُصدَّرة",
   "Exported graphs' text": "نص الرسوم المُصدَّرة",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "ألوان صور PNG التي تُصدِّرها رسوم المقاييس وعارض معدل البت. لون الخلفية أو النص، عند اختياره، يحل محل لون المظهر؛ ويعيده زر إعادة ضبط اللون في نافذته. تحتفظ الخطوط بألوانها."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "ألوان صور PNG التي تُصدِّرها رسوم المقاييس وعارض معدل البت. لون الخلفية أو النص، عند اختياره، يحل محل لون المظهر؛ ويعيده زر إعادة ضبط اللون في نافذته. تحتفظ الخطوط بألوانها.",
+  "GPU:": "وحدة GPU:",
+  "Automatic (a discrete GPU first)": "تلقائي (وحدة GPU منفصلة أولًا)",
+  "{name} (not found)": "{name} (غير موجودة)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "وحدة GPU التي تحسب VMAF وVMAF v1 وSSIMULACRA2 وButteraugli وCVVDP على جهاز فيه أكثر من وحدة، والتي يُجرَّب مفكك ترميز الشركة المصنّعة لها أولًا عندما يكون فك الترميز على GPU تلقائيًا. المقياس الذي لا تستطيع وحدة GPU الخاصة به حسابه يُحسب على المعالج المركزي بدلًا من وحدة GPU أخرى. الوضع التلقائي يستخدم وحدة GPU منفصلة أولًا.\n\nتُطبَّق عند تشغيل التطبيق في المرة القادمة؛ الخيار --gpu في سطر الأوامر يختار لتشغيل واحد."
  },
  "plurals": {
   "about {count} day": [

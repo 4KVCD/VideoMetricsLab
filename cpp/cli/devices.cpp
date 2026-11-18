@@ -8,6 +8,7 @@
 #include "arguments.h"
 #include "vml/ffmpeg_run.h"
 #include "vml/gpu_checks.h"
+#include "vml/gpu_choice.h"
 #include "vml/isolated.h"
 #include "vml/libvmaf.h"
 #include "vml/metrics.h"
@@ -19,6 +20,9 @@ namespace vml::cli {
 
 std::vector<std::string> device_lines(const DeviceFindings& found) {
     std::vector<std::string> lines;
+    if (found.chosen_gpu) {
+        lines.push_back("GPU chosen: " + *found.chosen_gpu);
+    }
     if (found.tools.ok()) {
         lines.push_back("FFmpeg: " + format_version(found.tools.ffmpeg.version));
     } else {
@@ -84,6 +88,7 @@ int devices() {
     std::future<GpuVmafBackend> vmaf_check = std::async(std::launch::async, [] { return gpu_vmaf_backend(gpu_probes_token()); });
     std::future<V1Probe> v1_check = std::async(std::launch::async, [] { return v1_available(gpu_probes_token()); });
     DeviceFindings found;
+    found.chosen_gpu = chosen_gpu();
     found.tools = check_tools(settings);
     const auto [vship, no_vship] = vship_check.get();
     found.vship = vship;

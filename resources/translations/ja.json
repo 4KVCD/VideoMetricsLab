@@ -974,7 +974,11 @@
   "Text": "文字",
   "Exported graphs' background": "エクスポートするグラフの背景",
   "Exported graphs' text": "エクスポートするグラフの文字",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "指標グラフとビットレートビューアーがエクスポートする PNG 画像の色です。背景または文字の色を選ぶと、テーマの色の代わりに使われます。ダイアログの「色をリセット」でテーマの色に戻ります。線はそれぞれの色のままです。"
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "指標グラフとビットレートビューアーがエクスポートする PNG 画像の色です。背景または文字の色を選ぶと、テーマの色の代わりに使われます。ダイアログの「色をリセット」でテーマの色に戻ります。線はそれぞれの色のままです。",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "自動 (単体 GPU を優先)",
+  "{name} (not found)": "{name} (見つかりません)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU が複数ある PC で VMAF、VMAF v1、SSIMULACRA2、Butteraugli、CVVDP を計算する GPU です。GPU デコードが自動のときは、この GPU のメーカーのデコーダーが最初に試されます。この GPU で計算できない指標は、別の GPU ではなく CPU で計算されます。自動では単体 GPU が優先されます。\n\n次回アプリを起動したときに反映されます。コマンドラインの --gpu は 1 回の実行に対して選びます。"
  },
  "plurals": {
   "about {count} day": [

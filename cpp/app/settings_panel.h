@@ -97,6 +97,7 @@ public:
     QComboBox* film_grain_default = nullptr;
     QComboBox* vship_build_default = nullptr;  // none where stock Vship 5.1.2 is not bundled
     QCheckBox* gpu_together = nullptr;
+    QComboBox* gpu_choice = nullptr;  // none on a PC with one GPU and none chosen
     QComboBox* vvc_decoder = nullptr;  // none where vvdec-vulkan is not bundled (a Mac)
     QComboBox* decoded_videos = nullptr;
     QComboBox* language = nullptr;

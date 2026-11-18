@@ -726,5 +726,21 @@ TEST(CommandLine, NamesEachVideosFilesAfterTheTemplate) {
     EXPECT_EQ(entry["segment_files"][1], platform::path_text(temporary / "segments" / (stem + ".segments.csv")));
 }
 
+// --gpu names a GPU DirectX lists, by its whole name or a part of one, or
+// auto; another name is refused with the GPUs there are. Where the system
+// lists none (a Mac), the name is left to Vulkan's.
+TEST(CommandLine, GpuNamesAGpuThePcHas) {
+    EXPECT_EQ(parse_arguments({"compare", "ref.mkv", "a.mkv", "--gpu", "radeon"}).compare.gpu, "radeon");
+    const std::vector<platform::GpuAdapter> adapters{{0, 0x10DE, "NVIDIA GeForce RTX 5090"},
+                                                     {1, 0x1002, "AMD Radeon(TM) Graphics"}};
+    EXPECT_EQ(gpu_refusal(std::string("radeon"), adapters), std::nullopt);
+    EXPECT_EQ(gpu_refusal(std::string("auto"), adapters), std::nullopt);
+    EXPECT_EQ(gpu_refusal(std::nullopt, adapters), std::nullopt);
+    EXPECT_EQ(gpu_refusal(std::string("titan"), {}), std::nullopt);
+    EXPECT_EQ(gpu_refusal(std::string("titan"), adapters),
+              "--gpu titan: no GPU here has that name. The GPUs here: NVIDIA GeForce RTX 5090, AMD Radeon(TM) "
+              "Graphics; or auto.");
+}
+
 }  // namespace
 }  // namespace vml::cli

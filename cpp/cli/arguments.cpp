@@ -47,7 +47,8 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--vship-pass {one,each}] [--cpu]
                                    [--no-gpu-decode |
                                    --gpu-decode {auto,nvidia,intel,amd}]
-                                   [--vvc-decoder {gpu,cpu}] [--parallel N]
+                                   [--vvc-decoder {gpu,cpu}] [--gpu NAME]
+                                   [--parallel N]
                                    [--recalculate] [--difference]
                                    [--csv FOLDER] [--json FILE] [--batch CSV]
                                    [--scores-csv FILE] [--worst N]
@@ -253,6 +254,11 @@ options:
                         decode a VVC video on the GPU (vvdec-vulkan,
                         experimental), else on the CPU (VVdeC); the scores are
                         the same, and --no-gpu-decode decodes it on the CPU too
+                        (default: the app's)
+  --gpu NAME            the GPU that calculates VMAF, VMAF v1, SSIMULACRA2,
+                        Butteraugli and CVVDP, by its name or a part of it
+                        ("radeon"), on a PC with more than one; its maker's
+                        decoder is tried first. auto: a discrete GPU first
                         (default: the app's)
   --parallel N          videos calculated at once on the CPU, 1-2 (default:
                         the app's)
@@ -1124,6 +1130,7 @@ Parser compare_parser(CompareArguments& parsed) {
                }),
         option({"--vvc-decoder"},
                [&parsed](const std::string& value) { parsed.vvc_decoder = choice(value, {"gpu", "cpu"}); }),
+        option({"--gpu"}, [&parsed](const std::string& value) { parsed.gpu = value; }),
         option({"--parallel"},
                [&parsed](const std::string& value) {
                    const std::optional<long long> number = python_int(value);

@@ -974,7 +974,11 @@
   "Text": "Szöveg",
   "Exported graphs' background": "Az exportált grafikonok háttere",
   "Exported graphs' text": "Az exportált grafikonok szövege",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "A Metrikagrafikonok és a Bitrátanéző által exportált PNG-képek színei. A kiválasztott háttér- vagy szövegszín a téma színét váltja fel; a párbeszédablak Szín visszaállítása gombja visszatér hozzá. A vonalak megtartják a saját színüket."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "A Metrikagrafikonok és a Bitrátanéző által exportált PNG-képek színei. A kiválasztott háttér- vagy szövegszín a téma színét váltja fel; a párbeszédablak Szín visszaállítása gombja visszatér hozzá. A vonalak megtartják a saját színüket.",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "Automatikus (először dedikált GPU)",
+  "{name} (not found)": "{name} (nem található)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "Az a GPU, amely több GPU-val rendelkező gépen a VMAF, VMAF v1, SSIMULACRA2, Butteraugli és CVVDP értékeket számolja, és amelynek gyártói dekódere kerül először sorra, ha a GPU-s dekódolás automatikus. Az a metrika, amelyet a GPU-ja nem tud kiszámolni, a CPU-n számolódik, nem egy másik GPU-n. Az automatikus mód először dedikált GPU-t használ.\n\nAz alkalmazás következő indításakor lép érvénybe; a parancssor --gpu kapcsolója egy futtatásra választ."
  },
  "plurals": {
   "about {count} day": [

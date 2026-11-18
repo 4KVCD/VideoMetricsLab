@@ -974,7 +974,11 @@
   "Text": "Teks",
   "Exported graphs' background": "Latar grafik yang diekspor",
   "Exported graphs' text": "Teks grafik yang diekspor",
-  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Warna gambar PNG yang diekspor Grafik metrik dan Penampil bitrate. Warna latar atau teks yang dipilih menggantikan warna tema; Atur ulang warna di dialognya mengembalikannya. Garis tetap memakai warnanya sendiri."
+  "The colors of the PNG images Metric Graphs and the Bitrate Viewer export. A Background or Text color, when chosen, takes the place of the theme's; Reset color in its dialog goes back to it. The lines keep their own colors.": "Warna gambar PNG yang diekspor Grafik metrik dan Penampil bitrate. Warna latar atau teks yang dipilih menggantikan warna tema; Atur ulang warna di dialognya mengembalikannya. Garis tetap memakai warnanya sendiri.",
+  "GPU:": "GPU:",
+  "Automatic (a discrete GPU first)": "Otomatis (GPU terpisah lebih dulu)",
+  "{name} (not found)": "{name} (tidak ditemukan)",
+  "The GPU that calculates VMAF, VMAF v1, SSIMULACRA2, Butteraugli and CVVDP on a PC with more than one, and whose maker's decoder is tried first when GPU decoding is automatic. A metric its GPU cannot calculate is calculated on the CPU rather than on another GPU. Automatic uses a discrete GPU first.\n\nTakes effect when the app is next started; the command line's --gpu chooses for one run.": "GPU yang menghitung VMAF, VMAF v1, SSIMULACRA2, Butteraugli, dan CVVDP pada PC yang punya lebih dari satu, dan dekoder buatan pabrikannya dicoba lebih dulu saat dekode GPU otomatis. Metrik yang tidak bisa dihitung GPU-nya dihitung di CPU, bukan di GPU lain. Otomatis memakai GPU terpisah lebih dulu.\n\nBerlaku saat aplikasi dijalankan berikutnya; --gpu di baris perintah memilih untuk satu kali jalan."
  },
  "plurals": {
   "about {count} day": [

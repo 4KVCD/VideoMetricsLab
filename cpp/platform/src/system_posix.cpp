@@ -39,6 +39,14 @@ std::optional<std::string> environment_variable(std::string_view name) {
     return std::string(value);
 }
 
+void set_environment_variable(std::string_view name, const std::string& value) {
+    if (value.empty()) {
+        unsetenv(std::string(name).c_str());
+    } else {
+        setenv(std::string(name).c_str(), value.c_str(), 1);
+    }
+}
+
 std::vector<std::string> environment_starting_with(std::string_view prefix) {
     std::vector<std::string> found;
     for (char** entry = environ; *entry != nullptr; ++entry) {
@@ -232,7 +240,9 @@ bool lists_gpus() { return false; }
 
 std::optional<unsigned> first_gpu_adapter() { return 0; }
 
-std::optional<std::set<std::string>> d3d11va_codecs() { return std::nullopt; }
+std::vector<GpuAdapter> gpu_adapters() { return {}; }
+
+std::optional<std::set<std::string>> d3d11va_codecs(std::optional<unsigned>) { return std::nullopt; }
 
 #ifdef __APPLE__
 namespace {

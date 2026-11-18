@@ -22,6 +22,9 @@
 #include "bitrate.h"
 #include "compare.h"
 #include "devices.h"
+#include "vml/gpu_choice.h"
+#include "vml/hardware_decoding.h"
+#include "vml/settings.h"
 #include "vml/app_log.h"
 #include "vml/isolated.h"
 #include "vml/platform/console.h"
@@ -36,6 +39,9 @@ int main(int argc, char** argv) {
     std::signal(SIGPIPE, SIG_IGN);
 #endif
     const std::vector<std::string> words = platform::utf8_arguments(argc, argv);
+    // FFmpeg's D3D11VA decoding on the AMD GPU, not D3D11's default adapter
+    // (another maker's on a PC with two), here and in the isolated tasks.
+    use_d3d11va_adapter(d3d11va_adapter());
     // This program again, as the process of its own that native GPU code
     // runs in (isolated.h): a task and its request, not a command.
     if (words.size() == 3 && words[0] == isolated_argument) {
@@ -48,6 +54,19 @@ int main(int argc, char** argv) {
             platform::write_text(platform::Stream::output, *arguments.print_and_exit);
             return cli::exit_ok;
         }
+        // The GPU to score on: --gpu, else one named in the environment,
+        // else the app's (Settings::gpu); the processes this one starts
+        // inherit it.
+        if (arguments.command == cli::Command::compare && arguments.compare.gpu) {
+            const std::string& gpu = *arguments.compare.gpu;
+            choose_gpu(gpu == "auto" ? std::nullopt : std::optional(gpu));
+        } else if (arguments.command == cli::Command::compare || arguments.command == cli::Command::devices) {
+            if (!chosen_gpu()) {
+                const Settings settings = Settings::load();
+                choose_gpu(settings.gpu.empty() ? std::nullopt : std::optional(settings.gpu));
+            }
+        }
+        use_d3d11va_adapter(d3d11va_adapter());
         // The app's log on standard error: its failures always, everything
         // with --verbose.
         const bool verbose = arguments.command == cli::Command::compare && arguments.compare.verbose;
