@@ -1041,7 +1041,21 @@
   "Rename...": "Átnevezés...",
   "Save as new profile...": "Mentés új profilként...",
   "Save to profile": "Mentés profilba",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Hol számítanak egy videó pontszámai gyengének, elnevezett profilokban különféle videótípusokhoz. Az itt kiválasztott profil a használatban lévő: a Metrikagrafikonok > Legrosszabb képkockák > Gyenge szakaszok ebből indul, és a gyenge szakaszok jelentése, a minden futás utáni exportok és a parancssor --segments saved kapcsolója ezt követi."
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Hol számítanak egy videó pontszámai gyengének, elnevezett profilokban különféle videótípusokhoz. Az itt kiválasztott profil a használatban lévő: a Metrikagrafikonok > Legrosszabb képkockák > Gyenge szakaszok ebből indul, és a gyenge szakaszok jelentése, a minden futás utáni exportok és a parancssor --segments saved kapcsolója ezt követi.",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "Új profil egy videótípushoz való kiindulópontból, igény szerint módosítható.",
+  "Animation": "Animáció",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP, amely HDR-kijelzőket modellez (a VMAF modelljei SDR-videóhoz valók): a CVVDP-nek pontozva kell lennie.",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "Tiszta élőszereplős felvétel digitális kamerákból: egy jó minőségű kódolás szokásos küszöbértékei.",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "Tiszta renderelt részletek és sima átmenetek: a magas VMAF- és SSIMULACRA2-küszöbértékek kiszűrik a részletvesztést és a sávosodást.",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "A filmszemcse lerontja azoknak a képkockáknak a pontszámát is, amelyek megjelenése megmarad: alacsonyabb küszöbértékek, és csak legalább hat képkockás szakaszok, hogy önmagában a szemcse ne legyen gyenge.",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "Egyszínű felületek és éles vonalak, amelyek jól kódolhatók és magas pontszámot kapnak: a magas VMAF- és SSIMULACRA2-küszöbértékek kiszűrik a sávosodást és a sérült vonalakat.",
+  "From preset...": "Előbeállításból...",
+  "Grain-free digital": "Szemcsementes digitális",
+  "Grainy film": "Szemcsés film",
+  "HDR": "HDR",
+  "Low-bitrate preview": "Alacsony bitrátájú előnézet",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Csak a legalább tizenkét képkockán át tartó súlyos összeomlások, olyan kódolásokhoz, amelyeknek nem kell a forrásra hasonlítaniuk."
  },
  "plurals": {
   "about {count} day": [

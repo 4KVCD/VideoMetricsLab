@@ -64,6 +64,7 @@ add_library(vml_core
     src/run_line.cpp
     src/run_record.cpp
     src/score_logs.cpp
+    src/segment_presets.cpp
     src/segment_profiles.cpp
     src/settings.cpp
     src/sha256.cpp

@@ -1041,7 +1041,21 @@
   "Rename...": "Naam wijzigen...",
   "Save as new profile...": "Opslaan als nieuw profiel...",
   "Save to profile": "Opslaan in profiel",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Waar de scores van een video als zwak gelden, in profielen met een naam voor verschillende soorten video. Het hier gekozen profiel is het profiel dat in gebruik is: Metriekgrafieken > Slechtste frames > Zwakke segmenten begint ermee, en het rapport zwakke segmenten, de exports na elke run en --segments saved op de opdrachtregel volgen het."
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Waar de scores van een video als zwak gelden, in profielen met een naam voor verschillende soorten video. Het hier gekozen profiel is het profiel dat in gebruik is: Metriekgrafieken > Slechtste frames > Zwakke segmenten begint ermee, en het rapport zwakke segmenten, de exports na elke run en --segments saved op de opdrachtregel volgen het.",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "Een nieuw profiel vanuit een startpunt voor een soort video, aan te passen waar nodig.",
+  "Animation": "Animatie",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP, dat HDR-schermen modelleert (de modellen van VMAF zijn voor SDR-video): CVVDP moet beoordeeld zijn.",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "Schone live-action van digitale camera's: de gebruikelijke drempels van een encode van hoge kwaliteit.",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "Schoon gerenderd detail en vloeiende verlopen: hoge VMAF- en SSIMULACRA2-drempels vangen verloren detail en banding.",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "Filmkorrel verlaagt de scores van frames waarvan de look behouden blijft: lagere drempels, en alleen stukken van zes frames of meer, zodat korrel alleen niet zwak is.",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "Egale kleuren en scherpe lijnen, die goed encoderen en hoog scoren: hoge VMAF- en SSIMULACRA2-drempels vangen banding en beschadigde lijnen.",
+  "From preset...": "Vanuit voorinstelling...",
+  "Grain-free digital": "Digitaal zonder korrel",
+  "Grainy film": "Korrelige film",
+  "HDR": "HDR",
+  "Low-bitrate preview": "Voorbeeld met lage bitrate",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Alleen ernstige inzakkingen van twaalf frames of meer, voor encodes die niet op de bron hoeven te lijken."
  },
  "plurals": {
   "about {count} day": [

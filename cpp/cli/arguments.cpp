@@ -309,8 +309,10 @@ options:
                         judged second by second. "saved" takes the
                         conditions of the weak segment profile in use in the
                         app's Settings > Weak segments, "profile:NAME" those
-                        of profile NAME (those on metrics not compared left
-                        out), and its options where none are given here
+                        of profile NAME, "preset:KEY" those of a preset
+                        (animation, cgi, digital, grainy-film, hdr,
+                        preview); those on metrics not compared are left
+                        out, and its options apply where none are given here
   --segments-all        a frame is weak only where every condition holds
   --segment-min-frames N
                         leave out segments shorter than N frames (default 1)
@@ -1172,9 +1174,12 @@ Parser compare_parser(CompareArguments& parsed) {
                [&parsed](const std::string& value) {
                    const std::string given(python_strip(value));
                    const bool profile = ascii_lower(given).starts_with("profile:");
-                   parsed.segments_saved = profile || ascii_lower(given) == "saved";
+                   const bool preset = ascii_lower(given).starts_with("preset:");
+                   parsed.segments_saved = profile || preset || ascii_lower(given) == "saved";
                    parsed.segments_profile =
                        profile ? std::optional(std::string(python_strip(given.substr(8)))) : std::nullopt;
+                   parsed.segments_preset =
+                       preset ? std::optional(std::string(python_strip(given.substr(7)))) : std::nullopt;
                    parsed.segments = parsed.segments_saved ? std::vector<WeakCondition>() : weak_conditions(value);
                }),
         flag({"--segments-all"}, parsed.segments_all),

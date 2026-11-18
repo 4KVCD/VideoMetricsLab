@@ -1041,7 +1041,21 @@
   "Rename...": "Přejmenovat...",
   "Save as new profile...": "Uložit jako nový profil...",
   "Save to profile": "Uložit do profilu",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Kdy se skóre videa považuje za slabé, v pojmenovaných profilech pro různé druhy videa. Profil vybraný zde je ten používaný: Grafy metrik > Nejhorší snímky > Slabé úseky z něj vychází a přehled slabých úseků, exporty po každém běhu a --segments saved v příkazovém řádku se jím řídí."
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Kdy se skóre videa považuje za slabé, v pojmenovaných profilech pro různé druhy videa. Profil vybraný zde je ten používaný: Grafy metrik > Nejhorší snímky > Slabé úseky z něj vychází a přehled slabých úseků, exporty po každém běhu a --segments saved v příkazovém řádku se jím řídí.",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "Nový profil z výchozího bodu pro určitý druh videa, k úpravě podle potřeby.",
+  "Animation": "Animace",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP, který modeluje HDR displeje (modely VMAF jsou pro SDR video): CVVDP musí být ohodnoceno.",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "Čisté hrané záběry z digitálních kamer: obvyklé prahy vysoce kvalitního kódování.",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "Čisté renderované detaily a plynulé přechody: vysoké prahy VMAF a SSIMULACRA2 zachytí ztracené detaily a pruhování.",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "Filmové zrno snižuje skóre snímků, jejichž vzhled je zachován: nižší prahy a jen úseky o šesti snímcích a více, aby samotné zrno nebylo slabé.",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "Ploché barvy a ostré linie, které se dobře kódují a mají vysoké skóre: vysoké prahy VMAF a SSIMULACRA2 zachytí pruhování a poškozené linie.",
+  "From preset...": "Z předvolby...",
+  "Grain-free digital": "Digitál bez zrna",
+  "Grainy film": "Zrnitý film",
+  "HDR": "HDR",
+  "Low-bitrate preview": "Náhled s nízkým datovým tokem",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Jen vážné výpadky trvající dvanáct snímků a více, pro kódování, která nemají vypadat jako zdroj."
  },
  "plurals": {
   "about {count} day": [

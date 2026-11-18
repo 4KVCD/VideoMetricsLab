@@ -10,6 +10,7 @@
 #include "vml/export_csv.h"
 #include "vml/metrics.h"
 #include "vml/platform/system.h"
+#include "vml/segment_presets.h"
 #include "vml/python_text.h"
 #include "vml/temp_files.h"
 #include "vml/time_format.h"
@@ -82,13 +83,30 @@ SegmentRules segment_rules(const CompareArguments& arguments) {
     return rules;
 }
 
+std::string segments_source(const CompareArguments& arguments) {
+    return arguments.segments_preset    ? "preset:" + *arguments.segments_preset
+           : arguments.segments_profile ? "profile:" + *arguments.segments_profile
+                                        : std::string("saved");
+}
+
 std::vector<std::string> take_saved_segments(CompareArguments& arguments, const Settings& settings,
                                              const std::vector<std::string>& asked) {
-    const std::string option =
-        "--segments " + (arguments.segments_profile ? "profile:" + *arguments.segments_profile : std::string("saved"));
-    const std::optional<SegmentProfile> profile = arguments.segments_profile
-                                                      ? segment_profile_named(settings, *arguments.segments_profile)
-                                                      : segment_profile_in_use(settings);
+    const std::string option = "--segments " + segments_source(arguments);
+    std::optional<SegmentProfile> profile;
+    if (arguments.segments_preset) {
+        const SegmentPreset* preset = segment_preset(*arguments.segments_preset);
+        if (preset == nullptr) {
+            std::string keys;
+            for (const SegmentPreset& known : segment_presets()) {
+                keys += (keys.empty() ? "" : ", ") + std::string(known.key);
+            }
+            throw std::invalid_argument(option + ": no weak segment preset has that name; choose from: " + keys);
+        }
+        profile = SegmentProfile{std::string(preset->key), preset->rules};
+    } else {
+        profile = arguments.segments_profile ? segment_profile_named(settings, *arguments.segments_profile)
+                                             : segment_profile_in_use(settings);
+    }
     if (!profile) {
         std::string names;
         for (const SegmentProfile& other : segment_profiles(settings)) {
@@ -115,7 +133,8 @@ std::vector<std::string> take_saved_segments(CompareArguments& arguments, const 
         for (const std::string& text : left_out) {
             texts += (texts.empty() ? "" : ", ") + text;
         }
-        throw std::invalid_argument(option + ": none of the profile's conditions (" + texts +
+        throw std::invalid_argument(option + ": none of the " + (arguments.segments_preset ? "preset" : "profile") +
+                                    "'s conditions (" + texts +
                                     ") is on a metric compared (-m)");
     }
     arguments.segments_all = arguments.segments_all || saved.all;

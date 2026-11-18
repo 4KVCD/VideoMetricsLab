@@ -405,7 +405,7 @@ $run.videos[0].metrics.vmaf.score
 | `--batch CSV` | Compare the videos a CSV file lists, in place of REFERENCE and TEST, all in one run (the start-up and the GPU checks once, not once per reference). A row per test video, with the columns `reference` and `test` (a file or a pattern) and, if wanted, `sequence` and any others, which `--scores-csv` keeps; paths are relative to the CSV file's folder. The tables come per reference, and `--json` writes `{"batch": [...]}`, each reference's results as without `--batch`. A reference that cannot be read is said and the others are still compared (exit code 1). Not with `--difference`. |
 | `--scores-csv FILE` | Write each test video's bitrate (`kbps`) and scores to FILE, a row per video, with its `sequence` (the `--batch` row's, else the reference's file name), `test`, `reference` and the `--batch` row's other columns: the file `bdrate --anchor` and `--test` read. A video whose bitrate is not known, or with only a part compared (`--range`, `--duration`), is left out, said. |
 | `--worst N` | After the tables, each metric's N worst dips: the worst frame of each (a frame within 1 s of a worse one is part of its dip), with every metric's score there. |
-| `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. `--segments saved` takes the conditions of the weak segment profile in use in the app's Settings > Weak segments, and `--segments profile:NAME` those of profile NAME (any case; `Default` too); those on metrics not compared are left out, and said; the profile's any/every choice, shortest segment and gap apply where the command gives none. |
+| `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. `--segments saved` takes the conditions of the weak segment profile in use in the app's Settings > Weak segments, `--segments profile:NAME` those of profile NAME (any case; `Default` too), and `--segments preset:KEY` those of a preset (see [Weak segment profiles](#weak-segment-profiles)); those on metrics not compared are left out, and said; the profile's any/every choice, shortest segment and gap apply where the command gives none. |
 | `--segments-all` | A frame is weak only where every `--segments` condition holds. |
 | `--segment-min-frames N`, `--segment-merge-frames N` | Leave out segments shorter than N frames (default 1); join segments at most N frames apart (default 0). |
 | `--segments-dir FOLDER` | Write each video's segments to FOLDER as `<video>.<metrics>.segments.json` and `.csv`, `<metrics>` the conditions' metrics joined by `+` (`<video>.vmaf+ssimulacra2.segments.json`), as the app names them. |
@@ -629,6 +629,23 @@ rules kept before there were profiles, has neither). The profile in use is
 where Metric Graphs' **Weak segments...** starts, and what the weak segments
 report, the exports after each run and the command line's `--segments saved`
 follow; `--segments profile:NAME` takes another.
+
+**From preset...** starts a profile for a kind of video, named after it and
+put in use, to adjust as needed (the command line takes a preset as
+`--segments preset:KEY`). Any condition makes a frame weak:
+
+| Preset (`KEY`) | Conditions | Shortest segment | Join gap | For |
+| --- | --- | --- | --- | --- |
+| Animation (`animation`) | VMAF < 93, SSIMULACRA2 < 75 | 3 | 6 | Flat colour and sharp lines, which encode well and score high: banding and damaged lines. |
+| CGI (`cgi`) | VMAF < 92, SSIMULACRA2 < 70 | 3 | 6 | Clean rendered detail and smooth gradients. |
+| Grain-free digital (`digital`) | VMAF < 90, SSIMULACRA2 < 65 | 3 | 6 | Clean live action: the usual thresholds of a high-quality encode. |
+| Grainy film (`grainy-film`) | VMAF < 85, SSIMULACRA2 < 55 | 6 | 12 | Grain lowers the scores of frames whose look is kept, so lower thresholds, and grain alone is not weak. |
+| HDR (`hdr`) | CVVDP < 9 JOD | 1 | 24 | CVVDP models HDR displays; VMAF's models are for SDR video. CVVDP must be scored. |
+| Low-bitrate preview (`preview`) | VMAF < 70, SSIMULACRA2 < 40 | 12 | 24 | Only severe breakdowns, for encodes not meant to look like the source. |
+
+The thresholds are starting points on each metric's scale: VMAF's 0-100
+(90 and above is a good encode), SSIMULACRA2's (70 and above high quality,
+50 medium, 30 low), CVVDP's JOD (10: no visible difference).
 
 ### Exporting weak segments
 

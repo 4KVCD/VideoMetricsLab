@@ -1041,7 +1041,21 @@
   "Rename...": "Yeniden adlandır...",
   "Save as new profile...": "Yeni profil olarak kaydet...",
   "Save to profile": "Profile kaydet",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Bir videonun puanlarının zayıf sayıldığı yerler, farklı video türleri için adlandırılmış profillerde. Burada seçilen profil kullanılandır: Metrik grafikleri > En kötü kareler > Zayıf bölümler ondan başlar; zayıf bölümler raporu, her çalıştırmadan sonraki dışa aktarmalar ve komut satırındaki --segments saved da onu izler."
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Bir videonun puanlarının zayıf sayıldığı yerler, farklı video türleri için adlandırılmış profillerde. Burada seçilen profil kullanılandır: Metrik grafikleri > En kötü kareler > Zayıf bölümler ondan başlar; zayıf bölümler raporu, her çalıştırmadan sonraki dışa aktarmalar ve komut satırındaki --segments saved da onu izler.",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "Bir video türü için bir başlangıç noktasından, gerektiğinde ayarlanacak yeni bir profil.",
+  "Animation": "Animasyon",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "HDR ekranları modelleyen CVVDP (VMAF'ın modelleri SDR video içindir): CVVDP puanlanmış olmalıdır.",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "Dijital kameralardan temiz canlı çekim: yüksek kaliteli bir kodlamanın olağan eşikleri.",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "Temiz işlenmiş ayrıntı ve yumuşak geçişler: yüksek VMAF ve SSIMULACRA2 eşikleri kaybolan ayrıntıyı ve bantlanmayı yakalar.",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "Film greni, görünümü korunan karelerin puanlarını düşürür: daha düşük eşikler ve yalnızca altı kare veya daha uzun bölümler, böylece tek başına gren zayıf sayılmaz.",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "Düz renkler ve keskin çizgiler; iyi kodlanır ve yüksek puan alır: yüksek VMAF ve SSIMULACRA2 eşikleri bantlanmayı ve bozulmuş çizgileri yakalar.",
+  "From preset...": "Ön ayardan...",
+  "Grain-free digital": "Grensiz dijital",
+  "Grainy film": "Grenli film",
+  "HDR": "HDR",
+  "Low-bitrate preview": "Düşük bit hızlı önizleme",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Yalnızca on iki kare veya daha uzun süren ciddi bozulmalar; kaynağa benzemesi amaçlanmayan kodlamalar için."
  },
  "plurals": {
   "about {count} day": [

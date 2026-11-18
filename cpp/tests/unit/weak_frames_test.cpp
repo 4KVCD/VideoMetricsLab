@@ -1,11 +1,14 @@
 #include "vml/weak_frames.h"
 
+#include "vml/segment_presets.h"
 #include "vml/segment_profiles.h"
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace vml {
@@ -252,6 +255,41 @@ TEST(WeakFrames, ProfilesAreKeptInSettings) {
     for (const char* taken : {"", "  ", "Default", "hdr", " Animation"}) {
         EXPECT_FALSE(segment_profile_name_free(segment_profiles(settings), taken)) << taken;
     }
+}
+
+// The presets: each with a key of its own, conditions on metrics the app
+// has, each the way its metric's direction reads them (as the window's
+// editor would save them), within the metric's scale, and options a profile
+// can hold; found by key or name in any case.
+TEST(WeakFrames, PresetsAreProfilesTheAppCanUse) {
+    std::vector<std::string_view> keys;
+    for (const SegmentPreset& preset : segment_presets()) {
+        SCOPED_TRACE(std::string(preset.key));
+        EXPECT_EQ(std::count(keys.begin(), keys.end(), preset.key), 0);
+        keys.push_back(preset.key);
+        ASSERT_FALSE(preset.rules.conditions.empty());
+        for (const WeakCondition& condition : preset.rules.conditions) {
+            const MetricDefinition* metric = find_metric(condition.key);
+            ASSERT_NE(metric, nullptr) << condition.key;
+            EXPECT_EQ(condition.comparison, metric->direction == MetricDirection::lower_is_better ? '>' : '<');
+            EXPECT_GT(condition.threshold, 0.0);
+            EXPECT_LE(condition.threshold, 100.0);
+        }
+        EXPECT_GE(preset.rules.min_frames, 1);
+        EXPECT_GE(preset.rules.merge_frames, 0);
+        // Kept as a profile and read back unchanged.
+        Settings settings;
+        store_segment_profile(settings, "P", preset.rules);
+        const SegmentRules back = segment_profile_named(settings, "P")->rules;
+        EXPECT_EQ(condition_texts(back.conditions), condition_texts(preset.rules.conditions));
+        EXPECT_EQ(back.min_frames, preset.rules.min_frames);
+        EXPECT_EQ(back.merge_frames, preset.rules.merge_frames);
+    }
+    EXPECT_EQ(keys.size(), 6U);
+    ASSERT_NE(segment_preset(" Grainy Film "), nullptr);
+    EXPECT_EQ(segment_preset(" Grainy Film ")->key, "grainy-film");
+    EXPECT_EQ(segment_preset("HDR")->key, "hdr");
+    EXPECT_EQ(segment_preset("anime"), nullptr);
 }
 
 // The window's helpers: a frame's score (a per-frame metric only at its

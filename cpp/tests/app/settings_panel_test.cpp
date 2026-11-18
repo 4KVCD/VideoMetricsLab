@@ -16,6 +16,7 @@
 #include "file_writes.h"
 #include "segment_rules_editor.h"
 #include "settings_panel.h"
+#include "vml/segment_presets.h"
 #include "vml/segment_profiles.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/settings.h"
@@ -120,7 +121,19 @@ TEST(SettingsPanel, WeakSegmentsEditsTheProfiles) {
     EXPECT_EQ(segment_profiles(settings).size(), 1U);
     EXPECT_EQ(panel.weak_profile->currentText(), "Default");
 
+    // From preset...: a profile named after the preset (numbered where the
+    // name is taken), with its rules, in use.
+    panel.new_weak_profile_from_preset("animation");
+    panel.new_weak_profile_from_preset("animation");
+    EXPECT_EQ(settings.weak_segment_profile, "Animation 2");
+    EXPECT_EQ(panel.weak_profile->currentText(), "Animation 2");
+    ASSERT_TRUE(segment_profile_named(settings, "Animation"));
+    EXPECT_EQ(condition_texts(panel.weak_segments->rules().conditions),
+              condition_texts(segment_preset("animation")->rules.conditions));
+
+    // Saved by the window (Default, put back in use): shown, not an edit.
     const int edits = changed.count();
+    settings.weak_segment_profile.clear();
     settings.weak_segment_conditions = {"ssimulacra2<70"};
     panel.show_weak_segment_rules();
     EXPECT_EQ(condition_texts(panel.weak_segments->rules().conditions), std::vector<std::string>{"ssimulacra2<70"});

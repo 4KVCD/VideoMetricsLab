@@ -1041,7 +1041,21 @@
   "Rename...": "名前を変更...",
   "Save as new profile...": "新しいプロファイルとして保存...",
   "Save to profile": "プロファイルに保存",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "動画のスコアを弱いとみなす条件を、動画の種類ごとに名前付きのプロファイルで定めます。ここで選んだプロファイルが使われます。指標グラフ > 最悪のフレーム > 弱い区間 はこれから始まり、弱い区間のレポート、実行のたびのエクスポート、コマンドラインの --segments saved もこれに従います。"
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "動画のスコアを弱いとみなす条件を、動画の種類ごとに名前付きのプロファイルで定めます。ここで選んだプロファイルが使われます。指標グラフ > 最悪のフレーム > 弱い区間 はこれから始まり、弱い区間のレポート、実行のたびのエクスポート、コマンドラインの --segments saved もこれに従います。",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "動画の種類に合わせた出発点から作る新しいプロファイルです。必要に応じて調整してください。",
+  "Animation": "アニメーション",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "HDR ディスプレイをモデル化する CVVDP を使います（VMAF のモデルは SDR 動画用です）。CVVDP が採点済みである必要があります。",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "デジタルカメラによるクリーンな実写：高品質なエンコードの一般的なしきい値です。",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "クリーンなレンダリングの細部と滑らかなグラデーション：高い VMAF と SSIMULACRA2 のしきい値で、失われた細部とバンディングを捉えます。",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "フィルムグレインは、見た目が保たれているフレームのスコアも下げます。そのため、しきい値を低くし、6 フレーム以上続く区間だけを対象にして、グレインだけでは弱いとみなされないようにします。",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "フラットな色とシャープな線は、エンコードしやすくスコアも高く出ます：高い VMAF と SSIMULACRA2 のしきい値で、バンディングと崩れた線を捉えます。",
+  "From preset...": "プリセットから...",
+  "Grain-free digital": "グレインのないデジタル",
+  "Grainy film": "粒状感のあるフィルム",
+  "HDR": "HDR",
+  "Low-bitrate preview": "低ビットレートのプレビュー",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "12 フレーム以上続く深刻な破綻だけを対象にします。ソースに似せることを目的としないエンコード向けです。"
  },
  "plurals": {
   "about {count} day": [

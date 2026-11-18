@@ -1041,7 +1041,21 @@
   "Rename...": "Renombrar...",
   "Save as new profile...": "Guardar como perfil nuevo...",
   "Save to profile": "Guardar en el perfil",
-  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Dónde las puntuaciones de un vídeo cuentan como débiles, en perfiles con nombre para distintos tipos de vídeo. El perfil elegido aquí es el que se usa: Gráficos de métricas > Peores fotogramas > Segmentos débiles parte de él, y el informe de segmentos débiles, las exportaciones después de cada ejecución y --segments saved de la línea de comandos lo siguen."
+  "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Dónde las puntuaciones de un vídeo cuentan como débiles, en perfiles con nombre para distintos tipos de vídeo. El perfil elegido aquí es el que se usa: Gráficos de métricas > Peores fotogramas > Segmentos débiles parte de él, y el informe de segmentos débiles, las exportaciones después de cada ejecución y --segments saved de la línea de comandos lo siguen.",
+  "A new profile from a starting point for a kind of video, to adjust as needed.": "Un perfil nuevo desde un punto de partida para un tipo de vídeo, para ajustar según haga falta.",
+  "Animation": "Animación",
+  "CGI": "CGI",
+  "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP, que modela pantallas HDR (los modelos de VMAF son para vídeo SDR): CVVDP debe estar puntuado.",
+  "Clean live action from digital cameras: the usual thresholds of a high-quality encode.": "Imagen real limpia de cámaras digitales: los umbrales habituales de una codificación de alta calidad.",
+  "Clean rendered detail and smooth gradients: high VMAF and SSIMULACRA2 thresholds catch lost detail and banding.": "Detalle renderizado limpio y degradados suaves: umbrales altos de VMAF y SSIMULACRA2 detectan la pérdida de detalle y el banding.",
+  "Film grain lowers the scores of frames whose look is kept: lower thresholds, and only stretches of six frames or more, so that grain alone is not weak.": "El grano de película baja las puntuaciones de fotogramas cuyo aspecto se conserva: umbrales más bajos, y solo tramos de seis fotogramas o más, para que el grano por sí solo no sea débil.",
+  "Flat colour and sharp lines, which encode well and score high: high VMAF and SSIMULACRA2 thresholds catch banding and damaged lines.": "Color plano y líneas nítidas, que se codifican bien y puntúan alto: umbrales altos de VMAF y SSIMULACRA2 detectan el banding y las líneas dañadas.",
+  "From preset...": "Desde preajuste...",
+  "Grain-free digital": "Digital sin grano",
+  "Grainy film": "Película con grano",
+  "HDR": "HDR",
+  "Low-bitrate preview": "Vista previa de baja tasa de bits",
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Solo fallos graves que duran doce fotogramas o más, para codificaciones que no pretenden parecerse a la fuente."
  },
  "plurals": {
   "about {count} day": [

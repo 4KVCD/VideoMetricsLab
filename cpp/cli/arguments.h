@@ -80,6 +80,9 @@ struct CompareArguments {
     // --segments profile:NAME: that profile's rather than the one in use
     // (segments_saved set too).
     std::optional<std::string> segments_profile;
+    // --segments preset:KEY: that weak segment preset's (segment_presets.h;
+    // segments_saved set too).
+    std::optional<std::string> segments_preset;
     bool segments_all = false;
     std::optional<int> segment_min_frames;
     std::optional<int> segment_merge_frames;
