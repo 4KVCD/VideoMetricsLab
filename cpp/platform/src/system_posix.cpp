@@ -232,6 +232,8 @@ bool lists_gpus() { return false; }
 
 std::optional<unsigned> first_gpu_adapter() { return 0; }
 
+std::optional<unsigned> d3d11va_adapter() { return std::nullopt; }
+
 std::optional<std::set<std::string>> d3d11va_codecs() { return std::nullopt; }
 
 #ifdef __APPLE__

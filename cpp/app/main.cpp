@@ -35,6 +35,7 @@
 #include "theme.h"
 #include "vml/app_log.h"
 #include "vml/gpu_vmaf.h"
+#include "vml/hardware_decoding.h"
 #include "vml/isolated.h"
 #include "vml/platform/console.h"
 #include "vml/platform/system.h"
@@ -175,6 +176,9 @@ private:
 int main(int argc, char** argv) {
     using namespace vml;
     const std::vector<std::string> words = platform::utf8_arguments(argc, argv);
+    // FFmpeg's D3D11VA decoding on the AMD GPU, not D3D11's default adapter
+    // (another maker's on a PC with two), here and in the isolated tasks.
+    use_d3d11va_adapter(platform::d3d11va_adapter());
     if (words.size() == 3 && words[0] == isolated_argument) {
         return run_isolated_task(words[1], platform::path_from_text(words[2]));
     }

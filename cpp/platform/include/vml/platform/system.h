@@ -170,11 +170,18 @@ bool lists_gpus();
 // the first, unless VML_GPU_VENDOR names another maker's; nothing when it
 // names a maker with no GPU here (as with no GPU, none to draw on).
 std::optional<unsigned> first_gpu_adapter();
+// DirectX's number for the GPU that FFmpeg's D3D11VA decoding is to use, the
+// app's decoding on AMD's GPUs: the first AMD GPU DirectX lists (of those
+// gpu_vendor_ids lists). FFmpeg given no -hwaccel_device decodes on D3D11's
+// default adapter, which on a PC with an NVIDIA card and an AMD iGPU is
+// NVIDIA's. Nothing where there is no AMD GPU, or on other systems: D3D11's
+// default adapter, then.
+std::optional<unsigned> d3d11va_adapter();
 // The codecs, as FFmpeg names them (h264, hevc, vp9, av1, vc1, mpeg2video),
-// for which the GPU that FFmpeg's D3D11VA decoding uses offers one of the
-// decoder profiles FFmpeg decodes them with: D3D11's default adapter, which
-// FFmpeg decodes on when no -hwaccel_device is given. Nothing where that
-// cannot be known: other systems, or no D3D11 video device.
+// for which the GPU that FFmpeg's D3D11VA decoding uses (d3d11va_adapter, or
+// D3D11's default adapter) offers one of the decoder profiles FFmpeg decodes
+// them with. Nothing where that cannot be known: other systems, or no D3D11
+// video device.
 std::optional<std::set<std::string>> d3d11va_codecs();
 
 // What tells this PC's GPUs and their drivers apart, read without loading

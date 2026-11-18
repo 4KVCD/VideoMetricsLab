@@ -22,6 +22,7 @@
 #include "bitrate.h"
 #include "compare.h"
 #include "devices.h"
+#include "vml/hardware_decoding.h"
 #include "vml/app_log.h"
 #include "vml/isolated.h"
 #include "vml/platform/console.h"
@@ -36,6 +37,9 @@ int main(int argc, char** argv) {
     std::signal(SIGPIPE, SIG_IGN);
 #endif
     const std::vector<std::string> words = platform::utf8_arguments(argc, argv);
+    // FFmpeg's D3D11VA decoding on the AMD GPU, not D3D11's default adapter
+    // (another maker's on a PC with two), here and in the isolated tasks.
+    use_d3d11va_adapter(platform::d3d11va_adapter());
     // This program again, as the process of its own that native GPU code
     // runs in (isolated.h): a task and its request, not a command.
     if (words.size() == 3 && words[0] == isolated_argument) {

@@ -841,5 +841,21 @@ TEST(Decisions, TheVmafModelIsChosenAsThePythonAppChoosesIt) {
     }
 }
 
+// D3D11VA decodes on the adapter the app names as it starts (the AMD GPU's):
+// FFmpeg given no -hwaccel_device would take D3D11's default adapter, which on
+// a PC with an NVIDIA card and an AMD iGPU is NVIDIA's. The other decoders
+// pick their maker's GPU themselves.
+TEST(Decisions, D3d11vaDecodesOnTheAdapterNamed) {
+    use_d3d11va_adapter(1);
+    const std::vector<std::string> d3d11va = hwaccel_args("d3d11va");
+    const std::vector<std::string> cuda = hwaccel_args("cuda");
+    use_d3d11va_adapter(std::nullopt);
+    EXPECT_EQ(d3d11va, (std::vector<std::string>{"-hwaccel", "d3d11va", "-hwaccel_output_format", "d3d11",
+                                                 "-hwaccel_device", "1"}));
+    EXPECT_EQ(cuda, (std::vector<std::string>{"-threads", "1", "-hwaccel", "cuda", "-hwaccel_output_format", "cuda"}));
+    EXPECT_EQ(hwaccel_args("d3d11va"),
+              (std::vector<std::string>{"-hwaccel", "d3d11va", "-hwaccel_output_format", "d3d11"}));
+}
+
 }  // namespace
 }  // namespace vml

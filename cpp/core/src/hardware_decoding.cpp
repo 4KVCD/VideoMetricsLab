@@ -18,6 +18,7 @@
 #include "vml/gpu_decoders.h"
 #include "vml/isolated.h"
 #include "vml/platform/process.h"
+#include "vml/append.h"
 #include "vml/platform/system.h"
 #include "vml/python_text.h"
 
@@ -525,7 +526,24 @@ std::vector<std::string> hwaccel_args(const std::optional<std::string>& hwaccel)
     const GpuDecoder* decoder = decoder_of_hwaccel(*hwaccel);
     const std::string output_format = decoder ? std::string(decoder->output_format) : *hwaccel;
     args.insert(args.end(), {"-hwaccel", *hwaccel, "-hwaccel_output_format", output_format});
+    append(args, hwaccel_device_args(*hwaccel));
     return args;
+}
+
+namespace {
+
+// use_d3d11va_adapter's, written before any thread reads it.
+std::optional<unsigned> d3d11va_device;
+
+}  // namespace
+
+void use_d3d11va_adapter(std::optional<unsigned> adapter) { d3d11va_device = adapter; }
+
+std::vector<std::string> hwaccel_device_args(const std::string& hwaccel) {
+    if (hwaccel != "d3d11va" || !d3d11va_device) {
+        return {};
+    }
+    return {"-hwaccel_device", std::to_string(*d3d11va_device)};
 }
 
 }  // namespace vml

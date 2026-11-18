@@ -193,7 +193,18 @@ HardwareDecoding plan_hardware_decoding(const DecodingCapabilities& capabilities
 
 // The -hwaccel options for one video (FFmpeg reads them as options of the
 // next -i): NVIDIA's decoding on one thread, frames kept on the GPU (in
-// VideoToolbox's own surfaces on a Mac, videotoolbox_vld).
+// VideoToolbox's own surfaces on a Mac, videotoolbox_vld), and D3D11VA's on
+// its GPU (hwaccel_device_args).
 std::vector<std::string> hwaccel_args(const std::optional<std::string>& hwaccel);
+// The GPU `hwaccel` decodes on: for D3D11VA, the adapter use_d3d11va_adapter
+// named, as -hwaccel_device; FFmpeg would otherwise take D3D11's default
+// adapter, which can be another maker's GPU. None for the others, which pick
+// their maker's GPU themselves.
+std::vector<std::string> hwaccel_device_args(const std::string& hwaccel);
+// Names the adapter D3D11VA decodes on in this process (platform::
+// d3d11va_adapter, the AMD GPU's): set once as the app, the command line and
+// the processes they start begin, before any FFmpeg command is made. Not set
+// (tests), FFmpeg's default adapter is used.
+void use_d3d11va_adapter(std::optional<unsigned> adapter);
 
 }  // namespace vml

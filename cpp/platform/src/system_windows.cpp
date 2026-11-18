@@ -501,6 +501,15 @@ std::optional<unsigned> first_gpu_adapter() {
     return gpus.empty() ? std::nullopt : std::optional<unsigned>(gpus.front().first);
 }
 
+std::optional<unsigned> d3d11va_adapter() {
+    for (const auto& [index, vendor] : listed_gpus()) {
+        if (std::find(std::begin(amd_pci_vendors), std::end(amd_pci_vendors), vendor) != std::end(amd_pci_vendors)) {
+            return index;
+        }
+    }
+    return std::nullopt;
+}
+
 std::optional<std::set<std::string>> d3d11va_codecs() {
     // The decoder profiles FFmpeg's D3D11VA decoders take for each codec
     // (dxva_modes in libavcodec/dxva2.c), Intel's own H.264 one among them.
@@ -519,11 +528,26 @@ std::optional<std::set<std::string>> d3d11va_codecs() {
         {&D3D11_DECODER_PROFILE_VP9_VLD_10BIT_PROFILE2, "vp9"},
         {&D3D11_DECODER_PROFILE_AV1_VLD_PROFILE0, "av1"},
     }};
-    // A device on the default adapter with video support, as FFmpeg makes
-    // its own.
+    // A device with video support on the adapter FFmpeg decodes on, as FFmpeg
+    // makes its own.
+    IDXGIAdapter1* adapter = nullptr;
+    if (const std::optional<unsigned> index = d3d11va_adapter()) {
+        IDXGIFactory1* factory = nullptr;
+        if (SUCCEEDED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) {
+            if (FAILED(factory->EnumAdapters1(*index, &adapter))) {
+                adapter = nullptr;
+            }
+            factory->Release();
+        }
+    }
     ID3D11Device* device = nullptr;
-    if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_VIDEO_SUPPORT, nullptr,
-                                 0, D3D11_SDK_VERSION, &device, nullptr, nullptr))) {
+    const HRESULT made =
+        D3D11CreateDevice(adapter, adapter != nullptr ? D3D_DRIVER_TYPE_UNKNOWN : D3D_DRIVER_TYPE_HARDWARE, nullptr,
+                          D3D11_CREATE_DEVICE_VIDEO_SUPPORT, nullptr, 0, D3D11_SDK_VERSION, &device, nullptr, nullptr);
+    if (adapter != nullptr) {
+        adapter->Release();
+    }
+    if (FAILED(made)) {
         return std::nullopt;
     }
     ID3D11VideoDevice* video = nullptr;
