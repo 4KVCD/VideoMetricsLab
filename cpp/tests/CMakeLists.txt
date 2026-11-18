@@ -130,6 +130,7 @@ if(TARGET vml_app)
         app/playback_test.cpp
         app/results_export_test.cpp
         app/settings_panel_test.cpp
+        app/table_selection_test.cpp
         app/vship_names_test.cpp
         unit/reference.cpp
         unit/test_videos.cpp
