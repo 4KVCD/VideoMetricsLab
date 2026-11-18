@@ -8,6 +8,7 @@
 
 #include "vml/build_info.h"
 #include "vml/ffmpeg_run.h"
+#include "vml/metrics.h"
 #include "vml/model_select.h"
 #include "vml/platform/system.h"
 #include "vml/temp_files.h"
@@ -237,11 +238,30 @@ void v1_from_old_vmaf_column(ComparisonResult& result) {
     result.model_choice = std::string(auto_model_choice);
 }
 
+// The result's metrics in the registry's order (metrics()), then any other
+// it has in its own order. A result keeps them in the order they came in,
+// which a run's passes and its saved scores give differently: the same
+// scores, saved after a run or from saved scores, would be different files.
+std::vector<std::string> saved_order(const MetricResultSet& results) {
+    std::vector<std::string> keys;
+    for (const MetricDefinition& metric : metrics()) {
+        if (results.has(std::string(metric.key))) {
+            keys.emplace_back(metric.key);
+        }
+    }
+    for (const std::string& key : results.keys()) {
+        if (std::find(keys.begin(), keys.end(), key) == keys.end()) {
+            keys.push_back(key);
+        }
+    }
+    return keys;
+}
+
 }  // namespace
 
 std::string run_file_text(const ComparisonResult& result, const std::string& label) {
     Json metrics = Json::array();
-    for (const std::string& key : result.metric_results.keys()) {
+    for (const std::string& key : saved_order(result.metric_results)) {
         if (const FrameMetricResult* frame = result.metric_results.frame(key)) {
             metrics.push_back(metric_to_dict(*frame));
         } else if (const SequenceMetricResult* sequence = result.metric_results.sequence(key)) {

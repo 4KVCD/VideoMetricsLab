@@ -1,9 +1,12 @@
 // Saved runs: a comparison's result in a file of its own, to look at again
 // later or on another PC, and read back (the Python app's run_io.save_run
 // and load_run). Either app opens the other's files. They are the Python
-// app's byte for byte, but for the order of the keys in a score's
-// provenance parameters: this app keeps them sorted (MetricProvenance),
-// the Python app in the order they were made. The order means nothing.
+// app's byte for byte, but for two orders: the keys in a score's provenance
+// parameters, which this app keeps sorted (MetricProvenance), and the
+// metrics, which it saves in the registry's order (metrics.h) rather than
+// the order they came in, so that the same scores give the same file after
+// a run and from saved scores. The Python app keeps both in the order they
+// were made. Neither order means anything to a reader.
 #pragma once
 
 #include <filesystem>

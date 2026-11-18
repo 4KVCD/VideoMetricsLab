@@ -86,5 +86,24 @@ TEST(RunFile, KeepsTheVideosProfile) {
     EXPECT_EQ(loaded.distorted_info.profile, "");
 }
 
+// The metrics are saved in the registry's order, not the order they came
+// in: a run adds its CPU metrics before its GPU ones, its saved scores come
+// in the registry's order, and the same scores must give the same file.
+TEST(RunFile, SavesTheMetricsInTheRegistrysOrder) {
+    const FrameMetricResult vmaf{"vmaf", {0, 1}, {0.0, 0.04}, {96.0F, 80.0F}, {}};
+    const FrameMetricResult psnr{"psnr", {0, 1}, {0.0, 0.04}, {39.0F, 38.5F}, {}};
+    ComparisonResult as_run;
+    as_run.metric_results.add(psnr);
+    as_run.metric_results.add(vmaf);
+    ComparisonResult as_saved;
+    as_saved.metric_results.add(vmaf);
+    as_saved.metric_results.add(psnr);
+    const std::string text = run_file_text(as_run, "encode");
+    EXPECT_EQ(text, run_file_text(as_saved, "encode"));
+    EXPECT_LT(text.find("\"key\": \"vmaf\""), text.find("\"key\": \"psnr\""));
+    // Loaded, it keeps the file's order.
+    EXPECT_EQ(run_from_text(text).first.metric_results.keys(), (std::vector<std::string>{"vmaf", "psnr"}));
+}
+
 }  // namespace
 }  // namespace vml
