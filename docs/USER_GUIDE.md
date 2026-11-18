@@ -539,6 +539,39 @@ its file, every setting (defaults too), its black bars and how they were
 found, how each metric came out, the decoders used and how long each pass
 took. [The results file](RESULTS_JSON.md) describes every key.
 
+### Exporting graphs
+
+**Export all graphs...** (beside **Open metric graphs**, or in the Videos
+table's right-click menu as **Export all graphs as ZIP...**) saves the graphs
+of every test video scored against the reference as one `.zip` file of PNG
+images, drawn as Metric Graphs' and the Bitrate Viewer's **Export PNG** draw
+them:
+
+- each test video's graph of every metric it has: `<video> - <metric>.png`;
+- with two or more test videos, every metric with all of them together:
+  `All test videos - <metric>.png`;
+- the bitrate (second based) of the reference with all of the test videos,
+  `All test videos - Bitrate.png`, and of the reference with each one,
+  `<video> - Bitrate.png`.
+
+The files are named after the test videos; where two share a name, each gets
+its folder's name after it, in brackets. What the tabs show (the lines ticked,
+the page, the zoom) is left as it is: the graphs are drawn apart from them.
+The Bitrate Viewer reads each video's bitrate after its run; if it is still
+reading, or a video's bitrate was never read (its scores came from saved
+results, say), the status line says the bitrate graphs are still being built,
+and the file is saved as soon as they are.
+
+Right-click a test video whose metrics are all scored for its own exports:
+**Export this video's results as CSV...** or **as JSON...** (the file
+**Export results** saves, with that video alone), or the same results with
+the video's graphs as a `.zip` file.
+
+**Settings > Storage > After each run** saves each video's results (JSON)
+and graphs as `<video> - VideoMetricsLab.zip` once its run ends and its
+bitrate is read: next to the test video, or in the export folder (next to the
+video while none is set). A file of the same name is replaced.
+
 Cached results are reused when files and relevant settings match. A
 compatible subset can load as partially calculated; request calculation to
 fill missing metrics.

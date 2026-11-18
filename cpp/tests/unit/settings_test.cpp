@@ -24,6 +24,7 @@ const std::map<std::string, std::function<Json(const Settings&)>>& settings_by_k
         {"ffmpeg_dir", [](const Settings& s) { return Json(s.ffmpeg_dir); }},
         {"cache_dir", [](const Settings& s) { return Json(s.cache_dir); }},
         {"export_dir", [](const Settings& s) { return Json(s.export_dir); }},
+        {"auto_export", [](const Settings& s) { return Json(s.auto_export); }},
         {"default_gpu_decode", [](const Settings& s) { return Json(s.default_gpu_decode); }},
         {"default_compute_psnr", [](const Settings& s) { return Json(s.default_compute_psnr); }},
         {"default_compute_ssim", [](const Settings& s) { return Json(s.default_compute_ssim); }},

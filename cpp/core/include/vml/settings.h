@@ -24,6 +24,10 @@ struct Settings {
     std::string cache_dir;
     // The folder CSV and PNG exports go to; empty means "ask each time".
     std::string export_dir;
+    // After each video's run, its results and graphs saved as a .zip file
+    // (the window's graph exports): "" not, "beside" next to the test video,
+    // "folder" in export_dir (next to the test video while that is empty).
+    std::string auto_export;
 
     // What a newly added video starts with (each row's own settings are
     // edited in the window's Options panel).

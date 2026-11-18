@@ -208,6 +208,24 @@ QGroupBox* SettingsPanel::build_storage_box() {
     storage_form->addRow(app::tr("Exported graphs:"), export_colors_row);
     show_export_colors();
 
+    // The entries' data: Settings' auto_export values.
+    auto_export = new QComboBox;
+    auto_export->addItem(app::tr("Don't export automatically"), QString());
+    auto_export->addItem(app::tr("Export each video's results and graphs next to it"), QStringLiteral("beside"));
+    auto_export->addItem(app::tr("Export each video's results and graphs to the export folder"),
+                         QStringLiteral("folder"));
+    const int chosen_export = auto_export->findData(text_of(settings_.auto_export));
+    auto_export->setCurrentIndex(chosen_export >= 0 ? chosen_export : 0);
+    auto_export->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    auto_export->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    auto_export->setToolTip(app::tr(
+        "After each video is scored, saves a .zip file of its results (JSON) and graphs: its graph of every metric "
+        "and its bitrate with the reference's, named after the video. It's saved once the video's bitrate has been "
+        "read, which the Bitrate Viewer does after each run. To the export folder: next to the video while no "
+        "export folder is set. An existing file of the same name is replaced."));
+    connect(auto_export, &QComboBox::currentIndexChanged, this, [this] { on_edited(); });
+    storage_form->addRow(app::tr("After each run:"), auto_export);
+
     use_cache = new QCheckBox(app::tr("Reuse a saved result when a video is added again"));
     use_cache->setChecked(settings_.use_cache);
     connect(use_cache, &QCheckBox::toggled, this, [this] { on_edited(); });
@@ -663,6 +681,7 @@ void SettingsPanel::read_controls() {
     settings_.ffmpeg_dir = ffmpeg_edit->text().toStdString();
     settings_.cache_dir = cache_edit->text().toStdString();
     settings_.export_dir = export_edit->text().toStdString();
+    settings_.auto_export = auto_export->currentData().toString().toStdString();
     settings_.export_graph_theme = export_graph_theme->currentData().toString().toStdString();
     settings_.export_graph_background = export_background_button->property("chosen").toString().toStdString();
     settings_.export_graph_text = export_text_button->property("chosen").toString().toStdString();

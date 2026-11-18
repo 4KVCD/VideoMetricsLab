@@ -1249,6 +1249,51 @@ QPixmap BitratePanel::render_export_image() {
                         export_colours ? export_colours() : theme::chart_colours(false), keys);
 }
 
+QPixmap BitratePanel::render_export_image(QSize size) {
+    const QSize own = chart->size();
+    chart->resize(size);
+    QPixmap image = render_export_image();
+    chart->resize(own);
+    return image;
+}
+
+std::optional<BitrateState> BitratePanel::state_of(const std::filesystem::path& path) const {
+    const QString key = path_key(path);
+    for (const auto& [listed, entry] : entries_) {
+        if (listed == key) {
+            return entry.data ? BitrateState::complete : entry.state;
+        }
+    }
+    return std::nullopt;
+}
+
+void BitratePanel::adopt_read(const BitratePanel& from, const std::vector<std::filesystem::path>& paths) {
+    bool first = true;
+    for (const std::filesystem::path& path : paths) {
+        const QString key = path_key(path);
+        const auto found = std::find_if(from.entries_.begin(), from.entries_.end(),
+                                        [&key](const auto& item) { return item.first == key; });
+        const bool reference = std::exchange(first, false);
+        if (found == from.entries_.end() || !found->second.data ||
+            std::any_of(entries_.begin(), entries_.end(), [&key](const auto& item) { return item.first == key; })) {
+            continue;
+        }
+        BitrateEntry entry;
+        entry.path = found->second.path;
+        entry.color = found->second.color;
+        entry.series = next_series_++;
+        entry.info = found->second.info;
+        entry.data = found->second.data;
+        entry.frame_types = found->second.frame_types;
+        entry.read_as = found->second.read_as;
+        entry.reference = reference;
+        entry.state = BitrateState::complete;
+        entries_.emplace_back(key, std::move(entry));
+    }
+    rebuild_table();
+    refresh_plot();
+}
+
 void BitratePanel::on_export_png() {
     if (!chart->has_data()) {
         dialogs.inform(app::tr("No bitrate data"), app::tr("Analyze at least one video first."));

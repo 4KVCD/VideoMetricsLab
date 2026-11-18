@@ -856,8 +856,15 @@ QWidget* MainWindow::build_run_panel() {
     show_graph_button_ = new QPushButton(app::tr("Open metric graphs"));
     show_graph_button_->setToolTip(app::tr("Opens Metric Graphs with the current results and graph settings."));
     connect(show_graph_button_, &QPushButton::clicked, this, [this] { on_show_graph_clicked(); });
+    export_graphs_button_ = new QPushButton(app::tr("Export all graphs..."));
+    export_graphs_button_->setToolTip(app::tr(
+        "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph "
+        "of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are "
+        "left as they are. If the bitrate is still being read, the file is saved as soon as it's done."));
+    connect(export_graphs_button_, &QPushButton::clicked, this, [this] { on_export_all_graphs(); });
     run_row->addWidget(load_button_);
     run_row->addWidget(save_button_);
+    run_row->addWidget(export_graphs_button_);
     run_row->addWidget(show_graph_button_);
     layout->addLayout(run_row);
 

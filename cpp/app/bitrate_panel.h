@@ -135,6 +135,16 @@ public:
     // frame range, the frame types' colours while marked) and a table of
     // the lines drawn, keyed by their colours, with the table's figures.
     QPixmap render_export_image();
+    // render_export_image with the chart drawn at `size`; its own size is put back.
+    QPixmap render_export_image(QSize size);
+
+    // How far `path` has got: complete once read; nothing when not listed.
+    std::optional<BitrateState> state_of(const std::filesystem::path& path) const;
+    // Lists `paths` as `from` has read them (their packets, details and
+    // colours; the first as the reference), reading nothing: the panel an
+    // export draws apart from the tab (graph_bundle.h). Those `from` has not
+    // read are left out.
+    void adopt_read(const BitratePanel& from, const std::vector<std::filesystem::path>& paths);
 
     // Its questions and messages; the tests answer them.
     Dialogs dialogs;

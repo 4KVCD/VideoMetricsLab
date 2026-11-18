@@ -1931,6 +1931,49 @@ QPixmap GraphPanel::render_export_image() {
                         export_colours ? export_colours() : theme::chart_colours(false));
 }
 
+QPixmap GraphPanel::render_export_image(const std::string& key, const std::vector<std::string>& identities,
+                                        QSize size) {
+    const auto& all = metrics();
+    const auto metric = std::find_if(all.begin(), all.end(), [&key](const MetricDefinition& each) {
+        return each.key == key;
+    });
+    if (metric == all.end()) {
+        return {};
+    }
+    const int shown_page = tabs_->currentIndex();
+    tabs_->setCurrentIndex(static_cast<int>(metric - all.begin()));  // builds the page when first shown
+    std::map<int, bool> was_visible;
+    for (const auto& [id, entry] : entries_) {
+        was_visible[id] = entry.visible;
+    }
+    for (const auto& [id, visible] : was_visible) {
+        set_visible(id, identities.empty() || std::find(identities.begin(), identities.end(),
+                                                        entries_.at(id).identity) != identities.end());
+    }
+    ChartWidget& chart = pages_.at(key)->chart();
+    const QSize own = chart.size();
+    chart.resize(size);
+    QPixmap image = render_export_image();
+    chart.resize(own);
+    for (const auto& [id, visible] : was_visible) {
+        set_visible(id, visible);
+    }
+    tabs_->setCurrentIndex(shown_page);
+    return image;
+}
+
+std::vector<std::string> GraphPanel::scored_metrics() const {
+    std::vector<std::string> keys;
+    for (const MetricDefinition& metric : metrics()) {
+        const std::string key(metric.key);
+        if (std::any_of(entries_.begin(), entries_.end(),
+                        [&key](const auto& item) { return item.second.result->has_metric(key); })) {
+            keys.push_back(key);
+        }
+    }
+    return keys;
+}
+
 void GraphPanel::on_add_saved_run() {
     // A saved run's line.
     const QString chosen = dialogs.open_file(

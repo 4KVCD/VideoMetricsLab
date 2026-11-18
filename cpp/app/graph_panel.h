@@ -259,6 +259,14 @@ public:
     // The chart of the metric shown, with a title, a legend keyed by the
     // lines' colours and the statistics: what an exported PNG holds.
     QPixmap render_export_image();
+    // render_export_image of metric `key`'s page, with only the lines whose
+    // identities are `identities` drawn (all of them when empty), the chart
+    // drawn at `size`. The page shown, the lines shown and the chart's size
+    // are put back after. For an export drawn apart from the tab
+    // (graph_bundle.h).
+    QPixmap render_export_image(const std::string& key, const std::vector<std::string>& identities, QSize size);
+    // The metrics any line has scores of, in the app's order.
+    std::vector<std::string> scored_metrics() const;
 
     // The dialogs that wait for the user, which the tests answer.
     Dialogs dialogs;
