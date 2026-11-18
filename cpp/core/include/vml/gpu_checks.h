@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -23,10 +24,12 @@ std::filesystem::path gpu_checks_file();
 // Runs GPU check `task` ("vulkan-probe", "cuda-probe", "vmaf-v1-probe",
 // "vship-probe" or "nvdec-probe") with `request` in a process of its own, as run_isolated
 // does, unless an answer saved at an earlier start on this PC as it is now
-// answers it; a pass is saved. Throws what run_isolated throws, and Cancelled
-// before anything when `cancel` is set.
+// answers it; a pass is saved. `on_message` is given what the check's process
+// sends as it goes (run_isolated's). Throws what run_isolated throws, and
+// Cancelled before anything when `cancel` is set.
 nlohmann::json run_gpu_check(std::string_view task, std::string_view what, const nlohmann::json& request,
-                             const CancelToken& cancel);
+                             const CancelToken& cancel,
+                             const std::function<void(const nlohmann::json&)>& on_message = {});
 
 // Deletes every saved answer, so that the checks run again at the next start:
 // after a GPU fault in a run (the saved answer may be wrong now), and for

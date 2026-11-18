@@ -475,21 +475,52 @@ std::optional<GpuVendor> vendor_from(const std::string& text) {
 // crashed or failed rather than answering. A probe stopped by `cancel` (the
 // run's Cancel, or the app ending: stop_gpu_probes) is no answer: Cancelled
 // goes on.
+// The probe in a process of its own. A crash on one GPU's check (its driver's
+// fault) leaves the others: the probe runs again without the GPU it said it
+// was checking, which the answer's reason then names.
 std::pair<std::optional<VshipDevice>, std::string> probe_isolated(VshipBuild build, bool& failed,
                                                                   const CancelToken& cancel) {
-    try {
-        const std::string what = std::string(vship_build_label(build)) + "'s GPU probe";
-        const nlohmann::json result =
-            run_gpu_check("vship-probe", what, {{"vship_build", std::string(vship_build_value(build))}}, cancel);
-        return {vship_device_from(result.at("device")), result.at("reason").get<std::string>()};
-    } catch (const IsolatedCrashError& error) {
-        failed = true;
-        return {std::nullopt, error.what()};
-    } catch (const Cancelled&) {
-        throw;
-    } catch (const std::exception& error) {
-        failed = true;
-        return {std::nullopt, std::string("the GPU probe failed: ") + error.what()};
+    const std::string what = std::string(vship_build_label(build)) + "'s GPU probe";
+    SkippedGpus skipped;
+    while (true) {
+        std::optional<std::pair<int, std::string>> checking;
+        nlohmann::json request{{"vship_build", std::string(vship_build_value(build))}};
+        if (!skipped.empty()) {
+            nlohmann::json skip = nlohmann::json::array();
+            for (const auto& [gpu_id, why] : skipped) {
+                skip.push_back({gpu_id, why});
+            }
+            request["skip"] = std::move(skip);
+        }
+        try {
+            const nlohmann::json result = run_gpu_check(
+                "vship-probe", what, request, cancel, [&checking](const nlohmann::json& message) {
+                    if (message.contains("checking")) {
+                        checking = std::pair(message["checking"].at(0).get<int>(),
+                                             message["checking"].at(1).get<std::string>());
+                    }
+                });
+            return {vship_device_from(result.at("device")), result.at("reason").get<std::string>()};
+        } catch (const IsolatedCrashError& error) {
+            const bool known = checking && std::none_of(skipped.begin(), skipped.end(), [&](const auto& skip) {
+                                   return skip.first == checking->first;
+                               });
+            if (!known) {
+                failed = true;
+                return {std::nullopt, error.what()};
+            }
+            const std::string why = vship_build_api(build) + " GPU " + std::to_string(checking->first) + " (" +
+                                    checking->second + "): its check crashed (" + error.what() + ")";
+            app_log::write(app_log::Level::warning, "vml.perceptual_vship",
+                           std::string(vship_build_label(build)) + " leaves out " + checking->second +
+                               ": its check crashed; the other GPUs are checked without it");
+            skipped.emplace_back(checking->first, why);
+        } catch (const Cancelled&) {
+            throw;
+        } catch (const std::exception& error) {
+            failed = true;
+            return {std::nullopt, std::string("the GPU probe failed: ") + error.what()};
+        }
     }
 }
 
@@ -641,7 +672,8 @@ std::string vship_build_name(const VshipDevice& device) {
     }
 }
 
-std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(VshipBuild build) {
+std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(
+    VshipBuild build, const SkippedGpus& skipped, const std::function<void(int gpu_id, const std::string& name)>& checking) {
     // The rest is built on every system all the same, so that it stays
     // ready for the builds of the others.
     if constexpr (!vship_bundled) {
@@ -681,11 +713,15 @@ std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(VshipBuild
         return {std::nullopt, api + ": " + library->message(error)};
     }
     // (integrated, number, name): a discrete GPU first, then Vship's order.
-    std::vector<std::tuple<bool, int, std::string>> usable;
+    // Each GPU's details first, which ask the driver nothing of its compiler,
+    // then the checks in that order until one passes.
+    std::vector<std::tuple<bool, int, std::string>> candidates;
     std::vector<std::string> failures;
+    for (const auto& [gpu_id, why] : skipped) {
+        failures.push_back(why);
+    }
     for (int gpu_id = 0; gpu_id < count; ++gpu_id) {
-        if (const int error = library->gpu_full_check(gpu_id); error != 0) {
-            failures.push_back(api + " GPU " + std::to_string(gpu_id) + ": " + library->message(error));
+        if (std::any_of(skipped.begin(), skipped.end(), [gpu_id](const auto& skip) { return skip.first == gpu_id; })) {
             continue;
         }
         vship_api::DeviceInfo info;
@@ -694,7 +730,22 @@ std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(VshipBuild
             continue;
         }
         const std::string name = replace_invalid_utf8(std::string(info.name, strnlen(info.name, sizeof info.name)));
-        usable.emplace_back(info.integrated != 0, gpu_id, name.empty() ? api + " GPU " + std::to_string(gpu_id) : name);
+        candidates.emplace_back(info.integrated != 0, gpu_id,
+                                name.empty() ? api + " GPU " + std::to_string(gpu_id) : name);
+    }
+    std::sort(candidates.begin(), candidates.end());
+    std::vector<std::tuple<bool, int, std::string>> usable;
+    for (const auto& candidate : candidates) {
+        const auto& [integrated, gpu_id, name] = candidate;
+        if (checking) {
+            checking(gpu_id, name);
+        }
+        if (const int error = library->gpu_full_check(gpu_id); error != 0) {
+            failures.push_back(api + " GPU " + std::to_string(gpu_id) + " (" + name + "): " + library->message(error));
+            continue;
+        }
+        usable.push_back(candidate);
+        break;
     }
     if (usable.empty()) {
         if (count == 0) {
@@ -706,7 +757,7 @@ std::pair<std::optional<VshipDevice>, std::string> probe_vship_device(VshipBuild
         }
         return {std::nullopt, reasons};
     }
-    const auto& [integrated, gpu_id, name] = *std::min_element(usable.begin(), usable.end());
+    const auto& [integrated, gpu_id, name] = usable.front();
     const vship_api::Version version = library->get_version();
     const std::optional<GpuVendor> vendor = build == VshipBuild::hip    ? std::optional(GpuVendor::amd)
                                             : build == VshipBuild::cuda ? std::optional(GpuVendor::nvidia)
