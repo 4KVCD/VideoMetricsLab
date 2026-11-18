@@ -20,7 +20,7 @@
   "name": "VideoMetricsLab",
   "applicationCategory": "MultimediaApplication",
   "operatingSystem": "Windows 10, Windows 11, macOS 14.4",
-  "softwareVersion": "2.5.1",
+  "softwareVersion": "2.6",
   "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
   "license": "https://opensource.org/licenses/MIT",
   "url": "https://4kvcd.github.io/VideoMetricsLab/",
@@ -81,14 +81,12 @@ before it ships.</p>
   <a class="button" href="https://github.com/4KVCD/VideoMetricsLab">Source code on GitHub</a>
 </div>
 <p class="note">Windows 10 or 11 (x64), or macOS 14.4 or later on Apple silicon. Needs FFmpeg 9 or newer with
-libvmaf, installed separately. Free and open source, under the MIT licence.</p>
+libvmaf: on Windows the app offers to download it, on macOS it is installed separately. Free and open source, under the MIT licence.</p>
 
 <section class="news">
-<h2>New in v2.5.1</h2>
-<p>v2.5.1 fixes the problem where cached results take 10-20+ seconds to load because of black bar detection being redone, along with some bug fixes. See the
-<a href="https://github.com/4KVCD/VideoMetricsLab/releases/tag/v2.5.1">release notes</a>.</p>
-<p>v2.5 adds statistics for any range of frames in Metric Graphs, black-bar crops entered by hand, ColorVideo VDP on more than one display in the window, ranges in frames, and fuller results files, along with various bug fixes. See the
-<a href="https://github.com/4KVCD/VideoMetricsLab/releases/tag/v2.5">release notes</a>.</p>
+<h2>New in v2.6</h2>
+<p>v2.6 significantly speeds up short video scoring through CLI by removing long startup costs, automatically downloads FFmpeg on Windows that doesn't have ffmpeg, finds a video's worst moments and weak stretches, and various bug fixes. See the
+<a href="https://github.com/4KVCD/VideoMetricsLab/releases/tag/v2.6">release notes</a>.</p>
 </section>
 
 <h2>Features</h2>
