@@ -792,6 +792,11 @@ TEST_F(GraphPanelTest, WorstFramesListsTheDipsAndOpensThemInVideoCompare) {
     EXPECT_EQ(list.item(0, 0)->text(), "70");
 
     range_start_spin(panel).setValue(0);
+    QStringList suggested;
+    panel.dialogs.save_file = [&suggested](const QString&, const QString& name, const QString&) {
+        suggested.append(name);
+        return QString();  // Cancel
+    };
     worst_panel(panel).segments_button()->click();
     auto* dialog = panel.findChild<WeakSegmentsDialog*>();
     ASSERT_NE(dialog, nullptr);
@@ -800,6 +805,15 @@ TEST_F(GraphPanelTest, WorstFramesListsTheDipsAndOpensThemInVideoCompare) {
     EXPECT_EQ(dialog->segments()[0].first_frame, 9);
     EXPECT_EQ(dialog->segments()[0].last_frame, 10);
     EXPECT_EQ(dialog->segments()[1].first_frame, 70);
+
+    // The exports are named after the metrics they cover, so that one by
+    // another metric does not take this one's name.
+    for (QPushButton* button : dialog->findChildren<QPushButton*>()) {
+        if (button->text().startsWith("Export")) {
+            button->click();
+        }
+    }
+    EXPECT_EQ(suggested, (QStringList{"a.vmaf.segments.json", "a.vmaf.segments.csv"}));
 }
 
 TEST_F(GraphPanelTest, WorstFramesKeepsTheChosenVideoWhileItIsRecalculated) {
