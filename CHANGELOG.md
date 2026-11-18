@@ -1,5 +1,91 @@
 # Changelog
 
+## v2.6
+
+v2.6 significantly speeds up short video scoring through CLI by removing long startup costs, automatically downloads
+FFmpeg on Windows that doesn't have ffmpeg, finds a video's worst moments and weak stretches, and various bug fixes.
+
+### Performance
+
+- The command line no longer waits seconds to minutes to start and finish a run when it runs at low priority, as
+  scripts run it (48-frame runs: 85.8-180.5 s -> 3.6-6.3 s each).
+- Runs start about 5 s sooner: the GPU checks run once, and their passes are remembered until the app, the GPU or
+  its driver changes (a 1080p VMAF, CVVDP and VMAF v1 compare: 13.4 -> 8.2 s).
+- The command line starts scoring sooner: it reads all the videos at once and asks FFmpeg less (a 1080p reference
+  and 3 VVC encodes: 10.2 -> 7.5 s).
+- Saved scores show as soon as the videos are added, with no black-bar check first, whatever version saved them.
+- Added videos show their details at once: the video bitrate estimate is worked out in the background, and the
+  row shows the rough rate (≈) until it lands.
+
+### New
+
+- On Windows, the app offers to download FFmpeg when it is missing: the latest stable build from the FFmpeg-Builds
+  project, checked against its published SHA-256 before use.
+- Worst frames: Metric Graphs lists the worst frame of each of a video's 10, 25 or 50 worst dips, with every metric's
+  score there; a double-click opens that frame in Video Compare (#24).
+- Weak segments: the stretches where scores fall below a threshold you set (such as VMAF < 85), exported as JSON or CSV
+  (#24).
+- Video Compare steps through the worst frames (Previous worst / Next worst), loops playback around a frame, and saves
+  the frame of both videos as PNGs (#24).
+- The command line lists the worst dips (`--worst N`) and weak segments (`--segments "vmaf<90"`), and writes them to
+  JSON and CSV files (`--segments-dir`) (#24).
+- On a PC with more than one GPU, you choose the one that calculates the GPU metrics (Settings > GPU metrics > GPU, or
+  the command line's `--gpu`) (#36, by @jakejackson).
+- The command line saves each video's result as a file Metric Graphs can open (`--run-dir`), writes its log to a file
+  (`--log-file`), and names each video's files after a template such as `--name "{test}-{date}"` (#34, by
+  @jakejackson).
+- The command line compares the encodes of many references in one run (`compare --batch list.csv`), and writes each
+  encode's bitrate and scores in the file the BD-rate calculator reads (`--scores-csv`).
+- Exported graphs can be light, dark or in the window's colours, with a background and text colour of your choice
+  (Settings > Storage > Exported graphs) (#31; #32, by @jakejackson).
+- The Bitrate tab's Export PNG adds a title and a table saying which coloured line is which video, with its figures, as
+  Metric Graphs' export does (#29; #30, by @jakejackson).
+- The results JSON says why each video was decoded on the CPU rather than the GPU.
+- The window reopens where it was closed, maximized if it was (#25).
+
+### Bug fixes
+
+Wrong scores:
+
+- Fixed H.264 Blu-ray remuxes whose keyframes do not all carry their own picture settings being decoded wrongly on
+  Intel's and AMD's GPU decoders, with no error (lowest frame PSNR 12.7 instead of 50.9 on the reported film) (#23).
+- Fixed a test video cut from a letterboxed source when it was encoded being scored against a picture shifted by a
+  row or column, or refused as "different shapes", when the source keeps a thin dark edge inside its bars or the
+  encode was cut into the picture (#18, #20).
+- Fixed a row's Manual black bars carrying over to every test video added afterwards, even for another reference (#22).
+- Fixed a video whose colour range changes partway through (limited, then full) scoring differently when decoded on
+  the CPU than on the GPU: the later frames' levels were converted.
+
+Other:
+
+- Fixed SSIMULACRA2, Butteraugli and CVVDP being calculated on the CPU on PCs where one GPU's driver crashes their
+  GPU check (AMD integrated GPUs), even when another GPU works (#35; #36, by @jakejackson).
+- Fixed decoding on AMD GPUs running on another maker's GPU on PCs that have both (#35; #36, by @jakejackson).
+- Fixed the GPU VVC decoder compiling all its shaders again (about 45 s on an RTX 5090) after a first run that was
+  cancelled or closed while it compiled them.
+- Fixed the GPU VVC decoder taking up to 11 s to close on Intel GPUs whose driver had not cached its shaders yet.
+- Fixed saved scores of H.264 test videos from the older Python app not loading, so they were calculated again.
+- Fixed choosing another scaling algorithm or resolution-mismatch direction recalculating saved scores of videos of
+  the same size, which nothing scales.
+- Fixed the Video bitrate column showing the whole file's bitrate, audio, subtitles and fonts included, for files
+  that do not record the video's own: it now shows an estimate of the video's, marked ≈.
+- Fixed Calculate metrics asking about the film grain of a video whose saved scores were already in and which was
+  not calculated again.
+- Fixed the progress line showing a speed of 0.0 fps and over an hour left while a run was still starting (such as
+  the GPU VVC decoder's first run).
+- Fixed the command line reporting a test-video pattern that matches no file as an ffprobe error ("Invalid argument");
+  it now says no file matches it.
+- Fixed Export graph and the bitrate plot's export suggesting the same file name for every video: they are now named
+  after the test video shown, or the reference when several are (#26).
+- Fixed Metric Graphs' time axis showing a single label ("0:00:00") under the graph of a run shorter than a few
+  seconds, or of a graph zoomed in that far: its labels now show tenths or hundredths of a second.
+- Fixed a held arrow of the frame-range boxes moving one frame and stopping (#28).
+- Fixed status lines and logs naming the GPU decoder by FFmpeg's name ("d3d11va", "cuda", "qsv") and calling the
+  test video "distorted": they now say "AMD GPU", "NVIDIA GPU", "Intel GPU" or "CPU".
+- Fixed the command line's `bitrate` writing each video's "packets read" line twice when its output goes to a file or
+  pipe.
+- Fixed Settings' "New videos use" box cutting off its choice ("GPU (fastest" for "GPU (fastest and most accurate)").
+
 ## v2.5.1
 
 v2.5.1 fixes the problem where cached results take 10-20+ seconds to load because of black bar detection being

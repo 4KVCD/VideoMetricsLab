@@ -95,9 +95,10 @@ extract it, and run `VideoMetricsLab.exe` (Windows) or `VideoMetricsLab.app`
 (macOS). The macOS app is not notarized: the first time, open it from System
 Settings > Privacy & Security > Open Anyway.
 
-The app requires **FFmpeg 9 or newer with libvmaf**. FFmpeg is not bundled; the
-app prompts for its location if it is not available on `PATH`. On macOS,
-`brew install ffmpeg-full` installs it (with zscale, which HDR video needs to be shown in SDR).
+The app requires **FFmpeg 9 or newer with libvmaf**. FFmpeg is not bundled. On Windows, when it is not on `PATH`, the
+app offers to download it (the latest stable build from the FFmpeg-Builds project, checked against its published
+SHA-256) or to locate it. On macOS, `brew install ffmpeg-full` installs it (with zscale, which HDR video needs to be
+shown in SDR).
 
 ### Build from source
 
