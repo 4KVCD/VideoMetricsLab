@@ -241,6 +241,18 @@ QGroupBox* SettingsPanel::build_storage_box() {
     use_cache->setChecked(settings_.use_cache);
     connect(use_cache, &QCheckBox::toggled, this, [this] { on_edited(); });
     storage_form->addRow("", use_cache);
+    recognise_remuxes = new QCheckBox(app::tr("Recognize test videos remuxed after scoring (reads each one again)"));
+    recognise_remuxes->setToolTip(Qt::convertFromPlainText(app::tr(
+        "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps "
+        "its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more "
+        "after its scores are saved, as long as reading the file takes (a few minutes for a film on a network "
+        "share), in the background and never during a run; and a video whose stream begins as a scored one's is "
+        "read whole to tell whether it is that video, after the other videos' saved scores are found.\n\n"
+        "Off: test videos are known by their files only."),
+        Qt::WhiteSpaceNormal));
+    recognise_remuxes->setChecked(settings_.recognise_test_remuxes);
+    connect(recognise_remuxes, &QCheckBox::toggled, this, [this] { on_edited(); });
+    storage_form->addRow("", recognise_remuxes);
     check_frame_counts = new QCheckBox(app::tr("Read entire files to check frame counts when needed (can be slow)"));
     // As rich text, which Qt wraps (a plain tooltip is one line however long)
     check_frame_counts->setToolTip(Qt::convertFromPlainText(app::tr(
@@ -925,6 +937,7 @@ void SettingsPanel::read_controls() {
     settings_.export_graph_background = export_background_button->property("chosen").toString().toStdString();
     settings_.export_graph_text = export_text_button->property("chosen").toString().toStdString();
     settings_.use_cache = use_cache->isChecked();
+    settings_.recognise_test_remuxes = recognise_remuxes->isChecked();
     settings_.check_frame_counts = check_frame_counts->isChecked();
     settings_.default_gpu_decode = default_gpu->isChecked();
     for (const auto& [key, box] : default_metrics) {

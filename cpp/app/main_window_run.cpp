@@ -581,6 +581,16 @@ void MainWindow::set_run_ui_active(bool active) {
     // Freezes every input that can change the meaning of a live job.
     run_active_ = active;
     saved_results_panel_->set_run_active(active);  // its Delete: the run saves there
+    // A run has the disks to itself: a test stream being recorded is read
+    // again after it, and a remux check under way gives way (its rows are
+    // calculated).
+    if (active) {
+        stream_records_->pause();
+        cancel_stream_check();
+        end_stream_status();
+    } else {
+        stream_records_->resume();
+    }
     // A run can take hours: the PC must not go to sleep under it. Released as
     // soon as the run ends.
     if (keep_awake()(active)) {
@@ -1103,14 +1113,19 @@ void MainWindow::save_job_result(std::size_t job, const RowData& row_data, const
                          job_cvvdp_[job], result.source_info, result.distorted_info);
     ComparisonResult saved = result;  // the copy the write needs anyway
     take_current_rates(saved);        // a rate sampled since the video started
+    sync_remux_setting();
     file_writes_->submit(QStringLiteral("cache %1").arg(label),
                          [base = cache_folder(), identity = row_data.identity_path(), result = std::move(saved),
-                          label = label.toStdString(), request, records = stream_records_] {
+                          label = label.toStdString(), request, records = stream_records_,
+                          recognise = settings_.recognise_test_remuxes] {
                              store_result(base, result.source, identity, request.recipe, result, label,
                                           request.metrics);
-                             // Its test stream, for a remux of it to keep these scores: read
-                             // apart from the writes, which it would hold up.
-                             records->add(base, identity);
+                             // Its test stream, for a remux of it to keep these scores (with
+                             // Settings' "Recognize test videos remuxed"): read apart from the
+                             // writes, which it would hold up, and after the run.
+                             if (recognise) {
+                                 records->add(base, identity);
+                             }
                          });
 }
 

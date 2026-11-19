@@ -182,6 +182,19 @@ MainWindow::MainWindow() {
     // later would be worse than the failure it announces.
     file_writes_ = new FileWrites(this);
     stream_records_ = std::make_shared<StreamRecords>();
+    // What the records read, on the status line: queued to the window's
+    // thread (the records' own calls it from theirs).
+    stream_records_->set_reporting(
+        [this](const std::filesystem::path& test) {
+            QMetaObject::invokeMethod(
+                this,
+                [this, name = name_of(test)] {
+                    show_stream_status(app::tr("Recording {name}'s stream, so that a remux of it keeps its scores\xE2\x80\xA6",
+                                               {{"name", name}}));
+                },
+                Qt::QueuedConnection);
+        },
+        [this] { QMetaObject::invokeMethod(this, [this] { end_stream_status(); }, Qt::QueuedConnection); });
     connect(file_writes_, &FileWrites::write_failed, this, [this](const QString& description, const QString& error) {
         show_status(app::tr("Could not {description}: {error}", {{"description", description}, {"error", error}}));
     });
@@ -218,7 +231,7 @@ MainWindow::MainWindow() {
     const std::string ffmpeg = find_tool("ffmpeg", settings_);
     const std::string ffprobe = find_tool("ffprobe", settings_);
     set_video_fingerprinter(fingerprinter_using(ffmpeg, ffprobe));
-    set_stream_fingerprinter(stream_fingerprinter_using(ffmpeg, ffprobe));
+    use_stream_fingerprinter(ffmpeg, ffprobe);
     restore_open_videos();
     on_table_selection_changed();
 }
@@ -335,7 +348,9 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         }
         frame_compare_panel_->cancel();
         bitrate_panel_->cancel();
-        stream_records_->stop();  // a test stream being read is recorded at its next save
+        stream_records_->set_reporting({}, {});  // nothing more for the window
+        stream_records_->stop();                 // a test stream being read is recorded at its next save
+        cancel_stream_check();
         for (ProbeWorker* worker : probe_workers_) {
             worker->cancel();
         }
@@ -1101,7 +1116,7 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     // A remuxed or moved reference, and a remuxed test video, keep their
     // saved scores (file_fingerprint.h).
     set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
-    set_stream_fingerprinter(stream_fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
+    use_stream_fingerprinter(status.ffmpeg.path, status.ffprobe.path);
     if (prompt) {
         log_tools(status, detected_gpu_vendors_);
     }
@@ -1211,7 +1226,7 @@ void MainWindow::on_ffmpeg_downloaded(const std::filesystem::path& folder) {
     // A remuxed or moved reference, and a remuxed test video, keep their
     // saved scores (file_fingerprint.h).
     set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
-    set_stream_fingerprinter(stream_fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
+    use_stream_fingerprinter(status.ffmpeg.path, status.ffprobe.path);
     log_tools(status, detected_gpu_vendors_);
     ffmpeg_found(status, folder);
     if (const std::optional<std::string> problem = settings_.save()) {
@@ -1278,7 +1293,7 @@ bool MainWindow::on_locate_ffmpeg() {
     // A remuxed or moved reference, and a remuxed test video, keep their
     // saved scores (file_fingerprint.h).
     set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
-    set_stream_fingerprinter(stream_fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
+    use_stream_fingerprinter(status.ffmpeg.path, status.ffprobe.path);
     if (!status.ok()) {
         const QStringList problems = tool_problems(status);
         QMessageBox::warning(this, app::tr("Still not usable"), problems.join("\n"));

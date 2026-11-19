@@ -399,6 +399,7 @@ $run.videos[0].metrics.vmaf.score
 | `--parallel 1\|2` | Videos calculated at once on the CPU. |
 | `--frame-counts check\|skip` | When a video may be out of sync with the reference, the frame counts stored in the files are always checked. check: also read a file that doesn't store one from start to finish to count its frames, which can add minutes per video; skip: don't. Default: Settings > Storage. |
 | `--recalculate` | Ignore saved scores. |
+| `--test-remuxes on\|off` | On: read each test video calculated once more after the run, so that a remux of it keeps its saved scores, and read a video whose stream begins as a saved one's to tell whether it is that video (see [Saved results and caches](#saved-results-and-caches)). Off: neither. Left out: as **Settings > Storage > Recognize test videos remuxed after scoring** (off unless changed). |
 | `--difference` | With exactly two test videos: the first minus the second as well, frame by frame (CVVDP second by second), paired as **Difference** in Metric Graphs pairs them. The tables end with a difference table (Score: the two scores subtracted; Mean, Min, Max: of the frames' differences; Paired: the frames, or seconds, both have), the JSON gets a `difference` section, and with `--csv` it is written as `<first>_minus_<second>.csv` (the files' names). |
 | `--csv FOLDER` | Write each video's per-frame scores as `<video>.csv`, as **Export CSV** does. |
 | `--json FILE` | Also write the results as JSON. `--json -` prints the JSON instead of the tables, for a script to read. |
@@ -716,16 +717,27 @@ stream is only looked at when the test video has saved scores, so a new
 encode costs nothing to look up. A remux that changes the stream's colour
 tags, or a re-encode, is another video and is scored again.
 
-A test video remuxed (its raw stream, `.264`, `.265`, `.266` or `.obu`, muxed
-into MKV or MP4 with its audio, an MKV remuxed to MP4, a tag edited) keeps
-its scores too, with the same reference and settings, read at the same frame
-rate. It is recognised by its coded pictures, byte for byte: any re-encode,
-even of one scene, is another video. After a test video's scores are saved,
-its stream is read once, as long as reading the file takes: by the app in
-the background (closing it stops the read, which is made again at the next
-save), and by the command line after its run. Looking a
-new encode up reads only its first packets, and the whole stream only when
-they and the reference match a saved comparison.
+With **Settings > Storage > Recognize test videos remuxed after scoring**
+(off by default; the command line's `--test-remuxes on`), a test video
+remuxed (its raw stream, `.264`, `.265`, `.266` or `.obu`, muxed into MKV or
+MP4 with its audio, an MKV remuxed to MP4, a tag edited) keeps its scores
+too, with the same reference and settings, read at the same frame rate. It
+is recognised by its coded pictures, byte for byte: any re-encode, even of
+one scene, is another video. That takes reading each test video once more
+after its scores are saved, as long as reading the file takes (about 45 s
+for a 4 GB film on a network share):
+- the app reads it in the background, saying so on the status line, and
+  never during a run (a run pauses it; closing the app stops it, and it is
+  read at the next save);
+- the command line reads it after writing its results, saying so.
+
+Looking a new encode up reads only its first packets. A video whose first
+packets and reference match a saved comparison's (a remux, or an encode
+redone in later scenes only) is read whole to tell which: in the app after
+the other videos' saved scores are shown, on the status line, and given up
+when a run starts (the video is calculated); on the command line before
+the run, said first. Off, nothing reads test streams, and test videos are
+recognised by their files only.
 
 Settings and the default cache are under `~/.videometricslab/`. Back up that
 folder before maintenance; changing checkout should not require clearing it.

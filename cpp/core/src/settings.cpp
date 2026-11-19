@@ -56,6 +56,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"gpu_metrics_together", &Settings::gpu_metrics_together},
         {"gpu", &Settings::gpu},
         {"vvc_decode_on_gpu", &Settings::vvc_decode_on_gpu},
+        {"recognise_test_remuxes", &Settings::recognise_test_remuxes},
         {"use_cache", &Settings::use_cache},
         {"check_frame_counts", &Settings::check_frame_counts},
         {"check_for_updates", &Settings::check_for_updates},
@@ -266,6 +267,7 @@ std::string Settings::text() const {
     data["gpu_metrics_together"] = gpu_metrics_together;
     data["gpu"] = gpu;
     data["vvc_decode_on_gpu"] = vvc_decode_on_gpu;
+    data["recognise_test_remuxes"] = recognise_test_remuxes;
     data["use_cache"] = use_cache;
     data["check_frame_counts"] = check_frame_counts;
     data["check_for_updates"] = check_for_updates;

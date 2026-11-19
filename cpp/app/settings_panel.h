@@ -113,6 +113,7 @@ public:
     QPushButton* export_background_button = nullptr;
     QPushButton* export_text_button = nullptr;
     QCheckBox* use_cache = nullptr;
+    QCheckBox* recognise_remuxes = nullptr;
     QCheckBox* check_frame_counts = nullptr;
     QLabel* log_label = nullptr;
     QPushButton* copy_log_button = nullptr;

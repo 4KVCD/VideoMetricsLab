@@ -42,13 +42,14 @@ ProbeWorker::ProbeWorker(QStringList paths, std::string ffprobe, std::string ffm
 }
 
 ProbeWorker::ProbeWorker(QStringList paths, std::filesystem::path base, std::filesystem::path source,
-                         std::map<QString, SavedScoresQuery> queries, QObject* parent)
+                         std::map<QString, SavedScoresQuery> queries, QObject* parent, WholeStreams whole_streams)
     : QThread(parent),
       paths_(std::move(paths)),
       base_(std::move(base)),
       source_(std::move(source)),
       queries_(std::move(queries)),
       looks_up_(true) {
+    whole_streams_ = whole_streams == WholeStreams::yes;
     register_types();
 }
 
@@ -122,8 +123,11 @@ void ProbeWorker::look_up(const QString& path) {
         // The token first: a file replaced during a long read gives another,
         // and the window refuses the scores found under the old one.
         const std::string token = lookup_token(source_, query.identity, request);
-        // A remux's test stream read to know it by stops with the lookup.
-        const StreamReadCancel stream_reads(cancel_);
+        // A remux's test stream read to know it by stops with the lookup; a
+        // whole one is read only where this lookup is for that.
+        const StreamReads stream_reads(cancel_, whole_streams_,
+                                       [this, &path](const std::filesystem::path&) { emit stream_check_started(path); });
+        take_whole_stream_wanted();  // none of an earlier row's
         if (auto found = load_result(base_, source_, query.identity, request.recipe, request.metrics,
                                      request.perceptual_backends, query.supplemental, query.not_from_other_recipes)) {
             emit saved_found({path, std::move(found->first), token});
@@ -131,6 +135,9 @@ void ProbeWorker::look_up(const QString& path) {
         if (auto others = other_cvvdp_scores(base_, source_, query.identity, request.recipe, request.metrics,
                                              query.supplemental, query.not_from_other_recipes)) {
             emit other_displays_found({path, std::move(others->scores), std::move(others->parameters)});
+        }
+        if (take_whole_stream_wanted() && !cancelled_) {
+            emit stream_check_wanted(path);
         }
     } catch (const std::exception&) {
         // A damaged saved file must not end the lookup, leaving the videos

@@ -1094,7 +1094,11 @@
   "can't be read": "nem olvasható",
   "{name} (saved)": "{name} (mentett)",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Recognize test videos remuxed after scoring (reads each one again)": "A pontozás után újramuxolt tesztvideók felismerése (mindegyiket újra beolvassa)",
+  "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "A pontozás után muxolt vagy újramuxolt tesztvideó (nyers streamje MKV-be, egy MKV MP4-be) megtartja a mentett pontszámait: kódolt képeiről ismerhető fel.\n\nEhhez minden tesztvideót még egyszer be kell olvasni a pontszámai mentése után, annyi ideig, amennyi a fájl beolvasása (hálózati megosztáson lévő filmnél néhány perc), a háttérben és soha nem számítás közben; és az a videó, amelynek streamje úgy kezdődik, mint egy pontozotté, teljes egészében beolvasásra kerül, hogy kiderüljön, ugyanaz-e, miután a többi videó mentett pontszámai megvannak.\n\nKikapcsolva: a tesztvideók csak a fájljaikról ismerhetők fel.",
+  "Checking whether {name} is a remux of a video already scored: reading its stream…": "Ellenőrzés, hogy a(z) {name} egy már pontozott videó újramuxolása-e: a stream beolvasása…",
+  "Recording {name}'s stream, so that a remux of it keeps its scores…": "A(z) {name} streamjének rögzítése, hogy újramuxolása megtartsa a pontszámait…"
  },
  "plurals": {
   "about {count} day": [

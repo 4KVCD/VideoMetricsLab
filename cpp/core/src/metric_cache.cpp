@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <functional>
+#include <utility>
 #include <iterator>
 #include <map>
 #include <mutex>
@@ -31,6 +33,7 @@
 #include "vml/hardware_decoding.h"
 #include "vml/model_select.h"
 #include "vml/npz.h"
+#include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/temp_files.h"
 #include "vml/python_json.h"
@@ -1244,14 +1247,21 @@ std::optional<std::string> video_of(const std::filesystem::path& file) {
 // `head_packets` packets, a cheap first check, or all of them.
 constexpr int head_packets = 100;
 
-// What stops the stream reads of the lookups on this thread
-// (StreamReadCancel); none stops them where none is set.
-thread_local std::optional<CancelToken> lookup_cancel;
+// How the lookups on this thread read streams (StreamReads): what stops
+// them (none: nothing), whether they may read whole streams, and whom to
+// tell first; and whether one would have read a whole stream.
+struct ThreadStreamReads {
+    std::optional<CancelToken> cancel;
+    bool whole = false;
+    std::function<void(const std::filesystem::path&)> announce;
+    bool whole_wanted = false;
+};
+thread_local ThreadStreamReads lookup_reads;
 
 // The stream fingerprint of `file`'s first `packets` packets (0: all), read
 // once (a read cancelled is not kept). Not `read`: only one read before.
 std::optional<std::string> stream_of(const std::filesystem::path& file, int packets, bool read = true,
-                                     const CancelToken& cancel = lookup_cancel.value_or(CancelToken())) {
+                                     const CancelToken& cancel = lookup_reads.cancel.value_or(CancelToken())) {
     const std::pair<std::string, int> key{file_identity(file), packets};
     KnownFiles& known = known_files();
     StreamFingerprinter fingerprinter;
@@ -1432,7 +1442,36 @@ std::optional<std::filesystem::path> folder_of_same_stream(const std::filesystem
     if (candidates.empty()) {
         return std::nullopt;
     }
-    const std::string stream = stream_of(distorted, 0).value_or("");
+    // The whole stream: as recorded already, or read where this thread's
+    // lookups may (StreamReads), told first.
+    std::optional<std::string> whole = stream_of(distorted, 0, false);
+    if (!whole) {
+        if (!lookup_reads.whole) {
+            lookup_reads.whole_wanted = true;
+            return std::nullopt;
+        }
+        if (lookup_reads.cancel && lookup_reads.cancel->cancelled()) {
+            return std::nullopt;  // the lookup is over: nothing to read, nor to say
+        }
+        if (lookup_reads.announce) {
+            lookup_reads.announce(distorted);
+        }
+        const auto started = std::chrono::steady_clock::now();
+        whole = stream_of(distorted, 0);
+        const std::string stream = whole.value_or("");
+        const auto same = std::find_if(candidates.begin(), candidates.end(), [&stream](const RecordedComparison& c) {
+            return !stream.empty() && c.distorted_stream == stream;
+        });
+        app_log::write(app_log::Level::info, "vml.metric_cache",
+                       "Read " + platform::path_text(distorted.filename()) +
+                           "'s whole stream to tell a remux of a scored test video: " +
+                           format_fixed(std::chrono::duration<double>(std::chrono::steady_clock::now() - started)
+                                            .count(),
+                                        1) +
+                           " s, " + (stream.empty() ? "not read" : same != candidates.end() ? "a remux" : "another encode"));
+        return same == candidates.end() ? std::nullopt : std::optional(same->folder);
+    }
+    const std::string stream = whole.value_or("");
     for (const RecordedComparison& candidate : candidates) {
         if (!stream.empty() && candidate.distorted_stream == stream) {
             return candidate.folder;
@@ -1489,12 +1528,21 @@ void set_stream_fingerprinter(StreamFingerprinter fingerprinter) {
     known.stream_fingerprinter = std::move(fingerprinter);
 }
 
-StreamReadCancel::StreamReadCancel(const CancelToken& cancel) : before_(lookup_cancel) {
-    lookup_cancel = cancel;
+StreamReads::StreamReads(const CancelToken& cancel, bool whole,
+                         std::function<void(const std::filesystem::path&)> announce) {
+    lookup_reads.cancel = cancel;
+    lookup_reads.whole = whole;
+    lookup_reads.announce = std::move(announce);
 }
 
-StreamReadCancel::~StreamReadCancel() {
-    lookup_cancel = before_;
+StreamReads::~StreamReads() {
+    lookup_reads.cancel.reset();
+    lookup_reads.whole = false;
+    lookup_reads.announce = nullptr;
+}
+
+bool take_whole_stream_wanted() {
+    return std::exchange(lookup_reads.whole_wanted, false);
 }
 
 bool record_test_stream(const std::filesystem::path& base, const std::filesystem::path& distorted,
@@ -1509,8 +1557,15 @@ bool record_test_stream(const std::filesystem::path& base, const std::filesystem
     if (folders.empty()) {
         return false;  // nothing saved for it, or its stream recorded already: nothing read
     }
+    const auto started = std::chrono::steady_clock::now();
     const std::optional<std::string> head = stream_of(distorted, head_packets, true, cancel);
     const std::optional<std::string> stream = head ? stream_of(distorted, 0, true, cancel) : std::nullopt;
+    app_log::write(app_log::Level::info, "vml.metric_cache",
+                   "Read " + platform::path_text(distorted.filename()) + "'s stream for a remux of it to keep its "
+                       "saved scores: " +
+                       format_fixed(std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count(),
+                                    1) +
+                       " s" + (cancel.cancelled() ? ", stopped" : !stream ? ", not read" : ""));
     if (!head || !stream || file_identity(distorted) != path) {
         return false;  // not read, or the file changed meanwhile
     }

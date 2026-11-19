@@ -1094,7 +1094,11 @@
   "can't be read": "읽을 수 없음",
   "{name} (saved)": "{name}(저장됨)",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Recognize test videos remuxed after scoring (reads each one again)": "채점 후 다시 먹싱한 테스트 영상 인식(각 영상을 다시 읽음)",
+  "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "채점 후 먹싱하거나 다시 먹싱한 테스트 영상(원시 스트림을 MKV로, MKV를 MP4로)은 저장된 점수를 유지합니다. 인코딩된 화면으로 식별됩니다.\n\n이를 위해 점수를 저장한 뒤 각 테스트 영상을 한 번 더 읽으며, 파일을 읽는 만큼 시간이 걸립니다(네트워크 공유의 영화는 몇 분). 백그라운드에서 진행되며 계산 중에는 하지 않습니다. 스트림의 시작이 채점한 영상과 같은 영상은 다른 영상의 저장된 점수를 찾은 뒤, 같은 영상인지 확인하기 위해 전체를 읽습니다.\n\n끔: 테스트 영상은 파일로만 식별됩니다.",
+  "Checking whether {name} is a remux of a video already scored: reading its stream…": "{name}이(가) 이미 채점한 영상을 다시 먹싱한 것인지 확인하는 중: 스트림 읽는 중…",
+  "Recording {name}'s stream, so that a remux of it keeps its scores…": "{name}의 스트림을 기록하는 중(다시 먹싱해도 점수를 유지하도록)…"
  },
  "plurals": {
   "about {count} day": [

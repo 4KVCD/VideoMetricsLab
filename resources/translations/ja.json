@@ -1094,7 +1094,11 @@
   "can't be read": "読み込めません",
   "{name} (saved)": "{name}（保存済み）",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Recognize test videos remuxed after scoring (reads each one again)": "採点後に再多重化されたテスト動画を認識する（各動画をもう一度読み込みます）",
+  "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "採点後に多重化または再多重化されたテスト動画（生ストリームを MKV に、MKV を MP4 に）は、保存済みのスコアを引き継ぎます。符号化された画像によって識別されます。\n\nそのため、スコアの保存後に各テスト動画をもう一度読み込みます。ファイルの読み込みと同じ時間がかかり（ネットワーク共有上の映画で数分）、バックグラウンドで行われ、計算中には行われません。また、ストリームの先頭が採点済みの動画と同じ動画は、他の動画の保存済みスコアが見つかった後、同じ動画かどうかを判定するためにすべて読み込まれます。\n\nオフ：テスト動画はファイルによってのみ識別されます。",
+  "Checking whether {name} is a remux of a video already scored: reading its stream…": "{name} が採点済みの動画の再多重化かどうかを確認しています：ストリームを読み込み中…",
+  "Recording {name}'s stream, so that a remux of it keeps its scores…": "{name} のストリームを記録しています（再多重化してもスコアを引き継ぐため）…"
  },
  "plurals": {
   "about {count} day": [

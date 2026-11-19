@@ -88,9 +88,17 @@ public:
     ProbeWorker(QStringList paths, std::string ffprobe, std::string ffmpeg, StreamScan scan,
                 QObject* parent = nullptr);
     // Looks up the saved scores of the rows `paths` (as `queries` asks for
-    // each) under `base`, compared with the reference `source`.
+    // each) under `base`, compared with the reference `source`. Without
+    // `whole_streams`, no test video's whole stream is read (a row that only
+    // its whole stream could tell for a remux of a saved encode is said to
+    // be one: stream_check_wanted); with it, such streams are read
+    // (stream_check_started first).
+    // (`whole_streams` is a type of its own: a QObject pointer, the parent,
+    // would turn into a bool without a word.)
+    enum class WholeStreams { no, yes };
     ProbeWorker(QStringList paths, std::filesystem::path base, std::filesystem::path source,
-                std::map<QString, SavedScoresQuery> queries, QObject* parent = nullptr);
+                std::map<QString, SavedScoresQuery> queries, QObject* parent = nullptr,
+                WholeStreams whole_streams = WholeStreams::no);
 
     // Stops, ending the ffprobe or FFmpeg reading a video; a lookup under way
     // is let finish.
@@ -112,6 +120,12 @@ signals:
     // For every row whose lookup includes CVVDP, so that none found clears
     // what was found before.
     void other_displays_found(const vml::app::OtherDisplaysFound& found);
+    // A row whose test video began as a saved comparison's did, with the
+    // same reference and settings: only reading its whole stream tells
+    // whether it is that encode remuxed (a lookup without whole_streams).
+    void stream_check_wanted(const QString& path);
+    // A row's whole test stream is being read (a lookup with whole_streams).
+    void stream_check_started(const QString& path);
     // Every video has been read: what waits for the videos (the saved scores'
     // lookup, "Reading..." taken down) need not wait for their rates.
     void lane_probed();
@@ -132,6 +146,8 @@ private:
     };
 
     void look_up(const QString& path);
+
+    bool whole_streams_ = false;
     void estimate_rates(const std::vector<RateToSample>& videos);
 
     QStringList paths_;

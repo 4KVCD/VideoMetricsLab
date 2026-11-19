@@ -1094,7 +1094,11 @@
   "can't be read": "no se puede leer",
   "{name} (saved)": "{name} (guardado)",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Recognize test videos remuxed after scoring (reads each one again)": "Reconocer videos de prueba remultiplexados tras puntuarlos (lee cada uno de nuevo)",
+  "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Un video de prueba multiplexado o remultiplexado después de puntuarlo (su flujo sin contenedor en un MKV, un MKV en un MP4) conserva sus puntuaciones guardadas: se le reconoce por sus imágenes codificadas.\n\nPara ello cada video de prueba se lee una vez más después de guardar sus puntuaciones, lo que tarda en leerse el archivo (unos minutos para una película en un recurso de red), en segundo plano y nunca durante un cálculo; y un video cuyo flujo empieza como el de uno puntuado se lee entero para saber si es ese video, después de encontrar las puntuaciones guardadas de los demás videos.\n\nDesactivado: los videos de prueba se reconocen solo por sus archivos.",
+  "Checking whether {name} is a remux of a video already scored: reading its stream…": "Comprobando si {name} es un remux de un video ya puntuado: leyendo su flujo…",
+  "Recording {name}'s stream, so that a remux of it keeps its scores…": "Registrando el flujo de {name}, para que un remux suyo conserve sus puntuaciones…"
  },
  "plurals": {
   "about {count} day": [

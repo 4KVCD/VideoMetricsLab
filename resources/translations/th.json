@@ -1094,7 +1094,11 @@
   "can't be read": "อ่านไม่ได้",
   "{name} (saved)": "{name} (ที่บันทึกไว้)",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Recognize test videos remuxed after scoring (reads each one again)": "จดจำวิดีโอทดสอบที่รีมักซ์หลังให้คะแนน (อ่านแต่ละรายการอีกครั้ง)",
+  "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "วิดีโอทดสอบที่มักซ์หรือรีมักซ์หลังให้คะแนนแล้ว (สตรีมดิบเป็น MKV หรือ MKV เป็น MP4) จะยังคงใช้คะแนนที่บันทึกไว้ โดยจดจำจากภาพที่เข้ารหัส\n\nจึงต้องอ่านวิดีโอทดสอบแต่ละรายการอีกครั้งหลังบันทึกคะแนน ใช้เวลาเท่ากับการอ่านไฟล์ (ไม่กี่นาทีสำหรับภาพยนตร์บนเครือข่ายที่แชร์) ทำในเบื้องหลังและไม่ทำระหว่างการคำนวณ และวิดีโอที่สตรีมเริ่มต้นเหมือนวิดีโอที่ให้คะแนนแล้วจะถูกอ่านทั้งหมดเพื่อดูว่าเป็นวิดีโอเดียวกันหรือไม่ หลังจากพบคะแนนที่บันทึกของวิดีโออื่นแล้ว\n\nปิด: จดจำวิดีโอทดสอบจากไฟล์เท่านั้น",
+  "Checking whether {name} is a remux of a video already scored: reading its stream…": "กำลังตรวจว่า {name} เป็นการรีมักซ์ของวิดีโอที่ให้คะแนนแล้วหรือไม่: กำลังอ่านสตรีม…",
+  "Recording {name}'s stream, so that a remux of it keeps its scores…": "กำลังบันทึกสตรีมของ {name} เพื่อให้การรีมักซ์ยังคงใช้คะแนนเดิม…"
  },
  "plurals": {
   "about {count} day": [

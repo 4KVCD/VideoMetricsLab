@@ -1094,7 +1094,11 @@
   "can't be read": "tidak dapat dibaca",
   "{name} (saved)": "{name} (tersimpan)",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Recognize test videos remuxed after scoring (reads each one again)": "Kenali video uji yang di-remux setelah dinilai (membaca masing-masing lagi)",
+  "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Video uji yang di-mux atau di-remux setelah dinilai (stream mentahnya ke MKV, MKV ke MP4) tetap memakai skor tersimpannya: video dikenali dari gambar terkodenya.\n\nUntuk itu setiap video uji dibaca sekali lagi setelah skornya disimpan, selama waktu membaca filenya (beberapa menit untuk film di share jaringan), di latar belakang dan tidak pernah saat perhitungan; dan video yang stream-nya diawali seperti stream video yang sudah dinilai dibaca seluruhnya untuk mengetahui apakah itu video yang sama, setelah skor tersimpan video lain ditemukan.\n\nNonaktif: video uji hanya dikenali dari filenya.",
+  "Checking whether {name} is a remux of a video already scored: reading its stream…": "Memeriksa apakah {name} merupakan remux dari video yang sudah dinilai: membaca stream-nya…",
+  "Recording {name}'s stream, so that a remux of it keeps its scores…": "Merekam stream {name}, agar remux-nya tetap memakai skornya…"
  },
  "plurals": {
   "about {count} day": [

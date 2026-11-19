@@ -51,26 +51,37 @@ void set_video_fingerprinter(VideoFingerprinter fingerprinter);
 
 // How the saved scores recognise a test video remuxed (raw, MKV, MP4):
 // given a file, a number of packets (0: all) and what stops the read, its
-// stream_fingerprint (file_fingerprint.h). None set (the default): test
-// videos are recognised by their path and sampled_file_hash only.
+// stream_fingerprint (file_fingerprint.h). None set (the default, and
+// Settings' "Recognize test videos remuxed" off): test videos are
+// recognised by their path and sampled_file_hash only, and nothing reads
+// their streams.
 using StreamFingerprinter =
     std::function<std::optional<std::string>(const std::filesystem::path&, int, const CancelToken&)>;
 void set_stream_fingerprinter(StreamFingerprinter fingerprinter);
 
-// While it lives, `cancel` stops the test stream a lookup on this thread
-// (recipe_directory, load_result) reads to know a remux by: a whole stream
-// takes as long as the file takes to read, which a window closing should
-// not wait for.
-class StreamReadCancel {
+// How the lookups on this thread (load_result, other_cvvdp_scores) read a
+// test video's stream to know a remux of a saved one by. A whole stream takes
+// as long as its file takes to read: minutes for a film over a network.
+// Without one of these, as when saving or clearing scores, a lookup reads
+// no whole stream: only a stream's first packets, and where a remux could
+// be told only by the whole stream, it finds nothing and says so
+// (take_whole_stream_wanted). With one, `cancel` stops its reads, and with
+// `whole` it may read whole streams, `announce` told of each file first.
+class StreamReads {
 public:
-    explicit StreamReadCancel(const CancelToken& cancel);
-    ~StreamReadCancel();
-    StreamReadCancel(const StreamReadCancel&) = delete;
-    StreamReadCancel& operator=(const StreamReadCancel&) = delete;
-
-private:
-    std::optional<CancelToken> before_;
+    explicit StreamReads(const CancelToken& cancel, bool whole = false,
+                         std::function<void(const std::filesystem::path&)> announce = {});
+    ~StreamReads();
+    StreamReads(const StreamReads&) = delete;
+    StreamReads& operator=(const StreamReads&) = delete;
 };
+
+// Whether a lookup on this thread, since the last call, found a saved
+// comparison whose test stream began as its test video's does, with the same
+// reference and settings, but could not read the whole stream to tell
+// whether it is that video remuxed or another encode (StreamReads without
+// `whole`). Cleared by the call.
+bool take_whole_stream_wanted();
 
 // Reads the test video `distorted`'s stream fingerprint and records it in
 // the identity.json of each comparison under `base` saved for that file

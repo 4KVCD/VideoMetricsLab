@@ -1094,7 +1094,11 @@
   "can't be read": "onleesbaar",
   "{name} (saved)": "{name} (opgeslagen)",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Recognize test videos remuxed after scoring (reads each one again)": "Na het scoren opnieuw gemuxte testvideo's herkennen (leest elke opnieuw)",
+  "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Een testvideo die na het scoren is gemuxt of opnieuw gemuxt (de ruwe stream in een MKV, een MKV in een MP4) houdt zijn opgeslagen scores: hij wordt herkend aan zijn gecodeerde beelden.\n\nDaarvoor wordt elke testvideo na het opslaan van de scores nog één keer gelezen, zo lang als het lezen van het bestand duurt (een paar minuten voor een film op een netwerkshare), op de achtergrond en nooit tijdens een berekening; en een video waarvan de stream begint zoals die van een gescoorde video, wordt helemaal gelezen om te bepalen of het dezelfde is, nadat de opgeslagen scores van de andere video's zijn gevonden.\n\nUit: testvideo's worden alleen aan hun bestanden herkend.",
+  "Checking whether {name} is a remux of a video already scored: reading its stream…": "Controleren of {name} een remux is van een al gescoorde video: de stream wordt gelezen…",
+  "Recording {name}'s stream, so that a remux of it keeps its scores…": "De stream van {name} wordt vastgelegd, zodat een remux ervan de scores houdt…"
  },
  "plurals": {
   "about {count} day": [

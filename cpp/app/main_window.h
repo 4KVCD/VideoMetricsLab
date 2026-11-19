@@ -21,6 +21,7 @@
 #include <QString>
 #include <QStringList>
 
+#include <atomic>
 #include <deque>
 #include <filesystem>
 #include <functional>
@@ -418,6 +419,19 @@ private:
     // Whether a lookup started (none with saved scores off, no reference, or
     // the window closing).
     bool start_cache_lookup(const std::vector<std::filesystem::path>& paths);
+    // The lookup of the rows only their whole test stream can tell for a
+    // remux (stream_check_paths_), after the others; and its end.
+    void start_stream_check();
+    void cancel_stream_check();
+    void on_stream_check_finished(ProbeWorker* worker);
+    // A stream being read said on the status line (only while no run uses
+    // it), and taken down once done if it is still what the line says.
+    void show_stream_status(const QString& text);
+    void end_stream_status();
+    // The stream fingerprinter with `ffmpeg` and `ffprobe`, that reads
+    // nothing while Settings' "Recognize test videos remuxed" is off.
+    void use_stream_fingerprinter(const std::string& ffmpeg, const std::string& ffprobe);
+    void sync_remux_setting();
     void reload_saved_scores(const std::vector<int>& rows);
     std::vector<std::filesystem::path> cancel_cache_lookup();
     void on_cache_lookup_finished(ProbeWorker* worker);
@@ -698,6 +712,19 @@ private:
     // of one it replaced (they were for the reference and settings then).
     ProbeWorker* cache_worker_ = nullptr;
     std::vector<std::filesystem::path> cache_lookup_paths_;
+    // Rows the lookup could tell for a remux of a saved encode only by
+    // reading their whole test stream, and the lookup that does so once the
+    // others are in (start_stream_check): nothing waits for it, and a run
+    // cancels it.
+    std::vector<std::filesystem::path> stream_check_paths_;
+    ProbeWorker* stream_check_worker_ = nullptr;
+    std::vector<std::filesystem::path> stream_checking_paths_;  // the rows it reads
+    // Settings' "Recognize test videos remuxed", as the stream fingerprinter
+    // reads it on the lookups' and the records' threads (sync_remux_setting).
+    std::shared_ptr<std::atomic<bool>> recognise_remuxes_ = std::make_shared<std::atomic<bool>>(false);
+    // The status line's text about a stream being read, to be taken down
+    // when the reading ends if nothing replaced it.
+    QString stream_status_;
     int cache_generation_ = 0;
     FileWrites* file_writes_ = nullptr;
     // Test streams read after their scores are saved: shared with the writes
