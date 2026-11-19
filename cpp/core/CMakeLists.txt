@@ -8,6 +8,7 @@ add_library(vml_core
     src/bd_rate.cpp
     src/bd_rate_report.cpp
     src/bitrate.cpp
+    src/bitrate_store.cpp
     src/black_bars_rule.cpp
     src/build_info.cpp
     src/cancel.cpp
@@ -22,6 +23,7 @@ add_library(vml_core
     src/ffmpeg_run.cpp
     src/ffmpeg_tools.cpp
     src/ffprobe.cpp
+    src/file_fingerprint.cpp
     src/film_grain_detect.cpp
     src/film_grain_scoring.cpp
     src/frame_extract.cpp
@@ -63,6 +65,7 @@ add_library(vml_core
     src/run_json.cpp
     src/run_line.cpp
     src/run_record.cpp
+    src/saved_results.cpp
     src/score_logs.cpp
     src/segment_presets.cpp
     src/segment_profiles.cpp

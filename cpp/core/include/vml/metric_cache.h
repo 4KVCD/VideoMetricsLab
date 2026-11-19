@@ -17,6 +17,7 @@
 #include <set>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "vml/analysis_request.h"
@@ -40,6 +41,13 @@ inline constexpr int black_bars_rule_version = 3;
 // .videometricslab/results_cache in the user's home.
 std::filesystem::path default_cache_dir();
 
+// How the saved scores recognise a reference whose path changed: given a
+// file, its video_fingerprint (file_fingerprint.h), made with the tools of
+// the app or the command line. None set (the default): files are recognised
+// by their path and by their sampled_file_hash only.
+using VideoFingerprinter = std::function<std::optional<std::string>(const std::filesystem::path&)>;
+void set_video_fingerprinter(VideoFingerprinter fingerprinter);
+
 // The hash that names a comparison's folder: of both files' identities and
 // the recipe's.
 std::string recipe_hash(const std::filesystem::path& source, const std::filesystem::path& distorted,
@@ -51,7 +59,12 @@ std::string metric_identity_hash(const MetricRequestSpec& spec);
 // The comparison's folder under `base`. Folders saved under the older
 // identity, one per scaling algorithm, are merged into it the first time it
 // is asked for; if the first of those cannot be renamed (it is open
-// elsewhere), it is used where it is.
+// elsewhere), it is used where it is. With none, a folder saved for the
+// same files elsewhere (identity.json): the test video by its path or its
+// sampled_file_hash, the reference by those or, where the test video
+// matched, by its video_fingerprint, so that a renamed, moved or copied
+// file, and a remuxed reference, keep their scores. Its scores are then
+// read and saved there.
 std::filesystem::path recipe_directory(const std::filesystem::path& base, const std::filesystem::path& source,
                                        const std::filesystem::path& distorted, const ComparisonRecipe& recipe);
 
@@ -163,17 +176,35 @@ int clear_metrics(const std::filesystem::path& base, const std::filesystem::path
 std::string lookup_token(const std::filesystem::path& source, const std::filesystem::path& distorted,
                          const AnalysisRequest& request);
 
+// A saved score as its file holds it, whatever request it answers: its
+// metric (the result's key), samples and provenance; nothing for a file that
+// cannot be read or is of another format. For browsing the saved results
+// (saved_results.h), which need no request to read them by.
+std::optional<std::variant<FrameMetricResult, SequenceMetricResult>> read_saved_score(
+    const std::filesystem::path& file);
+
+// The comparison a saved folder's context.json describes: its result,
+// without scores, and its label; nothing where there is no context.json, or
+// one this app cannot read.
+std::optional<std::pair<ComparisonResult, std::string>> saved_comparison(const std::filesystem::path& folder);
+
+// The sampled hash (file_fingerprint.h) a saved folder's identity.json
+// records for its reference (`reference`) or test video: the key of their
+// saved bitrate (bitrate_store.h). Empty where none is recorded.
+std::string saved_content_hash(const std::filesystem::path& folder, bool reference);
+
 // How many comparisons are saved under `base`, and the bytes their files
-// take, for Settings.
+// and the saved bitrate (bitrate_store.h) take, for Settings.
 struct CacheSummary {
     int comparisons = 0;
     std::uintmax_t bytes = 0;
 };
 CacheSummary cache_summary(const std::filesystem::path& base);
 
-// Deletes every comparison saved under `base` (its v2 folder; nothing else
-// there) and returns how many there were: 0 when they could not all be
-// deleted, as the Python app counts it.
+// Deletes every comparison saved under `base` (its v2 folder) and the saved
+// bitrate (its bitrate folder; nothing else there), and returns how many
+// comparisons there were: 0 when they could not all be deleted, as the
+// Python app counts it.
 int clear_all(const std::filesystem::path& base);
 
 }  // namespace vml

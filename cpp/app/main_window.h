@@ -39,6 +39,7 @@
 #include "graph_bundle.h"
 #include "probe_worker.h"
 #include "results_export.h"
+#include "saved_results_panel.h"
 #include "row_state.h"
 #include "worst_frame_list.h"
 #include "vml/analysis_request.h"
@@ -121,7 +122,7 @@ const std::vector<MetricColumn>& metric_columns();
 const MetricColumn* metric_column_of(int column);
 
 // The window's tabs.
-enum Tab : int { tab_videos, tab_graph, tab_frame_compare, tab_bitrate, tab_bd_rate, tab_settings };
+enum Tab : int { tab_videos, tab_graph, tab_frame_compare, tab_bitrate, tab_bd_rate, tab_saved_results, tab_settings };
 
 // A run's own line on Metric Graphs: a name no other run has (the Python
 // app's graph_identity, an object of its own).
@@ -515,6 +516,13 @@ private:
     // (the saved ones, or the Weak segments dialog's), in one JSON or CSV
     // file the user names.
     void export_segments_report(const SegmentRules& rules);
+    // `videos`' weak segments by `rules` in one JSON or CSV file the user
+    // names, suggested after `reference` (export_segments_report, and the
+    // Saved results tab's).
+    void save_segments_report(const std::vector<SegmentsReportVideo>& videos, const SegmentRules& rules,
+                              const std::filesystem::path& reference);
+    // The Saved results tab's exports of the comparisons it read.
+    void export_saved_results(SavedResultsPanel::Export kind, const std::vector<LoadedSavedResult>& results);
     // The rules of the weak segment profile in use (Settings > Weak segments).
     SegmentRules saved_weak_rules() const;
     void on_export_all_graphs();
@@ -775,6 +783,7 @@ private:
     // grain choice changed (settle_film_grain).
     bool run_waits_for_saved_scores_ = false;
     // The Settings tab, and the latest check of FFmpeg, which it shows.
+    SavedResultsPanel* saved_results_panel_ = nullptr;
     SettingsPanel* settings_panel_ = nullptr;
     ToolsStatus tools_status_;
     // The rows ticked when the run started, those already scored too: their

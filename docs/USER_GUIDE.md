@@ -283,6 +283,9 @@ band under the graph with its own scale: frame by frame in the frame view, and
 at each moment in the second and GOP views (where two encodes' GOPs differ,
 each moment's GOP bitrate is subtracted).
 The command line's `bitrate` command (below) reads the same numbers.
+Each file's reading is saved with the saved results and is not read again:
+the file adds at once the next time, renamed, moved or copied too (it is
+known by its content, as saved scores are). A remux is read again.
 
 ## BD-rate
 
@@ -585,6 +588,36 @@ its file, every setting (defaults too), its black bars and how they were
 found, how each metric came out, the decoders used and how long each pass
 took. [The results file](RESULTS_JSON.md) describes every key.
 
+### The Saved results tab
+
+**Saved results** lists every comparison whose scores the app has saved (its
+results cache, Settings > Storage > Saved results), newest first, with its
+test video, reference, when it was saved, its metrics and its size; **Filter**
+narrows it by file name. Select one or more to use them without adding the
+videos again:
+
+- **Open in Metric Graphs** (or double-click) adds them as lines of their own,
+  named "*video* (saved)".
+- **Export results** saves them **As JSON** or **As CSV**, as Export results
+  does; **Export per-frame CSV...** writes a file per comparison to a folder,
+  as Metric Graphs' Export CSV does.
+- **Export graphs as ZIP...** saves the graphs Export all graphs saves, for
+  comparisons of one reference. The bitrate graphs of a video no longer on
+  disk come from its saved bitrate, where the Bitrate Viewer or the
+  command line read it before it went.
+- **Export weak segments...** saves the weak segments report by the rules
+  picked beside it: the profile in use, any profile or a preset. Weak segments
+  are not saved with the scores; they are found from them as they are
+  exported.
+- **Delete...** removes their saved scores, after asking: the videos are
+  scored again the next time they are compared. It is locked while metrics
+  are calculated.
+
+**Saved scores** lists the selected comparison's scores, each with when and
+how it was made (GPU or CPU, the program, the VMAF model, the CVVDP display).
+Where a metric has more than one (CVVDP for two displays; SSIMULACRA2 on the
+GPU and the CPU), the newest is used unless another is picked there.
+
 ### Exporting graphs
 
 **Export all graphs...** (beside **Open metric graphs**, or in the Videos
@@ -677,9 +710,20 @@ Cached results are reused when files and relevant settings match. A
 compatible subset can load as partially calculated; request calculation to
 fill missing metrics.
 
+Saved scores follow the files, not their names or folders. A file renamed,
+moved or copied is recognised by its content: its size and samples of its
+bytes from the start, the end and between (a few megabytes read). A
+reference remuxed into another container (MKV, MP4, with any other tracks)
+is recognised by its video stream: its codec, picture size, frame rate,
+colour and length, and five pictures decoded from it. The test video is
+recognised by its path or its content only, and the reference's stream is
+only looked at when the test video has saved scores, so a new encode costs
+nothing to look up. A remux that changes the stream's colour tags, or a
+re-encode, is another video and is scored again.
+
 Settings and the default cache are under `~/.videometricslab/`. Back up that
 folder before maintenance; changing checkout should not require clearing it.
-File moves or replacements can cause cache misses. Use explicit saved-result
+A file replaced by another causes a cache miss. Use explicit saved-result
 loading when you need to inspect a portable result. Right-click recalculation
 forgets matching cached results, so do not use it just to refresh the display.
 

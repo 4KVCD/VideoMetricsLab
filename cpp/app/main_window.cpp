@@ -49,7 +49,9 @@
 #include "vml/app_log.h"
 #include "vml/append.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/file_fingerprint.h"
 #include "vml/hardware_decoding.h"
+#include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/python_text.h"
 #include "vml/platform/system.h"
@@ -208,6 +210,10 @@ MainWindow::MainWindow() {
     on_vship_probe_finished([this] {
         QMetaObject::invokeMethod(this, [this] { on_vship_checked(); }, Qt::QueuedConnection);
     });
+    // The saved scores' lookups (restore_open_videos' first of them) know a
+    // remuxed reference from the start: with the tools Settings name now,
+    // set again wherever the tools are checked (check_ffmpeg).
+    set_video_fingerprinter(fingerprinter_using(find_tool("ffmpeg", settings_), find_tool("ffprobe", settings_)));
     restore_open_videos();
     on_table_selection_changed();
 }
@@ -605,6 +611,8 @@ void MainWindow::build_ui() {
     // Its own list of videos: a finished run adds its own (on_job_finished).
     bitrate_panel_ = new BitratePanel([this] { return find_tool("ffprobe", settings_); }, video_colors_);
     bitrate_panel_->dialogs = standard_dialogs(bitrate_panel_, export_dir);
+    // Its readings are saved with the saved scores, and found there again.
+    bitrate_panel_->store_folder = [this] { return cache_folder(); };
     // Settings' Exported graphs, read at each export as the folder is.
     const auto export_colours = [this] {
         return theme::export_chart_colours(settings_.export_graph_theme, settings_.export_graph_background,
@@ -629,6 +637,25 @@ void MainWindow::build_ui() {
     connect(settings_panel_, &SettingsPanel::weak_segment_rules_changed, this, [this] {
         graph_panel_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
     });
+    saved_results_panel_ = new SavedResultsPanel(settings_, dialogs_);
+    connect(saved_results_panel_, &SavedResultsPanel::open_requested, this,
+            [this](const std::vector<LoadedSavedResult>& results) {
+                // On Metric Graphs as saved runs: lines of their own, beside the
+                // Videos tab's, and named apart from a row of the same video.
+                for (const LoadedSavedResult& saved : results) {
+                    graph_panel_->add_run({saved.result, app::tr("{name} (saved)", {{"name", saved.label}}),
+                                           "saved:" + platform::path_text(saved.folder)});
+                }
+                if (!results.empty()) {
+                    tabs_->setCurrentIndex(tab_graph);
+                }
+            });
+    connect(saved_results_panel_, &SavedResultsPanel::export_requested, this,
+            [this](SavedResultsPanel::Export kind, const std::vector<LoadedSavedResult>& results) {
+                export_saved_results(kind, results);
+            });
+    connect(saved_results_panel_, &SavedResultsPanel::deleted, this, [this] { settings_panel_->refresh_status(); });
+    tabs_->addTab(new ScrollingPage(saved_results_panel_), app::tr("Saved results"));
     tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
 }
@@ -1067,6 +1094,8 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     // banner.
     const ToolsStatus status = check_tools(settings_);
     tools_status_ = status;
+    // A remuxed or moved reference keeps its saved scores (file_fingerprint.h).
+    set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
     if (prompt) {
         log_tools(status, detected_gpu_vendors_);
     }
@@ -1173,6 +1202,8 @@ void MainWindow::on_ffmpeg_downloaded(const std::filesystem::path& folder) {
     settings_.ffmpeg_dir = trial.ffmpeg_dir;
     settings_panel_->show_ffmpeg_folder(QString::fromStdString(settings_.ffmpeg_dir));
     tools_status_ = status;
+    // A remuxed or moved reference keeps its saved scores (file_fingerprint.h).
+    set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
     log_tools(status, detected_gpu_vendors_);
     ffmpeg_found(status, folder);
     if (const std::optional<std::string> problem = settings_.save()) {
@@ -1236,6 +1267,8 @@ bool MainWindow::on_locate_ffmpeg() {
     }
     const ToolsStatus status = check_tools(settings_);
     tools_status_ = status;
+    // A remuxed or moved reference keeps its saved scores (file_fingerprint.h).
+    set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
     if (!status.ok()) {
         const QStringList problems = tool_problems(status);
         QMessageBox::warning(this, app::tr("Still not usable"), problems.join("\n"));

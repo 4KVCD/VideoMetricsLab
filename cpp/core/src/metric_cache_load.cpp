@@ -537,12 +537,14 @@ void cache_parts::forget_scores_of_another_picture(const std::filesystem::path& 
     }
 }
 
-std::optional<std::pair<ComparisonResult, std::string>> load_result(
+namespace {
+
+// load_result, before the files' current paths are given to the result.
+std::optional<std::pair<ComparisonResult, std::string>> load_saved_result(
     const std::filesystem::path& base, const std::filesystem::path& source, const std::filesystem::path& distorted,
     const ComparisonRecipe& recipe, const std::vector<MetricRequestSpec>& specs,
     const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental,
-    const std::set<std::string>& not_from_other_recipes) {
-    const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
+    const std::set<std::string>& not_from_other_recipes, const std::filesystem::path& directory) {
     // None: its scores are not read
     const std::optional<nlohmann::json> context = current_context(directory, recipe);
     const std::optional<OtherRecipeFolder> automatic =
@@ -658,6 +660,31 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
     return found;
 }
 
+}  // namespace
+
+std::optional<std::pair<ComparisonResult, std::string>> load_result(
+    const std::filesystem::path& base, const std::filesystem::path& source, const std::filesystem::path& distorted,
+    const ComparisonRecipe& recipe, const std::vector<MetricRequestSpec>& specs,
+    const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental,
+    const std::set<std::string>& not_from_other_recipes) {
+    const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
+    auto found = load_saved_result(base, source, distorted, recipe, specs, backends, supplemental,
+                                   not_from_other_recipes, directory);
+    if (found) {
+        // The files as they are now: the folder may be one saved for them
+        // under other paths (recipe_directory), its context.json naming those.
+        found->first.source = source;
+        found->first.distorted = distorted;
+        // A folder saved before files were recorded: recorded now, so that
+        // it is found when they move.
+        std::error_code error;
+        if (std::filesystem::exists(directory / "context.json", error)) {
+            record_identity(directory, source, distorted, true);
+        }
+    }
+    return found;
+}
+
 std::optional<OtherCvvdpScores> other_cvvdp_scores(const std::filesystem::path& base,
                                                    const std::filesystem::path& source,
                                                    const std::filesystem::path& distorted,
@@ -712,6 +739,15 @@ std::optional<OtherCvvdpScores> other_cvvdp_scores(const std::filesystem::path& 
         }
     }
     return found;
+}
+
+std::optional<std::pair<ComparisonResult, std::string>> saved_comparison(const std::filesystem::path& folder) {
+    const std::optional<nlohmann::json> context = read_json(folder / "context.json");
+    if (!context || !context->is_object()) {
+        return std::nullopt;
+    }
+    // No recipe to stand in for what an old context lacks: the defaults do.
+    return comparison_from(*context, ComparisonRecipe{}, MetricResultSet{}, {});
 }
 
 }  // namespace vml

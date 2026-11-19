@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -31,6 +32,9 @@
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 #include "vml/result_json.h"
+#include "vml/saved_results.h"
+#include "vml/bitrate_store.h"
+#include "vml/file_fingerprint.h"
 #include "vml/score_identity.h"
 #include "vml/sha256.h"
 
@@ -676,6 +680,218 @@ TEST(MetricCache, StoresAResultAsThePythonApp) {
 
 // The build that made a score comes back with it, saved again unchanged
 // (not as the build that saves it); a score saved before builds said, none.
+// The saved results browsed (saved_results.h): every comparison listed,
+// newest first, with its label, files and score files by metric; read back
+// without a request (a metric's newest file, or the one chosen; an
+// unreadable one passed over for the next); and deleted, only a folder of
+// its own under the cache's v2 folder.
+TEST(MetricCache, SavedComparisonsAreListedReadAndDeleted) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    touch(folder / "u.mp4", "u");
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source = folder / "s.mp4";  // as a run gives them: the files' own paths
+    result.distorted = folder / "t.mp4";
+    const std::filesystem::path cache = folder / "cache";
+    const std::filesystem::path first =
+        store_result(cache, folder / "s.mp4", folder / "t.mp4", request.recipe, result, "t", request.metrics);
+    result.distorted = folder / "u.mp4";
+    const std::filesystem::path second =
+        store_result(cache, folder / "s.mp4", folder / "u.mp4", request.recipe, result, "u", request.metrics);
+    // The first comparison newest: its files a minute later.
+    for (const auto& entry : std::filesystem::directory_iterator(first)) {
+        std::filesystem::last_write_time(entry.path(), std::filesystem::last_write_time(entry.path()) +
+                                                           std::chrono::minutes(1));
+    }
+
+    std::vector<SavedComparison> list = list_saved_comparisons(cache);
+    ASSERT_EQ(list.size(), 2U);
+    EXPECT_EQ(list[0].folder, first);
+    EXPECT_EQ(list[0].label, "t");
+    EXPECT_EQ(list[1].label, "u");
+    EXPECT_EQ(list[0].distorted, folder / "t.mp4");
+    EXPECT_EQ(list[0].source, folder / "s.mp4");
+    EXPECT_GT(list[0].bytes, 0U);
+    const std::vector<std::string> keys = list[0].keys();
+    std::vector<std::string> saved_keys = result.metric_results.keys();
+    std::sort(saved_keys.begin(), saved_keys.end());
+    std::vector<std::string> listed = keys;
+    std::sort(listed.begin(), listed.end());
+    EXPECT_EQ(listed, saved_keys);
+    // In the app's order: VMAF before PSNR.
+    EXPECT_LT(std::find(keys.begin(), keys.end(), "vmaf"), std::find(keys.begin(), keys.end(), "psnr"));
+
+    // Read back as saved.
+    const auto loaded = load_saved_comparison(list[0]);
+    ASSERT_TRUE(loaded);
+    EXPECT_EQ(loaded->second, "t");
+    EXPECT_EQ(loaded->first.distorted, folder / "t.mp4");
+    EXPECT_EQ(loaded->first.metric_results.frame("vmaf")->values, result.metric_results.frame("vmaf")->values);
+
+    // A newer VMAF file that cannot be read: passed over for the readable one,
+    // also when it is the one chosen.
+    const std::filesystem::path broken = first / "vmaf_ffff.npz";
+    touch(broken, "not a score");
+    std::filesystem::last_write_time(broken, std::filesystem::last_write_time(broken) + std::chrono::minutes(5));
+    list = list_saved_comparisons(cache);
+    const auto vmaf_files = std::count_if(list[0].scores.begin(), list[0].scores.end(),
+                                          [](const SavedScoreFile& file) { return file.key == "vmaf"; });
+    EXPECT_EQ(vmaf_files, 2);
+    EXPECT_EQ(std::find_if(list[0].scores.begin(), list[0].scores.end(),
+                           [](const SavedScoreFile& file) { return file.key == "vmaf"; })
+                  ->file,
+              broken);  // the newest first
+    const auto chosen = load_saved_comparison(list[0], {{"vmaf", broken}});
+    ASSERT_TRUE(chosen);
+    EXPECT_EQ(chosen->first.metric_results.frame("vmaf")->values, result.metric_results.frame("vmaf")->values);
+    EXPECT_FALSE(read_saved_score(broken));
+
+    // Deleted: only its own folder; another path is refused.
+    SavedComparison elsewhere = list[1];
+    elsewhere.folder = folder / "s.mp4";  // not a folder under v2
+    EXPECT_FALSE(delete_saved_comparison(cache, elsewhere));
+    EXPECT_TRUE(std::filesystem::exists(folder / "s.mp4"));
+    EXPECT_TRUE(delete_saved_comparison(cache, list[1]));
+    EXPECT_FALSE(std::filesystem::exists(second));
+    list = list_saved_comparisons(cache);
+    ASSERT_EQ(list.size(), 1U);
+    EXPECT_EQ(list[0].label, "t");
+}
+
+// A file is known by its content where its path changed: the sampled hash
+// reads the size and samples of the file (the same bytes anywhere give the
+// same hash; a changed byte in a sample, another), and the pictures a video
+// fingerprint decodes are mid-frame times a sixth of the length apart.
+TEST(MetricCache, FilesAreKnownByTheirContent) {
+    const test::Folder folder;
+    std::string bytes(3 << 20, 'x');  // past the size read whole
+    for (std::size_t i = 0; i < bytes.size(); ++i) {
+        bytes[i] = static_cast<char>((i * 7919) % 251);
+    }
+    touch(folder / "a.mkv", bytes);
+    touch(folder / "b.mkv", bytes);
+    const std::optional<std::string> a = sampled_file_hash(folder / "a.mkv");
+    ASSERT_TRUE(a);
+    EXPECT_EQ(sampled_file_hash(folder / "b.mkv"), a);
+    bytes[10] ^= 1;  // in the first megabyte
+    touch(folder / "b.mkv", bytes);
+    EXPECT_NE(sampled_file_hash(folder / "b.mkv"), a);
+    touch(folder / "small.mkv", "small");
+    EXPECT_TRUE(sampled_file_hash(folder / "small.mkv"));
+    EXPECT_FALSE(sampled_file_hash(folder / "missing.mkv"));
+
+    // 8 s at 24 fps: frames 32, 64, 96, 128 and 160, each at its middle; an
+    // MP4's 7.999 s and 24.003 fps (its rounded duration's) give the same.
+    const std::vector<double> times = fingerprint_times(8.0, 24.0);
+    ASSERT_EQ(times.size(), 5U);
+    EXPECT_DOUBLE_EQ(times[0], 32.5 / 24.0);
+    EXPECT_DOUBLE_EQ(times[4], 160.5 / 24.0);
+    EXPECT_EQ(fingerprint_times(7.999, 24.003), times);
+    EXPECT_TRUE(fingerprint_times(8.0, 0.0).empty());
+}
+
+// The saved scores of files whose paths changed: a renamed or copied test
+// video or reference (their sampled hashes), a remuxed reference (its video
+// fingerprint, asked only once the test video matched); another reference
+// is not taken for it. The result has the files' paths as they are now.
+TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mkv", std::string(5000, 's'));
+    touch(folder / "t.mkv", std::string(4000, 't'));
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source = folder / "s.mkv";
+    result.distorted = folder / "t.mkv";
+    int fingerprinted = 0;
+    set_video_fingerprinter([&fingerprinted](const std::filesystem::path& file) -> std::optional<std::string> {
+        ++fingerprinted;
+        // The remux holds the reference's stream; the other video another.
+        const std::string name = platform::path_text(file.filename());
+        return name == "other.mp4" ? std::string("another stream") : std::string("the reference's stream");
+    });
+    const std::filesystem::path cache = folder / "cache";
+    const std::filesystem::path saved =
+        store_result(cache, folder / "s.mkv", folder / "t.mkv", request.recipe, result, "t", request.metrics);
+    EXPECT_TRUE(std::filesystem::exists(saved / "identity.json"));
+    const auto load = [&](const std::string& source, const std::string& distorted) {
+        return load_result(cache, folder / source, folder / distorted, request.recipe, request.metrics,
+                           request.perceptual_backends);
+    };
+
+    // Copied and renamed: the same bytes.
+    std::filesystem::copy_file(folder / "s.mkv", folder / "s copy.mkv");
+    std::filesystem::copy_file(folder / "t.mkv", folder / "t renamed.mkv");
+    const auto copied = load("s copy.mkv", "t renamed.mkv");
+    ASSERT_TRUE(copied);
+    EXPECT_EQ(copied->first.source, folder / "s copy.mkv");
+    EXPECT_EQ(copied->first.distorted, folder / "t renamed.mkv");
+    EXPECT_EQ(recipe_directory(cache, folder / "s copy.mkv", folder / "t renamed.mkv", request.recipe), saved);
+
+    // A remuxed reference: other bytes, the same stream.
+    touch(folder / "remux.mp4", std::string(5100, 'm'));
+    const int before = fingerprinted;
+    ASSERT_TRUE(load("remux.mp4", "t.mkv"));
+    EXPECT_GT(fingerprinted, before);
+
+    // Another reference: not this comparison's.
+    touch(folder / "other.mp4", std::string(5100, 'o'));
+    EXPECT_FALSE(load("other.mp4", "t.mkv"));
+
+    // A new test video: nothing saved for it, nothing decoded to find out.
+    touch(folder / "new.mkv", std::string(4100, 'n'));
+    const int asked = fingerprinted;
+    EXPECT_FALSE(load("remux.mp4", "new.mkv"));
+    EXPECT_EQ(fingerprinted, asked);
+    set_video_fingerprinter(nullptr);
+}
+
+// A file's bitrate is saved by its content and read back as it was, under
+// the path the file has now; frame types the command line did not read are
+// told apart from types read and unknown. Settings counts and clears it with
+// the saved scores.
+TEST(MetricCache, BitrateIsSavedByContent) {
+    const test::Folder folder;
+    const std::filesystem::path cache = folder / "cache";
+    SavedBitrate bitrate;
+    bitrate.info.path = folder / "a.mkv";
+    bitrate.info.codec_name = "h264";
+    bitrate.info.width = 1920;
+    bitrate.info.height = 1080;
+    bitrate.info.fps = 24.0;
+    bitrate.info.duration = 0.125;
+    bitrate.data = bitrate_data(bitrate.info.path, {0.0, 1 / 24.0, 2 / 24.0}, {1 / 24.0, 1 / 24.0, 1 / 24.0},
+                                {90000, 1200, 3400000000LL}, {true, false, false});
+    bitrate.frame_types = std::vector<std::uint8_t>{1, 2, 3};
+    save_bitrate(cache, "content", bitrate);
+    EXPECT_FALSE(load_saved_bitrate(cache, "other", folder / "a.mkv"));
+    EXPECT_FALSE(load_saved_bitrate(cache, "", folder / "a.mkv"));
+
+    const std::optional<SavedBitrate> moved = load_saved_bitrate(cache, "content", folder / "moved.mkv");
+    ASSERT_TRUE(moved);
+    EXPECT_EQ(moved->info.path, folder / "moved.mkv");
+    EXPECT_EQ(moved->info.codec_name, "h264");
+    EXPECT_EQ(moved->data.times, bitrate.data.times);
+    EXPECT_EQ(moved->data.sizes, bitrate.data.sizes);
+    EXPECT_EQ(moved->data.keyframes, bitrate.data.keyframes);
+    EXPECT_EQ(moved->frame_types, bitrate.frame_types);
+
+    bitrate.frame_types = std::nullopt;  // the command line's
+    save_bitrate(cache, "unread", bitrate);
+    bitrate.frame_types = std::vector<std::uint8_t>{};  // read, not known
+    save_bitrate(cache, "unknown", bitrate);
+    EXPECT_FALSE(load_saved_bitrate(cache, "unread", folder / "a.mkv")->frame_types);
+    EXPECT_EQ(load_saved_bitrate(cache, "unknown", folder / "a.mkv")->frame_types, std::vector<std::uint8_t>{});
+
+    EXPECT_GT(cache_summary(cache).bytes, 0U);
+    clear_all(cache);
+    EXPECT_FALSE(std::filesystem::exists(bitrate_store_folder(cache)));
+    EXPECT_EQ(cache_summary(cache).bytes, 0U);
+}
+
 TEST(MetricCache, AScoreKeepsTheBuildThatMadeIt) {
     const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
     const test::Folder folder;

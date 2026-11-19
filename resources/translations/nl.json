@@ -1056,7 +1056,46 @@
   "Grainy film": "Korrelige film",
   "HDR": "HDR",
   "Low-bitrate preview": "Voorbeeld met lage bitrate",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Alleen ernstige inzakkingen van twaalf frames of meer, voor encodes die niet op de bron hoeven te lijken."
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Alleen ernstige inzakkingen van twaalf frames of meer, voor encodes die niet op de bron hoeven te lijken.",
+  "As CSV...": "Als CSV...",
+  "As JSON...": "Als JSON...",
+  "Delete saved results": "Opgeslagen resultaten verwijderen",
+  "Delete...": "Verwijderen...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "De grafiek van elke video voor elke metriek en, bij meerdere video's van één referentie, elke metriek met ze allemaal; de bitrategrafieken waar de video's nog aanwezig zijn.",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Elke vergelijking waarvan de app scores heeft opgeslagen. Open ze in Metriekgrafieken, of exporteer hun resultaten, scores per frame, grafieken en zwakke segmenten, zonder de video's opnieuw toe te voegen.",
+  "Export graphs": "Grafieken exporteren",
+  "Export graphs as ZIP...": "Grafieken exporteren als ZIP...",
+  "Export per-frame CSV files to": "CSV-bestanden per frame exporteren naar",
+  "Export per-frame CSV...": "CSV per frame exporteren...",
+  "Export weak segments...": "Zwakke segmenten exporteren...",
+  "Filter by file name": "Filteren op bestandsnaam",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "Grafieken worden geëxporteerd voor testvideo's van één referentie: selecteer vergelijkingen die deze delen.",
+  "Locked while metrics are calculated: the run saves its scores there.": "Vergrendeld terwijl metrieken worden berekend: de uitvoering slaat daar haar scores op.",
+  "Metrics": "Metrieken",
+  "Not all deleted": "Niet alles verwijderd",
+  "One reference at a time": "Eén referentie tegelijk",
+  "Open in Metric Graphs": "Openen in Metriekgrafieken",
+  "Preset: {name}": "Voorinstelling: {name}",
+  "Profile in use ({name})": "Profiel in gebruik ({name})",
+  "Profile: {name}": "Profiel: {name}",
+  "Reading {directory}...": "{directory} lezen...",
+  "Refresh": "Vernieuwen",
+  "Results exported to {path}": "Resultaten geëxporteerd naar {path}",
+  "Saved": "Opgeslagen",
+  "Saved results": "Opgeslagen resultaten",
+  "Saved scores": "Opgeslagen scores",
+  "Saved scores of {name}": "Opgeslagen scores van {name}",
+  "Select a comparison to see its saved scores.": "Selecteer een vergelijking om de opgeslagen scores te zien.",
+  "Select one comparison to see its saved scores.": "Selecteer één vergelijking om de opgeslagen scores te zien.",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "Er zijn meerdere scores van deze metriek opgeslagen: de nieuwste wordt gebruikt, tenzij een andere is gekozen.",
+  "Size": "Grootte",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "Het gekozen profiel heeft geen voorwaarden: stel ze in bij Instellingen > Zwakke segmenten, of kies een voorinstelling.",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "De regels waarmee de zwakke segmenten worden gevonden: ze worden niet met de scores opgeslagen, maar nu daarop toegepast.",
+  "a display of its own": "een eigen scherm",
+  "can't be read": "onleesbaar",
+  "{name} (saved)": "{name} (opgeslagen)",
+  "{size:.0f} KB": "{size:.0f} KB",
+  "{size:.1f} MB": "{size:.1f} MB"
  },
  "plurals": {
   "about {count} day": [
@@ -1170,6 +1209,22 @@
   "{count} frame in all.": [
    "{count} frame in totaal.",
    "{count} frames in totaal."
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "De opgeslagen scores van {count} vergelijking verwijderen? Ze kunnen niet worden teruggehaald: de video's worden opnieuw gescoord wanneer ze weer worden vergeleken.",
+   "De opgeslagen scores van {count} vergelijkingen verwijderen? Ze kunnen niet worden teruggehaald: de video's worden opnieuw gescoord wanneer ze weer worden vergeleken."
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "De opgeslagen scores van {count} vergelijking konden niet worden verwijderd: een van de bestanden is mogelijk geopend.",
+   "De opgeslagen scores van {count} vergelijkingen konden niet worden verwijderd: een van de bestanden is mogelijk geopend."
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "{count} CSV-bestand per frame geëxporteerd naar {path}",
+   "{count} CSV-bestanden per frame geëxporteerd naar {path}"
+  ],
+  "{count} saved comparison in {directory}": [
+   "{count} opgeslagen vergelijking in {directory}",
+   "{count} opgeslagen vergelijkingen in {directory}"
   ]
  }
 }

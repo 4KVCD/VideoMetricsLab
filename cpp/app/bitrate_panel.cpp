@@ -35,6 +35,7 @@
 #include "series_colors.h"
 #include "vml/analysis_request.h"
 #include "vml/ffprobe.h"
+#include "vml/file_fingerprint.h"
 #include "vml/geometry.h"
 #include "vml/platform/system.h"
 #include "vml/time_format.h"
@@ -162,8 +163,9 @@ QString frames_text(const QStringList& frames) {
 
 // ------------------------------------------------------------------ the worker
 
-BitrateWorker::BitrateWorker(std::string ffprobe, std::vector<Job> jobs, QObject* parent)
-    : QThread(parent), ffprobe_(std::move(ffprobe)), jobs_(std::move(jobs)) {}
+BitrateWorker::BitrateWorker(std::string ffprobe, std::vector<Job> jobs, std::filesystem::path store,
+                             QObject* parent)
+    : QThread(parent), ffprobe_(std::move(ffprobe)), jobs_(std::move(jobs)), store_(std::move(store)) {}
 
 void BitrateWorker::run() {
     for (const auto& [path, known] : jobs_) {
@@ -175,6 +177,21 @@ void BitrateWorker::run() {
         try {
             // Taken first: a file written to during the read counts as changed.
             std::string read_as = file_identity(path);
+            // Read before (bitrate_store.h), its frame types too: not read
+            // again. A raw stream's times are counted from the rate it is
+            // given, which can change: it is always read.
+            const bool raw = known && known->is_raw_stream();
+            const std::string content =
+                store_.empty() || raw ? std::string() : sampled_file_hash(path).value_or("");
+            std::optional<SavedBitrate> saved = load_saved_bitrate(store_, content, path);
+            if (saved && saved->frame_types && !saved->info.is_raw_stream()) {
+                VideoInfo info = known ? *known : saved->info;
+                info.path = path;
+                emit analyzed({name, std::move(info), std::make_shared<const BitrateData>(std::move(saved->data)),
+                               std::make_shared<const std::vector<std::uint8_t>>(std::move(*saved->frame_types)),
+                               std::move(read_as)});
+                continue;
+            }
             VideoInfo info = known ? *known : probe_video(path, ffprobe_, cancel_);
             if (!known && info.is_raw_stream()) {
                 info = raw_stream_as_found(std::move(info), ffprobe_, cancel_);
@@ -194,6 +211,13 @@ void BitrateWorker::run() {
                     emit progress(name, done, total);
                 }));
             auto types = std::make_shared<const std::vector<std::uint8_t>>(type_reader.types_of(*data));
+            if (!content.empty() && !info.is_raw_stream() && !cancel_.cancelled()) {
+                try {
+                    save_bitrate(store_, content, {info, *data, *types});
+                } catch (const std::exception&) {
+                    // Not saved: read again next time.
+                }
+            }
             if (!cancel_.cancelled()) {
                 emit analyzed({name, info, std::move(data), std::move(types), std::move(read_as)});
             }
@@ -606,7 +630,8 @@ void BitratePanel::start_pending() {
     for (const auto& [path, info] : jobs) {
         active_keys_.insert(path_key(path));
     }
-    auto* worker = new BitrateWorker(ffprobe_(), std::move(jobs), this);
+    auto* worker = new BitrateWorker(ffprobe_(), std::move(jobs),
+                                     store_folder ? store_folder() : std::filesystem::path(), this);
     worker_ = worker;
     connect(worker, &BitrateWorker::file_started, this, [this](const QString& path) { on_file_started(path); });
     connect(worker, &BitrateWorker::progress, this,
@@ -688,6 +713,15 @@ void BitratePanel::on_analyzed(const BitrateAnalyzed& analyzed) {
     progress->setValue(100);
     refresh_table_values();
     refresh_plot();
+}
+
+void BitratePanel::add_saved(const SavedBitrate& saved) {
+    add_files({saved.info.path}, {{saved.info.path, saved.info}}, false);
+    on_analyzed({qt_text(platform::path_text(saved.info.path)), saved.info,
+                 std::make_shared<const BitrateData>(saved.data),
+                 std::make_shared<const std::vector<std::uint8_t>>(
+                     saved.frame_types.value_or(std::vector<std::uint8_t>())),
+                 file_identity(saved.info.path)});
 }
 
 void BitratePanel::on_failed(const QString& path, const QString& error) {

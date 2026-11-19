@@ -1056,7 +1056,46 @@
   "Grainy film": "Körniger Film",
   "HDR": "HDR",
   "Low-bitrate preview": "Vorschau mit niedriger Bitrate",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Nur schwere Einbrüche ab zwölf Bildern Länge, für Kodierungen, die nicht wie die Quelle aussehen sollen."
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Nur schwere Einbrüche ab zwölf Bildern Länge, für Kodierungen, die nicht wie die Quelle aussehen sollen.",
+  "As CSV...": "Als CSV...",
+  "As JSON...": "Als JSON...",
+  "Delete saved results": "Gespeicherte Ergebnisse löschen",
+  "Delete...": "Löschen...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "Das Diagramm jedes Videos für jede Metrik und, bei mehreren Videos einer Referenz, jede Metrik mit allen zusammen; die Bitrate-Diagramme, wo die Videos noch vorhanden sind.",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Jeder Vergleich, dessen Werte die App gespeichert hat. Öffnen Sie sie in den Metrik-Diagrammen oder exportieren Sie ihre Ergebnisse, Werte pro Bild, Diagramme und schwachen Abschnitte, ohne die Videos erneut hinzuzufügen.",
+  "Export graphs": "Diagramme exportieren",
+  "Export graphs as ZIP...": "Diagramme als ZIP exportieren...",
+  "Export per-frame CSV files to": "CSV-Dateien pro Bild exportieren nach",
+  "Export per-frame CSV...": "CSV pro Bild exportieren...",
+  "Export weak segments...": "Schwache Abschnitte exportieren...",
+  "Filter by file name": "Nach Dateiname filtern",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "Diagramme werden für Testvideos einer Referenz exportiert: Wählen Sie Vergleiche, die sie gemeinsam haben.",
+  "Locked while metrics are calculated: the run saves its scores there.": "Gesperrt, während Metriken berechnet werden: Der Lauf speichert seine Werte dort.",
+  "Metrics": "Metriken",
+  "Not all deleted": "Nicht alles gelöscht",
+  "One reference at a time": "Jeweils eine Referenz",
+  "Open in Metric Graphs": "In Metrik-Diagrammen öffnen",
+  "Preset: {name}": "Vorlage: {name}",
+  "Profile in use ({name})": "Verwendetes Profil ({name})",
+  "Profile: {name}": "Profil: {name}",
+  "Reading {directory}...": "{directory} wird gelesen...",
+  "Refresh": "Aktualisieren",
+  "Results exported to {path}": "Ergebnisse exportiert nach {path}",
+  "Saved": "Gespeichert",
+  "Saved results": "Gespeicherte Ergebnisse",
+  "Saved scores": "Gespeicherte Werte",
+  "Saved scores of {name}": "Gespeicherte Werte von {name}",
+  "Select a comparison to see its saved scores.": "Wählen Sie einen Vergleich, um seine gespeicherten Werte zu sehen.",
+  "Select one comparison to see its saved scores.": "Wählen Sie genau einen Vergleich, um seine gespeicherten Werte zu sehen.",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "Für diese Metrik sind mehrere Werte gespeichert: Der neueste wird verwendet, sofern kein anderer gewählt ist.",
+  "Size": "Größe",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "Das gewählte Profil hat keine Bedingungen: Legen Sie sie unter Einstellungen > Schwache Abschnitte fest oder wählen Sie eine Vorlage.",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Die Regeln, nach denen die schwachen Abschnitte gefunden werden: Sie werden nicht mit den Werten gespeichert, sondern jetzt aus ihnen ermittelt.",
+  "a display of its own": "eine eigene Anzeige",
+  "can't be read": "nicht lesbar",
+  "{name} (saved)": "{name} (gespeichert)",
+  "{size:.0f} KB": "{size:.0f} KB",
+  "{size:.1f} MB": "{size:.1f} MB"
  },
  "plurals": {
   "about {count} day": [
@@ -1170,6 +1209,22 @@
   "{count} frame in all.": [
    "{count} Bild insgesamt.",
    "{count} Bilder insgesamt."
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "Die gespeicherten Werte von {count} Vergleich löschen? Sie lassen sich nicht wiederherstellen: Die Videos werden beim nächsten Vergleich erneut bewertet.",
+   "Die gespeicherten Werte von {count} Vergleichen löschen? Sie lassen sich nicht wiederherstellen: Die Videos werden beim nächsten Vergleich erneut bewertet."
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "Die gespeicherten Werte von {count} Vergleich konnten nicht gelöscht werden: Eine ihrer Dateien ist möglicherweise geöffnet.",
+   "Die gespeicherten Werte von {count} Vergleichen konnten nicht gelöscht werden: Eine ihrer Dateien ist möglicherweise geöffnet."
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "{count} CSV-Datei pro Bild exportiert nach {path}",
+   "{count} CSV-Dateien pro Bild exportiert nach {path}"
+  ],
+  "{count} saved comparison in {directory}": [
+   "{count} gespeicherter Vergleich in {directory}",
+   "{count} gespeicherte Vergleiche in {directory}"
   ]
  }
 }

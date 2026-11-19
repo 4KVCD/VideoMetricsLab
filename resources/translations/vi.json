@@ -1056,7 +1056,46 @@
   "Grainy film": "Phim nhiều hạt",
   "HDR": "HDR",
   "Low-bitrate preview": "Bản xem trước bitrate thấp",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Chỉ các lỗi nghiêm trọng kéo dài từ mười hai khung trở lên, cho các bản mã hóa không nhằm trông giống nguồn."
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Chỉ các lỗi nghiêm trọng kéo dài từ mười hai khung trở lên, cho các bản mã hóa không nhằm trông giống nguồn.",
+  "As CSV...": "Dạng CSV...",
+  "As JSON...": "Dạng JSON...",
+  "Delete saved results": "Xóa kết quả đã lưu",
+  "Delete...": "Xóa...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "Biểu đồ của mỗi video cho từng chỉ số, và khi có nhiều video của cùng một tham chiếu thì mỗi chỉ số với tất cả chúng; biểu đồ bitrate ở nơi video vẫn còn.",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Mọi so sánh mà ứng dụng đã lưu điểm. Mở chúng trong Biểu đồ chỉ số, hoặc xuất kết quả, điểm từng khung hình, biểu đồ và đoạn yếu của chúng mà không cần thêm lại video.",
+  "Export graphs": "Xuất biểu đồ",
+  "Export graphs as ZIP...": "Xuất biểu đồ dưới dạng ZIP...",
+  "Export per-frame CSV files to": "Xuất tệp CSV từng khung hình vào",
+  "Export per-frame CSV...": "Xuất CSV từng khung hình...",
+  "Export weak segments...": "Xuất đoạn yếu...",
+  "Filter by file name": "Lọc theo tên tệp",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "Biểu đồ được xuất cho các video thử của một tham chiếu: hãy chọn các so sánh có chung tham chiếu.",
+  "Locked while metrics are calculated: the run saves its scores there.": "Bị khóa khi đang tính chỉ số: lần chạy lưu điểm của nó ở đó.",
+  "Metrics": "Chỉ số",
+  "Not all deleted": "Chưa xóa hết",
+  "One reference at a time": "Mỗi lần một tham chiếu",
+  "Open in Metric Graphs": "Mở trong Biểu đồ chỉ số",
+  "Preset: {name}": "Cài đặt sẵn: {name}",
+  "Profile in use ({name})": "Hồ sơ đang dùng ({name})",
+  "Profile: {name}": "Hồ sơ: {name}",
+  "Reading {directory}...": "Đang đọc {directory}...",
+  "Refresh": "Làm mới",
+  "Results exported to {path}": "Đã xuất kết quả vào {path}",
+  "Saved": "Ngày lưu",
+  "Saved results": "Kết quả đã lưu",
+  "Saved scores": "Điểm đã lưu",
+  "Saved scores of {name}": "Điểm đã lưu của {name}",
+  "Select a comparison to see its saved scores.": "Chọn một so sánh để xem điểm đã lưu.",
+  "Select one comparison to see its saved scores.": "Chỉ chọn một so sánh để xem điểm đã lưu.",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "Có nhiều điểm đã lưu cho chỉ số này: điểm mới nhất được dùng trừ khi chọn điểm khác.",
+  "Size": "Kích thước",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "Hồ sơ đã chọn không có điều kiện: hãy đặt trong Cài đặt > Đoạn yếu, hoặc chọn một cài đặt sẵn.",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Các quy tắc dùng để tìm đoạn yếu: chúng không được lưu cùng điểm mà được áp dụng lên điểm ngay bây giờ.",
+  "a display of its own": "màn hình riêng",
+  "can't be read": "không đọc được",
+  "{name} (saved)": "{name} (đã lưu)",
+  "{size:.0f} KB": "{size:.0f} KB",
+  "{size:.1f} MB": "{size:.1f} MB"
  },
  "plurals": {
   "about {count} day": [
@@ -1142,6 +1181,18 @@
   ],
   "{count} frame in all.": [
    "tổng cộng {count} khung."
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "Xóa điểm đã lưu của {count} so sánh? Không thể khôi phục: video sẽ được chấm điểm lại vào lần so sánh tiếp theo."
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "Không thể xóa điểm đã lưu của {count} so sánh: có thể một tệp của chúng đang mở."
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "Đã xuất {count} tệp CSV từng khung hình vào {path}"
+  ],
+  "{count} saved comparison in {directory}": [
+   "{count} so sánh đã lưu trong {directory}"
   ]
  }
 }

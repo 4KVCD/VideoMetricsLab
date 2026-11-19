@@ -5,6 +5,7 @@
 #include <cmath>
 #include <fstream>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <regex>
 #include <set>
@@ -17,10 +18,12 @@
 #include "metric_cache_parts.h"
 #include "vml/app_log.h"
 #include "vml/append.h"
+#include "vml/bitrate_store.h"
 #include "vml/build_info.h"
 #include "vml/cancel.h"
 #include "vml/colour.h"
 #include "vml/crop_detect.h"
+#include "vml/file_fingerprint.h"
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/geometry.h"
@@ -882,6 +885,54 @@ void merge_legacy(const std::filesystem::path& legacy, const std::filesystem::pa
 
 }  // namespace
 
+std::optional<std::variant<FrameMetricResult, SequenceMetricResult>> read_saved_score(
+    const std::filesystem::path& file) {
+    try {
+        const auto score = read_score(file);
+        if (!score) {
+            return std::nullopt;
+        }
+        const auto& [metadata, arrays] = *score;
+        const nlohmann::json key = metadata.value("key", nlohmann::json());
+        if (!current_format(metadata) || !key.is_string()) {
+            return std::nullopt;
+        }
+        const std::optional<MetricProvenance> provenance = provenance_from(metadata.at("provenance"));
+        if (!provenance) {
+            return std::nullopt;
+        }
+        const bool marked = metadata.value(av1_grain_dav1d, nlohmann::json()) == av1_grain_dav1d_version;
+        const nlohmann::json kind = metadata.at("kind");
+        if (kind == "frame") {
+            auto frames = timeline(arrays);
+            if (!frames) {
+                return std::nullopt;
+            }
+            auto& [frame, time, values] = *frames;
+            return FrameMetricResult{key.get<std::string>(), std::move(frame), std::move(time), std::move(values),
+                                     *provenance, marked};
+        }
+        if (kind == "sequence" && arrays.contains("score")) {
+            const std::optional<std::vector<double>> value = npy_numbers(arrays.at("score"));
+            if (!value || value->size() != 1) {
+                return std::nullopt;
+            }
+            SequenceMetricResult result{key.get<std::string>(), value->front(), *provenance, {}, {}, {}, marked};
+            if (arrays.contains("values")) {
+                auto frames = timeline(arrays);
+                if (!frames) {
+                    return std::nullopt;
+                }
+                std::tie(result.frame, result.time, result.values) = std::move(*frames);
+            }
+            return result;
+        }
+    } catch (const nlohmann::json::exception&) {
+    } catch (const std::exception&) {
+    }
+    return std::nullopt;
+}
+
 namespace cache_parts {
 
 std::string hash_of(const std::string& source_identity, const std::string& distorted_identity,
@@ -1103,6 +1154,196 @@ std::string metric_identity_hash(const MetricRequestSpec& spec) {
     return sha256_hex(python_json_compact(spec.identity()));
 }
 
+namespace {
+
+// What the saved scores know of files, kept for the process: their sampled
+// hashes and video fingerprints by path identity (each read once), and each
+// base's comparisons as their identity.json and context.json record them
+// (read again after a comparison is saved).
+struct RecordedComparison {
+    std::filesystem::path folder;
+    nlohmann::json recipe;
+    std::string source_path, source_sampled, source_video;
+    std::string distorted_path, distorted_sampled;
+};
+
+struct KnownFiles {
+    std::mutex mutex;
+    VideoFingerprinter fingerprinter;
+    std::map<std::string, std::optional<std::string>> sampled;
+    std::map<std::string, std::optional<std::string>> video;
+    std::map<std::filesystem::path, std::vector<RecordedComparison>> recorded;
+};
+
+KnownFiles& known_files() {
+    static KnownFiles known;
+    return known;
+}
+
+std::optional<std::string> sampled_of(const std::filesystem::path& file) {
+    const std::string identity = file_identity(file);
+    KnownFiles& known = known_files();
+    {
+        const std::lock_guard lock(known.mutex);
+        if (const auto found = known.sampled.find(identity); found != known.sampled.end()) {
+            return found->second;
+        }
+    }
+    std::optional<std::string> hash = sampled_file_hash(file);
+    const std::lock_guard lock(known.mutex);
+    known.sampled[identity] = hash;
+    return hash;
+}
+
+std::optional<std::string> video_of(const std::filesystem::path& file) {
+    const std::string identity = file_identity(file);
+    KnownFiles& known = known_files();
+    VideoFingerprinter fingerprinter;
+    {
+        const std::lock_guard lock(known.mutex);
+        if (const auto found = known.video.find(identity); found != known.video.end()) {
+            return found->second;
+        }
+        // One recorded for this file before (another comparison of the same
+        // reference): no decoding.
+        for (const auto& [base, comparisons] : known.recorded) {
+            for (const RecordedComparison& recorded : comparisons) {
+                if (recorded.source_path == identity && !recorded.source_video.empty()) {
+                    known.video[identity] = recorded.source_video;
+                    return recorded.source_video;
+                }
+            }
+        }
+        fingerprinter = known.fingerprinter;
+    }
+    if (!fingerprinter) {
+        return std::nullopt;
+    }
+    std::optional<std::string> fingerprint = fingerprinter(file);
+    const std::lock_guard lock(known.mutex);
+    known.video[identity] = fingerprint;
+    return fingerprint;
+}
+
+std::string text_at(const nlohmann::json& data, const char* side, const char* field) {
+    const nlohmann::json value = data.value(side, nlohmann::json::object()).value(field, nlohmann::json());
+    return value.is_string() ? value.get<std::string>() : std::string();
+}
+
+// Every comparison under `base` with an identity.json, read once.
+std::vector<RecordedComparison> recorded_comparisons(const std::filesystem::path& base) {
+    KnownFiles& known = known_files();
+    {
+        const std::lock_guard lock(known.mutex);
+        if (const auto found = known.recorded.find(base); found != known.recorded.end()) {
+            return found->second;
+        }
+    }
+    std::vector<RecordedComparison> list;
+    std::error_code error;
+    std::filesystem::directory_iterator folder(base / format_folder, error);
+    for (; !error && folder != std::filesystem::directory_iterator(); folder.increment(error)) {
+        const std::optional<nlohmann::json> identity = read_json(folder->path() / "identity.json");
+        const std::optional<nlohmann::json> context = read_json(folder->path() / "context.json");
+        if (!identity || !identity->is_object() || !context || !context->is_object()) {
+            continue;
+        }
+        list.push_back({folder->path(), context->value("recipe", nlohmann::json()),
+                        text_at(*identity, "source", "path"), text_at(*identity, "source", "sampled"),
+                        text_at(*identity, "source", "video"), text_at(*identity, "distorted", "path"),
+                        text_at(*identity, "distorted", "sampled")});
+    }
+    const std::lock_guard lock(known.mutex);
+    known.recorded[base] = list;
+    return list;
+}
+
+// A folder saved for the same files under other paths (recipe_directory).
+std::optional<std::filesystem::path> folder_of_same_files(const std::filesystem::path& base,
+                                                         const std::filesystem::path& source,
+                                                         const std::filesystem::path& distorted,
+                                                         const ComparisonRecipe& recipe) {
+    const nlohmann::json identity = recipe.identity();
+    const std::string distorted_path = file_identity(distorted);
+    std::optional<std::string> distorted_sampled;
+    std::vector<RecordedComparison> candidates;
+    for (RecordedComparison& recorded : recorded_comparisons(base)) {
+        if (recorded.recipe != identity) {
+            continue;
+        }
+        bool same = recorded.distorted_path == distorted_path;
+        if (!same && !recorded.distorted_sampled.empty()) {
+            if (!distorted_sampled) {
+                distorted_sampled = sampled_of(distorted).value_or("");
+            }
+            same = !distorted_sampled->empty() && *distorted_sampled == recorded.distorted_sampled;
+        }
+        if (same) {
+            candidates.push_back(std::move(recorded));
+        }
+    }
+    if (candidates.empty()) {
+        return std::nullopt;  // the test video is new: nothing to read, nothing decoded
+    }
+    // The reference, cheapest first: its path, its sampled hash, its stream.
+    const std::string source_path = file_identity(source);
+    for (const RecordedComparison& candidate : candidates) {
+        if (candidate.source_path == source_path) {
+            return candidate.folder;
+        }
+    }
+    const std::string source_sampled = sampled_of(source).value_or("");
+    for (const RecordedComparison& candidate : candidates) {
+        if (!source_sampled.empty() && candidate.source_sampled == source_sampled) {
+            return candidate.folder;
+        }
+    }
+    if (std::none_of(candidates.begin(), candidates.end(),
+                     [](const RecordedComparison& candidate) { return !candidate.source_video.empty(); })) {
+        return std::nullopt;
+    }
+    const std::string source_video = video_of(source).value_or("");
+    for (const RecordedComparison& candidate : candidates) {
+        if (!source_video.empty() && candidate.source_video == source_video) {
+            return candidate.folder;
+        }
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+void set_video_fingerprinter(VideoFingerprinter fingerprinter) {
+    KnownFiles& known = known_files();
+    const std::lock_guard lock(known.mutex);
+    known.fingerprinter = std::move(fingerprinter);
+}
+
+void cache_parts::record_identity(const std::filesystem::path& directory, const std::filesystem::path& source,
+                                  const std::filesystem::path& distorted, bool only_if_missing) {
+    std::error_code error;
+    if (only_if_missing && std::filesystem::exists(directory / "identity.json", error)) {
+        return;
+    }
+    nlohmann::json source_side = {{"path", file_identity(source)}, {"sampled", sampled_of(source).value_or("")}};
+    if (const std::optional<std::string> video = video_of(source)) {
+        source_side["video"] = *video;
+    }
+    const nlohmann::json identity = {
+        {"format", 1},
+        {"source", std::move(source_side)},
+        {"distorted", {{"path", file_identity(distorted)}, {"sampled", sampled_of(distorted).value_or("")}}}};
+    try {
+        write_atomically(directory / "identity.json", python_json_compact(identity));
+    } catch (const std::exception&) {
+        return;  // a record only: the scores are saved without it
+    }
+    // Read again at the next lookup, this one with it.
+    KnownFiles& known = known_files();
+    const std::lock_guard lock(known.mutex);
+    known.recorded.erase(directory.parent_path().parent_path());
+}
+
 std::filesystem::path recipe_directory(const std::filesystem::path& base, const std::filesystem::path& source,
                                        const std::filesystem::path& distorted, const ComparisonRecipe& recipe) {
     const std::filesystem::path root = base / format_folder;
@@ -1138,7 +1379,9 @@ std::filesystem::path recipe_directory(const std::filesystem::path& base, const 
         }
     }
     if (legacy.empty()) {
-        return directory;
+        // The same files saved under other paths: renamed, moved, copied, or
+        // a remuxed reference.
+        return folder_of_same_files(base, source, distorted, recipe).value_or(directory);
     }
     std::filesystem::rename(legacy.front(), directory, error);
     if (error) {
@@ -1281,6 +1524,8 @@ std::filesystem::path store_result(const std::filesystem::path& base, const std:
             }
         }
     }
+    // What the files are, to know them by when their paths change.
+    record_identity(directory, source, distorted, false);
     return directory;
 }
 
@@ -1358,11 +1603,22 @@ CacheSummary cache_summary(const std::filesystem::path& base) {
             ++summary.comparisons;
         }
     }
+    // The bitrate saved beside them (bitrate_store.h) is saved results too.
+    std::filesystem::directory_iterator bitrate(bitrate_store_folder(base), error);
+    for (; !error && bitrate != std::filesystem::directory_iterator(); bitrate.increment(error)) {
+        std::error_code ignored;
+        if (const std::uintmax_t size = bitrate->file_size(ignored); !ignored) {
+            summary.bytes += size;
+        }
+    }
     return summary;
 }
 
 int clear_all(const std::filesystem::path& base) {
     const std::filesystem::path root = base / format_folder;
+    // The bitrate saved beside the scores (bitrate_store.h), saved or not.
+    std::error_code bitrate_error;
+    std::filesystem::remove_all(bitrate_store_folder(base), bitrate_error);
     std::error_code error;
     if (!std::filesystem::exists(root, error)) {
         return 0;
@@ -1378,6 +1634,12 @@ int clear_all(const std::filesystem::path& base) {
     }
     std::filesystem::remove_all(root, error);
     return error ? 0 : count;
+}
+
+std::string saved_content_hash(const std::filesystem::path& folder, bool reference) {
+    const std::optional<nlohmann::json> identity = read_json(folder / "identity.json");
+    return identity && identity->is_object() ? text_at(*identity, reference ? "source" : "distorted", "sampled")
+                                             : std::string();
 }
 
 }  // namespace vml
