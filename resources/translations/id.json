@@ -1055,7 +1055,46 @@
   "Grainy film": "Film berbutir",
   "HDR": "HDR",
   "Low-bitrate preview": "Pratinjau bitrate rendah",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Hanya kerusakan parah yang berlangsung dua belas bingkai atau lebih, untuk enkode yang tidak dimaksudkan mirip dengan sumbernya."
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Hanya kerusakan parah yang berlangsung dua belas bingkai atau lebih, untuk enkode yang tidak dimaksudkan mirip dengan sumbernya.",
+  "As CSV...": "Sebagai CSV...",
+  "As JSON...": "Sebagai JSON...",
+  "Delete saved results": "Hapus hasil tersimpan",
+  "Delete...": "Hapus...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "Grafik setiap video untuk setiap metrik, dan bila ada beberapa video dari satu referensi, setiap metrik dengan semuanya; grafik bitrate bila videonya masih ada.",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Setiap perbandingan yang skornya disimpan aplikasi. Buka di Grafik metrik, atau ekspor hasil, skor per frame, grafik, dan segmen lemahnya, tanpa menambahkan videonya lagi.",
+  "Export graphs": "Ekspor grafik",
+  "Export graphs as ZIP...": "Ekspor grafik sebagai ZIP...",
+  "Export per-frame CSV files to": "Ekspor file CSV per frame ke",
+  "Export per-frame CSV...": "Ekspor CSV per frame...",
+  "Export weak segments...": "Ekspor segmen lemah...",
+  "Filter by file name": "Filter menurut nama file",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "Grafik diekspor untuk video uji dari satu referensi: pilih perbandingan yang memakai referensi yang sama.",
+  "Locked while metrics are calculated: the run saves its scores there.": "Terkunci selama metrik dihitung: proses menyimpan skornya di sana.",
+  "Metrics": "Metrik",
+  "Not all deleted": "Tidak semua terhapus",
+  "One reference at a time": "Satu referensi sekaligus",
+  "Open in Metric Graphs": "Buka di Grafik metrik",
+  "Preset: {name}": "Preset: {name}",
+  "Profile in use ({name})": "Profil yang dipakai ({name})",
+  "Profile: {name}": "Profil: {name}",
+  "Reading {directory}...": "Membaca {directory}...",
+  "Refresh": "Segarkan",
+  "Results exported to {path}": "Hasil diekspor ke {path}",
+  "Saved": "Disimpan",
+  "Saved results": "Hasil tersimpan",
+  "Saved scores": "Skor tersimpan",
+  "Saved scores of {name}": "Skor tersimpan {name}",
+  "Select a comparison to see its saved scores.": "Pilih perbandingan untuk melihat skor tersimpannya.",
+  "Select one comparison to see its saved scores.": "Pilih satu perbandingan saja untuk melihat skor tersimpannya.",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "Ada beberapa skor tersimpan untuk metrik ini: yang terbaru dipakai kecuali dipilih yang lain.",
+  "Size": "Ukuran",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "Profil yang dipilih tidak punya syarat: atur di Pengaturan > Segmen lemah, atau pilih preset.",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Aturan untuk menemukan segmen lemah: aturan ini tidak disimpan bersama skor, tetapi diterapkan pada skor sekarang.",
+  "a display of its own": "layar tersendiri",
+  "can't be read": "tidak dapat dibaca",
+  "{name} (saved)": "{name} (tersimpan)",
+  "{size:.0f} KB": "{size:.0f} KB",
+  "{size:.1f} MB": "{size:.1f} MB"
  },
  "plurals": {
   "about {count} day": [
@@ -1141,6 +1180,18 @@
   ],
   "{count} frame in all.": [
    "total {count} bingkai."
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "Hapus skor tersimpan dari {count} perbandingan? Skor tidak dapat dikembalikan: video akan diberi skor lagi saat dibandingkan berikutnya."
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "Skor tersimpan dari {count} perbandingan tidak dapat dihapus: salah satu filenya mungkin sedang terbuka."
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "{count} file CSV per frame diekspor ke {path}"
+  ],
+  "{count} saved comparison in {directory}": [
+   "{count} perbandingan tersimpan di {directory}"
   ]
  }
 }

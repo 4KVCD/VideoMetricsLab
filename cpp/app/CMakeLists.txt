@@ -48,6 +48,7 @@ add_library(vml_app STATIC
     row_state.cpp
     run_worker.cpp
     screen_frame_clock.cpp
+    saved_results_panel.cpp
     segment_rules_editor.cpp
     self_test.cpp
     series_colors.cpp

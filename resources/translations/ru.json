@@ -1055,7 +1055,46 @@
   "Grainy film": "Зернистая плёнка",
   "HDR": "HDR",
   "Low-bitrate preview": "Предпросмотр с низким битрейтом",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Только серьёзные сбои длиной от двенадцати кадров, для кодирований, которые не должны выглядеть как исходник."
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Только серьёзные сбои длиной от двенадцати кадров, для кодирований, которые не должны выглядеть как исходник.",
+  "As CSV...": "В CSV...",
+  "As JSON...": "В JSON...",
+  "Delete saved results": "Удалить сохранённые результаты",
+  "Delete...": "Удалить...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "График каждого видео по каждой метрике, а при нескольких видео одного эталона — каждая метрика со всеми ними; графики битрейта там, где видео ещё на месте.",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Все сравнения, оценки которых сохранило приложение. Откройте их в графиках метрик или экспортируйте их результаты, покадровые оценки, графики и слабые участки, не добавляя видео заново.",
+  "Export graphs": "Экспорт графиков",
+  "Export graphs as ZIP...": "Экспорт графиков в ZIP...",
+  "Export per-frame CSV files to": "Папка для покадровых CSV-файлов",
+  "Export per-frame CSV...": "Экспорт покадровых CSV...",
+  "Export weak segments...": "Экспорт слабых участков...",
+  "Filter by file name": "Фильтр по имени файла",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "Графики экспортируются для тестовых видео одного эталона: выберите сравнения с общим эталоном.",
+  "Locked while metrics are calculated: the run saves its scores there.": "Заблокировано, пока вычисляются метрики: запуск сохраняет туда свои оценки.",
+  "Metrics": "Метрики",
+  "Not all deleted": "Удалено не всё",
+  "One reference at a time": "Только один эталон",
+  "Open in Metric Graphs": "Открыть в «Графиках метрик»",
+  "Preset: {name}": "Пресет: {name}",
+  "Profile in use ({name})": "Используемый профиль ({name})",
+  "Profile: {name}": "Профиль: {name}",
+  "Reading {directory}...": "Чтение {directory}...",
+  "Refresh": "Обновить",
+  "Results exported to {path}": "Результаты экспортированы в {path}",
+  "Saved": "Сохранено",
+  "Saved results": "Сохранённые результаты",
+  "Saved scores": "Сохранённые оценки",
+  "Saved scores of {name}": "Сохранённые оценки: {name}",
+  "Select a comparison to see its saved scores.": "Выберите сравнение, чтобы увидеть его сохранённые оценки.",
+  "Select one comparison to see its saved scores.": "Выберите одно сравнение, чтобы увидеть его сохранённые оценки.",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "Для этой метрики сохранено несколько оценок: используется самая новая, если не выбрана другая.",
+  "Size": "Размер",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "В выбранном профиле нет условий: задайте их в Настройки > Слабые участки или выберите пресет.",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Правила, по которым находятся слабые участки: они не сохраняются вместе с оценками, а применяются к ним сейчас.",
+  "a display of its own": "собственный дисплей",
+  "can't be read": "не читается",
+  "{name} (saved)": "{name} (сохранено)",
+  "{size:.0f} KB": "{size:.0f} КБ",
+  "{size:.1f} MB": "{size:.1f} МБ"
  },
  "plurals": {
   "about {count} day": [
@@ -1197,6 +1236,26 @@
    "всего {count} кадр.",
    "всего {count} кадра.",
    "всего {count} кадров."
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "Удалить сохранённые оценки {count} сравнения? Их нельзя вернуть: видео будут оценены заново при следующем сравнении.",
+   "Удалить сохранённые оценки {count} сравнений? Их нельзя вернуть: видео будут оценены заново при следующем сравнении.",
+   "Удалить сохранённые оценки {count} сравнений? Их нельзя вернуть: видео будут оценены заново при следующем сравнении."
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "Не удалось удалить сохранённые оценки {count} сравнения: возможно, один из их файлов открыт.",
+   "Не удалось удалить сохранённые оценки {count} сравнений: возможно, один из их файлов открыт.",
+   "Не удалось удалить сохранённые оценки {count} сравнений: возможно, один из их файлов открыт."
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "{count} покадровый CSV-файл экспортирован в {path}",
+   "{count} покадровых CSV-файла экспортированы в {path}",
+   "{count} покадровых CSV-файлов экспортировано в {path}"
+  ],
+  "{count} saved comparison in {directory}": [
+   "{count} сохранённое сравнение в {directory}",
+   "{count} сохранённых сравнения в {directory}",
+   "{count} сохранённых сравнений в {directory}"
   ]
  }
 }

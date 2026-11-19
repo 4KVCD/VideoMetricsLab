@@ -1055,7 +1055,46 @@
   "Grainy film": "粒状感のあるフィルム",
   "HDR": "HDR",
   "Low-bitrate preview": "低ビットレートのプレビュー",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "12 フレーム以上続く深刻な破綻だけを対象にします。ソースに似せることを目的としないエンコード向けです。"
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "12 フレーム以上続く深刻な破綻だけを対象にします。ソースに似せることを目的としないエンコード向けです。",
+  "As CSV...": "CSV 形式...",
+  "As JSON...": "JSON 形式...",
+  "Delete saved results": "保存済みの結果を削除",
+  "Delete...": "削除...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "各動画の指標ごとのグラフと、同じ参照動画の動画が複数あれば指標ごとに全動画をまとめたグラフ。動画がまだ残っている場合はビットレートのグラフも。",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "アプリがスコアを保存しているすべての比較。動画を再び追加しなくても、指標グラフで開いたり、結果、フレームごとのスコア、グラフ、弱い区間をエクスポートしたりできます。",
+  "Export graphs": "グラフをエクスポート",
+  "Export graphs as ZIP...": "グラフを ZIP でエクスポート...",
+  "Export per-frame CSV files to": "フレームごとの CSV ファイルのエクスポート先",
+  "Export per-frame CSV...": "フレームごとの CSV をエクスポート...",
+  "Export weak segments...": "弱い区間をエクスポート...",
+  "Filter by file name": "ファイル名で絞り込み",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "グラフは同じ参照動画のテスト動画についてエクスポートされます。参照動画が共通の比較を選択してください。",
+  "Locked while metrics are calculated: the run saves its scores there.": "指標の計算中はロックされます。実行中の計算がここにスコアを保存するためです。",
+  "Metrics": "指標",
+  "Not all deleted": "一部を削除できませんでした",
+  "One reference at a time": "参照動画は一度に 1 つ",
+  "Open in Metric Graphs": "指標グラフで開く",
+  "Preset: {name}": "プリセット：{name}",
+  "Profile in use ({name})": "使用中のプロファイル（{name}）",
+  "Profile: {name}": "プロファイル：{name}",
+  "Reading {directory}...": "{directory} を読み込み中...",
+  "Refresh": "更新",
+  "Results exported to {path}": "結果を {path} にエクスポートしました",
+  "Saved": "保存日時",
+  "Saved results": "保存済みの結果",
+  "Saved scores": "保存済みのスコア",
+  "Saved scores of {name}": "{name} の保存済みのスコア",
+  "Select a comparison to see its saved scores.": "比較を選択すると、保存済みのスコアが表示されます。",
+  "Select one comparison to see its saved scores.": "比較を 1 つだけ選択すると、保存済みのスコアが表示されます。",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "この指標には複数のスコアが保存されています。別のものを選ばない限り、最新のものが使われます。",
+  "Size": "サイズ",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "選択したプロファイルには条件がありません。設定 > 弱い区間 で条件を設定するか、プリセットを選んでください。",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "弱い区間を見つけるためのルール。スコアと一緒には保存されず、今スコアから求められます。",
+  "a display of its own": "独自のディスプレイ",
+  "can't be read": "読み込めません",
+  "{name} (saved)": "{name}（保存済み）",
+  "{size:.0f} KB": "{size:.0f} KB",
+  "{size:.1f} MB": "{size:.1f} MB"
  },
  "plurals": {
   "about {count} day": [
@@ -1141,6 +1180,18 @@
   ],
   "{count} frame in all.": [
    "合計 {count} フレーム。"
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "{count} 件の比較の保存済みスコアを削除しますか？元に戻せません。次に比較するときに動画が再びスコア計算されます。"
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "{count} 件の比較の保存済みスコアを削除できませんでした。そのファイルが開かれている可能性があります。"
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "フレームごとの CSV ファイル {count} 個を {path} にエクスポートしました"
+  ],
+  "{count} saved comparison in {directory}": [
+   "保存済みの比較 {count} 件（{directory}）"
   ]
  }
 }

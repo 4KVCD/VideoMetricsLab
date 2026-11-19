@@ -714,4 +714,13 @@ std::optional<OtherCvvdpScores> other_cvvdp_scores(const std::filesystem::path& 
     return found;
 }
 
+std::optional<std::pair<ComparisonResult, std::string>> saved_comparison(const std::filesystem::path& folder) {
+    const std::optional<nlohmann::json> context = read_json(folder / "context.json");
+    if (!context || !context->is_object()) {
+        return std::nullopt;
+    }
+    // No recipe to stand in for what an old context lacks: the defaults do.
+    return comparison_from(*context, ComparisonRecipe{}, MetricResultSet{}, {});
+}
+
 }  // namespace vml

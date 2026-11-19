@@ -1055,7 +1055,46 @@
   "Grainy film": "颗粒感胶片",
   "HDR": "HDR",
   "Low-bitrate preview": "低码率预览",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "仅计持续十二帧及以上的严重崩坏，适用于不追求与源相似的编码。"
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "仅计持续十二帧及以上的严重崩坏，适用于不追求与源相似的编码。",
+  "As CSV...": "CSV 格式...",
+  "As JSON...": "JSON 格式...",
+  "Delete saved results": "删除已保存的结果",
+  "Delete...": "删除...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "每个视频各指标的图表，同一参考视频有多个视频时还有包含所有视频的各指标图表；视频仍在时还有码率图表。",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "应用已保存分数的所有对比。无需重新添加视频，即可在指标图表中打开，或导出其结果、逐帧分数、图表和弱片段。",
+  "Export graphs": "导出图表",
+  "Export graphs as ZIP...": "将图表导出为 ZIP...",
+  "Export per-frame CSV files to": "将逐帧 CSV 文件导出到",
+  "Export per-frame CSV...": "导出逐帧 CSV...",
+  "Export weak segments...": "导出弱片段...",
+  "Filter by file name": "按文件名筛选",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "图表按同一参考视频的测试视频导出：请选择参考视频相同的对比。",
+  "Locked while metrics are calculated: the run saves its scores there.": "计算指标时锁定：运行会将分数保存在那里。",
+  "Metrics": "指标",
+  "Not all deleted": "未能全部删除",
+  "One reference at a time": "一次一个参考视频",
+  "Open in Metric Graphs": "在指标图表中打开",
+  "Preset: {name}": "预设：{name}",
+  "Profile in use ({name})": "正在使用的方案（{name}）",
+  "Profile: {name}": "方案：{name}",
+  "Reading {directory}...": "正在读取 {directory}...",
+  "Refresh": "刷新",
+  "Results exported to {path}": "结果已导出到 {path}",
+  "Saved": "保存时间",
+  "Saved results": "已保存的结果",
+  "Saved scores": "已保存的分数",
+  "Saved scores of {name}": "{name} 的已保存分数",
+  "Select a comparison to see its saved scores.": "选择一个对比以查看其已保存的分数。",
+  "Select one comparison to see its saved scores.": "只选择一个对比以查看其已保存的分数。",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "此指标保存了多个分数：除非选择其他分数，否则使用最新的。",
+  "Size": "大小",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "所选方案没有条件：请在 设置 > 弱片段 中设置，或选择一个预设。",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "查找弱片段所用的规则：它们不随分数保存，而是现在根据分数查找。",
+  "a display of its own": "其专属的显示器",
+  "can't be read": "无法读取",
+  "{name} (saved)": "{name}（已保存）",
+  "{size:.0f} KB": "{size:.0f} KB",
+  "{size:.1f} MB": "{size:.1f} MB"
  },
  "plurals": {
   "about {count} day": [
@@ -1141,6 +1180,18 @@
   ],
   "{count} frame in all.": [
    "共 {count} 帧。"
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "删除 {count} 个对比的已保存分数？删除后无法恢复：下次对比时会重新为视频评分。"
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "无法删除 {count} 个对比的已保存分数：其中某个文件可能已打开。"
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "{count} 个逐帧 CSV 文件已导出到 {path}"
+  ],
+  "{count} saved comparison in {directory}": [
+   "{count} 个已保存的对比，位于 {directory}"
   ]
  }
 }

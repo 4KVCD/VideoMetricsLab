@@ -579,6 +579,7 @@ bool MainWindow::confirm_long_cpu_perceptual(const std::vector<std::shared_ptr<R
 void MainWindow::set_run_ui_active(bool active) {
     // Freezes every input that can change the meaning of a live job.
     run_active_ = active;
+    saved_results_panel_->set_run_active(active);  // its Delete: the run saves there
     // A run can take hours: the PC must not go to sleep under it. Released as
     // soon as the run ends.
     if (keep_awake()(active)) {

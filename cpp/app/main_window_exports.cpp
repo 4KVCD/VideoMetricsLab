@@ -11,6 +11,7 @@
 #include <exception>
 #include <fstream>
 #include <iterator>
+#include <set>
 #include <stdexcept>
 #include <utility>
 
@@ -19,6 +20,7 @@
 #include "i18n.h"
 #include "theme.h"
 #include "vml/app_log.h"
+#include "vml/export_csv.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 #include "vml/results_summary.h"
@@ -174,17 +176,22 @@ void MainWindow::export_segments_report(const SegmentRules& rules) {
                                 "saved ones."));
         return;
     }
-    const QString suggested = file_safe(text_of(source_info_->path.stem()) + QStringLiteral(" - weak segments")) +
-                              "." + qt_text(segments_file_suffix(rules)) + ".json";
-    const QString path = dialogs_.save_file(app::tr("Export weak segments report"), suggested,
-                                            app::tr("JSON file (*.json);;CSV file (*.csv)"));
-    if (path.isEmpty()) {
-        return;
-    }
     std::vector<SegmentsReportVideo> report;
     for (const BundleVideo& video : videos) {
         report.push_back({video.label.toStdString(), platform::path_text(video.path),
                           platform::path_text(source_info_->path), video.result.get()});
+    }
+    save_segments_report(report, rules, source_info_->path);
+}
+
+void MainWindow::save_segments_report(const std::vector<SegmentsReportVideo>& report, const SegmentRules& rules,
+                                      const std::filesystem::path& reference) {
+    const QString suggested = file_safe(text_of(reference.stem()) + QStringLiteral(" - weak segments")) + "." +
+                              qt_text(segments_file_suffix(rules)) + ".json";
+    const QString path = dialogs_.save_file(app::tr("Export weak segments report"), suggested,
+                                            app::tr("JSON file (*.json);;CSV file (*.csv)"));
+    if (path.isEmpty()) {
+        return;
     }
     // Made now, while the results are the window's; written on the worker.
     const bool csv = path.endsWith(QStringLiteral(".csv"), Qt::CaseInsensitive);
@@ -324,6 +331,99 @@ void MainWindow::write_ready_bundles() {
     }
     if (pending_bundles_.empty() && bundle_timer_ != nullptr) {
         bundle_timer_->stop();
+    }
+}
+
+void MainWindow::export_saved_results(SavedResultsPanel::Export kind, const std::vector<LoadedSavedResult>& results) {
+    if (results.empty()) {
+        return;
+    }
+    // One reference among them, or none (each entry names its own).
+    const std::filesystem::path& first_reference = results.front().result->source;
+    const bool one_reference = std::all_of(results.begin(), results.end(), [&first_reference](const auto& saved) {
+        return same_path(saved.result->source, first_reference);
+    });
+    const QString name = results.size() == 1 ? results.front().label : text_of(first_reference.stem());
+    switch (kind) {
+    case SavedResultsPanel::Export::results_json:
+    case SavedResultsPanel::Export::results_csv: {
+        std::vector<ExportedRun> runs;
+        for (const LoadedSavedResult& saved : results) {
+            runs.push_back({saved.result, saved.label});
+        }
+        const nlohmann::ordered_json document =
+            export_document(one_reference ? std::optional(results.front().result->source_info) : std::nullopt, runs,
+                            current_machine());
+        const bool csv = kind == SavedResultsPanel::Export::results_csv;
+        const QString path = dialogs_.save_file(
+            app::tr("Export results"), file_safe(name + QStringLiteral(" - results")) + (csv ? ".csv" : ".json"),
+            csv ? app::tr("CSV file (*.csv)") : app::tr("JSON file (*.json)"));
+        if (!path.isEmpty()) {
+            std::string bytes = csv ? results_csv(document) : python_json_dumps(document) + "\n";
+            file_writes_->submit(app::tr("export {name}", {{"name", name_of(path_of(path))}}),
+                                 [bytes = std::move(bytes), out = path_of(path)] { write_bytes(out, bytes); });
+            show_status(app::tr("Results exported to {path}", {{"path", path}}));
+        }
+        return;
+    }
+    case SavedResultsPanel::Export::frames_csv: {
+        // A file per comparison, as Metric Graphs' Export CSV writes it.
+        const QString folder = dialogs_.choose_folder(app::tr("Export per-frame CSV files to"),
+                                                      dialogs_.export_folder ? dialogs_.export_folder() : QString());
+        if (folder.isEmpty()) {
+            return;
+        }
+        std::set<std::filesystem::path> reserved;
+        std::vector<std::pair<std::shared_ptr<const ComparisonResult>, std::filesystem::path>> files;
+        for (const LoadedSavedResult& saved : results) {
+            files.emplace_back(saved.result,
+                               unique_output_path(path_of(folder), output_stem(saved.label.toStdString()), ".csv",
+                                                  reserved));
+        }
+        file_writes_->submit(app::tr("export {name}", {{"name", folder}}), [files = std::move(files)] {
+            for (const auto& [result, out] : files) {
+                export_csv(*result, out);
+            }
+        });
+        show_status(ntr("{count} per-frame CSV file exported to {path}", "{count} per-frame CSV files exported to {path}",
+                        static_cast<long long>(results.size()), {{"path", folder}}));
+        return;
+    }
+    case SavedResultsPanel::Export::graphs: {
+        if (!one_reference) {
+            dialogs_.inform(app::tr("One reference at a time"),
+                            app::tr("Graphs are exported for test videos of one reference: select comparisons that "
+                                    "share it."));
+            return;
+        }
+        std::vector<BundleVideo> videos;
+        for (const LoadedSavedResult& saved : results) {
+            videos.push_back({saved.result, saved.label, saved.result->distorted});
+        }
+        const QString path = dialogs_.save_file(app::tr("Export graphs"),
+                                                file_safe(name + QStringLiteral(" - graphs")) + ".zip",
+                                                app::tr("Zip archive (*.zip)"));
+        if (!path.isEmpty()) {
+            queue_bundle({videos, first_reference, path_of(path), {}, true, false});
+        }
+        return;
+    }
+    case SavedResultsPanel::Export::segments: {
+        const SegmentRules rules = saved_results_panel_->segment_rules();
+        if (rules.conditions.empty()) {
+            dialogs_.inform(app::tr("No weak segment conditions"),
+                            app::tr("The profile picked has no conditions: set them in Settings > Weak segments, or "
+                                    "pick a preset."));
+            return;
+        }
+        std::vector<SegmentsReportVideo> report;
+        for (const LoadedSavedResult& saved : results) {
+            report.push_back({saved.label.toStdString(), platform::path_text(saved.result->distorted),
+                              platform::path_text(saved.result->source), saved.result.get()});
+        }
+        save_segments_report(report, rules, first_reference);
+        return;
+    }
     }
 }
 

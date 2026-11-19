@@ -1055,7 +1055,46 @@
   "Grainy film": "Film granuleux",
   "HDR": "HDR",
   "Low-bitrate preview": "Aperçu à faible débit",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Seulement les dégradations graves de douze images ou plus, pour les encodages qui ne sont pas censés ressembler à la source."
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Seulement les dégradations graves de douze images ou plus, pour les encodages qui ne sont pas censés ressembler à la source.",
+  "As CSV...": "En CSV...",
+  "As JSON...": "En JSON...",
+  "Delete saved results": "Supprimer les résultats enregistrés",
+  "Delete...": "Supprimer...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "Le graphique de chaque vidéo pour chaque métrique et, avec plusieurs vidéos d'une même référence, chaque métrique avec toutes ; les graphiques de débit là où les vidéos sont encore présentes.",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Chaque comparaison dont l'application a enregistré les scores. Ouvrez-les dans Graphiques des métriques, ou exportez leurs résultats, scores par image, graphiques et segments faibles, sans ajouter à nouveau les vidéos.",
+  "Export graphs": "Exporter les graphiques",
+  "Export graphs as ZIP...": "Exporter les graphiques en ZIP...",
+  "Export per-frame CSV files to": "Exporter les fichiers CSV par image vers",
+  "Export per-frame CSV...": "Exporter en CSV par image...",
+  "Export weak segments...": "Exporter les segments faibles...",
+  "Filter by file name": "Filtrer par nom de fichier",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "Les graphiques sont exportés pour les vidéos de test d'une même référence : sélectionnez des comparaisons qui la partagent.",
+  "Locked while metrics are calculated: the run saves its scores there.": "Verrouillé pendant le calcul des métriques : l'exécution y enregistre ses scores.",
+  "Metrics": "Métriques",
+  "Not all deleted": "Suppression incomplète",
+  "One reference at a time": "Une référence à la fois",
+  "Open in Metric Graphs": "Ouvrir dans Graphiques des métriques",
+  "Preset: {name}": "Préréglage : {name}",
+  "Profile in use ({name})": "Profil utilisé ({name})",
+  "Profile: {name}": "Profil : {name}",
+  "Reading {directory}...": "Lecture de {directory}...",
+  "Refresh": "Actualiser",
+  "Results exported to {path}": "Résultats exportés vers {path}",
+  "Saved": "Enregistré",
+  "Saved results": "Résultats enregistrés",
+  "Saved scores": "Scores enregistrés",
+  "Saved scores of {name}": "Scores enregistrés de {name}",
+  "Select a comparison to see its saved scores.": "Sélectionnez une comparaison pour voir ses scores enregistrés.",
+  "Select one comparison to see its saved scores.": "Sélectionnez une seule comparaison pour voir ses scores enregistrés.",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "Plusieurs scores de cette métrique sont enregistrés : le plus récent est utilisé, sauf si un autre est choisi.",
+  "Size": "Taille",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "Le profil choisi n'a aucune condition : définissez-les dans Paramètres > Segments faibles, ou choisissez un préréglage.",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Les règles qui servent à trouver les segments faibles : elles ne sont pas enregistrées avec les scores, mais leur sont appliquées maintenant.",
+  "a display of its own": "un écran qui lui est propre",
+  "can't be read": "illisible",
+  "{name} (saved)": "{name} (enregistré)",
+  "{size:.0f} KB": "{size:.0f} Ko",
+  "{size:.1f} MB": "{size:.1f} Mo"
  },
  "plurals": {
   "about {count} day": [
@@ -1169,6 +1208,22 @@
   "{count} frame in all.": [
    "{count} image en tout.",
    "{count} images en tout."
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "Supprimer les scores enregistrés de {count} comparaison ? Ils ne pourront pas être récupérés : les vidéos seront à nouveau évaluées la prochaine fois qu'elles seront comparées.",
+   "Supprimer les scores enregistrés de {count} comparaisons ? Ils ne pourront pas être récupérés : les vidéos seront à nouveau évaluées la prochaine fois qu'elles seront comparées."
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "Les scores enregistrés de {count} comparaison n'ont pas pu être supprimés : un de leurs fichiers est peut-être ouvert.",
+   "Les scores enregistrés de {count} comparaisons n'ont pas pu être supprimés : un de leurs fichiers est peut-être ouvert."
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "{count} fichier CSV par image exporté vers {path}",
+   "{count} fichiers CSV par image exportés vers {path}"
+  ],
+  "{count} saved comparison in {directory}": [
+   "{count} comparaison enregistrée dans {directory}",
+   "{count} comparaisons enregistrées dans {directory}"
   ]
  }
 }

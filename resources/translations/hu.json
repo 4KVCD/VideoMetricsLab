@@ -1055,7 +1055,46 @@
   "Grainy film": "Szemcsés film",
   "HDR": "HDR",
   "Low-bitrate preview": "Alacsony bitrátájú előnézet",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Csak a legalább tizenkét képkockán át tartó súlyos összeomlások, olyan kódolásokhoz, amelyeknek nem kell a forrásra hasonlítaniuk."
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Csak a legalább tizenkét képkockán át tartó súlyos összeomlások, olyan kódolásokhoz, amelyeknek nem kell a forrásra hasonlítaniuk.",
+  "As CSV...": "CSV-ként...",
+  "As JSON...": "JSON-ként...",
+  "Delete saved results": "Mentett eredmények törlése",
+  "Delete...": "Törlés...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "Minden videó grafikonja minden metrikára, és ha egy referenciának több videója van, minden metrika mindegyikkel együtt; a bitráta-grafikonok, ahol a videók még megvannak.",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Minden összehasonlítás, amelynek pontszámait az alkalmazás elmentette. Nyissa meg őket a Metrikagrafikonokban, vagy exportálja eredményeiket, képkockánkénti pontszámaikat, grafikonjaikat és gyenge szakaszaikat a videók újbóli hozzáadása nélkül.",
+  "Export graphs": "Grafikonok exportálása",
+  "Export graphs as ZIP...": "Grafikonok exportálása ZIP-ként...",
+  "Export per-frame CSV files to": "Képkockánkénti CSV-fájlok exportálási helye",
+  "Export per-frame CSV...": "Képkockánkénti CSV exportálása...",
+  "Export weak segments...": "Gyenge szakaszok exportálása...",
+  "Filter by file name": "Szűrés fájlnév szerint",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "A grafikonok egy referencia tesztvideóihoz exportálhatók: jelöljön ki olyan összehasonlításokat, amelyeknek ez közös.",
+  "Locked while metrics are calculated: the run saves its scores there.": "Zárolva, amíg a metrikák számítása folyik: a futtatás ide menti a pontszámait.",
+  "Metrics": "Metrikák",
+  "Not all deleted": "Nem minden törlődött",
+  "One reference at a time": "Egyszerre egy referencia",
+  "Open in Metric Graphs": "Megnyitás a Metrikagrafikonokban",
+  "Preset: {name}": "Előbeállítás: {name}",
+  "Profile in use ({name})": "Használt profil ({name})",
+  "Profile: {name}": "Profil: {name}",
+  "Reading {directory}...": "{directory} olvasása...",
+  "Refresh": "Frissítés",
+  "Results exported to {path}": "Eredmények exportálva ide: {path}",
+  "Saved": "Mentve",
+  "Saved results": "Mentett eredmények",
+  "Saved scores": "Mentett pontszámok",
+  "Saved scores of {name}": "{name} mentett pontszámai",
+  "Select a comparison to see its saved scores.": "Jelöljön ki egy összehasonlítást a mentett pontszámai megtekintéséhez.",
+  "Select one comparison to see its saved scores.": "Csak egy összehasonlítást jelöljön ki a mentett pontszámai megtekintéséhez.",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "Ennek a metrikának több pontszáma is el van mentve: a legújabbat használja, hacsak nem választ másikat.",
+  "Size": "Méret",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "A kiválasztott profilnak nincsenek feltételei: adja meg őket a Beállítások > Gyenge szakaszok pontban, vagy válasszon előbeállítást.",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "A szabályok, amelyek alapján a gyenge szakaszok meghatározhatók: nem a pontszámokkal együtt vannak mentve, hanem most kerülnek alkalmazásra rajtuk.",
+  "a display of its own": "saját kijelző",
+  "can't be read": "nem olvasható",
+  "{name} (saved)": "{name} (mentett)",
+  "{size:.0f} KB": "{size:.0f} KB",
+  "{size:.1f} MB": "{size:.1f} MB"
  },
  "plurals": {
   "about {count} day": [
@@ -1169,6 +1208,22 @@
   "{count} frame in all.": [
    "összesen {count} képkocka.",
    "összesen {count} képkocka."
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "Törli {count} összehasonlítás mentett pontszámait? Nem állíthatók vissza: a videók pontozása újra megtörténik, amikor legközelebb összehasonlítja őket.",
+   "Törli {count} összehasonlítás mentett pontszámait? Nem állíthatók vissza: a videók pontozása újra megtörténik, amikor legközelebb összehasonlítja őket."
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "{count} összehasonlítás mentett pontszámait nem sikerült törölni: lehet, hogy valamelyik fájljuk meg van nyitva.",
+   "{count} összehasonlítás mentett pontszámait nem sikerült törölni: lehet, hogy valamelyik fájljuk meg van nyitva."
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "{count} képkockánkénti CSV-fájl exportálva ide: {path}",
+   "{count} képkockánkénti CSV-fájl exportálva ide: {path}"
+  ],
+  "{count} saved comparison in {directory}": [
+   "{count} mentett összehasonlítás itt: {directory}",
+   "{count} mentett összehasonlítás itt: {directory}"
   ]
  }
 }

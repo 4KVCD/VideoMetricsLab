@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -31,6 +32,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 #include "vml/result_json.h"
+#include "vml/saved_results.h"
 #include "vml/score_identity.h"
 #include "vml/sha256.h"
 
@@ -676,6 +678,87 @@ TEST(MetricCache, StoresAResultAsThePythonApp) {
 
 // The build that made a score comes back with it, saved again unchanged
 // (not as the build that saves it); a score saved before builds said, none.
+// The saved results browsed (saved_results.h): every comparison listed,
+// newest first, with its label, files and score files by metric; read back
+// without a request (a metric's newest file, or the one chosen; an
+// unreadable one passed over for the next); and deleted, only a folder of
+// its own under the cache's v2 folder.
+TEST(MetricCache, SavedComparisonsAreListedReadAndDeleted) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mp4", "s");
+    touch(folder / "t.mp4", "t");
+    touch(folder / "u.mp4", "u");
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source = folder / "s.mp4";  // as a run gives them: the files' own paths
+    result.distorted = folder / "t.mp4";
+    const std::filesystem::path cache = folder / "cache";
+    const std::filesystem::path first =
+        store_result(cache, folder / "s.mp4", folder / "t.mp4", request.recipe, result, "t", request.metrics);
+    result.distorted = folder / "u.mp4";
+    const std::filesystem::path second =
+        store_result(cache, folder / "s.mp4", folder / "u.mp4", request.recipe, result, "u", request.metrics);
+    // The first comparison newest: its files a minute later.
+    for (const auto& entry : std::filesystem::directory_iterator(first)) {
+        std::filesystem::last_write_time(entry.path(), std::filesystem::last_write_time(entry.path()) +
+                                                           std::chrono::minutes(1));
+    }
+
+    std::vector<SavedComparison> list = list_saved_comparisons(cache);
+    ASSERT_EQ(list.size(), 2U);
+    EXPECT_EQ(list[0].folder, first);
+    EXPECT_EQ(list[0].label, "t");
+    EXPECT_EQ(list[1].label, "u");
+    EXPECT_EQ(list[0].distorted, folder / "t.mp4");
+    EXPECT_EQ(list[0].source, folder / "s.mp4");
+    EXPECT_GT(list[0].bytes, 0U);
+    const std::vector<std::string> keys = list[0].keys();
+    std::vector<std::string> saved_keys = result.metric_results.keys();
+    std::sort(saved_keys.begin(), saved_keys.end());
+    std::vector<std::string> listed = keys;
+    std::sort(listed.begin(), listed.end());
+    EXPECT_EQ(listed, saved_keys);
+    // In the app's order: VMAF before PSNR.
+    EXPECT_LT(std::find(keys.begin(), keys.end(), "vmaf"), std::find(keys.begin(), keys.end(), "psnr"));
+
+    // Read back as saved.
+    const auto loaded = load_saved_comparison(list[0]);
+    ASSERT_TRUE(loaded);
+    EXPECT_EQ(loaded->second, "t");
+    EXPECT_EQ(loaded->first.distorted, folder / "t.mp4");
+    EXPECT_EQ(loaded->first.metric_results.frame("vmaf")->values, result.metric_results.frame("vmaf")->values);
+
+    // A newer VMAF file that cannot be read: passed over for the readable one,
+    // also when it is the one chosen.
+    const std::filesystem::path broken = first / "vmaf_ffff.npz";
+    touch(broken, "not a score");
+    std::filesystem::last_write_time(broken, std::filesystem::last_write_time(broken) + std::chrono::minutes(5));
+    list = list_saved_comparisons(cache);
+    const auto vmaf_files = std::count_if(list[0].scores.begin(), list[0].scores.end(),
+                                          [](const SavedScoreFile& file) { return file.key == "vmaf"; });
+    EXPECT_EQ(vmaf_files, 2);
+    EXPECT_EQ(std::find_if(list[0].scores.begin(), list[0].scores.end(),
+                           [](const SavedScoreFile& file) { return file.key == "vmaf"; })
+                  ->file,
+              broken);  // the newest first
+    const auto chosen = load_saved_comparison(list[0], {{"vmaf", broken}});
+    ASSERT_TRUE(chosen);
+    EXPECT_EQ(chosen->first.metric_results.frame("vmaf")->values, result.metric_results.frame("vmaf")->values);
+    EXPECT_FALSE(read_saved_score(broken));
+
+    // Deleted: only its own folder; another path is refused.
+    SavedComparison elsewhere = list[1];
+    elsewhere.folder = folder / "s.mp4";  // not a folder under v2
+    EXPECT_FALSE(delete_saved_comparison(cache, elsewhere));
+    EXPECT_TRUE(std::filesystem::exists(folder / "s.mp4"));
+    EXPECT_TRUE(delete_saved_comparison(cache, list[1]));
+    EXPECT_FALSE(std::filesystem::exists(second));
+    list = list_saved_comparisons(cache);
+    ASSERT_EQ(list.size(), 1U);
+    EXPECT_EQ(list[0].label, "t");
+}
+
 TEST(MetricCache, AScoreKeepsTheBuildThatMadeIt) {
     const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
     const test::Folder folder;

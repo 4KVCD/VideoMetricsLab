@@ -585,6 +585,35 @@ its file, every setting (defaults too), its black bars and how they were
 found, how each metric came out, the decoders used and how long each pass
 took. [The results file](RESULTS_JSON.md) describes every key.
 
+### The Saved results tab
+
+**Saved results** lists every comparison whose scores the app has saved (its
+results cache, Settings > Storage > Saved results), newest first, with its
+test video, reference, when it was saved, its metrics and its size; **Filter**
+narrows it by file name. Select one or more to use them without adding the
+videos again:
+
+- **Open in Metric Graphs** (or double-click) adds them as lines of their own,
+  named "*video* (saved)".
+- **Export results** saves them **As JSON** or **As CSV**, as Export results
+  does; **Export per-frame CSV...** writes a file per comparison to a folder,
+  as Metric Graphs' Export CSV does.
+- **Export graphs as ZIP...** saves the graphs Export all graphs saves, for
+  comparisons of one reference; the bitrate graphs only where the videos are
+  still on disk (the scores are saved, the bitrate is not).
+- **Export weak segments...** saves the weak segments report by the rules
+  picked beside it: the profile in use, any profile or a preset. Weak segments
+  are not saved with the scores; they are found from them as they are
+  exported.
+- **Delete...** removes their saved scores, after asking: the videos are
+  scored again the next time they are compared. It is locked while metrics
+  are calculated.
+
+**Saved scores** lists the selected comparison's scores, each with when and
+how it was made (GPU or CPU, the program, the VMAF model, the CVVDP display).
+Where a metric has more than one (CVVDP for two displays; SSIMULACRA2 on the
+GPU and the CPU), the newest is used unless another is picked there.
+
 ### Exporting graphs
 
 **Export all graphs...** (beside **Open metric graphs**, or in the Videos

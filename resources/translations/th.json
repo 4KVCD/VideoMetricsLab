@@ -1055,7 +1055,46 @@
   "Grainy film": "ฟิล์มมีเกรน",
   "HDR": "HDR",
   "Low-bitrate preview": "พรีวิวบิตเรตต่ำ",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "เฉพาะความเสียหายรุนแรงที่ยาวตั้งแต่สิบสองเฟรมขึ้นไป สำหรับการเข้ารหัสที่ไม่ได้ตั้งใจให้ดูเหมือนต้นฉบับ"
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "เฉพาะความเสียหายรุนแรงที่ยาวตั้งแต่สิบสองเฟรมขึ้นไป สำหรับการเข้ารหัสที่ไม่ได้ตั้งใจให้ดูเหมือนต้นฉบับ",
+  "As CSV...": "เป็น CSV...",
+  "As JSON...": "เป็น JSON...",
+  "Delete saved results": "ลบผลลัพธ์ที่บันทึก",
+  "Delete...": "ลบ...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "กราฟของวิดีโอแต่ละรายการสำหรับทุกเมตริก และเมื่อมีหลายวิดีโอของวิดีโออ้างอิงเดียวกัน กราฟของแต่ละเมตริกที่รวมทุกวิดีโอ รวมถึงกราฟบิตเรตในกรณีที่ยังมีไฟล์วิดีโออยู่",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "การเปรียบเทียบทั้งหมดที่แอปบันทึกคะแนนไว้ เปิดในกราฟเมตริก หรือส่งออกผลลัพธ์ คะแนนรายเฟรม กราฟ และช่วงที่อ่อน โดยไม่ต้องเพิ่มวิดีโออีกครั้ง",
+  "Export graphs": "ส่งออกกราฟ",
+  "Export graphs as ZIP...": "ส่งออกกราฟเป็น ZIP...",
+  "Export per-frame CSV files to": "ส่งออกไฟล์ CSV รายเฟรมไปที่",
+  "Export per-frame CSV...": "ส่งออก CSV รายเฟรม...",
+  "Export weak segments...": "ส่งออกช่วงที่อ่อน...",
+  "Filter by file name": "กรองตามชื่อไฟล์",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "กราฟจะส่งออกสำหรับวิดีโอทดสอบของวิดีโออ้างอิงเดียวกัน: เลือกการเปรียบเทียบที่ใช้วิดีโออ้างอิงร่วมกัน",
+  "Locked while metrics are calculated: the run saves its scores there.": "ถูกล็อกขณะคำนวณเมตริก: การคำนวณจะบันทึกคะแนนไว้ที่นั่น",
+  "Metrics": "เมตริก",
+  "Not all deleted": "ลบไม่ครบทั้งหมด",
+  "One reference at a time": "ทีละวิดีโออ้างอิง",
+  "Open in Metric Graphs": "เปิดในกราฟเมตริก",
+  "Preset: {name}": "พรีเซ็ต: {name}",
+  "Profile in use ({name})": "โปรไฟล์ที่ใช้อยู่ ({name})",
+  "Profile: {name}": "โปรไฟล์: {name}",
+  "Reading {directory}...": "กำลังอ่าน {directory}...",
+  "Refresh": "รีเฟรช",
+  "Results exported to {path}": "ส่งออกผลลัพธ์ไปที่ {path} แล้ว",
+  "Saved": "บันทึกเมื่อ",
+  "Saved results": "ผลลัพธ์ที่บันทึก",
+  "Saved scores": "คะแนนที่บันทึกไว้",
+  "Saved scores of {name}": "คะแนนที่บันทึกไว้ของ {name}",
+  "Select a comparison to see its saved scores.": "เลือกการเปรียบเทียบเพื่อดูคะแนนที่บันทึกไว้",
+  "Select one comparison to see its saved scores.": "เลือกการเปรียบเทียบเพียงรายการเดียวเพื่อดูคะแนนที่บันทึกไว้",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "เมตริกนี้มีคะแนนที่บันทึกไว้หลายชุด: จะใช้ชุดล่าสุด เว้นแต่จะเลือกชุดอื่น",
+  "Size": "ขนาด",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "โปรไฟล์ที่เลือกไม่มีเงื่อนไข: ตั้งค่าได้ใน การตั้งค่า > ช่วงที่อ่อน หรือเลือกพรีเซ็ต",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "กฎที่ใช้หาช่วงที่อ่อน: กฎเหล่านี้ไม่ได้บันทึกไว้กับคะแนน แต่นำมาใช้กับคะแนนตอนนี้",
+  "a display of its own": "จอเฉพาะของตัวเอง",
+  "can't be read": "อ่านไม่ได้",
+  "{name} (saved)": "{name} (ที่บันทึกไว้)",
+  "{size:.0f} KB": "{size:.0f} KB",
+  "{size:.1f} MB": "{size:.1f} MB"
  },
  "plurals": {
   "about {count} day": [
@@ -1141,6 +1180,18 @@
   ],
   "{count} frame in all.": [
    "รวม {count} เฟรม"
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "ลบคะแนนที่บันทึกไว้ของการเปรียบเทียบ {count} รายการหรือไม่ จะกู้คืนไม่ได้: วิดีโอจะถูกคำนวณคะแนนใหม่ในครั้งถัดไปที่เปรียบเทียบ"
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "ลบคะแนนที่บันทึกไว้ของการเปรียบเทียบ {count} รายการไม่ได้: อาจมีไฟล์ของรายการเหล่านั้นเปิดอยู่"
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "ส่งออกไฟล์ CSV รายเฟรม {count} ไฟล์ไปที่ {path} แล้ว"
+  ],
+  "{count} saved comparison in {directory}": [
+   "การเปรียบเทียบที่บันทึก {count} รายการใน {directory}"
   ]
  }
 }

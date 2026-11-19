@@ -629,6 +629,25 @@ void MainWindow::build_ui() {
     connect(settings_panel_, &SettingsPanel::weak_segment_rules_changed, this, [this] {
         graph_panel_->set_segment_profiles(segment_profiles(settings_), segment_profile_in_use(settings_).name);
     });
+    saved_results_panel_ = new SavedResultsPanel(settings_, dialogs_);
+    connect(saved_results_panel_, &SavedResultsPanel::open_requested, this,
+            [this](const std::vector<LoadedSavedResult>& results) {
+                // On Metric Graphs as saved runs: lines of their own, beside the
+                // Videos tab's, and named apart from a row of the same video.
+                for (const LoadedSavedResult& saved : results) {
+                    graph_panel_->add_run({saved.result, app::tr("{name} (saved)", {{"name", saved.label}}),
+                                           "saved:" + platform::path_text(saved.folder)});
+                }
+                if (!results.empty()) {
+                    tabs_->setCurrentIndex(tab_graph);
+                }
+            });
+    connect(saved_results_panel_, &SavedResultsPanel::export_requested, this,
+            [this](SavedResultsPanel::Export kind, const std::vector<LoadedSavedResult>& results) {
+                export_saved_results(kind, results);
+            });
+    connect(saved_results_panel_, &SavedResultsPanel::deleted, this, [this] { settings_panel_->refresh_status(); });
+    tabs_->addTab(new ScrollingPage(saved_results_panel_), app::tr("Saved results"));
     tabs_->addTab(new ScrollingPage(settings_panel_), app::tr("Settings"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int index) { on_tab_changed(index); });
 }

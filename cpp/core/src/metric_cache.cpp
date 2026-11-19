@@ -882,6 +882,54 @@ void merge_legacy(const std::filesystem::path& legacy, const std::filesystem::pa
 
 }  // namespace
 
+std::optional<std::variant<FrameMetricResult, SequenceMetricResult>> read_saved_score(
+    const std::filesystem::path& file) {
+    try {
+        const auto score = read_score(file);
+        if (!score) {
+            return std::nullopt;
+        }
+        const auto& [metadata, arrays] = *score;
+        const nlohmann::json key = metadata.value("key", nlohmann::json());
+        if (!current_format(metadata) || !key.is_string()) {
+            return std::nullopt;
+        }
+        const std::optional<MetricProvenance> provenance = provenance_from(metadata.at("provenance"));
+        if (!provenance) {
+            return std::nullopt;
+        }
+        const bool marked = metadata.value(av1_grain_dav1d, nlohmann::json()) == av1_grain_dav1d_version;
+        const nlohmann::json kind = metadata.at("kind");
+        if (kind == "frame") {
+            auto frames = timeline(arrays);
+            if (!frames) {
+                return std::nullopt;
+            }
+            auto& [frame, time, values] = *frames;
+            return FrameMetricResult{key.get<std::string>(), std::move(frame), std::move(time), std::move(values),
+                                     *provenance, marked};
+        }
+        if (kind == "sequence" && arrays.contains("score")) {
+            const std::optional<std::vector<double>> value = npy_numbers(arrays.at("score"));
+            if (!value || value->size() != 1) {
+                return std::nullopt;
+            }
+            SequenceMetricResult result{key.get<std::string>(), value->front(), *provenance, {}, {}, {}, marked};
+            if (arrays.contains("values")) {
+                auto frames = timeline(arrays);
+                if (!frames) {
+                    return std::nullopt;
+                }
+                std::tie(result.frame, result.time, result.values) = std::move(*frames);
+            }
+            return result;
+        }
+    } catch (const nlohmann::json::exception&) {
+    } catch (const std::exception&) {
+    }
+    return std::nullopt;
+}
+
 namespace cache_parts {
 
 std::string hash_of(const std::string& source_identity, const std::string& distorted_identity,

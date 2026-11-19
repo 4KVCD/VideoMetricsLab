@@ -1,0 +1,398 @@
+#include "saved_results_panel.h"
+
+#include <QAction>
+#include <QComboBox>
+#include <QDateTime>
+#include <QFormLayout>
+#include <QFutureWatcher>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QHeaderView>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMenu>
+#include <QPushButton>
+#include <QTableWidget>
+#include <QVBoxLayout>
+#include <QtConcurrent/QtConcurrentRun>
+
+#include <algorithm>
+#include <chrono>
+#include <set>
+#include <utility>
+#include <variant>
+
+#include "i18n.h"
+#include "theme.h"
+#include "window_helpers.h"
+#include "vml/cvvdp.h"
+#include "vml/metric_cache.h"
+#include "vml/metrics.h"
+#include "vml/results_summary.h"
+#include "vml/segment_presets.h"
+#include "vml/segment_profiles.h"
+
+namespace vml::app {
+
+namespace {
+
+enum Column : int { col_test, col_reference, col_saved, col_metrics, col_size, column_count };
+
+QString time_text(std::chrono::system_clock::time_point when) {
+    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(when.time_since_epoch()).count();
+    return QLocale().toString(QDateTime::fromSecsSinceEpoch(seconds), QLocale::ShortFormat);
+}
+
+QString size_text(std::uintmax_t bytes) {
+    // A comparison's scores are often under a megabyte.
+    return bytes < 1048576 ? app::tr("{size:.0f} KB", {{"size", std::max(1.0, static_cast<double>(bytes) / 1024.0)}})
+                           : app::tr("{size:.1f} MB", {{"size", static_cast<double>(bytes) / 1048576.0}});
+}
+
+QString metric_label(const std::string& key) {
+    const MetricDefinition* metric = find_metric(key);
+    return metric != nullptr ? qt_text(metric->short_label) : qt_text(key);
+}
+
+// A table cell that sorts by `order` rather than its text.
+class SortItem : public QTableWidgetItem {
+public:
+    SortItem(const QString& text, double order) : QTableWidgetItem(text) { setData(Qt::UserRole, order); }
+    bool operator<(const QTableWidgetItem& other) const override {
+        return data(Qt::UserRole).toDouble() < other.data(Qt::UserRole).toDouble();
+    }
+};
+
+}  // namespace
+
+SavedResultsPanel::SavedResultsPanel(const Settings& settings, const Dialogs& dialogs, QWidget* parent)
+    : QWidget(parent),
+      settings_(settings),
+      dialogs_(dialogs),
+      reading_(new QFutureWatcher<std::vector<SavedComparison>>(this)) {
+    connect(reading_, &QFutureWatcher<std::vector<SavedComparison>>::finished, this,
+            [this] { show_list(reading_->result()); });
+    auto* layout = new QVBoxLayout(this);
+    auto* note = new QLabel(app::tr("Every comparison the app has saved scores of. Open them in Metric Graphs, or "
+                                    "export their results, per-frame scores, graphs and weak segments, without the "
+                                    "videos being added again."));
+    note->setWordWrap(true);
+    theme::style(note, "color: {muted};");
+    layout->addWidget(note);
+    auto* top = new QHBoxLayout;
+    folder_label_ = new QLabel;
+    top->addWidget(folder_label_, 1);
+    filter_ = new QLineEdit;
+    filter_->setPlaceholderText(app::tr("Filter by file name"));
+    filter_->setClearButtonEnabled(true);
+    filter_->setMinimumWidth(240);
+    connect(filter_, &QLineEdit::textChanged, this, [this] { apply_filter(); });
+    top->addWidget(filter_);
+    auto* refresh_button = new QPushButton(app::tr("Refresh"));
+    connect(refresh_button, &QPushButton::clicked, this, [this] { refresh(); });
+    top->addWidget(refresh_button);
+    layout->addLayout(top);
+
+    table_ = new QTableWidget(0, column_count);
+    table_->setHorizontalHeaderLabels(
+        {app::tr("Test video"), app::tr("Reference"), app::tr("Saved"), app::tr("Metrics"), app::tr("Size")});
+    table_->verticalHeader()->setVisible(false);
+    table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table_->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table_->horizontalHeader()->setSectionResizeMode(col_test, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(col_reference, QHeaderView::Stretch);
+    for (const int column : {int(col_saved), int(col_metrics), int(col_size)}) {
+        table_->horizontalHeader()->setSectionResizeMode(column, QHeaderView::ResizeToContents);
+    }
+    table_->setMinimumHeight(260);
+    connect(table_, &QTableWidget::itemSelectionChanged, this, [this] {
+        show_details();
+        update_buttons();
+    });
+    connect(table_, &QTableWidget::cellDoubleClicked, this, [this] { emit open_requested(selected_results()); });
+    layout->addWidget(table_, 1);
+
+    details_ = new QGroupBox(app::tr("Saved scores"));
+    details_form_ = new QFormLayout(details_);
+    details_form_->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+    layout->addWidget(details_);
+
+    auto* buttons = new QHBoxLayout;
+    open_button_ = new QPushButton(app::tr("Open in Metric Graphs"));
+    connect(open_button_, &QPushButton::clicked, this, [this] { emit open_requested(selected_results()); });
+    buttons->addWidget(open_button_);
+    results_button_ = new QPushButton(app::tr("Export results"));
+    auto* results_menu = new QMenu(results_button_);
+    connect(results_menu->addAction(app::tr("As JSON...")), &QAction::triggered, this,
+            [this] { emit export_requested(Export::results_json, selected_results()); });
+    connect(results_menu->addAction(app::tr("As CSV...")), &QAction::triggered, this,
+            [this] { emit export_requested(Export::results_csv, selected_results()); });
+    results_button_->setMenu(results_menu);
+    buttons->addWidget(results_button_);
+    frames_button_ = new QPushButton(app::tr("Export per-frame CSV..."));
+    connect(frames_button_, &QPushButton::clicked, this,
+            [this] { emit export_requested(Export::frames_csv, selected_results()); });
+    buttons->addWidget(frames_button_);
+    graphs_button_ = new QPushButton(app::tr("Export graphs as ZIP..."));
+    graphs_button_->setToolTip(app::tr("Each video's graph of every metric, and with several of one reference "
+                                       "every metric with all of them; the bitrate graphs where the videos are "
+                                       "still there."));
+    connect(graphs_button_, &QPushButton::clicked, this,
+            [this] { emit export_requested(Export::graphs, selected_results()); });
+    buttons->addWidget(graphs_button_);
+    buttons->addSpacing(12);
+    rules_combo_ = new QComboBox;
+    rules_combo_->setToolTip(app::tr("The rules the weak segments are found by: they are not saved with the "
+                                     "scores, but found from them now."));
+    buttons->addWidget(rules_combo_);
+    segments_button_ = new QPushButton(app::tr("Export weak segments..."));
+    connect(segments_button_, &QPushButton::clicked, this,
+            [this] { emit export_requested(Export::segments, selected_results()); });
+    buttons->addWidget(segments_button_);
+    buttons->addStretch(1);
+    delete_button_ = new QPushButton(app::tr("Delete..."));
+    connect(delete_button_, &QPushButton::clicked, this, [this] { delete_selected(); });
+    buttons->addWidget(delete_button_);
+    layout->addLayout(buttons);
+
+    fill_segment_rules();
+    show_details();
+    update_buttons();
+}
+
+SavedResultsPanel::~SavedResultsPanel() {
+    reading_->waitForFinished();
+}
+
+std::filesystem::path SavedResultsPanel::base() const {
+    return settings_.cache_dir_path().value_or(default_cache_dir());
+}
+
+void SavedResultsPanel::refresh() {
+    folder_label_->setText(app::tr("Reading {directory}...", {{"directory", text_of(base())}}));
+    reading_->setFuture(QtConcurrent::run([folder = base()] { return list_saved_comparisons(folder); }));
+}
+
+void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
+    list_ = std::move(list);
+    folder_label_->setText(ntr("{count} saved comparison in {directory}", "{count} saved comparisons in {directory}",
+                               static_cast<long long>(list_.size()), {{"directory", text_of(base())}}));
+    const QSignalBlocker blocker(table_);
+    table_->setSortingEnabled(false);
+    table_->clearContents();
+    table_->setRowCount(static_cast<int>(list_.size()));
+    for (int row = 0; row < static_cast<int>(list_.size()); ++row) {
+        const SavedComparison& saved = list_[static_cast<std::size_t>(row)];
+        auto* test = new QTableWidgetItem(qt_text(saved.label));
+        test->setToolTip(text_of(saved.distorted));
+        test->setData(Qt::UserRole, row);  // its place in list_, whatever the sort
+        table_->setItem(row, col_test, test);
+        auto* reference = new QTableWidgetItem(name_of(saved.source));
+        reference->setToolTip(text_of(saved.source));
+        table_->setItem(row, col_reference, reference);
+        table_->setItem(row, col_saved,
+                        new SortItem(time_text(saved.saved),
+                                     static_cast<double>(saved.saved.time_since_epoch().count())));
+        QStringList metrics;
+        for (const std::string& key : saved.keys()) {
+            metrics.append(metric_label(key));
+        }
+        table_->setItem(row, col_metrics, new QTableWidgetItem(metrics.join(", ")));
+        table_->setItem(row, col_size, new SortItem(size_text(saved.bytes), static_cast<double>(saved.bytes)));
+    }
+    table_->setSortingEnabled(true);
+    apply_filter();
+    show_details();
+    update_buttons();
+}
+
+void SavedResultsPanel::apply_filter() {
+    const QString wanted = filter_->text().trimmed();
+    for (int row = 0; row < table_->rowCount(); ++row) {
+        const bool shown = wanted.isEmpty() ||
+                           table_->item(row, col_test)->text().contains(wanted, Qt::CaseInsensitive) ||
+                           table_->item(row, col_test)->toolTip().contains(wanted, Qt::CaseInsensitive) ||
+                           table_->item(row, col_reference)->toolTip().contains(wanted, Qt::CaseInsensitive);
+        table_->setRowHidden(row, !shown);
+    }
+}
+
+std::vector<const SavedComparison*> SavedResultsPanel::selected() const {
+    std::set<int> rows;
+    for (const QModelIndex& index : table_->selectionModel()->selectedRows()) {
+        if (!table_->isRowHidden(index.row())) {
+            rows.insert(index.row());
+        }
+    }
+    std::vector<const SavedComparison*> chosen;
+    for (const int row : rows) {
+        const int place = table_->item(row, col_test)->data(Qt::UserRole).toInt();
+        chosen.push_back(&list_[static_cast<std::size_t>(place)]);
+    }
+    return chosen;
+}
+
+void SavedResultsPanel::show_details() {
+    while (details_form_->rowCount() > 0) {
+        details_form_->removeRow(0);
+    }
+    score_combos_.clear();
+    const std::vector<const SavedComparison*> chosen = selected();
+    if (chosen.size() != 1) {
+        details_->setTitle(app::tr("Saved scores"));
+        details_form_->addRow(new QLabel(chosen.empty() ? app::tr("Select a comparison to see its saved scores.")
+                                                        : app::tr("Select one comparison to see its saved scores.")));
+        return;
+    }
+    const SavedComparison& saved = *chosen.front();
+    details_->setTitle(app::tr("Saved scores of {name}", {{"name", qt_text(saved.label)}}));
+    for (const std::string& key : saved.keys()) {
+        auto* combo = new QComboBox;
+        for (const SavedScoreFile& file : saved.scores) {
+            if (file.key != key) {
+                continue;
+            }
+            // How it was made, as its file records it.
+            QStringList made{time_text(file.saved)};
+            if (auto score = read_saved_score(file.file)) {
+                const MetricProvenance& provenance =
+                    std::visit([](const auto& metric) -> const MetricProvenance& { return metric.provenance; }, *score);
+                made.append(provenance.compute_backend == "gpu" ? QStringLiteral("GPU") : QStringLiteral("CPU"));
+                made.append(qt_text(provenance.implementation + " " + provenance.implementation_version).trimmed());
+                if (const auto model = provenance.parameters.find("model"); model != provenance.parameters.end()) {
+                    made.append(qt_text(model->second).remove(QLatin1Char('"')));
+                }
+                if (const auto* cvvdp = std::get_if<SequenceMetricResult>(&*score)) {
+                    if (const std::optional<CvvdpSettings> display = cvvdp_display_of(*cvvdp)) {
+                        const std::optional<CvvdpPreset> preset =
+                            matching_cvvdp_preset(*display, settings_.cvvdp_presets_json, "");
+                        made.append(preset ? app::tr(qt_text(preset->name)) : app::tr("a display of its own"));
+                    }
+                }
+            } else {
+                made.append(app::tr("can't be read"));
+            }
+            combo->addItem(made.join(QStringLiteral(" · ")), text_of(file.file));
+        }
+        if (const auto picked = picked_.find(saved.folder); picked != picked_.end()) {
+            if (const auto file = picked->second.find(key); file != picked->second.end()) {
+                combo->setCurrentIndex(std::max(combo->findData(text_of(file->second)), 0));
+            }
+        }
+        if (combo->count() == 1) {
+            // Nothing to pick: its one score, as text (a disabled list is hard to read).
+            details_form_->addRow(metric_label(key) + ":", new QLabel(combo->itemText(0)));
+            delete combo;
+            continue;
+        }
+        combo->setToolTip(app::tr("Several scores of this metric are saved: the newest is used unless another is "
+                                  "picked."));
+        connect(combo, &QComboBox::currentIndexChanged, this, [this, combo, folder = saved.folder, key] {
+            picked_[folder][key] = path_of(combo->currentData().toString());
+        });
+        details_form_->addRow(metric_label(key) + ":", combo);
+        score_combos_[key] = combo;
+    }
+}
+
+QComboBox* SavedResultsPanel::score_choice(const std::string& key) const {
+    const auto found = score_combos_.find(key);
+    return found != score_combos_.end() ? found->second : nullptr;
+}
+
+std::vector<LoadedSavedResult> SavedResultsPanel::selected_results() const {
+    std::vector<LoadedSavedResult> results;
+    for (const SavedComparison* saved : selected()) {
+        const auto picked = picked_.find(saved->folder);
+        const std::optional<std::pair<ComparisonResult, std::string>> loaded = load_saved_comparison(
+            *saved, picked != picked_.end() ? picked->second : std::map<std::string, std::filesystem::path>{});
+        if (loaded) {
+            results.push_back({std::make_shared<const ComparisonResult>(loaded->first), qt_text(loaded->second),
+                               saved->folder});
+        }
+    }
+    return results;
+}
+
+void SavedResultsPanel::fill_segment_rules() {
+    const QString current = rules_combo_->currentData().toString();
+    const QSignalBlocker blocker(rules_combo_);
+    rules_combo_->clear();
+    const SegmentProfile in_use = segment_profile_in_use(settings_);
+    rules_combo_->addItem(app::tr("Profile in use ({name})",
+                                  {{"name", in_use.name.empty() ? app::tr("Default") : qt_text(in_use.name)}}),
+                          QStringLiteral("in-use"));
+    for (const SegmentProfile& profile : segment_profiles(settings_)) {
+        rules_combo_->addItem(app::tr("Profile: {name}",
+                                      {{"name", profile.name.empty() ? app::tr("Default") : qt_text(profile.name)}}),
+                              QStringLiteral("profile:") + qt_text(profile.name));
+    }
+    for (const SegmentPreset& preset : segment_presets()) {
+        rules_combo_->addItem(app::tr("Preset: {name}", {{"name", app::tr(preset.name)}}),
+                              QStringLiteral("preset:") + qt_text(std::string(preset.key)));
+    }
+    rules_combo_->setCurrentIndex(std::max(rules_combo_->findData(current), 0));
+}
+
+SegmentRules SavedResultsPanel::segment_rules() const {
+    const std::string choice = rules_combo_->currentData().toString().toStdString();
+    if (choice.starts_with("preset:")) {
+        if (const SegmentPreset* preset = segment_preset(choice.substr(7))) {
+            return preset->rules;
+        }
+    } else if (choice.starts_with("profile:")) {
+        if (const std::optional<SegmentProfile> profile = segment_profile_named(settings_, choice.substr(8))) {
+            return profile->rules;
+        }
+    }
+    return segment_profile_in_use(settings_).rules;
+}
+
+void SavedResultsPanel::set_run_active(bool active) {
+    run_active_ = active;
+    update_buttons();
+}
+
+void SavedResultsPanel::update_buttons() {
+    const std::size_t count = selected().size();
+    for (QPushButton* button : {open_button_, results_button_, frames_button_, graphs_button_, segments_button_}) {
+        button->setEnabled(count > 0);
+    }
+    delete_button_->setEnabled(count > 0 && !run_active_);
+    delete_button_->setToolTip(run_active_ ? app::tr("Locked while metrics are calculated: the run saves its "
+                                                     "scores there.")
+                                           : QString());
+}
+
+void SavedResultsPanel::delete_selected() {
+    const std::vector<const SavedComparison*> chosen = selected();
+    if (chosen.empty() || run_active_) {
+        return;
+    }
+    if (!dialogs_.ask_no_default(
+            app::tr("Delete saved results"),
+            ntr("Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored "
+                "again the next time they are compared.",
+                "Delete the saved scores of {count} comparisons? They can't be brought back: the videos are scored "
+                "again the next time they are compared.",
+                static_cast<long long>(chosen.size())))) {
+        return;
+    }
+    int failed = 0;
+    for (const SavedComparison* saved : chosen) {
+        if (!delete_saved_comparison(base(), *saved)) {
+            ++failed;
+        }
+    }
+    if (failed > 0) {
+        dialogs_.alert(app::tr("Not all deleted"),
+                       ntr("{count} comparison's saved scores could not be deleted: a file of theirs may be open.",
+                           "{count} comparisons' saved scores could not be deleted: a file of theirs may be open.",
+                           failed));
+    }
+    emit deleted();
+    refresh();
+}
+
+}  // namespace vml::app

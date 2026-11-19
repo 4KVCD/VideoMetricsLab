@@ -1055,7 +1055,46 @@
   "Grainy film": "Pellicola granulosa",
   "HDR": "HDR",
   "Low-bitrate preview": "Anteprima a basso bitrate",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Solo cedimenti gravi che durano dodici fotogrammi o più, per codifiche non pensate per somigliare alla sorgente."
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Solo cedimenti gravi che durano dodici fotogrammi o più, per codifiche non pensate per somigliare alla sorgente.",
+  "As CSV...": "Come CSV...",
+  "As JSON...": "Come JSON...",
+  "Delete saved results": "Elimina risultati salvati",
+  "Delete...": "Elimina...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "Il grafico di ogni video per ogni metrica e, con più video di uno stesso riferimento, ogni metrica con tutti insieme; i grafici del bitrate dove i video sono ancora presenti.",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Ogni confronto di cui l'app ha salvato i punteggi. Aprili in Grafici metriche, o esportane risultati, punteggi per fotogramma, grafici e segmenti deboli, senza aggiungere di nuovo i video.",
+  "Export graphs": "Esporta grafici",
+  "Export graphs as ZIP...": "Esporta grafici come ZIP...",
+  "Export per-frame CSV files to": "Esporta i file CSV per fotogramma in",
+  "Export per-frame CSV...": "Esporta CSV per fotogramma...",
+  "Export weak segments...": "Esporta segmenti deboli...",
+  "Filter by file name": "Filtra per nome file",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "I grafici si esportano per i video di prova di un solo riferimento: seleziona confronti che lo condividono.",
+  "Locked while metrics are calculated: the run saves its scores there.": "Bloccato durante il calcolo delle metriche: l'esecuzione vi salva i suoi punteggi.",
+  "Metrics": "Metriche",
+  "Not all deleted": "Eliminazione non completa",
+  "One reference at a time": "Un riferimento alla volta",
+  "Open in Metric Graphs": "Apri in Grafici metriche",
+  "Preset: {name}": "Preset: {name}",
+  "Profile in use ({name})": "Profilo in uso ({name})",
+  "Profile: {name}": "Profilo: {name}",
+  "Reading {directory}...": "Lettura di {directory}...",
+  "Refresh": "Aggiorna",
+  "Results exported to {path}": "Risultati esportati in {path}",
+  "Saved": "Salvato",
+  "Saved results": "Risultati salvati",
+  "Saved scores": "Punteggi salvati",
+  "Saved scores of {name}": "Punteggi salvati di {name}",
+  "Select a comparison to see its saved scores.": "Seleziona un confronto per vederne i punteggi salvati.",
+  "Select one comparison to see its saved scores.": "Seleziona un solo confronto per vederne i punteggi salvati.",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "Di questa metrica sono salvati più punteggi: si usa il più recente, a meno che non se ne scelga un altro.",
+  "Size": "Dimensione",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "Il profilo scelto non ha condizioni: impostale in Impostazioni > Segmenti deboli, o scegli un preset.",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "Le regole con cui si trovano i segmenti deboli: non sono salvate con i punteggi, ma applicate ora a questi.",
+  "a display of its own": "un display tutto suo",
+  "can't be read": "illeggibile",
+  "{name} (saved)": "{name} (salvato)",
+  "{size:.0f} KB": "{size:.0f} KB",
+  "{size:.1f} MB": "{size:.1f} MB"
  },
  "plurals": {
   "about {count} day": [
@@ -1169,6 +1208,22 @@
   "{count} frame in all.": [
    "{count} fotogramma in tutto.",
    "{count} fotogrammi in tutto."
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "Eliminare i punteggi salvati di {count} confronto? Non si possono recuperare: i video verranno valutati di nuovo la prossima volta che saranno confrontati.",
+   "Eliminare i punteggi salvati di {count} confronti? Non si possono recuperare: i video verranno valutati di nuovo la prossima volta che saranno confrontati."
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "Non è stato possibile eliminare i punteggi salvati di {count} confronto: uno dei suoi file potrebbe essere aperto.",
+   "Non è stato possibile eliminare i punteggi salvati di {count} confronti: uno dei loro file potrebbe essere aperto."
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "{count} file CSV per fotogramma esportato in {path}",
+   "{count} file CSV per fotogramma esportati in {path}"
+  ],
+  "{count} saved comparison in {directory}": [
+   "{count} confronto salvato in {directory}",
+   "{count} confronti salvati in {directory}"
   ]
  }
 }

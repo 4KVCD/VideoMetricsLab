@@ -1055,7 +1055,46 @@
   "Grainy film": "فيلم محبّب",
   "HDR": "HDR",
   "Low-bitrate preview": "معاينة بمعدل بت منخفض",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "فقط الانهيارات الشديدة التي تدوم اثني عشر إطارًا أو أكثر، لترميزات لا يُقصد أن تشبه المصدر."
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "فقط الانهيارات الشديدة التي تدوم اثني عشر إطارًا أو أكثر، لترميزات لا يُقصد أن تشبه المصدر.",
+  "As CSV...": "بصيغة CSV...",
+  "As JSON...": "بصيغة JSON...",
+  "Delete saved results": "حذف النتائج المحفوظة",
+  "Delete...": "حذف...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "رسم كل فيديو لكل مقياس، ومع عدة فيديوهات لمرجع واحد رسم لكل مقياس يجمعها كلها؛ ورسوم معدل البت حيث لا تزال الفيديوهات موجودة.",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "كل مقارنة حفظ التطبيق درجاتها. افتحها في رسوم المقاييس، أو صدّر نتائجها ودرجاتها لكل إطار ورسومها ومقاطعها الضعيفة، دون إضافة الفيديوهات مرة أخرى.",
+  "Export graphs": "تصدير الرسوم البيانية",
+  "Export graphs as ZIP...": "تصدير الرسوم البيانية كملف ZIP...",
+  "Export per-frame CSV files to": "تصدير ملفات CSV لكل إطار إلى",
+  "Export per-frame CSV...": "تصدير CSV لكل إطار...",
+  "Export weak segments...": "تصدير المقاطع الضعيفة...",
+  "Filter by file name": "تصفية حسب اسم الملف",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "تُصدَّر الرسوم لفيديوهات الاختبار لمرجع واحد: حدّد مقارنات تشترك فيه.",
+  "Locked while metrics are calculated: the run saves its scores there.": "مقفل أثناء حساب المقاييس: يحفظ التشغيل درجاته هناك.",
+  "Metrics": "المقاييس",
+  "Not all deleted": "لم يُحذف الكل",
+  "One reference at a time": "مرجع واحد في كل مرة",
+  "Open in Metric Graphs": "فتح في رسوم المقاييس",
+  "Preset: {name}": "إعداد مسبق: {name}",
+  "Profile in use ({name})": "ملف التعريف المستخدم ({name})",
+  "Profile: {name}": "ملف التعريف: {name}",
+  "Reading {directory}...": "جارٍ قراءة {directory}...",
+  "Refresh": "تحديث",
+  "Results exported to {path}": "صُدّرت النتائج إلى {path}",
+  "Saved": "تاريخ الحفظ",
+  "Saved results": "النتائج المحفوظة",
+  "Saved scores": "الدرجات المحفوظة",
+  "Saved scores of {name}": "الدرجات المحفوظة لـ {name}",
+  "Select a comparison to see its saved scores.": "حدّد مقارنة لعرض درجاتها المحفوظة.",
+  "Select one comparison to see its saved scores.": "حدّد مقارنة واحدة فقط لعرض درجاتها المحفوظة.",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "حُفظت عدة درجات لهذا المقياس: تُستخدم الأحدث ما لم تُختر أخرى.",
+  "Size": "الحجم",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "ملف التعريف المختار بلا شروط: عيّنها في الإعدادات > المقاطع الضعيفة، أو اختر إعدادًا مسبقًا.",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "القواعد التي تُحدَّد بها المقاطع الضعيفة: لا تُحفظ مع الدرجات، بل تُطبَّق عليها الآن.",
+  "a display of its own": "شاشة خاصة به",
+  "can't be read": "تتعذر قراءته",
+  "{name} (saved)": "{name} (محفوظ)",
+  "{size:.0f} KB": "{size:.0f} كيلوبايت",
+  "{size:.1f} MB": "{size:.1f} ميغابايت"
  },
  "plurals": {
   "about {count} day": [
@@ -1281,6 +1320,38 @@
    "{count} إطارات إجمالًا.",
    "{count} إطارًا إجمالًا.",
    "{count} إطار إجمالًا."
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "حذف الدرجات المحفوظة لـ {count} مقارنة؟ لا يمكن استعادتها: ستُقيَّم الفيديوهات من جديد في المرة القادمة التي تُقارَن فيها.",
+   "حذف الدرجات المحفوظة لـ {count} مقارنة؟ لا يمكن استعادتها: ستُقيَّم الفيديوهات من جديد في المرة القادمة التي تُقارَن فيها.",
+   "حذف الدرجات المحفوظة لـ {count} مقارنة؟ لا يمكن استعادتها: ستُقيَّم الفيديوهات من جديد في المرة القادمة التي تُقارَن فيها.",
+   "حذف الدرجات المحفوظة لـ {count} مقارنات؟ لا يمكن استعادتها: ستُقيَّم الفيديوهات من جديد في المرة القادمة التي تُقارَن فيها.",
+   "حذف الدرجات المحفوظة لـ {count} مقارنةً؟ لا يمكن استعادتها: ستُقيَّم الفيديوهات من جديد في المرة القادمة التي تُقارَن فيها.",
+   "حذف الدرجات المحفوظة لـ {count} مقارنة؟ لا يمكن استعادتها: ستُقيَّم الفيديوهات من جديد في المرة القادمة التي تُقارَن فيها."
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "تعذّر حذف الدرجات المحفوظة لـ {count} مقارنة: ربما يكون أحد ملفاتها مفتوحًا.",
+   "تعذّر حذف الدرجات المحفوظة لـ {count} مقارنة: ربما يكون أحد ملفاتها مفتوحًا.",
+   "تعذّر حذف الدرجات المحفوظة لـ {count} مقارنة: ربما يكون أحد ملفاتها مفتوحًا.",
+   "تعذّر حذف الدرجات المحفوظة لـ {count} مقارنات: ربما يكون أحد ملفاتها مفتوحًا.",
+   "تعذّر حذف الدرجات المحفوظة لـ {count} مقارنةً: ربما يكون أحد ملفاتها مفتوحًا.",
+   "تعذّر حذف الدرجات المحفوظة لـ {count} مقارنة: ربما يكون أحد ملفاتها مفتوحًا."
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "صُدّر {count} ملف CSV لكل إطار إلى {path}",
+   "صُدّر {count} ملف CSV لكل إطار إلى {path}",
+   "صُدّر {count} ملف CSV لكل إطار إلى {path}",
+   "صُدّرت {count} ملفات CSV لكل إطار إلى {path}",
+   "صُدّر {count} ملفًا CSV لكل إطار إلى {path}",
+   "صُدّر {count} ملف CSV لكل إطار إلى {path}"
+  ],
+  "{count} saved comparison in {directory}": [
+   "{count} مقارنة محفوظة في {directory}",
+   "{count} مقارنة محفوظة في {directory}",
+   "{count} مقارنة محفوظة في {directory}",
+   "{count} مقارنات محفوظة في {directory}",
+   "{count} مقارنةً محفوظة في {directory}",
+   "{count} مقارنة محفوظة في {directory}"
   ]
  }
 }

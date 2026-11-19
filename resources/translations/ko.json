@@ -1055,7 +1055,46 @@
   "Grainy film": "그레인 있는 필름",
   "HDR": "HDR",
   "Low-bitrate preview": "저비트레이트 미리 보기",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "12프레임 이상 이어지는 심각한 붕괴만 봅니다. 원본처럼 보이도록 의도하지 않은 인코딩용입니다."
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "12프레임 이상 이어지는 심각한 붕괴만 봅니다. 원본처럼 보이도록 의도하지 않은 인코딩용입니다.",
+  "As CSV...": "CSV로...",
+  "As JSON...": "JSON으로...",
+  "Delete saved results": "저장된 결과 삭제",
+  "Delete...": "삭제...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "각 영상의 지표별 그래프와, 같은 참조 영상의 영상이 여러 개면 지표별로 모두를 함께 담은 그래프. 영상이 아직 있으면 비트레이트 그래프도 포함됩니다.",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "앱이 점수를 저장한 모든 비교입니다. 영상을 다시 추가하지 않고도 지표 그래프에서 열거나 결과, 프레임별 점수, 그래프, 약한 구간을 내보낼 수 있습니다.",
+  "Export graphs": "그래프 내보내기",
+  "Export graphs as ZIP...": "그래프를 ZIP으로 내보내기...",
+  "Export per-frame CSV files to": "프레임별 CSV 파일을 내보낼 위치",
+  "Export per-frame CSV...": "프레임별 CSV 내보내기...",
+  "Export weak segments...": "약한 구간 내보내기...",
+  "Filter by file name": "파일 이름으로 필터",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "그래프는 같은 참조 영상의 테스트 영상에 대해 내보냅니다. 참조 영상이 같은 비교를 선택하세요.",
+  "Locked while metrics are calculated: the run saves its scores there.": "지표를 계산하는 동안 잠깁니다. 실행 중인 계산이 이곳에 점수를 저장합니다.",
+  "Metrics": "지표",
+  "Not all deleted": "일부만 삭제됨",
+  "One reference at a time": "한 번에 하나의 참조 영상",
+  "Open in Metric Graphs": "지표 그래프에서 열기",
+  "Preset: {name}": "사전 설정: {name}",
+  "Profile in use ({name})": "사용 중인 프로필({name})",
+  "Profile: {name}": "프로필: {name}",
+  "Reading {directory}...": "{directory} 읽는 중...",
+  "Refresh": "새로 고침",
+  "Results exported to {path}": "결과를 {path}에 내보냈습니다",
+  "Saved": "저장 시각",
+  "Saved results": "저장된 결과",
+  "Saved scores": "저장된 점수",
+  "Saved scores of {name}": "{name}의 저장된 점수",
+  "Select a comparison to see its saved scores.": "비교를 선택하면 저장된 점수를 볼 수 있습니다.",
+  "Select one comparison to see its saved scores.": "비교를 하나만 선택하면 저장된 점수를 볼 수 있습니다.",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "이 지표의 점수가 여러 개 저장되어 있습니다. 다른 것을 선택하지 않으면 가장 최근 것이 사용됩니다.",
+  "Size": "크기",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "선택한 프로필에 조건이 없습니다. 설정 > 약한 구간에서 조건을 설정하거나 사전 설정을 선택하세요.",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "약한 구간을 찾는 규칙입니다. 점수와 함께 저장되지 않으며, 지금 점수에서 찾습니다.",
+  "a display of its own": "자체 디스플레이",
+  "can't be read": "읽을 수 없음",
+  "{name} (saved)": "{name}(저장됨)",
+  "{size:.0f} KB": "{size:.0f} KB",
+  "{size:.1f} MB": "{size:.1f} MB"
  },
  "plurals": {
   "about {count} day": [
@@ -1141,6 +1180,18 @@
   ],
   "{count} frame in all.": [
    "모두 {count}프레임."
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "비교 {count}개의 저장된 점수를 삭제할까요? 되돌릴 수 없습니다. 다음에 비교할 때 영상의 점수를 다시 계산합니다."
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "비교 {count}개의 저장된 점수를 삭제하지 못했습니다. 해당 파일이 열려 있을 수 있습니다."
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "프레임별 CSV 파일 {count}개를 {path}에 내보냈습니다"
+  ],
+  "{count} saved comparison in {directory}": [
+   "저장된 비교 {count}개, {directory}"
   ]
  }
 }

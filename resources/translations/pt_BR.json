@@ -1055,7 +1055,46 @@
   "Grainy film": "Filme granulado",
   "HDR": "HDR",
   "Low-bitrate preview": "Prévia de baixa taxa de bits",
-  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Só falhas graves que duram doze quadros ou mais, para codificações que não pretendem parecer com a fonte."
+  "Only severe breakdowns lasting twelve frames or more, for encodes not meant to look like the source.": "Só falhas graves que duram doze quadros ou mais, para codificações que não pretendem parecer com a fonte.",
+  "As CSV...": "Como CSV...",
+  "As JSON...": "Como JSON...",
+  "Delete saved results": "Excluir resultados salvos",
+  "Delete...": "Excluir...",
+  "Each video's graph of every metric, and with several of one reference every metric with all of them; the bitrate graphs where the videos are still there.": "O gráfico de cada vídeo para cada métrica e, com vários de uma mesma referência, cada métrica com todos eles; os gráficos de taxa de bits onde os vídeos ainda estão.",
+  "Every comparison the app has saved scores of. Open them in Metric Graphs, or export their results, per-frame scores, graphs and weak segments, without the videos being added again.": "Toda comparação da qual o aplicativo salvou pontuações. Abra-as em Gráficos de métricas ou exporte seus resultados, pontuações por quadro, gráficos e segmentos fracos, sem adicionar os vídeos de novo.",
+  "Export graphs": "Exportar gráficos",
+  "Export graphs as ZIP...": "Exportar gráficos como ZIP...",
+  "Export per-frame CSV files to": "Exportar arquivos CSV por quadro para",
+  "Export per-frame CSV...": "Exportar CSV por quadro...",
+  "Export weak segments...": "Exportar segmentos fracos...",
+  "Filter by file name": "Filtrar por nome de arquivo",
+  "Graphs are exported for test videos of one reference: select comparisons that share it.": "Os gráficos são exportados para vídeos de teste de uma mesma referência: selecione comparações que a compartilhem.",
+  "Locked while metrics are calculated: the run saves its scores there.": "Bloqueado enquanto as métricas são calculadas: a execução salva suas pontuações ali.",
+  "Metrics": "Métricas",
+  "Not all deleted": "Nem tudo foi excluído",
+  "One reference at a time": "Uma referência por vez",
+  "Open in Metric Graphs": "Abrir em Gráficos de métricas",
+  "Preset: {name}": "Predefinição: {name}",
+  "Profile in use ({name})": "Perfil em uso ({name})",
+  "Profile: {name}": "Perfil: {name}",
+  "Reading {directory}...": "Lendo {directory}...",
+  "Refresh": "Atualizar",
+  "Results exported to {path}": "Resultados exportados para {path}",
+  "Saved": "Salvo",
+  "Saved results": "Resultados salvos",
+  "Saved scores": "Pontuações salvas",
+  "Saved scores of {name}": "Pontuações salvas de {name}",
+  "Select a comparison to see its saved scores.": "Selecione uma comparação para ver suas pontuações salvas.",
+  "Select one comparison to see its saved scores.": "Selecione apenas uma comparação para ver suas pontuações salvas.",
+  "Several scores of this metric are saved: the newest is used unless another is picked.": "Há várias pontuações salvas desta métrica: a mais recente é usada, a menos que outra seja escolhida.",
+  "Size": "Tamanho",
+  "The profile picked has no conditions: set them in Settings > Weak segments, or pick a preset.": "O perfil escolhido não tem condições: defina-as em Configurações > Segmentos fracos ou escolha uma predefinição.",
+  "The rules the weak segments are found by: they are not saved with the scores, but found from them now.": "As regras pelas quais os segmentos fracos são encontrados: elas não são salvas com as pontuações, mas aplicadas a elas agora.",
+  "a display of its own": "uma tela própria",
+  "can't be read": "não pode ser lido",
+  "{name} (saved)": "{name} (salvo)",
+  "{size:.0f} KB": "{size:.0f} KB",
+  "{size:.1f} MB": "{size:.1f} MB"
  },
  "plurals": {
   "about {count} day": [
@@ -1169,6 +1208,22 @@
   "{count} frame in all.": [
    "{count} quadro no total.",
    "{count} quadros no total."
+  ],
+  "Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored again the next time they are compared.": [
+   "Excluir as pontuações salvas de {count} comparação? Elas não podem ser recuperadas: os vídeos serão pontuados de novo na próxima vez que forem comparados.",
+   "Excluir as pontuações salvas de {count} comparações? Elas não podem ser recuperadas: os vídeos serão pontuados de novo na próxima vez que forem comparados."
+  ],
+  "{count} comparison's saved scores could not be deleted: a file of theirs may be open.": [
+   "Não foi possível excluir as pontuações salvas de {count} comparação: um arquivo dela pode estar aberto.",
+   "Não foi possível excluir as pontuações salvas de {count} comparações: um arquivo delas pode estar aberto."
+  ],
+  "{count} per-frame CSV file exported to {path}": [
+   "{count} arquivo CSV por quadro exportado para {path}",
+   "{count} arquivos CSV por quadro exportados para {path}"
+  ],
+  "{count} saved comparison in {directory}": [
+   "{count} comparação salva em {directory}",
+   "{count} comparações salvas em {directory}"
   ]
  }
 }
