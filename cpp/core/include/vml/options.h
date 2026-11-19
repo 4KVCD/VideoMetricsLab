@@ -128,12 +128,15 @@ struct VmafOptions {
     std::string model_choice_v1 = std::string(auto_model_choice);
     std::string model_v1;
     // The range compared, in whole seconds of the reference counted as CVVDP
-    // counts them (frame_range.h), or in frames (range_in_frames): from
-    // range_start to range_end, the first second or frame past it; range_end
-    // 0 compares to the videos' end. Both 0: the whole videos.
+    // counts them (frame_range.h), in frames (range_in_frames), or in
+    // milliseconds (range_in_milliseconds, a time that is not whole
+    // seconds): from range_start to range_end, the first second, frame or
+    // millisecond past it; range_end 0 compares to the videos' end. Both 0:
+    // the whole videos.
     long long range_start = 0;
     long long range_end = 0;
     bool range_in_frames = false;
+    bool range_in_milliseconds = false;
     // Both videos are decoded on the GPU where they can be (each falls back
     // to software on its own).
     bool gpu_decode = true;
@@ -155,7 +158,20 @@ struct VmafOptions {
     // Not a choice of the user's: set where a run hands its two videos to FFmpeg.
     RangeSeeks range_seeks;
 
-    ComparedRange compared_range() const { return {range_start, range_end, range_in_frames}; }
+    ComparedRange compared_range() const {
+        return {range_start, range_end, range_in_frames, range_in_milliseconds && !range_in_frames};
+    }
+    // A range of time, from `start` to `end` in milliseconds (an end of 0: to
+    // the end): whole seconds where both are, so that such a range is the one
+    // it has always been, else milliseconds.
+    void set_time_range(long long start_ms, long long end_ms) {
+        range_in_frames = false;
+        range_in_milliseconds = start_ms % 1000 != 0 || end_ms % 1000 != 0;
+        range_start = range_in_milliseconds ? start_ms : start_ms / 1000;
+        range_end = range_in_milliseconds ? end_ms : end_ms / 1000;
+    }
+    // A time of this range (range_start or range_end, not of frames) in milliseconds.
+    long long range_time_ms(long long value) const { return range_in_milliseconds ? value : value * 1000; }
     CropChoice crop_choice() const { return CropChoice(crop_mode, manual_source_crop, manual_test_crop); }
     // The keys of FFmpeg's metrics these options ask for, in the registry's
     // order.

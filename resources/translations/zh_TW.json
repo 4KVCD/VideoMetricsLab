@@ -792,7 +792,7 @@
   "The test video is compared at its full frame.": "測試影片以完整畫面比較。",
   "Range:": "範圍：",
   "to": "至",
-  "The part of the videos compared: in whole seconds, from the first time to the second, where an end of 00:00:00 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "比較的影片部分：以整秒計，從第一個時間到第二個時間（結尾為 00:00:00 時比較到影片結尾）；或以影格計，從第一個影格到最後一個影格，兩端都比較，與影片比較一樣從 0 開始計數。",
+  "The part of the videos compared: in time, to the millisecond, from the first time to the second, where an end of 00:00:00.000 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "比較的影片部分：以時間計（精確到毫秒），從第一個時間到第二個時間（結尾為 00:00:00.000 時比較到影片結尾）；或以影格計，從第一個影格到最後一個影格，兩端都比較，與影片比較一樣從 0 開始計數。",
   "CVVDP scores whole seconds: its range is rounded to the nearest second.": "CVVDP 以整秒評分：其範圍會四捨五入到最接近的秒。",
   "Time": "時間",
   "End": "結尾",

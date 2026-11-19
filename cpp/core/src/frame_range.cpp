@@ -44,7 +44,48 @@ long long end_second_of(long long frames, double fps) {
     return frames > 0 && fps > 0 ? second_of_frame(frames - 1, fps) + 1 : 0;
 }
 
-std::pair<long long, std::optional<long long>> compared_frames(const ComparedRange& range, double fps) {
+namespace {
+
+// The first frame shown at `milliseconds` or after: the first whose time,
+// frame i's i / fps, is not before it (as first_frame_of_second for a
+// second's).
+long long first_frame_at(long long milliseconds, double fps) {
+    if (milliseconds <= 0 || fps <= 0) {
+        return 0;
+    }
+    const auto before = [milliseconds, fps](long long frame) {
+        return static_cast<double>(frame) * 1000.0 < static_cast<double>(milliseconds) * fps;
+    };
+    auto frame = static_cast<long long>(std::ceil(static_cast<double>(milliseconds) * fps / 1000.0));
+    while (frame > 0 && !before(frame - 1)) {
+        --frame;
+    }
+    while (before(frame)) {
+        ++frame;
+    }
+    return frame;
+}
+
+}  // namespace
+
+ComparedRange in_frames_at(const ComparedRange& range, double fps) {
+    if (!range.in_milliseconds || range.in_frames) {
+        return range;
+    }
+    // An end above 0 is a frame above 0 (frame 0 is at 0 ms), never "to the end".
+    return {first_frame_at(range.start, fps), range.end > 0 ? first_frame_at(range.end, fps) : 0, true};
+}
+
+std::string range_time_text(long long milliseconds) {
+    const long long ms = std::max(0LL, milliseconds);
+    const auto two = [](long long value) { return (value < 10 ? "0" : "") + std::to_string(value); };
+    const long long fraction = ms % 1000;
+    return std::to_string(ms / 3600000) + ":" + two(ms / 60000 % 60) + ":" + two(ms / 1000 % 60) + "." +
+           (fraction < 100 ? "0" : "") + two(fraction);
+}
+
+std::pair<long long, std::optional<long long>> compared_frames(const ComparedRange& given, double fps) {
+    const ComparedRange range = in_frames_at(given, fps);
     if (range.in_frames) {
         return {std::max(0LL, range.start), range.end > 0 ? std::optional(range.end) : std::nullopt};
     }
@@ -52,9 +93,10 @@ std::pair<long long, std::optional<long long>> compared_frames(const ComparedRan
             range.end > 0 ? std::optional(first_frame_of_second(range.end, fps)) : std::nullopt};
 }
 
-ComparedRange cvvdp_seconds(const ComparedRange& range, double fps, long long video_frames) {
+ComparedRange cvvdp_seconds(const ComparedRange& given, double fps, long long video_frames) {
+    const ComparedRange range = fps > 0 ? in_frames_at(given, fps) : given;
     if (!range.in_frames || range.whole() || fps <= 0) {
-        return range.in_frames ? ComparedRange{} : range;
+        return range.in_seconds() ? range : ComparedRange{};
     }
     const auto nearest = [fps](long long frame) { return std::llround(static_cast<double>(frame) / fps); };
     long long start = nearest(std::max(0LL, range.start));
@@ -79,7 +121,8 @@ ComparedRange cvvdp_seconds(const ComparedRange& range, double fps, long long vi
     return {start, end, false};
 }
 
-FrameRange frame_range(const ComparedRange& compared, double fps, int step, bool looks_around) {
+FrameRange frame_range(const ComparedRange& given, double fps, int step, bool looks_around) {
+    const ComparedRange compared = in_frames_at(given, fps);
     FrameRange range;
     std::tie(range.start, range.end) = compared_frames(compared, fps);
     if (range.end) {

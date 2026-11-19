@@ -792,7 +792,7 @@
   "The test video is compared at its full frame.": "Тестове відео порівнюється в повному кадрі.",
   "Range:": "Діапазон:",
   "to": "до",
-  "The part of the videos compared: in whole seconds, from the first time to the second, where an end of 00:00:00 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "Порівнювана частина відео: у цілих секундах, від першого часу до другого, де кінець 00:00:00 означає порівняння до кінця відео; або в кадрах, від першого кадру до останнього, обидва включно, з відліком від 0, як у розділі «Порівняння відео».",
+  "The part of the videos compared: in time, to the millisecond, from the first time to the second, where an end of 00:00:00.000 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "Порівнювана частина відео: у часі, з точністю до мілісекунди, від першого часу до другого, де кінець 00:00:00.000 означає порівняння до кінця відео; або в кадрах, від першого кадру до останнього, обидва включно, з відліком від 0, як у розділі «Порівняння відео».",
   "CVVDP scores whole seconds: its range is rounded to the nearest second.": "CVVDP оцінює цілі секунди: його діапазон округлюється до найближчої секунди.",
   "Time": "Час",
   "End": "Кінець",

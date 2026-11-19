@@ -43,14 +43,19 @@ std::optional<std::string> frame_rate_problem(const VideoInfo& source, const Vid
 // Why the two videos' frame rates or durations do not allow a comparison of
 // `range` (seconds or frames; an end of 0: to the end).
 std::optional<std::string> timeline_problem(const VideoInfo& source, const VideoInfo& distorted,
-                                            const ComparedRange& range) {
-    const long long range_start = range.start;
-    const long long range_end = range.end;
-    if (range_end > 0 && range_end <= range_start) {
+                                            const ComparedRange& given) {
+    if (given.end > 0 && given.end <= given.start) {
         return "The range ends before it starts.";
     }
-    if (!range.whole() && (source.fps <= 0 || distorted.fps <= 0)) {
+    if (!given.whole() && (source.fps <= 0 || distorted.fps <= 0)) {
         return "A range needs the videos' frame rates, which are not known.";  // its seconds count frames
+    }
+    // Milliseconds as the frames they cover.
+    const ComparedRange range = in_frames_at(given, source.fps);
+    const long long range_start = range.start;
+    const long long range_end = range.end;
+    if (given.in_milliseconds && range_end > 0 && range_end <= range_start) {
+        return "The range contains no frame of the videos.";  // shorter than a frame
     }
     if (!range.in_frames && range_end > 0 &&
         first_frame_of_second(range_start, source.fps) >= first_frame_of_second(range_end, source.fps)) {

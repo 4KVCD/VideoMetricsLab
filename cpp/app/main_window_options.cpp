@@ -199,14 +199,24 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         } else if (field == "range_in_frames") {
             // Another unit: the range the fields show in it, whole by default.
             target.range_in_frames = panel.range_in_frames;
+            target.range_in_milliseconds = panel.range_in_milliseconds;
             target.range_start = panel.range_start;
             target.range_end = panel.range_end;
         } else if (field == "range_start" || field == "range_end") {
             if (target.range_in_frames != panel.range_in_frames) {
                 // A row of the selection in the other unit: the whole range shown.
                 target.range_in_frames = panel.range_in_frames;
+                target.range_in_milliseconds = panel.range_in_milliseconds;
                 target.range_start = panel.range_start;
                 target.range_end = panel.range_end;
+            } else if (!panel.range_in_frames) {
+                // Times: the one edited, in milliseconds, and the row's other
+                // as it was (whole seconds, or milliseconds).
+                long long start = target.range_time_ms(target.range_start);
+                long long end = target.range_time_ms(target.range_end);
+                (field == "range_start" ? start : end) =
+                    panel.range_time_ms(field == "range_start" ? panel.range_start : panel.range_end);
+                target.set_time_range(start, end);
             } else if (field == "range_start") {
                 target.range_start = panel.range_start;
             } else {

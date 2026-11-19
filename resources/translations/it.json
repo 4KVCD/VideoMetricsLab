@@ -792,7 +792,7 @@
   "The test video is compared at its full frame.": "Il video di prova viene confrontato a fotogramma intero.",
   "Range:": "Intervallo:",
   "to": "a",
-  "The part of the videos compared: in whole seconds, from the first time to the second, where an end of 00:00:00 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "La parte dei video confrontata: in secondi interi, dal primo tempo al secondo, dove una fine di 00:00:00 confronta fino alla fine dei video; oppure in fotogrammi, dal primo all'ultimo, entrambi confrontati, contati da 0 come in Confronto video.",
+  "The part of the videos compared: in time, to the millisecond, from the first time to the second, where an end of 00:00:00.000 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "La parte dei video confrontata: in tempo, al millisecondo, dal primo tempo al secondo, dove una fine di 00:00:00.000 confronta fino alla fine dei video; oppure in fotogrammi, dal primo all'ultimo, entrambi confrontati, contati da 0 come in Confronto video.",
   "CVVDP scores whole seconds: its range is rounded to the nearest second.": "CVVDP valuta secondi interi: il suo intervallo è arrotondato al secondo più vicino.",
   "Time": "Tempo",
   "End": "Fine",

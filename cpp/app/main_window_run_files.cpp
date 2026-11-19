@@ -112,6 +112,7 @@ void take_run_options(VmafOptions& options, const ComparisonResult& result) {
     options.range_start = scored.start;
     options.range_end = scored.end;
     options.range_in_frames = scored.in_frames;
+    options.range_in_milliseconds = false;  // a saved run's range: its frames, or whole seconds
     const auto any = [&ids](bool (*made_by)(std::string_view)) { return std::any_of(ids.begin(), ids.end(), made_by); };
     if (any(score_identity::is_vship_fast_id)) {
         options.vship_build = VshipBuild::fast;
