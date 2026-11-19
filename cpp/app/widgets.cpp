@@ -124,6 +124,41 @@ void FillColumnTable::select_row_if_none_is(int row) {
                                       QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 }
 
+void FillColumnTable::keep_a_row_selected() {
+    keeps_a_row_ = true;
+    connect(selectionModel(), &QItemSelectionModel::selectionChanged, this, [this] {
+        const QModelIndexList rows = selectionModel()->selectedRows();
+        if (!rows.isEmpty()) {
+            last_selected_row_ = currentRow() >= 0 && selectionModel()->isRowSelected(currentRow(), {})
+                                     ? currentRow()
+                                     : rows.front().row();
+            return;
+        }
+        // Once control is back in the event loop, not here: rows are removed
+        // one by one (removeRow) while their owner's own list of them is
+        // still being changed, and a row selected now would be read from it.
+        if (!reselect_pending_) {
+            reselect_pending_ = true;
+            QMetaObject::invokeMethod(this, [this] {
+                reselect_pending_ = false;
+                if (rowCount() > 0) {
+                    select_row_if_none_is(std::clamp(last_selected_row_, 0, rowCount() - 1));
+                }
+            }, Qt::QueuedConnection);
+        }
+    });
+}
+
+void FillColumnTable::mousePressEvent(QMouseEvent* event) {
+    // Where there is no row: nothing, rather than no row selected (Qt clears
+    // the selection there), and no drag to select from there.
+    if (keeps_a_row_ && rowCount() > 0 && !indexAt(event->position().toPoint()).isValid()) {
+        event->accept();
+        return;
+    }
+    QTableWidget::mousePressEvent(event);
+}
+
 void FillColumnTable::setHorizontalHeader(QHeaderView* header) {
     // A new header does not have the connection the constructor made to the
     // old one; without it, the fill column would stop following the other

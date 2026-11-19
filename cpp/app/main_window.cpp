@@ -737,6 +737,7 @@ void MainWindow::build_test_table() {
         other_columns.push_back(item.column);
     }
     distorted_table_ = new FillColumnTable(0, column_count, col_path, other_columns);
+    distorted_table_->keep_a_row_selected();  // the Options panel always has a row to show
     // Seeded from the same defaults a new row gets, so the headers agree with
     // the Settings tab.
     QMap<int, bool> checkable;
