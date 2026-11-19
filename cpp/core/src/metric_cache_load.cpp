@@ -329,6 +329,16 @@ bool same_crops(const nlohmann::json& context, const nlohmann::json& other) {
     return true;
 }
 
+// The whole videos' recipe of a range: no range, in no unit (a range unit
+// left set would put "range_unit" in its identity, a folder never saved).
+ComparisonRecipe whole_video_recipe(ComparisonRecipe recipe) {
+    recipe.range_start = 0;
+    recipe.range_end = 0;
+    recipe.range_in_frames = false;
+    recipe.range_in_milliseconds = false;
+    return recipe;
+}
+
 // A range's comparison over the whole videos: its folder (by its hash, as
 // auto_folder_for_source_only finds Auto's) and context, whose scores are cut
 // to the range (cut_to_range). Nothing for a recipe of the whole videos, or
@@ -342,24 +352,13 @@ std::optional<OtherRecipeFolder> whole_video_folder(const std::filesystem::path&
     if (recipe.range_start <= 0 && recipe.range_end <= 0) {
         return std::nullopt;
     }
-    ComparisonRecipe whole = recipe;
-    whole.range_start = 0;
-    whole.range_end = 0;
-    whole.range_in_frames = false;
+    const ComparisonRecipe whole = whole_video_recipe(recipe);
     std::filesystem::path directory = base / format_folder / recipe_hash(source, distorted, whole);
     std::optional<nlohmann::json> context = current_context(directory, whole);
     if (!context || (own_context && !same_crops(*own_context, *context))) {
         return std::nullopt;
     }
     return OtherRecipeFolder{std::move(directory), std::move(*context)};
-}
-
-// The whole videos' recipe of a range, for auto_folder_for_source_only.
-ComparisonRecipe whole_video_recipe(ComparisonRecipe recipe) {
-    recipe.range_start = 0;
-    recipe.range_end = 0;
-    recipe.range_in_frames = false;
-    return recipe;
 }
 
 // Whether a comparison's context scaled neither video: no resolution test,

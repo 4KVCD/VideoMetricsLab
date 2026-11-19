@@ -395,6 +395,12 @@ TEST(MetricCache, ARangeTakesTheWholeVideosScoresCutToIt) {
     EXPECT_EQ(cut.sequence("cvvdp")->provenance.parameters.at("range_frames"), "[2,4]");
     EXPECT_FALSE(cut.sequence("cvvdp")->provenance.parameters.contains("cvvdp_frames_reached"));
     EXPECT_EQ(later->first.compared_frame_count, 2);
+    // A range of milliseconds too: [0.9 s, 2 s) is frames 2 and 3.
+    ComparisonRecipe milliseconds = ranged(900, 2000);
+    milliseconds.range_in_milliseconds = true;
+    const auto in_milliseconds = load("new", milliseconds);
+    ASSERT_TRUE(in_milliseconds && in_milliseconds->first.metric_results.frame("vmaf"));
+    EXPECT_EQ(in_milliseconds->first.metric_results.frame("vmaf")->frame, (std::vector<int>{2, 3}));
 
     // The metrics found (none when nothing is).
     const auto keys = [&](const std::string& cache, const ComparisonRecipe& recipe,
