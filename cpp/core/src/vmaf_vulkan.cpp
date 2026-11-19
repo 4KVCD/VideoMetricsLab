@@ -304,7 +304,7 @@ VulkanScorer::VulkanScorer(int width, int height, int bit_depth,
             release();
             throw;
         }
-        // vvdec-vulkan's copies signal a timeline the GPU waits for: one decoder's, the test video's where it
+        // vvdec-vulkan's copies signal a timeline the engine waits for: one decoder's, the test video's where it
         // decodes it (a frame waits for one timeline's value)
         for (GpuFrameStream* decoder : {shared, shared_reference}) {
             if (decoder == nullptr || decoder->backend() != vvdec_decoder || engine_.import_timeline == nullptr ||

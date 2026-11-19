@@ -345,7 +345,7 @@ struct DecoderLibrary {
             unpin = library.function<decltype(unpin)>("nvf_unpin");
             copy_planes = optional_function<decltype(copy_planes)>(library, "nvf_copy_planes");
         }
-        // AMD's: copies the GPU waits for, rather than the CPU; and a slot's
+        // AMD's: copies the engine waits for, rather than this thread; and a slot's
         // picture in place (Windows' decoder).
         timeline = optional_function<decltype(timeline)>(library, "nvf_timeline");
         copy_luma_async = optional_function<decltype(copy_luma_async)>(library, "nvf_copy_luma_async");

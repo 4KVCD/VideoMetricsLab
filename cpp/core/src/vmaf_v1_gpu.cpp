@@ -489,7 +489,7 @@ struct V1Scorer::State {
 
     bool cpu_features() const { return cpu != nullptr; }
 
-    // Whether the GPU waits for `stream`'s copies (after).
+    // Whether the engine waits for `stream`'s copies (after).
     bool waits_for(const GpuFrameStream& stream) const {
         return after != nullptr && (after == &stream || after->shares_gpu_memory_with(stream));
     }
@@ -861,7 +861,7 @@ void V1Scorer::add_decoded(GpuFrameStream& reference, int reference_slot, GpuFra
         ++s.count;
         return;
     }
-    // The copies into the shared buffers. When the GPU waits for them
+    // The copies into the shared buffers. When the engine waits for them
     // (after), this thread does not: each copy gives the value the decoder's
     // timeline reaches once it is done, else 0.
     const auto copy_luma = [&s, &next](GpuFrameStream& stream, int slot, std::uint64_t address) -> std::uint64_t {

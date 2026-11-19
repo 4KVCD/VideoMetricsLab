@@ -93,8 +93,9 @@ struct VulkanEngine {
     // For AMD's decoder handing over, each nullptr in an engine without it:
     // the GPU, driver and memory type a decoder's own Vulkan device must
     // match to import the shared buffers; the decoder's timeline semaphore,
-    // which its copies signal, and the value the next commit's frame waits
-    // for on the GPU; a frame's pictures where Windows' decoder left them
+    // which its copies signal, and the value after which the engine submits
+    // the next commit's frame (a thread of its own waits for it, not the
+    // caller); a frame's pictures where Windows' decoder left them
     // (textures), and whether a context takes them.
     int (*shared_device)(VulkanContext* context, std::uint8_t* device_uuid, std::uint8_t* driver_uuid,
                          std::uint32_t* memory_type);
@@ -297,10 +298,10 @@ public:
     // plane, packed, into the host memory it is given (the engine copies it
     // into the slot on the GPU). Only where takes_host_planes().
     // `distorted` copies the test video's plane and returns the decoder's timeline value the copy signals (0: it was
-    // waited for); with waits_on_decoder(), the frame waits for it on the GPU.
+    // waited for); with waits_on_decoder(), the engine waits for it on a thread of its own.
     bool takes_host_planes() const;
     bool waits_on_decoder() const { return waits_on_ != nullptr; }
-    // Whether the frame waits on the GPU for `decoder`'s copies, whose
+    // Whether the engine waits for `decoder`'s copies (on its own thread), whose
     // timeline semaphore it imported (vvdec-vulkan's: the test video's where
     // it decodes it, else the source's; the other decoder's copies are waited
     // for by the CPU), rather than this thread.
@@ -336,7 +337,7 @@ private:
     std::size_t frame_bytes_ = 0;
     // With frames from GPU memory: the memory the decoder imported.
     std::optional<SharedSlots> shared_;
-    // The shared decoder whose timeline semaphore is imported: a frame waits on the GPU for its copies (add_shared's
+    // The shared decoder whose timeline semaphore is imported: the engine waits for its copies (add_shared's
     // and add_shared_mixed's values), not the CPU; nullptr for none
     const GpuFrameStream* waits_on_ = nullptr;
     // add_decoded's plane, written packed for a width whose rows the engine
