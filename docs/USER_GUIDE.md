@@ -283,6 +283,9 @@ band under the graph with its own scale: frame by frame in the frame view, and
 at each moment in the second and GOP views (where two encodes' GOPs differ,
 each moment's GOP bitrate is subtracted).
 The command line's `bitrate` command (below) reads the same numbers.
+Each file's reading is saved with the saved results and is not read again:
+the file adds at once the next time, renamed, moved or copied too (it is
+known by its content, as saved scores are). A remux is read again.
 
 ## BD-rate
 
@@ -599,8 +602,9 @@ videos again:
   does; **Export per-frame CSV...** writes a file per comparison to a folder,
   as Metric Graphs' Export CSV does.
 - **Export graphs as ZIP...** saves the graphs Export all graphs saves, for
-  comparisons of one reference; the bitrate graphs only where the videos are
-  still on disk (the scores are saved, the bitrate is not).
+  comparisons of one reference. The bitrate graphs of a video no longer on
+  disk come from its saved bitrate, where the Bitrate Viewer or the
+  command line read it before it went.
 - **Export weak segments...** saves the weak segments report by the rules
   picked beside it: the profile in use, any profile or a preset. Weak segments
   are not saved with the scores; they are found from them as they are

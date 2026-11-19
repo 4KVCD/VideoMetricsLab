@@ -611,6 +611,8 @@ void MainWindow::build_ui() {
     // Its own list of videos: a finished run adds its own (on_job_finished).
     bitrate_panel_ = new BitratePanel([this] { return find_tool("ffprobe", settings_); }, video_colors_);
     bitrate_panel_->dialogs = standard_dialogs(bitrate_panel_, export_dir);
+    // Its readings are saved with the saved scores, and found there again.
+    bitrate_panel_->store_folder = [this] { return cache_folder(); };
     // Settings' Exported graphs, read at each export as the folder is.
     const auto export_colours = [this] {
         return theme::export_chart_colours(settings_.export_graph_theme, settings_.export_graph_background,

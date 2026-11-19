@@ -10,12 +10,15 @@
 
 #include "common.h"
 #include "compare.h"
+#include "vml/bitrate_store.h"
 #include "vml/build_info.h"
 #include "vml/cancel.h"
 #include "vml/export_csv.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
+#include "vml/file_fingerprint.h"
 #include "vml/geometry.h"
+#include "vml/metric_cache.h"
 #include "vml/number_format.h"
 #include "vml/platform/console.h"
 #include "vml/platform/system.h"
@@ -87,12 +90,23 @@ std::optional<std::vector<BitrateVideo>> read_videos(const std::vector<std::file
 }
 
 // Reads each video's packets, showing how far it has got.
-void read_packets(std::vector<BitrateVideo>& videos, const std::string& ffprobe, Progress& progress) {
+// `store`: the saved results' folder, whose saved bitrate (bitrate_store.h)
+// a file's packets are taken from where saved, and saved to when read.
+void read_packets(std::vector<BitrateVideo>& videos, const std::string& ffprobe, const std::filesystem::path& store,
+                  Progress& progress) {
     for (std::size_t index = 0; index < videos.size(); ++index) {
         BitrateVideo& video = videos[index];
         const std::string name = name_of(video.path);
         if (!video.info) {
             progress.problem(name + ": not read: " + video.error);
+            continue;
+        }
+        // A raw stream's times are counted from --fps, which can change: it is always read.
+        const std::string content =
+            video.info->is_raw_stream() ? std::string() : sampled_file_hash(video.path).value_or("");
+        if (std::optional<SavedBitrate> saved = load_saved_bitrate(store, content, video.path)) {
+            video.data = std::move(saved->data);
+            progress.finished(index, name + ": " + with_thousands(video.data->frame_count()) + " packets saved before");
             continue;
         }
         // The frames expected only where the file says (a raw stream's are counted as its packets are read)
@@ -105,6 +119,11 @@ void read_packets(std::vector<BitrateVideo>& videos, const std::string& ffprobe,
         try {
             video.data = analyze_video_bitrate(ffprobe, *video.info, CancelToken(), on_progress);
             progress.finished(index, name + ": " + with_thousands(video.data->frame_count()) + " packets read");
+            try {
+                save_bitrate(store, content, {*video.info, *video.data, std::nullopt});
+            } catch (const std::exception&) {
+                // Not saved: read again next time.
+            }
         } catch (const std::exception& error) {
             video.error = error.what();
             progress.problem(name + ": not read: " + video.error);
@@ -336,7 +355,7 @@ int bitrate(const BitrateArguments& arguments) {
         return exit_usage;
     }
     progress.start();
-    read_packets(*videos, ffprobe.path, progress);
+    read_packets(*videos, ffprobe.path, settings.cache_dir_path().value_or(default_cache_dir()), progress);
 
     bool ok = std::all_of(videos->begin(), videos->end(),
                           [](const BitrateVideo& video) { return video.data.has_value(); });

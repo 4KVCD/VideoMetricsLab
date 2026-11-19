@@ -27,6 +27,7 @@
 #include "export_image.h"
 #include "theme.h"
 #include "vml/bitrate.h"
+#include "vml/bitrate_store.h"
 #include "vml/cancel.h"
 #include "vml/video.h"
 #include "widgets.h"
@@ -89,7 +90,10 @@ class BitrateWorker : public QThread {
 
 public:
     using Job = std::pair<std::filesystem::path, std::optional<VideoInfo>>;
-    BitrateWorker(std::string ffprobe, std::vector<Job> jobs, QObject* parent = nullptr);
+    // `store`: the saved results' folder, where the bitrate read is saved
+    // and found again (bitrate_store.h); empty: none.
+    BitrateWorker(std::string ffprobe, std::vector<Job> jobs, std::filesystem::path store = {},
+                  QObject* parent = nullptr);
 
     // Stops, ending ffprobe.
     void cancel() { cancel_.cancel(); }
@@ -108,6 +112,7 @@ protected:
 private:
     std::string ffprobe_;
     std::vector<Job> jobs_;
+    std::filesystem::path store_;
     CancelToken cancel_;
 };
 
@@ -127,6 +132,9 @@ public:
     // Adds videos read already, and reads their packets (a finished run's:
     // the first is its reference).
     void add_and_analyze(const std::vector<VideoInfo>& infos);
+    // Adds a file's bitrate read before (bitrate_store.h), as complete: for a
+    // file no longer there, whose graphs are still wanted.
+    void add_saved(const SavedBitrate& saved);
     // The scan running now, if any.
     std::vector<QThread*> live_workers() const;
     // Stops the analysis, keeping finished results.
@@ -148,6 +156,9 @@ public:
 
     // Its questions and messages; the tests answer them.
     Dialogs dialogs;
+    // The saved results' folder, whose saved bitrate (bitrate_store.h) a
+    // file's reading looks in first and is saved to; none set: not used.
+    std::function<std::filesystem::path()> store_folder;
     // The colours Export PNG draws in (Settings' Exported graphs), asked at
     // each export; the light chart colours when not set.
     std::function<theme::ChartColours()> export_colours;

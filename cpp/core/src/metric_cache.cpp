@@ -18,6 +18,7 @@
 #include "metric_cache_parts.h"
 #include "vml/app_log.h"
 #include "vml/append.h"
+#include "vml/bitrate_store.h"
 #include "vml/build_info.h"
 #include "vml/cancel.h"
 #include "vml/colour.h"
@@ -1602,11 +1603,22 @@ CacheSummary cache_summary(const std::filesystem::path& base) {
             ++summary.comparisons;
         }
     }
+    // The bitrate saved beside them (bitrate_store.h) is saved results too.
+    std::filesystem::directory_iterator bitrate(bitrate_store_folder(base), error);
+    for (; !error && bitrate != std::filesystem::directory_iterator(); bitrate.increment(error)) {
+        std::error_code ignored;
+        if (const std::uintmax_t size = bitrate->file_size(ignored); !ignored) {
+            summary.bytes += size;
+        }
+    }
     return summary;
 }
 
 int clear_all(const std::filesystem::path& base) {
     const std::filesystem::path root = base / format_folder;
+    // The bitrate saved beside the scores (bitrate_store.h), saved or not.
+    std::error_code bitrate_error;
+    std::filesystem::remove_all(bitrate_store_folder(base), bitrate_error);
     std::error_code error;
     if (!std::filesystem::exists(root, error)) {
         return 0;
@@ -1622,6 +1634,12 @@ int clear_all(const std::filesystem::path& base) {
     }
     std::filesystem::remove_all(root, error);
     return error ? 0 : count;
+}
+
+std::string saved_content_hash(const std::filesystem::path& folder, bool reference) {
+    const std::optional<nlohmann::json> identity = read_json(folder / "identity.json");
+    return identity && identity->is_object() ? text_at(*identity, reference ? "source" : "distorted", "sampled")
+                                             : std::string();
 }
 
 }  // namespace vml

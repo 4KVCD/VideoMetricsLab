@@ -819,7 +819,8 @@ void SettingsPanel::clear_saved_results() {
     // window. While it is still being made, the question is asked anyway.
     const bool counted = counting_->isFinished() && counting_->future().resultCount() > 0 &&
                          counted_folder_ == directory;
-    if (counted && counting_->result().comparisons == 0 && file_writes_.idle()) {
+    if (counted && counting_->result().comparisons == 0 && counting_->result().bytes == 0 &&
+        file_writes_.idle()) {
         status->setText(app::tr("There are no saved results to clear."));
         return;
     }

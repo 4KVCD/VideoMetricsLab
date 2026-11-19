@@ -188,17 +188,23 @@ std::optional<std::variant<FrameMetricResult, SequenceMetricResult>> read_saved_
 // one this app cannot read.
 std::optional<std::pair<ComparisonResult, std::string>> saved_comparison(const std::filesystem::path& folder);
 
+// The sampled hash (file_fingerprint.h) a saved folder's identity.json
+// records for its reference (`reference`) or test video: the key of their
+// saved bitrate (bitrate_store.h). Empty where none is recorded.
+std::string saved_content_hash(const std::filesystem::path& folder, bool reference);
+
 // How many comparisons are saved under `base`, and the bytes their files
-// take, for Settings.
+// and the saved bitrate (bitrate_store.h) take, for Settings.
 struct CacheSummary {
     int comparisons = 0;
     std::uintmax_t bytes = 0;
 };
 CacheSummary cache_summary(const std::filesystem::path& base);
 
-// Deletes every comparison saved under `base` (its v2 folder; nothing else
-// there) and returns how many there were: 0 when they could not all be
-// deleted, as the Python app counts it.
+// Deletes every comparison saved under `base` (its v2 folder) and the saved
+// bitrate (its bitrate folder; nothing else there), and returns how many
+// comparisons there were: 0 when they could not all be deleted, as the
+// Python app counts it.
 int clear_all(const std::filesystem::path& base);
 
 }  // namespace vml
