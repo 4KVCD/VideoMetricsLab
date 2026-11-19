@@ -1024,7 +1024,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Előbb adja meg a feltételeket a Beállítások > Gyenge szakaszok pontban: a jelentés a mentetteket követi.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "{name} gyenge szakaszai nem lettek exportálva: a Beállítások > Gyenge szakaszok pontban nincs feltétel megadva.",
   "A new profile, starting from this one's rules.": "Új profil ennek a profilnak a szabályaiból kiindulva.",
-  "A profile needs a name of its own, not Default or another profile's.": "A profilnak saját név kell, nem Alapértelmezett és nem egy másik profil neve.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "A profilnak saját név kell, vessző nélkül, nem Alapértelmezett és nem egy másik profil neve.",
   "As saved in profile {profile}.": "Ahogy a(z) {profile} profilban mentve van.",
   "Changed here only: Save to profile keeps these in {profile}.": "Csak itt módosítva: a Mentés profilba megtartja ezeket a(z) {profile} profilban.",
   "Default": "Alapértelmezett",

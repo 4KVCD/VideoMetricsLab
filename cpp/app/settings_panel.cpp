@@ -409,7 +409,8 @@ void SettingsPanel::new_weak_profile() {
     const std::string text = std::string(python_strip(name->toStdString()));
     if (!segment_profile_name_free(segment_profiles(settings_), text)) {
         dialogs_.alert(app::tr("Profile not saved"),
-                       app::tr("A profile needs a name of its own, not Default or another profile's."));
+                       app::tr("A profile needs a name of its own, without commas, and not Default or another "
+                               "profile's."));
         return;
     }
     store_segment_profile(settings_, text, weak_segments->rules());
@@ -458,7 +459,8 @@ void SettingsPanel::rename_weak_profile() {
                  [&current](const SegmentProfile& profile) { return profile.name != current; });
     if (!segment_profile_name_free(others, text)) {
         dialogs_.alert(app::tr("Profile not renamed"),
-                       app::tr("A profile needs a name of its own, not Default or another profile's."));
+                       app::tr("A profile needs a name of its own, without commas, and not Default or another "
+                               "profile's."));
         return;
     }
     for (SegmentProfile& profile : profiles) {

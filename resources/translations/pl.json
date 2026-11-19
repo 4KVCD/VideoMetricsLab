@@ -1024,7 +1024,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Najpierw ustaw warunki w Ustawienia > Słabe odcinki: raport odpowiada zapisanym.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Słabe odcinki filmu {name} nie zostały wyeksportowane: w Ustawienia > Słabe odcinki nie ustawiono żadnego warunku.",
   "A new profile, starting from this one's rules.": "Nowy profil wychodzący od reguł tego profilu.",
-  "A profile needs a name of its own, not Default or another profile's.": "Profil musi mieć własną nazwę, nie Domyślny ani nazwę innego profilu.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "Profil musi mieć własną nazwę, bez przecinków, i nie Domyślny ani nazwę innego profilu.",
   "As saved in profile {profile}.": "Tak jak zapisano w profilu {profile}.",
   "Changed here only: Save to profile keeps these in {profile}.": "Zmienione tylko tutaj: Zapisz w profilu zachowa je w {profile}.",
   "Default": "Domyślny",

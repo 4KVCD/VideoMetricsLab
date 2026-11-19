@@ -1024,7 +1024,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Спочатку задайте умови в Налаштування > Слабкі ділянки: звіт відповідає збереженим.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Слабкі ділянки {name} не експортовано: у Налаштування > Слабкі ділянки не задано жодної умови.",
   "A new profile, starting from this one's rules.": "Новий профіль на основі правил цього профілю.",
-  "A profile needs a name of its own, not Default or another profile's.": "Профілю потрібна власна назва, не «Типовий» і не назва іншого профілю.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "Профілю потрібна власна назва без ком, не «Типовий» і не назва іншого профілю.",
   "As saved in profile {profile}.": "Як збережено в профілі {profile}.",
   "Changed here only: Save to profile keeps these in {profile}.": "Змінено лише тут: «Зберегти в профіль» збереже їх у {profile}.",
   "Default": "Типовий",

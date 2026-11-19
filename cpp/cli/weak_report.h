@@ -32,7 +32,10 @@ std::string segments_source(const CompareArguments& arguments);
 // segments, or of the preset
 // (`settings`) on the metrics compared (`asked`) put in `arguments`, and
 // its any/every choice, shortest segment and gap where the command gave
-// none (--segments-all can only add "every"). The saved conditions left
+// none (--segments-all or --segments-any). Conditions given after it
+// replace its condition on their metric, or are added. Those on metrics
+// not compared are refused later, as given conditions are
+// (segments_refusal). The saved conditions left
 // out, on metrics not compared, are returned. Throws
 // std::invalid_argument when none is left.
 std::vector<std::string> take_saved_segments(CompareArguments& arguments, const Settings& settings,

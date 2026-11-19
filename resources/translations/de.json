@@ -1024,7 +1024,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Legen Sie zuerst die Bedingungen unter Einstellungen > Schwache Abschnitte fest: Der Bericht folgt den gespeicherten.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Die schwachen Abschnitte von {name} wurden nicht exportiert: Unter Einstellungen > Schwache Abschnitte ist keine Bedingung festgelegt.",
   "A new profile, starting from this one's rules.": "Ein neues Profil, ausgehend von den Regeln dieses Profils.",
-  "A profile needs a name of its own, not Default or another profile's.": "Ein Profil braucht einen eigenen Namen, nicht Standard oder den eines anderen Profils.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "Ein Profil braucht einen eigenen Namen ohne Kommas, nicht Standard oder den eines anderen Profils.",
   "As saved in profile {profile}.": "Wie im Profil {profile} gespeichert.",
   "Changed here only: Save to profile keeps these in {profile}.": "Nur hier geändert: In Profil speichern übernimmt diese in {profile}.",
   "Default": "Standard",

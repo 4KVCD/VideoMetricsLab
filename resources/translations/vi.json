@@ -1024,7 +1024,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Hãy đặt điều kiện trong Cài đặt > Đoạn yếu trước: báo cáo theo các điều kiện đã lưu.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Chưa xuất các đoạn yếu của {name}: chưa đặt điều kiện nào trong Cài đặt > Đoạn yếu.",
   "A new profile, starting from this one's rules.": "Một hồ sơ mới, bắt đầu từ các quy tắc của hồ sơ này.",
-  "A profile needs a name of its own, not Default or another profile's.": "Hồ sơ cần có tên riêng, không phải Mặc định hay tên của hồ sơ khác.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "Hồ sơ cần có tên riêng, không có dấu phẩy, và không phải Mặc định hay tên của hồ sơ khác.",
   "As saved in profile {profile}.": "Như đã lưu trong hồ sơ {profile}.",
   "Changed here only: Save to profile keeps these in {profile}.": "Chỉ thay đổi ở đây: Lưu vào hồ sơ sẽ giữ chúng trong {profile}.",
   "Default": "Mặc định",

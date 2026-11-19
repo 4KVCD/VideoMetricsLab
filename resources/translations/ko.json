@@ -1024,7 +1024,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "먼저 설정 > 약한 구간에서 조건을 설정하세요. 보고서는 저장된 조건을 따릅니다.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "{name}의 약한 구간을 내보내지 않았습니다. 설정 > 약한 구간에 설정된 조건이 없습니다.",
   "A new profile, starting from this one's rules.": "이 프로필의 규칙에서 시작하는 새 프로필입니다.",
-  "A profile needs a name of its own, not Default or another profile's.": "프로필에는 기본값이나 다른 프로필의 이름이 아닌 고유한 이름이 필요합니다.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "프로필에는 쉼표가 없고 기본값이나 다른 프로필의 이름이 아닌 고유한 이름이 필요합니다.",
   "As saved in profile {profile}.": "프로필 {profile}에 저장된 그대로입니다.",
   "Changed here only: Save to profile keeps these in {profile}.": "여기서만 변경됨: 프로필에 저장을 누르면 {profile}에 이 조건을 유지합니다.",
   "Default": "기본값",

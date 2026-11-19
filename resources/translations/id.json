@@ -1024,7 +1024,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Atur syaratnya di Pengaturan > Segmen lemah terlebih dahulu: laporan mengikuti syarat yang tersimpan.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "Segmen lemah {name} tidak diekspor: belum ada syarat yang diatur di Pengaturan > Segmen lemah.",
   "A new profile, starting from this one's rules.": "Profil baru, dimulai dari aturan profil ini.",
-  "A profile needs a name of its own, not Default or another profile's.": "Profil memerlukan nama sendiri, bukan Bawaan atau nama profil lain.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "Profil memerlukan nama sendiri, tanpa koma, dan bukan Bawaan atau nama profil lain.",
   "As saved in profile {profile}.": "Sesuai yang disimpan di profil {profile}.",
   "Changed here only: Save to profile keeps these in {profile}.": "Hanya diubah di sini: Simpan ke profil menyimpannya di {profile}.",
   "Default": "Bawaan",

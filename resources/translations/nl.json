@@ -1024,7 +1024,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "Stel eerst de voorwaarden in bij Instellingen > Zwakke segmenten: het rapport volgt de opgeslagen voorwaarden.",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "De zwakke segmenten van {name} zijn niet geëxporteerd: er is geen voorwaarde ingesteld in Instellingen > Zwakke segmenten.",
   "A new profile, starting from this one's rules.": "Een nieuw profiel, uitgaande van de regels van dit profiel.",
-  "A profile needs a name of its own, not Default or another profile's.": "Een profiel heeft een eigen naam nodig, niet Standaard of die van een ander profiel.",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "Een profiel heeft een eigen naam nodig, zonder komma's, en niet Standaard of die van een ander profiel.",
   "As saved in profile {profile}.": "Zoals opgeslagen in profiel {profile}.",
   "Changed here only: Save to profile keeps these in {profile}.": "Alleen hier gewijzigd: Opslaan in profiel bewaart deze in {profile}.",
   "Default": "Standaard",

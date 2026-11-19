@@ -1024,7 +1024,7 @@
   "Set the conditions in Settings > Weak segments first: the report follows the saved ones.": "先に 設定 > 弱い区間 で条件を設定してください。レポートは保存された条件に従います。",
   "{name}'s weak segments weren't exported: no condition is set in Settings > Weak segments.": "{name} の弱い区間はエクスポートされませんでした。設定 > 弱い区間 に条件が設定されていません。",
   "A new profile, starting from this one's rules.": "このプロファイルのルールから始まる新しいプロファイルです。",
-  "A profile needs a name of its own, not Default or another profile's.": "プロファイルには、既定 や他のプロファイルの名前ではない独自の名前が必要です。",
+  "A profile needs a name of its own, without commas, and not Default or another profile's.": "プロファイルには、カンマを含まず、既定 や他のプロファイルの名前ではない独自の名前が必要です。",
   "As saved in profile {profile}.": "プロファイル {profile} に保存されているとおりです。",
   "Changed here only: Save to profile keeps these in {profile}.": "ここだけの変更です。プロファイルに保存 を押すと {profile} にこれらを保持します。",
   "Default": "既定",
