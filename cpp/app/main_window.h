@@ -173,6 +173,9 @@ struct RowData {
     // once, as it was added or the reference chosen).
     bool length_checked = false;
     VmafOptions options;
+    // The range before the Range unit was last switched, restored where the
+    // range is switched back with no edit (switch_range_unit).
+    std::optional<ComparedRange> range_before_unit_switch;
     // The metrics not run by FFmpeg that the row has ticked.
     std::set<std::string> extra_metric_keys;
     // The display CVVDP models for this row: part of what a CVVDP score

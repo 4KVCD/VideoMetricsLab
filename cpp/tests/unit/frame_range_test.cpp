@@ -183,6 +183,57 @@ TEST(FrameRange, ATimeRangeIsWholeSecondsWhereItCanBe) {
     EXPECT_FALSE(identity(10000, 20000).contains("range_unit"));
 }
 
+// The Range unit switched (Options > Range, Time or Frames): the same frames
+// in the other unit, and where it is switched back with no edit, the range
+// as it was typed rather than rounded to frames' times.
+TEST(FrameRange, SwitchingTheRangeUnitKeepsTheRange) {
+    const double film = 24000.0 / 1001.0;
+    // Time to frames and back: whole seconds at 24 fps are whole seconds again.
+    EXPECT_EQ(range_in_unit(ComparedRange{10, 20, false}, true, 24.0), (ComparedRange{240, 480, true}));
+    EXPECT_EQ(range_in_unit(ComparedRange{240, 480, true}, false, 24.0), (ComparedRange{10, 20, false}));
+    // At 24000/1001 a second's first frame is past its start: 30 s is frame
+    // 720, at 30.030 s.
+    const ComparedRange seconds{30, 60, false};
+    const std::optional<ComparedRange> frames = range_in_unit(seconds, true, film);
+    ASSERT_TRUE(frames);
+    EXPECT_EQ(*frames, (ComparedRange{720, 1439, true}));
+    const std::optional<ComparedRange> times = range_in_unit(*frames, false, film);
+    ASSERT_TRUE(times);
+    EXPECT_EQ(*times, (ComparedRange{30030, 60018, false, true}));
+    EXPECT_EQ(range_in_unit(*times, true, film), frames);  // the same frames
+    // Every frame's time reads back as that frame, at the usual rates.
+    for (const double fps : {film, 24.0, 25.0, 30000.0 / 1001.0, 50.0, 60000.0 / 1001.0, 120.0}) {
+        for (long long frame = 1; frame < 20000; frame += 7) {
+            const std::optional<ComparedRange> time = range_in_unit(ComparedRange{frame, frame + 5, true}, false, fps);
+            ASSERT_TRUE(time) << fps;
+            EXPECT_EQ(range_in_unit(*time, true, fps), (ComparedRange{frame, frame + 5, true})) << fps << " " << frame;
+        }
+    }
+    // To the end stays to the end; the whole videos stay whole; a unit's own range is itself.
+    EXPECT_EQ(range_in_unit(ComparedRange{100, 0, true}, false, 24.0), (ComparedRange{4166, 0, false, true}));
+    EXPECT_EQ(range_in_unit(ComparedRange{}, true, film), (ComparedRange{0, 0, true}));
+    EXPECT_EQ(range_in_unit(ComparedRange{0, 0, true}, false, film), ComparedRange{});
+    EXPECT_EQ(range_in_unit(ComparedRange{2500, 4000, false, true}, false, 0.0),
+              (ComparedRange{2500, 4000, false, true}));
+    // No frame rate (no reference yet): no other unit.
+    EXPECT_FALSE(range_in_unit(seconds, true, 0.0));
+
+    // Switched to frames and back with no edit: the range as typed.
+    const ComparedRange to_frames = switch_range_unit(seconds, std::nullopt, true, film);
+    EXPECT_EQ(to_frames, (ComparedRange{720, 1439, true}));
+    EXPECT_EQ(switch_range_unit(to_frames, seconds, false, film), seconds);
+    const ComparedRange typed_frames{100, 220, true};
+    const ComparedRange to_time = switch_range_unit(typed_frames, std::nullopt, false, film);
+    EXPECT_EQ(switch_range_unit(to_time, typed_frames, true, film), typed_frames);
+    // Edited in between: the edited range in the other unit, not the old one.
+    EXPECT_EQ(switch_range_unit(ComparedRange{720, 1500, true}, seconds, false, film),
+              range_in_unit(ComparedRange{720, 1500, true}, false, film).value());
+    // Without a frame rate: the whole videos, and the range typed again on the way back.
+    EXPECT_EQ(switch_range_unit(seconds, std::nullopt, true, 0.0), (ComparedRange{0, 0, true}));
+    EXPECT_EQ(switch_range_unit(ComparedRange{0, 0, true}, seconds, false, 0.0), seconds);
+    EXPECT_EQ(switch_range_unit(ComparedRange{5, 9, true}, seconds, false, 0.0), ComparedRange{});
+}
+
 // Scores loaded from a file tell their range by their frames: on whole
 // seconds' edges a range of seconds, else of frames.
 TEST(FrameRange, AScoresFramesSayWhetherItWasARangeOfFrames) {

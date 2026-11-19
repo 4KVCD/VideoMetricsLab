@@ -170,6 +170,13 @@ struct VmafOptions {
         range_start = range_in_milliseconds ? start_ms : start_ms / 1000;
         range_end = range_in_milliseconds ? end_ms : end_ms / 1000;
     }
+    // The range `range`, in its unit.
+    void set_compared_range(const ComparedRange& range) {
+        range_start = range.start;
+        range_end = range.end;
+        range_in_frames = range.in_frames;
+        range_in_milliseconds = range.in_milliseconds && !range.in_frames;
+    }
     // A time of this range (range_start or range_end, not of frames) in milliseconds.
     long long range_time_ms(long long value) const { return range_in_milliseconds ? value : value * 1000; }
     CropChoice crop_choice() const { return CropChoice(crop_mode, manual_source_crop, manual_test_crop); }

@@ -28,6 +28,7 @@
 #include "vml/cvvdp.h"
 #include "vml/crop_detect.h"
 #include "vml/film_grain_scoring.h"
+#include "vml/frame_range.h"
 #include "vml/isolated.h"
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
@@ -197,11 +198,8 @@ void MainWindow::on_panel_field_edited(const QString& field) {
         } else if (const std::optional<ManualCropBox> box = manual_crop_box_of(field)) {
             box->in(target) = box->in(panel);
         } else if (field == "range_in_frames") {
-            // Another unit: the range the fields show in it, whole by default.
-            target.range_in_frames = panel.range_in_frames;
-            target.range_in_milliseconds = panel.range_in_milliseconds;
-            target.range_start = panel.range_start;
-            target.range_end = panel.range_end;
+            // Rows: switched in the loop below (switch_range_unit), each its
+            // own range. Nothing else holds a range (new rows have none).
         } else if (field == "range_start" || field == "range_end") {
             if (target.range_in_frames != panel.range_in_frames) {
                 // A row of the selection in the other unit: the whole range shown.
@@ -262,8 +260,26 @@ void MainWindow::on_panel_field_edited(const QString& field) {
     const bool execution_only = field == "gpu" || field == "n_threads" || field == "vmaf_on_gpu";
     std::vector<int> applied;
     bool filled = false;
+    // Another unit for the range: the same part of the videos in it, at the
+    // reference's frame rate, or the range as it was typed where it is
+    // switched back with no edit; the panel then shows it.
+    const bool unit_switched = field == "range_in_frames";
+    const double reference_fps = source_info_ ? source_info_->fps : 0.0;
     for (const int row : panel_target_rows_) {
         RowData& row_data = *rows_[static_cast<std::size_t>(row)];
+        if (unit_switched) {
+            const ComparedRange current = row_data.options.compared_range();
+            if (field_is_fixed_for(row_data, field) || current.in_frames == panel.range_in_frames) {
+                continue;
+            }
+            row_data.options.set_compared_range(switch_range_unit(
+                current, row_data.range_before_unit_switch, panel.range_in_frames, reference_fps));
+            row_data.range_before_unit_switch = current;
+            if (!(row_data.options.compared_range() == current)) {
+                applied.push_back(row);
+            }
+            continue;
+        }
         if (!field_is_fixed_for(row_data, field) && apply(row_data.options)) {
             applied.push_back(row);
             if (field == "crop_mode") {
@@ -271,7 +287,7 @@ void MainWindow::on_panel_field_edited(const QString& field) {
             }
         }
     }
-    if (filled) {
+    if (filled || (unit_switched && !panel_target_rows_.empty())) {
         write_panel_options(rows_[static_cast<std::size_t>(panel_target_rows_.front())]->options);
     }
     const std::vector<int> changed = execution_only ? std::vector<int>() : applied;
