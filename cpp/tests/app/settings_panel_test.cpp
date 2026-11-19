@@ -72,7 +72,8 @@ TEST(SettingsPanel, ARunLocksOnlyWhatItUsesAndSaysSo) {
 
 // Settings > Weak segments shows the profile in use and edits it; an edit is
 // saved and told to the window (for Metric Graphs' Weak segments). New...
-// starts a profile from the one shown and puts it in use; Rename... and
+// starts a profile from the one shown and puts it in use; From preset loads
+// a preset into the one in use; Rename... and
 // Delete work on the one in use (Default has neither); a name taken is
 // refused. Profiles the window saved are shown without counting as an edit.
 TEST(SettingsPanel, WeakSegmentsEditsTheProfiles) {
@@ -81,7 +82,7 @@ TEST(SettingsPanel, WeakSegmentsEditsTheProfiles) {
     settings.weak_segment_merge_frames = 4;
     FileWrites writes;
     Dialogs dialogs = standard_dialogs(nullptr);
-    QStringList answers{"Film", "default", "Film, 35mm", "Grain"};
+    QStringList answers{"Film", "default", "Film, 35mm", "Grain", "Film"};
     QString alerted;
     dialogs.ask_text = [&answers](const QString&, const QString&, const QString&) -> std::optional<QString> {
         return answers.takeFirst();
@@ -132,15 +133,33 @@ TEST(SettingsPanel, WeakSegmentsEditsTheProfiles) {
     EXPECT_EQ(segment_profiles(settings).size(), 1U);
     EXPECT_EQ(panel.weak_profile->currentText(), "Default");
 
-    // From preset...: a profile named after the preset (numbered where the
-    // name is taken), with its rules, in use.
-    panel.new_weak_profile_from_preset("animation");
-    panel.new_weak_profile_from_preset("animation");
-    EXPECT_EQ(settings.weak_segment_profile, "Animation 2");
-    EXPECT_EQ(panel.weak_profile->currentText(), "Animation 2");
-    ASSERT_TRUE(segment_profile_named(settings, "Animation"));
-    EXPECT_EQ(condition_texts(panel.weak_segments->rules().conditions),
-              condition_texts(segment_preset("animation")->rules.conditions));
+    // From preset...: the preset's rules into the profile in use, Default
+    // here, saved and told as an edit. No profile is added, however often.
+    const int before_preset = changed.count();
+    panel.load_weak_preset("animation");
+    panel.load_weak_preset("animation");
+    EXPECT_EQ(segment_profiles(settings).size(), 1U);
+    EXPECT_EQ(panel.weak_profile->count(), 1);
+    EXPECT_EQ(settings.weak_segment_profile, "");
+    EXPECT_EQ(panel.weak_profile->currentText(), "Default");
+    const SegmentRules& animation = segment_preset("animation")->rules;
+    EXPECT_EQ(condition_texts(panel.weak_segments->rules().conditions), condition_texts(animation.conditions));
+    EXPECT_EQ(condition_texts(segment_profile_in_use(settings).rules.conditions),
+              condition_texts(animation.conditions));
+    EXPECT_EQ(settings.weak_segment_min_frames, animation.min_frames);
+    EXPECT_EQ(settings.weak_segment_merge_frames, animation.merge_frames);
+    EXPECT_GT(changed.count(), before_preset);
+    // Into a named profile: its rules only, Default's left as they are.
+    panel.new_weak_profile();  // "Film", from the rules shown
+    panel.load_weak_preset("grainy-film");
+    EXPECT_EQ(settings.weak_segment_profile, "Film");
+    EXPECT_EQ(segment_profiles(settings).size(), 2U);
+    EXPECT_EQ(condition_texts(segment_profile_named(settings, "Film")->rules.conditions),
+              condition_texts(segment_preset("grainy-film")->rules.conditions));
+    EXPECT_EQ(condition_texts(segment_profile_named(settings, "")->rules.conditions),
+              condition_texts(animation.conditions));
+    panel.delete_weak_profile();
+    EXPECT_EQ(panel.weak_profile->currentText(), "Default");
 
     // Saved by the window (Default, put back in use): shown, not an edit.
     const int edits = changed.count();

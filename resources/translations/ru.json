@@ -1047,7 +1047,7 @@
   "Save as new profile": "Сохранить как новый профиль",
   "Save to profile": "Сохранить в профиль",
   "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "Где оценки видео считаются слабыми, в именованных профилях для разных видов видео. Выбранный здесь профиль — используемый: Графики метрик > Худшие кадры > Слабые участки начинается с него, а отчёт о слабых участках, экспорт после каждого запуска и --segments saved в командной строке следуют ему.",
-  "A new profile from a starting point for a kind of video, to adjust as needed.": "Новый профиль из отправной точки для определённого вида видео, с настройкой по необходимости.",
+  "Loads a starting point for a kind of video into this profile, replacing its rules, to adjust as needed. To keep the rules shown too, make a profile with New first.": "Загружает в этот профиль отправную точку для определённого вида видео, заменяя его правила, с настройкой по необходимости. Чтобы сохранить и показанные правила, сначала создайте профиль кнопкой «Создать».",
   "Animation": "Анимация",
   "CGI": "CGI",
   "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "CVVDP, моделирующая HDR-дисплеи (модели VMAF рассчитаны на SDR-видео): CVVDP должна быть оценена.",

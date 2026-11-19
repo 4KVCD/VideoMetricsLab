@@ -1047,7 +1047,7 @@
   "Save as new profile": "新しいプロファイルとして保存",
   "Save to profile": "プロファイルに保存",
   "Where a video's scores count as weak, in named profiles for different kinds of video. The profile picked here is the one in use: Metric Graphs > Worst frames > Weak segments starts from it, and the weak segments report, the exports after each run and the command line's --segments saved follow it.": "動画のスコアを弱いとみなす条件を、動画の種類ごとに名前付きのプロファイルで定めます。ここで選んだプロファイルが使われます。指標グラフ > 最悪のフレーム > 弱い区間 はこれから始まり、弱い区間のレポート、実行のたびのエクスポート、コマンドラインの --segments saved もこれに従います。",
-  "A new profile from a starting point for a kind of video, to adjust as needed.": "動画の種類に合わせた出発点から作る新しいプロファイルです。必要に応じて調整してください。",
+  "Loads a starting point for a kind of video into this profile, replacing its rules, to adjust as needed. To keep the rules shown too, make a profile with New first.": "動画の種類に合わせた出発点をこのプロファイルに読み込み、そのルールを置き換えます。必要に応じて調整してください。表示中のルールも残すには、先に「新規」でプロファイルを作成してください。",
   "Animation": "アニメーション",
   "CGI": "CGI",
   "CVVDP, which models HDR displays (VMAF's models are for SDR video): CVVDP must be scored.": "HDR ディスプレイをモデル化する CVVDP を使います（VMAF のモデルは SDR 動画用です）。CVVDP が採点済みである必要があります。",

@@ -684,9 +684,11 @@ where Metric Graphs' **Weak segments...** starts, and what the weak segments
 report, the exports after each run and the command line's `--segments saved`
 follow; `--segments profile:NAME` takes another.
 
-**From preset...** starts a profile for a kind of video, named after it and
-put in use, to adjust as needed (the command line takes a preset as
-`--segments preset:KEY`). Any condition makes a frame weak:
+**From preset...** loads a starting point for a kind of video into the
+profile in use, replacing its rules, to adjust as needed; it adds no
+profile. To keep the rules shown as well, make a profile with **New...**
+first, then load the preset into it. (The command line takes a preset as
+`--segments preset:KEY`.) Any condition makes a frame weak:
 
 | Preset (`KEY`) | Conditions | Shortest segment | Join gap | For |
 | --- | --- | --- | --- | --- |
