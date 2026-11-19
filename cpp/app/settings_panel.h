@@ -36,6 +36,7 @@ class QFutureWatcher;
 
 namespace vml {
 struct CacheSummary;
+struct ClearedResults;
 }
 
 namespace vml::app {
@@ -197,8 +198,9 @@ private:
     // newer count replaces an older one before it is shown.
     QFutureWatcher<CacheSummary>* counting_ = nullptr;
     std::filesystem::path counted_folder_;
-    // How many saved results clearing them removed, while it is under way.
-    std::shared_ptr<int> cleared_;
+    // How many saved results clearing them removed and kept, while it is
+    // under way.
+    std::shared_ptr<ClearedResults> cleared_;
     bool filling_profiles_ = false;  // fill_weak_profiles: not an edit
 };
 

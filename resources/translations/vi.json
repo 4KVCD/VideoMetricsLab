@@ -116,7 +116,6 @@
   "Log exported to {path}": "Đã xuất nhật ký ra {path}",
   "There are no saved results to clear.": "Không có kết quả đã lưu để xóa.",
   "Saved results are already being cleared.": "Đang xóa kết quả đã lưu.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "Xóa kết quả đã lưu khỏi {directory}?\n\nCác video đã chấm sẽ cần tính lại.",
   "Clearing saved results...": "Đang xóa kết quả đã lưu...",
   "Reference video:": "Video tham chiếu:",
   "No reference selected.": "Chưa chọn video tham chiếu.",
@@ -1101,6 +1100,9 @@
   "{name} (saved)": "{name} (đã lưu)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Xóa kết quả đã lưu khỏi {directory}?\n\nCác video đã chấm sẽ cần tính lại. Những kết quả có video tham chiếu không còn ở chỗ cũ sẽ được giữ lại: không thể tính lại điểm của chúng. Hãy xóa chúng trong thẻ Kết quả đã lưu.",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Một số kết quả không thể chấm lại: video tham chiếu của chúng không còn ở chỗ cũ (được đánh dấu \"không tìm thấy\").",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nKhông tìm thấy ở đó: không có nó, không thể tính lại các điểm này.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Nhận ra video kiểm tra đã remux sau khi chấm (đọc lại từng video)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Video kiểm tra được mux hoặc remux sau khi chấm (luồng thô vào MKV, MKV vào MP4) vẫn giữ điểm đã lưu: nó được nhận ra qua các ảnh đã mã hóa.\n\nĐể làm vậy, mỗi video kiểm tra được đọc thêm một lần sau khi lưu điểm, mất thời gian bằng việc đọc tệp (vài phút với phim trên thư mục chia sẻ mạng), chạy nền và không bao giờ trong lúc tính; và video có luồng bắt đầu giống một video đã chấm sẽ được đọc toàn bộ để biết có phải cùng video không, sau khi tìm thấy điểm đã lưu của các video khác.\n\nTắt: video kiểm tra chỉ được nhận ra qua tệp của chúng.",
   "Checking whether {name} is a remux of a video already scored: reading its stream…": "Đang kiểm tra xem {name} có phải bản remux của video đã chấm không: đang đọc luồng…",
@@ -1202,6 +1204,9 @@
   ],
   "{count} saved comparison in {directory}": [
    "{count} so sánh đã lưu trong {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "Đã giữ {count} kết quả có video tham chiếu bị mất: hãy xóa trong thẻ Kết quả đã lưu."
   ]
  }
 }

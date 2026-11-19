@@ -116,7 +116,6 @@
   "Log exported to {path}": "Log esportato in {path}",
   "There are no saved results to clear.": "Non ci sono risultati salvati da cancellare.",
   "Saved results are already being cleared.": "I risultati salvati sono già in fase di cancellazione.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "Eliminare i risultati salvati da {directory}?\n\nI video già valutati dovranno essere ricalcolati.",
   "Clearing saved results...": "Cancellazione dei risultati salvati...",
   "Reference video:": "Video di riferimento:",
   "No reference selected.": "Nessun riferimento selezionato.",
@@ -1101,6 +1100,9 @@
   "{name} (saved)": "{name} (salvato)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Eliminare i risultati salvati da {directory}?\n\nI video già valutati dovranno essere ricalcolati. Quelli il cui video di riferimento non è più dove si trovava vengono conservati: i loro punteggi non potrebbero essere ricalcolati. Eliminali nella scheda Risultati salvati.",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Alcuni di essi non potrebbero essere valutati di nuovo: il loro video di riferimento non è più dove si trovava (contrassegnato \"non trovata\").",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nNon trovato lì: senza di esso, questi punteggi non potrebbero essere ricalcolati.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Riconosci i video di test rimuxati dopo la valutazione (rilegge ciascuno)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Un video di test muxato o rimuxato dopo la valutazione (il suo flusso grezzo in un MKV, un MKV in un MP4) mantiene i punteggi salvati: viene riconosciuto dalle sue immagini codificate.\n\nPer farlo ogni video di test viene riletto una volta dopo il salvataggio dei punteggi, per il tempo che richiede la lettura del file (qualche minuto per un film su una condivisione di rete), in background e mai durante un calcolo; e un video il cui flusso inizia come quello di uno valutato viene letto per intero per capire se è lo stesso, dopo che i punteggi salvati degli altri video sono stati trovati.\n\nDisattivato: i video di test vengono riconosciuti solo dai loro file.",
   "Checking whether {name} is a remux of a video already scored: reading its stream…": "Verifica se {name} è un remux di un video già valutato: lettura del suo flusso…",
@@ -1234,6 +1236,10 @@
   "{count} saved comparison in {directory}": [
    "{count} confronto salvato in {directory}",
    "{count} confronti salvati in {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "Conservato {count} risultato il cui video di riferimento manca: eliminalo nella scheda Risultati salvati.",
+   "Conservati {count} risultati i cui video di riferimento mancano: eliminali nella scheda Risultati salvati."
   ]
  }
 }

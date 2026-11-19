@@ -3,6 +3,7 @@
 #include <QAction>
 #include <QComboBox>
 #include <QDateTime>
+#include <QFont>
 #include <QFormLayout>
 #include <QFutureWatcher>
 #include <QGroupBox>
@@ -190,6 +191,16 @@ void SavedResultsPanel::show_list(std::vector<SavedComparison> list) {
         table_->setItem(row, col_test, test);
         auto* reference = new QTableWidgetItem(name_of(saved.source));
         reference->setToolTip(text_of(saved.source));
+        if (!saved.reference_found) {
+            // Its scores are the only ones there are: said where it is seen.
+            reference->setText(app::tr("{name} (not found)", {{"name", name_of(saved.source)}}));
+            reference->setToolTip(app::tr("{path}\n\nNot found there: without it, these scores could not be "
+                                          "calculated again.",
+                                          {{"path", text_of(saved.source)}}));
+            QFont font = reference->font();
+            font.setItalic(true);
+            reference->setFont(font);
+        }
         table_->setItem(row, col_reference, reference);
         table_->setItem(row, col_saved,
                         new SortItem(time_text(saved.saved),
@@ -370,13 +381,17 @@ void SavedResultsPanel::delete_selected() {
     if (chosen.empty() || run_active_) {
         return;
     }
-    if (!dialogs_.ask_no_default(
-            app::tr("Delete saved results"),
-            ntr("Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored "
-                "again the next time they are compared.",
-                "Delete the saved scores of {count} comparisons? They can't be brought back: the videos are scored "
-                "again the next time they are compared.",
-                static_cast<long long>(chosen.size())))) {
+    QString question =
+        ntr("Delete the saved scores of {count} comparison? They can't be brought back: the videos are scored "
+            "again the next time they are compared.",
+            "Delete the saved scores of {count} comparisons? They can't be brought back: the videos are scored "
+            "again the next time they are compared.",
+            static_cast<long long>(chosen.size()));
+    if (std::any_of(chosen.begin(), chosen.end(), [](const SavedComparison* saved) { return !saved->reference_found; })) {
+        question += "\n\n" + app::tr("Some of them could not be scored again: their reference video is no longer "
+                                      "where it was (marked \"not found\").");
+    }
+    if (!dialogs_.ask_no_default(app::tr("Delete saved results"), question)) {
         return;
     }
     int failed = 0;

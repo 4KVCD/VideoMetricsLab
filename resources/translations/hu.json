@@ -116,7 +116,6 @@
   "Log exported to {path}": "Napló exportálva ide: {path}",
   "There are no saved results to clear.": "Nincsenek törölhető mentett eredmények.",
   "Saved results are already being cleared.": "A mentett eredmények törlése már folyamatban van.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "Törli a mentett eredményeket innen: {directory}?\n\nA már pontozott videókat újra kell számolni.",
   "Clearing saved results...": "Mentett eredmények törlése...",
   "Reference video:": "Referenciavideó:",
   "No reference selected.": "Nincs kiválasztva referencia.",
@@ -1101,6 +1100,9 @@
   "{name} (saved)": "{name} (mentett)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Törli a mentett eredményeket innen: {directory}?\n\nA már pontozott videókat újra kell számolni. Azok megmaradnak, amelyek referenciavideója már nincs ott, ahol volt: a pontszámaikat nem lehetne újra kiszámolni. Ezeket a Mentett eredmények lapon törölheti.",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Némelyiküket nem lehetne újra pontozni: a referenciavideójuk már nincs ott, ahol volt („nem található” jelöléssel).",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nOtt nem található: nélküle ezeket a pontszámokat nem lehetne újra kiszámolni.",
   "Recognize test videos remuxed after scoring (reads each one again)": "A pontozás után újramuxolt tesztvideók felismerése (mindegyiket újra beolvassa)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "A pontozás után muxolt vagy újramuxolt tesztvideó (nyers streamje MKV-be, egy MKV MP4-be) megtartja a mentett pontszámait: kódolt képeiről ismerhető fel.\n\nEhhez minden tesztvideót még egyszer be kell olvasni a pontszámai mentése után, annyi ideig, amennyi a fájl beolvasása (hálózati megosztáson lévő filmnél néhány perc), a háttérben és soha nem számítás közben; és az a videó, amelynek streamje úgy kezdődik, mint egy pontozotté, teljes egészében beolvasásra kerül, hogy kiderüljön, ugyanaz-e, miután a többi videó mentett pontszámai megvannak.\n\nKikapcsolva: a tesztvideók csak a fájljaikról ismerhetők fel.",
   "Checking whether {name} is a remux of a video already scored: reading its stream…": "Ellenőrzés, hogy a(z) {name} egy már pontozott videó újramuxolása-e: a stream beolvasása…",
@@ -1234,6 +1236,10 @@
   "{count} saved comparison in {directory}": [
    "{count} mentett összehasonlítás itt: {directory}",
    "{count} mentett összehasonlítás itt: {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "{count} eredmény megmaradt, amelynek hiányzik a referenciavideója: törölje a Mentett eredmények lapon.",
+   "{count} eredmény megmaradt, amelyeknek hiányzik a referenciavideója: törölje őket a Mentett eredmények lapon."
   ]
  }
 }

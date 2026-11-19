@@ -33,6 +33,10 @@ struct SavedComparison {
     std::filesystem::path distorted;
     std::chrono::system_clock::time_point saved;  // its newest file's
     std::uintmax_t bytes = 0;                     // its files'
+    // Whether its reference is still where its scores were saved from
+    // (metric_cache.h's reference_where_saved). Where not, its scores are the
+    // only ones there are: they could not be calculated again.
+    bool reference_found = true;
     // By metric in the app's order, each metric's newest first.
     std::vector<SavedScoreFile> scores;
 

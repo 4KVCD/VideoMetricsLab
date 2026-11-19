@@ -116,7 +116,6 @@
   "Log exported to {path}": "日志已导出到 {path}",
   "There are no saved results to clear.": "没有可清除的已保存结果。",
   "Saved results are already being cleared.": "已保存的结果正在清除。",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "要删除 {directory} 中已保存的结果吗？\n\n已评分的视频需要重新计算。",
   "Clearing saved results...": "正在清除已保存的结果...",
   "Reference video:": "参考视频：",
   "No reference selected.": "未选择参考视频。",
@@ -1101,6 +1100,9 @@
   "{name} (saved)": "{name}（已保存）",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "要删除 {directory} 中已保存的结果吗？\n\n已评分的视频需要重新计算。参考视频已不在原位置的结果会保留：它们的分数无法再重新计算。请在“已保存的结果”选项卡中删除它们。",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "其中一些无法重新评分：它们的参考视频已不在原位置（标记为“未找到”）。",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\n在该位置找不到：没有它，就无法重新计算这些分数。",
   "Recognize test videos remuxed after scoring (reads each one again)": "识别评分后重新封装的测试视频（会再读取每个视频一次）",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "评分后封装或重新封装的测试视频（原始流封装为 MKV，MKV 转为 MP4）会保留已保存的分数：按其编码画面识别。\n\n为此，每个测试视频在分数保存后会再读取一次，耗时与读取文件相同（网络共享上的电影需要几分钟），在后台进行，计算期间不会进行；流的开头与已评分视频相同的视频，会在其他视频的已保存分数找到后完整读取，以判断是否为同一视频。\n\n关闭：测试视频只按文件识别。",
   "Checking whether {name} is a remux of a video already scored: reading its stream…": "正在检查 {name} 是否为已评分视频的重新封装：正在读取其流…",
@@ -1202,6 +1204,9 @@
   ],
   "{count} saved comparison in {directory}": [
    "{count} 个已保存的对比，位于 {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "已保留 {count} 个参考视频已丢失的结果：请在“已保存的结果”选项卡中删除。"
   ]
  }
 }

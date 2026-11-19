@@ -1921,26 +1921,61 @@ CacheSummary cache_summary(const std::filesystem::path& base) {
     return summary;
 }
 
-int clear_all(const std::filesystem::path& base) {
+bool reference_where_saved(const std::filesystem::path& folder) {
+    const std::optional<nlohmann::json> context = read_json(folder / "context.json");
+    if (!context || !context->is_object() || !context->contains("source")) {
+        return true;  // not a comparison this app can read: nothing to keep it for
+    }
+    const std::filesystem::path source = platform::path_from_text(python_str(context->at("source")));
+    std::error_code error;
+    if (source.empty() || !std::filesystem::is_regular_file(source, error)) {
+        return false;
+    }
+    const std::optional<nlohmann::json> identity = read_json(folder / "identity.json");
+    const std::string recorded =
+        identity && identity->is_object() ? text_at(*identity, "source", "path") : std::string();
+    return recorded.empty() || recorded == file_identity(source);
+}
+
+ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_without_reference) {
     const std::filesystem::path root = base / format_folder;
-    // The bitrate saved beside the scores (bitrate_store.h), saved or not.
+    ClearedResults cleared;
+    // The bitrate saved beside the scores (bitrate_store.h), all of it: it is
+    // read again from a file still there, and none of it is listed where
+    // what is kept can be deleted later (the Saved results tab).
     std::error_code bitrate_error;
     std::filesystem::remove_all(bitrate_store_folder(base), bitrate_error);
     std::error_code error;
     if (!std::filesystem::exists(root, error)) {
-        return 0;
+        return cleared;
     }
-    int count = 0;
+    std::vector<std::filesystem::path> deleted;
     // increment(error), not a range-for: its ++ throws if reading fails.
     for (std::filesystem::directory_iterator entry(root, error);
          !error && entry != std::filesystem::directory_iterator(); entry.increment(error)) {
         std::error_code ignored;
-        if (std::filesystem::is_regular_file(entry->path() / "context.json", ignored)) {
-            ++count;
+        if (!std::filesystem::is_regular_file(entry->path() / "context.json", ignored)) {
+            continue;
+        }
+        if (keep_without_reference && !reference_where_saved(entry->path())) {
+            ++cleared.kept;
+        } else {
+            deleted.push_back(entry->path());
         }
     }
-    std::filesystem::remove_all(root, error);
-    return error ? 0 : count;
+    if (cleared.kept == 0) {
+        std::filesystem::remove_all(root, error);  // everything, as before
+        cleared.removed = error ? 0 : static_cast<int>(deleted.size());
+        return cleared;
+    }
+    bool all = !error;
+    for (const std::filesystem::path& folder : deleted) {
+        std::error_code not_removed;
+        std::filesystem::remove_all(folder, not_removed);
+        all = all && !not_removed;
+    }
+    cleared.removed = all ? static_cast<int>(deleted.size()) : 0;
+    return cleared;
 }
 
 std::string saved_content_hash(const std::filesystem::path& folder, bool reference) {

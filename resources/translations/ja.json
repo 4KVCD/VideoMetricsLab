@@ -116,7 +116,6 @@
   "Log exported to {path}": "ログを {path} にエクスポートしました",
   "There are no saved results to clear.": "消去できる保存済みの結果はありません。",
   "Saved results are already being cleared.": "保存済みの結果はすでに消去中です。",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "{directory} の保存済みの結果を削除しますか？\n\n採点済みの動画は再計算が必要になります。",
   "Clearing saved results...": "保存済みの結果を消去しています...",
   "Reference video:": "参照動画：",
   "No reference selected.": "参照動画が選択されていません。",
@@ -1101,6 +1100,9 @@
   "{name} (saved)": "{name}（保存済み）",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "{directory} の保存済みの結果を削除しますか？\n\n採点済みの動画は再計算が必要になります。参照動画が元の場所にない結果は残されます。そのスコアは再計算できないためです。それらは「保存済みの結果」タブで削除してください。",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "一部は再採点できません。参照動画が元の場所にありません（「見つかりません」と表示）。",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nそこに見つかりません。参照動画がないと、これらのスコアは再計算できません。",
   "Recognize test videos remuxed after scoring (reads each one again)": "採点後に再多重化されたテスト動画を認識する（各動画をもう一度読み込みます）",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "採点後に多重化または再多重化されたテスト動画（生ストリームを MKV に、MKV を MP4 に）は、保存済みのスコアを引き継ぎます。符号化された画像によって識別されます。\n\nそのため、スコアの保存後に各テスト動画をもう一度読み込みます。ファイルの読み込みと同じ時間がかかり（ネットワーク共有上の映画で数分）、バックグラウンドで行われ、計算中には行われません。また、ストリームの先頭が採点済みの動画と同じ動画は、他の動画の保存済みスコアが見つかった後、同じ動画かどうかを判定するためにすべて読み込まれます。\n\nオフ：テスト動画はファイルによってのみ識別されます。",
   "Checking whether {name} is a remux of a video already scored: reading its stream…": "{name} が採点済みの動画の再多重化かどうかを確認しています：ストリームを読み込み中…",
@@ -1202,6 +1204,9 @@
   ],
   "{count} saved comparison in {directory}": [
    "保存済みの比較 {count} 件（{directory}）"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "参照動画がない {count} 件の結果を残しました。「保存済みの結果」タブで削除してください。"
   ]
  }
 }

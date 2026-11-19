@@ -116,7 +116,6 @@
   "Log exported to {path}": "Log exportado para {path}",
   "There are no saved results to clear.": "Não há resultados salvos para limpar.",
   "Saved results are already being cleared.": "Os resultados salvos já estão sendo limpos.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "Excluir os resultados salvos de {directory}?\n\nOs vídeos já pontuados terão de ser recalculados.",
   "Clearing saved results...": "Limpando resultados salvos...",
   "Reference video:": "Vídeo de referência:",
   "No reference selected.": "Nenhuma referência selecionada.",
@@ -1101,6 +1100,9 @@
   "{name} (saved)": "{name} (salvo)",
   "{size:.0f} KB": "{size:.0f} KB",
   "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Excluir os resultados salvos de {directory}?\n\nOs vídeos já pontuados terão de ser recalculados. São mantidos aqueles cujo vídeo de referência não está mais onde estava: suas pontuações não poderiam ser calculadas de novo. Exclua-os na aba Resultados salvos.",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Alguns deles não poderiam ser pontuados de novo: o vídeo de referência não está mais onde estava (marcado como \"não encontrada\").",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nNão encontrado ali: sem ele, essas pontuações não poderiam ser calculadas de novo.",
   "Recognize test videos remuxed after scoring (reads each one again)": "Reconhecer vídeos de teste remuxados após a pontuação (lê cada um de novo)",
   "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Um vídeo de teste muxado ou remuxado depois de pontuado (seu fluxo bruto em um MKV, um MKV em um MP4) mantém suas pontuações salvas: ele é reconhecido por suas imagens codificadas.\n\nPara isso, cada vídeo de teste é lido mais uma vez depois que suas pontuações são salvas, pelo tempo que leva a leitura do arquivo (alguns minutos para um filme em um compartilhamento de rede), em segundo plano e nunca durante um cálculo; e um vídeo cujo fluxo começa como o de um já pontuado é lido inteiro para saber se é o mesmo, depois que as pontuações salvas dos outros vídeos são encontradas.\n\nDesativado: os vídeos de teste são reconhecidos só pelos arquivos.",
   "Checking whether {name} is a remux of a video already scored: reading its stream…": "Verificando se {name} é um remux de um vídeo já pontuado: lendo seu fluxo…",
@@ -1234,6 +1236,10 @@
   "{count} saved comparison in {directory}": [
    "{count} comparação salva em {directory}",
    "{count} comparações salvas em {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "{count} resultado mantido, cujo vídeo de referência sumiu: exclua-o na aba Resultados salvos.",
+   "{count} resultados mantidos, cujos vídeos de referência sumiram: exclua-os na aba Resultados salvos."
   ]
  }
 }
