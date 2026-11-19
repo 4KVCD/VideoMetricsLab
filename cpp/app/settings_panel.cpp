@@ -56,6 +56,7 @@
 #include "vml/segment_profiles.h"
 #include "vml/vship.h"
 #include "vship_names.h"
+#include "widgets.h"
 #include "window_helpers.h"
 
 // The panel's text is app::tr's: inside a Q_OBJECT class, tr() is Qt's.
@@ -112,6 +113,7 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     status = new QLabel;
     theme::style(status, "color: {muted};");
     layout->addWidget(status);
+    new WheelPastValueBoxes(this);  // the wheel scrolls this page, never changes a setting
     // The tools and saved results are filled in when the tab is shown
     // (refresh_status).
 }
