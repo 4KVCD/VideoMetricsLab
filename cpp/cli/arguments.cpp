@@ -53,7 +53,8 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--test-remuxes {on,off}]
                                    [--csv FOLDER] [--json FILE] [--batch CSV]
                                    [--scores-csv FILE] [--worst N]
-                                   [--segments CONDITIONS] [--segments-all]
+                                   [--segments CONDITIONS]
+                                   [--segments-all | --segments-any]
                                    [--segment-min-frames N]
                                    [--segment-merge-frames N]
                                    [--segments-dir FOLDER]
@@ -319,8 +320,15 @@ options:
                         of profile NAME, "preset:KEY" those of a preset
                         (animation, cgi, digital, grainy-film, hdr,
                         preview); those on metrics not compared are left
-                        out, and its options apply where none are given here
+                        out, and its options apply where none are given
+                        here. Conditions after it change it:
+                        "preset:grainy-film,vmaf<80" replaces the preset's
+                        VMAF condition, and a metric it has none for is
+                        added
   --segments-all        a frame is weak only where every condition holds
+  --segments-any        a frame is weak where any condition holds, also where
+                        the profile or preset says every one must (the
+                        default otherwise)
   --segment-min-frames N
                         leave out segments shorter than N frames (default 1)
   --segment-merge-frames N
@@ -900,6 +908,40 @@ std::vector<WeakCondition> weak_conditions(const std::string& text) {
     return conditions;
 }
 
+// --segments' value: conditions; or "saved", "profile:NAME" or "preset:KEY",
+// with conditions after it, if any, that change it (take_saved_segments).
+void read_segments(const std::string& value, CompareArguments& parsed) {
+    std::optional<std::string> source;
+    std::string conditions;
+    for (std::size_t start = 0; start <= value.size();) {
+        std::size_t end = value.find(',', start);
+        if (end == std::string::npos) {
+            end = value.size();
+        }
+        const std::string part(python_strip(value.substr(start, end - start)));
+        start = end + 1;
+        const std::string lower = ascii_lower(part);
+        if (lower == "saved" || lower.starts_with("profile:") || lower.starts_with("preset:")) {
+            if (source) {
+                throw ArgumentError{"give one of saved, profile:NAME and preset:KEY, not " + *source + " and " + part};
+            }
+            source = part;
+        } else {
+            conditions += (conditions.empty() ? "" : ",") + part;
+        }
+    }
+    const std::string lower = source ? ascii_lower(*source) : std::string();
+    parsed.segments_saved = source.has_value();
+    parsed.segments_profile = lower.starts_with("profile:")
+                                  ? std::optional(std::string(python_strip(source->substr(8))))
+                                  : std::nullopt;
+    parsed.segments_preset = lower.starts_with("preset:")
+                                 ? std::optional(std::string(python_strip(source->substr(7))))
+                                 : std::nullopt;
+    // Conditions alone must be some; after a profile, none is fine.
+    parsed.segments = source && conditions.empty() ? std::vector<WeakCondition>() : weak_conditions(conditions);
+}
+
 // A whole number from 0 up, read as Python's int() reads it.
 int int_from_zero(const std::string& text) {
     const std::optional<long long> value = python_int(text);
@@ -1179,19 +1221,9 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--batch"}, [&parsed](const std::string& value) { parsed.batch = value; }),
         option({"--scores-csv"}, [&parsed](const std::string& value) { parsed.scores_csv = value; }),
         option({"--worst"}, [&parsed](const std::string& value) { parsed.worst = int_up_to(value, 1000); }),
-        option({"--segments"},
-               [&parsed](const std::string& value) {
-                   const std::string given(python_strip(value));
-                   const bool profile = ascii_lower(given).starts_with("profile:");
-                   const bool preset = ascii_lower(given).starts_with("preset:");
-                   parsed.segments_saved = profile || preset || ascii_lower(given) == "saved";
-                   parsed.segments_profile =
-                       profile ? std::optional(std::string(python_strip(given.substr(8)))) : std::nullopt;
-                   parsed.segments_preset =
-                       preset ? std::optional(std::string(python_strip(given.substr(7)))) : std::nullopt;
-                   parsed.segments = parsed.segments_saved ? std::vector<WeakCondition>() : weak_conditions(value);
-               }),
+        option({"--segments"}, [&parsed](const std::string& value) { read_segments(value, parsed); }),
         flag({"--segments-all"}, parsed.segments_all),
+        flag({"--segments-any"}, parsed.segments_any),
         option({"--segment-min-frames"},
                [&parsed](const std::string& value) {
                    parsed.segment_min_frames = int_up_to(value, std::numeric_limits<int>::max());
@@ -1209,7 +1241,8 @@ Parser compare_parser(CompareArguments& parsed) {
     parser.exclusive = {{"--duration", "--range"},
                         {"--duration", "--frames"},
                         {"--range", "--frames"},
-                        {"--no-gpu-decode", "--gpu-decode"}};
+                        {"--no-gpu-decode", "--gpu-decode"},
+                        {"--segments-all", "--segments-any"}};
     return parser;
 }
 
@@ -1277,6 +1310,9 @@ std::optional<std::string> segment_option_alone(const CompareArguments& argument
     }
     if (arguments.segments_all) {
         return "--segments-all";
+    }
+    if (arguments.segments_any) {
+        return "--segments-any";
     }
     if (arguments.segment_min_frames) {
         return "--segment-min-frames";

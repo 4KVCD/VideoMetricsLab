@@ -56,6 +56,7 @@
 #include "vml/segment_profiles.h"
 #include "vml/vship.h"
 #include "vship_names.h"
+#include "widgets.h"
 #include "window_helpers.h"
 
 // The panel's text is app::tr's: inside a Q_OBJECT class, tr() is Qt's.
@@ -112,6 +113,7 @@ SettingsPanel::SettingsPanel(Settings& settings, FileWrites& file_writes, std::f
     status = new QLabel;
     theme::style(status, "color: {muted};");
     layout->addWidget(status);
+    new WheelPastValueBoxes(this);  // the wheel scrolls this page, never changes a setting
     // The tools and saved results are filled in when the tab is shown
     // (refresh_status).
 }
@@ -124,7 +126,7 @@ QGroupBox* SettingsPanel::build_ffmpeg_box() {
     ffmpeg_edit = new QLineEdit(text_of(settings_.ffmpeg_dir));
     ffmpeg_edit->setPlaceholderText(app::tr("blank = search PATH"));
     connect(ffmpeg_edit, &QLineEdit::editingFinished, this, [this] { on_edited(); });
-    auto* browse_ffmpeg = new QPushButton(app::tr("Browse..."));
+    auto* browse_ffmpeg = new QPushButton(app::tr("Browse"));
     connect(browse_ffmpeg, &QPushButton::clicked, this,
             [this] { pick_directory(app::with_program_names(app::tr("Select the folder containing ffmpeg.exe")), ffmpeg_edit); });
     auto* ffmpeg_row = new QHBoxLayout;
@@ -144,7 +146,7 @@ QGroupBox* SettingsPanel::build_storage_box() {
     cache_edit = new QLineEdit(text_of(settings_.cache_dir));
     cache_edit->setPlaceholderText(app::tr("blank = shared user-profile folder"));
     connect(cache_edit, &QLineEdit::editingFinished, this, [this] { on_edited(); });
-    auto* browse_cache = new QPushButton(app::tr("Browse..."));
+    auto* browse_cache = new QPushButton(app::tr("Browse"));
     connect(browse_cache, &QPushButton::clicked, this,
             [this] { pick_directory(app::tr("Where should saved results be kept?"), cache_edit); });
     auto* open_cache = new QPushButton(app::tr("Open"));
@@ -175,7 +177,7 @@ QGroupBox* SettingsPanel::build_storage_box() {
     export_edit = new QLineEdit(text_of(settings_.export_dir));
     export_edit->setPlaceholderText(app::tr("blank = ask each time"));
     connect(export_edit, &QLineEdit::editingFinished, this, [this] { on_edited(); });
-    auto* browse_export = new QPushButton(app::tr("Browse..."));
+    auto* browse_export = new QPushButton(app::tr("Browse"));
     connect(browse_export, &QPushButton::clicked, this,
             [this] { pick_directory(app::tr("Where should exports be written?"), export_edit); });
     auto* export_row = new QHBoxLayout;
@@ -296,7 +298,7 @@ QGroupBox* SettingsPanel::build_storage_box() {
         std::filesystem::create_directories(folder, ignored);
         QDesktopServices::openUrl(QUrl::fromLocalFile(text_of(folder)));
     });
-    export_log_button = new QPushButton(app::tr("Export log..."));
+    export_log_button = new QPushButton(app::tr("Export log"));
     export_log_button->setToolTip(
         app::tr("Save the log files as one .zip file, to attach when reporting a problem."));
     connect(export_log_button, &QPushButton::clicked, this, [this] { on_export_log(); });
@@ -328,11 +330,11 @@ QGroupBox* SettingsPanel::build_weak_segments_box() {
     weak_profile = new QComboBox;
     weak_profile->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     profile_row->addWidget(weak_profile);
-    auto* new_profile = new QPushButton(app::tr("New..."));
+    auto* new_profile = new QPushButton(app::tr("New"));
     new_profile->setToolTip(app::tr("A new profile, starting from this one's rules."));
     connect(new_profile, &QPushButton::clicked, this, [this] { new_weak_profile(); });
     profile_row->addWidget(new_profile);
-    auto* from_preset = new QPushButton(app::tr("From preset..."));
+    auto* from_preset = new QPushButton(app::tr("From preset"));
     from_preset->setToolTip(app::tr("A new profile from a starting point for a kind of video, to adjust as needed."));
     auto* presets_menu = new QMenu(from_preset);
     presets_menu->setToolTipsVisible(true);
@@ -344,7 +346,7 @@ QGroupBox* SettingsPanel::build_weak_segments_box() {
     }
     from_preset->setMenu(presets_menu);
     profile_row->addWidget(from_preset);
-    weak_profile_rename = new QPushButton(app::tr("Rename..."));
+    weak_profile_rename = new QPushButton(app::tr("Rename"));
     connect(weak_profile_rename, &QPushButton::clicked, this, [this] { rename_weak_profile(); });
     profile_row->addWidget(weak_profile_rename);
     weak_profile_delete = new QPushButton(app::tr("Delete"));
@@ -419,7 +421,8 @@ void SettingsPanel::new_weak_profile() {
     const std::string text = std::string(python_strip(name->toStdString()));
     if (!segment_profile_name_free(segment_profiles(settings_), text)) {
         dialogs_.alert(app::tr("Profile not saved"),
-                       app::tr("A profile needs a name of its own, not Default or another profile's."));
+                       app::tr("A profile needs a name of its own, without commas, and not Default or another "
+                               "profile's."));
         return;
     }
     store_segment_profile(settings_, text, weak_segments->rules());
@@ -468,7 +471,8 @@ void SettingsPanel::rename_weak_profile() {
                  [&current](const SegmentProfile& profile) { return profile.name != current; });
     if (!segment_profile_name_free(others, text)) {
         dialogs_.alert(app::tr("Profile not renamed"),
-                       app::tr("A profile needs a name of its own, not Default or another profile's."));
+                       app::tr("A profile needs a name of its own, without commas, and not Default or another "
+                               "profile's."));
         return;
     }
     for (SegmentProfile& profile : profiles) {
@@ -831,7 +835,8 @@ void SettingsPanel::clear_saved_results() {
     // window. While it is still being made, the question is asked anyway.
     const bool counted = counting_->isFinished() && counting_->future().resultCount() > 0 &&
                          counted_folder_ == directory;
-    if (counted && counting_->result().comparisons == 0 && file_writes_.idle()) {
+    if (counted && counting_->result().comparisons == 0 && counting_->result().bytes == 0 &&
+        file_writes_.idle()) {
         status->setText(app::tr("There are no saved results to clear."));
         return;
     }

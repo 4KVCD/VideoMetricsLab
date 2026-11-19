@@ -636,6 +636,14 @@ bool GpuAttempt::closed_pipe_of(std::size_t output) const {
     return (output == 0 ? state_->distorted : state_->reference)->stopped_while_reading();
 }
 
+bool both_copy_on_gpu(const GpuFrameStream& test, const GpuFrameStream& reference) {
+    const auto copies = [](const GpuFrameStream& stream) {
+        return stream.handover() && (stream.backend() == vvdec_decoder || stream.backend() == nvidia_decoder);
+    };
+    return copies(test) && copies(reference) &&
+           (test.backend() == vvdec_decoder || reference.backend() == vvdec_decoder);
+}
+
 namespace {
 
 // score_decoded with libvmaf's CUDA code (the Python app's
@@ -734,9 +742,12 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                                   decoders, ffmpeg, ffprobe, on_progress, cancel);
     }
     // Where wanted (Settings' VVC decoder): an 8- or 10-bit VVC video, unscaled and scored without film grain, decoded
-    // on the GPU by vvdec-vulkan (vvdec_use): a test video's pictures handed over to the engine, the reference written
-    // into its slots by the CPU (mixed); otherwise copied by the GPU into host memory, which the engine and the CPU's
-    // metrics read (a handed-over frame's planes may not be read, vvdec.h's hand-over).
+    // on the GPU by vvdec-vulkan (vvdec_use). Where the other video's decoder copies on the GPU too (vvdec-vulkan's or
+    // NVIDIA's) and no CPU metric runs beside (they need both pictures in system memory anyway: the extra copies on
+    // the GPU made the six metrics of a 1080p pair about 30 % slower on an RTX 5090), both videos' pictures are
+    // copied into the engine's memory by the GPU (both_copy_on_gpu). Otherwise a test video's pictures handed over to
+    // the engine, the reference written into its slots by the CPU (mixed); else copied by the GPU into host memory,
+    // which the engine and the CPU's metrics read (a handed-over frame's planes may not be read, vvdec.h's hand-over).
     const VvdecUse vvdec = vvdec_use(vvdec_chosen(plans[0], want_vvdec), vvdec_chosen(plans[1], want_vvdec),
                                      !plan.beside.empty());
     const std::string test_library = vvdec.test ? std::string(vvdec_decoder) : test_backend;
@@ -763,12 +774,28 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
     // The planes stay on the GPU when the decoders and Vulkan share memory:
     // one decoder library for both videos, NVIDIA's or AMD's handing over
     // (the scorer's memory is imported by the test video's decoder, and the
-    // source's copies go into it).
+    // source's copies go into it), or vvdec-vulkan's beside its own or
+    // NVIDIA's (each imports the scorer's memory).
     bool shared = false;
     // The test video's pictures handed over, the reference's written by the CPU (whatever decodes it: its pictures
     // are downloaded, as without the hand-over)
     bool mixed = false;
-    if (vvdec.mixed) {
+    if (vvdec.any() && plan.beside.empty() && both_copy_on_gpu(test, reference)) {
+        try {
+            scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.device, &test,
+                           &reference);
+            shared = true;
+        } catch (const VmafVulkanError& error) {
+            app_log::write(app_log::Level::info, "vml.vmaf_vulkan",
+                           std::string("VMAF with Vulkan: the two videos' pictures are not both copied on the GPU (") +
+                               error.what() + ")");
+        }
+    }
+    if (shared) {
+        app_log::write(app_log::Level::info, "vml.vmaf_vulkan",
+                       "VMAF with Vulkan: vvdec-vulkan's pictures and the other video's copied on the GPU into the "
+                       "engine's memory");
+    } else if (vvdec.mixed) {
         try {
             scorer.emplace(plan.width, plan.height, plan.bit_depth, plan.models, n_subsample, plan.device, &test);
             mixed = scorer->takes_host_planes();
@@ -826,7 +853,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
         return stream.gives_planes() || gpu_decoder(stream.backend()).cuda_copies;
     };
     std::optional<HostPairs> pairs;
-    if ((vvdec.any() && !mixed) || (!shared && !beside && as_planes(reference) && as_planes(test))) {
+    if ((vvdec.any() && !shared) || (!shared && !beside && as_planes(reference) && as_planes(test))) {
         pairs.emplace(reference, plans[1], test, plans[0]);
     }
     test.start();
@@ -862,11 +889,7 @@ PairScores score_decoded(const VideoInfo& source, const VideoInfo& distorted,
                                              return 0;
                                          });
             } else if (shared) {
-                scorer->add_shared(
-                    [&](std::uint64_t address, std::int64_t pitch) {
-                        reference.copy_luma(reference_slot, address, pitch);
-                    },
-                    [&](std::uint64_t address, std::int64_t pitch) { test.copy_luma(test_slot, address, pitch); });
+                scorer->add_shared(luma_copy(*scorer, reference, reference_slot), luma_copy(*scorer, test, test_slot));
             } else {
                 scorer->add_decoded([&](std::uint8_t* plane) { reference.download(reference_slot, plane); },
                                     [&](std::uint8_t* plane) { test.download(test_slot, plane); });

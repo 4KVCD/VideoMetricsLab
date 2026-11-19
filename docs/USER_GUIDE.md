@@ -283,6 +283,9 @@ band under the graph with its own scale: frame by frame in the frame view, and
 at each moment in the second and GOP views (where two encodes' GOPs differ,
 each moment's GOP bitrate is subtracted).
 The command line's `bitrate` command (below) reads the same numbers.
+Each file's reading is saved with the saved results and is not read again:
+the file adds at once the next time, renamed, moved or copied too (it is
+known by its content, as saved scores are). A remux is read again.
 
 ## BD-rate
 
@@ -406,8 +409,8 @@ $run.videos[0].metrics.vmaf.score
 | `--batch CSV` | Compare the videos a CSV file lists, in place of REFERENCE and TEST, all in one run (the start-up and the GPU checks once, not once per reference). A row per test video, with the columns `reference` and `test` (a file or a pattern) and, if wanted, `sequence` and any others, which `--scores-csv` keeps; paths are relative to the CSV file's folder. The tables come per reference, and `--json` writes `{"batch": [...]}`, each reference's results as without `--batch`. A reference that cannot be read is said and the others are still compared (exit code 1). Not with `--difference`. |
 | `--scores-csv FILE` | Write each test video's bitrate (`kbps`) and scores to FILE, a row per video, with its `sequence` (the `--batch` row's, else the reference's file name), `test`, `reference` and the `--batch` row's other columns: the file `bdrate --anchor` and `--test` read. A video whose bitrate is not known, or with only a part compared (`--range`, `--duration`), is left out, said. |
 | `--worst N` | After the tables, each metric's N worst dips: the worst frame of each (a frame within 1 s of a worse one is part of its dip), with every metric's score there. |
-| `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. `--segments saved` takes the conditions of the weak segment profile in use in the app's Settings > Weak segments, `--segments profile:NAME` those of profile NAME (any case; `Default` too), and `--segments preset:KEY` those of a preset (see [Weak segment profiles](#weak-segment-profiles)); those on metrics not compared are left out, and said; the profile's any/every choice, shortest segment and gap apply where the command gives none. |
-| `--segments-all` | A frame is weak only where every `--segments` condition holds. |
+| `--segments CONDITIONS` | List the stretches where scores fall past a threshold, such as `"vmaf<90,ssimulacra2<70"` (quoted: `<` and `>` are the shell's; Butteraugli's worst are high: `"butteraugli>2"`). A frame is weak where any of them holds. Frames are numbered from the video's first, as its encoder numbers them; CVVDP is judged second by second. `--segments saved` takes the conditions of the weak segment profile in use in the app's Settings > Weak segments, `--segments profile:NAME` those of profile NAME (any case; `Default` too), and `--segments preset:KEY` those of a preset (see [Weak segment profiles](#weak-segment-profiles)); conditions after it change it: `"preset:grainy-film,vmaf<80"` replaces the preset's VMAF condition, and a metric it has none for is added; those on metrics not compared are left out, and said; the profile's any/every choice, shortest segment and gap apply where the command gives none. |
+| `--segments-all`, `--segments-any` | A frame is weak only where every `--segments` condition holds; or where any one does, also when the profile or preset says every one must (any is the default otherwise). One or the other. |
 | `--segment-min-frames N`, `--segment-merge-frames N` | Leave out segments shorter than N frames (default 1); join segments at most N frames apart (default 0). |
 | `--segments-dir FOLDER` | Write each video's segments to FOLDER as `<video>.<metrics>.segments.json` and `.csv`, `<metrics>` the conditions' metrics joined by `+` (`<video>.vmaf+ssimulacra2.segments.json`), as the app names them. |
 | `--segments-report FILE` | Write every test video's segments (with `--batch`, every reference's) to FILE as one report, as the app's **Export weak segments report...**: JSON, or CSV when FILE ends in `.csv`. The fields of `--json`'s path are filled in in its path. |
@@ -601,8 +604,9 @@ videos again:
   does; **Export per-frame CSV...** writes a file per comparison to a folder,
   as Metric Graphs' Export CSV does.
 - **Export graphs as ZIP...** saves the graphs Export all graphs saves, for
-  comparisons of one reference; the bitrate graphs only where the videos are
-  still on disk (the scores are saved, the bitrate is not).
+  comparisons of one reference. The bitrate graphs of a video no longer on
+  disk come from its saved bitrate, where the Bitrate Viewer or the
+  command line read it before it went.
 - **Export weak segments...** saves the weak segments report by the rules
   picked beside it: the profile in use, any profile or a preset. Weak segments
   are not saved with the scores; they are found from them as they are
@@ -656,7 +660,8 @@ and HDR call for different metrics and thresholds. **Settings > Weak
 segments** keeps them as named profiles. **Profile** picks the one in use,
 which the rules below it edit; **New...** starts a profile from the one
 shown, **Rename...** and **Delete** work on the one in use (**Default**, the
-rules kept before there were profiles, has neither). The profile in use is
+rules kept before there were profiles, has neither). A profile's name can't
+contain a comma, which separates `--segments`' parts on the command line. The profile in use is
 where Metric Graphs' **Weak segments...** starts, and what the weak segments
 report, the exports after each run and the command line's `--segments saved`
 follow; `--segments profile:NAME` takes another.

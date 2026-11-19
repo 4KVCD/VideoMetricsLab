@@ -33,6 +33,7 @@
 #include "vml/python_json.h"
 #include "vml/result_json.h"
 #include "vml/saved_results.h"
+#include "vml/bitrate_store.h"
 #include "vml/file_fingerprint.h"
 #include "vml/score_identity.h"
 #include "vml/sha256.h"
@@ -859,6 +860,20 @@ TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
     const auto from_another = load("s.mkv", "u renamed.mkv");
     ASSERT_TRUE(from_another);
     EXPECT_EQ(from_another->first.distorted, folder / "u renamed.mkv");
+
+    // Saved by an older version, without identity.json: the lookup leaves
+    // the recording, which decodes, to record_saved_files, called after.
+    std::filesystem::remove(saved / "identity.json");
+    ASSERT_TRUE(load("s.mkv", "t.mkv"));
+    EXPECT_FALSE(std::filesystem::exists(saved / "identity.json"));
+    record_saved_files(cache, folder / "s.mkv", folder / "t.mkv", request.recipe);
+    EXPECT_TRUE(std::filesystem::exists(saved / "identity.json"));
+
+    // Deleted (the Saved results tab) after a lookup read the records: no
+    // longer found by the files' content.
+    EXPECT_EQ(recipe_directory(cache, folder / "s copy.mkv", folder / "t renamed.mkv", request.recipe), saved);
+    std::filesystem::remove_all(saved);
+    EXPECT_NE(recipe_directory(cache, folder / "s copy.mkv", folder / "t renamed.mkv", request.recipe), saved);
     set_video_fingerprinter(nullptr);
 }
 
@@ -974,6 +989,49 @@ TEST(MetricCache, ARemuxedTestStreamKeepsItsScores) {
     EXPECT_FALSE(load("other reference.mkv", "t.mp4", request.recipe));
     EXPECT_TRUE(load("s.mkv", "t.mp4", request.recipe));
     set_stream_fingerprinter(nullptr);
+}
+
+// A file's bitrate is saved by its content and read back as it was, under
+// the path the file has now; frame types the command line did not read are
+// told apart from types read and unknown. Settings counts and clears it with
+// the saved scores.
+TEST(MetricCache, BitrateIsSavedByContent) {
+    const test::Folder folder;
+    const std::filesystem::path cache = folder / "cache";
+    SavedBitrate bitrate;
+    bitrate.info.path = folder / "a.mkv";
+    bitrate.info.codec_name = "h264";
+    bitrate.info.width = 1920;
+    bitrate.info.height = 1080;
+    bitrate.info.fps = 24.0;
+    bitrate.info.duration = 0.125;
+    bitrate.data = bitrate_data(bitrate.info.path, {0.0, 1 / 24.0, 2 / 24.0}, {1 / 24.0, 1 / 24.0, 1 / 24.0},
+                                {90000, 1200, 3400000000LL}, {true, false, false});
+    bitrate.frame_types = std::vector<std::uint8_t>{1, 2, 3};
+    save_bitrate(cache, "content", bitrate);
+    EXPECT_FALSE(load_saved_bitrate(cache, "other", folder / "a.mkv"));
+    EXPECT_FALSE(load_saved_bitrate(cache, "", folder / "a.mkv"));
+
+    const std::optional<SavedBitrate> moved = load_saved_bitrate(cache, "content", folder / "moved.mkv");
+    ASSERT_TRUE(moved);
+    EXPECT_EQ(moved->info.path, folder / "moved.mkv");
+    EXPECT_EQ(moved->info.codec_name, "h264");
+    EXPECT_EQ(moved->data.times, bitrate.data.times);
+    EXPECT_EQ(moved->data.sizes, bitrate.data.sizes);
+    EXPECT_EQ(moved->data.keyframes, bitrate.data.keyframes);
+    EXPECT_EQ(moved->frame_types, bitrate.frame_types);
+
+    bitrate.frame_types = std::nullopt;  // the command line's
+    save_bitrate(cache, "unread", bitrate);
+    bitrate.frame_types = std::vector<std::uint8_t>{};  // read, not known
+    save_bitrate(cache, "unknown", bitrate);
+    EXPECT_FALSE(load_saved_bitrate(cache, "unread", folder / "a.mkv")->frame_types);
+    EXPECT_EQ(load_saved_bitrate(cache, "unknown", folder / "a.mkv")->frame_types, std::vector<std::uint8_t>{});
+
+    EXPECT_GT(cache_summary(cache).bytes, 0U);
+    clear_all(cache);
+    EXPECT_FALSE(std::filesystem::exists(bitrate_store_folder(cache)));
+    EXPECT_EQ(cache_summary(cache).bytes, 0U);
 }
 
 TEST(MetricCache, AScoreKeepsTheBuildThatMadeIt) {

@@ -115,20 +115,34 @@ std::vector<std::string> take_saved_segments(CompareArguments& arguments, const 
         throw std::invalid_argument(option + ": no weak segment profile has that name; the app's: " + names);
     }
     const SegmentRules& saved = profile->rules;
+    // The conditions given after it: each replaces the profile's on its
+    // metric, in its place, or is added after them.
+    const std::vector<WeakCondition> given = arguments.segments;
+    const auto given_on = [&given](const std::string& key) {
+        return std::find_if(given.begin(), given.end(), [&key](const WeakCondition& c) { return c.key == key; });
+    };
     std::vector<std::string> left_out;
     arguments.segments.clear();
     for (const WeakCondition& condition : saved.conditions) {
-        if (std::find(asked.begin(), asked.end(), condition.key) != asked.end()) {
+        if (const auto replaced = given_on(condition.key); replaced != given.end()) {
+            arguments.segments.push_back(*replaced);
+        } else if (std::find(asked.begin(), asked.end(), condition.key) != asked.end()) {
             arguments.segments.push_back(condition);
         } else {
             left_out.push_back(condition.text());
         }
     }
-    if (saved.conditions.empty()) {
+    for (const WeakCondition& condition : given) {
+        if (std::none_of(saved.conditions.begin(), saved.conditions.end(),
+                         [&condition](const WeakCondition& c) { return c.key == condition.key; })) {
+            arguments.segments.push_back(condition);
+        }
+    }
+    if (saved.conditions.empty() && given.empty()) {
         throw std::invalid_argument(option + ": the profile has no conditions; set them in the app's Settings > "
                                     "Weak segments, or give them here (such as \"vmaf<90\")");
     }
-    if (arguments.segments.empty()) {
+    if (arguments.segments.empty() && given.empty()) {
         std::string texts;
         for (const std::string& text : left_out) {
             texts += (texts.empty() ? "" : ", ") + text;
@@ -137,7 +151,7 @@ std::vector<std::string> take_saved_segments(CompareArguments& arguments, const 
                                     "'s conditions (" + texts +
                                     ") is on a metric compared (-m)");
     }
-    arguments.segments_all = arguments.segments_all || saved.all;
+    arguments.segments_all = !arguments.segments_any && (arguments.segments_all || saved.all);
     arguments.segment_min_frames = arguments.segment_min_frames.value_or(saved.min_frames);
     arguments.segment_merge_frames = arguments.segment_merge_frames.value_or(saved.merge_frames);
     return left_out;

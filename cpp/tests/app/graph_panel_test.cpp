@@ -913,7 +913,7 @@ TEST_F(GraphPanelTest, WeakSegmentsStartsFromAProfileAndSavesOnlyWhenAsked) {
     QObject::connect(&panel, &GraphPanel::segments_report_requested,
                      [&reports](const SegmentRules& rules) { reports.push_back(rules); });
     for (QPushButton* button : dialog->findChildren<QPushButton*>()) {
-        if (button->text() == "Export all videos...") {
+        if (button->text() == "Export all videos") {
             button->click();
         }
     }

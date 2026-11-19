@@ -387,12 +387,12 @@ void OptionsPanel::build_cvvdp(QFormLayout* form) {
     form->addRow(QString(), cvvdp_display_label);
 
     auto* buttons = new QHBoxLayout;
-    cvvdp_add_button = new QPushButton(app::tr("Add preset..."));
+    cvvdp_add_button = new QPushButton(app::tr("Add preset"));
     cvvdp_add_button->setToolTip(
         app::tr("Make a new preset of your own, starting from the display shown here. It becomes the display newly "
                 "added videos start with; the selected videos keep theirs until you choose it for them."));
     connect(cvvdp_add_button, &QPushButton::clicked, this, &OptionsPanel::cvvdp_add_requested);
-    cvvdp_edit_button = new QPushButton(app::tr("Edit display..."));
+    cvvdp_edit_button = new QPushButton(app::tr("Edit display"));
     cvvdp_edit_button->setToolTip(
         app::tr("Change the display's size, distance, brightness, room light and more; rename your preset or save "
                 "the display as a new one."));
@@ -407,7 +407,7 @@ void OptionsPanel::build_cvvdp(QFormLayout* form) {
     form->addRow(QString(), buttons);
 
     // Another display beside the videos' own, each scored in a row of its own.
-    cvvdp_other_button = new QPushButton(app::tr("Also score CVVDP on..."));
+    cvvdp_other_button = new QPushButton(app::tr("Also score CVVDP on"));
     cvvdp_other_button->setToolTip(
         app::tr("Adds a row for each selected video that scores CVVDP alone on another display, beside the display "
                 "of its own row. The other metrics are not calculated again. Export results lists every display in "

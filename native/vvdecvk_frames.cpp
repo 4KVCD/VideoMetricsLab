@@ -60,6 +60,9 @@ struct Decoder {
     vvdecDecoder *dec = nullptr;
     vvdecAccessUnit *unit = nullptr;
     std::mutex vvdec_lock;  // vvdec's calls, one at a time (vvdec.h's hand-over)
+    // The timeline semaphore's handle, exported once (under vvdec_lock): Vulkan lets a semaphore be exported as an
+    // NT handle only once, so every caller of nvf_timeline gets a duplicate of this one.
+    HANDLE timeline = nullptr;
 
     std::mutex mutex;  // what follows
     std::condition_variable changed;
@@ -157,6 +160,7 @@ void destroy(Decoder *d) {
         for (const Pinned &host : d->pinned) vvdec_handover_release(d->dec, host.buffer);
         vvdec_decoder_close(d->dec);
     }
+    if (d->timeline) CloseHandle(d->timeline);
     if (d->unit) vvdec_accessUnit_free(d->unit);
     delete d;
 }
@@ -285,51 +289,88 @@ int wait_for_copy(Decoder *d, uint64_t value) {
 
 }  // namespace
 
+namespace {
+
+// The slot's picture, or null for no such slot. Called with the decoder's mutex held.
+vvdecFrame *slot_frame(const Decoder *d, int slot) {
+    return slot >= 0 && slot < static_cast<int>(d->slots.size()) ? d->slots[static_cast<size_t>(slot)] : nullptr;
+}
+
+// The buffer nvf_pin took that holds `bytes` from `at`, *offset being at's place in it; null for none. Called with the
+// decoder's mutex held.
+void *pinned_buffer(const Decoder *d, const unsigned char *at, unsigned long long bytes, unsigned long long *offset) {
+    for (const Pinned &pinned : d->pinned) {
+        if (at >= pinned.host && at + bytes <= pinned.host + pinned.bytes) {
+            *offset = static_cast<unsigned long long>(at - pinned.host);
+            return pinned.buffer;
+        }
+    }
+    return nullptr;
+}
+
+// The memory nvf_import_vulkan imported that `address` lies in, *offset being its place there; null for none. Called
+// with the decoder's mutex held.
+void *imported_buffer(const Decoder *d, unsigned long long address, unsigned long long *offset) {
+    const unsigned long long base = address >> kImportShift << kImportShift;
+    for (const Import &imported : d->imports) {
+        if (imported.base == base) {
+            *offset = address - base;
+            return imported.buffer;
+        }
+    }
+    return nullptr;
+}
+
+// The GPU's copy of the picture's crop into `buffer`: its luma alone to offsets[0] (luma_only), or its Y, U and V
+// planes to offsets[c], rows strides[c] bytes apart. 8-bit samples in a byte; 10-bit ones in two, in the low bits
+// (shift 6: as FFmpeg's yuv420p10le) or the top ones (shift 0: P016). *value: the timeline's value once the copy is
+// done. 0, or NVF_ERROR with the reason kept.
+int pack(Decoder *d, vvdecFrame *frame, void *buffer, const uint64_t offsets[3], const uint32_t strides[3],
+         bool luma_only, uint64_t *value) {
+    const Params &p = d->params;
+    const int sample = p.bit_depth > 8 ? 2 : 1;
+    const int shift = sample == 2 && p.shift == 0 ? 6 : 0;
+    std::lock_guard<std::mutex> lock(d->vvdec_lock);
+    const int result = luma_only ? vvdec_handover_pack(d->dec, frame, buffer, offsets[0], strides[0], sample, shift,
+                                                       p.crop_x, p.crop_y, p.crop_w, p.crop_h, value)
+                                 : vvdec_handover_pack_frame(d->dec, frame, buffer, offsets, strides, sample, shift,
+                                                             p.crop_x, p.crop_y, p.crop_w, p.crop_h, value);
+    if (result != VVDEC_OK) {
+        d->fail(std::string("handing a picture over failed: ") + vvdec_get_last_error(d->dec));
+        return NVF_ERROR;
+    }
+    return 0;
+}
+
+}  // namespace
+
 // The slot's picture (frame_bytes' layout: the crop's Y, then U and V) copied by the GPU into a buffer nvf_pin took,
 // returning once it is there. One caller at a time (the copier thread). NVF_ERROR for a buffer not pinned here: the
 // pictures have no samples in host memory to copy from.
 NVF_API int nvf_download(void *handle, int slot, void *host) {
     Decoder *d = static_cast<Decoder *>(handle);
-    const unsigned char *at = static_cast<const unsigned char *>(host);
-    const unsigned long long bytes = d->info.frame_bytes;
     void *buffer = nullptr;
     unsigned long long offset = 0;
     vvdecFrame *frame = nullptr;
     {
         std::lock_guard<std::mutex> guard(d->mutex);
-        for (const Pinned &pinned : d->pinned) {
-            if (at >= pinned.host && at + bytes <= pinned.host + pinned.bytes) {
-                buffer = pinned.buffer;
-                offset = static_cast<unsigned long long>(at - pinned.host);
-            }
-        }
-        if (slot >= 0 && slot < static_cast<int>(d->slots.size())) frame = d->slots[static_cast<size_t>(slot)];
+        buffer = pinned_buffer(d, static_cast<const unsigned char *>(host), d->info.frame_bytes, &offset);
+        frame = slot_frame(d, slot);
     }
     if (!buffer || !frame) {
         d->fail("a picture asked for in memory the decoder did not pin, or of no slot");
         return NVF_ERROR;
     }
-    // As copy_luma's samples; the planes one after another, rows packed
+    // The planes one after another, rows packed
     const Params &p = d->params;
     const int sample = p.bit_depth > 8 ? 2 : 1;
-    const int shift = sample == 2 && p.shift == 0 ? 6 : 0;
     const unsigned long long luma = static_cast<unsigned long long>(p.crop_w) * p.crop_h * sample;
     const unsigned long long chroma = static_cast<unsigned long long>(p.crop_w / 2) * (p.crop_h / 2) * sample;
     const uint64_t offsets[3] = {offset, offset + luma, offset + luma + chroma};
     const uint32_t strides[3] = {static_cast<uint32_t>(p.crop_w * sample), static_cast<uint32_t>(p.crop_w / 2 * sample),
                                  static_cast<uint32_t>(p.crop_w / 2 * sample)};
     uint64_t value = 0;
-    {
-        std::lock_guard<std::mutex> lock(d->vvdec_lock);
-        const int result = p.luma_only ? vvdec_handover_pack(d->dec, frame, buffer, offsets[0], strides[0], sample, shift,
-                                                             p.crop_x, p.crop_y, p.crop_w, p.crop_h, &value)
-                                       : vvdec_handover_pack_frame(d->dec, frame, buffer, offsets, strides, sample, shift,
-                                                                   p.crop_x, p.crop_y, p.crop_w, p.crop_h, &value);
-        if (result != VVDEC_OK) {
-            d->fail(std::string("handing a picture over failed: ") + vvdec_get_last_error(d->dec));
-            return NVF_ERROR;
-        }
-    }
+    if (pack(d, frame, buffer, offsets, strides, p.luma_only, &value) != 0) return NVF_ERROR;
     return wait_for_copy(d, value);
 }
 
@@ -338,30 +379,43 @@ namespace {
 // The slot's luma (its crop) into imported memory at `dst`, rows `dst_pitch` bytes apart; *value: the timeline's
 // value once it is there.
 int copy_luma(Decoder *d, int slot, unsigned long long dst, long long dst_pitch, unsigned long long *value) {
-    const unsigned long long base = dst >> kImportShift << kImportShift;
     void *buffer = nullptr;
+    unsigned long long offset = 0;
     vvdecFrame *frame = nullptr;
     {
         std::lock_guard<std::mutex> guard(d->mutex);
-        for (const Import &imported : d->imports) buffer = imported.base == base ? imported.buffer : buffer;
-        if (slot >= 0 && slot < static_cast<int>(d->slots.size())) frame = d->slots[static_cast<size_t>(slot)];
+        buffer = imported_buffer(d, dst, &offset);
+        frame = slot_frame(d, slot);
     }
     if (!buffer || !frame || dst_pitch <= 0) return NVF_ERROR;
-    // 8-bit samples in a byte; 10-bit ones in two, in the low bits (shift 6: as FFmpeg's yuv420p10le) or the top ones
-    // (shift 0: P016)
-    const int bytes = d->params.bit_depth > 8 ? 2 : 1;
-    const int shift = bytes == 2 && d->params.shift == 0 ? 6 : 0;
-    uint64_t signalled = 0;
-    std::lock_guard<std::mutex> lock(d->vvdec_lock);
-    const int result = vvdec_handover_pack(d->dec, frame, buffer, dst - base, static_cast<uint32_t>(dst_pitch), bytes, shift,
-                                           d->params.crop_x, d->params.crop_y, d->params.crop_w, d->params.crop_h,
-                                           &signalled);
-    if (result != VVDEC_OK) {
-        d->fail(std::string("handing a picture over failed: ") + vvdec_get_last_error(d->dec));
-        return NVF_ERROR;
+    const uint64_t offsets[3] = {offset, 0, 0};
+    const uint32_t strides[3] = {static_cast<uint32_t>(dst_pitch), 0, 0};
+    return pack(d, frame, buffer, offsets, strides, true, value);
+}
+
+// The slot's Y, U and V planes (its crop) into imported memory at addresses[c], all three in one import, rows
+// pitches[c] bytes apart; *value as copy_luma's.
+int copy_planes(Decoder *d, int slot, const unsigned long long *addresses, const long long *pitches,
+                unsigned long long *value) {
+    bool found = true;
+    void *buffer = nullptr;
+    uint64_t offsets[3] = {};
+    uint32_t strides[3] = {};
+    vvdecFrame *frame = nullptr;
+    {
+        std::lock_guard<std::mutex> guard(d->mutex);
+        frame = slot_frame(d, slot);
+        for (int c = 0; c < 3 && found; ++c) {
+            unsigned long long offset = 0;
+            void *const holder = imported_buffer(d, addresses[c], &offset);
+            found = holder && (c == 0 || holder == buffer) && pitches[c] > 0;
+            buffer = holder;
+            offsets[c] = offset;
+            strides[c] = static_cast<uint32_t>(pitches[c]);
+        }
     }
-    *value = signalled;
-    return 0;
+    if (!found || !frame) return NVF_ERROR;
+    return pack(d, frame, buffer, offsets, strides, false, value);
 }
 
 }  // namespace
@@ -380,12 +434,35 @@ NVF_API int nvf_copy_luma_async(void *handle, int slot, unsigned long long dst, 
     return copy_luma(static_cast<Decoder *>(handle), slot, dst, dst_pitch, value);
 }
 
+// The slot's Y, U and V planes into imported memory (VMAF v1's luma and SpEED's chroma in one slot), returning once
+// they are there.
+NVF_API int nvf_copy_planes(void *handle, int slot, const unsigned long long *addresses, const long long *pitches) {
+    Decoder *d = static_cast<Decoder *>(handle);
+    unsigned long long value = 0;
+    if (copy_planes(d, slot, addresses, pitches, &value) != 0) return NVF_ERROR;
+    return wait_for_copy(d, value);
+}
+
+// nvf_copy_planes, not waited for: *value as nvf_copy_luma_async's.
+NVF_API int nvf_copy_planes_async(void *handle, int slot, const unsigned long long *addresses, const long long *pitches,
+                                  unsigned long long *value) {
+    return copy_planes(static_cast<Decoder *>(handle), slot, addresses, pitches, value);
+}
+
 // The decoder's timeline semaphore, which the copies signal, as an opaque Win32 handle the caller imports and closes.
+// Each caller (VMAF's and VMAF v1's Vulkan contexts) gets its own handle to the one export.
 NVF_API int nvf_timeline(void *handle, void **win32) {
     Decoder *d = static_cast<Decoder *>(handle);
+    *win32 = nullptr;
     std::lock_guard<std::mutex> lock(d->vvdec_lock);
-    *win32 = vvdec_handover_timeline(d->dec);
-    return *win32 ? 0 : -1;
+    if (!d->timeline) d->timeline = vvdec_handover_timeline(d->dec);
+    HANDLE copy = nullptr;
+    if (!d->timeline || !DuplicateHandle(GetCurrentProcess(), d->timeline, GetCurrentProcess(), &copy, 0, FALSE,
+                                         DUPLICATE_SAME_ACCESS)) {
+        return -1;
+    }
+    *win32 = copy;
+    return 0;
 }
 
 // Vulkan VMAF's memory (vv_export's handle of `bytes`, from `memory_type` of the device with these UUIDs): *address

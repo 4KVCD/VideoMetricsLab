@@ -124,6 +124,10 @@ struct Device {
     // cannot share one. `timeline_value`: the last value signalled (under `mutex`).
     VkSemaphore timeline = VK_NULL_HANDLE;
     uint64_t timeline_value = 0;
+    // The timeline's Win32 handle, exported once (under `mutex`): Vulkan lets
+    // a semaphore be exported as an NT handle only once, so every caller of
+    // nvf_timeline, in every run of the process, gets a duplicate of this one.
+    HANDLE timeline_handle = nullptr;
     PFN_vkGetSemaphoreWin32HandleKHR vkGetSemaphoreWin32HandleKHR = nullptr;
     PFN_vkGetSemaphoreCounterValue vkGetSemaphoreCounterValue = nullptr;
     PFN_vkCreateSemaphore vkCreateSemaphore = nullptr;
@@ -253,6 +257,32 @@ inline bool timeline_reached(uint64_t value) {
     if (!value) return true;
     uint64_t now = 0;
     return g_device.vkGetSemaphoreCounterValue(g_device.device, g_device.timeline, &now) == VK_SUCCESS && now >= value;
+}
+
+// The timeline semaphore as a new opaque Win32 handle the caller imports and
+// closes: a duplicate of one export, made by the first call (Vulkan lets a
+// semaphore be exported as an NT handle only once). Every caller (VMAF's and
+// VMAF v1's Vulkan contexts, in every run) gets its own. 0, or -1 if it
+// cannot be exported.
+inline int export_timeline(void **win32) {
+    Device &g = g_device;
+    *win32 = nullptr;
+    std::lock_guard<std::mutex> lock(g.mutex);
+    if (!g.timeline_handle) {
+        VkSemaphoreGetWin32HandleInfoKHR info{VK_STRUCTURE_TYPE_SEMAPHORE_GET_WIN32_HANDLE_INFO_KHR};
+        info.semaphore = g.timeline;
+        info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+        HANDLE exported = nullptr;
+        if (g.vkGetSemaphoreWin32HandleKHR(g.device, &info, &exported) != VK_SUCCESS || !exported) return -1;
+        g.timeline_handle = exported;
+    }
+    HANDLE copy = nullptr;
+    if (!DuplicateHandle(GetCurrentProcess(), g.timeline_handle, GetCurrentProcess(), &copy, 0, FALSE,
+                         DUPLICATE_SAME_ACCESS)) {
+        return -1;
+    }
+    *win32 = copy;
+    return 0;
 }
 
 // The device, made on first use on the GPU whose LUID (DXGI's adapter LUID)

@@ -187,6 +187,16 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
     const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental = {},
     const std::set<std::string>& not_from_other_recipes = {});
 
+// A comparison saved before its files were recorded (identity.json, which
+// an older version did not write): records them now, so that its scores are
+// found when the files are renamed, moved or remuxed. It reads a few MB of
+// each file and decodes five pictures of the reference (seconds for a 4K
+// film, once per reference in a process), so it is called after the saved
+// scores load_result found are shown, never before. Nothing to do for a
+// comparison not saved, or already recorded.
+void record_saved_files(const std::filesystem::path& base, const std::filesystem::path& source,
+                        const std::filesystem::path& distorted, const ComparisonRecipe& recipe);
+
 // CVVDP's scores saved for a comparison with other displays than the one
 // its request in `specs` or `supplemental` models, each with the CVVDP
 // parameters it was made with (the Python app's other_cvvdp_scores), and
@@ -237,17 +247,23 @@ std::optional<std::variant<FrameMetricResult, SequenceMetricResult>> read_saved_
 // one this app cannot read.
 std::optional<std::pair<ComparisonResult, std::string>> saved_comparison(const std::filesystem::path& folder);
 
+// The sampled hash (file_fingerprint.h) a saved folder's identity.json
+// records for its reference (`reference`) or test video: the key of their
+// saved bitrate (bitrate_store.h). Empty where none is recorded.
+std::string saved_content_hash(const std::filesystem::path& folder, bool reference);
+
 // How many comparisons are saved under `base`, and the bytes their files
-// take, for Settings.
+// and the saved bitrate (bitrate_store.h) take, for Settings.
 struct CacheSummary {
     int comparisons = 0;
     std::uintmax_t bytes = 0;
 };
 CacheSummary cache_summary(const std::filesystem::path& base);
 
-// Deletes every comparison saved under `base` (its v2 folder; nothing else
-// there) and returns how many there were: 0 when they could not all be
-// deleted, as the Python app counts it.
+// Deletes every comparison saved under `base` (its v2 folder) and the saved
+// bitrate (its bitrate folder; nothing else there), and returns how many
+// comparisons there were: 0 when they could not all be deleted, as the
+// Python app counts it.
 int clear_all(const std::filesystem::path& base);
 
 }  // namespace vml

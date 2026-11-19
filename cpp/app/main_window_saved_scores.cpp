@@ -282,9 +282,16 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     if (row_data.video_info && row_data.video_info->frame_rate_unknown()) {
         return;  // a raw stream not yet given its rate: its saved scores are known by it (test_rate)
     }
-    if (lookup_token(source_info_->path, row_data.identity_path(), analysis_request_of(row_data)) != found.token) {
+    const AnalysisRequest request = analysis_request_of(row_data);
+    if (lookup_token(source_info_->path, row_data.identity_path(), request) != found.token) {
         return;
     }
+    // A comparison saved by an older version has its files recorded now, so
+    // that it is found when they move: off the window's thread and after the
+    // lookup, whose numbers a 4K reference's seconds of decoding would hold up.
+    file_writes_->submit(QStringLiteral("identity %1").arg(text_of(row_data.path.stem())),
+                         [base = cache_folder(), source = source_info_->path, distorted = row_data.identity_path(),
+                          recipe = request.recipe] { record_saved_files(base, source, distorted, recipe); });
     const std::shared_ptr<CompletedRun> previous = row_data.completed_run;
     auto run = std::make_shared<CompletedRun>();
     run->result = found.result;
