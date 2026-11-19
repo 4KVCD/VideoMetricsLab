@@ -12,6 +12,7 @@
 #include "vml/number_format.h"
 #include "vml/platform/process.h"
 #include "vml/platform/system.h"
+#include "vml/python_text.h"
 #include "vml/sha256.h"
 
 namespace vml {
@@ -143,6 +144,89 @@ std::optional<std::string> video_fingerprint(const std::filesystem::path& file, 
         add_text(hash, picture.hexdigest());
     }
     return hash.hexdigest();
+}
+
+namespace {
+
+// How each codec's stream is made the same whatever held it: to Annex B
+// (from MKV's and MP4's length-prefixed units), then only the units that
+// carry pictures.
+struct StreamFilter {
+    const char* codec;
+    const char* filters;
+};
+constexpr StreamFilter stream_filters[] = {
+    {"h264", "h264_mp4toannexb,filter_units=pass_types=1-5"},
+    {"hevc", "hevc_mp4toannexb,filter_units=pass_types=0-31"},
+    {"vvc", "vvc_mp4toannexb,filter_units=pass_types=0-11"},
+    // OBU_FRAME_HEADER, OBU_TILE_GROUP, OBU_FRAME: not the temporal
+    // delimiters a raw .obu stream has and a container drops.
+    {"av1", "filter_units=pass_types=3|4|6"},
+};
+
+}  // namespace
+
+std::optional<std::string> stream_fingerprint(const std::filesystem::path& file, const std::string& codec,
+                                              const std::string& ffmpeg, int packets, const CancelToken& cancel) {
+    if (ffmpeg.empty() || codec.empty()) {
+        return std::nullopt;
+    }
+    const std::string name = ascii_lower(codec);
+    if (name == "rawvideo") {
+        return std::nullopt;  // raw pictures (a .yuv file), whose scores are not saved: nothing to read
+    }
+    std::vector<std::string> command{ffmpeg, "-nostdin", "-v", "error", "-i", platform::path_text(file),
+                                     "-map", "0:v:0", "-c", "copy"};
+    for (const StreamFilter& filter : stream_filters) {
+        if (name == filter.codec) {
+            command.insert(command.end(), {"-bsf:v", filter.filters});
+        }
+    }
+    if (packets > 0) {
+        command.insert(command.end(), {"-frames:v", std::to_string(packets)});
+    }
+    command.insert(command.end(), {"-f", "hash", "-hash", "sha256", "-"});
+    platform::ProcessOutput out;
+    try {
+        // A whole feature-length stream read over a network share takes
+        // minutes: a limit only against a program that never ends.
+        out = platform::run_program(command, std::chrono::hours(6), {}, [&cancel] { return cancel.cancelled(); });
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+    // "SHA256=<hex>": the hash muxer's one line.
+    const std::string text = out.standard_output;
+    const std::size_t at = text.find("SHA256=");
+    if (out.exit_code != 0 || out.timed_out || out.stopped || at == std::string::npos) {
+        return std::nullopt;
+    }
+    const std::string digest = text.substr(at + 7, 64);
+    if (digest.size() != 64) {
+        return std::nullopt;
+    }
+    Sha256 hash;
+    add_text(hash, "vml-stream-1");
+    add_text(hash, name);
+    add_text(hash, std::to_string(packets));
+    add_text(hash, digest);
+    return hash.hexdigest();
+}
+
+std::function<std::optional<std::string>(const std::filesystem::path&, int, const CancelToken&)>
+stream_fingerprinter_using(std::string ffmpeg, std::string ffprobe) {
+    return [ffmpeg = std::move(ffmpeg), ffprobe = std::move(ffprobe)](
+               const std::filesystem::path& file, int packets,
+               const CancelToken& cancel) -> std::optional<std::string> {
+        if (ffmpeg.empty() || ffprobe.empty()) {
+            return std::nullopt;
+        }
+        try {
+            return stream_fingerprint(file, probe_video(file, ffprobe, cancel).codec_name, ffmpeg, packets,
+                                      cancel);
+        } catch (const std::exception&) {
+            return std::nullopt;  // not read: the test video is only recognised by its path and sampled hash
+        }
+    };
 }
 
 std::function<std::optional<std::string>(const std::filesystem::path&)> fingerprinter_using(std::string ffmpeg,

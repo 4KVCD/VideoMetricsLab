@@ -848,6 +848,100 @@ TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
     set_video_fingerprinter(nullptr);
 }
 
+// A test video remuxed (raw <-> MKV <-> MP4) keeps its scores by its stream
+// fingerprint, recorded after the save, read at the same rate, with the
+// same reference: its first packets first, the whole stream only where they
+// matched. An encode that changed only later scenes (x265 zones) shares the
+// first packets, not the stream; a raw stream read at another rate is
+// another comparison; a lookup cancelled reads nothing.
+TEST(MetricCache, ARemuxedTestStreamKeepsItsScores) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mkv", std::string(5000, 's'));
+    // "<first packets>/<rest>|<container bytes>": the fake fingerprinter's
+    // stream, which a remux keeps and its container's bytes do not.
+    touch(folder / "t.mkv", "A/a|" + std::string(4000, 'k'));
+    AnalysisRequest request = request_from(stored);
+    request.recipe.test_rate = 24000.0 / 1001.0;
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source = folder / "s.mkv";
+    result.distorted = folder / "t.mkv";
+    int heads = 0;
+    int wholes = 0;
+    set_stream_fingerprinter([&](const std::filesystem::path& file, int packets,
+                                 const CancelToken&) -> std::optional<std::string> {
+        std::ifstream in(file, std::ios::binary);
+        std::string stream;
+        std::getline(in, stream, '|');
+        ++(packets > 0 ? heads : wholes);
+        return packets > 0 ? stream.substr(0, stream.find('/')) : stream;
+    });
+    const std::filesystem::path cache = folder / "cache";
+    const std::filesystem::path saved =
+        store_result(cache, folder / "s.mkv", folder / "t.mkv", request.recipe, result, "t", request.metrics);
+    const auto identity_of = [&saved] {
+        std::ifstream file(saved / "identity.json");
+        return nlohmann::json::parse(file);
+    };
+    // The save reads no stream: recorded after it, once.
+    EXPECT_EQ(heads + wholes, 0);
+    EXPECT_FALSE(identity_of()["distorted"].contains("stream"));
+    EXPECT_TRUE(record_test_stream(cache, folder / "t.mkv"));
+    EXPECT_EQ(wholes, 1);
+    EXPECT_FALSE(record_test_stream(cache, folder / "t.mkv"));
+    EXPECT_EQ(wholes, 1);
+    const nlohmann::json identity = identity_of();
+    EXPECT_EQ(identity["distorted"]["rate"], "23.98");
+    EXPECT_EQ(identity["distorted"]["stream_head"], "A");
+    EXPECT_EQ(identity["distorted"]["stream"], "A/a");
+    ComparisonRecipe raw = request.recipe;
+    raw.test_raw = true;
+    EXPECT_FALSE(request.recipe.identity().contains("test_rate"));
+    EXPECT_DOUBLE_EQ(raw.identity()["test_rate"].get<double>(), 23.976);
+    const auto load = [&](const std::string& source, const std::string& distorted, const ComparisonRecipe& recipe) {
+        return load_result(cache, folder / source, folder / distorted, recipe, request.metrics,
+                           request.perceptual_backends);
+    };
+
+    // The raw stream it was muxed from, given the same rate: its scores; not
+    // in a lookup cancelled, which reads nothing.
+    touch(folder / "t.265", "A/a|" + std::string(3900, 'r'));
+    {
+        CancelToken cancelled;
+        cancelled.cancel();
+        const StreamReadCancel stop(cancelled);
+        const int before = heads + wholes;
+        EXPECT_FALSE(load("s.mkv", "t.265", raw));
+        EXPECT_EQ(heads + wholes, before);
+    }
+    const auto found = load("s.mkv", "t.265", raw);
+    ASSERT_TRUE(found);
+    EXPECT_EQ(found->first.distorted, folder / "t.265");
+    EXPECT_EQ(recipe_directory(cache, folder / "s.mkv", folder / "t.265", raw), saved);
+    // Read at another rate: another comparison, and nothing read to know it.
+    ComparisonRecipe at_25 = raw;
+    at_25.test_rate = 25.0;
+    int read = heads + wholes;
+    EXPECT_FALSE(load("s.mkv", "t.265", at_25));
+    EXPECT_EQ(heads + wholes, read);
+
+    // Re-encoded in its later scenes only: the same first packets, another
+    // stream. Another encode: told apart by its first packets alone.
+    touch(folder / "zoned.mkv", "A/b|" + std::string(4000, 'z'));
+    EXPECT_FALSE(load("s.mkv", "zoned.mkv", request.recipe));
+    touch(folder / "other.mkv", "B/b|" + std::string(4000, 'o'));
+    read = wholes;
+    EXPECT_FALSE(load("s.mkv", "other.mkv", request.recipe));
+    EXPECT_EQ(wholes, read);
+
+    // The same stream against another reference: not this comparison's.
+    touch(folder / "other reference.mkv", std::string(5100, 'x'));
+    touch(folder / "t.mp4", "A/a|" + std::string(4100, 'p'));
+    EXPECT_FALSE(load("other reference.mkv", "t.mp4", request.recipe));
+    EXPECT_TRUE(load("s.mkv", "t.mp4", request.recipe));
+    set_stream_fingerprinter(nullptr);
+}
+
 TEST(MetricCache, AScoreKeepsTheBuildThatMadeIt) {
     const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
     const test::Folder folder;

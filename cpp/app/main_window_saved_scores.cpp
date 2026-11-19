@@ -163,8 +163,8 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
         return;
     }
     RowData& row_data = *rows_[static_cast<std::size_t>(*row)];
-    if (row_data.video_info && row_data.video_info->is_raw_stream()) {
-        return;  // asked about before it was read: an older version's scores, at FFmpeg's guessed rate
+    if (row_data.video_info && row_data.video_info->frame_rate_unknown()) {
+        return;  // a raw stream not yet given its rate: its saved scores are known by it (test_rate)
     }
     if (lookup_token(source_info_->path, row_data.identity_path(), analysis_request_of(row_data)) != found.token) {
         return;
@@ -252,7 +252,7 @@ void MainWindow::on_other_displays_found(int generation, const OtherDisplaysFoun
         return;
     }
     RowData& row_data = *rows_[static_cast<std::size_t>(*row)];
-    if (row_data.video_info && row_data.video_info->is_raw_stream()) {
+    if (row_data.video_info && row_data.video_info->frame_rate_unknown()) {
         return;  // as on_saved_found
     }
     if (nlohmann::json(row_data.cvvdp.parameters()) != found.parameters) {

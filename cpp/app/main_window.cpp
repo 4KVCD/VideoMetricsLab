@@ -45,6 +45,7 @@
 #include "run_worker.h"
 #include "series_colors.h"
 #include "settings_panel.h"
+#include "stream_records.h"
 #include "theme.h"
 #include "vml/app_log.h"
 #include "vml/append.h"
@@ -180,6 +181,7 @@ MainWindow::MainWindow() {
     // the status line, not in a dialog: a dialog taking the focus minutes
     // later would be worse than the failure it announces.
     file_writes_ = new FileWrites(this);
+    stream_records_ = std::make_shared<StreamRecords>();
     connect(file_writes_, &FileWrites::write_failed, this, [this](const QString& description, const QString& error) {
         show_status(app::tr("Could not {description}: {error}", {{"description", description}, {"error", error}}));
     });
@@ -213,7 +215,10 @@ MainWindow::MainWindow() {
     // The saved scores' lookups (restore_open_videos' first of them) know a
     // remuxed reference from the start: with the tools Settings name now,
     // set again wherever the tools are checked (check_ffmpeg).
-    set_video_fingerprinter(fingerprinter_using(find_tool("ffmpeg", settings_), find_tool("ffprobe", settings_)));
+    const std::string ffmpeg = find_tool("ffmpeg", settings_);
+    const std::string ffprobe = find_tool("ffprobe", settings_);
+    set_video_fingerprinter(fingerprinter_using(ffmpeg, ffprobe));
+    set_stream_fingerprinter(stream_fingerprinter_using(ffmpeg, ffprobe));
     restore_open_videos();
     on_table_selection_changed();
 }
@@ -330,6 +335,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         }
         frame_compare_panel_->cancel();
         bitrate_panel_->cancel();
+        stream_records_->stop();  // a test stream being read is recorded at its next save
         for (ProbeWorker* worker : probe_workers_) {
             worker->cancel();
         }
@@ -1092,8 +1098,10 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     // banner.
     const ToolsStatus status = check_tools(settings_);
     tools_status_ = status;
-    // A remuxed or moved reference keeps its saved scores (file_fingerprint.h).
+    // A remuxed or moved reference, and a remuxed test video, keep their
+    // saved scores (file_fingerprint.h).
     set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
+    set_stream_fingerprinter(stream_fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
     if (prompt) {
         log_tools(status, detected_gpu_vendors_);
     }
@@ -1200,8 +1208,10 @@ void MainWindow::on_ffmpeg_downloaded(const std::filesystem::path& folder) {
     settings_.ffmpeg_dir = trial.ffmpeg_dir;
     settings_panel_->show_ffmpeg_folder(QString::fromStdString(settings_.ffmpeg_dir));
     tools_status_ = status;
-    // A remuxed or moved reference keeps its saved scores (file_fingerprint.h).
+    // A remuxed or moved reference, and a remuxed test video, keep their
+    // saved scores (file_fingerprint.h).
     set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
+    set_stream_fingerprinter(stream_fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
     log_tools(status, detected_gpu_vendors_);
     ffmpeg_found(status, folder);
     if (const std::optional<std::string> problem = settings_.save()) {
@@ -1265,8 +1275,10 @@ bool MainWindow::on_locate_ffmpeg() {
     }
     const ToolsStatus status = check_tools(settings_);
     tools_status_ = status;
-    // A remuxed or moved reference keeps its saved scores (file_fingerprint.h).
+    // A remuxed or moved reference, and a remuxed test video, keep their
+    // saved scores (file_fingerprint.h).
     set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
+    set_stream_fingerprinter(stream_fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
     if (!status.ok()) {
         const QStringList problems = tool_problems(status);
         QMessageBox::warning(this, app::tr("Still not usable"), problems.join("\n"));

@@ -784,6 +784,22 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
             return run_perceptual_task(request, keys, together, hooks, token);
         },
         gpu_metrics_together, environment.cores, cancel);
+    // Each test stream whose scores were just saved, for a remux of it to
+    // keep them (record_test_stream): read after the run, which it would
+    // hold up, one at a time.
+    std::set<std::filesystem::path> recorded;
+    for (const TestVideo* target : targets) {
+        if (cancel.cancelled()) {
+            break;
+        }
+        if (target->save_scores && target->result && recorded.insert(target->path).second) {
+            try {
+                record_test_stream(cache_folder, target->path, cancel);
+            } catch (const std::exception&) {
+                // a record only: the scores are saved
+            }
+        }
+    }
 }
 
 // Adds the job that calculates what `video` asks for, less what is saved
@@ -1184,8 +1200,11 @@ std::optional<std::string> ComparisonPlanner::plan(const std::filesystem::path& 
             video.colours_taken = "the reference";
         }
     }
-    video.save_scores =
-        !arguments_.colour && video.colours_taken.empty() && !source_.timed_raw && !video.info->timed_raw;
+    // A raw test stream's scores are saved under the rate it was read at
+    // (ComparisonRecipe::test_rate); a raw reference's are not, nor a raw YUV
+    // file's, read at a size and pixel format the saved scores do not know.
+    video.save_scores = !arguments_.colour && video.colours_taken.empty() && !source_.timed_raw &&
+                        video.info->format_name != "rawvideo";
     note_argument_use(*video.info);
     test_video_read_ = true;
     add_film_grain_notes(video);
@@ -1993,8 +2012,10 @@ int compare(const CompareArguments& given) {
         print_error(ffmpeg_problem(tools));
         return exit_usage;
     }
-    // A remuxed or moved reference keeps its saved scores (file_fingerprint.h).
+    // A remuxed or moved reference, and a remuxed test video, keep their
+    // saved scores (file_fingerprint.h).
     set_video_fingerprinter(fingerprinter_using(tools.ffmpeg.path, tools.ffprobe.path));
+    set_stream_fingerprinter(stream_fingerprinter_using(tools.ffmpeg.path, tools.ffprobe.path));
     std::vector<CvvdpDisplayChoice> displays;
     try {
         displays = cvvdp_displays(arguments, settings);

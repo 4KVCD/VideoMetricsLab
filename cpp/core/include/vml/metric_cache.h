@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "vml/analysis_request.h"
+#include "vml/cancel.h"
 #include "vml/results.h"
 
 namespace vml {
@@ -48,6 +49,38 @@ std::filesystem::path default_cache_dir();
 using VideoFingerprinter = std::function<std::optional<std::string>(const std::filesystem::path&)>;
 void set_video_fingerprinter(VideoFingerprinter fingerprinter);
 
+// How the saved scores recognise a test video remuxed (raw, MKV, MP4):
+// given a file, a number of packets (0: all) and what stops the read, its
+// stream_fingerprint (file_fingerprint.h). None set (the default): test
+// videos are recognised by their path and sampled_file_hash only.
+using StreamFingerprinter =
+    std::function<std::optional<std::string>(const std::filesystem::path&, int, const CancelToken&)>;
+void set_stream_fingerprinter(StreamFingerprinter fingerprinter);
+
+// While it lives, `cancel` stops the test stream a lookup on this thread
+// (recipe_directory, load_result) reads to know a remux by: a whole stream
+// takes as long as the file takes to read, which a window closing should
+// not wait for.
+class StreamReadCancel {
+public:
+    explicit StreamReadCancel(const CancelToken& cancel);
+    ~StreamReadCancel();
+    StreamReadCancel(const StreamReadCancel&) = delete;
+    StreamReadCancel& operator=(const StreamReadCancel&) = delete;
+
+private:
+    std::optional<CancelToken> before_;
+};
+
+// Reads the test video `distorted`'s stream fingerprint and records it in
+// the identity.json of each comparison under `base` saved for that file
+// without one, for a remux of it to keep their scores. store_result does
+// not read it (it takes as long as reading the file: minutes for a long one
+// over a network share): this is called after it, apart from the saving.
+// Nothing is read where nothing needs it. Whether one was recorded.
+bool record_test_stream(const std::filesystem::path& base, const std::filesystem::path& distorted,
+                        const CancelToken& cancel = {});
+
 // The hash that names a comparison's folder: of both files' identities and
 // the recipe's.
 std::string recipe_hash(const std::filesystem::path& source, const std::filesystem::path& distorted,
@@ -63,8 +96,11 @@ std::string metric_identity_hash(const MetricRequestSpec& spec);
 // same files elsewhere (identity.json): the test video by its path or its
 // sampled_file_hash, the reference by those or, where the test video
 // matched, by its video_fingerprint, so that a renamed, moved or copied
-// file, and a remuxed reference, keep their scores. Its scores are then
-// read and saved there.
+// file, and a remuxed reference, keep their scores. Failing that, a test
+// stream saved in another file (a remux) with the same recipe, reference
+// and frame rate: by its stream_fingerprint's first packets, then the
+// reference, then the whole stream. Its scores are then read and saved
+// there.
 std::filesystem::path recipe_directory(const std::filesystem::path& base, const std::filesystem::path& source,
                                        const std::filesystem::path& distorted, const ComparisonRecipe& recipe);
 
@@ -170,9 +206,11 @@ int clear_metrics(const std::filesystem::path& base, const std::filesystem::path
                   const std::vector<MetricRequestSpec>& specs);
 
 // A token for a row's request to the saved scores: of the two files'
-// identities, the recipe and each metric's request. The window refuses a
-// saved result read under a token that is no longer the row's: a file or
-// the row's settings changed while it was being read.
+// identities, the recipe, the test video's frame rate (by which a remux of
+// it is known: a lookup made before the video was read, without it, is made
+// again) and each metric's request. The window refuses a saved result read
+// under a token that is no longer the row's: a file or the row's settings
+// changed while it was being read.
 std::string lookup_token(const std::filesystem::path& source, const std::filesystem::path& distorted,
                          const AnalysisRequest& request);
 

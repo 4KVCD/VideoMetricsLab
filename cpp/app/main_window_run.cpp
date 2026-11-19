@@ -26,6 +26,7 @@
 #include "options_panel.h"
 #include "run_worker.h"
 #include "settings_panel.h"
+#include "stream_records.h"
 #include "widgets.h"
 #include "window_helpers.h"
 #include "vml/app_log.h"
@@ -1092,8 +1093,10 @@ std::optional<int> MainWindow::on_job_finished(int index, const ComparisonResult
 // long video's scores take seconds to write.
 void MainWindow::save_job_result(std::size_t job, const RowData& row_data, const ComparisonResult& result,
                                  const QString& label) {
-    if (result.source_info.is_raw_stream() || result.distorted_info.is_raw_stream()) {
-        return;  // the saved scores know a video by its file, not by the frame rate it was read at
+    if (result.source_info.is_raw_stream() || result.distorted_info.format_name == "rawvideo") {
+        // The saved scores know a reference by its file, not by the frame
+        // rate it was read at, and a raw YUV file not by its size and format.
+        return;
     }
     const AnalysisRequest request =
         analysis_request(job_options_[job], requested_metrics(row_data), automatic_perceptual_backends,
@@ -1102,9 +1105,12 @@ void MainWindow::save_job_result(std::size_t job, const RowData& row_data, const
     take_current_rates(saved);        // a rate sampled since the video started
     file_writes_->submit(QStringLiteral("cache %1").arg(label),
                          [base = cache_folder(), identity = row_data.identity_path(), result = std::move(saved),
-                          label = label.toStdString(), request] {
+                          label = label.toStdString(), request, records = stream_records_] {
                              store_result(base, result.source, identity, request.recipe, result, label,
                                           request.metrics);
+                             // Its test stream, for a remux of it to keep these scores: read
+                             // apart from the writes, which it would hold up.
+                             records->add(base, identity);
                          });
 }
 

@@ -382,7 +382,7 @@ $run.videos[0].metrics.vmaf.score
 | `--range START-END` | Compare only that part of each video, from START to END (whole seconds, or H:MM:SS: `1:00-1:30`); without END, to the videos' end. |
 | `--colour pq-bt2020\|hlg-bt2020\|bt709` | The colours of a video with no colour tags (y4m, say); a tagged video keeps its own. Left out, such a video takes the other video's tags when that one has them (a y4m encode of a tagged HDR10 source is read as HDR10), and is otherwise taken as SDR, which changes CVVDP, SSIMULACRA2 and Butteraugli. Scores with colours given or taken are not saved. |
 | `--film-grain with\|without` | Score with the film grain a video's stream asks the player to add, as players show it, or without it, the coded pictures only. Left out: as Settings' **Film grain** default says; with, where it asks. |
-| `--fps RATE` | The frame rate of a raw video stream or raw YUV file (below), such as `24000/1001`, `23.976` or `60`, in place of a rate the stream stores. Required for a raw YUV file and for a raw stream that stores none, when the reference or a test video is one. These scores are not saved. |
+| `--fps RATE` | The frame rate of a raw video stream or raw YUV file (below), such as `24000/1001`, `23.976` or `60`, in place of a rate the stream stores. Required for a raw YUV file and for a raw stream that stores none, when the reference or a test video is one. A raw test stream's scores are saved under this rate; a raw reference's are not saved. |
 | `--size WIDTHxHEIGHT`, `--pix-fmt FORMAT` | The picture size and pixel format (as FFmpeg names it: `yuv420p`, `yuv420p10le`...) of a raw YUV file (below). Required with `--fps` for one. |
 | `--cvvdp-display PRESET` | The display CVVDP models, by preset name. Repeat it for a CVVDP score on each display; the JSON then lists each display's name, score, display parameters and full CVVDP statistics in the video's `cvvdp_displays`. Left out: the app's default display, Automatic unless Settings name a preset: the HDR display (`30-inch 4K HDR monitor, dim room`, the official `standard_hdr_pq`) for an HDR reference (PQ or HLG), the SDR one (`30-inch 4K monitor, office`, `standard_4k`) otherwise. |
 | `--cvvdp-fill` | Scale the compared frames up to fill CVVDP's display, aspect kept, as the Options panel's **Scale the video to fill the display**. Left out: off, as the official tool (a 1080p video covers a quarter of a 4K display). These scores are saved apart. |
@@ -455,8 +455,9 @@ other, Media info says the frame rate is unknown and the app asks for it, as a
 number or a fraction such as 24000/1001, when the video is added and again at
 **Calculate metrics**; a rate in the headers is only what the encoder was told,
 so a stream can also store a wrong one, which the app then refuses as a mismatch
-with the reference. The Bitrate Viewer asks the same. Its scores are not kept in
-the saved scores, and Video Compare decodes it from its start to reach a frame,
+with the reference. The Bitrate Viewer asks the same. A raw test stream's
+scores are kept in the saved scores under the rate it was read at (a raw
+reference's are not), and Video Compare decodes it from its start to reach a frame,
 which takes a while far into a long stream. The command line reads the same
 rate from the same headers and needs `--fps` for any other raw stream; `--fps`
 also replaces a stored rate, for every raw stream of the command. Its frames are counted when the video is read (the file is read
@@ -710,11 +711,21 @@ moved or copied is recognised by its content: its size and samples of its
 bytes from the start, the end and between (a few megabytes read). A
 reference remuxed into another container (MKV, MP4, with any other tracks)
 is recognised by its video stream: its codec, picture size, frame rate,
-colour and length, and five pictures decoded from it. The test video is
-recognised by its path or its content only, and the reference's stream is
-only looked at when the test video has saved scores, so a new encode costs
-nothing to look up. A remux that changes the stream's colour tags, or a
-re-encode, is another video and is scored again.
+colour and length, and five pictures decoded from it. The reference's
+stream is only looked at when the test video has saved scores, so a new
+encode costs nothing to look up. A remux that changes the stream's colour
+tags, or a re-encode, is another video and is scored again.
+
+A test video remuxed (its raw stream, `.264`, `.265`, `.266` or `.obu`, muxed
+into MKV or MP4 with its audio, an MKV remuxed to MP4, a tag edited) keeps
+its scores too, with the same reference and settings, read at the same frame
+rate. It is recognised by its coded pictures, byte for byte: any re-encode,
+even of one scene, is another video. After a test video's scores are saved,
+its stream is read once, as long as reading the file takes: by the app in
+the background (closing it stops the read, which is made again at the next
+save), and by the command line after its run. Looking a
+new encode up reads only its first packets, and the whole stream only when
+they and the reference match a saved comparison.
 
 Settings and the default cache are under `~/.videometricslab/`. Back up that
 folder before maintenance; changing checkout should not require clearing it.

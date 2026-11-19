@@ -122,6 +122,8 @@ void ProbeWorker::look_up(const QString& path) {
         // The token first: a file replaced during a long read gives another,
         // and the window refuses the scores found under the old one.
         const std::string token = lookup_token(source_, query.identity, request);
+        // A remux's test stream read to know it by stops with the lookup.
+        const StreamReadCancel stream_reads(cancel_);
         if (auto found = load_result(base_, source_, query.identity, request.recipe, request.metrics,
                                      request.perceptual_backends, query.supplemental, query.not_from_other_recipes)) {
             emit saved_found({path, std::move(found->first), token});

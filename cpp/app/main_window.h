@@ -74,6 +74,7 @@ class ElidedLabel;
 class CvvdpDisplayDialog;
 class FfmpegDownload;
 class FileWrites;
+class StreamRecords;
 class BdRatePanel;
 class BitratePanel;
 class FrameComparePanel;
@@ -699,6 +700,9 @@ private:
     std::vector<std::filesystem::path> cache_lookup_paths_;
     int cache_generation_ = 0;
     FileWrites* file_writes_ = nullptr;
+    // Test streams read after their scores are saved: shared with the writes
+    // that queue them, which can outlive the window's other members.
+    std::shared_ptr<StreamRecords> stream_records_;
 
     // The run under way, or the last one, by its jobs' indexes. Its jobs'
     // rows are held as rows, not positions, so that a row moved or removed

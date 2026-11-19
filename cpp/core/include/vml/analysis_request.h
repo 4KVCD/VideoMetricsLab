@@ -41,6 +41,13 @@ struct ComparisonRecipe {
     // its H.264 scores count as maybe lossless 4:4:4 (decoding_marks).
     std::string source_profile;
     std::string distorted_profile;
+    // The test video's frame rate as it is read (VideoInfo::fps). In
+    // identity() only for a raw stream (test_raw), whose rate is the one it
+    // was given: read at another, its scores (CVVDP's, a range in seconds)
+    // are others. The saved scores also compare it with the rate a remux of
+    // the same stream was saved at (metric_cache.h's recipe_directory).
+    double test_rate = 0;
+    bool test_raw = false;
     bool range_in_frames = false;  // range_start and range_end are frames
     // The crops entered by hand (CropMode::manual only; VmafOptions').
     CropEdges manual_source_crop;

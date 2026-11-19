@@ -679,7 +679,7 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
         // it is found when they move.
         std::error_code error;
         if (std::filesystem::exists(directory / "context.json", error)) {
-            record_identity(directory, source, distorted, true);
+            record_identity(directory, source, distorted, recipe, true);
         }
     }
     return found;
