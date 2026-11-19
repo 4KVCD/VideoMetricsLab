@@ -1100,7 +1100,11 @@
   "can't be read": "okunamıyor",
   "{name} (saved)": "{name} (kayıtlı)",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Recognize test videos remuxed after scoring (reads each one again)": "Puanlamadan sonra yeniden muxlanan test videolarını tanı (her birini yeniden okur)",
+  "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Puanlandıktan sonra muxlanan ya da yeniden muxlanan bir test videosu (ham akışı bir MKV'ye, bir MKV bir MP4'e) kaydedilen puanlarını korur: kodlanmış görüntülerinden tanınır.\n\nBunun için her test videosu puanları kaydedildikten sonra bir kez daha okunur; dosyayı okumak ne kadar sürerse o kadar sürer (ağ paylaşımındaki bir film için birkaç dakika), arka planda yapılır ve hesaplama sırasında asla yapılmaz; akışı puanlanmış bir videonunki gibi başlayan bir video ise diğer videoların kaydedilen puanları bulunduktan sonra aynı video olup olmadığını anlamak için baştan sona okunur.\n\nKapalı: test videoları yalnızca dosyalarından tanınır.",
+  "Checking whether {name} is a remux of a video already scored: reading its stream…": "{name} zaten puanlanmış bir videonun yeniden muxlanmış hâli mi diye bakılıyor: akışı okunuyor…",
+  "Recording {name}'s stream, so that a remux of it keeps its scores…": "{name} akışı kaydediliyor, böylece yeniden muxlanmış hâli puanlarını korur…"
  },
  "plurals": {
   "about {count} day": [

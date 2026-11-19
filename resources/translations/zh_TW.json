@@ -1100,7 +1100,11 @@
   "can't be read": "無法讀取",
   "{name} (saved)": "{name}（已儲存）",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Recognize test videos remuxed after scoring (reads each one again)": "辨識評分後重新封裝的測試影片（會再讀取每部影片一次）",
+  "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "評分後封裝或重新封裝的測試影片（原始串流封裝為 MKV，MKV 轉為 MP4）會保留已儲存的分數：依其編碼畫面辨識。\n\n為此，每部測試影片在分數儲存後會再讀取一次，耗時與讀取檔案相同（網路共用上的電影需要幾分鐘），在背景進行，計算期間不會進行；串流開頭與已評分影片相同的影片，會在其他影片的已儲存分數找到後完整讀取，以判斷是否為同一部影片。\n\n關閉：測試影片只依檔案辨識。",
+  "Checking whether {name} is a remux of a video already scored: reading its stream…": "正在檢查 {name} 是否為已評分影片的重新封裝：正在讀取其串流…",
+  "Recording {name}'s stream, so that a remux of it keeps its scores…": "正在記錄 {name} 的串流，以便其重新封裝版本保留分數…"
  },
  "plurals": {
   "about {count} day": [

@@ -53,6 +53,7 @@ add_library(vml_app STATIC
     self_test.cpp
     series_colors.cpp
     settings_panel.cpp
+    stream_records.cpp
     theme.cpp
     video_compare_view.cpp
     widgets.cpp

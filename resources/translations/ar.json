@@ -1100,7 +1100,11 @@
   "can't be read": "تتعذر قراءته",
   "{name} (saved)": "{name} (محفوظ)",
   "{size:.0f} KB": "{size:.0f} كيلوبايت",
-  "{size:.1f} MB": "{size:.1f} ميغابايت"
+  "{size:.1f} MB": "{size:.1f} ميغابايت",
+  "Recognize test videos remuxed after scoring (reads each one again)": "التعرّف على مقاطع الفيديو المختبَرة المُعاد تغليفها بعد التقييم (يقرأ كلًّا منها مرة أخرى)",
+  "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "يحتفظ فيديو الاختبار الذي غُلِّف أو أُعيد تغليفه بعد تقييمه (تدفقه الخام في MKV، أو MKV في MP4) بدرجاته المحفوظة: يُعرَف بصوره المرمّزة.\n\nيتطلب ذلك قراءة كل فيديو اختبار مرة أخرى بعد حفظ درجاته، بقدر ما تستغرقه قراءة الملف (بضع دقائق لفيلم على مشاركة شبكة)، في الخلفية ولا يحدث أبدًا أثناء التشغيل؛ والفيديو الذي يبدأ تدفقه كتدفق فيديو مُقيَّم يُقرأ كاملًا لمعرفة ما إذا كان هو نفسه، بعد العثور على الدرجات المحفوظة لمقاطع الفيديو الأخرى.\n\nعند الإيقاف: تُعرَف مقاطع الفيديو المختبَرة بملفاتها فقط.",
+  "Checking whether {name} is a remux of a video already scored: reading its stream…": "يجري التحقق مما إذا كان {name} إعادة تغليف لفيديو قُيِّم من قبل: تُقرأ تدفقاته…",
+  "Recording {name}'s stream, so that a remux of it keeps its scores…": "يجري تسجيل تدفق {name}، كي تحتفظ أي إعادة تغليف له بدرجاته…"
  },
  "plurals": {
   "about {count} day": [

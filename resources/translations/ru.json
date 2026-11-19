@@ -1100,7 +1100,11 @@
   "can't be read": "не читается",
   "{name} (saved)": "{name} (сохранено)",
   "{size:.0f} KB": "{size:.0f} КБ",
-  "{size:.1f} MB": "{size:.1f} МБ"
+  "{size:.1f} MB": "{size:.1f} МБ",
+  "Recognize test videos remuxed after scoring (reads each one again)": "Узнавать тестовые видео, перепакованные после оценки (читает каждое ещё раз)",
+  "A test video muxed or remuxed after it was scored (its raw stream into an MKV, an MKV into an MP4) keeps its saved scores: it is known by its coded pictures.\n\nThat takes reading each test video once more after its scores are saved, as long as reading the file takes (a few minutes for a film on a network share), in the background and never during a run; and a video whose stream begins as a scored one's is read whole to tell whether it is that video, after the other videos' saved scores are found.\n\nOff: test videos are known by their files only.": "Тестовое видео, упакованное или перепакованное после оценки (его сырой поток в MKV, MKV в MP4), сохраняет свои сохранённые оценки: оно узнаётся по закодированным кадрам.\n\nДля этого каждое тестовое видео читается ещё раз после сохранения оценок, столько же, сколько чтение файла (несколько минут для фильма в сетевой папке), в фоне и никогда во время расчёта; а видео, поток которого начинается как поток оценённого, читается целиком, чтобы понять, то же ли это видео, после того как найдены сохранённые оценки остальных видео.\n\nВыключено: тестовые видео узнаются только по файлам.",
+  "Checking whether {name} is a remux of a video already scored: reading its stream…": "Проверка, не перепакован ли {name} из уже оценённого видео: чтение потока…",
+  "Recording {name}'s stream, so that a remux of it keeps its scores…": "Запись потока {name}, чтобы его перепакованная версия сохранила оценки…"
  },
  "plurals": {
   "about {count} day": [

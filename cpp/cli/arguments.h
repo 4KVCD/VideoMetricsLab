@@ -61,6 +61,7 @@ struct CompareArguments {
     bool no_gpu_decode = false;
     std::optional<std::string> gpu_decode;  // "auto", or the maker: "nvidia", "intel" or "amd"
     std::optional<std::string> vvc_decoder;  // "gpu" or "cpu" (Settings::vvc_decode_on_gpu)
+    std::optional<std::string> test_remuxes;  // "on" or "off" (Settings::recognise_test_remuxes)
     // --gpu: the GPU to score on, by name (gpu_choice.h); "auto" for a discrete one first (Settings::gpu)
     std::optional<std::string> gpu;
     std::optional<int> parallel;

@@ -62,11 +62,16 @@ bool is_vship_id(std::string_view id);
 bool is_auto_perceptual(const MetricRequestSpec& spec);
 
 // Writes a comparison folder's identity.json: each file's path identity and
-// sampled_file_hash, and the reference's video_fingerprint (where a
-// fingerprinter is set), for recipe_directory to recognise them by when
-// their paths change. With `only_if_missing`, a folder that has one keeps it.
+// sampled_file_hash, the reference's video_fingerprint (where a
+// fingerprinter is set), the frame rate the test video was read at
+// (`recipe`'s) and its stream_fingerprint, of its first packets and of all
+// of them, where those were read already (record_test_stream reads them),
+// for recipe_directory to recognise them by when their paths change or the
+// test stream is remuxed. With `only_if_missing`, a folder that has one
+// keeps it.
 void record_identity(const std::filesystem::path& directory, const std::filesystem::path& source,
-                     const std::filesystem::path& distorted, bool only_if_missing);
+                     const std::filesystem::path& distorted, const ComparisonRecipe& recipe,
+                     bool only_if_missing);
 
 // A JSON file's data, or nothing for a file that is missing or not JSON.
 std::optional<nlohmann::json> read_json(const std::filesystem::path& path);

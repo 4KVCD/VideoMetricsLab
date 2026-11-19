@@ -1,6 +1,7 @@
 #include "vml/analysis_request.h"
 
 #include <algorithm>
+#include <cmath>
 #include <set>
 #include <stdexcept>
 #include <system_error>
@@ -84,6 +85,10 @@ nlohmann::json ComparisonRecipe::identity() const {
     if (monochrome_h264) {
         identity["monochrome_h264"] = true;
     }
+    if (test_raw) {
+        // Only here: no comparison of a raw stream was saved before.
+        identity["test_rate"] = std::round(test_rate * 1000.0) / 1000.0;
+    }
     return identity;
 }
 
@@ -128,6 +133,8 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
     request.recipe.monochrome_h264 = source.monochrome_h264 || distorted.monochrome_h264;
     request.recipe.source_profile = source.profile;
     request.recipe.distorted_profile = distorted.profile;
+    request.recipe.test_rate = distorted.fps;
+    request.recipe.test_raw = distorted.is_raw_stream();
     request.perceptual_backends = automatic_perceptual_backends;
     for (const auto& [key, backend] : perceptual_backends) {
         if (!request.perceptual_backends.contains(key)) {

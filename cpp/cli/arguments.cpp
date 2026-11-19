@@ -50,6 +50,7 @@ const char* const compare_usage = R"(usage: VideoMetricsLab-cli compare [-h] [-m
                                    [--vvc-decoder {gpu,cpu}] [--gpu NAME]
                                    [--parallel N] [--frame-counts {check,skip}]
                                    [--recalculate] [--difference]
+                                   [--test-remuxes {on,off}]
                                    [--csv FOLDER] [--json FILE] [--batch CSV]
                                    [--scores-csv FILE] [--worst N]
                                    [--segments CONDITIONS]
@@ -274,6 +275,12 @@ options:
                         app's)
   --recalculate         calculate every metric again instead of using saved
                         scores
+  --test-remuxes {on,off}
+                        on: read each test video calculated once more after
+                        the run, so that a remux of it (raw, MKV, MP4) keeps
+                        its saved scores, and check a video whose stream
+                        begins as a saved one's by reading its stream; off:
+                        neither (default: the app's, off unless changed)
   --difference          with two test videos: the first minus the second as
                         well, frame by frame (CVVDP second by second); with
                         --csv also in FOLDER as <first>_minus_<second>.csv
@@ -1206,6 +1213,8 @@ Parser compare_parser(CompareArguments& parsed) {
         option({"--frame-counts"},
                [&parsed](const std::string& value) { parsed.frame_counts = choice(value, {"check", "skip"}); }),
         flag({"--recalculate"}, parsed.recalculate),
+        option({"--test-remuxes"},
+               [&parsed](const std::string& value) { parsed.test_remuxes = choice(value, {"on", "off"}); }),
         flag({"--difference"}, parsed.difference),
         option({"--csv"}, [&parsed](const std::string& value) { parsed.csv = value; }),
         option({"--json"}, [&parsed](const std::string& value) { parsed.json_path = value; }),

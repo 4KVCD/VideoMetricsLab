@@ -686,7 +686,7 @@ void record_saved_files(const std::filesystem::path& base, const std::filesystem
     const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
     std::error_code error;
     if (std::filesystem::exists(directory / "context.json", error)) {
-        record_identity(directory, source, distorted, true);
+        record_identity(directory, source, distorted, recipe, true);
     }
 }
 

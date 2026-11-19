@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "vml/analysis_request.h"
+#include "vml/cancel.h"
 #include "vml/results.h"
 
 namespace vml {
@@ -48,6 +49,54 @@ std::filesystem::path default_cache_dir();
 using VideoFingerprinter = std::function<std::optional<std::string>(const std::filesystem::path&)>;
 void set_video_fingerprinter(VideoFingerprinter fingerprinter);
 
+// How the saved scores recognise a test video remuxed (raw, MKV, MP4):
+// given a file, a number of packets (0: all) and what stops the read, its
+// stream_fingerprint (file_fingerprint.h). None set (the default, and
+// Settings' "Recognize test videos remuxed" off): test videos are
+// recognised by their path and sampled_file_hash only, and nothing reads
+// their streams.
+using StreamFingerprinter =
+    std::function<std::optional<std::string>(const std::filesystem::path&, int, const CancelToken&)>;
+void set_stream_fingerprinter(StreamFingerprinter fingerprinter);
+
+// How the lookups on this thread (load_result, other_cvvdp_scores) read a
+// test video's stream to know a remux of a saved one by. A whole stream takes
+// as long as its file takes to read: minutes for a film over a network.
+// Without one of these, as when saving or clearing scores, a lookup reads
+// no whole stream: only a stream's first packets, and where a remux could
+// be told only by the whole stream, it finds nothing and says so
+// (take_whole_stream_wanted). With one, `cancel` stops its reads, and with
+// `whole` it may read whole streams, `announce` told of each file first.
+class StreamReads {
+public:
+    explicit StreamReads(const CancelToken& cancel, bool whole = false,
+                         std::function<void(const std::filesystem::path&)> announce = {});
+    ~StreamReads();
+    StreamReads(const StreamReads&) = delete;
+    StreamReads& operator=(const StreamReads&) = delete;
+};
+
+// Whether a lookup on this thread, since the last call, found a saved
+// comparison whose test stream began as its test video's does, with the same
+// reference and settings, but could not read the whole stream to tell
+// whether it is that video remuxed or another encode (StreamReads without
+// `whole`). Cleared by the call.
+bool take_whole_stream_wanted();
+
+// Reads the test video `distorted`'s stream fingerprint and records it in
+// the identity.json of each comparison under `base` saved for that file
+// without one, for a remux of it to keep their scores. store_result does
+// not read it (it takes as long as reading the file: minutes for a long one
+// over a network share): this is called after it, apart from the saving.
+// Nothing is read where nothing needs it. Whether one was recorded.
+bool record_test_stream(const std::filesystem::path& base, const std::filesystem::path& distorted,
+                        const CancelToken& cancel = {});
+// Whether record_test_stream would read `distorted`: a comparison saved for
+// it has no test stream recorded, as one saved by a version before streams
+// were (its files recorded since, record_saved_files) has none until its
+// test video is calculated again. Reads nothing of the file.
+bool test_stream_wanted(const std::filesystem::path& base, const std::filesystem::path& distorted);
+
 // The hash that names a comparison's folder: of both files' identities and
 // the recipe's.
 std::string recipe_hash(const std::filesystem::path& source, const std::filesystem::path& distorted,
@@ -63,8 +112,11 @@ std::string metric_identity_hash(const MetricRequestSpec& spec);
 // same files elsewhere (identity.json): the test video by its path or its
 // sampled_file_hash, the reference by those or, where the test video
 // matched, by its video_fingerprint, so that a renamed, moved or copied
-// file, and a remuxed reference, keep their scores. Its scores are then
-// read and saved there.
+// file, and a remuxed reference, keep their scores. Failing that, a test
+// stream saved in another file (a remux) with the same recipe, reference
+// and frame rate: by its stream_fingerprint's first packets, then the
+// reference, then the whole stream. Its scores are then read and saved
+// there.
 std::filesystem::path recipe_directory(const std::filesystem::path& base, const std::filesystem::path& source,
                                        const std::filesystem::path& distorted, const ComparisonRecipe& recipe);
 
@@ -180,9 +232,11 @@ int clear_metrics(const std::filesystem::path& base, const std::filesystem::path
                   const std::vector<MetricRequestSpec>& specs);
 
 // A token for a row's request to the saved scores: of the two files'
-// identities, the recipe and each metric's request. The window refuses a
-// saved result read under a token that is no longer the row's: a file or
-// the row's settings changed while it was being read.
+// identities, the recipe, the test video's frame rate (by which a remux of
+// it is known: a lookup made before the video was read, without it, is made
+// again) and each metric's request. The window refuses a saved result read
+// under a token that is no longer the row's: a file or the row's settings
+// changed while it was being read.
 std::string lookup_token(const std::filesystem::path& source, const std::filesystem::path& distorted,
                          const AnalysisRequest& request);
 

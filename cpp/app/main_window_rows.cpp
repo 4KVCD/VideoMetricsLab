@@ -1072,6 +1072,7 @@ void MainWindow::enter_frame_rate(const std::filesystem::path& path, double fps)
         return;  // removed while it was asked about
     }
     const std::filesystem::path file = rows_[static_cast<std::size_t>(*asked)]->identity_path();
+    std::vector<std::filesystem::path> timed;
     for (int row = 0; row < static_cast<int>(rows_.size()); ++row) {
         RowData& row_data = *rows_[static_cast<std::size_t>(row)];
         if (row_data.options.resample_test || !same_path(row_data.identity_path(), file) || !row_data.video_info ||
@@ -1087,8 +1088,12 @@ void MainWindow::enter_frame_rate(const std::filesystem::path& path, double fps)
             refresh_row_state(row);
         }
         set_row_metrics(row);
+        timed.push_back(row_data.path);
     }
     sync_frame_compare();  // Video Compare's copy of its details
+    // A raw test stream's saved scores are known by the rate it was given:
+    // looked up now (before a run, which waits for them).
+    start_cache_lookup(timed);
 }
 
 void MainWindow::enter_reference_frame_rate(const std::filesystem::path& path, double fps) {
