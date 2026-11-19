@@ -2,7 +2,8 @@
 // Python app's do; with VML_TEST_ON_SCREEN=1, on the display, for the tests
 // of what only shows there (native playback, which is off offscreen). A dialog that opens would wait for a click that never
 // comes: it fails the test instead, and is closed so the tests go on. No
-// test keeps the PC awake: a run's request to is a stand-in's.
+// test keeps the PC awake: a run's request to is a stand-in's. The program
+// runs in a home folder of its own (private_home.h).
 #include <QApplication>
 #include <QTimer>
 #include <QWidget>
@@ -12,10 +13,12 @@
 #include <clocale>
 
 #include "main_window.h"
+#include "private_home.h"
 #include "vml/isolated.h"
 #include "vml/platform/system.h"
 
 int main(int argc, char** argv) {
+    const vml::testing::PrivateHome home;  // the isolated GPU work, its children, inherit it
     if (qgetenv("VML_TEST_ON_SCREEN") != "1") {
         qputenv("QT_QPA_PLATFORM", "offscreen");
     }
