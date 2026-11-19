@@ -82,6 +82,30 @@ TEST(OptionsPanel, ARangeOfFramesIsShownAndReadInFrames) {
     EXPECT_EQ(panel.read_options({}, true, true, true, true).compared_range(), seconds.compared_range());
 }
 
+// A range of time is shown and read to the millisecond (hh:mm:ss.zzz): whole
+// seconds as the range of seconds they have always been, a part of a second
+// in milliseconds, with the note on CVVDP's whole seconds.
+TEST(OptionsPanel, ARangeOfTimeIsShownAndReadToTheMillisecond) {
+    OptionsPanel panel({});
+    EXPECT_EQ(panel.range_start_edit->displayFormat(), QStringLiteral("HH:mm:ss.zzz"));
+    VmafOptions ms;
+    ms.set_time_range(62500, 5576279);
+    panel.show_options(ms, {ms});
+    EXPECT_EQ(panel.range_unit_combo->currentIndex(), 0);
+    EXPECT_EQ(panel.range_start_edit->time(), QTime(0, 1, 2, 500));
+    EXPECT_EQ(panel.range_end_edit->time(), QTime(1, 32, 56, 279));
+    EXPECT_TRUE(panel.range_frames_note->isVisibleTo(&panel));
+    VmafOptions read = panel.read_options({}, true, true, true, true);
+    EXPECT_EQ(read.compared_range(), (ComparedRange{62500, 5576279, false, true}));
+
+    // Typed back to whole seconds: a range of seconds again, without the note.
+    panel.range_start_edit->setTime(QTime(0, 1, 2));
+    panel.range_end_edit->setTime(QTime(0, 1, 30));
+    EXPECT_FALSE(panel.range_frames_note->isVisibleTo(&panel));
+    read = panel.read_options({}, true, true, true, true);
+    EXPECT_EQ(read.compared_range(), (ComparedRange{62, 90, false}));
+}
+
 // Manual shows its crop fields with the crops entered and reads them back, an
 // odd number of lines taken up to even; the other modes hide them.
 TEST(OptionsPanel, ManualCropsAreShownAndReadBack) {

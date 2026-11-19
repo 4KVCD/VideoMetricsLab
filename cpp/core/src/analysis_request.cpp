@@ -64,6 +64,8 @@ nlohmann::json ComparisonRecipe::identity() const {
     if (range_in_frames) {
         // Only here: every range of seconds keeps the identity it had.
         identity["range_unit"] = "frames";
+    } else if (range_in_milliseconds) {
+        identity["range_unit"] = "milliseconds";
     }
     if (!resample_test && scale_algorithm != VmafOptions{}.scale_algorithm) {
         identity["scale_algorithm"] = scale_algorithm;
@@ -109,6 +111,7 @@ AnalysisRequest analysis_request(const VmafOptions& options, const std::vector<s
     request.recipe.resample_test = options.resample_test;
     // The whole videos are one comparison however a range would be counted.
     request.recipe.range_in_frames = options.range_in_frames && !options.compared_range().whole();
+    request.recipe.range_in_milliseconds = options.compared_range().in_milliseconds && !options.compared_range().whole();
     if (options.crop_mode == CropMode::manual) {
         request.recipe.manual_source_crop = options.manual_source_crop;
         request.recipe.manual_test_crop = options.manual_test_crop;

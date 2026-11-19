@@ -792,7 +792,7 @@
   "The test video is compared at its full frame.": "테스트 영상은 전체 프레임으로 비교됩니다.",
   "Range:": "범위:",
   "to": "~",
-  "The part of the videos compared: in whole seconds, from the first time to the second, where an end of 00:00:00 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "비교할 동영상 구간: 초 단위로는 첫 시간부터 두 번째 시간까지(끝이 00:00:00이면 동영상 끝까지), 프레임 단위로는 첫 프레임부터 마지막 프레임까지(둘 다 포함, 영상 비교처럼 0부터 셈).",
+  "The part of the videos compared: in time, to the millisecond, from the first time to the second, where an end of 00:00:00.000 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "비교할 동영상 구간: 시간(밀리초 단위)으로는 첫 시간부터 두 번째 시간까지(끝이 00:00:00.000이면 동영상 끝까지), 프레임 단위로는 첫 프레임부터 마지막 프레임까지(둘 다 포함, 영상 비교처럼 0부터 셈).",
   "CVVDP scores whole seconds: its range is rounded to the nearest second.": "CVVDP는 초 단위로 평가하므로 범위가 가장 가까운 초로 반올림됩니다.",
   "Time": "시간",
   "End": "끝",

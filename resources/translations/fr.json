@@ -792,7 +792,7 @@
   "The test video is compared at its full frame.": "La vidéo de test est comparée en image entière.",
   "Range:": "Plage :",
   "to": "à",
-  "The part of the videos compared: in whole seconds, from the first time to the second, where an end of 00:00:00 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "La partie des vidéos comparée : en secondes entières, du premier temps au second, une fin à 00:00:00 comparant jusqu'à la fin des vidéos ; ou en images, de la première à la dernière, toutes deux comparées, comptées à partir de 0 comme dans Comparaison vidéo.",
+  "The part of the videos compared: in time, to the millisecond, from the first time to the second, where an end of 00:00:00.000 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "La partie des vidéos comparée : en temps, à la milliseconde près, du premier temps au second, une fin à 00:00:00.000 comparant jusqu'à la fin des vidéos ; ou en images, de la première à la dernière, toutes deux comparées, comptées à partir de 0 comme dans Comparaison vidéo.",
   "CVVDP scores whole seconds: its range is rounded to the nearest second.": "CVVDP note des secondes entières : sa plage est arrondie à la seconde la plus proche.",
   "Time": "Temps",
   "End": "Fin",

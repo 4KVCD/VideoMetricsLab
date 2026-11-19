@@ -470,6 +470,16 @@ TEST(Decisions, ARangeEndingInAVideosLastPartialSecondComparesToItsEnd) {
     slides.duration = 6.0;  // frames at 0, 2 and 4 s
     EXPECT_EQ(pair_problem(slides, slides, 1, 2), "The range contains no frame of the videos.");
     EXPECT_EQ(pair_problem(slides, slides, 1, 3), std::nullopt);
+    // Milliseconds, as the frames in them: between two frames, none; past
+    // the shorter video's frames, beyond its end (288 frames end at 12.012 s).
+    EXPECT_EQ(pair_problem(slides, slides, ComparedRange{500, 1500, false, true}),
+              "The range contains no frame of the videos.");
+    EXPECT_EQ(pair_problem(slides, slides, ComparedRange{500, 2500, false, true}), std::nullopt);
+    EXPECT_EQ(pair_problem(source, whole_seconds, ComparedRange{11500, 12011, false, true}), std::nullopt);
+    EXPECT_EQ(pair_problem(source, whole_seconds, ComparedRange{11500, 12013, false, true}),
+              "The range extends beyond the end of one of the videos.");
+    EXPECT_EQ(pair_problem(source, whole_seconds, ComparedRange{2500, 1500, false, true}),
+              "The range ends before it starts.");
 }
 
 TEST(Decisions, ShapesAndComparedSizesAreThePythonAppsOwn) {

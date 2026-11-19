@@ -85,8 +85,8 @@ bool fit_to_range(LoadedMetric& metric, const ComparisonRecipe& recipe, const nl
     if (recipe.range_start <= 0 && recipe.range_end <= 0) {
         return !marked;
     }
-    if (recipe.range_in_frames) {
-        return marked;  // no score saved before ranges is of a range of frames
+    if (recipe.range_in_frames || recipe.range_in_milliseconds) {
+        return marked;  // no score saved before ranges is of a range of frames or milliseconds
     }
     if (recipe.range_end <= 0 || marked) {
         return true;  // the range's own

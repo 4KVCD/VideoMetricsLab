@@ -792,7 +792,7 @@
   "The test video is compared at its full frame.": "A tesztvideó teljes képkockával kerül összehasonlításra.",
   "Range:": "Tartomány:",
   "to": "–",
-  "The part of the videos compared: in whole seconds, from the first time to the second, where an end of 00:00:00 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "A videók összehasonlított része: egész másodpercekben, az első időtől a másodikig, ahol a 00:00:00 vég a videók végéig hasonlít; vagy képkockákban, az elsőtől az utolsóig, mindkettőt beleértve, 0-tól számolva, ahogy a(z) Videó-összehasonlítás számolja.",
+  "The part of the videos compared: in time, to the millisecond, from the first time to the second, where an end of 00:00:00.000 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "A videók összehasonlított része: időben, ezredmásodpercre pontosan, az első időtől a másodikig, ahol a 00:00:00.000 vég a videók végéig hasonlít; vagy képkockákban, az elsőtől az utolsóig, mindkettőt beleértve, 0-tól számolva, ahogy a(z) Videó-összehasonlítás számolja.",
   "CVVDP scores whole seconds: its range is rounded to the nearest second.": "A CVVDP egész másodperceket pontoz: a tartománya a legközelebbi másodpercre kerekül.",
   "Time": "Idő",
   "End": "Vége",

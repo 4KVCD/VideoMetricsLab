@@ -792,7 +792,7 @@
   "The test video is compared at its full frame.": "Video uji dibandingkan dengan bingkai penuhnya.",
   "Range:": "Rentang:",
   "to": "sampai",
-  "The part of the videos compared: in whole seconds, from the first time to the second, where an end of 00:00:00 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "Bagian video yang dibandingkan: dalam detik utuh, dari waktu pertama ke waktu kedua, dengan akhir 00:00:00 berarti sampai akhir video; atau dalam frame, dari frame pertama sampai terakhir, keduanya dibandingkan, dihitung dari 0 seperti di Bandingkan video.",
+  "The part of the videos compared: in time, to the millisecond, from the first time to the second, where an end of 00:00:00.000 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "Bagian video yang dibandingkan: dalam waktu, hingga milidetik, dari waktu pertama ke waktu kedua, dengan akhir 00:00:00.000 berarti sampai akhir video; atau dalam frame, dari frame pertama sampai terakhir, keduanya dibandingkan, dihitung dari 0 seperti di Bandingkan video.",
   "CVVDP scores whole seconds: its range is rounded to the nearest second.": "CVVDP menilai per detik utuh: rentangnya dibulatkan ke detik terdekat.",
   "Time": "Waktu",
   "End": "Akhir",

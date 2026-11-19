@@ -211,8 +211,8 @@ Json settings_json(const VideoSettings& settings, const ComparisonResult* result
     json["range"] = Json{{"whole", range.whole()},
                          {"start", range.start},
                          {"end", range.end},
-                         {"unit", range.in_frames ? "frames" : "seconds"}};
-    if (asks_cvvdp && range.in_frames && !range.whole()) {
+                         {"unit", range.in_frames ? "frames" : range.in_milliseconds ? "milliseconds" : "seconds"}};
+    if (asks_cvvdp && !range.in_seconds() && !range.whole()) {
         // CVVDP scores whole seconds: those nearest the frames, as the run
         // scored them (an end of 0: to the videos' end)
         const ComparedRange seconds =

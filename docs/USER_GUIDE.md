@@ -13,8 +13,12 @@
    removing the selected rows selects the next. VMAF, PSNR, SSIM and XPSNR are enabled
    by default; VMAF NEG, SSIMULACRA2 and Butteraugli can be selected separately.
 3. Review crop, scale, model, range and subsampling settings before starting.
-   **Range** compares only a part of the videos, from one time to another in
-   whole seconds (an end of 00:00:00 compares to the videos' end). A range's
+   **Range** compares only a part of the videos, from one time to another, to
+   the millisecond (hh:mm:ss.zzz; an end of 00:00:00.000 compares to the
+   videos' end). It compares the frames whose times are from the first time up
+   to, not including, the second (frame *n* is at *n* / frame rate). CVVDP
+   scores whole seconds: a range that isn't whole seconds is rounded to the
+   nearest seconds for it. A range's
    scores are those of the same frames in a run over the whole videos. An end
    within a video's last, partial second compares to its end: 00:00:00 to
    00:00:13 for a 300-frame encode of 12.5 seconds. A range late in a video

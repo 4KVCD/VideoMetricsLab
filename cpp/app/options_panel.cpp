@@ -157,7 +157,7 @@ QTimeEdit* new_seconds_edit() {
     // backwards ("00:00:00" reversed); times read left to right in every
     // language. The direction must be set before the display format.
     edit->setLayoutDirection(Qt::LeftToRight);
-    edit->setDisplayFormat("HH:mm:ss");
+    edit->setDisplayFormat("HH:mm:ss.zzz");
     edit->setTime(QTime(0, 0));
     edit->setKeyboardTracking(false);
     return edit;
@@ -238,8 +238,8 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
     form->addRow(app::tr("Black-bar handling:"), crop_combo);
     build_manual_crop(form);
 
-    // The range compared: from its start to its end in whole seconds (an end
-    // of 0: to the videos' end), or from a frame to a frame.
+    // The range compared: from its start to its end, to the millisecond (an
+    // end of 0: to the videos' end), or from a frame to a frame.
     range_unit_combo = new QComboBox;
     range_unit_combo->addItem(app::tr("Time"));
     range_unit_combo->addItem(app::tr("Frames"));
@@ -249,8 +249,14 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
     });
     range_start_edit = new_seconds_edit();
     range_end_edit = new_seconds_edit();
-    connect(range_start_edit, &QTimeEdit::timeChanged, this, [this] { emit field_edited("range_start"); });
-    connect(range_end_edit, &QTimeEdit::timeChanged, this, [this] { emit field_edited("range_end"); });
+    connect(range_start_edit, &QTimeEdit::timeChanged, this, [this] {
+        show_range_unit();
+        emit field_edited("range_start");
+    });
+    connect(range_end_edit, &QTimeEdit::timeChanged, this, [this] {
+        show_range_unit();
+        emit field_edited("range_end");
+    });
     range_first_spin = new QSpinBox;
     range_first_spin->setRange(0, std::numeric_limits<int>::max());
     range_first_spin->setKeyboardTracking(false);
@@ -270,10 +276,10 @@ void OptionsPanel::build_preparation(QFormLayout* form) {
     range_row->addWidget(range_last_spin);
     range_row->addStretch();
     auto* range_label = new QLabel(app::tr("Range:"));
-    range_label->setToolTip(app::tr("The part of the videos compared: in whole seconds, from the first time to the "
-                                    "second, where an end of 00:00:00 compares to the end of the videos; or in "
-                                    "frames, from the first frame to the last, both compared, counted from 0 as "
-                                    "Video Compare counts them."));
+    range_label->setToolTip(app::tr("The part of the videos compared: in time, to the millisecond, from the first "
+                                    "time to the second, where an end of 00:00:00.000 compares to the end of the "
+                                    "videos; or in frames, from the first frame to the last, both compared, counted "
+                                    "from 0 as Video Compare counts them."));
     form->addRow(range_label, range_row);
     range_frames_note = new QLabel(app::tr("CVVDP scores whole seconds: its range is rounded to the nearest second."));
     range_frames_note->setWordWrap(true);
@@ -582,13 +588,15 @@ void OptionsPanel::show_manual_crop() {
 }
 
 void OptionsPanel::show_range_unit() {
-    // Seconds' fields or frames', and the note on CVVDP's whole seconds.
+    // Time's fields or frames', and the note on CVVDP's whole seconds: for
+    // frames, and for a time that is not whole seconds.
     const bool frames = range_unit_combo->currentIndex() == 1;
     range_start_edit->setVisible(!frames);
     range_end_edit->setVisible(!frames);
     range_first_spin->setVisible(frames);
     range_last_spin->setVisible(frames);
-    range_frames_note->setVisible(frames);
+    const bool part_of_a_second = range_start_edit->time().msec() != 0 || range_end_edit->time().msec() != 0;
+    range_frames_note->setVisible(frames || part_of_a_second);
 }
 
 void OptionsPanel::commit_typed_values() {
@@ -635,13 +643,13 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::vector<Vm
     scale_direction_combo->setCurrentIndex(options.scale_direction == ScaleDirection::distorted_to_source ? 1 : 0);
 
     range_unit_combo->setCurrentIndex(options.range_in_frames ? 1 : 0);
-    const long long seconds_start = options.range_in_frames ? 0 : options.range_start;
-    const long long seconds_end = options.range_in_frames ? 0 : options.range_end;
+    const long long time_start = options.range_in_frames ? 0 : options.range_time_ms(options.range_start);
+    const long long time_end = options.range_in_frames ? 0 : options.range_time_ms(options.range_end);
     if (can_show(range_start_edit)) {
-        range_start_edit->setTime(QTime(0, 0).addSecs(static_cast<int>(seconds_start)));
+        range_start_edit->setTime(QTime(0, 0).addMSecs(static_cast<int>(time_start)));
     }
     if (can_show(range_end_edit)) {
-        range_end_edit->setTime(QTime(0, 0).addSecs(static_cast<int>(seconds_end)));
+        range_end_edit->setTime(QTime(0, 0).addMSecs(static_cast<int>(time_end)));
     }
     if (can_show(range_first_spin)) {
         range_first_spin->setValue(options.range_in_frames ? static_cast<int>(options.range_start) : 0);
@@ -649,6 +657,7 @@ void OptionsPanel::show_options(const VmafOptions& options, const std::vector<Vm
     if (can_show(range_last_spin)) {
         range_last_spin->setValue(options.range_in_frames ? static_cast<int>(options.range_end) - 1 : -1);
     }
+    show_range_unit();  // the note, for times shown that are not whole seconds
 
     const auto any = [&selected](auto&& predicate) { return std::any_of(selected.begin(), selected.end(), predicate); };
     model_combo->setEnabled(any([](const VmafOptions& item) { return item.compute_vmaf; }));
@@ -741,13 +750,14 @@ VmafOptions OptionsPanel::read_options(const std::vector<std::string>& extra_fea
     options.compute_xpsnr = compute_xpsnr;
     options.compute_vmaf = compute_vmaf;
     options.compute_vmaf_neg = compute_vmaf_neg;
-    options.range_in_frames = range_unit_combo->currentIndex() == 1;
-    if (options.range_in_frames) {
+    if (range_unit_combo->currentIndex() == 1) {
+        options.range_in_frames = true;
+        options.range_in_milliseconds = false;
         options.range_start = range_first_spin->value();
         options.range_end = range_last_spin->value() + 1;  // the frame past the last; End (-1): 0, to the end
     } else {
-        options.range_start = QTime(0, 0).secsTo(range_start_edit->time());
-        options.range_end = QTime(0, 0).secsTo(range_end_edit->time());
+        options.set_time_range(QTime(0, 0).msecsTo(range_start_edit->time()),
+                               QTime(0, 0).msecsTo(range_end_edit->time()));
     }
     options.gpu_decode = gpu_checkbox->isChecked();
     options.gpu_vendor = gpu_checkbox->isChecked()

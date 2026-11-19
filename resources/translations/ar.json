@@ -792,7 +792,7 @@
   "The test video is compared at its full frame.": "يُقارَن فيديو الاختبار بإطاره الكامل.",
   "Range:": "النطاق:",
   "to": "إلى",
-  "The part of the videos compared: in whole seconds, from the first time to the second, where an end of 00:00:00 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "الجزء الذي تتم مقارنته من الفيديوهين: بالثواني الكاملة، من الوقت الأول إلى الثاني، حيث تعني النهاية 00:00:00 المقارنة حتى نهاية الفيديوهين؛ أو بالإطارات، من الإطار الأول إلى الأخير، وكلاهما تتم مقارنته، مع العدّ من 0 كما يعدّها مقارنة الفيديو.",
+  "The part of the videos compared: in time, to the millisecond, from the first time to the second, where an end of 00:00:00.000 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "الجزء الذي تتم مقارنته من الفيديوهين: بالوقت حتى الملّي ثانية، من الوقت الأول إلى الثاني، حيث تعني النهاية 00:00:00.000 المقارنة حتى نهاية الفيديوهين؛ أو بالإطارات، من الإطار الأول إلى الأخير، وكلاهما تتم مقارنته، مع العدّ من 0 كما يعدّها مقارنة الفيديو.",
   "CVVDP scores whole seconds: its range is rounded to the nearest second.": "يقيّم CVVDP ثوانيَ كاملة: يُقرَّب نطاقه إلى أقرب ثانية.",
   "Time": "الوقت",
   "End": "النهاية",

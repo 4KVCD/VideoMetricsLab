@@ -467,6 +467,10 @@ std::string JobRun::describe() const {
                                            std::to_string(options.range_end - 1)
                : options.range_start > 0 ? "from frame " + std::to_string(options.range_start)
                                          : "whole videos")
+        : options.compared_range().in_milliseconds
+            ? (options.range_end > 0 ? range_time_text(options.range_start) + "-" + range_time_text(options.range_end)
+               : options.range_start > 0 ? "from " + range_time_text(options.range_start)
+                                         : "whole videos")
         : options.range_end > 0 ? std::to_string(options.range_start) + "-" + std::to_string(options.range_end) + " s"
         : options.range_start > 0 ? "from " + std::to_string(options.range_start) + " s"
                                   : "whole videos";

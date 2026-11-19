@@ -124,7 +124,7 @@ public:
     QWidget* manual_crop_box = nullptr;
     std::array<QSpinBox*, 4> source_crop_spins{};
     std::array<QSpinBox*, 4> test_crop_spins{};
-    // The range compared: whole seconds or frames (range_unit_combo: Time,
+    // The range compared: a time to the millisecond or frames (range_unit_combo: Time,
     // Frames), and the note on CVVDP's whole seconds shown with frames.
     QComboBox* range_unit_combo = nullptr;
     QTimeEdit* range_start_edit = nullptr;

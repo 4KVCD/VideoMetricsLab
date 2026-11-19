@@ -22,7 +22,7 @@ struct ComparisonRecipe {
     CropMode crop_mode = CropMode::automatic;
     std::string scale_algorithm = "bicubic";
     ScaleDirection scale_direction = ScaleDirection::source_to_distorted;
-    long long range_start = 0;  // VmafOptions' range, in whole seconds or frames
+    long long range_start = 0;  // VmafOptions' range, in whole seconds, frames or milliseconds
     long long range_end = 0;
     std::optional<ResampleTarget> resample_test;
     // The two videos' film grain as they are scored: {"source": ..,
@@ -41,12 +41,15 @@ struct ComparisonRecipe {
     // its H.264 scores count as maybe lossless 4:4:4 (decoding_marks).
     std::string source_profile;
     std::string distorted_profile;
-    bool range_in_frames = false;  // range_start and range_end are frames
+    bool range_in_frames = false;        // range_start and range_end are frames
+    bool range_in_milliseconds = false;  // or milliseconds
     // The crops entered by hand (CropMode::manual only; VmafOptions').
     CropEdges manual_source_crop;
     CropEdges manual_test_crop;
 
-    ComparedRange compared_range() const { return {range_start, range_end, range_in_frames}; }
+    ComparedRange compared_range() const {
+        return {range_start, range_end, range_in_frames, range_in_milliseconds && !range_in_frames};
+    }
 
     // The settings that decide what the comparison is (identity_dict). The
     // scaling algorithm is one, as whether a comparison scales can depend on

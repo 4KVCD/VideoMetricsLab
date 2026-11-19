@@ -792,7 +792,7 @@
   "The test video is compared at its full frame.": "Test videosu tam karesiyle karşılaştırılır.",
   "Range:": "Aralık:",
   "to": "-",
-  "The part of the videos compared: in whole seconds, from the first time to the second, where an end of 00:00:00 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "Videoların karşılaştırılan kısmı: tam saniye olarak, ilk zamandan ikinciye (00:00:00 sonu videoların sonuna kadar karşılaştırır); ya da kare olarak, ilk kareden sonuncuya, ikisi de dahil, Video karşılaştırma gibi 0'dan sayılarak.",
+  "The part of the videos compared: in time, to the millisecond, from the first time to the second, where an end of 00:00:00.000 compares to the end of the videos; or in frames, from the first frame to the last, both compared, counted from 0 as Video Compare counts them.": "Videoların karşılaştırılan kısmı: milisaniyesine kadar zaman olarak, ilk zamandan ikinciye (00:00:00.000 sonu videoların sonuna kadar karşılaştırır); ya da kare olarak, ilk kareden sonuncuya, ikisi de dahil, Video karşılaştırma gibi 0'dan sayılarak.",
   "CVVDP scores whole seconds: its range is rounded to the nearest second.": "CVVDP tam saniyeleri puanlar: aralığı en yakın saniyeye yuvarlanır.",
   "Time": "Zaman",
   "End": "Son",

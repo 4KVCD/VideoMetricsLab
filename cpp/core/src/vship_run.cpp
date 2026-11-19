@@ -1092,7 +1092,7 @@ public:
         const ComparedRange compared = request.options.compared_range();
         range_ = frame_range(compared, request.source.fps, step_, cvvdp_.has_value());
         cvvdp_range_ = range_;
-        if (cvvdp_ && compared.in_frames) {
+        if (cvvdp_ && !compared.in_seconds()) {
             // CVVDP scores whole seconds: those nearest a range of frames,
             // decoded with the frames the others compare.
             cvvdp_range_ = frame_range(cvvdp_seconds(compared, request.source.fps, frames), request.source.fps, step_,
