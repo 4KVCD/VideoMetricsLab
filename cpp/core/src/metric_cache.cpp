@@ -1160,13 +1160,23 @@ namespace {
 // What the saved scores know of files, kept for the process: their sampled
 // hashes, video fingerprints and stream fingerprints by path identity (each
 // read once), and each base's comparisons as their identity.json and
-// context.json record them (read again after a comparison is saved).
+// context.json record them (each read again when either file changes:
+// another process, the command line or another window, saves comparisons
+// too).
 struct RecordedComparison {
     std::filesystem::path folder;
     nlohmann::json recipe;
     std::string source_path, source_sampled, source_video;
     std::string distorted_path, distorted_sampled;
     std::string distorted_rate, distorted_head, distorted_stream;
+};
+
+// A comparison folder as last read: its two files' times, and what they
+// recorded (nothing where either was missing or unreadable).
+struct ReadComparison {
+    std::filesystem::file_time_type identity_time;
+    std::filesystem::file_time_type context_time;
+    std::optional<RecordedComparison> recorded;
 };
 
 struct KnownFiles {
@@ -1176,7 +1186,8 @@ struct KnownFiles {
     std::map<std::string, std::optional<std::string>> sampled;
     std::map<std::string, std::optional<std::string>> video;
     std::map<std::pair<std::string, int>, std::optional<std::string>> stream;
-    std::map<std::filesystem::path, std::vector<RecordedComparison>> recorded;
+    // By base, then by folder.
+    std::map<std::filesystem::path, std::map<std::filesystem::path, ReadComparison>> recorded;
 };
 
 KnownFiles& known_files() {
@@ -1211,10 +1222,10 @@ std::optional<std::string> video_of(const std::filesystem::path& file) {
         // One recorded for this file before (another comparison of the same
         // reference): no decoding.
         for (const auto& [base, comparisons] : known.recorded) {
-            for (const RecordedComparison& recorded : comparisons) {
-                if (recorded.source_path == identity && !recorded.source_video.empty()) {
-                    known.video[identity] = recorded.source_video;
-                    return recorded.source_video;
+            for (const auto& [folder, read] : comparisons) {
+                if (read.recorded && read.recorded->source_path == identity && !read.recorded->source_video.empty()) {
+                    known.video[identity] = read.recorded->source_video;
+                    return read.recorded->source_video;
                 }
             }
         }
@@ -1280,32 +1291,62 @@ std::string text_at(const nlohmann::json& data, const char* side, const char* fi
     return value.is_string() ? value.get<std::string>() : std::string();
 }
 
-// Every comparison under `base` with an identity.json, read once.
+// Every comparison under `base` with an identity.json, as its files are
+// now: the folder is listed each time, and a comparison read again only
+// where its identity.json or context.json changed since it was last read
+// (saved again, or saved by another process meanwhile).
 std::vector<RecordedComparison> recorded_comparisons(const std::filesystem::path& base) {
     KnownFiles& known = known_files();
+    std::map<std::filesystem::path, ReadComparison> before;
     {
         const std::lock_guard lock(known.mutex);
         if (const auto found = known.recorded.find(base); found != known.recorded.end()) {
-            return found->second;
+            before = found->second;
         }
     }
-    std::vector<RecordedComparison> list;
+    std::map<std::filesystem::path, ReadComparison> now;
     std::error_code error;
     std::filesystem::directory_iterator folder(base / format_folder, error);
     for (; !error && folder != std::filesystem::directory_iterator(); folder.increment(error)) {
-        const std::optional<nlohmann::json> identity = read_json(folder->path() / "identity.json");
-        const std::optional<nlohmann::json> context = read_json(folder->path() / "context.json");
-        if (!identity || !identity->is_object() || !context || !context->is_object()) {
+        std::error_code missing;
+        const auto identity_time = std::filesystem::last_write_time(folder->path() / "identity.json", missing);
+        if (missing) {
+            continue;  // no identity.json (saved before it was recorded): nothing to know it by
+        }
+        const auto context_time = std::filesystem::last_write_time(folder->path() / "context.json", missing);
+        if (missing) {
             continue;
         }
-        list.push_back({folder->path(), context->value("recipe", nlohmann::json()),
-                        text_at(*identity, "source", "path"), text_at(*identity, "source", "sampled"),
-                        text_at(*identity, "source", "video"), text_at(*identity, "distorted", "path"),
-                        text_at(*identity, "distorted", "sampled"), text_at(*identity, "distorted", "rate"),
-                        text_at(*identity, "distorted", "stream_head"), text_at(*identity, "distorted", "stream")});
+        if (const auto known_read = before.find(folder->path());
+            known_read != before.end() && known_read->second.identity_time == identity_time &&
+            known_read->second.context_time == context_time) {
+            now.insert(*known_read);
+            continue;
+        }
+        ReadComparison read{identity_time, context_time, std::nullopt};
+        const std::optional<nlohmann::json> identity = read_json(folder->path() / "identity.json");
+        const std::optional<nlohmann::json> context = read_json(folder->path() / "context.json");
+        if (identity && identity->is_object() && context && context->is_object()) {
+            read.recorded = RecordedComparison{folder->path(), context->value("recipe", nlohmann::json()),
+                                               text_at(*identity, "source", "path"),
+                                               text_at(*identity, "source", "sampled"),
+                                               text_at(*identity, "source", "video"),
+                                               text_at(*identity, "distorted", "path"),
+                                               text_at(*identity, "distorted", "sampled"),
+                                               text_at(*identity, "distorted", "rate"),
+                                               text_at(*identity, "distorted", "stream_head"),
+                                               text_at(*identity, "distorted", "stream")};
+        }
+        now.emplace(folder->path(), std::move(read));
+    }
+    std::vector<RecordedComparison> list;
+    for (const auto& [path, read] : now) {
+        if (read.recorded) {
+            list.push_back(*read.recorded);
+        }
     }
     const std::lock_guard lock(known.mutex);
-    known.recorded[base] = list;
+    known.recorded[base] = std::move(now);
     return list;
 }
 
@@ -1488,9 +1529,7 @@ bool record_test_stream(const std::filesystem::path& base, const std::filesystem
             // a record only: the scores stay found by the file's path and sampled hash
         }
     }
-    KnownFiles& known = known_files();
-    const std::lock_guard lock(known.mutex);
-    known.recorded.erase(base);
+    // Read again at the next lookup (recorded_comparisons: its time changed).
     return recorded_any;
 }
 
@@ -1535,10 +1574,7 @@ void cache_parts::record_identity(const std::filesystem::path& directory, const 
     } catch (const std::exception&) {
         return;  // a record only: the scores are saved without it
     }
-    // Read again at the next lookup, this one with it.
-    KnownFiles& known = known_files();
-    const std::lock_guard lock(known.mutex);
-    known.recorded.erase(directory.parent_path().parent_path());
+    // Read again at the next lookup (recorded_comparisons: its time changed).
 }
 
 std::filesystem::path recipe_directory(const std::filesystem::path& base, const std::filesystem::path& source,
