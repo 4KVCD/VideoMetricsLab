@@ -846,6 +846,20 @@ TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
     const int asked = fingerprinted;
     EXPECT_FALSE(load("remux.mp4", "new.mkv"));
     EXPECT_EQ(fingerprinted, asked);
+
+    // A comparison another process saved meanwhile (the command line, another
+    // window): found by a renamed copy too, though this process has looked
+    // the saved scores up before.
+    touch(folder / "u.mkv", std::string(4200, 'u'));
+    result.distorted = folder / "u.mkv";
+    const std::filesystem::path elsewhere =
+        store_result(folder / "other process", folder / "s.mkv", folder / "u.mkv", request.recipe, result, "u",
+                     request.metrics);
+    std::filesystem::copy(elsewhere, cache / "v2" / elsewhere.filename());
+    std::filesystem::copy_file(folder / "u.mkv", folder / "u renamed.mkv");
+    const auto from_another = load("s.mkv", "u renamed.mkv");
+    ASSERT_TRUE(from_another);
+    EXPECT_EQ(from_another->first.distorted, folder / "u renamed.mkv");
     set_video_fingerprinter(nullptr);
 }
 
