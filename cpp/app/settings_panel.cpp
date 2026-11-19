@@ -829,7 +829,8 @@ void SettingsPanel::clear_saved_results() {
     }
     if (!dialogs_.ask(app::tr("Clear saved results"),
                       app::tr("Delete saved results from {directory}?\n\nVideos already scored will have to be "
-                              "recomputed.",
+                              "recomputed. Those whose reference video is no longer where it was are kept: their "
+                              "scores could not be calculated again. Delete them in the Saved results tab.",
                               {{"directory", text_of(directory)}}))) {
         return;
     }
@@ -839,8 +840,8 @@ void SettingsPanel::clear_saved_results() {
     // `directory` is the folder the question just named: if the setting
     // changes before the queue gets to this, it must not delete a folder the
     // user was never asked about.
-    cleared_ = std::make_shared<int>(0);
-    file_writes_.submit(app::tr("clear saved results"), [directory, removed = cleared_] {
+    cleared_ = std::make_shared<ClearedResults>();
+    file_writes_.submit(app::tr("clear saved results"), [directory, cleared = cleared_] {
         // The black bars kept with the saved results go too: cleared, they
         // start afresh.
         forget_crop_answers();
@@ -851,7 +852,8 @@ void SettingsPanel::clear_saved_results() {
             app_log::write(app_log::Level::warning, "vml.crop_detect",
                            "Could not delete " + platform::path_text(black_bars) + ": " + error.message());
         }
-        *removed = clear_all(directory);
+        // Not those whose scores could not be calculated again.
+        *cleared = vml::clear_saved_results(directory, true);
     });
     status->setText(app::tr("Clearing saved results..."));
 }
@@ -876,9 +878,15 @@ void SettingsPanel::on_file_writes_idle() {
     if (!cleared_ || !file_writes_.idle()) {
         return;
     }
-    const int removed = *cleared_;
+    const ClearedResults cleared = *cleared_;
     cleared_.reset();
-    status->setText(ntr("Removed {count} saved result.", "Removed {count} saved results.", removed));
+    QString said = ntr("Removed {count} saved result.", "Removed {count} saved results.", cleared.removed);
+    if (cleared.kept > 0) {
+        said += " " + ntr("Kept {count} whose reference video is gone: delete it in the Saved results tab.",
+                          "Kept {count} whose reference videos are gone: delete them in the Saved results tab.",
+                          cleared.kept);
+    }
+    status->setText(said);
     refresh_status();
     emit saved_results_cleared();
 }

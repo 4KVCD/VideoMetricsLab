@@ -684,6 +684,47 @@ TEST(MetricCache, StoresAResultAsThePythonApp) {
 // without a request (a metric's newest file, or the one chosen; an
 // unreadable one passed over for the next); and deleted, only a folder of
 // its own under the cache's v2 folder.
+// A comparison whose reference is no longer where its scores were saved from
+// (gone, or another file there now) has the only scores there are: listed as
+// such, and kept by Clear saved results unless it is asked to take them too.
+TEST(MetricCache, ClearingKeepsTheComparisonsWhoseReferenceIsGone) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    const AnalysisRequest request = request_from(stored);
+    const std::filesystem::path cache = folder / "cache";
+    std::map<std::string, std::filesystem::path> saved;
+    for (const char* name : {"here", "gone", "replaced"}) {
+        const std::filesystem::path reference = folder / (std::string(name) + ".mp4");
+        touch(reference, name);
+        touch(folder / "t.mp4", "t");
+        ComparisonResult result = test::result_from(stored.at("result"));
+        result.source = reference;
+        result.distorted = folder / "t.mp4";
+        saved[name] = store_result(cache, reference, folder / "t.mp4", request.recipe, result, name, request.metrics);
+    }
+    std::filesystem::remove(folder / "gone.mp4");
+    touch(folder / "replaced.mp4", "another file, of another size");
+    EXPECT_TRUE(reference_where_saved(saved["here"]));
+    EXPECT_FALSE(reference_where_saved(saved["gone"]));
+    EXPECT_FALSE(reference_where_saved(saved["replaced"]));
+    for (const SavedComparison& listed : list_saved_comparisons(cache)) {
+        EXPECT_EQ(listed.reference_found, listed.label == "here") << listed.label;
+    }
+
+    const ClearedResults cleared = clear_saved_results(cache, true);
+    EXPECT_EQ(cleared.removed, 1);
+    EXPECT_EQ(cleared.kept, 2);
+    EXPECT_FALSE(std::filesystem::exists(saved["here"]));
+    EXPECT_TRUE(std::filesystem::exists(saved["gone"] / "context.json"));
+    EXPECT_TRUE(std::filesystem::exists(saved["replaced"] / "context.json"));
+    EXPECT_EQ(list_saved_comparisons(cache).size(), 2U);
+
+    const ClearedResults everything = clear_saved_results(cache, false);
+    EXPECT_EQ(everything.removed, 2);
+    EXPECT_EQ(everything.kept, 0);
+    EXPECT_TRUE(list_saved_comparisons(cache).empty());
+}
+
 TEST(MetricCache, SavedComparisonsAreListedReadAndDeleted) {
     const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
     const test::Folder folder;

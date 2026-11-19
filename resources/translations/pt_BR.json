@@ -116,7 +116,6 @@
   "Log exported to {path}": "Log exportado para {path}",
   "There are no saved results to clear.": "Não há resultados salvos para limpar.",
   "Saved results are already being cleared.": "Os resultados salvos já estão sendo limpos.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "Excluir os resultados salvos de {directory}?\n\nOs vídeos já pontuados terão de ser recalculados.",
   "Clearing saved results...": "Limpando resultados salvos...",
   "Reference video:": "Vídeo de referência:",
   "No reference selected.": "Nenhuma referência selecionada.",
@@ -1094,7 +1093,10 @@
   "can't be read": "não pode ser lido",
   "{name} (saved)": "{name} (salvo)",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Excluir os resultados salvos de {directory}?\n\nOs vídeos já pontuados terão de ser recalculados. São mantidos aqueles cujo vídeo de referência não está mais onde estava: suas pontuações não poderiam ser calculadas de novo. Exclua-os na aba Resultados salvos.",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Alguns deles não poderiam ser pontuados de novo: o vídeo de referência não está mais onde estava (marcado como \"não encontrada\").",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nNão encontrado ali: sem ele, essas pontuações não poderiam ser calculadas de novo."
  },
  "plurals": {
   "about {count} day": [
@@ -1224,6 +1226,10 @@
   "{count} saved comparison in {directory}": [
    "{count} comparação salva em {directory}",
    "{count} comparações salvas em {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "{count} resultado mantido, cujo vídeo de referência sumiu: exclua-o na aba Resultados salvos.",
+   "{count} resultados mantidos, cujos vídeos de referência sumiram: exclua-os na aba Resultados salvos."
   ]
  }
 }

@@ -57,6 +57,7 @@ std::vector<SavedComparison> list_saved_comparisons(const std::filesystem::path&
         saved.label = context->second;
         saved.source = context->first.source;
         saved.distorted = context->first.distorted;
+        saved.reference_found = reference_where_saved(folder->path());
         std::filesystem::directory_iterator file(folder->path(), ignored);
         for (; !ignored && file != std::filesystem::directory_iterator(); file.increment(ignored)) {
             std::error_code unread;

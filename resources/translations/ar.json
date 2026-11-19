@@ -116,7 +116,6 @@
   "Log exported to {path}": "صُدِّر السجل إلى {path}",
   "There are no saved results to clear.": "لا توجد نتائج محفوظة لمسحها.",
   "Saved results are already being cleared.": "يجري مسح النتائج المحفوظة بالفعل.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "حذف النتائج المحفوظة من {directory}؟\n\nستحتاج مقاطع الفيديو التي قُيّمت إلى إعادة الحساب.",
   "Clearing saved results...": "جارٍ مسح النتائج المحفوظة...",
   "Reference video:": "الفيديو المرجعي:",
   "No reference selected.": "لم يُحدَّد مرجع.",
@@ -1094,7 +1093,10 @@
   "can't be read": "تتعذر قراءته",
   "{name} (saved)": "{name} (محفوظ)",
   "{size:.0f} KB": "{size:.0f} كيلوبايت",
-  "{size:.1f} MB": "{size:.1f} ميغابايت"
+  "{size:.1f} MB": "{size:.1f} ميغابايت",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "حذف النتائج المحفوظة من {directory}؟\n\nستحتاج مقاطع الفيديو التي قُيّمت إلى إعادة الحساب. تُبقى النتائج التي لم يعد فيديو المرجع الخاص بها في مكانه: لا يمكن حساب درجاتها من جديد. احذفها من علامة التبويب «النتائج المحفوظة».",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "بعضها لا يمكن تقييمه من جديد: لم يعد فيديو المرجع الخاص به في مكانه (مُعلَّم «غير موجودة»).",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nغير موجود هناك: من دونه لا يمكن حساب هذه الدرجات من جديد."
  },
  "plurals": {
   "about {count} day": [
@@ -1352,6 +1354,14 @@
    "{count} مقارنات محفوظة في {directory}",
    "{count} مقارنةً محفوظة في {directory}",
    "{count} مقارنة محفوظة في {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "أُبقيت {count} نتيجة فيديو مرجعها مفقود: احذفها من علامة التبويب «النتائج المحفوظة».",
+   "أُبقيت {count} نتيجة فيديو مرجعها مفقود: احذفها من علامة التبويب «النتائج المحفوظة».",
+   "أُبقيت {count} نتيجة مقاطع الفيديو المرجعية لها مفقودة: احذفها من علامة التبويب «النتائج المحفوظة».",
+   "أُبقيت {count} نتائج مقاطع الفيديو المرجعية لها مفقودة: احذفها من علامة التبويب «النتائج المحفوظة».",
+   "أُبقيت {count} نتيجة مقاطع الفيديو المرجعية لها مفقودة: احذفها من علامة التبويب «النتائج المحفوظة».",
+   "أُبقيت {count} نتيجة مقاطع الفيديو المرجعية لها مفقودة: احذفها من علامة التبويب «النتائج المحفوظة»."
   ]
  }
 }

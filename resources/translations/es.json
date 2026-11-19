@@ -116,7 +116,6 @@
   "Log exported to {path}": "Registro exportado a {path}",
   "There are no saved results to clear.": "No hay resultados guardados para borrar.",
   "Saved results are already being cleared.": "Ya se están borrando los resultados guardados.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "¿Eliminar los resultados guardados de {directory}?\n\nLos videos ya puntuados tendrán que volver a calcularse.",
   "Clearing saved results...": "Borrando resultados guardados...",
   "Reference video:": "Video de referencia:",
   "No reference selected.": "No hay referencia seleccionada.",
@@ -1094,7 +1093,10 @@
   "can't be read": "no se puede leer",
   "{name} (saved)": "{name} (guardado)",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "¿Eliminar los resultados guardados de {directory}?\n\nLos videos ya puntuados tendrán que volver a calcularse. Se conservan aquellos cuyo video de referencia ya no está donde estaba: sus puntuaciones no podrían volver a calcularse. Elimínelos en la pestaña Resultados guardados.",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Algunos de ellos no podrían volver a puntuarse: su video de referencia ya no está donde estaba (marcado como «no encontrada»).",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nNo se encuentra ahí: sin él, estas puntuaciones no podrían volver a calcularse."
  },
  "plurals": {
   "about {count} day": [
@@ -1224,6 +1226,10 @@
   "{count} saved comparison in {directory}": [
    "{count} comparación guardada en {directory}",
    "{count} comparaciones guardadas en {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "Se conservó {count} resultado cuyo video de referencia falta: elimínelo en la pestaña Resultados guardados.",
+   "Se conservaron {count} resultados cuyos videos de referencia faltan: elimínelos en la pestaña Resultados guardados."
   ]
  }
 }

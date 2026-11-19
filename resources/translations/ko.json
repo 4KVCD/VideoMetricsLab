@@ -116,7 +116,6 @@
   "Log exported to {path}": "로그를 {path}(으)로 내보냈습니다",
   "There are no saved results to clear.": "지울 저장된 결과가 없습니다.",
   "Saved results are already being cleared.": "저장된 결과를 이미 지우는 중입니다.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "{directory}의 저장된 결과를 삭제할까요?\n\n이미 채점한 영상은 다시 계산해야 합니다.",
   "Clearing saved results...": "저장된 결과를 지우는 중...",
   "Reference video:": "참조 영상:",
   "No reference selected.": "참조 영상이 선택되지 않았습니다.",
@@ -1094,7 +1093,10 @@
   "can't be read": "읽을 수 없음",
   "{name} (saved)": "{name}(저장됨)",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "{directory}의 저장된 결과를 삭제할까요?\n\n이미 채점한 영상은 다시 계산해야 합니다. 참조 영상이 원래 위치에 없는 결과는 유지됩니다. 그 점수는 다시 계산할 수 없기 때문입니다. 이 결과는 저장된 결과 탭에서 삭제하세요.",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "일부는 다시 채점할 수 없습니다. 참조 영상이 원래 위치에 없습니다(\"찾을 수 없음\"으로 표시).",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\n그 위치에 없습니다. 참조 영상이 없으면 이 점수는 다시 계산할 수 없습니다."
  },
  "plurals": {
   "about {count} day": [
@@ -1192,6 +1194,9 @@
   ],
   "{count} saved comparison in {directory}": [
    "저장된 비교 {count}개, {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "참조 영상이 없는 결과 {count}개를 유지했습니다. 저장된 결과 탭에서 삭제하세요."
   ]
  }
 }

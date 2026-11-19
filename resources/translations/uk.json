@@ -116,7 +116,6 @@
   "Log exported to {path}": "Журнал експортовано до {path}",
   "There are no saved results to clear.": "Немає збережених результатів для очищення.",
   "Saved results are already being cleared.": "Збережені результати вже очищуються.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "Видалити збережені результати з {directory}?\n\nУже оцінені відео доведеться обчислити заново.",
   "Clearing saved results...": "Очищення збережених результатів...",
   "Reference video:": "Еталонне відео:",
   "No reference selected.": "Еталон не вибрано.",
@@ -1094,7 +1093,10 @@
   "can't be read": "не читається",
   "{name} (saved)": "{name} (збережено)",
   "{size:.0f} KB": "{size:.0f} КБ",
-  "{size:.1f} MB": "{size:.1f} МБ"
+  "{size:.1f} MB": "{size:.1f} МБ",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Видалити збережені результати з {directory}?\n\nУже оцінені відео доведеться обчислити заново. Результати, еталонне відео яких більше не там, де було, зберігаються: їхні оцінки не можна було б обчислити заново. Видаліть їх на вкладці «Збережені результати».",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Деякі з них не можна було б оцінити заново: їхнє еталонне відео більше не там, де було (позначено «не знайдено»).",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nТам не знайдено: без нього ці оцінки не можна було б обчислити заново."
  },
  "plurals": {
   "about {count} day": [
@@ -1256,6 +1258,11 @@
    "{count} збережене порівняння в {directory}",
    "{count} збережені порівняння в {directory}",
    "{count} збережених порівнянь у {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "Збережено {count} результат, еталонне відео якого зникло: видаліть його на вкладці «Збережені результати».",
+   "Збережено {count} результати, еталонні відео яких зникли: видаліть їх на вкладці «Збережені результати».",
+   "Збережено {count} результатів, еталонні відео яких зникли: видаліть їх на вкладці «Збережені результати»."
   ]
  }
 }

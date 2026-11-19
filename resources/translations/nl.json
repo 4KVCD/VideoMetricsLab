@@ -116,7 +116,6 @@
   "Log exported to {path}": "Logboek geëxporteerd naar {path}",
   "There are no saved results to clear.": "Geen opgeslagen resultaten om te wissen.",
   "Saved results are already being cleared.": "Opgeslagen resultaten worden al gewist.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "Opgeslagen resultaten verwijderen uit {directory}?\n\nVideo's die al zijn beoordeeld, moeten opnieuw worden berekend.",
   "Clearing saved results...": "Opgeslagen resultaten wissen...",
   "Reference video:": "Referentievideo:",
   "No reference selected.": "Geen referentie geselecteerd.",
@@ -1094,7 +1093,10 @@
   "can't be read": "onleesbaar",
   "{name} (saved)": "{name} (opgeslagen)",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Opgeslagen resultaten verwijderen uit {directory}?\n\nVideo's die al zijn beoordeeld, moeten opnieuw worden berekend. Resultaten waarvan de referentievideo niet meer staat waar hij stond, blijven bewaard: hun scores zouden niet opnieuw te berekenen zijn. Verwijder ze op het tabblad Opgeslagen resultaten.",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Sommige ervan zouden niet opnieuw te beoordelen zijn: hun referentievideo staat niet meer waar hij stond (gemarkeerd als \"niet gevonden\").",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nDaar niet gevonden: zonder deze video zouden deze scores niet opnieuw te berekenen zijn."
  },
  "plurals": {
   "about {count} day": [
@@ -1224,6 +1226,10 @@
   "{count} saved comparison in {directory}": [
    "{count} opgeslagen vergelijking in {directory}",
    "{count} opgeslagen vergelijkingen in {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "{count} resultaat bewaard waarvan de referentievideo ontbreekt: verwijder het op het tabblad Opgeslagen resultaten.",
+   "{count} resultaten bewaard waarvan de referentievideo's ontbreken: verwijder ze op het tabblad Opgeslagen resultaten."
   ]
  }
 }

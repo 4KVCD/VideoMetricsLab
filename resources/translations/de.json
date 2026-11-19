@@ -116,7 +116,6 @@
   "Log exported to {path}": "Protokoll exportiert nach {path}",
   "There are no saved results to clear.": "Es gibt keine gespeicherten Ergebnisse zum Löschen.",
   "Saved results are already being cleared.": "Gespeicherte Ergebnisse werden bereits gelöscht.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "Gespeicherte Ergebnisse aus {directory} löschen?\n\nBereits bewertete Videos müssen neu berechnet werden.",
   "Clearing saved results...": "Gespeicherte Ergebnisse werden gelöscht...",
   "Reference video:": "Referenzvideo:",
   "No reference selected.": "Keine Referenz ausgewählt.",
@@ -1094,7 +1093,10 @@
   "can't be read": "nicht lesbar",
   "{name} (saved)": "{name} (gespeichert)",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Gespeicherte Ergebnisse aus {directory} löschen?\n\nBereits bewertete Videos müssen neu berechnet werden. Ergebnisse, deren Referenzvideo nicht mehr dort ist, wo es war, bleiben erhalten: Ihre Werte ließen sich nicht erneut berechnen. Löschen Sie sie im Tab „Gespeicherte Ergebnisse“.",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Einige davon ließen sich nicht erneut bewerten: Ihr Referenzvideo ist nicht mehr dort, wo es war (als „nicht gefunden“ markiert).",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nDort nicht gefunden: Ohne es ließen sich diese Werte nicht erneut berechnen."
  },
  "plurals": {
   "about {count} day": [
@@ -1224,6 +1226,10 @@
   "{count} saved comparison in {directory}": [
    "{count} gespeicherter Vergleich in {directory}",
    "{count} gespeicherte Vergleiche in {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "{count} Ergebnis behalten, dessen Referenzvideo fehlt: Löschen Sie es im Tab „Gespeicherte Ergebnisse“.",
+   "{count} Ergebnisse behalten, deren Referenzvideos fehlen: Löschen Sie sie im Tab „Gespeicherte Ergebnisse“."
   ]
  }
 }

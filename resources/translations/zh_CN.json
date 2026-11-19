@@ -116,7 +116,6 @@
   "Log exported to {path}": "日志已导出到 {path}",
   "There are no saved results to clear.": "没有可清除的已保存结果。",
   "Saved results are already being cleared.": "已保存的结果正在清除。",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "要删除 {directory} 中已保存的结果吗？\n\n已评分的视频需要重新计算。",
   "Clearing saved results...": "正在清除已保存的结果...",
   "Reference video:": "参考视频：",
   "No reference selected.": "未选择参考视频。",
@@ -1094,7 +1093,10 @@
   "can't be read": "无法读取",
   "{name} (saved)": "{name}（已保存）",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "要删除 {directory} 中已保存的结果吗？\n\n已评分的视频需要重新计算。参考视频已不在原位置的结果会保留：它们的分数无法再重新计算。请在“已保存的结果”选项卡中删除它们。",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "其中一些无法重新评分：它们的参考视频已不在原位置（标记为“未找到”）。",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\n在该位置找不到：没有它，就无法重新计算这些分数。"
  },
  "plurals": {
   "about {count} day": [
@@ -1192,6 +1194,9 @@
   ],
   "{count} saved comparison in {directory}": [
    "{count} 个已保存的对比，位于 {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "已保留 {count} 个参考视频已丢失的结果：请在“已保存的结果”选项卡中删除。"
   ]
  }
 }

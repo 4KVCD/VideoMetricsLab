@@ -234,9 +234,25 @@ struct CacheSummary {
 };
 CacheSummary cache_summary(const std::filesystem::path& base);
 
-// Deletes every comparison saved under `base` (its v2 folder; nothing else
-// there) and returns how many there were: 0 when they could not all be
-// deleted, as the Python app counts it.
-int clear_all(const std::filesystem::path& base);
+// Whether the reference of the comparison saved in `folder` is still where
+// its scores were saved from: a file at its path, and the same file, as its
+// identity.json recorded it (path, size and time; where the comparison has
+// one). Without it, nothing saved there can be calculated again: the scores
+// saved are the only ones there are.
+bool reference_where_saved(const std::filesystem::path& folder);
+
+// What clear_saved_results did: how many comparisons it deleted (0 when not
+// all it meant to could be, as the Python app counted them), and how many it
+// kept.
+struct ClearedResults {
+    int removed = 0;
+    int kept = 0;
+};
+
+// Deletes the comparisons saved under `base` (its v2 folder; nothing else
+// there): every one, or with `keep_without_reference` every one whose
+// reference is still where it was (reference_where_saved), keeping those
+// whose scores could not be calculated again.
+ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_without_reference);
 
 }  // namespace vml

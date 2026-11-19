@@ -116,7 +116,6 @@
   "Log exported to {path}": "ログを {path} にエクスポートしました",
   "There are no saved results to clear.": "消去できる保存済みの結果はありません。",
   "Saved results are already being cleared.": "保存済みの結果はすでに消去中です。",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "{directory} の保存済みの結果を削除しますか？\n\n採点済みの動画は再計算が必要になります。",
   "Clearing saved results...": "保存済みの結果を消去しています...",
   "Reference video:": "参照動画：",
   "No reference selected.": "参照動画が選択されていません。",
@@ -1094,7 +1093,10 @@
   "can't be read": "読み込めません",
   "{name} (saved)": "{name}（保存済み）",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "{directory} の保存済みの結果を削除しますか？\n\n採点済みの動画は再計算が必要になります。参照動画が元の場所にない結果は残されます。そのスコアは再計算できないためです。それらは「保存済みの結果」タブで削除してください。",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "一部は再採点できません。参照動画が元の場所にありません（「見つかりません」と表示）。",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nそこに見つかりません。参照動画がないと、これらのスコアは再計算できません。"
  },
  "plurals": {
   "about {count} day": [
@@ -1192,6 +1194,9 @@
   ],
   "{count} saved comparison in {directory}": [
    "保存済みの比較 {count} 件（{directory}）"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "参照動画がない {count} 件の結果を残しました。「保存済みの結果」タブで削除してください。"
   ]
  }
 }

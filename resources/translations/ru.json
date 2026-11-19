@@ -116,7 +116,6 @@
   "Log exported to {path}": "Журнал экспортирован в {path}",
   "There are no saved results to clear.": "Нет сохранённых результатов для очистки.",
   "Saved results are already being cleared.": "Сохранённые результаты уже очищаются.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "Удалить сохранённые результаты из {directory}?\n\nУже оценённые видео придётся пересчитать.",
   "Clearing saved results...": "Очистка сохранённых результатов...",
   "Reference video:": "Эталонное видео:",
   "No reference selected.": "Эталон не выбран.",
@@ -1094,7 +1093,10 @@
   "can't be read": "не читается",
   "{name} (saved)": "{name} (сохранено)",
   "{size:.0f} KB": "{size:.0f} КБ",
-  "{size:.1f} MB": "{size:.1f} МБ"
+  "{size:.1f} MB": "{size:.1f} МБ",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Удалить сохранённые результаты из {directory}?\n\nУже оценённые видео придётся пересчитать. Результаты, эталонное видео которых больше не находится там, где было, сохраняются: их оценки нельзя было бы рассчитать заново. Удалите их на вкладке «Сохранённые результаты».",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Некоторые из них нельзя было бы оценить заново: их эталонное видео больше не находится там, где было (помечено «не найден»).",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nТам не найдено: без него эти оценки нельзя было бы рассчитать заново."
  },
  "plurals": {
   "about {count} day": [
@@ -1256,6 +1258,11 @@
    "{count} сохранённое сравнение в {directory}",
    "{count} сохранённых сравнения в {directory}",
    "{count} сохранённых сравнений в {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "Сохранён {count} результат, эталонное видео которого пропало: удалите его на вкладке «Сохранённые результаты».",
+   "Сохранено {count} результата, эталонные видео которых пропали: удалите их на вкладке «Сохранённые результаты».",
+   "Сохранено {count} результатов, эталонные видео которых пропали: удалите их на вкладке «Сохранённые результаты»."
   ]
  }
 }

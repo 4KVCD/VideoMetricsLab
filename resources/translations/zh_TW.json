@@ -116,7 +116,6 @@
   "Log exported to {path}": "記錄檔已匯出到 {path}",
   "There are no saved results to clear.": "沒有可清除的已儲存結果。",
   "Saved results are already being cleared.": "已儲存的結果正在清除中。",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "要刪除 {directory} 中已儲存的結果嗎？\n\n已評分的影片需要重新計算。",
   "Clearing saved results...": "正在清除已儲存的結果...",
   "Reference video:": "參考影片：",
   "No reference selected.": "未選取參考影片。",
@@ -1094,7 +1093,10 @@
   "can't be read": "無法讀取",
   "{name} (saved)": "{name}（已儲存）",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "要刪除 {directory} 中已儲存的結果嗎？\n\n已評分的影片需要重新計算。參考影片已不在原位置的結果會保留：它們的分數無法再重新計算。請在「已儲存的結果」分頁中刪除它們。",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "其中一些無法重新評分：它們的參考影片已不在原位置（標示為「找不到」）。",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\n在該位置找不到：沒有它，就無法重新計算這些分數。"
  },
  "plurals": {
   "about {count} day": [
@@ -1192,6 +1194,9 @@
   ],
   "{count} saved comparison in {directory}": [
    "{count} 個已儲存的比較，位於 {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "已保留 {count} 個參考影片已遺失的結果：請在「已儲存的結果」分頁中刪除。"
   ]
  }
 }

@@ -116,7 +116,6 @@
   "Log exported to {path}": "Journal exporté vers {path}",
   "There are no saved results to clear.": "Il n'y a aucun résultat enregistré à effacer.",
   "Saved results are already being cleared.": "Les résultats enregistrés sont déjà en cours d'effacement.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "Supprimer les résultats enregistrés de {directory} ?\n\nLes vidéos déjà notées devront être recalculées.",
   "Clearing saved results...": "Effacement des résultats enregistrés...",
   "Reference video:": "Vidéo de référence :",
   "No reference selected.": "Aucune référence sélectionnée.",
@@ -1094,7 +1093,10 @@
   "can't be read": "illisible",
   "{name} (saved)": "{name} (enregistré)",
   "{size:.0f} KB": "{size:.0f} Ko",
-  "{size:.1f} MB": "{size:.1f} Mo"
+  "{size:.1f} MB": "{size:.1f} Mo",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Supprimer les résultats enregistrés de {directory} ?\n\nLes vidéos déjà notées devront être recalculées. Ceux dont la vidéo de référence n'est plus là où elle était sont conservés : leurs scores ne pourraient pas être recalculés. Supprimez-les dans l'onglet Résultats enregistrés.",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Certains d'entre eux ne pourraient pas être notés à nouveau : leur vidéo de référence n'est plus là où elle était (marquée « introuvable »).",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nIntrouvable à cet endroit : sans elle, ces scores ne pourraient pas être recalculés."
  },
  "plurals": {
   "about {count} day": [
@@ -1224,6 +1226,10 @@
   "{count} saved comparison in {directory}": [
    "{count} comparaison enregistrée dans {directory}",
    "{count} comparaisons enregistrées dans {directory}"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "{count} résultat conservé, dont la vidéo de référence a disparu : supprimez-le dans l'onglet Résultats enregistrés.",
+   "{count} résultats conservés, dont les vidéos de référence ont disparu : supprimez-les dans l'onglet Résultats enregistrés."
   ]
  }
 }

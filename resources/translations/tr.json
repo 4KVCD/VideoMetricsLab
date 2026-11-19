@@ -116,7 +116,6 @@
   "Log exported to {path}": "Günlük dışa aktarıldı: {path}",
   "There are no saved results to clear.": "Temizlenecek kaydedilmiş sonuç yok.",
   "Saved results are already being cleared.": "Kaydedilen sonuçlar zaten temizleniyor.",
-  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed.": "Şu konumdaki kaydedilen sonuçlar silinsin mi: {directory}\n\nZaten puanlanmış videoların yeniden hesaplanması gerekecek.",
   "Clearing saved results...": "Kaydedilen sonuçlar temizleniyor...",
   "Reference video:": "Referans video:",
   "No reference selected.": "Referans seçilmedi.",
@@ -1094,7 +1093,10 @@
   "can't be read": "okunamıyor",
   "{name} (saved)": "{name} (kayıtlı)",
   "{size:.0f} KB": "{size:.0f} KB",
-  "{size:.1f} MB": "{size:.1f} MB"
+  "{size:.1f} MB": "{size:.1f} MB",
+  "Delete saved results from {directory}?\n\nVideos already scored will have to be recomputed. Those whose reference video is no longer where it was are kept: their scores could not be calculated again. Delete them in the Saved results tab.": "Şu konumdaki kaydedilen sonuçlar silinsin mi: {directory}\n\nZaten puanlanmış videoların yeniden hesaplanması gerekecek. Referans videosu artık eski yerinde olmayanlar saklanır: puanları yeniden hesaplanamaz. Bunları Kaydedilen sonuçlar sekmesinde silin.",
+  "Some of them could not be scored again: their reference video is no longer where it was (marked \"not found\").": "Bazıları yeniden puanlanamaz: referans videoları artık eski yerinde değil (\"bulunamadı\" olarak işaretli).",
+  "{path}\n\nNot found there: without it, these scores could not be calculated again.": "{path}\n\nOrada bulunamadı: o olmadan bu puanlar yeniden hesaplanamaz."
  },
  "plurals": {
   "about {count} day": [
@@ -1224,6 +1226,10 @@
   "{count} saved comparison in {directory}": [
    "{directory} içinde {count} kayıtlı karşılaştırma",
    "{directory} içinde {count} kayıtlı karşılaştırma"
+  ],
+  "Kept {count} whose reference video is gone: delete it in the Saved results tab.": [
+   "Referans videosu kaybolan {count} sonuç saklandı: Kaydedilen sonuçlar sekmesinde silin.",
+   "Referans videoları kaybolan {count} sonuç saklandı: Kaydedilen sonuçlar sekmesinde silin."
   ]
  }
 }
