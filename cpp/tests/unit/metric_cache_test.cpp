@@ -33,6 +33,7 @@
 #include "vml/python_json.h"
 #include "vml/result_json.h"
 #include "vml/saved_results.h"
+#include "vml/file_fingerprint.h"
 #include "vml/score_identity.h"
 #include "vml/sha256.h"
 
@@ -757,6 +758,94 @@ TEST(MetricCache, SavedComparisonsAreListedReadAndDeleted) {
     list = list_saved_comparisons(cache);
     ASSERT_EQ(list.size(), 1U);
     EXPECT_EQ(list[0].label, "t");
+}
+
+// A file is known by its content where its path changed: the sampled hash
+// reads the size and samples of the file (the same bytes anywhere give the
+// same hash; a changed byte in a sample, another), and the pictures a video
+// fingerprint decodes are mid-frame times a sixth of the length apart.
+TEST(MetricCache, FilesAreKnownByTheirContent) {
+    const test::Folder folder;
+    std::string bytes(3 << 20, 'x');  // past the size read whole
+    for (std::size_t i = 0; i < bytes.size(); ++i) {
+        bytes[i] = static_cast<char>((i * 7919) % 251);
+    }
+    touch(folder / "a.mkv", bytes);
+    touch(folder / "b.mkv", bytes);
+    const std::optional<std::string> a = sampled_file_hash(folder / "a.mkv");
+    ASSERT_TRUE(a);
+    EXPECT_EQ(sampled_file_hash(folder / "b.mkv"), a);
+    bytes[10] ^= 1;  // in the first megabyte
+    touch(folder / "b.mkv", bytes);
+    EXPECT_NE(sampled_file_hash(folder / "b.mkv"), a);
+    touch(folder / "small.mkv", "small");
+    EXPECT_TRUE(sampled_file_hash(folder / "small.mkv"));
+    EXPECT_FALSE(sampled_file_hash(folder / "missing.mkv"));
+
+    // 8 s at 24 fps: frames 32, 64, 96, 128 and 160, each at its middle; an
+    // MP4's 7.999 s and 24.003 fps (its rounded duration's) give the same.
+    const std::vector<double> times = fingerprint_times(8.0, 24.0);
+    ASSERT_EQ(times.size(), 5U);
+    EXPECT_DOUBLE_EQ(times[0], 32.5 / 24.0);
+    EXPECT_DOUBLE_EQ(times[4], 160.5 / 24.0);
+    EXPECT_EQ(fingerprint_times(7.999, 24.003), times);
+    EXPECT_TRUE(fingerprint_times(8.0, 0.0).empty());
+}
+
+// The saved scores of files whose paths changed: a renamed or copied test
+// video or reference (their sampled hashes), a remuxed reference (its video
+// fingerprint, asked only once the test video matched); another reference
+// is not taken for it. The result has the files' paths as they are now.
+TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
+    const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
+    const test::Folder folder;
+    touch(folder / "s.mkv", std::string(5000, 's'));
+    touch(folder / "t.mkv", std::string(4000, 't'));
+    const AnalysisRequest request = request_from(stored);
+    ComparisonResult result = test::result_from(stored.at("result"));
+    result.source = folder / "s.mkv";
+    result.distorted = folder / "t.mkv";
+    int fingerprinted = 0;
+    set_video_fingerprinter([&fingerprinted](const std::filesystem::path& file) -> std::optional<std::string> {
+        ++fingerprinted;
+        // The remux holds the reference's stream; the other video another.
+        const std::string name = platform::path_text(file.filename());
+        return name == "other.mp4" ? std::string("another stream") : std::string("the reference's stream");
+    });
+    const std::filesystem::path cache = folder / "cache";
+    const std::filesystem::path saved =
+        store_result(cache, folder / "s.mkv", folder / "t.mkv", request.recipe, result, "t", request.metrics);
+    EXPECT_TRUE(std::filesystem::exists(saved / "identity.json"));
+    const auto load = [&](const std::string& source, const std::string& distorted) {
+        return load_result(cache, folder / source, folder / distorted, request.recipe, request.metrics,
+                           request.perceptual_backends);
+    };
+
+    // Copied and renamed: the same bytes.
+    std::filesystem::copy_file(folder / "s.mkv", folder / "s copy.mkv");
+    std::filesystem::copy_file(folder / "t.mkv", folder / "t renamed.mkv");
+    const auto copied = load("s copy.mkv", "t renamed.mkv");
+    ASSERT_TRUE(copied);
+    EXPECT_EQ(copied->first.source, folder / "s copy.mkv");
+    EXPECT_EQ(copied->first.distorted, folder / "t renamed.mkv");
+    EXPECT_EQ(recipe_directory(cache, folder / "s copy.mkv", folder / "t renamed.mkv", request.recipe), saved);
+
+    // A remuxed reference: other bytes, the same stream.
+    touch(folder / "remux.mp4", std::string(5100, 'm'));
+    const int before = fingerprinted;
+    ASSERT_TRUE(load("remux.mp4", "t.mkv"));
+    EXPECT_GT(fingerprinted, before);
+
+    // Another reference: not this comparison's.
+    touch(folder / "other.mp4", std::string(5100, 'o'));
+    EXPECT_FALSE(load("other.mp4", "t.mkv"));
+
+    // A new test video: nothing saved for it, nothing decoded to find out.
+    touch(folder / "new.mkv", std::string(4100, 'n'));
+    const int asked = fingerprinted;
+    EXPECT_FALSE(load("remux.mp4", "new.mkv"));
+    EXPECT_EQ(fingerprinted, asked);
+    set_video_fingerprinter(nullptr);
 }
 
 TEST(MetricCache, AScoreKeepsTheBuildThatMadeIt) {

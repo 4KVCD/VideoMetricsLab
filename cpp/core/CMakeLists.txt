@@ -22,6 +22,7 @@ add_library(vml_core
     src/ffmpeg_run.cpp
     src/ffmpeg_tools.cpp
     src/ffprobe.cpp
+    src/file_fingerprint.cpp
     src/film_grain_detect.cpp
     src/film_grain_scoring.cpp
     src/frame_extract.cpp

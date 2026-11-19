@@ -49,7 +49,9 @@
 #include "vml/app_log.h"
 #include "vml/append.h"
 #include "vml/ffmpeg_tools.h"
+#include "vml/file_fingerprint.h"
 #include "vml/hardware_decoding.h"
+#include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/python_text.h"
 #include "vml/platform/system.h"
@@ -208,6 +210,10 @@ MainWindow::MainWindow() {
     on_vship_probe_finished([this] {
         QMetaObject::invokeMethod(this, [this] { on_vship_checked(); }, Qt::QueuedConnection);
     });
+    // The saved scores' lookups (restore_open_videos' first of them) know a
+    // remuxed reference from the start: with the tools Settings name now,
+    // set again wherever the tools are checked (check_ffmpeg).
+    set_video_fingerprinter(fingerprinter_using(find_tool("ffmpeg", settings_), find_tool("ffprobe", settings_)));
     restore_open_videos();
     on_table_selection_changed();
 }
@@ -1086,6 +1092,8 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     // banner.
     const ToolsStatus status = check_tools(settings_);
     tools_status_ = status;
+    // A remuxed or moved reference keeps its saved scores (file_fingerprint.h).
+    set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
     if (prompt) {
         log_tools(status, detected_gpu_vendors_);
     }
@@ -1192,6 +1200,8 @@ void MainWindow::on_ffmpeg_downloaded(const std::filesystem::path& folder) {
     settings_.ffmpeg_dir = trial.ffmpeg_dir;
     settings_panel_->show_ffmpeg_folder(QString::fromStdString(settings_.ffmpeg_dir));
     tools_status_ = status;
+    // A remuxed or moved reference keeps its saved scores (file_fingerprint.h).
+    set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
     log_tools(status, detected_gpu_vendors_);
     ffmpeg_found(status, folder);
     if (const std::optional<std::string> problem = settings_.save()) {
@@ -1255,6 +1265,8 @@ bool MainWindow::on_locate_ffmpeg() {
     }
     const ToolsStatus status = check_tools(settings_);
     tools_status_ = status;
+    // A remuxed or moved reference keeps its saved scores (file_fingerprint.h).
+    set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
     if (!status.ok()) {
         const QStringList problems = tool_problems(status);
         QMessageBox::warning(this, app::tr("Still not usable"), problems.join("\n"));

@@ -34,6 +34,7 @@
 #include "vml/ffmpeg_run.h"
 #include "vml/ffmpeg_tools.h"
 #include "vml/ffprobe.h"
+#include "vml/file_fingerprint.h"
 #include "vml/film_grain_detect.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/frame_pairing.h"
@@ -1992,6 +1993,8 @@ int compare(const CompareArguments& given) {
         print_error(ffmpeg_problem(tools));
         return exit_usage;
     }
+    // A remuxed or moved reference keeps its saved scores (file_fingerprint.h).
+    set_video_fingerprinter(fingerprinter_using(tools.ffmpeg.path, tools.ffprobe.path));
     std::vector<CvvdpDisplayChoice> displays;
     try {
         displays = cvvdp_displays(arguments, settings);

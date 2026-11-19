@@ -41,6 +41,13 @@ inline constexpr int black_bars_rule_version = 3;
 // .videometricslab/results_cache in the user's home.
 std::filesystem::path default_cache_dir();
 
+// How the saved scores recognise a reference whose path changed: given a
+// file, its video_fingerprint (file_fingerprint.h), made with the tools of
+// the app or the command line. None set (the default): files are recognised
+// by their path and by their sampled_file_hash only.
+using VideoFingerprinter = std::function<std::optional<std::string>(const std::filesystem::path&)>;
+void set_video_fingerprinter(VideoFingerprinter fingerprinter);
+
 // The hash that names a comparison's folder: of both files' identities and
 // the recipe's.
 std::string recipe_hash(const std::filesystem::path& source, const std::filesystem::path& distorted,
@@ -52,7 +59,12 @@ std::string metric_identity_hash(const MetricRequestSpec& spec);
 // The comparison's folder under `base`. Folders saved under the older
 // identity, one per scaling algorithm, are merged into it the first time it
 // is asked for; if the first of those cannot be renamed (it is open
-// elsewhere), it is used where it is.
+// elsewhere), it is used where it is. With none, a folder saved for the
+// same files elsewhere (identity.json): the test video by its path or its
+// sampled_file_hash, the reference by those or, where the test video
+// matched, by its video_fingerprint, so that a renamed, moved or copied
+// file, and a remuxed reference, keep their scores. Its scores are then
+// read and saved there.
 std::filesystem::path recipe_directory(const std::filesystem::path& base, const std::filesystem::path& source,
                                        const std::filesystem::path& distorted, const ComparisonRecipe& recipe);
 

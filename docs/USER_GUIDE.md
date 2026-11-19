@@ -705,9 +705,20 @@ Cached results are reused when files and relevant settings match. A
 compatible subset can load as partially calculated; request calculation to
 fill missing metrics.
 
+Saved scores follow the files, not their names or folders. A file renamed,
+moved or copied is recognised by its content: its size and samples of its
+bytes from the start, the end and between (a few megabytes read). A
+reference remuxed into another container (MKV, MP4, with any other tracks)
+is recognised by its video stream: its codec, picture size, frame rate,
+colour and length, and five pictures decoded from it. The test video is
+recognised by its path or its content only, and the reference's stream is
+only looked at when the test video has saved scores, so a new encode costs
+nothing to look up. A remux that changes the stream's colour tags, or a
+re-encode, is another video and is scored again.
+
 Settings and the default cache are under `~/.videometricslab/`. Back up that
 folder before maintenance; changing checkout should not require clearing it.
-File moves or replacements can cause cache misses. Use explicit saved-result
+A file replaced by another causes a cache miss. Use explicit saved-result
 loading when you need to inspect a portable result. Right-click recalculation
 forgets matching cached results, so do not use it just to refresh the display.
 
