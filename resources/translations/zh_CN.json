@@ -242,7 +242,7 @@
   "Yes": "是",
   "No": "否",
   "Reference and test video are compared at the same {size} -- no scaling needed.": "参考视频和测试视频以相同的 {size} 进行比较——无需缩放。",
-  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nBars are detected when this row runs, and are removed before the two are compared, so whether any scaling is needed is known then.": "参考视频为 {reference}，测试视频为 {test}，只有一个维度不同——这正是其中一个视频有黑边的样子。\n\n运行此行时会检测黑边，并在比较前去除，那时才能知道是否需要缩放。",
+  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nThe bars are detected when this row runs and removed before the two are compared, so normally no scaling is needed. If the sizes still differ then, one video is scaled to match the other.": "参考视频为 {reference}，测试视频为 {test}，只有一个维度不同——这正是其中一个视频有黑边的样子。\n\n运行此行时会检测黑边，并在比较前去除，因此通常无需缩放。如果尺寸仍不同，会将一个视频缩放到另一个的尺寸。",
   " (after black bars)": "（去除黑边后）",
   "Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.": "测试视频从 {from_size} 放大到 {to_size}{cropped}，以匹配参考视频。",
   "Test video downscaled {from_size} -> {to_size}{cropped} to match the reference.": "测试视频从 {from_size} 缩小到 {to_size}{cropped}，以匹配参考视频。",

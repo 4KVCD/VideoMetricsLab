@@ -242,7 +242,7 @@
   "Yes": "はい",
   "No": "いいえ",
   "Reference and test video are compared at the same {size} -- no scaling needed.": "参照動画とテスト動画は同じ {size} で比較されます。スケーリングは不要です。",
-  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nBars are detected when this row runs, and are removed before the two are compared, so whether any scaling is needed is known then.": "参照動画は {reference}、テスト動画は {test} で、差は一方の次元だけです。これはどちらかに黒帯がある形です。\n\n黒帯はこの行の実行時に検出され、比較の前に取り除かれるため、スケーリングが必要かどうかはそのときにわかります。",
+  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nThe bars are detected when this row runs and removed before the two are compared, so normally no scaling is needed. If the sizes still differ then, one video is scaled to match the other.": "参照動画は {reference}、テスト動画は {test} で、差は一方の次元だけです。これはどちらかに黒帯がある形です。\n\n黒帯はこの行の実行時に検出され、比較の前に取り除かれるため、通常スケーリングは不要です。それでもサイズが異なる場合は、一方の動画をもう一方に合わせてスケーリングします。",
   " (after black bars)": "（黒帯除去後）",
   "Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.": "参照動画に合わせてテスト動画を {from_size} → {to_size}{cropped} に拡大。",
   "Test video downscaled {from_size} -> {to_size}{cropped} to match the reference.": "参照動画に合わせてテスト動画を {from_size} → {to_size}{cropped} に縮小。",

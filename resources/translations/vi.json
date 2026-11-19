@@ -242,7 +242,7 @@
   "Yes": "Có",
   "No": "Không",
   "Reference and test video are compared at the same {size} -- no scaling needed.": "Video tham chiếu và video thử được so sánh ở cùng kích thước {size} — không cần đổi kích thước.",
-  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nBars are detected when this row runs, and are removed before the two are compared, so whether any scaling is needed is known then.": "Video tham chiếu {reference} và video thử {test} chỉ khác nhau ở một chiều — dấu hiệu của viền đen ở một trong hai.\n\nViền được phát hiện khi hàng này chạy và bị bỏ trước khi so sánh, nên đến lúc đó mới biết có cần đổi kích thước hay không.",
+  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nThe bars are detected when this row runs and removed before the two are compared, so normally no scaling is needed. If the sizes still differ then, one video is scaled to match the other.": "Video tham chiếu {reference} và video thử {test} chỉ khác nhau ở một chiều — dấu hiệu của viền đen ở một trong hai.\n\nViền được phát hiện khi hàng này chạy và bị bỏ trước khi so sánh, nên thường không cần đổi kích thước. Nếu kích thước vẫn khác nhau, một video sẽ được đổi kích thước cho khớp với video kia.",
   " (after black bars)": " (sau khi bỏ viền đen)",
   "Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.": "Video thử được phóng to {from_size} -> {to_size}{cropped} cho khớp video tham chiếu.",
   "Test video downscaled {from_size} -> {to_size}{cropped} to match the reference.": "Video thử được thu nhỏ {from_size} -> {to_size}{cropped} cho khớp video tham chiếu.",

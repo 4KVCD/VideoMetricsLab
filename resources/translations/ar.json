@@ -242,7 +242,7 @@
   "Yes": "نعم",
   "No": "لا",
   "Reference and test video are compared at the same {size} -- no scaling needed.": "يُقارن المرجع وفيديو الاختبار بالحجم نفسه {size} — لا حاجة إلى تغيير الحجم.",
-  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nBars are detected when this row runs, and are removed before the two are compared, so whether any scaling is needed is known then.": "المرجع {reference} وفيديو الاختبار {test}، والفرق في بُعد واحد فقط — وهذا شكل أشرطة سوداء في أحدهما.\n\nتُكتشف الأشرطة عند تشغيل هذا الصف وتُزال قبل المقارنة، فيُعرف حينها إن كان تغيير الحجم لازمًا.",
+  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nThe bars are detected when this row runs and removed before the two are compared, so normally no scaling is needed. If the sizes still differ then, one video is scaled to match the other.": "المرجع {reference} وفيديو الاختبار {test}، والفرق في بُعد واحد فقط — وهذا شكل أشرطة سوداء في أحدهما.\n\nتُكتشف الأشرطة عند تشغيل هذا الصف وتُزال قبل المقارنة، لذا لا يلزم تغيير الحجم عادةً. وإن بقي الحجمان مختلفين حينها، يُغيَّر حجم أحد الفيديوهين ليطابق الآخر.",
   " (after black bars)": " (بعد الأشرطة السوداء)",
   "Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.": "كُبّر فيديو الاختبار {from_size} -> {to_size}{cropped} ليطابق المرجع.",
   "Test video downscaled {from_size} -> {to_size}{cropped} to match the reference.": "صُغّر فيديو الاختبار {from_size} -> {to_size}{cropped} ليطابق المرجع.",

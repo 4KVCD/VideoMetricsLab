@@ -242,7 +242,7 @@
   "Yes": "ใช่",
   "No": "ไม่",
   "Reference and test video are compared at the same {size} -- no scaling needed.": "วิดีโออ้างอิงและวิดีโอทดสอบเปรียบเทียบที่ขนาด {size} เท่ากัน — ไม่ต้องปรับขนาด",
-  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nBars are detected when this row runs, and are removed before the two are compared, so whether any scaling is needed is known then.": "วิดีโออ้างอิง {reference} และวิดีโอทดสอบ {test} ต่างกันเพียงมิติเดียว — ลักษณะของแถบดำในวิดีโอหนึ่ง\n\nแถบจะถูกตรวจหาเมื่อแถวนี้ทำงาน และนำออกก่อนเปรียบเทียบ จึงจะรู้ตอนนั้นว่าต้องปรับขนาดหรือไม่",
+  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nThe bars are detected when this row runs and removed before the two are compared, so normally no scaling is needed. If the sizes still differ then, one video is scaled to match the other.": "วิดีโออ้างอิง {reference} และวิดีโอทดสอบ {test} ต่างกันเพียงมิติเดียว — ลักษณะของแถบดำในวิดีโอหนึ่ง\n\nแถบจะถูกตรวจหาเมื่อแถวนี้ทำงาน และนำออกก่อนเปรียบเทียบ จึงปกติไม่ต้องปรับขนาด หากขนาดยังต่างกันอยู่ วิดีโอหนึ่งจะถูกปรับขนาดให้ตรงกับอีกวิดีโอ",
   " (after black bars)": " (หลังนำแถบดำออก)",
   "Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.": "ขยายวิดีโอทดสอบ {from_size} -> {to_size}{cropped} ให้ตรงกับวิดีโออ้างอิง",
   "Test video downscaled {from_size} -> {to_size}{cropped} to match the reference.": "ย่อวิดีโอทดสอบ {from_size} -> {to_size}{cropped} ให้ตรงกับวิดีโออ้างอิง",

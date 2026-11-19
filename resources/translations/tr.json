@@ -242,7 +242,7 @@
   "Yes": "Evet",
   "No": "Hayır",
   "Reference and test video are compared at the same {size} -- no scaling needed.": "Referans ve test videosu aynı {size} boyutunda karşılaştırılır; ölçekleme gerekmez.",
-  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nBars are detected when this row runs, and are removed before the two are compared, so whether any scaling is needed is known then.": "Referans {reference}, test videosu ise {test}; fark yalnızca tek boyutta: birindeki siyah bantların şekli.\n\nBantlar bu satır çalıştırıldığında algılanır ve karşılaştırmadan önce kaldırılır; ölçekleme gerekip gerekmediği o zaman anlaşılır.",
+  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nThe bars are detected when this row runs and removed before the two are compared, so normally no scaling is needed. If the sizes still differ then, one video is scaled to match the other.": "Referans {reference}, test videosu ise {test}; fark yalnızca tek boyutta: birindeki siyah bantların şekli.\n\nBantlar bu satır çalıştırıldığında algılanır ve karşılaştırmadan önce kaldırılır; bu nedenle normalde ölçekleme gerekmez. Boyutlar yine de farklıysa, bir video diğerinin boyutuna ölçeklenir.",
   " (after black bars)": " (siyah bantlardan sonra)",
   "Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.": "Test videosu referansa uyması için {from_size} -> {to_size}{cropped} büyütüldü.",
   "Test video downscaled {from_size} -> {to_size}{cropped} to match the reference.": "Test videosu referansa uyması için {from_size} -> {to_size}{cropped} küçültüldü.",

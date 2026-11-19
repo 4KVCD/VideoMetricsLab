@@ -554,12 +554,13 @@ std::pair<QString, QString> MainWindow::resize_mismatch(int row) const {
     if (run == nullptr && detects_black_bars(row_data.options.crop_mode) &&
         (reference.first == test.first || reference.second == test.second)) {
         // One dimension already matches and only the other differs: the shape
-        // of black bars. Whether any scaling is needed is known once they are
-        // detected, when the row runs.
-        return {app::tr("Pending"),
+        // of black bars, which come off when the row runs, so the cell stays
+        // empty as for equal sizes. The run's crops decide it afterwards.
+        return {QString(),
                 app::tr("The reference is {reference} and the test video {test}, a difference in one dimension only -- "
-                        "the shape of black bars on one of them.\n\nBars are detected when this row runs, and are "
-                        "removed before the two are compared, so whether any scaling is needed is known then.",
+                        "the shape of black bars on one of them.\n\nThe bars are detected when this row runs and "
+                        "removed before the two are compared, so normally no scaling is needed. If the sizes still "
+                        "differ then, one video is scaled to match the other.",
                         {{"reference", size_text(source.width, source.height)},
                          {"test", size_text(distorted.width, distorted.height)}})};
     }

@@ -242,7 +242,7 @@
   "Yes": "Так",
   "No": "Ні",
   "Reference and test video are compared at the same {size} -- no scaling needed.": "Еталон і тестове відео порівнюються в однаковому розмірі {size} — масштабування не потрібне.",
-  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nBars are detected when this row runs, and are removed before the two are compared, so whether any scaling is needed is known then.": "Еталон {reference} і тестове відео {test} різняться лише за одним виміром — ознака чорних смуг в одному з них.\n\nСмуги визначаються під час обробки цього рядка й прибираються перед порівнянням, тож лише тоді стане відомо, чи потрібне масштабування.",
+  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nThe bars are detected when this row runs and removed before the two are compared, so normally no scaling is needed. If the sizes still differ then, one video is scaled to match the other.": "Еталон {reference} і тестове відео {test} різняться лише за одним виміром — ознака чорних смуг в одному з них.\n\nСмуги визначаються під час обробки цього рядка й прибираються перед порівнянням, тож масштабування зазвичай не потрібне. Якщо розміри й тоді різняться, одне відео масштабується під інше.",
   " (after black bars)": " (після чорних смуг)",
   "Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.": "Тестове відео збільшено {from_size} -> {to_size}{cropped} під еталон.",
   "Test video downscaled {from_size} -> {to_size}{cropped} to match the reference.": "Тестове відео зменшено {from_size} -> {to_size}{cropped} під еталон.",

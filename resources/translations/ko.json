@@ -242,7 +242,7 @@
   "Yes": "예",
   "No": "아니요",
   "Reference and test video are compared at the same {size} -- no scaling needed.": "참조 영상과 테스트 영상을 같은 {size} 크기로 비교합니다. 크기 조정이 필요 없습니다.",
-  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nBars are detected when this row runs, and are removed before the two are compared, so whether any scaling is needed is known then.": "참조 영상은 {reference}, 테스트 영상은 {test}로 한 방향 크기만 다릅니다. 둘 중 하나에 검은 띠가 있는 모양입니다.\n\n검은 띠는 이 행을 실행할 때 감지되어 비교 전에 제거되므로, 크기 조정이 필요한지는 그때 알 수 있습니다.",
+  "The reference is {reference} and the test video {test}, a difference in one dimension only -- the shape of black bars on one of them.\n\nThe bars are detected when this row runs and removed before the two are compared, so normally no scaling is needed. If the sizes still differ then, one video is scaled to match the other.": "참조 영상은 {reference}, 테스트 영상은 {test}로 한 방향 크기만 다릅니다. 둘 중 하나에 검은 띠가 있는 모양입니다.\n\n검은 띠는 이 행을 실행할 때 감지되어 비교 전에 제거되므로, 보통은 크기 조정이 필요 없습니다. 그래도 크기가 다르면 한 영상을 다른 영상에 맞게 크기 조정합니다.",
   " (after black bars)": " (검은 띠 제거 후)",
   "Test video upscaled {from_size} -> {to_size}{cropped} to match the reference.": "참조 영상에 맞추도록 테스트 영상을 {from_size} -> {to_size}{cropped}(으)로 확대.",
   "Test video downscaled {from_size} -> {to_size}{cropped} to match the reference.": "참조 영상에 맞추도록 테스트 영상을 {from_size} -> {to_size}{cropped}(으)로 축소.",
