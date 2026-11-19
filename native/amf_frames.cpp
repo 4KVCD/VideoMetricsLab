@@ -1165,31 +1165,14 @@ NVF_API int nvf_copy_planes_async(void *handle, int slot, const unsigned long lo
 
 // The hand-over's timeline semaphore, which nvf_copy_luma_async's copies
 // signal, as an opaque Win32 handle (Vulkan's) the caller imports and
-// closes. 0, or -1 if the GPU has none (the copies are then waited for).
-// Each caller (VMAF's and VMAF v1's Vulkan contexts, in every run) gets its
-// own handle to the one export.
+// closes (handover::export_timeline). 0, or -1 if the GPU has none (the
+// copies are then waited for).
 NVF_API int nvf_timeline(void *handle, void **win32) {
     Decoder *d = static_cast<Decoder *>(handle);
     handover::Device &g = handover::g_device;
     *win32 = nullptr;
     if (!d->handing_over || !g.timeline || !g.direct_pipelines[0]) return -1;
-    std::lock_guard<std::mutex> lock(g.mutex);
-    if (!g.timeline_handle) {
-        VkSemaphoreGetWin32HandleInfoKHR info{};
-        info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_WIN32_HANDLE_INFO_KHR;
-        info.semaphore = g.timeline;
-        info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
-        HANDLE exported = nullptr;
-        if (g.vkGetSemaphoreWin32HandleKHR(g.device, &info, &exported) != VK_SUCCESS || !exported) return -1;
-        g.timeline_handle = exported;
-    }
-    HANDLE copy = nullptr;
-    if (!DuplicateHandle(GetCurrentProcess(), g.timeline_handle, GetCurrentProcess(), &copy, 0, FALSE,
-                         DUPLICATE_SAME_ACCESS)) {
-        return -1;
-    }
-    *win32 = copy;
-    return 0;
+    return handover::export_timeline(win32);
 }
 
 // For the hand-over: libvmaf's picture memory made known to the GPU, which
