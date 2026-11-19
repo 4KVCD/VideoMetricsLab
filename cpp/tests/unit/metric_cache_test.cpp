@@ -917,10 +917,13 @@ TEST(MetricCache, ARemuxedTestStreamKeepsItsScores) {
     // The save reads no stream: recorded after it, once.
     EXPECT_EQ(heads + wholes, 0);
     EXPECT_FALSE(identity_of()["distorted"].contains("stream"));
+    EXPECT_TRUE(test_stream_wanted(cache, folder / "t.mkv"));
     EXPECT_TRUE(record_test_stream(cache, folder / "t.mkv"));
     EXPECT_EQ(wholes, 1);
+    EXPECT_FALSE(test_stream_wanted(cache, folder / "t.mkv"));
     EXPECT_FALSE(record_test_stream(cache, folder / "t.mkv"));
     EXPECT_EQ(wholes, 1);
+    EXPECT_FALSE(test_stream_wanted(cache, folder / "never saved.mkv"));
     const nlohmann::json identity = identity_of();
     EXPECT_EQ(identity["distorted"]["rate"], "23.98");
     EXPECT_EQ(identity["distorted"]["stream_head"], "A");
@@ -988,6 +991,25 @@ TEST(MetricCache, ARemuxedTestStreamKeepsItsScores) {
     touch(folder / "t.mp4", "A/a|" + std::string(4100, 'p'));
     EXPECT_FALSE(load("other reference.mkv", "t.mp4", request.recipe));
     EXPECT_TRUE(load("s.mkv", "t.mp4", request.recipe));
+
+    // Saved by an older version: no identity.json, so no stream. Found by
+    // its path, its files are recorded (record_saved_files) without one,
+    // and its stream is wanted until read: then a remux of it is found too.
+    touch(folder / "old.mkv", "O/o|" + std::string(4200, 'k'));
+    ComparisonResult old_result = result;
+    old_result.distorted = folder / "old.mkv";
+    const std::filesystem::path old_saved =
+        store_result(cache, folder / "s.mkv", folder / "old.mkv", request.recipe, old_result, "old", request.metrics);
+    std::filesystem::remove(old_saved / "identity.json");
+    EXPECT_FALSE(test_stream_wanted(cache, folder / "old.mkv"));  // nothing recorded of it yet
+    ASSERT_TRUE(load("s.mkv", "old.mkv", request.recipe));
+    record_saved_files(cache, folder / "s.mkv", folder / "old.mkv", request.recipe);
+    EXPECT_TRUE(test_stream_wanted(cache, folder / "old.mkv"));
+    touch(folder / "old.mp4", "O/o|" + std::string(4300, 'p'));
+    EXPECT_FALSE(load("s.mkv", "old.mp4", request.recipe));  // its remux, before the stream is read
+    EXPECT_TRUE(record_test_stream(cache, folder / "old.mkv"));
+    EXPECT_FALSE(test_stream_wanted(cache, folder / "old.mkv"));
+    EXPECT_TRUE(load("s.mkv", "old.mp4", request.recipe));
     set_stream_fingerprinter(nullptr);
 }
 

@@ -1546,15 +1546,31 @@ bool take_whole_stream_wanted() {
     return std::exchange(lookup_reads.whole_wanted, false);
 }
 
-bool record_test_stream(const std::filesystem::path& base, const std::filesystem::path& distorted,
-                        const CancelToken& cancel) {
-    const std::string path = file_identity(distorted);
+namespace {
+
+// The folders of the comparisons saved for the file of identity `path` with
+// no test stream recorded.
+std::vector<std::filesystem::path> folders_without_stream(const std::filesystem::path& base,
+                                                          const std::string& path) {
     std::vector<std::filesystem::path> folders;
     for (const RecordedComparison& recorded : recorded_comparisons(base)) {
         if (recorded.distorted_path == path && recorded.distorted_stream.empty()) {
             folders.push_back(recorded.folder);
         }
     }
+    return folders;
+}
+
+}  // namespace
+
+bool test_stream_wanted(const std::filesystem::path& base, const std::filesystem::path& distorted) {
+    return !folders_without_stream(base, file_identity(distorted)).empty();
+}
+
+bool record_test_stream(const std::filesystem::path& base, const std::filesystem::path& distorted,
+                        const CancelToken& cancel) {
+    const std::string path = file_identity(distorted);
+    const std::vector<std::filesystem::path> folders = folders_without_stream(base, path);
     if (folders.empty()) {
         return false;  // nothing saved for it, or its stream recorded already: nothing read
     }

@@ -91,6 +91,11 @@ bool take_whole_stream_wanted();
 // Nothing is read where nothing needs it. Whether one was recorded.
 bool record_test_stream(const std::filesystem::path& base, const std::filesystem::path& distorted,
                         const CancelToken& cancel = {});
+// Whether record_test_stream would read `distorted`: a comparison saved for
+// it has no test stream recorded, as one saved by a version before streams
+// were (its files recorded since, record_saved_files) has none until its
+// test video is calculated again. Reads nothing of the file.
+bool test_stream_wanted(const std::filesystem::path& base, const std::filesystem::path& distorted);
 
 // The hash that names a comparison's folder: of both files' identities and
 // the recipe's.

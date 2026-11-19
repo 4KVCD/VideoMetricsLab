@@ -1452,7 +1452,9 @@ struct Comparison {
 // With --test-remuxes on (or Settings'), each test video calculated and
 // saved, its stream read once more after the results are written, for a
 // remux of it to keep its scores (record_test_stream): said first, as it
-// takes as long as reading the file, and stopped by Ctrl+C.
+// takes as long as reading the file, and stopped by Ctrl+C. So is each one
+// whose saved scores were found without a stream recorded (saved by an older
+// version: test_stream_wanted).
 void record_test_streams(const std::vector<std::unique_ptr<Comparison>>& comparisons,
                          const std::filesystem::path& cache_folder, Progress& progress, const CancelToken& cancel) {
     std::vector<const TestVideo*> recorded;
@@ -1460,7 +1462,10 @@ void record_test_streams(const std::vector<std::unique_ptr<Comparison>>& compari
     for (const std::unique_ptr<Comparison>& comparison : comparisons) {
         if (comparison->planner) {
             for (const TestVideo& video : comparison->planner->videos) {
-                if (video.save_scores && video.result && !video.from_cache && paths.insert(video.path).second) {
+                const bool calculated = video.save_scores && video.result && !video.from_cache;
+                const bool found_without_one = video.result && video.from_cache &&
+                                               test_stream_wanted(cache_folder, video.path);
+                if ((calculated || found_without_one) && paths.insert(video.path).second) {
                     recorded.push_back(&video);
                 }
             }
@@ -1469,8 +1474,8 @@ void record_test_streams(const std::vector<std::unique_ptr<Comparison>>& compari
     if (recorded.empty()) {
         return;
     }
-    progress.message("Reading the stream of each test video calculated, so that a remux of it keeps its saved "
-                     "scores (--test-remuxes off skips this; Ctrl+C stops it):");
+    progress.message("Reading the stream of each test video calculated, or scored by an older version, so "
+                     "that a remux of it keeps its saved scores (--test-remuxes off skips this; Ctrl+C stops it):");
     for (const TestVideo* video : recorded) {
         if (cancel.cancelled()) {
             return;

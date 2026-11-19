@@ -16,6 +16,7 @@
 #include "graph_panel.h"
 #include "i18n.h"
 #include "main_window.h"
+#include "stream_records.h"
 #include "widgets.h"
 #include "window_helpers.h"
 #include "vml/append.h"
@@ -289,9 +290,27 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     // A comparison saved by an older version has its files recorded now, so
     // that it is found when they move: off the window's thread and after the
     // lookup, whose numbers a 4K reference's seconds of decoding would hold up.
+    // And its test stream, which no older version recorded, for a remux of it
+    // to keep these scores (with Settings' "Recognize test videos remuxed"):
+    // read as after a run's save, apart from the writes; queued only where
+    // none is recorded, so a video whose stream is says nothing.
+    sync_remux_setting();
+    // Recorded with the test video's rate, which a remux must have to be
+    // found: a row is looked up as it is added, before its video is read, and
+    // its request has no rate then; the saved comparison has its video's.
+    ComparisonRecipe recorded = request.recipe;
+    if (!(recorded.test_rate > 0.0)) {
+        recorded.test_rate = found.result.distorted_info.fps;
+    }
     file_writes_->submit(QStringLiteral("identity %1").arg(text_of(row_data.path.stem())),
                          [base = cache_folder(), source = source_info_->path, distorted = row_data.identity_path(),
-                          recipe = request.recipe] { record_saved_files(base, source, distorted, recipe); });
+                          recipe = std::move(recorded), records = stream_records_,
+                          recognise = settings_.recognise_test_remuxes] {
+                             record_saved_files(base, source, distorted, recipe);
+                             if (recognise && test_stream_wanted(base, distorted)) {
+                                 records->add(base, distorted);
+                             }
+                         });
     const std::shared_ptr<CompletedRun> previous = row_data.completed_run;
     auto run = std::make_shared<CompletedRun>();
     run->result = found.result;
