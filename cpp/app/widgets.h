@@ -81,6 +81,13 @@ public:
     // click first. A selection the user made is left as it is.
     void select_row_if_none_is(int row);
 
+    // While the table has rows, one of them stays selected (what is shown for
+    // the selection, the Options panel, is then always there): a click where
+    // there is no row does nothing, and whatever else would leave none
+    // selected (Ctrl+click on the only one, a drag over no row, removing the
+    // rows selected) selects the last row selected again, or the nearest.
+    void keep_a_row_selected();
+
 signals:
     // Files dropped on the table from outside it: their paths.
     void filesDropped(const QStringList& paths);
@@ -89,6 +96,7 @@ signals:
     void rowsMoved(const QList<int>& rows, int target);
 
 protected:
+    void mousePressEvent(QMouseEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dragMoveEvent(QDragMoveEvent* event) override;
@@ -106,6 +114,9 @@ private:
     void recalculate_fill_column();
 
     std::optional<int> drop_line_;  // the row a dragged row would go before, while dragging
+    bool keeps_a_row_ = false;      // keep_a_row_selected
+    int last_selected_row_ = 0;     // the row selected last, for keep_a_row_selected
+    bool reselect_pending_ = false; // keep_a_row_selected will select one
     // What the drag over the table carries, found once when it enters: a
     // drag move comes with every mouse move, and finding it again then would
     // look at every dragged file on disk each time.

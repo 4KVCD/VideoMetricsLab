@@ -7,8 +7,10 @@
    reference), paste a reference path, or use Browse. Drag rows to reorder
    them; click a column heading to sort by it, and again to reverse.
 2. Select the metric checkboxes in each row. Cell edits apply to selected rows;
-   header checkboxes apply across rows. When no row is selected, the first test
-   video added is, so the Options panel shows its settings straight away. VMAF, PSNR, SSIM and XPSNR are enabled
+   header checkboxes apply across rows. While there are test videos, one is
+   always selected, so the Options panel always shows settings: the first one
+   added is selected, a click where there is no row changes nothing, and
+   removing the selected rows selects the next. VMAF, PSNR, SSIM and XPSNR are enabled
    by default; VMAF NEG, SSIMULACRA2 and Butteraugli can be selected separately.
 3. Review crop, scale, model, range and subsampling settings before starting.
    **Range** compares only a part of the videos, from one time to another in
