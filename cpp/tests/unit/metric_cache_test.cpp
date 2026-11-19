@@ -860,6 +860,20 @@ TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
     const auto from_another = load("s.mkv", "u renamed.mkv");
     ASSERT_TRUE(from_another);
     EXPECT_EQ(from_another->first.distorted, folder / "u renamed.mkv");
+
+    // Saved by an older version, without identity.json: the lookup leaves
+    // the recording, which decodes, to record_saved_files, called after.
+    std::filesystem::remove(saved / "identity.json");
+    ASSERT_TRUE(load("s.mkv", "t.mkv"));
+    EXPECT_FALSE(std::filesystem::exists(saved / "identity.json"));
+    record_saved_files(cache, folder / "s.mkv", folder / "t.mkv", request.recipe);
+    EXPECT_TRUE(std::filesystem::exists(saved / "identity.json"));
+
+    // Deleted (the Saved results tab) after a lookup read the records: no
+    // longer found by the files' content.
+    EXPECT_EQ(recipe_directory(cache, folder / "s copy.mkv", folder / "t renamed.mkv", request.recipe), saved);
+    std::filesystem::remove_all(saved);
+    EXPECT_NE(recipe_directory(cache, folder / "s copy.mkv", folder / "t renamed.mkv", request.recipe), saved);
     set_video_fingerprinter(nullptr);
 }
 

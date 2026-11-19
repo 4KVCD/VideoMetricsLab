@@ -140,6 +140,16 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
     const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental = {},
     const std::set<std::string>& not_from_other_recipes = {});
 
+// A comparison saved before its files were recorded (identity.json, which
+// an older version did not write): records them now, so that its scores are
+// found when the files are renamed, moved or remuxed. It reads a few MB of
+// each file and decodes five pictures of the reference (seconds for a 4K
+// film, once per reference in a process), so it is called after the saved
+// scores load_result found are shown, never before. Nothing to do for a
+// comparison not saved, or already recorded.
+void record_saved_files(const std::filesystem::path& base, const std::filesystem::path& source,
+                        const std::filesystem::path& distorted, const ComparisonRecipe& recipe);
+
 // CVVDP's scores saved for a comparison with other displays than the one
 // its request in `specs` or `supplemental` models, each with the CVVDP
 // parameters it was made with (the Python app's other_cvvdp_scores), and

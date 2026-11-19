@@ -824,6 +824,9 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
             // file's.
             saved->source_info.take_bit_rate(source);
             saved->distorted_info.take_bit_rate(*video.info);
+            // Saved by an older version: its files recorded now, so that it
+            // is found when they move.
+            record_saved_files(cache_folder, source.path, video.path, video.request.recipe);
         }
     }
     // The saved scores the run keeps, by the window's rule.
