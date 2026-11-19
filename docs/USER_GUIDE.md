@@ -42,12 +42,17 @@ v0 model or be upgraded. For SDR, VMAF v1 is best measured at 10-bit precision.
    columns: a cell is blank where either video lacks the frame or the metric.
    To look at one part of the videos (a scene you re-encoded, say), enter its
    first and last frames in **Highlight range from frame** and **to frame**,
-   or hold Shift and drag across the graph: the frames between them are shaded on
+   its first and last times in **Highlight range from time** and **to time**
+   (h:mm:ss.sss, or seconds: the frames from the first time to the second,
+   both included; the frame boxes then show them, and the time boxes the
+   frames' own times), or hold Shift and drag across the graph: the frames
+   between them are shaded on
    every metric's graph, and the table and the exported PNG give the
    statistics of those frames only. CVVDP has a score for whole videos only, so its column shows
    — then; its graph's statistics are of the whole seconds the frames fall in.
    **Clear range** goes back to the whole videos. The CSV export always holds
-   every frame.
+   every frame. **Go to time** moves to the frame shown at a time, as **Go to
+   frame** does to a frame.
    **Worst frames** lists, for one video, the worst frame of each of the
    shown metric's 10, 25 or 50 worst dips (a frame within 1 s of a worse
    one is part of its dip), with every metric's score there, within the

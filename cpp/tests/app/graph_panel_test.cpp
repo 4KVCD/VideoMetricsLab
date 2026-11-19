@@ -12,6 +12,7 @@
 #include <QCoreApplication>
 #include <QImage>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMouseEvent>
 #include <QDoubleSpinBox>
 #include <QPushButton>
@@ -56,6 +57,14 @@ protected:
     static QSpinBox& range_start_spin(GraphPanel& panel) { return *panel.frame_controls_->range_start_spin; }
     static QSpinBox& range_end_spin(GraphPanel& panel) { return *panel.frame_controls_->range_end_spin; }
     static QPushButton& clear_range_button(GraphPanel& panel) { return *panel.frame_controls_->clear_range_button; }
+    static FrameControls& frame_controls(GraphPanel& panel) { return *panel.frame_controls_; }
+    // A time typed into a time box, then Enter.
+    static void type_time(QLineEdit& box, const QString& text) {
+        box.setText(text);
+        box.setModified(true);
+        emit box.returnPressed();
+        emit box.editingFinished();
+    }
     static QString stats_hint(const GraphPanel& panel) { return panel.stats_hint_->text(); }
     static QPushButton& worst_button(GraphPanel& panel) { return *panel.worst_button_; }
     static WorstFramesPanel& worst_panel(GraphPanel& panel) { return *panel.worst_panel_; }
@@ -633,6 +642,85 @@ std::shared_ptr<const ComparisonResult> range_run(const std::string& name, const
     result.metric_results.add(SequenceMetricResult{"cvvdp", 8.75, current_ffmpeg_provenance("vmaf", "9.0.1"),
                                                    {0, 3, 6}, {0.0, 0.1, 0.2}, {8.5F, 9.0F, 8.0F}});
     return std::make_shared<const ComparisonResult>(std::move(result));
+}
+
+// Go to time and a range in times, to the millisecond, as complements of the
+// frame boxes: a time is the frame shown then; a range of times the frames
+// from the first at its start or after to the last at its end or before.
+// The time boxes and the frame boxes show the same frames.
+TEST_F(GraphPanelTest, GoToTimeAndARangeOfTimes) {
+    EXPECT_EQ(FrameControls::parse_time("1:02.5"), 62.5);
+    EXPECT_EQ(FrameControls::parse_time(" 0:01:02.500 "), 62.5);
+    EXPECT_EQ(FrameControls::parse_time("62,25"), 62.25);
+    EXPECT_EQ(FrameControls::parse_time("1:00:00"), 3600.0);
+    EXPECT_EQ(FrameControls::parse_time("0.0405"), std::nullopt);  // past a millisecond
+    EXPECT_EQ(FrameControls::parse_time("1:75"), std::nullopt);
+    EXPECT_EQ(FrameControls::parse_time(""), std::nullopt);
+    EXPECT_EQ(FrameControls::time_text(80.0333333), "0:01:20.033");
+    EXPECT_EQ(FrameControls::time_text(5576.279), "1:32:56.279");
+
+    VideoColors colors;
+    GraphPanel panel(&colors);
+    FrameControls& controls = frame_controls(panel);
+    EXPECT_TRUE(controls.time_edit->isVisibleTo(&panel));
+    EXPECT_TRUE(controls.range_start_time->isVisibleTo(&panel));
+
+    // 30 fps: frame 2400 is at 80 s, 2401 at 80.0333 s.
+    panel.add_run({shared(vmaf_result("a.mkv", std::vector<float>(3000, 90.0F))), "a", "row a", false});
+    MetricPage& vmaf = page(panel, "vmaf");
+    zoom(vmaf, 10.0, 10.0);
+    type_time(*controls.time_edit, "1:20.017");  // frame 2400 is still shown
+    EXPECT_EQ(frame_spin(panel).value(), 2400);
+    const auto [start, end] = in_view(vmaf);
+    EXPECT_DOUBLE_EQ(start, 75.0);
+    EXPECT_DOUBLE_EQ(end, 85.0);
+    type_time(*controls.time_edit, "0:01:20.033");  // 2401's time as shown
+    EXPECT_EQ(frame_spin(panel).value(), 2401);
+    frame_spin(panel).setValue(2700);
+    EXPECT_EQ(controls.time_edit->text(), "0:01:30.000");
+    type_time(*controls.time_edit, "nonsense");
+    EXPECT_EQ(frame_spin(panel).value(), 2700);
+
+    // A range of times: 0.1 s is frame 3, and frame 7 (0.2333 s) is the last
+    // at 0.234 s or before.
+    GraphPanel ranged(&colors);
+    FrameControls& range_controls = frame_controls(ranged);
+    ranged.add_run({range_run("a.mkv", {80, 82, 84, 86, 88, 90, 70, 60, 95, 99}), "a", {}, true});
+    MetricPage& ranged_vmaf = page(ranged, "vmaf");
+    type_time(*range_controls.range_start_time, "0:00:00.100");
+    EXPECT_FALSE(ranged_vmaf.chart().highlight());  // one end: no range yet
+    type_time(*range_controls.range_end_time, "0.234");
+    EXPECT_EQ(range_start_spin(ranged).value(), 3);
+    EXPECT_EQ(range_end_spin(ranged).value(), 7);
+    EXPECT_TRUE(stats_hint(ranged).contains("frames 3 to 7")) << stats_hint(ranged).toStdString();
+    ASSERT_TRUE(ranged_vmaf.chart().highlight());
+    EXPECT_NEAR(ranged_vmaf.chart().highlight()->first, 2.5 / 30, 1e-9);
+    // The times then shown are the frames': 0.234 s typed, frame 7's shown.
+    EXPECT_EQ(range_controls.range_start_time->text(), "0:00:00.100");
+    EXPECT_EQ(range_controls.range_end_time->text(), "0:00:00.233");
+
+    // Frames chosen in their boxes: the time boxes show their times.
+    range_start_spin(ranged).setValue(2);
+    range_end_spin(ranged).setValue(4);
+    EXPECT_EQ(range_controls.range_start_time->text(), "0:00:00.067");
+    EXPECT_EQ(range_controls.range_end_time->text(), "0:00:00.133");
+    // And those times typed back are the same frames.
+    type_time(*range_controls.range_start_time, "0:00:00.067");
+    type_time(*range_controls.range_end_time, "0:00:00.133");
+    EXPECT_EQ(range_start_spin(ranged).value(), 2);
+    EXPECT_EQ(range_end_spin(ranged).value(), 4);
+
+    // No frame between the times: no range.
+    clear_range_button(ranged).click();
+    type_time(*range_controls.range_start_time, "0:00:00.040");
+    type_time(*range_controls.range_end_time, "0:00:00.060");
+    EXPECT_FALSE(ranged_vmaf.chart().highlight());
+    EXPECT_EQ(range_start_spin(ranged).value(), range_start_spin(ranged).minimum());
+
+    EXPECT_TRUE(clear_range_button(ranged).isEnabled());  // times typed to clear
+    clear_range_button(ranged).click();
+    EXPECT_TRUE(range_controls.range_start_time->text().isEmpty());
+    EXPECT_TRUE(range_controls.range_end_time->text().isEmpty());
 }
 
 TEST_F(GraphPanelTest, AFrameRangesStatisticsAndShading) {
