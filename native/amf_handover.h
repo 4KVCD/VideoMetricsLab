@@ -124,6 +124,10 @@ struct Device {
     // cannot share one. `timeline_value`: the last value signalled (under `mutex`).
     VkSemaphore timeline = VK_NULL_HANDLE;
     uint64_t timeline_value = 0;
+    // The timeline's Win32 handle, exported once (under `mutex`): Vulkan lets
+    // a semaphore be exported as an NT handle only once, so every caller of
+    // nvf_timeline, in every run of the process, gets a duplicate of this one.
+    HANDLE timeline_handle = nullptr;
     PFN_vkGetSemaphoreWin32HandleKHR vkGetSemaphoreWin32HandleKHR = nullptr;
     PFN_vkGetSemaphoreCounterValue vkGetSemaphoreCounterValue = nullptr;
     PFN_vkCreateSemaphore vkCreateSemaphore = nullptr;
