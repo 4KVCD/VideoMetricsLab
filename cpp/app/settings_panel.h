@@ -91,7 +91,8 @@ public:
     void new_weak_profile();
     // A new profile from preset `key` (segment_presets.h), named after it,
     // put in use (From preset...).
-    void new_weak_profile_from_preset(std::string_view key);
+    // From preset: the preset's rules into the profile in use.
+    void load_weak_preset(std::string_view key);
     void rename_weak_profile();
     void delete_weak_profile();
 

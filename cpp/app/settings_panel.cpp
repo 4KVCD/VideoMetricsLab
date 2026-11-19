@@ -335,14 +335,16 @@ QGroupBox* SettingsPanel::build_weak_segments_box() {
     connect(new_profile, &QPushButton::clicked, this, [this] { new_weak_profile(); });
     profile_row->addWidget(new_profile);
     auto* from_preset = new QPushButton(app::tr("From preset"));
-    from_preset->setToolTip(app::tr("A new profile from a starting point for a kind of video, to adjust as needed."));
+    from_preset->setToolTip(app::tr("Loads a starting point for a kind of video into this profile, replacing its "
+                                    "rules, to adjust as needed. To keep the rules shown too, make a profile with "
+                                    "New first."));
     auto* presets_menu = new QMenu(from_preset);
     presets_menu->setToolTipsVisible(true);
     for (const SegmentPreset& preset : segment_presets()) {
         QAction* action = presets_menu->addAction(app::tr(preset.name));
         action->setToolTip(app::tr(preset.about));
         connect(action, &QAction::triggered, this,
-                [this, key = preset.key] { new_weak_profile_from_preset(key); });
+                [this, key = preset.key] { load_weak_preset(key); });
     }
     from_preset->setMenu(presets_menu);
     profile_row->addWidget(from_preset);
@@ -433,21 +435,14 @@ void SettingsPanel::new_weak_profile() {
     emit weak_segment_rules_changed();
 }
 
-void SettingsPanel::new_weak_profile_from_preset(std::string_view key) {
+void SettingsPanel::load_weak_preset(std::string_view key) {
     const SegmentPreset* preset = segment_preset(key);
     if (preset == nullptr) {
         return;
     }
-    // Named after the preset, in the window's language; "Animation 2" where
-    // that name is taken.
-    const std::vector<SegmentProfile> profiles = segment_profiles(settings_);
-    const std::string base = app::tr(preset->name).toStdString();
-    std::string name = base;
-    for (int number = 2; !segment_profile_name_free(profiles, name); ++number) {
-        name = base + " " + std::to_string(number);
-    }
-    store_segment_profile(settings_, name, preset->rules);
-    settings_.weak_segment_profile = name;
+    // Into the profile in use, Default too, as an edit of its rules: no
+    // profile is added (New... makes one first, from the rules shown).
+    store_segment_profile(settings_, segment_profile_in_use(settings_).name, preset->rules);
     fill_weak_profiles();
     on_edited();
     // The settings changed before on_edited looked: told here.
