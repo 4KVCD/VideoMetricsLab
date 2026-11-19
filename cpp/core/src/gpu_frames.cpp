@@ -336,11 +336,14 @@ struct DecoderLibrary {
                 import_memory = library.function<decltype(import_memory)>("nvf_import");
             }
         } else if (backend == vvdec_decoder) {
-            // Copied on the GPU: the luma into Vulkan VMAF's memory, the whole picture into Vship's (pinned)
+            // Copied on the GPU: the luma into Vulkan VMAF's memory, the whole picture into Vship's (pinned);
+            // the planes into VMAF v1's, where the library has that (older builds of it do not: VMAF v1's
+            // pictures then go through system memory).
             unimport = library.function<decltype(unimport)>("nvf_unimport");
             import_vulkan = library.function<decltype(import_vulkan)>("nvf_import_vulkan");
             pin = library.function<decltype(pin)>("nvf_pin");
             unpin = library.function<decltype(unpin)>("nvf_unpin");
+            copy_planes = optional_function<decltype(copy_planes)>(library, "nvf_copy_planes");
         }
         // AMD's: copies the GPU waits for, rather than the CPU; and a slot's
         // picture in place (Windows' decoder).

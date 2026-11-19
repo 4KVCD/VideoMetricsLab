@@ -118,6 +118,13 @@ struct GpuPlan {
 // over whatever they are asked (GpuFrameStream).
 inline bool pass_may_hand_over(const GpuPlan& plan) { return plan.beside.empty(); }
 
+// Whether both videos' decoders can copy their pictures on the GPU into a
+// Vulkan scorer's memory that each imports (SharedSlots with the source's
+// decoder too): vvdec-vulkan's and NVIDIA's, one for each video, at least one
+// vvdec-vulkan's (two NVIDIA ones share one import). AMD's and Intel's
+// decoders keep their own routes. Taken only where pass_may_hand_over.
+bool both_copy_on_gpu(const GpuFrameStream& test, const GpuFrameStream& reference);
+
 // The scorer of a plan's metrics beside the GPU's (GpuPlan::beside), made in
 // `scorer` where the plan has any: every `n_subsample`th pair, as the GPU's
 // scorers score them. Throws LibvmafError.

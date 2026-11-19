@@ -109,13 +109,37 @@ struct VulkanEngine {
     // the reference's, 1 the distorted's), copied into the slot on the GPU at
     // the commit (nullptr in an engine without it).
     int (*shared_host_plane)(VulkanContext* context, int which, std::uint8_t** plane, std::uint32_t* stride);
+    // For a context made with vulkan_split_flag: a slot's buffer for the
+    // source's planes (part 0) or the test video's (part 1), each for its
+    // decoder to import (nullptr in an engine without it).
+    int (*export_part)(VulkanContext* context, int slot, int part, void** handle, std::uint64_t* bytes);
 };
 
 // How many frames the engine works on at once, as the Python app asks for
 // (bits 8 to 15 of a context's flags).
 inline constexpr int vulkan_frames_in_flight = 3;
+// One more for a context with vulkan_split_flag: a frame's work on the GPU
+// waits for vvdec-vulkan's copy, which its decoding queue runs behind about
+// three later pictures, so with three the engine waited for a free frame
+// about 3.6 ms a pair; with four VMAF, NEG and VMAF v1 of a 1080p pair were
+// 10 % faster on an RTX 5090 (12.5 -> 11.4 s), with 52-59 MB more GPU
+// memory (222-238 MB at 4K). Six gained nothing more.
+inline constexpr int vulkan_split_frames_in_flight = 4;
 // The flag of a context whose frames come from GPU memory (SharedSlots).
 inline constexpr int vulkan_shared_flag = 1 << 19;
+// With vulkan_shared_flag, for two decoders that share no GPU memory: each
+// slot's planes in two buffers, the source's and the test video's, each
+// imported by its own decoder (export_part). A driver may import an
+// allocation only once a process: NVIDIA's on Windows refused a second
+// import of a slot's buffer, by CUDA or by another Vulkan device alike.
+inline constexpr int vulkan_split_flag = 1 << 3;
+
+// A context's flags: its frames in flight, and whether its frames come from
+// GPU memory (`shared`), two decoders' (`split`, with `shared` only).
+inline int vulkan_context_flags(bool shared, bool split) {
+    const int in_flight = split ? vulkan_split_frames_in_flight : vulkan_frames_in_flight;
+    return (in_flight << 8) | (shared ? vulkan_shared_flag : 0) | (split ? vulkan_split_flag : 0);
+}
 
 // Throws VmafVulkanError saying that `what` failed, with the engine's
 // message, when `error` is one of the engine's errors (negative).
@@ -150,40 +174,61 @@ std::optional<VulkanDevice> chosen_vulkan_device(const std::vector<VulkanDevice>
 // the planes into, so that they never leave the GPU (the Python app's
 // SharedLumas). NVIDIA's decoder imports it, and AMD's handing over, into a
 // Vulkan device of its own that must be the engine's GPU and driver
-// (vv_shared_device).
+// (vv_shared_device). vvdec-vulkan imports it into its own Vulkan device too.
 class SharedSlots {
 public:
-    // Throws VmafVulkanError when the decoder and Vulkan cannot share memory
-    // (another GPU, an old driver); the caller then scores from system memory.
-    SharedSlots(const VulkanEngine& engine, VulkanContext* context, GpuFrameStream& decoder);
-    // Gives the memory back to the decoder: before the decoder and the
+    // The memory imported by `decoder`, the test video's, which the source's
+    // copies into too where it shares the test decoder's GPU memory
+    // (GpuFrameStream::shares_gpu_memory_with). A source decoder that does
+    // not, given as `reference` (vvdec-vulkan's, or NVIDIA's beside it), for
+    // a context made with vulkan_split_flag: each slot's source part is then
+    // imported by it and the test part by `decoder`. Throws VmafVulkanError
+    // when a decoder and Vulkan cannot share memory (another GPU, an old
+    // driver, an engine without export_part); the caller then scores from
+    // system memory.
+    SharedSlots(const VulkanEngine& engine, VulkanContext* context, GpuFrameStream& decoder,
+                GpuFrameStream* reference = nullptr);
+    // Gives the memory back to the decoders: before the decoders and the
     // context are closed.
     ~SharedSlots();
     SharedSlots(const SharedSlots&) = delete;
     SharedSlots& operator=(const SharedSlots&) = delete;
 
     // Where the next pair's planes go: the source's and the test video's
-    // luma, rows `pitch` bytes apart, in the slot's memory starting at
-    // `base`. vv_commit scores them once they are written.
+    // luma, rows `pitch` bytes apart, in the slot's memory, which starts at
+    // `base` as the source's decoder imported it and at `distorted_base` as
+    // the test video's did (the same memory and address with one decoder;
+    // with two, each its own part). vv_commit
+    // scores them once they are written.
     struct Next {
         std::uint64_t reference = 0;
         std::uint64_t distorted = 0;
         std::uint32_t pitch = 0;
         std::uint64_t base = 0;
+        std::uint64_t distorted_base = 0;
     };
     Next next();
 
     // How many slots there are: starting a pair waits until the pair this
     // many before it is done.
     std::size_t count() const { return imports_.size(); }
+    // Whether each decoder has a part of each slot of its own (two decoders).
+    bool parts() const { return reference_ != nullptr; }
 
 private:
+    // A decoder's imports, given back by the destructor.
+    using Imports = std::vector<std::pair<std::uint64_t, void*>>;
+    static void give_back(GpuFrameStream& decoder, const Imports& imports);
+
     const VulkanEngine& engine_;
     VulkanContext* context_;
     GpuFrameStream& decoder_;
+    GpuFrameStream* reference_;
     // Per slot: its address as the decoder imported it, and what it takes
-    // to give it back.
-    std::vector<std::pair<std::uint64_t, void*>> imports_;
+    // to give it back; the same for the source's own decoder (empty where
+    // there is none).
+    Imports imports_;
+    Imports reference_imports_;
 };
 
 // How many features the engine gives for each frame.
@@ -210,11 +255,13 @@ public:
     // a model libvmaf has built in ({"vmaf", "vmaf_v0.6.1"}). Every
     // `n_subsample`th frame is scored. `device` is Vulkan's number for the
     // GPU; nothing picks best_vulkan_device(). With `shared`, the frames
-    // come from GPU memory that decoder imports and writes (add_shared).
-    // Throws VmafVulkanError, also when the decoder and Vulkan cannot share
-    // memory (another GPU, an old driver).
+    // come from GPU memory that decoder imports and writes (add_shared), and
+    // `shared_reference` too where the source's decoder does not share the
+    // test decoder's memory (SharedSlots). Throws VmafVulkanError, also when
+    // a decoder and Vulkan cannot share memory (another GPU, an old driver).
     VulkanScorer(int width, int height, int bit_depth, std::vector<std::pair<std::string, std::string>> models,
-                 int n_subsample = 1, std::optional<int> device = std::nullopt, GpuFrameStream* shared = nullptr);
+                 int n_subsample = 1, std::optional<int> device = std::nullopt, GpuFrameStream* shared = nullptr,
+                 GpuFrameStream* shared_reference = nullptr);
     ~VulkanScorer() override;
     VulkanScorer(const VulkanScorer&) = delete;
     VulkanScorer& operator=(const VulkanScorer&) = delete;
@@ -236,12 +283,14 @@ public:
     void add_decoded(const std::function<void(std::uint8_t*)>& reference,
                      const std::function<void(std::uint8_t*)>& distorted);
 
-    // Scores one more pair that the decoder given as `shared` copies on the
-    // GPU: `reference` and `distorted` are each called with the GPU address
-    // to copy a luma plane to and the bytes from one row to the next, and
-    // return once the plane is there.
-    void add_shared(const std::function<void(std::uint64_t, std::int64_t)>& reference,
-                    const std::function<void(std::uint64_t, std::int64_t)>& distorted);
+    // Scores one more pair that the decoders given as `shared` (and
+    // `shared_reference`) copy on the GPU: `reference` and `distorted` are
+    // each called with the GPU address to copy a luma plane to and the bytes
+    // from one row to the next, and return the value the decoder's timeline
+    // reaches once the copy is done, where the frame waits for it on the GPU
+    // (waits_on), else 0 once the plane is there.
+    void add_shared(const std::function<std::uint64_t(std::uint64_t, std::int64_t)>& reference,
+                    const std::function<std::uint64_t(std::uint64_t, std::int64_t)>& distorted);
 
     // As add_shared, for a pair whose test video alone the decoder given as
     // `shared` copies on the GPU: `reference` writes the reference's luma
@@ -250,7 +299,12 @@ public:
     // `distorted` copies the test video's plane and returns the decoder's timeline value the copy signals (0: it was
     // waited for); with waits_on_decoder(), the frame waits for it on the GPU.
     bool takes_host_planes() const;
-    bool waits_on_decoder() const { return waits_on_decoder_; }
+    bool waits_on_decoder() const { return waits_on_ != nullptr; }
+    // Whether the frame waits on the GPU for `decoder`'s copies, whose
+    // timeline semaphore it imported (vvdec-vulkan's: the test video's where
+    // it decodes it, else the source's; the other decoder's copies are waited
+    // for by the CPU), rather than this thread.
+    bool waits_on(const GpuFrameStream& decoder) const { return waits_on_ == &decoder; }
     void add_shared_mixed(const std::function<void(std::uint8_t*)>& reference,
                           const std::function<std::uint64_t(std::uint64_t, std::int64_t)>& distorted);
 
@@ -282,13 +336,19 @@ private:
     std::size_t frame_bytes_ = 0;
     // With frames from GPU memory: the memory the decoder imported.
     std::optional<SharedSlots> shared_;
-    // The shared decoder's timeline semaphore is imported: a frame waits on the GPU for its copies (add_shared_mixed's
-    // values), not the CPU
-    bool waits_on_decoder_ = false;
+    // The shared decoder whose timeline semaphore is imported: a frame waits on the GPU for its copies (add_shared's
+    // and add_shared_mixed's values), not the CPU; nullptr for none
+    const GpuFrameStream* waits_on_ = nullptr;
     // add_decoded's plane, written packed for a width whose rows the engine
     // pads.
     std::vector<std::uint8_t> packed_;
 };
+
+// add_shared's copy of `decoder`'s picture in `slot`: without waiting where
+// `scorer` waits on that decoder's copies on the GPU (giving the value its
+// timeline reaches), else waited for (giving 0).
+std::function<std::uint64_t(std::uint64_t, std::int64_t)> luma_copy(const VulkanScorer& scorer,
+                                                                    GpuFrameStream& decoder, int slot);
 
 // The probe's frame pairs (reference frames, distorted frames): flat,
 // smooth and textured areas, blurred, noisy and sharpened in turn, so that
