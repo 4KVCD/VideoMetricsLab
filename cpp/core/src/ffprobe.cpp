@@ -138,19 +138,33 @@ const Json* video_stream(const Json& streams) {
     return nullptr;
 }
 
-// A stream tag, by its name in any case (Matroska writers differ).
+// A stream tag, by its name in any case (Matroska writers differ), or else
+// by its name with a language: a Matroska tag given a language reaches
+// ffprobe as NAME-lang, as the statistics tags of a track with one (BPS-eng,
+// DURATION-eng, NUMBER_OF_FRAMES-eng: mkvmerge before v40, 2019).
 const Json* tag(const Json& stream, std::string_view name) {
     const Json* tags = member(stream, "tags");
     if (tags == nullptr || !tags->is_object()) {
         return nullptr;
     }
+    const Json* with_language = nullptr;
     for (auto item = tags->begin(); item != tags->end(); ++item) {
         const std::string key = ascii_upper(item.key());
         if (key == name) {
             return &item.value();
         }
+        // NAME-xx or NAME-xxx (ISO 639), or NAME-xx-YY (a BCP 47 tag)
+        if (with_language == nullptr && key.size() > name.size() + 1 && key.starts_with(name) &&
+            key[name.size()] == '-') {
+            const std::string_view language = std::string_view(key).substr(name.size() + 1);
+            if (language.size() <= 8 && std::all_of(language.begin(), language.end(), [](char c) {
+                    return (c >= 'A' && c <= 'Z') || c == '-';
+                })) {
+                with_language = &item.value();
+            }
+        }
     }
-    return nullptr;
+    return with_language;
 }
 
 // A tag's text, by its name in any case; empty where it is none or not text.

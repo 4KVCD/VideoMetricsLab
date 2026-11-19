@@ -126,6 +126,36 @@ TEST(Ffprobe, StatisticsTagsCountUnlessFfmpegCopiedThem) {
     EXPECT_EQ(rate_when_written_by("Lavf63.1.101"), 631200);
 }
 
+// mkvmerge before v40 gave a track with a language its statistics tags with
+// it: DURATION-eng, BPS-eng. They are the track's as the plain ones are: a
+// Blu-ray remux whose audio runs 0.8 s past its picture is as long as its
+// picture (133,697 frames), not as the file. A plain tag comes first.
+TEST(Ffprobe, StatisticsTagsWithALanguageAreTheTracks) {
+    const auto probe = [](const std::string& video_tags) {
+        return R"({"streams":[{"index":0,"codec_type":"video","codec_name":"h264","width":1920,"height":1080,)"
+               R"("pix_fmt":"yuv420p","r_frame_rate":"24000/1001","avg_frame_rate":"24000/1001","tags":{)" +
+               video_tags +
+               R"(}},{"index":1,"codec_type":"audio","codec_name":"dts"}],)"
+               R"("format":{"duration":"5577.056000","size":"22000000000","format_name":"matroska,webm",)"
+               R"("tags":{"ENCODER":"libebml v1.3.6 + libmatroska v1.5.0"}}})";
+    };
+    const VideoInfo remux = video_info_from_probe(
+        "remux.mkv", probe(R"("BPS-eng":"30600748","DURATION-eng":"01:32:56.279000000",)"
+                           R"("NUMBER_OF_FRAMES-eng":"133697","NUMBER_OF_BYTES-eng":"21329788989")"));
+    EXPECT_DOUBLE_EQ(remux.duration, 5576.279);
+    EXPECT_EQ(remux.bit_rate, 30600748);
+    EXPECT_FALSE(remux.bit_rate_estimated || remux.bit_rate_whole_file);
+    EXPECT_EQ(remux.stream_bytes, 21329788989);
+    EXPECT_EQ(remux.estimated_frame_count(), 133697);
+
+    const VideoInfo both = video_info_from_probe(
+        "both.mkv", probe(R"("DURATION-eng":"01:00:00.000000000","DURATION":"01:32:56.279000000")"));
+    EXPECT_DOUBLE_EQ(both.duration, 5576.279);
+    // Not a language: another tag that starts so.
+    const VideoInfo other = video_info_from_probe("other.mkv", probe(R"("DURATION-IN-FRAMES-2":"01:00:00.0")"));
+    EXPECT_DOUBLE_EQ(other.duration, 5577.056);
+}
+
 // A file FFmpeg wrote, of 1,000,000 bytes over 10 s (800 kb/s), with a video
 // and an Opus track whose sizes the tags give as `video_bytes` and
 // `audio_bytes` ("" for no tags).
