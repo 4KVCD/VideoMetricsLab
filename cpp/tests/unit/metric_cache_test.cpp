@@ -33,6 +33,7 @@
 #include "vml/python_json.h"
 #include "vml/result_json.h"
 #include "vml/saved_results.h"
+#include "vml/bitrate_store.h"
 #include "vml/file_fingerprint.h"
 #include "vml/score_identity.h"
 #include "vml/sha256.h"
@@ -886,15 +887,45 @@ TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
     const int asked = fingerprinted;
     EXPECT_FALSE(load("remux.mp4", "new.mkv"));
     EXPECT_EQ(fingerprinted, asked);
+
+    // A comparison another process saved meanwhile (the command line, another
+    // window): found by a renamed copy too, though this process has looked
+    // the saved scores up before.
+    touch(folder / "u.mkv", std::string(4200, 'u'));
+    result.distorted = folder / "u.mkv";
+    const std::filesystem::path elsewhere =
+        store_result(folder / "other process", folder / "s.mkv", folder / "u.mkv", request.recipe, result, "u",
+                     request.metrics);
+    std::filesystem::copy(elsewhere, cache / "v2" / elsewhere.filename());
+    std::filesystem::copy_file(folder / "u.mkv", folder / "u renamed.mkv");
+    const auto from_another = load("s.mkv", "u renamed.mkv");
+    ASSERT_TRUE(from_another);
+    EXPECT_EQ(from_another->first.distorted, folder / "u renamed.mkv");
+
+    // Saved by an older version, without identity.json: the lookup leaves
+    // the recording, which decodes, to record_saved_files, called after.
+    std::filesystem::remove(saved / "identity.json");
+    ASSERT_TRUE(load("s.mkv", "t.mkv"));
+    EXPECT_FALSE(std::filesystem::exists(saved / "identity.json"));
+    record_saved_files(cache, folder / "s.mkv", folder / "t.mkv", request.recipe);
+    EXPECT_TRUE(std::filesystem::exists(saved / "identity.json"));
+
+    // Deleted (the Saved results tab) after a lookup read the records: no
+    // longer found by the files' content.
+    EXPECT_EQ(recipe_directory(cache, folder / "s copy.mkv", folder / "t renamed.mkv", request.recipe), saved);
+    std::filesystem::remove_all(saved);
+    EXPECT_NE(recipe_directory(cache, folder / "s copy.mkv", folder / "t renamed.mkv", request.recipe), saved);
     set_video_fingerprinter(nullptr);
 }
 
 // A test video remuxed (raw <-> MKV <-> MP4) keeps its scores by its stream
 // fingerprint, recorded after the save, read at the same rate, with the
 // same reference: its first packets first, the whole stream only where they
-// matched. An encode that changed only later scenes (x265 zones) shares the
-// first packets, not the stream; a raw stream read at another rate is
-// another comparison; a lookup cancelled reads nothing.
+// matched, and only by a lookup allowed to (StreamReads with `whole`, told
+// first): any other, and a save, reads none and says one was wanted. An
+// encode that changed only later scenes (x265 zones) shares the first
+// packets, not the stream; a raw stream read at another rate is another
+// comparison; a lookup cancelled reads nothing.
 TEST(MetricCache, ARemuxedTestStreamKeepsItsScores) {
     const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
     const test::Folder folder;
@@ -927,10 +958,13 @@ TEST(MetricCache, ARemuxedTestStreamKeepsItsScores) {
     // The save reads no stream: recorded after it, once.
     EXPECT_EQ(heads + wholes, 0);
     EXPECT_FALSE(identity_of()["distorted"].contains("stream"));
+    EXPECT_TRUE(test_stream_wanted(cache, folder / "t.mkv"));
     EXPECT_TRUE(record_test_stream(cache, folder / "t.mkv"));
     EXPECT_EQ(wholes, 1);
+    EXPECT_FALSE(test_stream_wanted(cache, folder / "t.mkv"));
     EXPECT_FALSE(record_test_stream(cache, folder / "t.mkv"));
     EXPECT_EQ(wholes, 1);
+    EXPECT_FALSE(test_stream_wanted(cache, folder / "never saved.mkv"));
     const nlohmann::json identity = identity_of();
     EXPECT_EQ(identity["distorted"]["rate"], "23.98");
     EXPECT_EQ(identity["distorted"]["stream_head"], "A");
@@ -939,26 +973,44 @@ TEST(MetricCache, ARemuxedTestStreamKeepsItsScores) {
     raw.test_raw = true;
     EXPECT_FALSE(request.recipe.identity().contains("test_rate"));
     EXPECT_DOUBLE_EQ(raw.identity()["test_rate"].get<double>(), 23.976);
+    std::vector<std::filesystem::path> announced;
     const auto load = [&](const std::string& source, const std::string& distorted, const ComparisonRecipe& recipe) {
+        const StreamReads whole(CancelToken(), true,
+                                [&announced](const std::filesystem::path& file) { announced.push_back(file); });
         return load_result(cache, folder / source, folder / distorted, recipe, request.metrics,
                            request.perceptual_backends);
     };
 
-    // The raw stream it was muxed from, given the same rate: its scores; not
-    // in a lookup cancelled, which reads nothing.
+    // The raw stream it was muxed from, given the same rate: its scores. Not
+    // by a lookup that may not read whole streams, nor by saving or clearing
+    // (recipe_directory without StreamReads): they read no whole stream, and
+    // say one was wanted. Not by a lookup cancelled, which reads nothing.
     touch(folder / "t.265", "A/a|" + std::string(3900, 'r'));
+    take_whole_stream_wanted();
+    const int wholes_before = wholes;
+    EXPECT_FALSE(load_result(cache, folder / "s.mkv", folder / "t.265", raw, request.metrics,
+                             request.perceptual_backends));
+    EXPECT_NE(recipe_directory(cache, folder / "s.mkv", folder / "t.265", raw), saved);
+    EXPECT_EQ(wholes, wholes_before);
+    EXPECT_TRUE(take_whole_stream_wanted());
+    EXPECT_FALSE(take_whole_stream_wanted());
     {
         CancelToken cancelled;
         cancelled.cancel();
-        const StreamReadCancel stop(cancelled);
+        const StreamReads stop(cancelled, true);
         const int before = heads + wholes;
-        EXPECT_FALSE(load("s.mkv", "t.265", raw));
+        EXPECT_FALSE(load_result(cache, folder / "s.mkv", folder / "t.265", raw, request.metrics,
+                                 request.perceptual_backends));
         EXPECT_EQ(heads + wholes, before);
     }
     const auto found = load("s.mkv", "t.265", raw);
     ASSERT_TRUE(found);
     EXPECT_EQ(found->first.distorted, folder / "t.265");
+    EXPECT_EQ(announced, std::vector<std::filesystem::path>{folder / "t.265"});
+    EXPECT_EQ(wholes, wholes_before + 1);
+    // Read once: a save of it now finds the folder without reading.
     EXPECT_EQ(recipe_directory(cache, folder / "s.mkv", folder / "t.265", raw), saved);
+    EXPECT_EQ(wholes, wholes_before + 1);
     // Read at another rate: another comparison, and nothing read to know it.
     ComparisonRecipe at_25 = raw;
     at_25.test_rate = 25.0;
@@ -980,7 +1032,69 @@ TEST(MetricCache, ARemuxedTestStreamKeepsItsScores) {
     touch(folder / "t.mp4", "A/a|" + std::string(4100, 'p'));
     EXPECT_FALSE(load("other reference.mkv", "t.mp4", request.recipe));
     EXPECT_TRUE(load("s.mkv", "t.mp4", request.recipe));
+
+    // Saved by an older version: no identity.json, so no stream. Found by
+    // its path, its files are recorded (record_saved_files) without one,
+    // and its stream is wanted until read: then a remux of it is found too.
+    touch(folder / "old.mkv", "O/o|" + std::string(4200, 'k'));
+    ComparisonResult old_result = result;
+    old_result.distorted = folder / "old.mkv";
+    const std::filesystem::path old_saved =
+        store_result(cache, folder / "s.mkv", folder / "old.mkv", request.recipe, old_result, "old", request.metrics);
+    std::filesystem::remove(old_saved / "identity.json");
+    EXPECT_FALSE(test_stream_wanted(cache, folder / "old.mkv"));  // nothing recorded of it yet
+    ASSERT_TRUE(load("s.mkv", "old.mkv", request.recipe));
+    record_saved_files(cache, folder / "s.mkv", folder / "old.mkv", request.recipe);
+    EXPECT_TRUE(test_stream_wanted(cache, folder / "old.mkv"));
+    touch(folder / "old.mp4", "O/o|" + std::string(4300, 'p'));
+    EXPECT_FALSE(load("s.mkv", "old.mp4", request.recipe));  // its remux, before the stream is read
+    EXPECT_TRUE(record_test_stream(cache, folder / "old.mkv"));
+    EXPECT_FALSE(test_stream_wanted(cache, folder / "old.mkv"));
+    EXPECT_TRUE(load("s.mkv", "old.mp4", request.recipe));
     set_stream_fingerprinter(nullptr);
+}
+
+// A file's bitrate is saved by its content and read back as it was, under
+// the path the file has now; frame types the command line did not read are
+// told apart from types read and unknown. Settings counts and clears it with
+// the saved scores.
+TEST(MetricCache, BitrateIsSavedByContent) {
+    const test::Folder folder;
+    const std::filesystem::path cache = folder / "cache";
+    SavedBitrate bitrate;
+    bitrate.info.path = folder / "a.mkv";
+    bitrate.info.codec_name = "h264";
+    bitrate.info.width = 1920;
+    bitrate.info.height = 1080;
+    bitrate.info.fps = 24.0;
+    bitrate.info.duration = 0.125;
+    bitrate.data = bitrate_data(bitrate.info.path, {0.0, 1 / 24.0, 2 / 24.0}, {1 / 24.0, 1 / 24.0, 1 / 24.0},
+                                {90000, 1200, 3400000000LL}, {true, false, false});
+    bitrate.frame_types = std::vector<std::uint8_t>{1, 2, 3};
+    save_bitrate(cache, "content", bitrate);
+    EXPECT_FALSE(load_saved_bitrate(cache, "other", folder / "a.mkv"));
+    EXPECT_FALSE(load_saved_bitrate(cache, "", folder / "a.mkv"));
+
+    const std::optional<SavedBitrate> moved = load_saved_bitrate(cache, "content", folder / "moved.mkv");
+    ASSERT_TRUE(moved);
+    EXPECT_EQ(moved->info.path, folder / "moved.mkv");
+    EXPECT_EQ(moved->info.codec_name, "h264");
+    EXPECT_EQ(moved->data.times, bitrate.data.times);
+    EXPECT_EQ(moved->data.sizes, bitrate.data.sizes);
+    EXPECT_EQ(moved->data.keyframes, bitrate.data.keyframes);
+    EXPECT_EQ(moved->frame_types, bitrate.frame_types);
+
+    bitrate.frame_types = std::nullopt;  // the command line's
+    save_bitrate(cache, "unread", bitrate);
+    bitrate.frame_types = std::vector<std::uint8_t>{};  // read, not known
+    save_bitrate(cache, "unknown", bitrate);
+    EXPECT_FALSE(load_saved_bitrate(cache, "unread", folder / "a.mkv")->frame_types);
+    EXPECT_EQ(load_saved_bitrate(cache, "unknown", folder / "a.mkv")->frame_types, std::vector<std::uint8_t>{});
+
+    EXPECT_GT(cache_summary(cache).bytes, 0U);
+    clear_saved_results(cache, true);  // as Settings clears: the bitrate too
+    EXPECT_FALSE(std::filesystem::exists(bitrate_store_folder(cache)));
+    EXPECT_EQ(cache_summary(cache).bytes, 0U);
 }
 
 TEST(MetricCache, AScoreKeepsTheBuildThatMadeIt) {

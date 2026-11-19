@@ -86,6 +86,11 @@ struct Settings {
     // Decode a VVC video on the GPU (vvdec-vulkan, its pictures handed over to the GPU metrics) where the GPU
     // metrics can take them; otherwise, and by default, the app's VVdeC on the CPU. The scores are the same.
     bool vvc_decode_on_gpu = false;
+    // Recognise a test video remuxed after it was scored (raw, MKV, MP4) by
+    // its stream (metric_cache.h's StreamFingerprinter): each test video is
+    // read once more after its scores are saved, which takes as long as
+    // reading the file. Off by default.
+    bool recognise_test_remuxes = false;
     // Use a saved result instead of calculating again.
     bool use_cache = true;
     // When a run of two videos scored fewer frame pairs than their lengths

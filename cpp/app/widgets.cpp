@@ -1,6 +1,8 @@
 #include "widgets.h"
 
+#include <QAbstractSpinBox>
 #include <QApplication>
+#include <QComboBox>
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>
 #include <QDragMoveEvent>
@@ -605,6 +607,52 @@ QFont symbol_font(const QFont& font) {
 #else
     return font;
 #endif
+}
+
+namespace {
+
+bool is_value_box(const QObject* object) {
+    return qobject_cast<const QAbstractSpinBox*>(object) != nullptr || qobject_cast<const QComboBox*>(object) != nullptr;
+}
+
+}  // namespace
+
+namespace {
+
+// The wheel passing over a box does not give it the focus either
+// (Qt::WheelFocus, theirs and their line edits' by default), where the arrow
+// keys pressed next would change it. Qt gives that focus before any event
+// filter sees the wheel event, so it is taken off beforehand.
+void no_wheel_focus(QWidget* widget) {
+    if (widget->focusPolicy() == Qt::WheelFocus &&
+        (is_value_box(widget) || is_value_box(widget->parentWidget()))) {
+        widget->setFocusPolicy(Qt::StrongFocus);
+    }
+}
+
+}  // namespace
+
+WheelPastValueBoxes::WheelPastValueBoxes(QWidget* page) : QObject(page), page_(page) {
+    for (QWidget* widget : page->findChildren<QWidget*>()) {  // the boxes already made
+        no_wheel_focus(widget);
+    }
+    QCoreApplication::instance()->installEventFilter(this);  // Qt takes it off when it is deleted
+}
+
+bool WheelPastValueBoxes::eventFilter(QObject* watched, QEvent* event) {
+    // The page's ancestry is looked up only for boxes.
+    if (event->type() == QEvent::Wheel && is_value_box(watched) &&
+        page_->isAncestorOf(static_cast<QWidget*>(watched))) {
+        event->ignore();
+        return true;
+    }
+    if (event->type() == QEvent::Polish) {  // a box added later, before it is first shown
+        auto* widget = static_cast<QWidget*>(watched);  // only widgets are polished
+        if (page_->isAncestorOf(widget)) {
+            no_wheel_focus(widget);
+        }
+    }
+    return false;
 }
 
 }  // namespace vml::app

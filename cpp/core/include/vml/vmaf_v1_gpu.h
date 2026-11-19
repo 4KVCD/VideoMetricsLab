@@ -35,6 +35,7 @@
 #include "vml/gpu_vmaf.h"
 #include "vml/libvmaf.h"
 #include "vml/pair_scorer.h"
+#include "vml/threads.h"
 #include "vml/vmaf_cuda.h"
 #include "vml/vmaf_vulkan.h"
 #include "vml/video.h"
@@ -83,12 +84,16 @@ public:
     // decoders give their pictures as textures (GpuFrameStream::
     // gives_textures): the engine then reads them where they are, without
     // copying them, if it can, and pictures() says whether it does; each
-    // pair's slots are then given back through release_later. Throws
+    // pair's slots are then given back through release_later.
+    // `shared_reference` is the source's decoder where it does not share the
+    // test decoder's GPU memory (SharedSlots): the engine must then calculate
+    // every feature itself from the planes copied on the GPU, as nothing is
+    // downloaded from the decoders (VmafV1Error otherwise). Throws
     // VmafV1Error (or VmafVulkanError, LibvmafError).
     V1Scorer(int width, int height, int bit_depth, const std::filesystem::path& model, int n_subsample = 1,
              std::optional<int> device = std::nullopt, std::optional<int> threads = std::nullopt,
              std::string name = "vmaf_v1", GpuFrameStream* shared = nullptr, bool gpu_cambi = true,
-             bool gpu_speed = true, bool pictures = false);
+             bool gpu_speed = true, bool pictures = false, GpuFrameStream* shared_reference = nullptr);
     ~V1Scorer() override;
     V1Scorer(const V1Scorer&) = delete;
     V1Scorer& operator=(const V1Scorer&) = delete;
@@ -161,11 +166,12 @@ public:
     // `models` as gpu_models gives them, VMAF v1's entry ("vmaf_v1") with
     // its model's "path=<file>". VMAF v0.6.1 and NEG are scored by
     // `backend`: "vulkan" on Vulkan's GPU `device` (nothing: the best), or
-    // "cuda" by libvmaf's CUDA code, with VMAF v1 on the best GPU. `shared`
-    // and `pictures` as V1Scorer's.
+    // "cuda" by libvmaf's CUDA code, with VMAF v1 on the best GPU. `shared`,
+    // `pictures` and `shared_reference` as V1Scorer's (`shared_reference`
+    // with "vulkan" only).
     MultiScorer(int width, int height, int bit_depth, const GpuModels& models, int n_subsample,
                 const std::string& backend, std::optional<int> device, GpuFrameStream* shared = nullptr,
-                bool pictures = false);
+                bool pictures = false, GpuFrameStream* shared_reference = nullptr);
     ~MultiScorer() override;
 
     std::size_t frame_bytes() const override;
@@ -197,6 +203,9 @@ private:
     std::unique_ptr<VulkanScorer> vulkan_;
     std::unique_ptr<CudaScorer> cuda_;
     std::unique_ptr<V1Scorer> v1_;
+    // Runs VMAF's copies beside VMAF v1's where two decoders copy into both
+    // (shared_reference); null otherwise.
+    std::unique_ptr<SideThread> side_;
 };
 
 // score_decoded (gpu_vmaf.h) for a run with VMAF v1: both videos decoded in

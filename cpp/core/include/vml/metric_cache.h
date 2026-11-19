@@ -51,26 +51,37 @@ void set_video_fingerprinter(VideoFingerprinter fingerprinter);
 
 // How the saved scores recognise a test video remuxed (raw, MKV, MP4):
 // given a file, a number of packets (0: all) and what stops the read, its
-// stream_fingerprint (file_fingerprint.h). None set (the default): test
-// videos are recognised by their path and sampled_file_hash only.
+// stream_fingerprint (file_fingerprint.h). None set (the default, and
+// Settings' "Recognize test videos remuxed" off): test videos are
+// recognised by their path and sampled_file_hash only, and nothing reads
+// their streams.
 using StreamFingerprinter =
     std::function<std::optional<std::string>(const std::filesystem::path&, int, const CancelToken&)>;
 void set_stream_fingerprinter(StreamFingerprinter fingerprinter);
 
-// While it lives, `cancel` stops the test stream a lookup on this thread
-// (recipe_directory, load_result) reads to know a remux by: a whole stream
-// takes as long as the file takes to read, which a window closing should
-// not wait for.
-class StreamReadCancel {
+// How the lookups on this thread (load_result, other_cvvdp_scores) read a
+// test video's stream to know a remux of a saved one by. A whole stream takes
+// as long as its file takes to read: minutes for a film over a network.
+// Without one of these, as when saving or clearing scores, a lookup reads
+// no whole stream: only a stream's first packets, and where a remux could
+// be told only by the whole stream, it finds nothing and says so
+// (take_whole_stream_wanted). With one, `cancel` stops its reads, and with
+// `whole` it may read whole streams, `announce` told of each file first.
+class StreamReads {
 public:
-    explicit StreamReadCancel(const CancelToken& cancel);
-    ~StreamReadCancel();
-    StreamReadCancel(const StreamReadCancel&) = delete;
-    StreamReadCancel& operator=(const StreamReadCancel&) = delete;
-
-private:
-    std::optional<CancelToken> before_;
+    explicit StreamReads(const CancelToken& cancel, bool whole = false,
+                         std::function<void(const std::filesystem::path&)> announce = {});
+    ~StreamReads();
+    StreamReads(const StreamReads&) = delete;
+    StreamReads& operator=(const StreamReads&) = delete;
 };
+
+// Whether a lookup on this thread, since the last call, found a saved
+// comparison whose test stream began as its test video's does, with the same
+// reference and settings, but could not read the whole stream to tell
+// whether it is that video remuxed or another encode (StreamReads without
+// `whole`). Cleared by the call.
+bool take_whole_stream_wanted();
 
 // Reads the test video `distorted`'s stream fingerprint and records it in
 // the identity.json of each comparison under `base` saved for that file
@@ -80,6 +91,11 @@ private:
 // Nothing is read where nothing needs it. Whether one was recorded.
 bool record_test_stream(const std::filesystem::path& base, const std::filesystem::path& distorted,
                         const CancelToken& cancel = {});
+// Whether record_test_stream would read `distorted`: a comparison saved for
+// it has no test stream recorded, as one saved by a version before streams
+// were (its files recorded since, record_saved_files) has none until its
+// test video is calculated again. Reads nothing of the file.
+bool test_stream_wanted(const std::filesystem::path& base, const std::filesystem::path& distorted);
 
 // The hash that names a comparison's folder: of both files' identities and
 // the recipe's.
@@ -176,6 +192,16 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
     const std::map<std::string, std::string>& backends, const std::vector<MetricRequestSpec>& supplemental = {},
     const std::set<std::string>& not_from_other_recipes = {});
 
+// A comparison saved before its files were recorded (identity.json, which
+// an older version did not write): records them now, so that its scores are
+// found when the files are renamed, moved or remuxed. It reads a few MB of
+// each file and decodes five pictures of the reference (seconds for a 4K
+// film, once per reference in a process), so it is called after the saved
+// scores load_result found are shown, never before. Nothing to do for a
+// comparison not saved, or already recorded.
+void record_saved_files(const std::filesystem::path& base, const std::filesystem::path& source,
+                        const std::filesystem::path& distorted, const ComparisonRecipe& recipe);
+
 // CVVDP's scores saved for a comparison with other displays than the one
 // its request in `specs` or `supplemental` models, each with the CVVDP
 // parameters it was made with (the Python app's other_cvvdp_scores), and
@@ -226,8 +252,13 @@ std::optional<std::variant<FrameMetricResult, SequenceMetricResult>> read_saved_
 // one this app cannot read.
 std::optional<std::pair<ComparisonResult, std::string>> saved_comparison(const std::filesystem::path& folder);
 
+// The sampled hash (file_fingerprint.h) a saved folder's identity.json
+// records for its reference (`reference`) or test video: the key of their
+// saved bitrate (bitrate_store.h). Empty where none is recorded.
+std::string saved_content_hash(const std::filesystem::path& folder, bool reference);
+
 // How many comparisons are saved under `base`, and the bytes their files
-// take, for Settings.
+// and the saved bitrate (bitrate_store.h) take, for Settings.
 struct CacheSummary {
     int comparisons = 0;
     std::uintmax_t bytes = 0;
@@ -249,10 +280,11 @@ struct ClearedResults {
     int kept = 0;
 };
 
-// Deletes the comparisons saved under `base` (its v2 folder; nothing else
-// there): every one, or with `keep_without_reference` every one whose
-// reference is still where it was (reference_where_saved), keeping those
-// whose scores could not be calculated again.
+// Deletes the comparisons saved under `base` (its v2 folder) and the saved
+// bitrate (its bitrate folder; nothing else there): every comparison, or
+// with `keep_without_reference` every one whose reference is still where it
+// was (reference_where_saved), keeping those whose scores could not be
+// calculated again.
 ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_without_reference);
 
 }  // namespace vml

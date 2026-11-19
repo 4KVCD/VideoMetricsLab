@@ -16,9 +16,11 @@
 #include "graph_panel.h"
 #include "i18n.h"
 #include "main_window.h"
+#include "stream_records.h"
 #include "widgets.h"
 #include "window_helpers.h"
 #include "vml/append.h"
+#include "vml/file_fingerprint.h"
 #include "vml/film_grain_scoring.h"
 #include "vml/metric_cache.h"
 
@@ -74,6 +76,12 @@ bool MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& pa
     // load would leave the others empty, and calculated again in full.
     std::vector<std::filesystem::path> asked = cancel_cache_lookup();
     append(asked, paths);
+    // A remux check under way, or due, is for the lookup this one replaces:
+    // its rows are asked about again.
+    append(asked, stream_check_paths_);
+    append(asked, stream_checking_paths_);
+    cancel_stream_check();
+    sync_remux_setting();
     const int generation = ++cache_generation_;
     QStringList texts;
     std::map<QString, SavedScoresQuery> queries;
@@ -105,10 +113,115 @@ bool MainWindow::start_cache_lookup(const std::vector<std::filesystem::path>& pa
             [this, generation](const SavedScoresFound& found) { on_saved_found(generation, found); });
     connect(worker, &ProbeWorker::other_displays_found, this,
             [this, generation](const OtherDisplaysFound& found) { on_other_displays_found(generation, found); });
+    connect(worker, &ProbeWorker::stream_check_wanted, this, [this, generation](const QString& path) {
+        if (generation == cache_generation_) {
+            stream_check_paths_.push_back(path_of(path));
+        }
+    });
     connect(worker, &ProbeWorker::finished_all, this, [this, worker] { on_cache_lookup_finished(worker); });
     worker->start();
     return true;
 }
+
+void MainWindow::start_stream_check() {
+    // The rows whose test stream began as a saved comparison's: read whole,
+    // after the other rows' lookups, by a lookup of its own that nothing
+    // waits for (a run cancels it: the row is calculated instead).
+    if (stream_check_paths_.empty() || stream_check_worker_ != nullptr || !source_info_ || run_active_ ||
+        closing_ || !settings_.use_cache || !recognise_remuxes_->load()) {
+        return;
+    }
+    QStringList texts;
+    std::map<QString, SavedScoresQuery> queries;
+    stream_checking_paths_.clear();
+    for (const std::filesystem::path& path : std::exchange(stream_check_paths_, {})) {
+        const std::optional<int> row = row_index_of_path(path);
+        if (!row) {
+            continue;  // removed meanwhile
+        }
+        const RowData& row_data = *rows_[static_cast<std::size_t>(*row)];
+        const QString text = text_of(row_data.path);
+        if (queries.contains(text)) {
+            continue;
+        }
+        const AnalysisRequest request = analysis_request_of(row_data);
+        const auto forgotten = row_data.forgotten_metrics.find(request.recipe.identity().dump());
+        queries.emplace(text, SavedScoresQuery{row_data.identity_path(), request,
+                                               displayable_metric_specs(row_data.options, row_data.cvvdp),
+                                               forgotten == row_data.forgotten_metrics.end() ? std::set<std::string>()
+                                                                                              : forgotten->second});
+        texts.append(text);
+        stream_checking_paths_.push_back(row_data.path);
+    }
+    if (texts.isEmpty()) {
+        return;
+    }
+    const int generation = cache_generation_;  // the lookup it completes: refused once another replaces it
+    auto* worker = new ProbeWorker(texts, cache_folder(), source_info_->path, std::move(queries), this,
+                                   ProbeWorker::WholeStreams::yes);
+    stream_check_worker_ = worker;
+    probe_workers_.push_back(worker);
+    connect(worker, &ProbeWorker::saved_found, this,
+            [this, generation](const SavedScoresFound& found) { on_saved_found(generation, found); });
+    connect(worker, &ProbeWorker::other_displays_found, this,
+            [this, generation](const OtherDisplaysFound& found) { on_other_displays_found(generation, found); });
+    connect(worker, &ProbeWorker::stream_check_started, this, [this](const QString& path) {
+        show_stream_status(app::tr("Checking whether {name} is a remux of a video already scored: reading its "
+                                   "stream\xE2\x80\xA6",
+                                   {{"name", name_of(path_of(path))}}));
+    });
+    connect(worker, &ProbeWorker::finished_all, this, [this, worker] { on_stream_check_finished(worker); });
+    worker->start();
+}
+
+void MainWindow::cancel_stream_check() {
+    if (stream_check_worker_ != nullptr) {
+        stream_check_worker_->cancel();  // retired as it ends, like every reader
+        stream_check_worker_ = nullptr;
+        end_stream_status();
+    }
+    stream_check_paths_.clear();
+    stream_checking_paths_.clear();
+}
+
+void MainWindow::on_stream_check_finished(ProbeWorker* worker) {
+    on_probe_finished(worker);
+    if (worker == stream_check_worker_) {  // not one cancelled, whose status went with it
+        stream_check_worker_ = nullptr;
+        stream_checking_paths_.clear();
+        end_stream_status();
+    }
+}
+
+void MainWindow::show_stream_status(const QString& text) {
+    if (run_active_) {
+        return;  // the run's own status says what matters then
+    }
+    stream_status_ = text;
+    show_status(text);
+}
+
+void MainWindow::end_stream_status() {
+    if (!stream_status_.isEmpty() && status_label_->text() == stream_status_ && !run_active_) {
+        show_status(app::tr("Ready."));
+    }
+    stream_status_.clear();
+}
+
+void MainWindow::use_stream_fingerprinter(const std::string& ffmpeg, const std::string& ffprobe) {
+    sync_remux_setting();
+    StreamFingerprinter read = stream_fingerprinter_using(ffmpeg, ffprobe);
+    set_stream_fingerprinter([on = recognise_remuxes_, read = std::move(read)](
+                                 const std::filesystem::path& file, int packets,
+                                 const CancelToken& cancel) -> std::optional<std::string> {
+        if (!on->load()) {
+            return std::nullopt;  // Settings: test videos are known by their files only
+        }
+        return read(file, packets, cancel);
+    });
+}
+
+void MainWindow::sync_remux_setting() { recognise_remuxes_->store(settings_.recognise_test_remuxes); }
 
 void MainWindow::reload_saved_scores(const std::vector<int>& rows) {
     // Looks the rows' saved scores up again after a change to what they ask
@@ -140,7 +253,8 @@ void MainWindow::on_cache_lookup_finished(ProbeWorker* worker) {
     // starts once none is under way: it waits for every lookup that replaced
     // the one it asked for, and not for one a Recalculate cancelled with none
     // after it (each lookup's end comes, cancelled or not).
-    if (worker == cache_worker_) {
+    const bool current = worker == cache_worker_;
+    if (current) {
         cache_worker_ = nullptr;
         cache_lookup_paths_.clear();
     }
@@ -148,6 +262,9 @@ void MainWindow::on_cache_lookup_finished(ProbeWorker* worker) {
     if (run_waits_for_saved_scores_ && cache_worker_ == nullptr) {
         stop_waiting_for_saved_scores();
         on_run_clicked();  // the rows' saved scores are in: the run asked for starts
+    }
+    if (current && cache_worker_ == nullptr) {
+        start_stream_check();  // after the others, and not before a run
     }
 }
 
@@ -166,9 +283,34 @@ void MainWindow::on_saved_found(int generation, const SavedScoresFound& found) {
     if (row_data.video_info && row_data.video_info->frame_rate_unknown()) {
         return;  // a raw stream not yet given its rate: its saved scores are known by it (test_rate)
     }
-    if (lookup_token(source_info_->path, row_data.identity_path(), analysis_request_of(row_data)) != found.token) {
+    const AnalysisRequest request = analysis_request_of(row_data);
+    if (lookup_token(source_info_->path, row_data.identity_path(), request) != found.token) {
         return;
     }
+    // A comparison saved by an older version has its files recorded now, so
+    // that it is found when they move: off the window's thread and after the
+    // lookup, whose numbers a 4K reference's seconds of decoding would hold up.
+    // And its test stream, which no older version recorded, for a remux of it
+    // to keep these scores (with Settings' "Recognize test videos remuxed"):
+    // read as after a run's save, apart from the writes; queued only where
+    // none is recorded, so a video whose stream is says nothing.
+    sync_remux_setting();
+    // Recorded with the test video's rate, which a remux must have to be
+    // found: a row is looked up as it is added, before its video is read, and
+    // its request has no rate then; the saved comparison has its video's.
+    ComparisonRecipe recorded = request.recipe;
+    if (!(recorded.test_rate > 0.0)) {
+        recorded.test_rate = found.result.distorted_info.fps;
+    }
+    file_writes_->submit(QStringLiteral("identity %1").arg(text_of(row_data.path.stem())),
+                         [base = cache_folder(), source = source_info_->path, distorted = row_data.identity_path(),
+                          recipe = std::move(recorded), records = stream_records_,
+                          recognise = settings_.recognise_test_remuxes] {
+                             record_saved_files(base, source, distorted, recipe);
+                             if (recognise && test_stream_wanted(base, distorted)) {
+                                 records->add(base, distorted);
+                             }
+                         });
     const std::shared_ptr<CompletedRun> previous = row_data.completed_run;
     auto run = std::make_shared<CompletedRun>();
     run->result = found.result;

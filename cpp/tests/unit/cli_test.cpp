@@ -831,6 +831,76 @@ TEST(CommandLine, NamesEachVideosFilesAfterTheTemplate) {
               platform::path_text(temporary / "segments" / (stem + ".vmaf.segments.csv")));
 }
 
+// A profile or preset changed on the command line: conditions after it
+// replace its condition on their metric (in its place) or are added; one
+// left out (its metric not compared) is not when a condition replaces it;
+// --segments-any undoes the profile's "every condition"; and one source
+// only. --segments-any and --segments-all are one or the other.
+TEST(CommandLine, SegmentsChangeAProfileOrPresetFromTheCommandLine) {
+    Settings settings;
+    settings.weak_segment_conditions = {"vmaf<80", "ssimulacra2<60"};
+    settings.weak_segments_all = true;
+    const auto taken = [&settings](const std::vector<std::string>& extra, const std::vector<std::string>& asked,
+                                   std::vector<std::string>* left_out = nullptr) {
+        std::vector<std::string> command{"compare", "ref.mkv", "a.mkv"};
+        command.insert(command.end(), extra.begin(), extra.end());
+        CompareArguments arguments = parse_arguments(command).compare;
+        const std::vector<std::string> left = take_saved_segments(arguments, settings, asked);
+        if (left_out != nullptr) {
+            *left_out = left;
+        }
+        return arguments;
+    };
+
+    // The preset's VMAF condition replaced; PSNR added.
+    CompareArguments changed = taken({"--segments", " preset:grainy-film, vmaf<80 ,psnr<30"}, {"vmaf", "psnr", "ssimulacra2"});
+    EXPECT_EQ(changed.segments_preset, "grainy-film");
+    EXPECT_EQ(condition_texts(changed.segments), (std::vector<std::string>{"vmaf<80", "ssimulacra2<55", "psnr<30"}));
+    EXPECT_EQ(changed.segment_min_frames, 6);  // the preset's options stay
+
+    // SSIMULACRA2 not compared: the saved profile's left out, unless
+    // replaced (then the replacement is refused later, as given conditions
+    // are).
+    std::vector<std::string> left_out;
+    changed = taken({"--segments", "saved,vmaf<85"}, {"vmaf"}, &left_out);
+    EXPECT_EQ(condition_texts(changed.segments), std::vector<std::string>{"vmaf<85"});
+    EXPECT_EQ(left_out, std::vector<std::string>{"ssimulacra2<60"});
+    changed = taken({"--segments", "saved,ssimulacra2<50"}, {"vmaf"}, &left_out);
+    EXPECT_EQ(condition_texts(changed.segments), (std::vector<std::string>{"vmaf<80", "ssimulacra2<50"}));
+    EXPECT_TRUE(left_out.empty());
+    EXPECT_EQ(segments_refusal(changed.segments, {"vmaf"}),
+              "--segments: ssimulacra2 is not one of the metrics compared (-m)");
+
+    // A profile with no conditions, given some: they are the rules.
+    settings.weak_segment_profiles_json = R"([{"name": "Empty", "conditions": []}])";
+    changed = taken({"--segments", "profile:empty,vmaf<90"}, {"vmaf"});
+    EXPECT_EQ(condition_texts(changed.segments), std::vector<std::string>{"vmaf<90"});
+
+    // Every condition (the profile's) or any (--segments-any).
+    EXPECT_TRUE(taken({"--segments", "saved"}, {"vmaf", "ssimulacra2"}).segments_all);
+    EXPECT_FALSE(taken({"--segments", "saved", "--segments-any"}, {"vmaf", "ssimulacra2"}).segments_all);
+    EXPECT_TRUE(taken({"--segments", "preset:cgi", "--segments-all"}, {"vmaf", "ssimulacra2"}).segments_all);
+
+    const auto error_of = [](const std::vector<std::string>& arguments) {
+        try {
+            parse_arguments(arguments);
+        } catch (const UsageError& error) {
+            const std::string text = error.what();
+            return text.substr(text.find("error: "));
+        }
+        return std::string("no error");
+    };
+    EXPECT_EQ(error_of({"compare", "ref.mkv", "a.mkv", "--segments", "preset:hdr,profile:Film"}),
+              "error: argument --segments: give one of saved, profile:NAME and preset:KEY, not preset:hdr and "
+              "profile:Film");
+    EXPECT_EQ(error_of({"compare", "ref.mkv", "a.mkv", "--segments", "vmaf<90", "--segments-all", "--segments-any"}),
+              "error: argument --segments-any: not allowed with argument --segments-all");
+    EXPECT_EQ(error_of({"compare", "ref.mkv", "a.mkv", "--segments-any"}),
+              "error: argument --segments-any: only with --segments, whose segments it shapes");
+    EXPECT_TRUE(error_of({"compare", "ref.mkv", "a.mkv", "--segments", "saved,vmaf=80"})
+                    .starts_with("error: argument --segments: invalid condition 'vmaf=80'"));
+}
+
 // --gpu names a GPU DirectX lists, by its whole name or a part of one, or
 // auto; another name is refused with the GPUs there are. Where the system
 // lists none (a Mac), the name is left to Vulkan's.

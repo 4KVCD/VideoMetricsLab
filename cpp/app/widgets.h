@@ -241,4 +241,25 @@ private:
 // among them: some 22 MB, for as long as the app runs.
 QFont symbol_font(const QFont& font);
 
+// Turns the mouse wheel's value changes off in the spin boxes and combo boxes
+// on `page` (the Settings tab): the wheel scrolls the page under them
+// instead, so scrolling it never changes a setting the pointer happens to
+// pass over, nor gives one the focus for the arrow keys to change. Their open
+// lists still scroll; the keyboard and clicks change values as before. Boxes
+// anywhere else keep the wheel. Made before the page is first shown, it
+// installs itself on the application and goes with the page. (The filter
+// sees a wheel event at each widget it goes up through; at a box of the
+// page's it drops it unread, ignored, so Qt passes it on to the box's
+// parent, the page's scroll area at last.)
+class WheelPastValueBoxes : public QObject {
+public:
+    explicit WheelPastValueBoxes(QWidget* page);
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
+private:
+    QWidget* page_;
+};
+
 }  // namespace vml::app

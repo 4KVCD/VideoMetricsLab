@@ -675,14 +675,19 @@ std::optional<std::pair<ComparisonResult, std::string>> load_result(
         // under other paths (recipe_directory), its context.json naming those.
         found->first.source = source;
         found->first.distorted = distorted;
-        // A folder saved before files were recorded: recorded now, so that
-        // it is found when they move.
-        std::error_code error;
-        if (std::filesystem::exists(directory / "context.json", error)) {
-            record_identity(directory, source, distorted, recipe, true);
-        }
+        // A folder saved before files were recorded is recorded by the
+        // caller, once the scores are shown (record_saved_files).
     }
     return found;
+}
+
+void record_saved_files(const std::filesystem::path& base, const std::filesystem::path& source,
+                        const std::filesystem::path& distorted, const ComparisonRecipe& recipe) {
+    const std::filesystem::path directory = recipe_directory(base, source, distorted, recipe);
+    std::error_code error;
+    if (std::filesystem::exists(directory / "context.json", error)) {
+        record_identity(directory, source, distorted, recipe, true);
+    }
 }
 
 std::optional<OtherCvvdpScores> other_cvvdp_scores(const std::filesystem::path& base,

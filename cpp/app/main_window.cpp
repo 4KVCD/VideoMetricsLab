@@ -182,6 +182,19 @@ MainWindow::MainWindow() {
     // later would be worse than the failure it announces.
     file_writes_ = new FileWrites(this);
     stream_records_ = std::make_shared<StreamRecords>();
+    // What the records read, on the status line: queued to the window's
+    // thread (the records' own calls it from theirs).
+    stream_records_->set_reporting(
+        [this](const std::filesystem::path& test) {
+            QMetaObject::invokeMethod(
+                this,
+                [this, name = name_of(test)] {
+                    show_stream_status(app::tr("Recording {name}'s stream, so that a remux of it keeps its scores\xE2\x80\xA6",
+                                               {{"name", name}}));
+                },
+                Qt::QueuedConnection);
+        },
+        [this] { QMetaObject::invokeMethod(this, [this] { end_stream_status(); }, Qt::QueuedConnection); });
     connect(file_writes_, &FileWrites::write_failed, this, [this](const QString& description, const QString& error) {
         show_status(app::tr("Could not {description}: {error}", {{"description", description}, {"error", error}}));
     });
@@ -218,7 +231,7 @@ MainWindow::MainWindow() {
     const std::string ffmpeg = find_tool("ffmpeg", settings_);
     const std::string ffprobe = find_tool("ffprobe", settings_);
     set_video_fingerprinter(fingerprinter_using(ffmpeg, ffprobe));
-    set_stream_fingerprinter(stream_fingerprinter_using(ffmpeg, ffprobe));
+    use_stream_fingerprinter(ffmpeg, ffprobe);
     restore_open_videos();
     on_table_selection_changed();
 }
@@ -335,7 +348,9 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         }
         frame_compare_panel_->cancel();
         bitrate_panel_->cancel();
-        stream_records_->stop();  // a test stream being read is recorded at its next save
+        stream_records_->set_reporting({}, {});  // nothing more for the window
+        stream_records_->stop();                 // a test stream being read is recorded at its next save
+        cancel_stream_check();
         for (ProbeWorker* worker : probe_workers_) {
             worker->cancel();
         }
@@ -500,7 +515,7 @@ void MainWindow::build_ui() {
                                  "border: 1px solid {banner_border};");
     ffmpeg_banner_->setWordWrap(true);
     ffmpeg_banner_->setVisible(false);
-    locate_ffmpeg_button_ = new QPushButton(app::with_program_names(app::tr("Locate ffmpeg.exe...")));
+    locate_ffmpeg_button_ = new QPushButton(app::with_program_names(app::tr("Locate ffmpeg.exe")));
     connect(locate_ffmpeg_button_, &QPushButton::clicked, this, [this] { on_locate_ffmpeg(); });
     locate_ffmpeg_button_->setVisible(false);
     banner_row->addWidget(ffmpeg_banner_, 1);
@@ -617,6 +632,8 @@ void MainWindow::build_ui() {
     // Its own list of videos: a finished run adds its own (on_job_finished).
     bitrate_panel_ = new BitratePanel([this] { return find_tool("ffprobe", settings_); }, video_colors_);
     bitrate_panel_->dialogs = standard_dialogs(bitrate_panel_, export_dir);
+    // Its readings are saved with the saved scores, and found there again.
+    bitrate_panel_->store_folder = [this] { return cache_folder(); };
     // Settings' Exported graphs, read at each export as the folder is.
     const auto export_colours = [this] {
         return theme::export_chart_colours(settings_.export_graph_theme, settings_.export_graph_background,
@@ -694,10 +711,10 @@ void MainWindow::add_reference_row(QVBoxLayout* layout) {
     // A path can be pasted or typed in (Enter, or leaving the box, reads it),
     // and a file dropped on it from a file manager.
     source_edit_ = new QLineEdit;
-    source_edit_->setPlaceholderText(app::tr("Drop a video here, paste its path, or click Browse..."));
+    source_edit_->setPlaceholderText(app::tr("Drop a video here, paste its path, or click Browse"));
     connect(source_edit_, &QLineEdit::editingFinished, this, [this] { on_source_path_entered(); });
     source_edit_->installEventFilter(this);
-    source_browse_button_ = new QPushButton(app::tr("Browse..."));
+    source_browse_button_ = new QPushButton(app::tr("Browse"));
     connect(source_browse_button_, &QPushButton::clicked, this, [this] { on_browse_source(); });
     source_row->addWidget(source_edit_, 1);
     source_row->addWidget(source_browse_button_);
@@ -760,7 +777,7 @@ void MainWindow::build_test_table() {
     };
     distorted_table_->setHorizontalHeaderLabels({
         "", app::tr("File name"), app::tr("Media info"), app::tr("Black bars"), app::tr("Scaling"),
-        app::tr("Video bitrate"), header_of("psnr"), header_of("ssim"), header_of("vmaf"), header_of("xpsnr"),
+        app::tr("Approx. bitrate"), header_of("psnr"), header_of("ssim"), header_of("vmaf"), header_of("xpsnr"),
         header_of("vmaf_neg"), header_of("ssimulacra2"), header_of("butteraugli"), header_of("cvvdp"),
         header_of("vmaf_v1"),
     });
@@ -825,9 +842,9 @@ void MainWindow::build_test_table() {
 // buttons a run freezes.
 std::vector<QWidget*> MainWindow::add_file_buttons(QVBoxLayout* layout) {
     auto* buttons = new QHBoxLayout;
-    auto* add_button = new QPushButton(app::tr("Add files..."));
+    auto* add_button = new QPushButton(app::tr("Add files"));
     connect(add_button, &QPushButton::clicked, this, [this] { on_add_distorted(); });
-    auto* add_resample_button = new QPushButton(app::tr("Add resolution test..."));
+    auto* add_resample_button = new QPushButton(app::tr("Add resolution test"));
     add_resample_button->setToolTip(
         app::tr("Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back "
                 "up -- no separate test file needed."));
@@ -892,17 +909,17 @@ QWidget* MainWindow::build_run_panel() {
     run_row->addWidget(parallel_jobs_check_);
     run_row->addStretch(1);
 
-    load_button_ = new QPushButton(app::tr("Load analysis results..."));
+    load_button_ = new QPushButton(app::tr("Load analysis results"));
     connect(load_button_, &QPushButton::clicked, this, [this] { on_load_saved_run(); });
     // Frozen during a run with the files: a saved run can bring a reference
     // of its own, which would change what the running videos mean.
     file_action_widgets_.push_back(load_button_);
-    save_button_ = new QPushButton(app::tr("Save selected results..."));
+    save_button_ = new QPushButton(app::tr("Save selected results"));
     connect(save_button_, &QPushButton::clicked, this, [this] { on_save_selected(); });
     show_graph_button_ = new QPushButton(app::tr("Open metric graphs"));
     show_graph_button_->setToolTip(app::tr("Opens Metric Graphs with the current results and graph settings."));
     connect(show_graph_button_, &QPushButton::clicked, this, [this] { on_show_graph_clicked(); });
-    export_graphs_button_ = new QPushButton(app::tr("Export all graphs..."));
+    export_graphs_button_ = new QPushButton(app::tr("Export all graphs"));
     export_graphs_button_->setToolTip(app::tr(
         "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph "
         "of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are "
@@ -1101,7 +1118,7 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     // A remuxed or moved reference, and a remuxed test video, keep their
     // saved scores (file_fingerprint.h).
     set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
-    set_stream_fingerprinter(stream_fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
+    use_stream_fingerprinter(status.ffmpeg.path, status.ffprobe.path);
     if (prompt) {
         log_tools(status, detected_gpu_vendors_);
     }
@@ -1121,10 +1138,10 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     const QString install;
 #endif
 #ifdef _WIN32
-    const QString click = app::tr("  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.");
+    const QString click = app::tr("  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe\" to point at it.");
     download_ffmpeg_button_->setVisible(true);
 #else
-    const QString click = app::with_program_names(app::tr("  Click \"Locate ffmpeg.exe...\" to point at it."));
+    const QString click = app::with_program_names(app::tr("  Click \"Locate ffmpeg.exe\" to point at it."));
 #endif
     ffmpeg_banner_->setText(problems.join("  ") + install + click);
     ffmpeg_banner_->setVisible(true);
@@ -1142,7 +1159,7 @@ bool MainWindow::check_ffmpeg(bool prompt) {
                                 "project on GitHub), or you can point it at an ffmpeg.exe you already have."),
                     QMessageBox::NoButton, this);
     QPushButton* download = box.addButton(app::tr("Download FFmpeg"), QMessageBox::AcceptRole);
-    QPushButton* locate = box.addButton(app::tr("Locate ffmpeg.exe..."), QMessageBox::ActionRole);
+    QPushButton* locate = box.addButton(app::tr("Locate ffmpeg.exe"), QMessageBox::ActionRole);
     box.addButton(app::tr("Not now"), QMessageBox::RejectRole);
     box.setDefaultButton(download);
     box.exec();
@@ -1211,7 +1228,7 @@ void MainWindow::on_ffmpeg_downloaded(const std::filesystem::path& folder) {
     // A remuxed or moved reference, and a remuxed test video, keep their
     // saved scores (file_fingerprint.h).
     set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
-    set_stream_fingerprinter(stream_fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
+    use_stream_fingerprinter(status.ffmpeg.path, status.ffprobe.path);
     log_tools(status, detected_gpu_vendors_);
     ffmpeg_found(status, folder);
     if (const std::optional<std::string> problem = settings_.save()) {
@@ -1278,7 +1295,7 @@ bool MainWindow::on_locate_ffmpeg() {
     // A remuxed or moved reference, and a remuxed test video, keep their
     // saved scores (file_fingerprint.h).
     set_video_fingerprinter(fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
-    set_stream_fingerprinter(stream_fingerprinter_using(status.ffmpeg.path, status.ffprobe.path));
+    use_stream_fingerprinter(status.ffmpeg.path, status.ffprobe.path);
     if (!status.ok()) {
         const QStringList problems = tool_problems(status);
         QMessageBox::warning(this, app::tr("Still not usable"), problems.join("\n"));

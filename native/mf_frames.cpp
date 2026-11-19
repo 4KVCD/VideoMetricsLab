@@ -924,18 +924,13 @@ NVF_API int nvf_copy_planes_async(void *handle, int slot, const unsigned long lo
     return result;
 }
 
+// The hand-over's timeline semaphore as a Win32 handle the caller imports and
+// closes (handover::export_timeline). 0, or -1 if the GPU has none.
 NVF_API int nvf_timeline(void *, void **win32) {
     handover::Device &g = handover::g_device;
     *win32 = nullptr;
     if (!g.timeline || !g.direct_pipelines[0]) return -1;
-    VkSemaphoreGetWin32HandleInfoKHR info{};
-    info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_WIN32_HANDLE_INFO_KHR;
-    info.semaphore = g.timeline;
-    info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
-    HANDLE exported = nullptr;
-    if (g.vkGetSemaphoreWin32HandleKHR(g.device, &info, &exported) != VK_SUCCESS || !exported) return -1;
-    *win32 = exported;
-    return 0;
+    return handover::export_timeline(win32);
 }
 
 NVF_API int nvf_pin(void *, void *host, unsigned long long bytes) {

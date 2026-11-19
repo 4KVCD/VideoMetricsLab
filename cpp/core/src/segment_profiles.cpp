@@ -113,7 +113,8 @@ void store_segment_profile(Settings& settings, const std::string& name, const Se
 }
 
 bool segment_profile_name_free(const std::vector<SegmentProfile>& profiles, std::string_view name) {
-    return !python_strip(name).empty() && !same_name(name, default_name) &&
+    return !python_strip(name).empty() && name.find(',') == std::string_view::npos &&
+           !same_name(name, default_name) &&
            std::none_of(profiles.begin(), profiles.end(),
                         [name](const SegmentProfile& profile) { return same_name(profile.name, name); });
 }

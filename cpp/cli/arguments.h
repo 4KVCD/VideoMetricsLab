@@ -61,6 +61,7 @@ struct CompareArguments {
     bool no_gpu_decode = false;
     std::optional<std::string> gpu_decode;  // "auto", or the maker: "nvidia", "intel" or "amd"
     std::optional<std::string> vvc_decoder;  // "gpu" or "cpu" (Settings::vvc_decode_on_gpu)
+    std::optional<std::string> test_remuxes;  // "on" or "off" (Settings::recognise_test_remuxes)
     // --gpu: the GPU to score on, by name (gpu_choice.h); "auto" for a discrete one first (Settings::gpu)
     std::optional<std::string> gpu;
     std::optional<int> parallel;
@@ -75,7 +76,8 @@ struct CompareArguments {
     std::vector<WeakCondition> segments;
     // --segments saved: the conditions and options saved in the window's
     // Settings > Weak segments (weak_segment_*), taken once the settings are
-    // read (take_saved_segments); `segments` is empty until then.
+    // read (take_saved_segments); until then `segments` holds the conditions
+    // given after it, which change the profile's.
     bool segments_saved = false;
     // --segments profile:NAME: that profile's rather than the one in use
     // (segments_saved set too).
@@ -84,6 +86,7 @@ struct CompareArguments {
     // segments_saved set too).
     std::optional<std::string> segments_preset;
     bool segments_all = false;
+    bool segments_any = false;  // --segments-any: any condition, whatever the profile or preset says
     std::optional<int> segment_min_frames;
     std::optional<int> segment_merge_frames;
     std::optional<std::string> segments_dir;  // the folder for each video's segment files

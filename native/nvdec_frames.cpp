@@ -552,6 +552,7 @@ WIDEN_DONE:
 )PTX";
 
 constexpr unsigned kBlockX = 32, kBlockY = 8;
+constexpr unsigned kOutputEventFlags = CU_EVENT_BLOCKING_SYNC | CU_EVENT_DISABLE_TIMING;
 
 // ----------------------------------------------------------------- decoder
 
@@ -568,7 +569,11 @@ struct Decoder {
     CUcontext context = nullptr;
     bool retained = false;
     CUstream decode_stream = nullptr, output_stream = nullptr;
-    CUevent decode_event = nullptr, output_event = nullptr;
+    CUevent decode_event = nullptr;
+    // Events the copies out of the slots wait on, one per copy under way: the
+    // scorers copy from several threads at once (on output_stream, in order).
+    // Guarded by mutex.
+    std::vector<CUevent> spare_events;
     CUmodule module = nullptr;
     CUfunction plane8 = nullptr, plane16 = nullptr, hpass = nullptr, vpass = nullptr, widen8 = nullptr;
     // Scaling: each filter's tables in GPU memory, and the rows between the
@@ -611,6 +616,10 @@ struct Decoder {
         fail(std::string(what) + " failed: " + cuda_error(result));
         return false;
     }
+
+    // Waits for what was queued on output_stream so far (the caller's copy),
+    // with an event of its own. The decoder's context is current.
+    bool wait_for_output(const char *what);
 
     bool stopped() {
         std::lock_guard<std::mutex> guard(mutex);
@@ -1005,7 +1014,7 @@ void destroy(Decoder *d) {
         }
         if (d->module) cu.cuModuleUnload(d->module);
         if (d->decode_event) cu.cuEventDestroy(d->decode_event);
-        if (d->output_event) cu.cuEventDestroy(d->output_event);
+        for (CUevent event : d->spare_events) cu.cuEventDestroy(event);
         if (d->decode_stream) cu.cuStreamDestroy(d->decode_stream);
         if (d->output_stream) cu.cuStreamDestroy(d->output_stream);
     }
@@ -1090,7 +1099,9 @@ NVF_API void *nvf_open(const Params *params, char *error, int error_size) {
         result = scope.pushed ? cu.cuStreamCreate(&d->decode_stream, CU_STREAM_NON_BLOCKING) : static_cast<CUresult>(201);  // CUDA_ERROR_INVALID_CONTEXT
         if (result == CUDA_SUCCESS) result = cu.cuStreamCreate(&d->output_stream, CU_STREAM_NON_BLOCKING);
         if (result == CUDA_SUCCESS) result = cu.cuEventCreate(&d->decode_event, CU_EVENT_BLOCKING_SYNC | CU_EVENT_DISABLE_TIMING);
-        if (result == CUDA_SUCCESS) result = cu.cuEventCreate(&d->output_event, CU_EVENT_BLOCKING_SYNC | CU_EVENT_DISABLE_TIMING);
+        CUevent output_event = nullptr;
+        if (result == CUDA_SUCCESS) result = cu.cuEventCreate(&output_event, kOutputEventFlags);
+        if (result == CUDA_SUCCESS) d->spare_events.push_back(output_event);
         if (result == CUDA_SUCCESS) {
             step = "Loading the GPU conversion kernels";
             result = cu.cuModuleLoadData(&d->module, kKernels);
@@ -1223,6 +1234,23 @@ NVF_API int nvf_pop(void *handle, int timeout_ms, int *slot, long long *pts) {
     return NVF_FRAME;
 }
 
+bool Decoder::wait_for_output(const char *what) {
+    const Driver &cu = g_driver;
+    CUevent event = nullptr;
+    {
+        std::lock_guard<std::mutex> guard(mutex);
+        if (!spare_events.empty()) {
+            event = spare_events.back();
+            spare_events.pop_back();
+        }
+    }
+    if (!event && !check(cu.cuEventCreate(&event, kOutputEventFlags), what)) return false;
+    const bool ok = check(cu.cuEventRecord(event, output_stream), what) && check(cu.cuEventSynchronize(event), what);
+    std::lock_guard<std::mutex> guard(mutex);
+    spare_events.push_back(event);
+    return ok;
+}
+
 // Copies a slot (frame_bytes, planes packed) into page-locked host memory,
 // returning once it is there. 0 or NVF_ERROR.
 NVF_API int nvf_download(void *handle, int slot, void *host) {
@@ -1231,8 +1259,7 @@ NVF_API int nvf_download(void *handle, int slot, void *host) {
     ContextScope scope(d);
     CUdeviceptr src = d->pool + static_cast<size_t>(slot) * d->frame_bytes;
     bool ok = d->check(cu.cuMemcpyDtoHAsync(host, src, d->frame_bytes, d->output_stream), "Copying a picture from the GPU")
-              && d->check(cu.cuEventRecord(d->output_event, d->output_stream), "Copying a picture from the GPU")
-              && d->check(cu.cuEventSynchronize(d->output_event), "Copying a picture from the GPU");
+              && d->wait_for_output("Copying a picture from the GPU");
     return ok ? 0 : NVF_ERROR;
 }
 
@@ -1252,8 +1279,7 @@ NVF_API int nvf_copy_luma(void *handle, int slot, unsigned long long dst, long l
     copy.WidthInBytes = copy.srcPitch;
     copy.Height = d->out_h;
     bool ok = d->check(cu.cuMemcpy2DAsync(&copy, d->output_stream), "Copying a picture on the GPU")
-              && d->check(cu.cuEventRecord(d->output_event, d->output_stream), "Copying a picture on the GPU")
-              && d->check(cu.cuEventSynchronize(d->output_event), "Copying a picture on the GPU");
+              && d->wait_for_output("Copying a picture on the GPU");
     return ok ? 0 : NVF_ERROR;
 }
 
@@ -1303,8 +1329,7 @@ NVF_API int nvf_copy_planes(void *handle, int slot, const unsigned long long *ad
         }
         src += widths[plane] * sample * heights[plane];
     }
-    ok = ok && d->check(cu.cuEventRecord(d->output_event, d->output_stream), "Copying a picture on the GPU")
-         && d->check(cu.cuEventSynchronize(d->output_event), "Copying a picture on the GPU");
+    ok = ok && d->wait_for_output("Copying a picture on the GPU");
     return ok ? 0 : NVF_ERROR;
 }
 
@@ -1337,8 +1362,7 @@ NVF_API int nvf_download_planes(void *handle, int slot, void *const *planes, con
         }
         src += widths[plane] * sample * heights[plane];
     }
-    ok = ok && d->check(cu.cuEventRecord(d->output_event, d->output_stream), "Copying a picture from the GPU")
-         && d->check(cu.cuEventSynchronize(d->output_event), "Copying a picture from the GPU");
+    ok = ok && d->wait_for_output("Copying a picture from the GPU");
     return ok ? 0 : NVF_ERROR;
 }
 

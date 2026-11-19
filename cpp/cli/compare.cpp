@@ -50,6 +50,7 @@
 #include "vml/metric_cache.h"
 #include "vml/metrics.h"
 #include "vml/model_select.h"
+#include "vml/number_format.h"
 #include "vml/platform/console.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
@@ -784,23 +785,8 @@ void run(const RunEnvironment& environment, const std::vector<TestVideo*>& targe
             return run_perceptual_task(request, keys, together, hooks, token);
         },
         gpu_metrics_together, environment.cores, cancel);
-    // Each test stream whose scores were just saved, for a remux of it to
-    // keep them (record_test_stream): read after the run, which it would
-    // hold up, one at a time.
-    std::set<std::filesystem::path> recorded;
-    for (const TestVideo* target : targets) {
-        if (cancel.cancelled()) {
-            break;
-        }
-        if (target->save_scores && target->result && recorded.insert(target->path).second) {
-            try {
-                record_test_stream(cache_folder, target->path, cancel);
-            } catch (const std::exception&) {
-                // a record only: the scores are saved
-            }
-        }
-    }
 }
+
 
 // Adds the job that calculates what `video` asks for, less what is saved
 // under `cache_folder` (when `use_saved`); with everything saved, takes the
@@ -840,6 +826,9 @@ std::optional<std::string> queue(TestVideo& video, const VideoInfo& source, Vmaf
             // file's.
             saved->source_info.take_bit_rate(source);
             saved->distorted_info.take_bit_rate(*video.info);
+            // Saved by an older version: its files recorded now, so that it
+            // is found when they move.
+            record_saved_files(cache_folder, source.path, video.path, video.request.recipe);
         }
     }
     // The saved scores the run keeps, by the window's rule.
@@ -1460,6 +1449,52 @@ struct Comparison {
     std::string error;  // why it is not compared (--batch: the others still are)
 };
 
+// With --test-remuxes on (or Settings'), each test video calculated and
+// saved, its stream read once more after the results are written, for a
+// remux of it to keep its scores (record_test_stream): said first, as it
+// takes as long as reading the file, and stopped by Ctrl+C. So is each one
+// whose saved scores were found without a stream recorded (saved by an older
+// version: test_stream_wanted).
+void record_test_streams(const std::vector<std::unique_ptr<Comparison>>& comparisons,
+                         const std::filesystem::path& cache_folder, Progress& progress, const CancelToken& cancel) {
+    std::vector<const TestVideo*> recorded;
+    std::set<std::filesystem::path> paths;
+    for (const std::unique_ptr<Comparison>& comparison : comparisons) {
+        if (comparison->planner) {
+            for (const TestVideo& video : comparison->planner->videos) {
+                const bool calculated = video.save_scores && video.result && !video.from_cache;
+                const bool found_without_one = video.result && video.from_cache &&
+                                               test_stream_wanted(cache_folder, video.path);
+                if ((calculated || found_without_one) && paths.insert(video.path).second) {
+                    recorded.push_back(&video);
+                }
+            }
+        }
+    }
+    if (recorded.empty()) {
+        return;
+    }
+    progress.message("Reading the stream of each test video calculated, or scored by an older version, so "
+                     "that a remux of it keeps its saved scores (--test-remuxes off skips this; Ctrl+C stops it):");
+    for (const TestVideo* video : recorded) {
+        if (cancel.cancelled()) {
+            return;
+        }
+        const auto started = std::chrono::steady_clock::now();
+        bool read = false;
+        try {
+            read = record_test_stream(cache_folder, video->path, cancel);
+        } catch (const std::exception&) {
+            // a record only: the scores are saved
+        }
+        const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+        progress.message("  " + platform::path_text(video->path.filename()) + ": " +
+                         (cancel.cancelled() ? std::string("stopped")
+                          : read             ? format_fixed(seconds, 1) + " s"
+                                             : std::string("recorded before")));
+    }
+}
+
 using Comparisons = std::vector<std::unique_ptr<Comparison>>;
 
 // Every comparison's reference and test videos, read ahead on several
@@ -2015,7 +2050,12 @@ int compare(const CompareArguments& given) {
     // A remuxed or moved reference, and a remuxed test video, keep their
     // saved scores (file_fingerprint.h).
     set_video_fingerprinter(fingerprinter_using(tools.ffmpeg.path, tools.ffprobe.path));
-    set_stream_fingerprinter(stream_fingerprinter_using(tools.ffmpeg.path, tools.ffprobe.path));
+    // A remuxed test video, with --test-remuxes on (or Settings'): read
+    // nothing of test streams otherwise.
+    const bool test_remuxes =
+        arguments.test_remuxes ? *arguments.test_remuxes == "on" : settings.recognise_test_remuxes;
+    set_stream_fingerprinter(test_remuxes ? stream_fingerprinter_using(tools.ffmpeg.path, tools.ffprobe.path)
+                                          : StreamFingerprinter());
     std::vector<CvvdpDisplayChoice> displays;
     try {
         displays = cvvdp_displays(arguments, settings);
@@ -2068,10 +2108,20 @@ int compare(const CompareArguments& given) {
     VideoReads reads(comparisons, arguments, settings, tools);  // all started now, taken in order below
     const std::vector<std::future<void>> gpu_checks = start_gpu_checks(arguments, settings, asked, tools.ffmpeg.path);
 
-    for (std::size_t index = 0; index < comparisons.size(); ++index) {
-        if (const std::optional<int> wrong = plan_comparison(*comparisons[index], index, reads, arguments, settings,
-                                                             tools, displays, asked, cache_folder, *progress)) {
-            return *wrong;
+    {
+        // The saved scores' lookups may read a test video's whole stream to
+        // tell a remux of a saved encode (said first): a run saved by it
+        // takes longer than the reading.
+        const StreamReads whole_streams(cancel, true, [&progress](const std::filesystem::path& file) {
+            progress->message("Checking whether " + platform::path_text(file.filename()) +
+                              " is a remux of a test video already scored: reading its stream...");
+        });
+        for (std::size_t index = 0; index < comparisons.size(); ++index) {
+            if (const std::optional<int> wrong = plan_comparison(*comparisons[index], index, reads, arguments,
+                                                                 settings, tools, displays, asked, cache_folder,
+                                                                 *progress)) {
+                return *wrong;
+            }
         }
     }
     for (const std::string& note : unused_argument_notes(comparisons)) {
@@ -2176,6 +2226,9 @@ int compare(const CompareArguments& given) {
                      1,
                      this_machine(tools.ffmpeg.path, format_version(tools.ffmpeg.version))};
     const bool written = write_results(arguments, comparisons, cancelled, record, fields, *progress);
+    if (test_remuxes && !cancelled) {
+        record_test_streams(comparisons, cache_folder, *progress, cancel);  // after the results: nothing waits
+    }
     const int exit_code = cancelled ? exit_cancelled : every_ok && written ? exit_ok : exit_failed;
     app_log::Logger("vml.cli").info("Command line finished: exit code " + std::to_string(exit_code));
     return exit_code;

@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <functional>
+#include <utility>
 #include <iterator>
 #include <map>
 #include <mutex>
@@ -20,6 +22,7 @@
 #include "metric_cache_parts.h"
 #include "vml/app_log.h"
 #include "vml/append.h"
+#include "vml/bitrate_store.h"
 #include "vml/build_info.h"
 #include "vml/cancel.h"
 #include "vml/colour.h"
@@ -31,6 +34,7 @@
 #include "vml/hardware_decoding.h"
 #include "vml/model_select.h"
 #include "vml/npz.h"
+#include "vml/number_format.h"
 #include "vml/platform/system.h"
 #include "vml/temp_files.h"
 #include "vml/python_json.h"
@@ -1160,13 +1164,23 @@ namespace {
 // What the saved scores know of files, kept for the process: their sampled
 // hashes, video fingerprints and stream fingerprints by path identity (each
 // read once), and each base's comparisons as their identity.json and
-// context.json record them (read again after a comparison is saved).
+// context.json record them (each read again when either file changes:
+// another process, the command line or another window, saves comparisons
+// too).
 struct RecordedComparison {
     std::filesystem::path folder;
     nlohmann::json recipe;
     std::string source_path, source_sampled, source_video;
     std::string distorted_path, distorted_sampled;
     std::string distorted_rate, distorted_head, distorted_stream;
+};
+
+// A comparison folder as last read: its two files' times, and what they
+// recorded (nothing where either was missing or unreadable).
+struct ReadComparison {
+    std::filesystem::file_time_type identity_time;
+    std::filesystem::file_time_type context_time;
+    std::optional<RecordedComparison> recorded;
 };
 
 struct KnownFiles {
@@ -1176,7 +1190,8 @@ struct KnownFiles {
     std::map<std::string, std::optional<std::string>> sampled;
     std::map<std::string, std::optional<std::string>> video;
     std::map<std::pair<std::string, int>, std::optional<std::string>> stream;
-    std::map<std::filesystem::path, std::vector<RecordedComparison>> recorded;
+    // By base, then by folder.
+    std::map<std::filesystem::path, std::map<std::filesystem::path, ReadComparison>> recorded;
 };
 
 KnownFiles& known_files() {
@@ -1211,10 +1226,10 @@ std::optional<std::string> video_of(const std::filesystem::path& file) {
         // One recorded for this file before (another comparison of the same
         // reference): no decoding.
         for (const auto& [base, comparisons] : known.recorded) {
-            for (const RecordedComparison& recorded : comparisons) {
-                if (recorded.source_path == identity && !recorded.source_video.empty()) {
-                    known.video[identity] = recorded.source_video;
-                    return recorded.source_video;
+            for (const auto& [folder, read] : comparisons) {
+                if (read.recorded && read.recorded->source_path == identity && !read.recorded->source_video.empty()) {
+                    known.video[identity] = read.recorded->source_video;
+                    return read.recorded->source_video;
                 }
             }
         }
@@ -1233,14 +1248,21 @@ std::optional<std::string> video_of(const std::filesystem::path& file) {
 // `head_packets` packets, a cheap first check, or all of them.
 constexpr int head_packets = 100;
 
-// What stops the stream reads of the lookups on this thread
-// (StreamReadCancel); none stops them where none is set.
-thread_local std::optional<CancelToken> lookup_cancel;
+// How the lookups on this thread read streams (StreamReads): what stops
+// them (none: nothing), whether they may read whole streams, and whom to
+// tell first; and whether one would have read a whole stream.
+struct ThreadStreamReads {
+    std::optional<CancelToken> cancel;
+    bool whole = false;
+    std::function<void(const std::filesystem::path&)> announce;
+    bool whole_wanted = false;
+};
+thread_local ThreadStreamReads lookup_reads;
 
 // The stream fingerprint of `file`'s first `packets` packets (0: all), read
 // once (a read cancelled is not kept). Not `read`: only one read before.
 std::optional<std::string> stream_of(const std::filesystem::path& file, int packets, bool read = true,
-                                     const CancelToken& cancel = lookup_cancel.value_or(CancelToken())) {
+                                     const CancelToken& cancel = lookup_reads.cancel.value_or(CancelToken())) {
     const std::pair<std::string, int> key{file_identity(file), packets};
     KnownFiles& known = known_files();
     StreamFingerprinter fingerprinter;
@@ -1280,32 +1302,62 @@ std::string text_at(const nlohmann::json& data, const char* side, const char* fi
     return value.is_string() ? value.get<std::string>() : std::string();
 }
 
-// Every comparison under `base` with an identity.json, read once.
+// Every comparison under `base` with an identity.json, as its files are
+// now: the folder is listed each time, and a comparison read again only
+// where its identity.json or context.json changed since it was last read
+// (saved again, or saved by another process meanwhile).
 std::vector<RecordedComparison> recorded_comparisons(const std::filesystem::path& base) {
     KnownFiles& known = known_files();
+    std::map<std::filesystem::path, ReadComparison> before;
     {
         const std::lock_guard lock(known.mutex);
         if (const auto found = known.recorded.find(base); found != known.recorded.end()) {
-            return found->second;
+            before = found->second;
         }
     }
-    std::vector<RecordedComparison> list;
+    std::map<std::filesystem::path, ReadComparison> now;
     std::error_code error;
     std::filesystem::directory_iterator folder(base / format_folder, error);
     for (; !error && folder != std::filesystem::directory_iterator(); folder.increment(error)) {
-        const std::optional<nlohmann::json> identity = read_json(folder->path() / "identity.json");
-        const std::optional<nlohmann::json> context = read_json(folder->path() / "context.json");
-        if (!identity || !identity->is_object() || !context || !context->is_object()) {
+        std::error_code missing;
+        const auto identity_time = std::filesystem::last_write_time(folder->path() / "identity.json", missing);
+        if (missing) {
+            continue;  // no identity.json (saved before it was recorded): nothing to know it by
+        }
+        const auto context_time = std::filesystem::last_write_time(folder->path() / "context.json", missing);
+        if (missing) {
             continue;
         }
-        list.push_back({folder->path(), context->value("recipe", nlohmann::json()),
-                        text_at(*identity, "source", "path"), text_at(*identity, "source", "sampled"),
-                        text_at(*identity, "source", "video"), text_at(*identity, "distorted", "path"),
-                        text_at(*identity, "distorted", "sampled"), text_at(*identity, "distorted", "rate"),
-                        text_at(*identity, "distorted", "stream_head"), text_at(*identity, "distorted", "stream")});
+        if (const auto known_read = before.find(folder->path());
+            known_read != before.end() && known_read->second.identity_time == identity_time &&
+            known_read->second.context_time == context_time) {
+            now.insert(*known_read);
+            continue;
+        }
+        ReadComparison read{identity_time, context_time, std::nullopt};
+        const std::optional<nlohmann::json> identity = read_json(folder->path() / "identity.json");
+        const std::optional<nlohmann::json> context = read_json(folder->path() / "context.json");
+        if (identity && identity->is_object() && context && context->is_object()) {
+            read.recorded = RecordedComparison{folder->path(), context->value("recipe", nlohmann::json()),
+                                               text_at(*identity, "source", "path"),
+                                               text_at(*identity, "source", "sampled"),
+                                               text_at(*identity, "source", "video"),
+                                               text_at(*identity, "distorted", "path"),
+                                               text_at(*identity, "distorted", "sampled"),
+                                               text_at(*identity, "distorted", "rate"),
+                                               text_at(*identity, "distorted", "stream_head"),
+                                               text_at(*identity, "distorted", "stream")};
+        }
+        now.emplace(folder->path(), std::move(read));
+    }
+    std::vector<RecordedComparison> list;
+    for (const auto& [path, read] : now) {
+        if (read.recorded) {
+            list.push_back(*read.recorded);
+        }
     }
     const std::lock_guard lock(known.mutex);
-    known.recorded[base] = list;
+    known.recorded[base] = std::move(now);
     return list;
 }
 
@@ -1391,7 +1443,36 @@ std::optional<std::filesystem::path> folder_of_same_stream(const std::filesystem
     if (candidates.empty()) {
         return std::nullopt;
     }
-    const std::string stream = stream_of(distorted, 0).value_or("");
+    // The whole stream: as recorded already, or read where this thread's
+    // lookups may (StreamReads), told first.
+    std::optional<std::string> whole = stream_of(distorted, 0, false);
+    if (!whole) {
+        if (!lookup_reads.whole) {
+            lookup_reads.whole_wanted = true;
+            return std::nullopt;
+        }
+        if (lookup_reads.cancel && lookup_reads.cancel->cancelled()) {
+            return std::nullopt;  // the lookup is over: nothing to read, nor to say
+        }
+        if (lookup_reads.announce) {
+            lookup_reads.announce(distorted);
+        }
+        const auto started = std::chrono::steady_clock::now();
+        whole = stream_of(distorted, 0);
+        const std::string stream = whole.value_or("");
+        const auto same = std::find_if(candidates.begin(), candidates.end(), [&stream](const RecordedComparison& c) {
+            return !stream.empty() && c.distorted_stream == stream;
+        });
+        app_log::write(app_log::Level::info, "vml.metric_cache",
+                       "Read " + platform::path_text(distorted.filename()) +
+                           "'s whole stream to tell a remux of a scored test video: " +
+                           format_fixed(std::chrono::duration<double>(std::chrono::steady_clock::now() - started)
+                                            .count(),
+                                        1) +
+                           " s, " + (stream.empty() ? "not read" : same != candidates.end() ? "a remux" : "another encode"));
+        return same == candidates.end() ? std::nullopt : std::optional(same->folder);
+    }
+    const std::string stream = whole.value_or("");
     for (const RecordedComparison& candidate : candidates) {
         if (!stream.empty() && candidate.distorted_stream == stream) {
             return candidate.folder;
@@ -1448,28 +1529,60 @@ void set_stream_fingerprinter(StreamFingerprinter fingerprinter) {
     known.stream_fingerprinter = std::move(fingerprinter);
 }
 
-StreamReadCancel::StreamReadCancel(const CancelToken& cancel) : before_(lookup_cancel) {
-    lookup_cancel = cancel;
+StreamReads::StreamReads(const CancelToken& cancel, bool whole,
+                         std::function<void(const std::filesystem::path&)> announce) {
+    lookup_reads.cancel = cancel;
+    lookup_reads.whole = whole;
+    lookup_reads.announce = std::move(announce);
 }
 
-StreamReadCancel::~StreamReadCancel() {
-    lookup_cancel = before_;
+StreamReads::~StreamReads() {
+    lookup_reads.cancel.reset();
+    lookup_reads.whole = false;
+    lookup_reads.announce = nullptr;
 }
 
-bool record_test_stream(const std::filesystem::path& base, const std::filesystem::path& distorted,
-                        const CancelToken& cancel) {
-    const std::string path = file_identity(distorted);
+bool take_whole_stream_wanted() {
+    return std::exchange(lookup_reads.whole_wanted, false);
+}
+
+namespace {
+
+// The folders of the comparisons saved for the file of identity `path` with
+// no test stream recorded.
+std::vector<std::filesystem::path> folders_without_stream(const std::filesystem::path& base,
+                                                          const std::string& path) {
     std::vector<std::filesystem::path> folders;
     for (const RecordedComparison& recorded : recorded_comparisons(base)) {
         if (recorded.distorted_path == path && recorded.distorted_stream.empty()) {
             folders.push_back(recorded.folder);
         }
     }
+    return folders;
+}
+
+}  // namespace
+
+bool test_stream_wanted(const std::filesystem::path& base, const std::filesystem::path& distorted) {
+    return !folders_without_stream(base, file_identity(distorted)).empty();
+}
+
+bool record_test_stream(const std::filesystem::path& base, const std::filesystem::path& distorted,
+                        const CancelToken& cancel) {
+    const std::string path = file_identity(distorted);
+    const std::vector<std::filesystem::path> folders = folders_without_stream(base, path);
     if (folders.empty()) {
         return false;  // nothing saved for it, or its stream recorded already: nothing read
     }
+    const auto started = std::chrono::steady_clock::now();
     const std::optional<std::string> head = stream_of(distorted, head_packets, true, cancel);
     const std::optional<std::string> stream = head ? stream_of(distorted, 0, true, cancel) : std::nullopt;
+    app_log::write(app_log::Level::info, "vml.metric_cache",
+                   "Read " + platform::path_text(distorted.filename()) + "'s stream for a remux of it to keep its "
+                       "saved scores: " +
+                       format_fixed(std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count(),
+                                    1) +
+                       " s" + (cancel.cancelled() ? ", stopped" : !stream ? ", not read" : ""));
     if (!head || !stream || file_identity(distorted) != path) {
         return false;  // not read, or the file changed meanwhile
     }
@@ -1488,9 +1601,7 @@ bool record_test_stream(const std::filesystem::path& base, const std::filesystem
             // a record only: the scores stay found by the file's path and sampled hash
         }
     }
-    KnownFiles& known = known_files();
-    const std::lock_guard lock(known.mutex);
-    known.recorded.erase(base);
+    // Read again at the next lookup (recorded_comparisons: its time changed).
     return recorded_any;
 }
 
@@ -1535,10 +1646,7 @@ void cache_parts::record_identity(const std::filesystem::path& directory, const 
     } catch (const std::exception&) {
         return;  // a record only: the scores are saved without it
     }
-    // Read again at the next lookup, this one with it.
-    KnownFiles& known = known_files();
-    const std::lock_guard lock(known.mutex);
-    known.recorded.erase(directory.parent_path().parent_path());
+    // Read again at the next lookup (recorded_comparisons: its time changed).
 }
 
 std::filesystem::path recipe_directory(const std::filesystem::path& base, const std::filesystem::path& source,
@@ -1802,6 +1910,14 @@ CacheSummary cache_summary(const std::filesystem::path& base) {
             ++summary.comparisons;
         }
     }
+    // The bitrate saved beside them (bitrate_store.h) is saved results too.
+    std::filesystem::directory_iterator bitrate(bitrate_store_folder(base), error);
+    for (; !error && bitrate != std::filesystem::directory_iterator(); bitrate.increment(error)) {
+        std::error_code ignored;
+        if (const std::uintmax_t size = bitrate->file_size(ignored); !ignored) {
+            summary.bytes += size;
+        }
+    }
     return summary;
 }
 
@@ -1824,6 +1940,11 @@ bool reference_where_saved(const std::filesystem::path& folder) {
 ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_without_reference) {
     const std::filesystem::path root = base / format_folder;
     ClearedResults cleared;
+    // The bitrate saved beside the scores (bitrate_store.h), all of it: it is
+    // read again from a file still there, and none of it is listed where
+    // what is kept can be deleted later (the Saved results tab).
+    std::error_code bitrate_error;
+    std::filesystem::remove_all(bitrate_store_folder(base), bitrate_error);
     std::error_code error;
     if (!std::filesystem::exists(root, error)) {
         return cleared;
@@ -1855,6 +1976,12 @@ ClearedResults clear_saved_results(const std::filesystem::path& base, bool keep_
     }
     cleared.removed = all ? static_cast<int>(deleted.size()) : 0;
     return cleared;
+}
+
+std::string saved_content_hash(const std::filesystem::path& folder, bool reference) {
+    const std::optional<nlohmann::json> identity = read_json(folder / "identity.json");
+    return identity && identity->is_object() ? text_at(*identity, reference ? "source" : "distorted", "sampled")
+                                             : std::string();
 }
 
 }  // namespace vml

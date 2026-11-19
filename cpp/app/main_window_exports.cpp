@@ -20,7 +20,9 @@
 #include "i18n.h"
 #include "theme.h"
 #include "vml/app_log.h"
+#include "vml/bitrate_store.h"
 #include "vml/export_csv.h"
+#include "vml/metric_cache.h"
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 #include "vml/results_summary.h"
@@ -403,9 +405,31 @@ void MainWindow::export_saved_results(SavedResultsPanel::Export kind, const std:
         const QString path = dialogs_.save_file(app::tr("Export graphs"),
                                                 file_safe(name + QStringLiteral(" - graphs")) + ".zip",
                                                 app::tr("Zip archive (*.zip)"));
-        if (!path.isEmpty()) {
-            queue_bundle({videos, first_reference, path_of(path), {}, true, false});
+        if (path.isEmpty()) {
+            return;
         }
+        // A file no longer there has its bitrate as it was saved, if it was.
+        const std::filesystem::path base = cache_folder();
+        const auto add_saved_bitrate = [&](const std::filesystem::path& file, const std::filesystem::path& folder,
+                                           bool reference) {
+            std::error_code error;
+            const std::optional<BitrateState> state = bitrate_panel_->state_of(file);
+            if (std::filesystem::exists(file, error) || state == BitrateState::complete ||
+                state == BitrateState::queued || state == BitrateState::reading ||
+                state == BitrateState::packets_read) {
+                return;
+            }
+            if (const auto saved = load_saved_bitrate(base, saved_content_hash(folder, reference), file)) {
+                bitrate_panel_->add_saved(*saved);
+            }
+        };
+        add_saved_bitrate(first_reference, results.front().folder, true);
+        for (const LoadedSavedResult& saved : results) {
+            if (!saved.result->resample_target) {
+                add_saved_bitrate(saved.result->distorted, saved.folder, false);
+            }
+        }
+        queue_bundle({videos, first_reference, path_of(path), {}, true, false});
         return;
     }
     case SavedResultsPanel::Export::segments: {
