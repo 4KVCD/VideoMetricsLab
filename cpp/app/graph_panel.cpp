@@ -1048,6 +1048,79 @@ bool MetricPage::show_frame(int frame, const std::map<int, SeriesEntry>& entries
     return !found.empty();
 }
 
+namespace {
+
+// Half a millisecond: a time typed to the millisecond is a frame's when it is
+// this near it (as time_text rounds it), and the frames of rates under 1000
+// fps are further apart.
+constexpr double half_a_millisecond = 0.0005 + 1e-9;
+
+// A line's points in time: each frame's time on a per-frame line, each
+// second's start on a per-second one.
+std::span<const double> point_times(const MetricCurve& curve) {
+    return curve.starts.empty() ? curve.times : std::span<const double>(curve.starts);
+}
+
+}  // namespace
+
+std::optional<double> MetricPage::time_of_frame(int frame) const {
+    for (const auto& [id, curve] : curves_) {
+        const std::span<const double> times = point_times(curve);
+        if (!curve.visible || curve.frames.empty() || times.size() != curve.frames.size()) {
+            continue;
+        }
+        // Between two points, as far between their times as between their frames.
+        const auto after = std::upper_bound(curve.frames.begin(), curve.frames.end(), frame) - curve.frames.begin();
+        const auto i = static_cast<std::size_t>(std::max<std::ptrdiff_t>(after - 1, 0));
+        if (i + 1 >= curve.frames.size()) {
+            // Past the last point: at the line's own pace.
+            const double per_frame = curve.frames.size() > 1 && curve.frames.back() > curve.frames.front()
+                                         ? (times.back() - times.front()) /
+                                               static_cast<double>(curve.frames.back() - curve.frames.front())
+                                         : 0.0;
+            return times[i] + per_frame * static_cast<double>(frame - curve.frames[i]);
+        }
+        const double span = static_cast<double>(curve.frames[i + 1] - curve.frames[i]);
+        return times[i] + (times[i + 1] - times[i]) * static_cast<double>(frame - curve.frames[i]) / span;
+    }
+    return std::nullopt;
+}
+
+std::optional<int> MetricPage::frame_at_time(double seconds, bool at_or_after) const {
+    for (const auto& [id, curve] : curves_) {
+        if (!curve.visible || curve.frames.empty()) {
+            continue;
+        }
+        if (!curve.starts.empty()) {
+            // A per-second line: its frames are not each known; the frame
+            // that far into its second (frame_at), stepped to the side asked.
+            const std::optional<int> frame = frame_at(seconds);
+            if (!frame) {
+                return std::nullopt;
+            }
+            const std::optional<double> time = time_of_frame(*frame);
+            if (time && at_or_after && *time < seconds - half_a_millisecond) {
+                return *frame + 1;
+            }
+            if (time && !at_or_after && *time > seconds + half_a_millisecond) {
+                return *frame > 0 ? std::optional(*frame - 1) : std::nullopt;
+            }
+            return frame;
+        }
+        const std::span<const double> times = curve.times;
+        if (at_or_after) {
+            const auto found = std::lower_bound(times.begin(), times.end(), seconds - half_a_millisecond);
+            return found == times.end() ? std::nullopt
+                                        : std::optional(curve.frames[static_cast<std::size_t>(found - times.begin())]);
+        }
+        const auto found = std::upper_bound(times.begin(), times.end(), seconds + half_a_millisecond);
+        return found == times.begin()
+                   ? std::nullopt
+                   : std::optional(curve.frames[static_cast<std::size_t>(found - times.begin()) - 1]);
+    }
+    return std::nullopt;
+}
+
 std::pair<int, int> MetricPage::frame_range() const {
     std::optional<int> lo;
     std::optional<int> hi;
@@ -1071,6 +1144,16 @@ GraphPanel::GraphPanel(VideoColors* colors, QWidget* parent) : QWidget(parent), 
     frame_controls_ = new FrameControls;
     connect(frame_controls_, &FrameControls::frame_requested, this, [this](int frame) { on_frame_requested(frame); });
     connect(frame_controls_, &FrameControls::range_changed, this, [this](bool finished) { on_range_changed(finished); });
+    // Times on the page shown: its first shown line's.
+    frame_controls_->set_timeline(FrameControls::Timeline{
+        [this](int frame) -> std::optional<double> {
+            const auto page = pages_.find(std::string(current_metric().key));
+            return page == pages_.end() ? std::nullopt : page->second->time_of_frame(frame);
+        },
+        [this](double seconds, bool at_or_after) -> std::optional<int> {
+            const auto page = pages_.find(std::string(current_metric().key));
+            return page == pages_.end() ? std::nullopt : page->second->frame_at_time(seconds, at_or_after);
+        }});
     // Exports of a feature-length run take seconds each: written off the
     // window's thread, so that the window does not freeze.
     file_writes_ = new FileWrites(this);

@@ -147,6 +147,13 @@ public:
     // across the chart: its nearest point's, or within a per-second line's
     // second, the frame that far into it. Nothing when no line is shown.
     std::optional<int> frame_at(double time) const;
+    // The first shown line's frames in time, for the time boxes
+    // (FrameControls::Timeline): a frame's time, and the frame at a time,
+    // the first at it or after or the last at it or before, within half a
+    // millisecond. A per-second line (CVVDP) places a frame between its
+    // seconds' first frames.
+    std::optional<double> time_of_frame(int frame) const;
+    std::optional<int> frame_at_time(double seconds, bool at_or_after) const;
 
 private:
     friend class GraphPanelTest;  // the graph's tests (tests/app)

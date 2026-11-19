@@ -1,16 +1,23 @@
 // The frame controls under a graph of frames, shared by Metric Graphs and the
 // Bitrate Viewer: Go to frame, and a frame range (issue #17) in two boxes of
 // its own, "Highlight range from frame: [ ] to frame: [ ]", with Clear range.
+// Where the tab gives its timeline (set_timeline: Metric Graphs), the same
+// in times under them, to the millisecond: "Go to time: [ ]" and "Highlight
+// range from time: [ ] to time: [ ]", kept in step with the frames.
 //
 // The widget keeps the range and its boxes; the tab it is in turns frames
 // into times on its own graph, shades the range and gives its statistics.
 #pragma once
 
+#include <QString>
 #include <QWidget>
 
+#include <functional>
 #include <optional>
 #include <utility>
+#include <vector>
 
+class QLineEdit;
 class QPushButton;
 class QSpinBox;
 
@@ -21,6 +28,24 @@ class FrameControls : public QWidget {
 
 public:
     explicit FrameControls(QWidget* parent = nullptr);
+
+    // A graph's frames in time, for the time boxes: a frame's time, and the
+    // frame at a time, the first at it or after (`at_or_after`) or the last
+    // at it or before. A time typed to the millisecond is a frame's when it
+    // is within half a millisecond of it, as its time is shown.
+    struct Timeline {
+        std::function<std::optional<double>(int frame)> time_of;
+        std::function<std::optional<int>(double seconds, bool at_or_after)> frame_at;
+    };
+    // Shows the time boxes, using `timeline` from then on.
+    void set_timeline(Timeline timeline);
+
+    // A time typed in a time box, in seconds: [[h:]m:]s[.fff] ("1:02.5",
+    // "0:01:02.500", "62.5"; a comma for the point too); nothing for other
+    // text, or none typed.
+    static std::optional<double> parse_time(const QString& text);
+    // A time as the boxes show it, to the millisecond: 0:01:02.500.
+    static QString time_text(double seconds);
 
     // The frames chosen, in order (the boxes' two ends either way round), or
     // nothing until both boxes hold a frame: the whole video.
@@ -42,6 +67,11 @@ public:
     QSpinBox* range_start_spin = nullptr;
     QSpinBox* range_end_spin = nullptr;
     QPushButton* clear_range_button = nullptr;
+    // The time boxes, hidden until set_timeline.
+    QLineEdit* time_edit = nullptr;
+    QPushButton* time_go_button = nullptr;
+    QLineEdit* range_start_time = nullptr;
+    QLineEdit* range_end_time = nullptr;
 
 signals:
     // Go to frame: the frame asked for.
@@ -61,12 +91,25 @@ private:
     enum class BoxBounds { exact, keep_wider };
     // The range boxes bounded by the graph's frames and the range's ends.
     void refresh_range_boxes(BoxBounds bounds = BoxBounds::exact);
+    // Go to time: the frame shown at the time typed (the last at it or
+    // before, else the first after it).
+    void on_time_requested();
+    // A range time box edited: the frames of its two times, from the first
+    // at the first time or after to the last at the second or before, once
+    // both hold a time.
+    void on_range_time_edited();
+    // The time boxes showing the range's frames' times, and Go to time the
+    // frame's, as the frames are chosen another way.
+    void refresh_range_times();
+    void show_frame_time(int frame);
 
     // Nothing (no range, the whole video) until both boxes hold a frame.
     // Each box's lowest value, shown as "—", is no end.
     std::optional<std::pair<int, int>> range_;
     int lo_ = 0;
     int hi_ = 0;
+    std::optional<Timeline> timeline_;
+    std::vector<QWidget*> time_row_;  // the time boxes and their labels
 };
 
 }  // namespace vml::app
