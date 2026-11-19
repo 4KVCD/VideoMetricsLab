@@ -127,7 +127,7 @@ WorstFramesPanel::WorstFramesPanel(QWidget* parent) : QWidget(parent) {
         }
     });
     buttons->addWidget(open_button_);
-    segments_button_ = new QPushButton(app::tr("Weak segments..."));
+    segments_button_ = new QPushButton(app::tr("Weak segments"));
     connect(segments_button_, &QPushButton::clicked, this, [this] { emit segments_requested(); });
     buttons->addWidget(segments_button_);
     buttons->addStretch(1);
@@ -323,7 +323,7 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
         show_saved_state();
     });
     save_row->addWidget(save_button_);
-    save_new_button_ = new QPushButton(app::tr("Save as new profile..."));
+    save_new_button_ = new QPushButton(app::tr("Save as new profile"));
     connect(save_new_button_, &QPushButton::clicked, this, [this] {
         const std::optional<QString> name =
             dialogs_.ask_text(app::tr("New weak segment profile"), app::tr("Profile name:"), QString());
@@ -366,9 +366,9 @@ WeakSegmentsDialog::WeakSegmentsDialog(WeakFramesVideo video, const MetricDefini
         QPushButton* button = buttons->addButton(text, QDialogButtonBox::ActionRole);
         connect(button, &QPushButton::clicked, this, [this, kind] { export_segments(kind); });
     };
-    add_export(app::tr("Export JSON..."), ExportKind::json);
-    add_export(app::tr("Export CSV..."), ExportKind::csv);
-    QPushButton* report = buttons->addButton(app::tr("Export all videos..."), QDialogButtonBox::ActionRole);
+    add_export(app::tr("Export JSON"), ExportKind::json);
+    add_export(app::tr("Export CSV"), ExportKind::csv);
+    QPushButton* report = buttons->addButton(app::tr("Export all videos"), QDialogButtonBox::ActionRole);
     report->setToolTip(app::tr("Every scored test video's weak segments by these conditions, in one JSON or CSV file."));
     connect(report, &QPushButton::clicked, this, [this] { emit report_requested(editor_->rules()); });
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);

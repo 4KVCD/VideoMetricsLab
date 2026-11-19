@@ -1263,13 +1263,13 @@ QWidget* GraphPanel::build_action_bar() {
     // The buttons under the graph: add saved results, export, go to a frame.
     auto* bar = new QWidget;
     auto* layout = new QHBoxLayout(bar);
-    auto* add_button = new QPushButton(app::tr("Add analysis results..."));
+    auto* add_button = new QPushButton(app::tr("Add analysis results"));
     connect(add_button, &QPushButton::clicked, this, [this] { on_add_saved_run(); });
     layout->addWidget(add_button);
     auto* png_button = new QPushButton(app::tr("Export graph as PNG"));
     connect(png_button, &QPushButton::clicked, this, [this] { on_export_png(); });
     layout->addWidget(png_button);
-    export_csv_button_ = new QPushButton(app::tr("Export CSV..."));
+    export_csv_button_ = new QPushButton(app::tr("Export CSV"));
     connect(export_csv_button_, &QPushButton::clicked, this, [this] { on_export_csv(); });
     layout->addWidget(export_csv_button_);
     layout->addSpacing(16);

@@ -488,7 +488,7 @@ void MainWindow::build_ui() {
                                  "border: 1px solid {banner_border};");
     ffmpeg_banner_->setWordWrap(true);
     ffmpeg_banner_->setVisible(false);
-    locate_ffmpeg_button_ = new QPushButton(app::with_program_names(app::tr("Locate ffmpeg.exe...")));
+    locate_ffmpeg_button_ = new QPushButton(app::with_program_names(app::tr("Locate ffmpeg.exe")));
     connect(locate_ffmpeg_button_, &QPushButton::clicked, this, [this] { on_locate_ffmpeg(); });
     locate_ffmpeg_button_->setVisible(false);
     banner_row->addWidget(ffmpeg_banner_, 1);
@@ -663,10 +663,10 @@ void MainWindow::add_reference_row(QVBoxLayout* layout) {
     // A path can be pasted or typed in (Enter, or leaving the box, reads it),
     // and a file dropped on it from a file manager.
     source_edit_ = new QLineEdit;
-    source_edit_->setPlaceholderText(app::tr("Drop a video here, paste its path, or click Browse..."));
+    source_edit_->setPlaceholderText(app::tr("Drop a video here, paste its path, or click Browse"));
     connect(source_edit_, &QLineEdit::editingFinished, this, [this] { on_source_path_entered(); });
     source_edit_->installEventFilter(this);
-    source_browse_button_ = new QPushButton(app::tr("Browse..."));
+    source_browse_button_ = new QPushButton(app::tr("Browse"));
     connect(source_browse_button_, &QPushButton::clicked, this, [this] { on_browse_source(); });
     source_row->addWidget(source_edit_, 1);
     source_row->addWidget(source_browse_button_);
@@ -794,9 +794,9 @@ void MainWindow::build_test_table() {
 // buttons a run freezes.
 std::vector<QWidget*> MainWindow::add_file_buttons(QVBoxLayout* layout) {
     auto* buttons = new QHBoxLayout;
-    auto* add_button = new QPushButton(app::tr("Add files..."));
+    auto* add_button = new QPushButton(app::tr("Add files"));
     connect(add_button, &QPushButton::clicked, this, [this] { on_add_distorted(); });
-    auto* add_resample_button = new QPushButton(app::tr("Add resolution test..."));
+    auto* add_resample_button = new QPushButton(app::tr("Add resolution test"));
     add_resample_button->setToolTip(
         app::tr("Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back "
                 "up -- no separate test file needed."));
@@ -861,17 +861,17 @@ QWidget* MainWindow::build_run_panel() {
     run_row->addWidget(parallel_jobs_check_);
     run_row->addStretch(1);
 
-    load_button_ = new QPushButton(app::tr("Load analysis results..."));
+    load_button_ = new QPushButton(app::tr("Load analysis results"));
     connect(load_button_, &QPushButton::clicked, this, [this] { on_load_saved_run(); });
     // Frozen during a run with the files: a saved run can bring a reference
     // of its own, which would change what the running videos mean.
     file_action_widgets_.push_back(load_button_);
-    save_button_ = new QPushButton(app::tr("Save selected results..."));
+    save_button_ = new QPushButton(app::tr("Save selected results"));
     connect(save_button_, &QPushButton::clicked, this, [this] { on_save_selected(); });
     show_graph_button_ = new QPushButton(app::tr("Open metric graphs"));
     show_graph_button_->setToolTip(app::tr("Opens Metric Graphs with the current results and graph settings."));
     connect(show_graph_button_, &QPushButton::clicked, this, [this] { on_show_graph_clicked(); });
-    export_graphs_button_ = new QPushButton(app::tr("Export all graphs..."));
+    export_graphs_button_ = new QPushButton(app::tr("Export all graphs"));
     export_graphs_button_->setToolTip(app::tr(
         "Saves the graphs of every test video scored against the reference as one .zip file: each video's graph "
         "of every metric, all of them together, and their bitrate with the reference's. The tabs' own graphs are "
@@ -1086,10 +1086,10 @@ bool MainWindow::check_ffmpeg(bool prompt) {
     const QString install;
 #endif
 #ifdef _WIN32
-    const QString click = app::tr("  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe...\" to point at it.");
+    const QString click = app::tr("  Click \"Download FFmpeg\" to get it, or \"Locate ffmpeg.exe\" to point at it.");
     download_ffmpeg_button_->setVisible(true);
 #else
-    const QString click = app::with_program_names(app::tr("  Click \"Locate ffmpeg.exe...\" to point at it."));
+    const QString click = app::with_program_names(app::tr("  Click \"Locate ffmpeg.exe\" to point at it."));
 #endif
     ffmpeg_banner_->setText(problems.join("  ") + install + click);
     ffmpeg_banner_->setVisible(true);
@@ -1107,7 +1107,7 @@ bool MainWindow::check_ffmpeg(bool prompt) {
                                 "project on GitHub), or you can point it at an ffmpeg.exe you already have."),
                     QMessageBox::NoButton, this);
     QPushButton* download = box.addButton(app::tr("Download FFmpeg"), QMessageBox::AcceptRole);
-    QPushButton* locate = box.addButton(app::tr("Locate ffmpeg.exe..."), QMessageBox::ActionRole);
+    QPushButton* locate = box.addButton(app::tr("Locate ffmpeg.exe"), QMessageBox::ActionRole);
     box.addButton(app::tr("Not now"), QMessageBox::RejectRole);
     box.setDefaultButton(download);
     box.exec();
