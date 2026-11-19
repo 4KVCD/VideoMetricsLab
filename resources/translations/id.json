@@ -128,6 +128,7 @@
   "Black bars": "Bilah hitam",
   "Scaling": "Ubah ukuran",
   "Video bitrate": "Bitrate video",
+  "Approx. bitrate": "Perkiraan bitrate",
   "Add files": "Tambah file",
   "Add resolution test": "Tambah uji resolusi",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Menghitung metrik yang dicentang untuk referensi yang diperkecil ke resolusi lebih rendah lalu diperbesar kembali — tanpa perlu file uji terpisah.",

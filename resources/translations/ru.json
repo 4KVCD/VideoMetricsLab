@@ -128,6 +128,7 @@
   "Black bars": "Чёрные полосы",
   "Scaling": "Масштабирование",
   "Video bitrate": "Битрейт видео",
+  "Approx. bitrate": "Примерный битрейт",
   "Add files": "Добавить файлы",
   "Add resolution test": "Добавить тест разрешения",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Вычисляет выбранные метрики для уменьшения эталона до меньшего разрешения и обратного увеличения — отдельный тестовый файл не нужен.",

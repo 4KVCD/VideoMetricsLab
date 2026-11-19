@@ -128,6 +128,7 @@
   "Black bars": "검은 띠",
   "Scaling": "크기 조정",
   "Video bitrate": "영상 비트레이트",
+  "Approx. bitrate": "대략적인 비트레이트",
   "Add files": "파일 추가",
   "Add resolution test": "해상도 테스트 추가",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "참조 영상을 낮은 해상도로 줄였다가 다시 키울 때의 선택한 지표를 계산합니다. 별도의 테스트 파일이 필요 없습니다.",

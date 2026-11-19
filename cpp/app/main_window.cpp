@@ -729,7 +729,7 @@ void MainWindow::build_test_table() {
     };
     distorted_table_->setHorizontalHeaderLabels({
         "", app::tr("File name"), app::tr("Media info"), app::tr("Black bars"), app::tr("Scaling"),
-        app::tr("Video bitrate"), header_of("psnr"), header_of("ssim"), header_of("vmaf"), header_of("xpsnr"),
+        app::tr("Approx. bitrate"), header_of("psnr"), header_of("ssim"), header_of("vmaf"), header_of("xpsnr"),
         header_of("vmaf_neg"), header_of("ssimulacra2"), header_of("butteraugli"), header_of("cvvdp"),
         header_of("vmaf_v1"),
     });

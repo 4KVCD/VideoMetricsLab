@@ -128,6 +128,7 @@
   "Black bars": "الأشرطة السوداء",
   "Scaling": "تغيير الحجم",
   "Video bitrate": "معدل بت الفيديو",
+  "Approx. bitrate": "معدل البت التقريبي",
   "Add files": "إضافة ملفات",
   "Add resolution test": "إضافة اختبار دقة",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "يحسب المقاييس المحددة عند تصغير المرجع إلى دقة أقل ثم تكبيره من جديد — دون حاجة إلى ملف اختبار منفصل.",

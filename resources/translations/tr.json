@@ -128,6 +128,7 @@
   "Black bars": "Siyah bantlar",
   "Scaling": "Ölçekleme",
   "Video bitrate": "Video bit hızı",
+  "Approx. bitrate": "Yaklaşık bit hızı",
   "Add files": "Dosya ekle",
   "Add resolution test": "Çözünürlük testi ekle",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Referansın daha düşük bir çözünürlüğe küçültülüp yeniden büyütülmesi için seçili metrikleri hesaplar; ayrı bir test dosyası gerekmez.",

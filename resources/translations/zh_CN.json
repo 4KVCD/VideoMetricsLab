@@ -128,6 +128,7 @@
   "Black bars": "黑边",
   "Scaling": "缩放",
   "Video bitrate": "视频码率",
+  "Approx. bitrate": "大约码率",
   "Add files": "添加文件",
   "Add resolution test": "添加分辨率测试",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "计算将参考视频缩小到较低分辨率再放大回来后的所选指标——无需单独的测试文件。",

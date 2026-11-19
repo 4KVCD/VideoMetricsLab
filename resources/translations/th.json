@@ -128,6 +128,7 @@
   "Black bars": "แถบดำ",
   "Scaling": "ปรับขนาด",
   "Video bitrate": "บิตเรตวิดีโอ",
+  "Approx. bitrate": "บิตเรตโดยประมาณ",
   "Add files": "เพิ่มไฟล์",
   "Add resolution test": "เพิ่มการทดสอบความละเอียด",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "คำนวณเมตริกที่ทำเครื่องหมาย สำหรับวิดีโออ้างอิงที่ย่อลงเป็นความละเอียดต่ำกว่าแล้วขยายกลับ — ไม่ต้องใช้ไฟล์ทดสอบแยก",

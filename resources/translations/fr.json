@@ -128,6 +128,7 @@
   "Black bars": "Bandes noires",
   "Scaling": "Mise à l'échelle",
   "Video bitrate": "Débit vidéo",
+  "Approx. bitrate": "Débit approx.",
   "Add files": "Ajouter des fichiers",
   "Add resolution test": "Ajouter un test de résolution",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Calcule les métriques sélectionnées pour une réduction de la référence à une résolution inférieure puis son agrandissement ; aucun fichier de test séparé n'est nécessaire.",

@@ -128,6 +128,7 @@
   "Black bars": "黑邊",
   "Scaling": "縮放",
   "Video bitrate": "影片位元速率",
+  "Approx. bitrate": "約略位元速率",
   "Add files": "新增檔案",
   "Add resolution test": "新增解析度測試",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "計算將參考影片縮小到較低解析度再放大回來後的所選指標——不需要另外的測試檔案。",

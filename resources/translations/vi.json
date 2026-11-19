@@ -128,6 +128,7 @@
   "Black bars": "Viền đen",
   "Scaling": "Đổi kích thước",
   "Video bitrate": "Bitrate video",
+  "Approx. bitrate": "Bitrate ước tính",
   "Add files": "Thêm tệp",
   "Add resolution test": "Thêm phép thử độ phân giải",
   "Calculates selected metrics for downscaling the reference to a lower resolution and scaling it back up -- no separate test file needed.": "Tính các chỉ số đã đánh dấu cho video tham chiếu khi thu nhỏ xuống độ phân giải thấp hơn rồi phóng to lại — không cần tệp thử riêng.",
