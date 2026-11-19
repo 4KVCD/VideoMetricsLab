@@ -199,6 +199,78 @@ std::optional<std::pair<long long, long long>> scored_seconds(const MetricProven
     return std::pair(start, frames[1].is_number_integer() ? second_reaching(frames[1].get<long long>(), fps) : 0);
 }
 
+namespace {
+
+// The time of `frame` to the millisecond, as first_frame_at reads it back:
+// the frame itself. The nearest millisecond where that is the frame's (30.030
+// s for frame 720 at 24000/1001), else the one before (4.166 s for frame 100
+// at 24 fps, whose 4.167 s would be frame 101's).
+long long millisecond_of_frame(long long frame, double fps) {
+    if (frame <= 0) {
+        return 0;
+    }
+    auto ms = std::llround(static_cast<double>(frame) * 1000.0 / fps);
+    while (ms > 0 && first_frame_at(ms, fps) > frame) {
+        --ms;
+    }
+    while (first_frame_at(ms, fps) < frame) {
+        ++ms;
+    }
+    return ms;
+}
+
+// A range of time in milliseconds, either way it is held.
+std::pair<long long, long long> milliseconds_of(const ComparedRange& range) {
+    const long long scale = range.in_milliseconds ? 1 : 1000;
+    return {range.start * scale, range.end * scale};
+}
+
+// Whether two ranges in the same unit are the same part of the videos.
+bool same_range(const ComparedRange& one, const ComparedRange& other) {
+    if (one.whole() || other.whole()) {
+        return one.whole() && other.whole();
+    }
+    if (one.in_frames || other.in_frames) {
+        return one.in_frames && other.in_frames && one.start == other.start && one.end == other.end;
+    }
+    return milliseconds_of(one) == milliseconds_of(other);
+}
+
+}  // namespace
+
+std::optional<ComparedRange> range_in_unit(const ComparedRange& range, bool frames, double fps) {
+    if (range.whole()) {
+        return ComparedRange{0, 0, frames};
+    }
+    if (range.in_frames == frames) {
+        return range;  // time is time, in seconds or milliseconds
+    }
+    if (!(fps > 0)) {
+        return std::nullopt;
+    }
+    if (frames) {
+        const auto [first, end] = compared_frames(range, fps);
+        return ComparedRange{first, end.value_or(0), true};
+    }
+    const long long start = millisecond_of_frame(range.start, fps);
+    const long long end = range.end > 0 ? millisecond_of_frame(range.end, fps) : 0;
+    if (start % 1000 == 0 && end % 1000 == 0) {
+        return ComparedRange{start / 1000, end / 1000, false};
+    }
+    return ComparedRange{start, end, false, true};
+}
+
+ComparedRange switch_range_unit(const ComparedRange& current, const std::optional<ComparedRange>& before, bool frames,
+                                double fps) {
+    if (before && before->in_frames == frames) {
+        const std::optional<ComparedRange> before_now = range_in_unit(*before, current.in_frames, fps);
+        if (before_now ? same_range(*before_now, current) : current.whole()) {
+            return *before;
+        }
+    }
+    return range_in_unit(current, frames, fps).value_or(ComparedRange{0, 0, frames});
+}
+
 std::optional<ComparedRange> scored_frames(const MetricProvenance& provenance, double fps) {
     const std::optional<std::pair<long long, long long>> seconds = scored_seconds(provenance, fps);
     if (!seconds) {

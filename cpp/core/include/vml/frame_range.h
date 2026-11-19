@@ -92,4 +92,20 @@ std::optional<std::pair<long long, long long>> scored_seconds(const MetricProven
 // cover whole seconds: scored_seconds.)
 std::optional<ComparedRange> scored_frames(const MetricProvenance& provenance, double fps);
 
+// `range` in frames (`frames`) or in time, at the reference's `fps`: the same
+// frames. A time is a frame's to the millisecond, rounded so that it is that
+// frame's (in whole seconds where both ends are). The whole videos stay the
+// whole videos, and a range already in the unit is itself; nothing where the
+// frame rate is not known.
+std::optional<ComparedRange> range_in_unit(const ComparedRange& range, bool frames, double fps);
+
+// The range after the Range unit is switched to frames (`frames`) or to time:
+// `before`, the range the previous switch left, where `current` is still the
+// same frames (switched back with no edit: the range as it was typed, not
+// rounded to frames' times); else `current` in the new unit. Without a frame
+// rate: `before` where the previous switch could not convert either (the
+// whole videos still), else the whole videos.
+ComparedRange switch_range_unit(const ComparedRange& current, const std::optional<ComparedRange>& before, bool frames,
+                                double fps);
+
 }  // namespace vml

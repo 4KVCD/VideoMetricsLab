@@ -18,7 +18,10 @@
    videos' end). It compares the frames whose times are from the first time up
    to, not including, the second (frame *n* is at *n* / frame rate). CVVDP
    scores whole seconds: a range that isn't whole seconds is rounded to the
-   nearest seconds for it. A range's
+   nearest seconds for it. Switching between **Time** and **Frames** keeps
+   the range: it is shown as the same frames in the other unit (at the
+   reference's frame rate), and switched back with no change, as it was
+   typed. A range's
    scores are those of the same frames in a run over the whole videos. An end
    within a video's last, partial second compares to its end: 00:00:00 to
    00:00:13 for a 300-frame encode of 12.5 seconds. A range late in a video
