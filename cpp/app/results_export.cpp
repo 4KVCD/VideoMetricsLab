@@ -16,6 +16,7 @@
 #include "vml/platform/system.h"
 #include "vml/python_json.h"
 #include "vml/results_summary.h"
+#include "vml/weak_frames.h"
 
 namespace vml::app {
 
@@ -137,7 +138,7 @@ Json export_document(const std::optional<VideoInfo>& reference, const std::vecto
 QString export_contents(const std::vector<std::string>& items) {
     const auto has = [&items](std::string_view key) { return std::find(items.begin(), items.end(), key) != items.end(); };
     QStringList kinds;
-    if (has("results_json") || has("results_csv")) {
+    if (has("results")) {
         kinds << app::tr("results");
     }
     if (has("graphs")) {
@@ -167,6 +168,79 @@ QString export_action_text(ExportScope scope, const std::vector<std::string>& it
         return app::tr("Export the selected videos' {contents}...", {{"contents", contents}});
     }
     return contents;
+}
+
+std::string text_lines(const std::string& text) {
+#ifdef _WIN32
+    std::string crlf;
+    crlf.reserve(text.size() + text.size() / 32);
+    for (const char c : text) {
+        crlf += c == '\n' ? std::string("\r\n") : std::string(1, c);
+    }
+    return crlf;
+#else
+    return text;
+#endif
+}
+
+std::vector<BundleFile> export_files(const Settings& settings, const std::vector<BundleVideo>& videos,
+                                     const std::filesystem::path& reference,
+                                     const std::function<Json()>& document, const SegmentRules& rules,
+                                     bool several, const QString& name, bool& segments_skipped) {
+    const std::vector<std::string> items = exported_items(settings);
+    const auto wanted = [&items](std::string_view key) {
+        return std::find(items.begin(), items.end(), key) != items.end();
+    };
+    // Results and weak segments in each format ticked.
+    const std::vector<std::string>& formats = settings.export_formats;
+    const bool json = std::find(formats.begin(), formats.end(), "json") != formats.end();
+    const bool csv = std::find(formats.begin(), formats.end(), "csv") != formats.end();
+    std::vector<BundleFile> files;
+    segments_skipped = false;
+    if (wanted("results")) {
+        const Json made = document();
+        const std::string stem = file_safe(name + QStringLiteral(" - results")).toStdString();
+        if (json) {
+            files.push_back({stem + ".json", python_json_dumps(made) + "\n"});
+        }
+        if (csv) {
+            files.push_back({stem + ".csv", results_csv(made)});
+        }
+    }
+    if (!wanted("weak_segments") || videos.empty()) {
+        return files;
+    }
+    if (rules.conditions.empty()) {
+        segments_skipped = true;
+    } else if (several) {
+        // One report of every video, as Export weak segments report saves it.
+        std::vector<SegmentsReportVideo> report;
+        for (const BundleVideo& video : videos) {
+            report.push_back({video.label.toStdString(), platform::path_text(video.path),
+                              platform::path_text(reference), video.result.get()});
+        }
+        const std::string stem =
+            (file_safe(name + QStringLiteral(" - weak segments")) + "." + qt_text(segments_file_suffix(rules)))
+                .toStdString();
+        if (json) {
+            files.push_back({stem + ".json", python_json_dumps(segments_report_json(report, rules)) + "\n"});
+        }
+        if (csv) {
+            files.push_back({stem + ".csv", text_lines(segments_report_csv(report, rules))});
+        }
+    } else {
+        const BundleVideo& video = videos.front();
+        const std::vector<WeakSegment> segments = weak_segments(*video.result, rules);
+        const std::string stem =
+            suggested_file_name(video.label, "." + qt_text(segments_file_suffix(rules))).toStdString();
+        if (json) {
+            files.push_back({stem + ".json", python_json_dumps(segments_json(segments, rules)) + "\n"});
+        }
+        if (csv) {
+            files.push_back({stem + ".csv", text_lines(segments_csv(segments, rules))});
+        }
+    }
+    return files;
 }
 
 }  // namespace vml::app

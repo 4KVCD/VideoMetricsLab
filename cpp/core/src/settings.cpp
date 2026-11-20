@@ -33,6 +33,7 @@ const std::unordered_map<std::string, Field>& fields() {
         {"auto_export", &Settings::auto_export},
         {"auto_export_segments", &Settings::auto_export_segments},
         {"export_items", &Settings::export_items},
+        {"export_formats", &Settings::export_formats},
         {"export_zip", &Settings::export_zip},
         {"after_run_export", &Settings::after_run_export},
         {"after_run_place", &Settings::after_run_place},
@@ -141,7 +142,23 @@ void log_unfit(const std::string& name, const Json& value, const std::string& ki
 }  // namespace
 
 const std::vector<std::string>& export_item_keys() {
-    static const std::vector<std::string> items{"results_json", "results_csv", "graphs", "weak_segments"};
+    static const std::vector<std::string> items{"results", "graphs", "weak_segments"};
+    return items;
+}
+
+const std::vector<std::string>& export_format_keys() {
+    static const std::vector<std::string> formats{"json", "csv"};
+    return formats;
+}
+
+std::vector<std::string> exported_items(const Settings& settings) {
+    const bool written = !settings.export_formats.empty();
+    std::vector<std::string> items;
+    for (const std::string& item : settings.export_items) {
+        if (written || item == "graphs") {
+            items.push_back(item);
+        }
+    }
     return items;
 }
 
@@ -160,14 +177,45 @@ void carry_over_auto_export(Settings& settings) {
     }
     settings.export_items.clear();
     if (results) {
-        settings.export_items = {"results_json", "graphs"};
+        settings.export_items = {"results", "graphs"};
     }
     if (segments) {
         settings.export_items.push_back("weak_segments");
     }
     settings.after_run_export = true;
     settings.after_run_place = results ? settings.auto_export : settings.auto_export_segments;
+    // Results were JSON alone, weak segments JSON and CSV: with weak
+    // segments, both (the results as CSV too, which there was no choice of).
+    settings.export_formats = segments ? std::vector<std::string>{"json", "csv"} : std::vector<std::string>{"json"};
     settings.export_zip = results;
+}
+
+// Exports as the first v2.7 builds chose them, results by format
+// ("results_json", "results_csv") and weak segments always as JSON and CSV:
+// Results in the formats its boxes ticked, or, with weak segments alone,
+// both formats as they were written.
+void carry_over_result_formats(Settings& settings) {
+    std::vector<std::string> formats;
+    std::vector<std::string> items;
+    bool results = false;
+    for (const std::string& item : settings.export_items) {
+        if (item == "results_json" || item == "results_csv") {
+            formats.push_back(item == "results_json" ? "json" : "csv");
+            if (!results) {
+                items.push_back("results");
+                results = true;
+            }
+        } else {
+            items.push_back(item);
+        }
+    }
+    if (results) {
+        std::sort(formats.begin(), formats.end(), std::greater<>());  // json, then csv
+        settings.export_formats = formats;
+    } else if (std::find(items.begin(), items.end(), "weak_segments") != items.end()) {
+        settings.export_formats = export_format_keys();
+    }
+    settings.export_items = items;
 }
 
 }  // namespace
@@ -239,6 +287,8 @@ Settings Settings::load_from(const std::filesystem::path& path) {
     }
     if (!data.contains("export_items")) {
         carry_over_auto_export(settings);
+    } else if (!data.contains("export_formats")) {
+        carry_over_result_formats(settings);
     }
     return settings;
 }
@@ -293,6 +343,7 @@ std::string Settings::text() const {
     data["cache_dir"] = cache_dir;
     data["export_dir"] = export_dir;
     data["export_items"] = export_items;
+    data["export_formats"] = export_formats;
     data["export_zip"] = export_zip;
     data["after_run_export"] = after_run_export;
     data["after_run_place"] = after_run_place;

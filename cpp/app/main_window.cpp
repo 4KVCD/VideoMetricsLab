@@ -639,7 +639,7 @@ void MainWindow::build_ui() {
     };
     graph_panel_->export_colours = export_colours;
     // Metric Graphs' statistics menu offers the Videos table's exports.
-    graph_panel_->export_items = [this] { return settings_.export_items; };
+    graph_panel_->export_items = [this] { return exported_items(settings_); };
     graph_panel_->video_exportable = [this](const std::string& identity) {
         return row_of_graph(identity).has_value();
     };

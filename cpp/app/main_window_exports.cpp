@@ -57,20 +57,6 @@ void write_loose(const std::filesystem::path& folder, const std::vector<BundleFi
     }
 }
 
-// CSV text as the command line writes it: CR LF on Windows.
-std::string text_lines(const std::string& text) {
-#ifdef _WIN32
-    std::string crlf;
-    crlf.reserve(text.size() + text.size() / 32);
-    for (const char c : text) {
-        crlf += c == '\n' ? std::string("\r\n") : std::string(1, c);
-    }
-    return crlf;
-#else
-    return text;
-#endif
-}
-
 // Whether the Bitrate tab is still reading `path` (or is about to).
 bool still_reading(const BitratePanel& panel, const std::filesystem::path& path) {
     const std::optional<BitrateState> state = panel.state_of(path);
@@ -154,47 +140,16 @@ MainWindow::ExportPlan MainWindow::export_plan(std::vector<BundleVideo> videos,
                                                const std::filesystem::path& reference,
                                                const std::function<nlohmann::ordered_json()>& document,
                                                const SegmentRules& rules, bool several, const QString& name) {
-    const std::vector<std::string>& items = settings_.export_items;
-    const auto wanted = [&items](std::string_view key) {
-        return std::find(items.begin(), items.end(), key) != items.end();
-    };
-    ExportPlan plan{std::move(videos), reference, {}, wanted("graphs"), several, name};
-    if (wanted("results_json") || wanted("results_csv")) {
-        const nlohmann::ordered_json made = document();
-        const std::string stem = file_safe(name + QStringLiteral(" - results")).toStdString();
-        if (wanted("results_json")) {
-            plan.files.push_back({stem + ".json", python_json_dumps(made) + "\n"});
-        }
-        if (wanted("results_csv")) {
-            plan.files.push_back({stem + ".csv", results_csv(made)});
-        }
-    }
-    if (wanted("weak_segments") && !plan.videos.empty()) {
-        if (rules.conditions.empty()) {
-            logger.info("No weak segments exported for " + name.toStdString() + ": the rules have no condition");
-            show_status(app::tr("{name}'s weak segments weren't exported: no condition is set in Settings > Weak "
-                                "segments.",
-                                {{"name", name}}));
-        } else if (several) {
-            // One report of every video, as Export weak segments report saves it.
-            std::vector<SegmentsReportVideo> report;
-            for (const BundleVideo& video : plan.videos) {
-                report.push_back({video.label.toStdString(), platform::path_text(video.path),
-                                  platform::path_text(reference), video.result.get()});
-            }
-            const std::string stem = (file_safe(name + QStringLiteral(" - weak segments")) + "." +
-                                      qt_text(segments_file_suffix(rules)))
-                                         .toStdString();
-            plan.files.push_back({stem + ".json", python_json_dumps(segments_report_json(report, rules)) + "\n"});
-            plan.files.push_back({stem + ".csv", text_lines(segments_report_csv(report, rules))});
-        } else {
-            const BundleVideo& video = plan.videos.front();
-            const std::vector<WeakSegment> segments = weak_segments(*video.result, rules);
-            const std::string stem =
-                suggested_file_name(video.label, "." + qt_text(segments_file_suffix(rules))).toStdString();
-            plan.files.push_back({stem + ".json", python_json_dumps(segments_json(segments, rules)) + "\n"});
-            plan.files.push_back({stem + ".csv", text_lines(segments_csv(segments, rules))});
-        }
+    const std::vector<std::string> items = exported_items(settings_);
+    const bool graphs = std::find(items.begin(), items.end(), "graphs") != items.end();
+    ExportPlan plan{std::move(videos), reference, {}, graphs, several, name};
+    bool segments_skipped = false;
+    plan.files = export_files(settings_, plan.videos, reference, document, rules, several, name, segments_skipped);
+    if (segments_skipped) {
+        logger.info("No weak segments exported for " + name.toStdString() + ": the rules have no condition");
+        show_status(app::tr("{name}'s weak segments weren't exported: no condition is set in Settings > Weak "
+                            "segments.",
+                            {{"name", name}}));
     }
     if (plan.videos.empty()) {
         plan.graphs = false;  // a run's results without a scored video of the reference
@@ -314,7 +269,7 @@ void MainWindow::export_saved_contents(const std::vector<LoadedSavedResult>& res
         return same_path(saved.result->source, reference);
     });
     const bool several = results.size() > 1;
-    const std::vector<std::string>& items = settings_.export_items;
+    const std::vector<std::string> items = exported_items(settings_);
     if (several && !one_reference &&
         (std::find(items.begin(), items.end(), "graphs") != items.end() ||
          std::find(items.begin(), items.end(), "weak_segments") != items.end())) {

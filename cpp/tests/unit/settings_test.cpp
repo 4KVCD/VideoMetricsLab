@@ -27,6 +27,7 @@ const std::map<std::string, std::function<Json(const Settings&)>>& settings_by_k
         {"auto_export", [](const Settings& s) { return Json(s.auto_export); }},
         {"auto_export_segments", [](const Settings& s) { return Json(s.auto_export_segments); }},
         {"export_items", [](const Settings& s) { return Json(s.export_items); }},
+        {"export_formats", [](const Settings& s) { return Json(s.export_formats); }},
         {"export_zip", [](const Settings& s) { return Json(s.export_zip); }},
         {"after_run_export", [](const Settings& s) { return Json(s.after_run_export); }},
         {"after_run_place", [](const Settings& s) { return Json(s.after_run_place); }},
@@ -110,9 +111,10 @@ TEST(Settings, LoadsSettingsJsonAsThePythonAppDoes) {
 
 // What exports include, from a settings.json saved before they were chosen
 // one by one (when only after each run exported): results (JSON) and graphs
-// in one .zip, weak segments as files of their own, where each was going;
-// both, all in the .zip; neither, the defaults (everything, as a .zip, not
-// after each run). A file that has the new choice keeps it.
+// in one .zip, weak segments as JSON and CSV files of their own, where each
+// was going; both, all in the .zip; neither, the defaults (everything, as
+// JSON and CSV, in a .zip, not after each run). A file that has the new
+// choice keeps it.
 TEST(Settings, ExportsCarryOverTheOldAfterRunChoices) {
     const test::Folder folder;
     const auto load = [&folder](const std::string& text) {
@@ -121,32 +123,66 @@ TEST(Settings, ExportsCarryOverTheOldAfterRunChoices) {
     };
     using Items = std::vector<std::string>;
     Settings settings = load(R"({"auto_export": "folder"})");
-    EXPECT_EQ(settings.export_items, (Items{"results_json", "graphs"}));
+    EXPECT_EQ(settings.export_items, (Items{"results", "graphs"}));
+    EXPECT_EQ(settings.export_formats, Items{"json"});
     EXPECT_TRUE(settings.export_zip);
     EXPECT_TRUE(settings.after_run_export);
     EXPECT_EQ(settings.after_run_place, "folder");
     settings = load(R"({"auto_export_segments": "beside"})");
     EXPECT_EQ(settings.export_items, (Items{"weak_segments"}));
+    EXPECT_EQ(settings.export_formats, (Items{"json", "csv"}));
     EXPECT_FALSE(settings.export_zip);
     EXPECT_TRUE(settings.after_run_export);
     EXPECT_EQ(settings.after_run_place, "beside");
     settings = load(R"({"auto_export": "beside", "auto_export_segments": "folder"})");
-    EXPECT_EQ(settings.export_items, (Items{"results_json", "graphs", "weak_segments"}));
+    EXPECT_EQ(settings.export_items, (Items{"results", "graphs", "weak_segments"}));
+    EXPECT_EQ(settings.export_formats, (Items{"json", "csv"}));
     EXPECT_TRUE(settings.export_zip);
     EXPECT_EQ(settings.after_run_place, "beside");
     settings = load(R"({"auto_export": ""})");
     EXPECT_EQ(settings.export_items, export_item_keys());
+    EXPECT_EQ(settings.export_formats, export_format_keys());
     EXPECT_TRUE(settings.export_zip);
     EXPECT_FALSE(settings.after_run_export);
-    settings = load(R"({"auto_export": "folder", "export_items": ["results_csv"], "export_zip": false})");
-    EXPECT_EQ(settings.export_items, (Items{"results_csv"}));
+    settings = load(R"({"auto_export": "folder", "export_items": ["results"], "export_formats": ["csv"],
+                         "export_zip": false})");
+    EXPECT_EQ(settings.export_items, (Items{"results"}));
+    EXPECT_EQ(settings.export_formats, Items{"csv"});
     EXPECT_FALSE(settings.export_zip);
     EXPECT_FALSE(settings.after_run_export);
     // Saved: the new choice, never the old keys.
     ASSERT_EQ(settings.save_to(folder / "saved.json"), std::nullopt);
     const std::string saved = platform::read_file(folder / "saved.json").value_or("");
     EXPECT_EQ(saved.find("auto_export"), std::string::npos);
-    EXPECT_NE(saved.find("\"export_items\": [\n    \"results_csv\"\n  ]"), std::string::npos);
+    EXPECT_NE(saved.find("\"export_items\": [\n    \"results\"\n  ]"), std::string::npos);
+    EXPECT_NE(saved.find("\"export_formats\": [\n    \"csv\"\n  ]"), std::string::npos);
+}
+
+// Exports as the first v2.7 builds saved them, results by format: Results in
+// those formats; weak segments alone, in both, as they were written.
+TEST(Settings, ExportsCarryOverResultsByFormat) {
+    const test::Folder folder;
+    const auto load = [&folder](const std::string& text) {
+        std::ofstream(folder / "settings.json", std::ios::binary) << text;
+        return Settings::load_from(folder / "settings.json");
+    };
+    using Items = std::vector<std::string>;
+    Settings settings = load(R"({"export_items": ["results_json", "graphs", "weak_segments"]})");
+    EXPECT_EQ(settings.export_items, (Items{"results", "graphs", "weak_segments"}));
+    EXPECT_EQ(settings.export_formats, Items{"json"});
+    settings = load(R"({"export_items": ["results_json", "results_csv"]})");
+    EXPECT_EQ(settings.export_items, Items{"results"});
+    EXPECT_EQ(settings.export_formats, (Items{"json", "csv"}));
+    settings = load(R"({"export_items": ["results_csv", "graphs"]})");
+    EXPECT_EQ(settings.export_items, (Items{"results", "graphs"}));
+    EXPECT_EQ(settings.export_formats, Items{"csv"});
+    settings = load(R"({"export_items": ["graphs", "weak_segments"]})");
+    EXPECT_EQ(settings.export_items, (Items{"graphs", "weak_segments"}));
+    EXPECT_EQ(settings.export_formats, (Items{"json", "csv"}));
+    // Already chosen apart: as saved.
+    settings = load(R"({"export_items": ["results"], "export_formats": ["csv"]})");
+    EXPECT_EQ(settings.export_items, Items{"results"});
+    EXPECT_EQ(settings.export_formats, Items{"csv"});
 }
 
 // The settings read are saved as the Python app saves them, to the byte:

@@ -324,20 +324,17 @@ QGroupBox* SettingsPanel::build_storage_box() {
 
 QWidget* SettingsPanel::build_export_choices() {
     // A box for each kind of export, so that another kind is one more box;
+    // a box for each format the results and weak segments are written in;
     // then as a .zip file or loose files. The right-click menus' exports and
     // the one after each run alike.
     auto* exports = new QWidget;
     auto* row = new QHBoxLayout(exports);
     row->setContentsMargins(0, 0, 0, 0);
     const std::map<std::string, std::pair<QString, QString>> described{
-        {"results_json",
-         {app::tr("Results (JSON)"),
-          app::tr("Scores and statistics, as Export results saves them: a video's alone (<video> - results.json), "
-                  "or all the videos' in one file.")}},
-        {"results_csv",
-         {app::tr("Results (CSV)"),
-          app::tr("Scores and statistics as CSV, as Export results saves them: a video's alone "
-                  "(<video> - results.csv), or all the videos' in one file.")}},
+        {"results",
+         {app::tr("Results"),
+          app::tr("Scores and statistics, as Export results saves them, in the formats ticked: a video's alone "
+                  "(<video> - results.json), or all the videos' in one file.")}},
         {"graphs",
          {app::tr("Graphs"),
           app::tr("Each video's graph of every metric, and its bitrate with the reference's, as PNG images "
@@ -346,8 +343,8 @@ QWidget* SettingsPanel::build_export_choices() {
         {"weak_segments",
          {app::tr("Weak segments"),
           app::tr("Weak segments by the profile in use (Settings > Weak segments; on the Saved results tab, the "
-                  "rules picked there), as JSON and CSV: a video's (<video>.vmaf.segments.json), or all the "
-                  "videos' in one report. Nothing is saved while the rules have no condition.")}},
+                  "rules picked there), in the formats ticked: a video's (<video>.vmaf.segments.json), or all "
+                  "the videos' in one report. Nothing is saved while the rules have no condition.")}},
     };
     for (const std::string& key : export_item_keys()) {
         const auto& [name, tip] = described.at(key);
@@ -357,6 +354,28 @@ QWidget* SettingsPanel::build_export_choices() {
                         settings_.export_items.end());
         connect(box, &QCheckBox::toggled, this, [this] { on_edited(); });
         export_item_boxes[key] = box;
+        row->addWidget(box);
+    }
+    row->addSpacing(12);
+    row->addWidget(new QLabel(app::tr("In:")));
+    const std::map<std::string, std::pair<QString, QString>> formats{
+        {"json",
+         {QStringLiteral("JSON"),
+          app::tr("Results and weak segments as JSON files. With neither JSON nor CSV ticked, only graphs are "
+                  "exported.")}},
+        {"csv",
+         {QStringLiteral("CSV"),
+          app::tr("Results and weak segments as CSV files, for spreadsheets. With neither JSON nor CSV ticked, "
+                  "only graphs are exported.")}},
+    };
+    for (const std::string& key : export_format_keys()) {
+        const auto& [name, tip] = formats.at(key);
+        auto* box = new QCheckBox(name);
+        box->setToolTip(Qt::convertFromPlainText(tip, Qt::WhiteSpaceNormal));
+        box->setChecked(std::find(settings_.export_formats.begin(), settings_.export_formats.end(), key) !=
+                        settings_.export_formats.end());
+        connect(box, &QCheckBox::toggled, this, [this] { on_edited(); });
+        export_format_boxes[key] = box;
         row->addWidget(box);
     }
     row->addSpacing(12);
@@ -1022,6 +1041,12 @@ void SettingsPanel::read_controls() {
     for (const std::string& key : export_item_keys()) {
         if (export_item_boxes.at(key)->isChecked()) {
             settings_.export_items.push_back(key);
+        }
+    }
+    settings_.export_formats.clear();
+    for (const std::string& key : export_format_keys()) {
+        if (export_format_boxes.at(key)->isChecked()) {
+            settings_.export_formats.push_back(key);
         }
     }
     settings_.export_zip = export_form->currentData().toBool();

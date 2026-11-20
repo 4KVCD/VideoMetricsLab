@@ -433,8 +433,8 @@ QAction* SavedResultsPanel::fill_menu(QMenu& menu) const {
         return nullptr;
     }
     QAction* contents = menu.addAction(export_action_text(
-        count == 1 ? ExportScope::this_video : ExportScope::selected_videos, settings_.export_items));
-    contents->setEnabled(!export_contents(settings_.export_items).isEmpty());
+        count == 1 ? ExportScope::this_video : ExportScope::selected_videos, exported_items(settings_)));
+    contents->setEnabled(!export_contents(exported_items(settings_)).isEmpty());
     return contents;
 }
 
