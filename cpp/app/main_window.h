@@ -498,7 +498,6 @@ private:
     // why it cannot show it; with Worst frames' `list` to step through, if
     // opened from it.
     void show_in_video_compare(const std::string& identity, int frame, const WorstFrameList& list);
-    void on_show_graph_clicked();
 
     // -------------------------------------- saved runs (main_window_run_files.cpp)
     void on_load_saved_run();
@@ -508,8 +507,9 @@ private:
     void take_read_details_of_file(const Probed& probed);
     bool offer_to_switch_source(const ComparisonResult& result);
     bool offer_to_take_reference_film_grain(const ComparisonResult& result);
-    std::vector<std::shared_ptr<CompletedRun>> selected_runs() const;
-    void on_save_selected();
+    // Saves `runs` as run files (.metrics.json): one where the user says,
+    // several into a folder, each named after its run.
+    void save_run_files(const std::vector<std::shared_ptr<CompletedRun>>& runs);
     void submit_save(const ComparisonResult& result, const std::filesystem::path& path, const QString& label);
     std::vector<ExportedRun> exported_runs() const;
 
@@ -549,7 +549,30 @@ private:
     void export_saved_results(SavedResultsPanel::Export kind, const std::vector<LoadedSavedResult>& results);
     // The rules of the weak segment profile in use (Settings > Weak segments).
     SegmentRules saved_weak_rules() const;
-    void on_export_all_graphs();
+    // Writes `document` as Export results saves it, JSON or CSV, where the
+    // user says, suggested after `name`.
+    void save_results_document(const nlohmann::ordered_json& document, const QString& name, bool csv);
+    // Writes each result's per-frame scores, JSON or CSV, into a folder the
+    // user picks, each file named after its label.
+    void save_per_frame_files(const std::vector<std::pair<std::shared_ptr<const ComparisonResult>, QString>>& results,
+                              bool json);
+    // The Videos tab's Export menu, made as it opens: the shared export of
+    // the rows it acts on (export_menu_rows), then each kind on its own.
+    void fill_videos_export_menu(QMenu& menu);
+    // A row's video for the Videos tab's Export menu: a finished run of the
+    // reference's, as scored_video, whatever metrics are ticked.
+    std::optional<BundleVideo> exportable_video(const RowData& row_data) const;
+    // The rows the Videos tab's Export menu acts on: the selected rows with
+    // a finished run (exportable_video), else, with none selected, every one.
+    std::vector<int> export_menu_rows() const;
+    // Whether rows are selected in the Videos table.
+    bool rows_selected() const;
+    // The menu's shared export of its rows (export_menu_rows) as they are
+    // now, those with every ticked metric scored: this video's, the selected
+    // ones', or all the videos' (export_all_videos) with none selected.
+    void export_rows();
+    // The menu's export of one kind, of its rows as they are now.
+    void export_rows_as(SavedResultsPanel::Export kind);
     // What an export holds, by Settings' Exports include: for one video, its
     // results (alone in the document) and its weak segments; for several,
     // the run's results document and their weak segments report; and the
@@ -856,9 +879,8 @@ private:
     // The rows ticked when the run started, those already scored too: their
     // results go to the graph when it ends.
     std::vector<std::shared_ptr<RowData>> checked_rows_for_run_;
-    QPushButton* save_button_ = nullptr;
-    QPushButton* show_graph_button_ = nullptr;
-    QPushButton* export_graphs_button_ = nullptr;
+    // The Videos box's Export menu (fill_videos_export_menu).
+    QPushButton* export_button_ = nullptr;
     // Graph exports waiting for their bitrate (queue_bundle), and the timer
     // that looks whether it is read.
     std::vector<PendingBundle> pending_bundles_;
