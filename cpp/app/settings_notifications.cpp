@@ -14,9 +14,11 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTextCursor>
+#include <QTextDocument>
 #include <QTimer>
 #include <QVBoxLayout>
 
+#include <cmath>
 #include <string>
 
 #include "i18n.h"
@@ -32,11 +34,16 @@ namespace {
 
 QString text_of(const std::string& text) { return QString::fromStdString(text); }
 
-// A template's editor: a few lines high, plain text.
+// A template's editor: `lines` lines high with no scroll bar, plain text.
+// The height counts what surrounds the text too: the document's margin, the
+// frame and the viewport's margins (a fixed allowance cut the last line).
 QPlainTextEdit* template_editor(const std::string& text, int lines) {
     auto* editor = new QPlainTextEdit(text_of(text));
     editor->setTabChangesFocus(true);
-    editor->setFixedHeight(editor->fontMetrics().lineSpacing() * lines + 12);
+    const QMargins margins = editor->contentsMargins();
+    const int around = static_cast<int>(std::ceil(2 * editor->document()->documentMargin())) +
+                       2 * editor->frameWidth() + margins.top() + margins.bottom();
+    editor->setFixedHeight(editor->fontMetrics().lineSpacing() * lines + around + 2);
     return editor;
 }
 
