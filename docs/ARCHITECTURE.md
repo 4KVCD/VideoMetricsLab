@@ -133,6 +133,58 @@ sees events on its own thread, in the order they were sent. File writes run
 on one thread of their own, in the order they were asked for, and closing
 the window ends the run and waits for them.
 
+## The window's interfaces
+
+The window has two interfaces, chosen in Settings > Window > Interface
+(`app/theme.h`):
+
+- **VML Classic:** the system's style (windows11 on Windows, Fusion on
+  macOS) with its own palette, and no style sheet of the app's own.
+- **VML Modern:** Fusion, with a palette and one application style sheet
+  made from Modern's colours and the accent.
+
+Both follow light and dark. A panel is laid out once, for both. What
+differs is drawn by the style sheet, from a role a widget is given with
+`theme::set_role`:
+
+| Role | For | In Modern |
+| --- | --- | --- |
+| `primary` | the one action a tab is for (Calculate metrics, Play) | the accent |
+| `danger` | an action that removes something | the danger colour |
+| `quiet` | a lesser action, read as text | no frame |
+| `card` | a box of controls that belong together | a card, as group boxes are |
+| `toolbar` | a strip of controls above or below a view | a raised strip |
+| `separator` | a line between a toolbar's groups (`theme::separator()`) | a line of the border colour |
+| `segmented` | a tab bar of a few choices, and its tab widget (Settings' sections, Metric Graphs' metrics) | a row of pills, the current one in the accent |
+| `notice` | a label set apart: what a run locks, say | a tinted strip |
+| `unboxed` | a group box only Classic frames (`theme::classic_box`) | no box, no title: its cards are the boxes |
+| `footer` | a strip of buttons along a card's bottom | a strip of the card's alternate colour |
+| `title`, `hint` | a card's title and the line beside it | semibold; muted |
+
+Classic draws every role alike, as the system draws the widget.
+
+When you add to the window:
+
+- **Give a new control its role where one fits.** Most controls need none.
+  A tab has at most one `primary`.
+- **A role is one of the table's.** A new one needs its rule in
+  `modern_style_sheet` first. `vml_appearance_tests` fails on a role the
+  style sheet doesn't style: misspelt, or added without its rule.
+- **A hint's slant is `{hint_style}`** in a `theme::style` template: italic
+  in Classic, upright in Modern. A widget whose own sheet only Classic
+  should draw uses `theme::style_classic`.
+- **Classic stays as it is.** Layout that is Modern's alone is built with
+  `theme::container` (a card, a toolbar or a footer whose margins are
+  Modern's only), `theme::modern_only` and `theme::classic_only` (a widget
+  one interface shows), and `theme::classic_box` (a group box Classic frames
+  and titles, Modern leaves unboxed). Each follows the interface applied.
+- **Colour nothing in a panel by hand.** A colour comes from the palette, from
+  `theme::color`, or from a role. Anything else shows in one interface and not
+  the other.
+- **Look at the change in both interfaces**, light and dark.
+  `vml_appearance_tests` saves every tab in each when `VML_UI_SNAPSHOTS` names
+  a folder (`CONTRIBUTING.md`).
+
 ## Performance rules
 
 - Keep frame scores in arrays (32-bit floats, as libvmaf and FFmpeg give

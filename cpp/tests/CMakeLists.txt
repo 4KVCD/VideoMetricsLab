@@ -181,4 +181,18 @@ if(TARGET vml_app)
         vml_deploy_qt_translations(vml_app_tests)
     endif()
     vml_add_test_shards(vml_app_tests vml_app_tests 4 "*")
+
+    # The window in each interface (app/appearance_test.cpp): a program of
+    # its own, as an interface applied is the whole application's, and one
+    # shard, as its tests run in order (Classic first). Beside the window's
+    # tests, whose Qt it uses.
+    add_executable(vml_appearance_tests app/appearance_test.cpp app/main.cpp)
+    target_include_directories(vml_appearance_tests PRIVATE unit)
+    target_link_libraries(vml_appearance_tests PRIVATE vml_app vml_compile_options gtest)
+    target_compile_definitions(vml_appearance_tests PRIVATE VML_CLI="$<TARGET_FILE:vml-cli>")
+    add_dependencies(vml_appearance_tests vml_app_tests)
+    if(WIN32 AND MSVC)
+        target_compile_definitions(vml_appearance_tests PRIVATE NOMINMAX)
+    endif()
+    vml_add_test_shards(vml_appearance_tests vml_appearance_tests 1 "*")
 endif()
