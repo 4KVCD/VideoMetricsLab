@@ -36,10 +36,12 @@
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
+class QHBoxLayout;
 class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSlider;
+class QSpacerItem;
 class QSpinBox;
 class QStackedWidget;
 class QTimer;
@@ -305,6 +307,10 @@ public:
     QSpinBox* loop_before_frames_spin = nullptr;
     QSpinBox* loop_after_frames_spin = nullptr;
     QPushButton* save_still_button = nullptr;
+    // The row of the worst frames, the loop and the still, centred, and the
+    // room between the worst frames and the loop, there while they show.
+    QHBoxLayout* inspect_row_ = nullptr;
+    QSpacerItem* worst_spacer_ = nullptr;
     ElidedLabel* detail_label = nullptr;
     QLabel* guide_label = nullptr;
     // The playback view, made when a pair first plays.

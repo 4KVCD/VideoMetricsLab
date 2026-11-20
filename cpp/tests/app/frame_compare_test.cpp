@@ -7,10 +7,12 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDeadlineTimer>
 #include <QDoubleSpinBox>
 #include <QGuiApplication>
 #include <QLabel>
+#include <QLayout>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSignalSpy>
@@ -227,6 +229,28 @@ TEST_F(FramePanelTest, ThePairsAreListedOnTheirCommonFramesAndStepTogether) {
     EXPECT_EQ(panel->frame_spin->maximum(), 119);
     EXPECT_TRUE(panel->detail_label->full_text().contains("No metric results loaded"));
     EXPECT_FALSE(panel->detail_label->full_text().contains("VMAF"));
+}
+
+// The row under the playback controls (the worst frames when shown, the
+// loop and the still) is centred, as the rows above and below it are.
+TEST_F(FramePanelTest, TheLoopRowIsCentred) {
+    const auto panel = make_panel();
+    panel->set_runs({scored("first"), scored("second")});
+    panel->resize(1400, 900);
+    panel->show();
+    const auto centre_offset = [&panel](QWidget* first, QWidget* last) {
+        panel->layout()->activate();
+        QCoreApplication::processEvents();
+        const int left = first->mapTo(panel.get(), QPoint(0, 0)).x();
+        const int right = last->mapTo(panel.get(), QPoint(last->width(), 0)).x();
+        return std::abs((left + right) / 2 - panel->width() / 2);
+    };
+    EXPECT_LE(centre_offset(panel->loop_checkbox, panel->save_still_button), 2);
+    ASSERT_EQ(panel->open_at("run:first", 10), FrameComparePanel::OpenAt::shown);
+    panel->set_worst_list({"run:first", "VMAF", {{10, "40.00"}, {70, "50.00"}}}, 0);
+    EXPECT_LE(centre_offset(panel->previous_worst_button, panel->save_still_button), 2);
+    panel->cycle_distorted(1);  // the list's video no longer shown: the loop alone, centred again
+    EXPECT_LE(centre_offset(panel->loop_checkbox, panel->save_still_button), 2);
 }
 
 // Issue #24: the Worst frames list from Metric Graphs is stepped through
