@@ -843,7 +843,9 @@ TEST(MetricCache, FilesAreKnownByTheirContent) {
 // The saved scores of files whose paths changed: a renamed or copied test
 // video or reference (their sampled hashes), a remuxed reference (its video
 // fingerprint, asked only once the test video matched); another reference
-// is not taken for it. The result has the files' paths as they are now.
+// is not taken for it. The result has the files' paths as they are now,
+// its videos' details too (Video Compare decodes those, and a run file
+// exported from the row keeps them).
 TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
     const nlohmann::json stored = test::load_reference("metric_cache.json").at("stored");
     const test::Folder folder;
@@ -853,6 +855,8 @@ TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
     ComparisonResult result = test::result_from(stored.at("result"));
     result.source = folder / "s.mkv";
     result.distorted = folder / "t.mkv";
+    result.source_info.path = result.source;
+    result.distorted_info.path = result.distorted;
     int fingerprinted = 0;
     set_video_fingerprinter([&fingerprinted](const std::filesystem::path& file) -> std::optional<std::string> {
         ++fingerprinted;
@@ -876,6 +880,8 @@ TEST(MetricCache, ScoresFollowRenamedAndRemuxedFiles) {
     ASSERT_TRUE(copied);
     EXPECT_EQ(copied->first.source, folder / "s copy.mkv");
     EXPECT_EQ(copied->first.distorted, folder / "t renamed.mkv");
+    EXPECT_EQ(copied->first.source_info.path, folder / "s copy.mkv");
+    EXPECT_EQ(copied->first.distorted_info.path, folder / "t renamed.mkv");
     EXPECT_EQ(recipe_directory(cache, folder / "s copy.mkv", folder / "t renamed.mkv", request.recipe), saved);
 
     // A remuxed reference: other bytes, the same stream.
