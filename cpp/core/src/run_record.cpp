@@ -304,6 +304,17 @@ void add_run_record(Json& document, const RunRecord& record) {
 
 void add_video_record(Json& entry, const RunFacts* facts, const ComparisonResult* result,
                       const std::string& cvvdp_display) {
+    if (result != nullptr) {
+        // From the scores themselves, so known without the run's settings
+        // too: whether they are of the whole videos (rate_of_scores pairs
+        // only those with the file's bitrate), and a resolution test, whose
+        // test video is the reference's own.
+        entry["whole_file"] = !scores_of_a_range(*result);
+        entry["resolution_test"] = result->resample_target ? Json{{"label", result->resample_target->label},
+                                                                   {"width", result->resample_target->width},
+                                                                   {"scaler", result->resample_target->scaler}}
+                                                           : Json(nullptr);
+    }
     if (facts == nullptr) {
         for (const char* key : {"settings", "black_bars", "metric_status", "decode_plan", "timings"}) {
             entry[key] = nullptr;

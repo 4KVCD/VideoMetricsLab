@@ -370,7 +370,7 @@ costs (+, in red) against an anchor for the same score, for each sequence and
 each of the nine metrics, with the mean and median over the sequences. Fill
 the **Anchor** and **Test** boxes with **Add videos…** (videos scored in this
 session: each one's sequence is its reference's file name, its rate the
-video's own bitrate) or **Import CSV…** (a file in the command line's
+video's own bitrate) or **Import CSV/JSON…** (a file in the command line's
 `bdrate` format, below); give each a name. Sequences are paired by name. A
 cell is n/a where there is no BD-rate; its tooltip says why, and
 **Warnings** lists what else needs a look. **Group by** adds a mean and
@@ -600,7 +600,8 @@ better, has its scores negated first. Then the mean and median over the
 sequences. It calculates no scores itself: it reads them from the two
 files.
 
-Each file is a CSV file with a header row and a row per encode. The
+Each file is a CSV file, or a JSON file (below). A CSV file has a header
+row and a row per encode. The
 `sequence` and `kbps` columns are needed; a column named by a metric's key
 (`vmaf`, `vmaf_neg`, `vmaf_v1`, `psnr`, `ssim`, `xpsnr`, `ssimulacra2`,
 `butteraugli`, `cvvdp`) holds its scores, empty where not scored. Other
@@ -612,6 +613,16 @@ crowd_run_1920x1080_50,22,41250.5,95.12,38.41,0.9871,9.62
 crowd_run_1920x1080_50,27,18820.0,90.33,35.97,0.9763,9.31
 ```
 
+A JSON file is either results as `compare --json` (a `--batch`'s too) and
+Export results write them, an encode for each video, or a run file
+(`.metrics.json`), the encode of its video. Each encode's sequence is its
+reference's file name without its extension, its rate the test video's
+bitrate, and its scores the video's. A video scored over a range, a
+resolution test, failed or cancelled, or of no known bitrate is left out, as
+is a row that scores another row's file another way (a film grain twin, a
+"Test both" companion, CVVDP on a further display): that file's own entry is
+its encode.
+
 Sequences are paired by name; one in a single file is left out with a
 warning. A cell is n/a, with a warning on stderr, where there is no
 BD-rate: a metric not scored at every encode of the sequence, fewer than 2
@@ -621,8 +632,8 @@ medians are over the sequences that have a BD-rate.
 
 | Option | Meaning |
 | --- | --- |
-| `--anchor CSV` | The anchor's encodes. |
-| `--test CSV` | The test encoder's encodes. |
+| `--anchor FILE` | The anchor's encodes, CSV or JSON. |
+| `--test FILE` | The test encoder's encodes, CSV or JSON. |
 | `-m`, `--metrics LIST` | The metrics to show, or `all`. Default: those the files have columns for. |
 | `--group-by COLUMN` | A mean and median for each value of this column of the anchor's file as well. |
 | `--json FILE` | Also write the results as JSON, every number in full; `--json -` prints the JSON instead of the table. |

@@ -65,8 +65,8 @@ public:
         QPushButton* add_videos_button = nullptr;
         QPushButton* import_button = nullptr;
         QPushButton* clear_button = nullptr;
-        // Its encodes by where they came from: a CSV file ("csv:" and its
-        // path) or a scored video ("video:" and its line's identity). Adding
+        // Its encodes by where they came from: a CSV or JSON file ("file:"
+        // and its path) or a scored video ("video:" and its line's identity). Adding
         // one again replaces it.
         std::vector<std::pair<QString, RateTable>> sources;
         // Its scored videos whose bitrate is the whole file's, soundtrack
@@ -85,8 +85,9 @@ public:
     QLabel* sequence_label = nullptr;
     RateCurveChart* chart = nullptr;
 
-    // Adds a CSV file's encodes to `side`; says why not where it cannot.
-    void import_csv(Side& side, const QString& path);
+    // Adds a CSV or JSON file's encodes to `side` (read_rate_file); says
+    // why not where it cannot.
+    void import_file(Side& side, const QString& path);
     // The report shown; none while there is none to show.
     const std::optional<BdRateReport>& report() const { return report_; }
     // The warnings the warnings button lists: the report's and the tab's own.

@@ -67,11 +67,11 @@ TEST(BdRatePanel, ShowsTheBdRatesOfTwoEncoders) {
     EXPECT_FALSE(panel.report());
     EXPECT_FALSE(panel.copy_button->isEnabled());
 
-    panel.import_csv(panel.anchor, write_csv(folder, "fast.csv",
+    panel.import_file(panel.anchor, write_csv(folder, "fast.csv",
                                              "sequence,kbps,vmaf,psnr\ns1,1000,30,30\ns1,2000,33,33\ns1,4000,36,36\n"
                                              "s1,8000,39,39\ns2,1000,30,30\ns2,2000,33,33\ns2,4000,36,36\n"
                                              "s2,8000,39,39\n"));
-    panel.import_csv(panel.test, write_csv(folder, "slow.csv",
+    panel.import_file(panel.test, write_csv(folder, "slow.csv",
                                            "sequence,kbps,vmaf,psnr\ns1,500,30,30\ns1,1000,33,33\ns1,2000,36,36\n"
                                            "s1,4000,39,39\ns2,1000,30,30\ns2,2000,33,\ns2,4000,36,36\n"
                                            "s2,8000,39,39\n"));
@@ -200,10 +200,10 @@ TEST(BdRatePanel, DrawsOnlyWhatTheBdRateUsed) {
     panel.dialogs.alert = [](const QString& title, const QString& text) {
         ADD_FAILURE() << title.toStdString() << text.toStdString();
     };
-    panel.import_csv(panel.anchor, write_csv(folder, "a.csv",
+    panel.import_file(panel.anchor, write_csv(folder, "a.csv",
                                              "sequence,kbps,vmaf,psnr\ns1,1000,30,30\ns1,2000,33,\ns1,0,36,36\n"
                                              "s1,8000,39,39\n"));
-    panel.import_csv(panel.test, write_csv(folder, "b.csv",
+    panel.import_file(panel.test, write_csv(folder, "b.csv",
                                            "sequence,kbps,vmaf,psnr\ns1,500,30,30\ns1,1000,33,33\ns1,2000,36,36\n"
                                            "s1,4000,39,39\n"));
     ASSERT_TRUE(panel.chart->plot());
@@ -219,12 +219,39 @@ TEST(BdRatePanel, DrawsOnlyWhatTheBdRateUsed) {
     EXPECT_FALSE(panel.chart->grab().isNull());
 
     panel.test.clear_button->click();
-    panel.import_csv(panel.test, write_csv(folder, "c.csv", "sequence,kbps,vmaf\nt1,500,30\n"));
+    panel.import_file(panel.test, write_csv(folder, "c.csv", "sequence,kbps,vmaf\nt1,500,30\n"));
     EXPECT_EQ(panel.test.name_edit->text(), "c");  // the new file's name, not the cleared one's
     EXPECT_FALSE(panel.report());
     EXPECT_EQ(panel.heading_label->text(), "the anchor and the test have no sequence in common");
     EXPECT_TRUE(panel.warnings().contains("s1: only in the anchor, left out"));
     EXPECT_TRUE(panel.warnings().contains("t1: only in the test, left out"));
+}
+
+// A side's encodes from a JSON file too: results as the command line's
+// --json writes them, under the button's name for both.
+TEST(BdRatePanel, ImportsEncodesFromJson) {
+    QTemporaryDir folder;
+    ASSERT_TRUE(folder.isValid());
+    BdRatePanel panel([] { return std::vector<GraphPanel::Run>{}; });
+    panel.dialogs.alert = [](const QString& title, const QString& text) {
+        ADD_FAILURE() << title.toStdString() << text.toStdString();
+    };
+    EXPECT_EQ(panel.anchor.import_button->text().toStdString(), "Import CSV/JSON\xE2\x80\xA6");
+    QString filter;
+    panel.dialogs.open_file = [&filter](const QString&, const QString& asked) {
+        filter = asked;
+        return QString();
+    };
+    panel.anchor.import_button->click();
+    EXPECT_EQ(filter.toStdString(), "CSV or JSON file (*.csv *.json)");
+    panel.import_file(panel.anchor,
+                      write_csv(folder, "x264.json",
+                                R"({"format": 2, "videos": [
+                                    {"reference": "Y:/clips/s1.y4m", "bit_rate": 1000000, "metrics": {"vmaf": {"score": 30}}},
+                                    {"reference": "Y:/clips/s1.y4m", "bit_rate": 2000000, "metrics": {"vmaf": {"score": 33}}}]})"));
+    EXPECT_EQ(panel.anchor.name_edit->text(), "x264");
+    ASSERT_EQ(panel.anchor.sequences->rowCount(), 1);
+    EXPECT_EQ(panel.anchor.sequences->item(0, 0)->text(), "s1");
 }
 
 }  // namespace

@@ -133,7 +133,9 @@ void add_run_record(nlohmann::ordered_json& document, const RunRecord& record);
 // - "metric_status", "decode_plan" and "timings".
 // Each is null where the facts it comes from are missing (a saved run
 // loaded); the last two also for a video that never started (its saved
-// scores answered it, or the run was cancelled first).
+// scores answered it, or the run was cancelled first). With `result`, also,
+// facts or none: "whole_file" (scores_of_a_range) and "resolution_test"
+// (its target, or null), which BD-rate's import reads.
 void add_video_record(nlohmann::ordered_json& entry, const RunFacts* facts, const ComparisonResult* result,
                       const std::string& cvvdp_display);
 
